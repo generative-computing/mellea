@@ -8,7 +8,7 @@ with structured, maintainable, robust, and efficient AI workflows.
 
 
 [//]: # ([![arXiv]&#40;https://img.shields.io/badge/arXiv-2408.09869-b31b1b.svg&#41;]&#40;https://arxiv.org/abs/2408.09869&#41;)
-[![Docs](https://img.shields.io/badge/docs-live-brightgreen)](https://docs.mellea.ai/)
+[![Docs](https://img.shields.io/badge/docs-live-brightgreen)](https://mellea.ai/)
 [![PyPI version](https://img.shields.io/pypi/v/mellea)](https://pypi.org/project/mellea/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mellea)](https://pypi.org/project/mellea/)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
