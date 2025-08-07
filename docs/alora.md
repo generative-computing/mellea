@@ -9,7 +9,7 @@ Mellea provides a command-line interface for training and uploading [LoRA](https
 From the root of the repository:
 
 ```bash
-pip install -e .
+pip install mellea
 huggingface-cli login  # Optional: only needed for uploads
 ```
 
@@ -82,7 +82,7 @@ This will:
 ## 🛠 Requirements
 
 - Python 3.8+
-- Install the following dependencies manually or via `pip install -e .`:
+- Install the following dependencies manually or via `pip install mellea`:
   - `transformers`
   - `trl`
   - `peft`
