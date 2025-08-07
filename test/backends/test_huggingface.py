@@ -41,6 +41,7 @@ class TestHFALoraStuff:
             constraint="The answer mention that there is a b in the middle of one of the strings but not the other.",
             force_yn=False,  # make sure that the alora naturally output Y and N without constrained generation
         )
+        print(alora_output)
         assert alora_output in ["Y", "N"], alora_output
         self.m.reset()
 
