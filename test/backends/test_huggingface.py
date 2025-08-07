@@ -33,7 +33,8 @@ class TestHFALoraStuff:
     def test_constraint_alora(self):
         self.m.reset()
         answer = self.m.instruct(
-            "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
+            "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa",
+            model_options={ModelOption.MAX_NEW_TOKENS: 100}
         )
         alora_output = self.backend.get_aloras()[0].generate_using_strings(
             input="Find the difference between these two strings: aaaaaaaaaa aaaaabaaaa",
@@ -41,7 +42,6 @@ class TestHFALoraStuff:
             constraint="The answer mention that there is a b in the middle of one of the strings but not the other.",
             force_yn=False,  # make sure that the alora naturally output Y and N without constrained generation
         )
-        print(alora_output)
         assert alora_output in ["Y", "N"], alora_output
         self.m.reset()
 

@@ -18,7 +18,7 @@ def test_model_option_remove():
     ), "dict with removed special keys did not match expected"
 
 
-def test_model_option_replace_to_common_opts(capfd):
+def test_model_option_replace_to_common_opts(caplog):
     model_opts = {
         ModelOption.CONTEXT_WINDOW: 3,
         ModelOption.TEMPERATURE: 1,
@@ -41,8 +41,7 @@ def test_model_option_replace_to_common_opts(capfd):
     ), "dict with replaced keys did not match expected"
 
     # There should also be a logged message due to context_window key clashes.
-    out, _ = capfd.readouterr()
-    assert "old_key (context_size) to new_key (@@@context_window@@@): lost value associated with old_key (4) and kept original value of new_key (3)" in out, "expected log for conflicting keys not found"
+    assert "old_key (context_size) to new_key (@@@context_window@@@): lost value associated with old_key (4) and kept original value of new_key (3)" in caplog.text, f"expected log for conflicting keys not found in: {caplog.text}"
 
 
 def test_model_option_replace_to_backend_specific():

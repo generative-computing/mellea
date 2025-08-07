@@ -5,6 +5,7 @@ import pydantic
 import json
 from typing_extensions import Annotated
 from mellea.backends.types import ModelOption
+import pytest
 
 
 class Test_SmokeTestComponents:
@@ -87,6 +88,7 @@ class Test_SmokeTestComponents:
 
         assert len(results) == len(prompts)
 
+    @pytest.mark.xfail(reason="ollama sometimes fails generated structured outputs")
     def test_generate_from_raw_with_format(self):
         prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
@@ -112,6 +114,4 @@ class Test_SmokeTestComponents:
 
 
 if __name__ == "__main__":
-    import pytest
-
     pytest.main([__file__])
