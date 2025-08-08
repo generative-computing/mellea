@@ -10,7 +10,10 @@ from mellea.helpers.fancy_logger import FancyLogger
 
 
 class HFConstraintAlora(HFAlora):
-    """The [Requirement Checking ALora for Granite 3.2 8B](https://huggingface.co/ibm-granite/granite-3.2-8b-alora-requirement-check) checks if the specified requirement was satisfied by the most recent model generation. Only one requirement is checked at a time."""
+    """The Requirement Checking ALora for Granite checks if the specified requirement was satisfied by the most recent model generation. Only one requirement is checked at a time.
+
+    Currently supports [Granite 3.2 8B](https://huggingface.co/ibm-granite/granite-3.2-8b-alora-requirement-check) and [Granite 3.3 8B](https://huggingface.co/ibm-granite/granite-3.3-8b-alora-requirement-check) by default.
+    """
 
     def __init__(
         self,
