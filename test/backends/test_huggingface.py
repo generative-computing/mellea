@@ -15,7 +15,7 @@ import pytest
 
 class TestHFALoraStuff:
     backend = LocalHFBackend(
-        model_id="ibm-granite/granite-3.3-8b-instruct",
+        model_id="ibm-granite/granite-3.2-8b-instruct",
         formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
         cache=SimpleLRUCache(5),
     )
@@ -33,7 +33,7 @@ class TestHFALoraStuff:
     def test_constraint_alora(self):
         self.m.reset()
         answer = self.m.instruct(
-            "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa",
+            "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa. Be concise and don't write code to answer the question.",
             model_options={ModelOption.MAX_NEW_TOKENS: 300}, # Until aloras get a bit better, try not to abruptly end generation.
         )
         alora_output = self.backend.get_aloras()[0].generate_using_strings(
