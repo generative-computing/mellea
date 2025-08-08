@@ -18,10 +18,25 @@ class HFConstraintAlora(HFAlora):
         path_or_model_id: str,
         generation_prompt: str,
         backend: LocalHFBackend,
+        *,
+        constraint_prompt: str | None = None,
+        include_constraint_in_alora_offset: bool = False,
     ):
-        """Initialize after checking that the backend is correct."""
-        assert backend._hf_model_id == "ibm-granite/granite-3.2-8b-instruct"
+        """Initialize after checking that the backend is correct.
+
+        Args:
+            constraint_prompt: a template that the constraint can be interpolated into; can only have a single `{}` slot.
+            include_constraint_in_alora_offset: whether to include the constraint prompt in the alora offset
+        """
         super().__init__(name, path_or_model_id, generation_prompt, backend)
+
+        # Maintain default behavior.
+        if constraint_prompt is None:
+            constraint_prompt = "\nRequirement: {}<|end_of_text|>\n"
+
+        self._constraint_prompt = constraint_prompt
+        self._include_constraint_in_alora_offset = include_constraint_in_alora_offset
+
         # We do a lot of logging for ALoras because this is an experimental feature. Maybe we should tag these log messages?
         self._logger = FancyLogger.get_logger()
 
@@ -51,8 +66,10 @@ class HFConstraintAlora(HFAlora):
         self, cache_hit: HFAloraCacheInfo, constraint: str, force_yn: bool
     ) -> str:
         assert self._backend.alora_model is not None
+
+        # Must tokenize the constraint here since the requirement isn't known at initialization.
         constraint_tokens = self._backend._tokenizer(
-            f"\nRequirement: {constraint}<|end_of_text|>\n", return_tensors="pt"
+            self._constraint_prompt.format(constraint), return_tensors="pt"
         ).to(self._backend._device)
 
         input_combined = {
@@ -74,7 +91,14 @@ class HFConstraintAlora(HFAlora):
             ),
         }
 
-        alora_offsets = [self._generation_prompt_tokens["input_ids"].shape[1] - 1]
+        if not self._include_constraint_in_alora_offset:
+            alora_offsets = [self._generation_prompt_tokens["input_ids"].shape[1] - 1]
+        else:
+            alora_offsets = [
+                constraint_tokens["input_ids"].shape[1]
+                + self._generation_prompt_tokens["input_ids"].shape[1]
+                - 2
+            ]
         self._logger.debug(
             f"Prompt for cached aLoRA({self.name}):\n {self._backend._tokenizer.decode(input_combined['input_ids'][0])}"
         )
@@ -136,7 +160,9 @@ class HFConstraintAlora(HFAlora):
 
         templatized = self._backend._tokenizer.apply_chat_template(chat, tokenize=False)
         assert type(templatized) is str
-        templatized = templatized + f"\nRequirement: {constraint}<|end_of_text|>\n"
+
+        # Must tokenize the constraint here since the requirement isn't known at initialization.
+        templatized = templatized + self._constraint_prompt.format(constraint)
 
         tokenized = self._backend._tokenizer(templatized, return_tensors="pt").to(
             self._backend._device
@@ -156,7 +182,19 @@ class HFConstraintAlora(HFAlora):
             ),
         }
 
-        alora_offsets = [self._generation_prompt_tokens["input_ids"].shape[1] - 1]
+        if not self._include_constraint_in_alora_offset:
+            alora_offsets = [self._generation_prompt_tokens["input_ids"].shape[1] - 1]
+        else:
+            # Get the constraint tokens separately so that we can calculate the alora offsets.
+            constraint_tokens = self._backend._tokenizer(
+                self._constraint_prompt.format(constraint), return_tensors="pt"
+            ).to(self._backend._device)
+
+            alora_offsets = [
+                constraint_tokens["input_ids"].shape[1]
+                + self._generation_prompt_tokens["input_ids"].shape[1]
+                - 2
+            ]
 
         self._logger.debug(
             f"Prompt for non-cached aLoRA({self.name}):\n{self._backend._tokenizer.decode(input_combined['input_ids'][0])}"
@@ -200,11 +238,29 @@ class HFConstraintAlora(HFAlora):
 
 def add_granite_aloras(backend: LocalHFBackend):
     """Adds the IBM Granite "starter pack" ALoras to a backend."""
-    backend.add_alora(
-        HFConstraintAlora(
-            name="constraint",
-            path_or_model_id="ibm-granite/granite-3.2-8b-alora-requirement-check",
-            generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>",
-            backend=backend,
+    if backend._hf_model_id == "ibm-granite/granite-3.2-8b-instruct":
+        backend.add_alora(
+            HFConstraintAlora(
+                name="constraint",
+                path_or_model_id="ibm-granite/granite-3.2-8b-alora-requirement-check",
+                generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>",
+                backend=backend,
+                constraint_prompt="\nRequirement: {}<|end_of_text|>\n",
+                include_constraint_in_alora_offset=False,
+            )
         )
-    )
+    elif backend._hf_model_id == "ibm-granite/granite-3.3-8b-instruct":
+        backend.add_alora(
+            HFConstraintAlora(
+                name="constraint",
+                path_or_model_id="ibm-granite/granite-3.3-8b-alora-requirement-check",
+                generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>",
+                backend=backend,
+                constraint_prompt="\n<|start_of_role|>requirement<|end_of_role|>{}<|end_of_text|>\n",
+                include_constraint_in_alora_offset=True,
+            )
+        )
+    else:
+        raise ValueError(
+            f"cannot add_granite_aloras to unknown huggingface model_id / backend: {backend._hf_model_id}"
+        )
