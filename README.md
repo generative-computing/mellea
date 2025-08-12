@@ -1,4 +1,4 @@
-<img src="docs/mellea_draft_logo_300.png" height=100>
+<img src="https://github.com/generative-computing/mellea/raw/main/docs/mellea_draft_logo_300.png" height=100>
 
 # Mellea
 
@@ -45,7 +45,7 @@ You can get started with a local install, or by using Colab notebooks.
 
 ### Getting Started with Local Infernece
 
-<img src="docs/GetStarted_py.png" style="max-width:800px">
+<img src="https://github.com/generative-computing/mellea/raw/main/docs/GetStarted_py.png" style="max-width:800px">
 
 Install with pip:
 
