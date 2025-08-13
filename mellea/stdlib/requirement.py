@@ -54,6 +54,14 @@ class ValidationResult:
         self._reason = reason
         self._score = score
 
+    @property
+    def reason(self) -> str | None:
+        return self._reason
+
+    @property
+    def score(self) -> float | None:
+        return self._score
+
     def as_bool(self) -> bool:
         """"""
         return self._result
