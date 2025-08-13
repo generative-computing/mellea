@@ -31,7 +31,7 @@ from mellea.stdlib.chat import Message, ToolMessage
 from mellea.stdlib.instruction import Instruction
 from mellea.stdlib.mify import mify
 from mellea.stdlib.mobject import MObjectProtocol
-from mellea.stdlib.requirement import Requirement, check, req
+from mellea.stdlib.requirement import Requirement, ValidationResult, check, req
 from mellea.stdlib.sampling import SamplingResult, SamplingStrategy
 
 
@@ -293,11 +293,10 @@ class MelleaSession:
         reqs: Requirement | list[Requirement],
         *,
         output: CBlock | None = None,
-        return_full_validation_results: bool = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
-    ) -> list[bool] | list[tuple[Any, bool]]:
+    ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
         # Turn a solitary requirement in to a list of requirements, and then reqify if needed.
         reqs = [reqs] if not isinstance(reqs, list) else reqs
@@ -309,18 +308,16 @@ class MelleaSession:
             validation_target_ctx.insert(output)
         rvs = []
         for requirement in reqs:
-            req_v, req_satisfied = requirement.validate(
+            val_result = requirement.validate(
                 self.backend,
                 validation_target_ctx,
                 format=format,
                 model_options=model_options,
                 generate_logs=generate_logs,
             )
-            rvs.append((req_v, req_satisfied))
-        if return_full_validation_results:
-            return rvs
-        else:
-            return [b for (_, b) in rvs]
+            rvs.append(val_result)
+
+        return rvs
 
     def req(self, *args, **kwargs):
         """Shorthand for Requirement.__init__(...)."""

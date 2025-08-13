@@ -35,13 +35,40 @@ def default_output_to_bool(x: CBlock | str) -> bool:
     return False
 
 
+class ValidationResult:
+    """ValidationResults store the output of a Requirement's validation. They can be used to return additional info from validation functions, which is useful for sampling/repairing."""
+
+    def __init__(
+        self, result: bool, *, reason: str | None = None, score: float | None = None
+    ):
+        """The result of a requirement's validation.
+
+        A ValidationResult's result field always contains a definitive pass/fail. The other fields can be used to communicate additional information about that result.
+
+        Args:
+            result: a boolean that is true if the requirement passed
+            reason: a reason for the result
+            score: if your validator gives you a score back, you can add this as metadata
+        """
+        self._result = result
+        self._reason = reason
+        self._score = score
+
+    def as_bool(self) -> bool:
+        """"""
+        return self._result
+
+    def __bool__(self) -> bool:
+        return self.as_bool()
+
+
 class Requirement(Component):
     """Requirements are a special type of Component used as input to the Validate step in Instruct/Validate/Repair patterns."""
 
     def __init__(
         self,
         description: str | None = None,
-        validation_fn: Callable[[Context], Any] | None = None,
+        validation_fn: Callable[[Context], ValidationResult] | None = None,
         *,
         output_to_bool: Callable[[CBlock | str], bool] | None = default_output_to_bool,
         check_only: bool = False,
@@ -69,12 +96,11 @@ class Requirement(Component):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
-    ) -> tuple[Any, bool]:
+    ) -> ValidationResult:
         """Chooses the appropriate validation strategy and applies that strategy."""
         if self.validation_fn is not None:
             # Python validation strategy
-            result = self.validation_fn(ctx)
-            return result, bool(result)
+            return self.validation_fn(ctx)
         else:
             # LLMaJ validation strategy. This includes ALora because the backend generate call will appropriately dispatch.
             assert self.output_to_bool is not None
@@ -93,7 +119,10 @@ class Requirement(Component):
             # This is crucial, because requirements can get reused;
             # this also means requirements are not thread-safe.
             self._output = None
-            return llm_as_a_judge_result, self.output_to_bool(llm_as_a_judge_result)
+            return ValidationResult(
+                result=self.output_to_bool(llm_as_a_judge_result),
+                reason=llm_as_a_judge_result.value,
+            )
 
     def parts(self):
         """Returns all of the constituent parts of a Requirement."""
@@ -158,7 +187,9 @@ def check(*args, **kwargs) -> Requirement:
     return Requirement(*args, **kwargs, check_only=True)
 
 
-def simple_validate(fn: Callable[[str], bool]) -> Callable[[Context], bool]:
+def simple_validate(
+    fn: Callable[[str], bool], *, reason: str | None = None
+) -> Callable[[Context], ValidationResult]:
     """Syntactic sugar for writing validation functions that only operate over the last output from the model (interpreted as a string).
 
     This is useful when your validation logic only depends upon the most recent model output. For example:
@@ -170,15 +201,21 @@ def simple_validate(fn: Callable[[str], bool]) -> Callable[[Context], bool]:
     Important notes:
      - this operates over the more recent _model output_, not the most recent message.
      - Model outputs are sometimes parsed into more complex types (eg by a `Formatter.parse` call or an OutputProcessor). This validation logic will interpret the most recent output as a string, regardless of whether it has a more complex parsed representation.
+
+    Args:
+        fn: the simple validation function that takes a string and returns some bool based off that
+        reason: if the validation function fails, a static reason for that failure to give to the llm when repairing
     """
 
-    def validate(ctx: Context) -> bool:
+    def validate(ctx: Context) -> ValidationResult:
         o = ctx.last_output()
         if o is None or o.value is None:
             FancyLogger.get_logger().warn(
                 "Last output of context was None. That might be a problem. We return validation as False to be able to continue..."
             )
-            return False
-        return fn(o.value)
+            return ValidationResult(
+                False
+            )  # Don't pass in the static reason since the function didn't run.
+        return ValidationResult(fn(o.value), reason=reason)
 
     return validate
