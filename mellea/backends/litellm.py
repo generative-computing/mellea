@@ -205,7 +205,6 @@ class LiteLLMBackend(FormatterBackend):
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
-        model_options = {} if model_options is None else model_options
         model_opts = self._simplify_and_merge(model_options)
         linearized_context = ctx.linearize()
         assert linearized_context is not None, (
@@ -221,7 +220,7 @@ class LiteLLMBackend(FormatterBackend):
                 messages.extend(self.formatter.to_chat_messages([action]))
 
         conversation: list[dict] = []
-        system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
+        system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([{"role": m.role, "content": m.content} for m in messages])
