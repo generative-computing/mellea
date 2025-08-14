@@ -5,9 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from mellea.backends import Backend, BaseModelSubclass
-from mellea.backends.aloras.huggingface.granite_aloras import add_granite_aloras
 from mellea.backends.formatter import FormatterBackend
-from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.model_ids import (
     IBM_GRANITE_3_2_8B,
     IBM_GRANITE_3_3_8B,
@@ -15,7 +13,6 @@ from mellea.backends.model_ids import (
 )
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
-from mellea.backends.watsonx import WatsonxAIBackend
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -40,10 +37,14 @@ def backend_name_to_class(name: str) -> Any:
     if name == "ollama":
         return OllamaModelBackend
     elif name == "hf" or name == "huggingface":
+        from mellea.backends.huggingface import LocalHFBackend
+
         return LocalHFBackend
     elif name == "openai":
         return OpenAIBackend
     elif name == "watsonx":
+        from mellea.backends.watsonx import WatsonxAIBackend
+
         return WatsonxAIBackend
     else:
         return None
@@ -332,9 +333,15 @@ class MelleaSession:
 
     def load_default_aloras(self):
         """Loads the default Aloras for this model, if they exist and if the backend supports."""
+        from mellea.backends.huggingface import LocalHFBackend
+
         if self.backend.model_id == IBM_GRANITE_3_2_8B and isinstance(
             self.backend, LocalHFBackend
         ):
+            from mellea.backends.aloras.huggingface.granite_aloras import (
+                add_granite_aloras,
+            )
+
             add_granite_aloras(self.backend)
             return
         self._session_logger.warning(
