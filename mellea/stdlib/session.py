@@ -432,6 +432,8 @@ class MelleaSession:
         obj: Any,
         transformation: str,
         *,
+        strategy: SamplingStrategy | None = None,
+        return_sampling_results: bool = False, # TODO: JAL. add this feature in as well.
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
     ) -> ModelOutputThunk | Any:
@@ -453,6 +455,35 @@ class MelleaSession:
         t = obj.get_transform_object(transformation)
 
         generate_logs: list[GenerateLog] = []
+
+        if strategy is not None:
+            if strategy.validate is None:
+                strategy.validate = lambda reqs, output: self.validate(  # type: ignore
+                    reqs,
+                    output=output,  # type: ignore
+                )  # type: ignore
+
+            if strategy.generate is None:
+                strategy.generate = lambda t, g_logs: (
+                    self.backend.generate_from_context(
+                        t,
+                        self.ctx,
+                        format=format,
+                        model_options=model_options,
+                        generate_logs=g_logs,
+                        tool_calls=True,
+                    )
+
+                    # TODO: JAL. Do more stuff here...
+                )
+
+            # TODO: JAL. change the function signature of sample and sample.generate
+            res = strategy.sample(t, generate_logs=generate_logs)
+
+            # TODO. JAL. add in post processing. for results.
+
+        # TODO: JAL. Remove this stuff if the strategy approach works.
+        # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 
         # Check that your model / backend supports tool calling.
         # This might throw an error when tools are provided but can't be handled by one or the other.
