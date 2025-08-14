@@ -3,8 +3,11 @@
 import datetime
 import json
 from collections.abc import Callable
+from typing import Any
 
 import litellm
+import litellm.litellm_core_utils
+import litellm.litellm_core_utils.get_supported_openai_params
 
 import mellea.backends.model_ids as model_ids
 from mellea.backends import BaseModelSubclass
@@ -61,6 +64,31 @@ class LiteLLMBackend(FormatterBackend):
         else:
             self._base_url = base_url
 
+        # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
+        # These are usually values that must be extracted before hand or that are common among backend providers.
+        # OpenAI has some deprecated parameters. Those map to the same mellea parameter, but
+        # users should only be specifying a single one in their request.
+        self.to_mellea_model_opts_map = {
+            "system": ModelOption.SYSTEM_PROMPT,
+            "reasoning_effort": ModelOption.THINKING,  # TODO: JAL; see which of these are actually extracted...
+            "seed": ModelOption.SEED,
+            "max_completion_tokens": ModelOption.MAX_NEW_TOKENS,
+            "max_tokens": ModelOption.MAX_NEW_TOKENS,
+            "tools": ModelOption.TOOLS,
+            "functions": ModelOption.TOOLS,
+        }
+
+        # A mapping of Mellea specific ModelOptions to the specific names for this backend.
+        # These options should almost always be a subset of those specified in the `to_mellea_model_opts_map`.
+        # Usually, values that are intentionally extracted while prepping for the backend generate call
+        # will be omitted here so that they will be removed when model_options are processed
+        # for the call to the model.
+        self.from_mellea_model_opts_map = {
+            ModelOption.SEED: "seed",
+            ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
+            ModelOption.THINKING: "reasoning_effort",
+        }
+
     def generate_from_context(
         self,
         action: Component | CBlock,
@@ -84,30 +112,87 @@ class LiteLLMBackend(FormatterBackend):
             tool_calls=tool_calls,
         )
 
-    def _simplify_and_merge(self, mo: dict) -> dict:
-        mo_safe = {} if mo is None else mo.copy()
-        mo_merged = ModelOption.merge_model_options(self.model_options, mo_safe)
+    def _simplify_and_merge(
+        self, model_options: dict[str, Any] | None
+    ) -> dict[str, Any]:
+        """Simplifies model_options to use the Mellea specific ModelOption.Option and merges the backend's model_options with those passed into this call.
 
-        # map to valid litellm names
-        mo_mapping = {
-            ModelOption.TOOLS: "tools",
-            ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
-            ModelOption.SEED: "seed",
-            ModelOption.THINKING: "thinking",
-        }
-        mo_res = ModelOption.replace_keys(mo_merged, mo_mapping)
-        mo_res = ModelOption.remove_special_keys(mo_res)
+        Rules:
+        - Within a model_options dict, existing keys take precedence. This means remapping to mellea specific keys will maintain the value of the mellea specific key if one already exists.
+        - When merging, the keys/values from the dictionary passed into this function take precedence.
 
-        supported_params = litellm.get_supported_openai_params(self._model_id)
-        assert supported_params is not None
-        for k in list(mo_res.keys()):
-            if k not in supported_params:
-                del mo_res[k]
-                FancyLogger.get_logger().warn(
-                    f"Skipping '{k}' -- Model-Option not supported by {self.model_id}."
-                )
+        Because this function simplifies and then merges, non-Mellea keys from the passed in model_options will replace
+        Mellea specific keys from the backend's model_options.
 
-        return mo_res
+        Args:
+            model_options: the model_options for this call
+
+        Returns:
+            a new dict
+        """
+        backend_model_opts = ModelOption.replace_keys(
+            self.model_options, self.to_mellea_model_opts_map
+        )
+
+        if model_options is None:
+            return backend_model_opts
+
+        generate_call_model_opts = ModelOption.replace_keys(
+            model_options, self.to_mellea_model_opts_map
+        )
+        return ModelOption.merge_model_options(
+            backend_model_opts, generate_call_model_opts
+        )
+
+    def _make_backend_specific_and_remove(
+        self, model_options: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Maps specified Mellea specific keys to their backend specific version and removes any remaining Mellea keys.
+
+        Additionally, logs any params unknown to litellm and any params that are openai specific but not supported by this model/provider.
+
+        Args:
+            model_options: the model_options for this call
+
+        Returns:
+            a new dict
+        """
+        backend_specific = ModelOption.replace_keys(
+            model_options, self.from_mellea_model_opts_map
+        )
+        backend_specific = ModelOption.remove_special_keys(backend_specific)
+
+        # We set `drop_params=True` which will drop non-supported openai params; check for non-openai
+        # params that might cause errors and log which openai params aren't supported here.
+        # See https://docs.litellm.ai/docs/completion/input.
+        standard_openai_subset = litellm.get_standard_openai_params(backend_specific)
+        supported_params_list = litellm.litellm_core_utils.get_supported_openai_params.get_supported_openai_params(
+            self._model_id
+        )
+        supported_params = (
+            set(supported_params_list) if supported_params_list is not None else set()
+        )
+
+        unknown_keys = []  # keys that are unknown to litellm
+        unsupported_openai_params = []  # openai params that are known to litellm but not supported for this model/provider
+        for key in backend_specific.keys():
+            if key not in standard_openai_subset.keys():
+                unknown_keys.append(key)
+
+            elif key not in supported_params:
+                unsupported_openai_params.append(key)
+
+        if len(unknown_keys) > 0:
+            FancyLogger.get_logger().warning(
+                f"litellm allows for unknown / non-openai input params; mellea won't validate the following params that may cause issues: {', '.join(unknown_keys)}"
+            )
+
+        if len(unsupported_openai_params) > 0:
+            FancyLogger.get_logger().warning(
+                f"litellm will automatically drop the following openai keys that aren't supported by the current model/provider: {', '.join(unsupported_openai_params)}"
+            )
+
+        return backend_specific
 
     def _generate_from_chat_context_standard(
         self,
@@ -154,6 +239,42 @@ class LiteLLMBackend(FormatterBackend):
             response_format = {"type": "text"}
 
         # Append tool call information if applicable.
+        tools: dict[str, Callable] = dict()
+        if tool_calls:
+            if format:
+                FancyLogger.get_logger().warning(
+                    f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
+                )
+            else:
+                if isinstance(action, Component) and isinstance(
+                    action.format_for_llm(), TemplateRepresentation
+                ):
+                    tools = get_tools_from_action(action)
+
+                model_options_tools = model_opts.get(ModelOption.TOOLS, None)
+                if model_options_tools is not None:
+                    assert isinstance(model_options_tools, dict)
+                    for fn_name in model_options_tools:
+                        # invariant re: relationship between the model_options set of tools and the TemplateRepresentation set of tools
+                        assert fn_name not in tools.keys(), (
+                            f"Cannot add tool {fn_name} because that tool was already defined in the TemplateRepresentation for the action."
+                        )
+                        # type checking because ModelOptions is an untyped dict and the calling convention for tools isn't clearly documented at our abstraction boundaries.
+                        assert type(fn_name) is str, (
+                            "When providing a `ModelOption.TOOLS` parameter to `model_options`, always used the type Dict[str, Callable] where `str` is the function name and the callable is the function."
+                        )
+                        assert callable(model_options_tools[fn_name]), (
+                            "When providing a `ModelOption.TOOLS` parameter to `model_options`, always used the type Dict[str, Callable] where `str` is the function name and the callable is the function."
+                        )
+                        # Add the model_options tool to the existing set of tools.
+                        tools[fn_name] = model_options_tools[fn_name]
+
+        thinking = model_opts.get(ModelOption.THINKING, None)
+        if type(thinking) is bool and thinking:
+            # OpenAI uses strings for its reasoning levels.
+            thinking = "medium"
+
+        # Append tool call information if applicable.
         tools = self._extract_tools(action, format, model_opts, tool_calls)
         formatted_tools = convert_tools_to_json(tools) if len(tools) > 0 else None
 
@@ -162,7 +283,9 @@ class LiteLLMBackend(FormatterBackend):
             messages=conversation,
             tools=formatted_tools,
             response_format=response_format,
-            **model_opts,
+            reasoning_effort=thinking,  # type: ignore
+            drop_params=True,  # See note in `_make_backend_specific_and_remove`.
+            **self._make_backend_specific_and_remove(model_opts),
         )
 
         choice_0 = chat_response.choices[0]
