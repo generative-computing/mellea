@@ -1,0 +1,33 @@
+name: Verify Code Quality & Security
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref_name }}
+    cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Install requirements
+        run: |
+          pip install ".[dev]"
+      - name: Install the pre-commit hooks
+        run: |
+            pre-commit install
+      - name: Validate all pre-commit verification were run correctly
+        run: |
+            pre-commit run --all-files
+      - name: Send failure message
+        if: failure()  # This step will only run if a previous step failed
+        run: echo "The quality & security verification failed. This is likely due to not using pre-commit hooks please run 'pre-commit install' before any commit."
