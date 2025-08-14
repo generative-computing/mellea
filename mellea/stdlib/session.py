@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+import contextvars
+from contextlib import contextmanager
+from typing import Any, Generator, Literal, Optional
 
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.aloras.huggingface.granite_aloras import add_granite_aloras
@@ -33,6 +35,26 @@ from mellea.stdlib.mify import mify
 from mellea.stdlib.mobject import MObjectProtocol
 from mellea.stdlib.requirement import Requirement, check, req
 from mellea.stdlib.sampling import SamplingResult, SamplingStrategy
+
+
+# Global context variable for the context session
+_context_session: contextvars.ContextVar[Optional["MelleaSession"]] = contextvars.ContextVar(
+    "context_session", default=None
+)
+
+
+def get_session() -> "MelleaSession":
+    """Get the current session from context.
+
+    Raises:
+        RuntimeError: If no session is currently active.
+    """
+    session = _context_session.get()
+    if session is None:
+        raise RuntimeError(
+            "No active session found. Use 'with session(...):' to create one."
+        )
+    return session
 
 
 def backend_name_to_class(name: str) -> Any:
@@ -74,6 +96,41 @@ def start_session(
     assert backend_class is not None
     backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
     return MelleaSession(backend, ctx)
+
+
+@contextmanager
+def session(
+    backend_name: Literal["ollama", "hf", "openai", "watsonx"] = "ollama",
+    model_id: str | ModelIdentifier = IBM_GRANITE_3_3_8B,
+    ctx: Context | None = SimpleContext(),
+    *,
+    model_options: dict | None = None,
+    **backend_kwargs,
+) -> Generator[MelleaSession, None, None]:
+    """Context manager that sets the current session.
+
+    Usage:
+        with session("ollama", "granite") as s:
+            # s is also available via get_current_session()
+            result = instruct("Generate a story")  # Uses current session
+    """
+    session_obj = start_session(
+        backend_name=backend_name,
+        model_id=model_id,
+        ctx=ctx,
+        model_options=model_options,
+        **backend_kwargs,
+    )
+
+    # Set the context variable
+    token = _context_session.set(session_obj)
+    try:
+        yield session_obj
+    finally:
+        # Clean up
+        session_obj.cleanup()
+        # Reset context variable
+        _context_session.reset(token)
 
 
 class MelleaSession:
@@ -131,6 +188,13 @@ class MelleaSession:
     def reset(self):
         """Reset the context state."""
         self.ctx.reset()
+
+    def cleanup(self) -> None:
+        """Clean up session resources."""
+        self.reset()
+        self._backend_stack.clear()
+        if hasattr(self.backend, "close"):
+            self.backend.close()
 
     def summarize(self) -> ModelOutputThunk:
         """Summarizes the current context."""
@@ -572,3 +636,29 @@ class MelleaSession:
             if isinstance(last_el, GenerateLog):
                 prompt = last_el.prompt
         return prompt
+
+
+# Convenience functions that use the current session
+def instruct(description: str, **kwargs) -> ModelOutputThunk | SamplingResult:
+    """Instruct using the current session."""
+    return get_session().instruct(description, **kwargs)
+
+
+def chat(content: str, **kwargs) -> Message:
+    """Chat using the current session."""
+    return get_session().chat(content, **kwargs)
+
+
+def validate(reqs, **kwargs):
+    """Validate using the current session."""
+    return get_session().validate(reqs, **kwargs)
+
+
+def query(obj: Any, query_str: str, **kwargs) -> ModelOutputThunk:
+    """Query using the current session."""
+    return get_session().query(obj, query_str, **kwargs)
+
+
+def transform(obj: Any, transformation: str, **kwargs):
+    """Transform using the current session."""
+    return get_session().transform(obj, transformation, **kwargs)
