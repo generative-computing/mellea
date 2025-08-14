@@ -94,8 +94,19 @@ class Requirement(Component):
         """
         self.description = description
         self.output_to_bool = output_to_bool
-        self.validation_fn = validation_fn
         self.check_only = check_only
+
+        self.validation_fn = validation_fn
+        if self.validation_fn is not None:
+            sig = inspect.signature(self.validation_fn)
+            if not (
+                len(sig.parameters) == 1
+                and next(iter(sig.parameters.values())).annotation is Context
+                and sig.return_annotation is ValidationResult
+            ):
+                FancyLogger.get_logger().warning(
+                    f"function signature for requirement's validation function doesn't match expected; may throw error during validation. fn signature: {sig}, req description: {self.description}"
+                )
 
     def validate(
         self,
@@ -109,7 +120,11 @@ class Requirement(Component):
         """Chooses the appropriate validation strategy and applies that strategy."""
         if self.validation_fn is not None:
             # Python validation strategy
-            return self.validation_fn(ctx)
+            res = self.validation_fn(ctx)
+            assert isinstance(res, ValidationResult), (
+                f"requirement's validation fn did not return a ValidationResult, got {type(res)} instead. requirement description: {self.description}"
+            )
+            return res
         else:
             # LLMaJ validation strategy. This includes ALora because the backend generate call will appropriately dispatch.
             assert self.output_to_bool is not None
