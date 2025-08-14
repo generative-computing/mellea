@@ -232,11 +232,13 @@ def research_subtopic(main_topic: str, subtopic: str, context: list[RAGDocument]
     summaries = step_summarize_docs(
         m, docs=[c.content for c in context], user_args=user_args
     )
-    print(f"Summaries: \n{'\n\n'.join([w(s) for s in summaries])}")
+    summaries_str = "\n\n".join([w(s) for s in summaries])
+    print(f"Summaries: \n{summaries_str}")
 
     # Step 2: Generate Outline
     outline = step_generate_outline(m, user_args=user_args, context=context)
-    print(f"Outline:\n{'\n'.join(outline)}")
+    outline_str = "\n".join(outline)
+    print(f"Outline:\n{outline_str}")
 
     # Step 3: Merge all for the final report
     full_report = step_write_full_report(

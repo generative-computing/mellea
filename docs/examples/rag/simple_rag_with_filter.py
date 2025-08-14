@@ -64,7 +64,8 @@ if __name__ == "__main__":
     # Query the index
     print("Query Embedding model...")
     results = query_index(embedding_model, index, query, docs)
-    print(f"results:\n {'\n'.join([f'=> {r}' for r in results])}\n ====")
+    results_str = "\n".join([f"=> {r}" for r in results])
+    print(f"results:\n {results_str}\n ====")
     del embedding_model  # help GC
 
     # Create Mellea session

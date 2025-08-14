@@ -557,7 +557,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         calls = chat_response.choices[0].message.tool_calls
         if calls:
             for tool_call in calls:
-                tool_name = tool_call.function.name  # type:ignore
+                tool_name = tool_call.function.name  # type: ignore
                 tool_args = tool_call.function.arguments  # type: ignore
 
                 func = tools.get(tool_name)
