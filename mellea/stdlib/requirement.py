@@ -1,8 +1,9 @@
 """Requirements are a special type of Component used as input to the "validate" step in Instruct/Validate/Repair design patterns."""
 
+import inspect
 import re
 from collections.abc import Callable
-from typing import Any
+from typing import Any, overload
 
 from mellea.backends import (
     Backend,
@@ -195,8 +196,20 @@ def check(*args, **kwargs) -> Requirement:
     return Requirement(*args, **kwargs, check_only=True)
 
 
+@overload
+def simple_validate(
+    fn: Callable[[str], tuple[bool, str]],
+) -> Callable[[Context], ValidationResult]: ...
+
+
+@overload
 def simple_validate(
     fn: Callable[[str], bool], *, reason: str | None = None
+) -> Callable[[Context], ValidationResult]: ...
+
+
+def simple_validate(
+    fn: Callable[[str], Any], *, reason: str | None = None
 ) -> Callable[[Context], ValidationResult]:
     """Syntactic sugar for writing validation functions that only operate over the last output from the model (interpreted as a string).
 
@@ -211,8 +224,8 @@ def simple_validate(
      - Model outputs are sometimes parsed into more complex types (eg by a `Formatter.parse` call or an OutputProcessor). This validation logic will interpret the most recent output as a string, regardless of whether it has a more complex parsed representation.
 
     Args:
-        fn: the simple validation function that takes a string and returns some bool based off that
-        reason: if the validation function fails, a static reason for that failure to give to the llm when repairing
+        fn: the simple validation function that takes a string and returns either a bool or (bool, str)
+        reason: only used if the provided function returns a bool; if the validation function fails, a static reason for that failure to give to the llm when repairing
     """
 
     def validate(ctx: Context) -> ValidationResult:
@@ -224,6 +237,21 @@ def simple_validate(
             return ValidationResult(
                 False
             )  # Don't pass in the static reason since the function didn't run.
-        return ValidationResult(fn(o.value), reason=reason)
+
+        result = fn(o.value)
+
+        # Only confirm that the result conforms to the fn type requirements here. Functions can
+        # declare return types and then deviate from them.
+
+        # Oneliner that checks the tuple actually contains (bool, str)
+        if isinstance(result, tuple) and list(map(type, result)) == [bool, str]:
+            return ValidationResult(result[0], reason=result[1])
+
+        elif type(result) is bool:
+            return ValidationResult(result, reason=reason)
+
+        raise ValueError(
+            f"function {fn.__name__} passed to simple_validate didn't return either bool or [bool, str]; returned {type(result)} instead"
+        )
 
     return validate
