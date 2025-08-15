@@ -43,7 +43,7 @@ jobs:
       - name: Pull granite3.3:8b model
         run: ollama pull granite3.3:8b
       - name: Start serving the model
-        run: nohup ollama serve --model granite3.3:8b &
+        run: nohup ollama serve &
       - name: Run Tests
         run: uv run pytest test
 
