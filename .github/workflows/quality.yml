@@ -36,4 +36,4 @@ jobs:
         run: pre-commit run --all-files
       - name: Send failure message
         if: failure()  # This step will only run if a previous step failed
-        run: echo "The quality & security verification failed. This is likely due to not using pre-commit hooks please run 'pre-commit install' before any commit."
+        run: echo "The quality & security verification failed."
