@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from typing import List  # noqa: UP035
 
 from jinja2 import Template
@@ -15,8 +16,20 @@ from mellea.backends.openai import OpenAIBackend
 from .task_decomposer import build_subtasks, decompose_task
 from .task_executor import execute_task
 
+# Pattern allows alphanumeric characters, underscore, hyphen, period, and space.
+# Anchors ^ and $ ensure the entire string matches the pattern.
+FILENAME_PATTERN = re.compile(r"^[a-zA-Z0-9_.][a-zA-Z0-9_.\- ]+$")
 
-def create_model(model_id=None, backend_type="huggingface", chat_history_on=False):
+
+def validate_filename(candidate_str: str) -> bool:
+    # Check if the "filename" matches the pattern and is within a reasonable length
+    # (e.g., 1 to 250 characters, a common limit that considers 5 more character for extension)
+    if re.fullmatch(FILENAME_PATTERN, candidate_str) and 1 <= len(candidate_str) <= 250:
+        return True
+    return False
+
+
+def create_model(model_id=None, backend_type="huggingface", chat_history_on=False):  # type: ignore[no-untyped-def]
     """Setup the backend model session with a model_id."""
     # Import here to avoid circular import if any
     from mellea.backends.formatter import TemplateFormatter
@@ -45,7 +58,7 @@ def create_model(model_id=None, backend_type="huggingface", chat_history_on=Fals
     return m
 
 
-def run_pipeline(
+def run_pipeline(  # type: ignore[no-untyped-def]
     task,
     index=None,
     out_dir=".",
@@ -114,7 +127,7 @@ def run_pipeline(
     }
 
 
-def generate_python_template(
+def generate_python_template(  # type: ignore[no-untyped-def]
     subtask_data: list, output_dir: str, index: int | None = None
 ):
     """Helper function to generate a python M program using a Jinja template."""

@@ -1,0 +1,34 @@
+import textwrap
+
+import mellea
+
+m = mellea.start_session()
+{% for item in subtasks%}
+{% set i = loop.index0 %}
+# {{ item.subtask }} - {{ item.tag }}
+subtask_{{ loop.index }} = m.instruct(
+    textwrap.dedent(
+        R"""
+        {{ item.prompt_template | trim  | indent(width=8, first=False) }}
+        """.strip()
+    ),
+    requirements=[
+        {%- for con in item.constraints %}
+        {{ con | tojson}},
+        {%- endfor %}
+    ],
+    {%- if not loop.first %}
+    user_variables={
+        {%- for j in range(i) %}
+        {{ subtasks[j].tag | tojson }}: subtask_{{ i }}.value if subtask_{{ i }}.value is not None else "",
+        {%- endfor %}
+    },
+    {%- endif %}
+)
+{%- if loop.last %}
+
+final_response = subtask_{{ loop.index }}.value
+
+print(final_response)
+{%- endif -%}
+{%- endfor -%}
