@@ -1,7 +1,8 @@
 def validate_filename(candidate_str: str) -> bool:
     import re
 
-    # Pattern allows alphanumeric characters, underscore, hyphen, period, and space.
+    # Allows alphanumeric characters, underscore, hyphen, period, and space.
+    # Enforces the first character to be alphanumeric, underscore, or period.
     # Anchors ^ and $ ensure the entire string matches the pattern.
     FILENAME_PATTERN = r"^[a-zA-Z0-9_.][a-zA-Z0-9_.\- ]+$"
 

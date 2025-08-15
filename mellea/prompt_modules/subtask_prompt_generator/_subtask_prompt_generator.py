@@ -203,7 +203,7 @@ class _SubtaskPromptGenerator(PromptModule):
             # - Words can only be separated by underline character (no spaces)
             # - No consecutive underline characters
             available_content_variables = [
-                r"{{" + item + r"}}" for item in user_input_var_names
+                r"{{" + item.upper() + r"}}" for item in user_input_var_names
             ] + [r"{{" + item + r"}}" for item in previous_tags]
 
             user_prompt = get_user_prompt(
