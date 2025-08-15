@@ -59,7 +59,7 @@ m = "cli.m:cli"
 # Use these like:
 # pip install -e .[dev]
 # pip install mellea[dev]
-dev = ["mypy", "mypy-extensions", "tomli", "codespell"]
+dev = ["mypy", "mypy-extensions", "tomli", "codespell", "pre-commit"]
 sphinx = ["sphinx_rtd_theme", "sphinx-autodoc-typehints", "sphinx_mdinclude"]
 
 [dependency-groups]
