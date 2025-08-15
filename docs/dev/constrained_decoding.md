@@ -10,7 +10,7 @@ The `m` framework currently uses the `format` argument to pydantic schemas, **ou
 
 > If a keyword had meaning across multiple types of backends, and if it means the same thing in all of those backends but has different names, then we use the `@@@`-style args so that the user can pass these args across all backends in the same way. Otherwise, the arguments in model_args are passed along verbatim.
 
-This argues for `@@@format@@@` as opposed to a dedicated `format` option in the method signature. Or, in the alternative, for an entir re-think of ModelArgs.
+This argues for `@@@format@@@` as opposed to a dedicated `format` option in the method signature. Or, in the alternative, for an entire re-think of ModelArgs.
 
 ## Integration with grammar-targeted LLMs
 
