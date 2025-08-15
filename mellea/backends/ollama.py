@@ -263,7 +263,7 @@ class OllamaModelBackend(FormatterBackend):
         """
         model_opts = self._simplify_and_merge(model_options)
 
-        linearized_context = ctx.linearize()
+        linearized_context = ctx.render_for_generation()
         assert linearized_context is not None, (
             "Cannot generate from a non-linear context in a FormatterBackend."
         )

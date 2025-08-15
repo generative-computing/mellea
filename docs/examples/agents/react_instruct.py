@@ -2,7 +2,7 @@ import datetime
 import inspect
 import json
 from collections.abc import Callable
-from typing import Literal
+from typing import Literal, Unpack
 
 import pydantic
 from jinja2 import Template
@@ -81,7 +81,7 @@ class ReactToolbox(pydantic.BaseModel):
     def tool_name_schema(self):
         names = self.tool_names()
         fields = dict()
-        fields["tool"] = Literal[*names]
+        fields["tool"] = Literal[Unpack[names]]
         return pydantic.create_model("ToolSelectionSchema", **fields)
 
     def get_tool_from_schema(self, content: str):
@@ -101,7 +101,7 @@ def react(
     react_toolbox: ReactToolbox,
 ):
     assert m.ctx.is_chat_context, "ReACT requires a chat context."
-    test_ctx_lin = m.ctx.linearize()
+    test_ctx_lin = m.ctx.render_for_generation()
     assert test_ctx_lin is not None and len(test_ctx_lin) == 0, (
         "ReACT expects a fresh context."
     )

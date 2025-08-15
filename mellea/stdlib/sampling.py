@@ -9,7 +9,7 @@ import tqdm
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import CBlock, GenerateLog, ModelOutputThunk
 from mellea.stdlib.instruction import Instruction
-from mellea.stdlib.requirement import Requirement
+from mellea.stdlib.requirement import Requirement, ValidationResult
 
 
 class SamplingResult(CBlock):
@@ -21,7 +21,8 @@ class SamplingResult(CBlock):
         success: bool,
         *,
         sample_generations: list[ModelOutputThunk] | None = None,
-        sample_validations: list[list[tuple[Requirement, bool]]] | None = None,
+        sample_validations: list[list[tuple[Requirement, ValidationResult]]]
+        | None = None,
     ):
         """Initialize a new instance of sampling results.
 
@@ -29,7 +30,7 @@ class SamplingResult(CBlock):
             result: The final output or result from applying the sampling strategy.
             success: A boolean indicating whether the operation was successful.
             sample_generations: A list containing intermediate generations produced during the process.
-            sample_validations: For each generation a list of a requirement and a boolean value indicating whether the requirement was met.
+            sample_validations: For each generation a list of tuples of a requirement and a validation result.
         """
         super().__init__(value=result.value)
         self.result = result
@@ -45,7 +46,9 @@ class SamplingStrategy(abc.ABC):
     It allows setting custom validation and generation functions through properties.
     """
 
-    validate: Callable[[list[Requirement], Any], list[bool]] | None = None
+    # the function signature here matches that of m.validate
+    validate: Callable[[list[Requirement], Any], list[ValidationResult]] | None = None
+
     generate: (
         Callable[[Instruction, list[GenerateLog] | None], ModelOutputThunk] | None
     ) = None
@@ -75,14 +78,23 @@ class RejectionSamplingStrategy(SamplingStrategy):
         *,
         loop_budget: int = 1,
         repair: Callable[
-            [Instruction, list[tuple[Requirement, bool]], list[Instruction]],
+            [
+                Instruction,
+                list[tuple[Requirement, ValidationResult]],
+                list[Instruction],
+            ],
             Instruction,
         ] = lambda i, r, h_i: i,
         select_from_failure: Callable[
-            [Instruction, list[ModelOutputThunk], list[list[tuple[Requirement, bool]]]],
+            [
+                Instruction,
+                list[ModelOutputThunk],
+                list[list[tuple[Requirement, ValidationResult]]],
+            ],
             ModelOutputThunk,
         ] = lambda _, results, __: results[0],
-        validate: Callable[[list[Requirement], Any], list[bool]] | None = None,
+        validate: Callable[[list[Requirement], Any], list[ValidationResult]]
+        | None = None,
         generate: (
             Callable[[Instruction, list[GenerateLog] | None], ModelOutputThunk] | None
         ) = None,
@@ -139,7 +151,7 @@ class RejectionSamplingStrategy(SamplingStrategy):
         flog = FancyLogger.get_logger()
 
         failed_results: list[ModelOutputThunk] = []
-        failed_scores: list[list[tuple[Requirement, bool]]] = []
+        failed_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         failed_instructions: list[Instruction] = []
 
         loop_count = 0
@@ -169,7 +181,7 @@ class RejectionSamplingStrategy(SamplingStrategy):
             failed_scores.append(constraint_scores)
             failed_instructions.append(instruction)
 
-            if all(s[1] for s in constraint_scores):
+            if all(bool(s[1]) for s in constraint_scores):
                 flog.info("SUCCESS")
                 return SamplingResult(
                     result,
@@ -179,7 +191,7 @@ class RejectionSamplingStrategy(SamplingStrategy):
                 )
 
             else:
-                count_valid = len([s for s in constraint_scores if s[1]])
+                count_valid = len([s for s in constraint_scores if bool(s[1])])
                 flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}")
             # If we did not pass all constraints, update the instruction and try again.
             instruction = self.repair(

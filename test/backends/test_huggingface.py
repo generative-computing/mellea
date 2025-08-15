@@ -2,7 +2,12 @@ from mellea import MelleaSession
 from mellea.stdlib.base import CBlock, LinearContext
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.aloras.huggingface.granite_aloras import add_granite_aloras
-from mellea.stdlib.requirement import Requirement, ALoraRequirement, LLMaJRequirement
+from mellea.stdlib.requirement import (
+    Requirement,
+    ALoraRequirement,
+    LLMaJRequirement,
+    ValidationResult,
+)
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.types import ModelOption
@@ -34,9 +39,13 @@ class TestHFALoraStuff:
         self.m.reset()
         answer = self.m.instruct(
             "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa. Be concise and don't write code to answer the question.",
-            model_options={ModelOption.MAX_NEW_TOKENS: 300}, # Until aloras get a bit better, try not to abruptly end generation.
+            model_options={
+                ModelOption.MAX_NEW_TOKENS: 300
+            },  # Until aloras get a bit better, try not to abruptly end generation.
         )
-        alora_output = self.backend.get_aloras()[0].generate_using_strings(
+        alora_output = self.backend.get_aloras()[
+            0
+        ].generate_using_strings(
             input="Find the difference between these two strings: aaaaaaaaaa aaaaabaaaa",
             response=str(answer),
             constraint="The answer mention that there is a b in the middle of one of the strings but not the other.",
@@ -54,12 +63,12 @@ class TestHFALoraStuff:
         assert self.m.backend._use_caches
         assert self.backend._cache.current_size() != 0
         validation_outputs = self.m.validate(
-            "The answer should mention that there is a b in the middle of one of the strings but not the other.",
-            return_full_validation_results=True,
+            "The answer should mention that there is a b in the middle of one of the strings but not the other."
         )
         assert len(validation_outputs) == 1
-        alora_output, valuation_boolean = validation_outputs[0]
-        assert str(alora_output) in ["Y", "N"]
+        val_result = validation_outputs[0]
+        assert isinstance(val_result, ValidationResult)
+        assert str(val_result.reason) in ["Y", "N"]
         self.m.reset()
 
     def test_constraint_lora_override(self):
@@ -69,12 +78,12 @@ class TestHFALoraStuff:
             "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
         )
         validation_outputs = self.m.validate(
-            "The answer should mention that there is a b in the middle of one of the strings but not the other.",
-            return_full_validation_results=True,
+            "The answer should mention that there is a b in the middle of one of the strings but not the other."
         )
         assert len(validation_outputs) == 1
-        non_alora_output, _ = validation_outputs[0]
-        assert str(non_alora_output) not in ["Y", "N"]
+        val_result = validation_outputs[0]
+        assert isinstance(val_result, ValidationResult)
+        assert str(val_result.reason) not in ["Y", "N"]
         self.backend.default_to_constraint_checking_alora = True
         self.m.reset()
 
@@ -87,12 +96,12 @@ class TestHFALoraStuff:
         validation_outputs = self.m.validate(
             ALoraRequirement(
                 "The answer should mention that there is a b in the middle of one of the strings but not the other."
-            ),
-            return_full_validation_results=True,
+            )
         )
         assert len(validation_outputs) == 1
-        non_alora_output, _ = validation_outputs[0]
-        assert str(non_alora_output) in ["Y", "N"]
+        val_result = validation_outputs[0]
+        assert isinstance(val_result, ValidationResult)
+        assert str(val_result.reason) in ["Y", "N"]
         self.backend.default_to_constraint_checking_alora = True
         self.m.reset()
 
@@ -105,12 +114,12 @@ class TestHFALoraStuff:
         validation_outputs = self.m.validate(
             LLMaJRequirement(
                 "The answer should mention that there is a b in the middle of one of the strings but not the other."
-            ),
-            return_full_validation_results=True,
+            )
         )
         assert len(validation_outputs) == 1
-        non_alora_output, _ = validation_outputs[0]
-        assert str(non_alora_output) not in ["Y", "N"]
+        val_result = validation_outputs[0]
+        assert isinstance(val_result, ValidationResult)
+        assert str(val_result.reason) not in ["Y", "N"]
         self.m.reset()
 
     def test_instruct(self):
@@ -135,8 +144,7 @@ class TestHFALoraStuff:
         class Person(pydantic.BaseModel):
             name: str
             email_address: Annotated[
-                str,
-                pydantic.StringConstraints(pattern=r"[a-zA-Z]{5,10}@example\.com"),
+                str, pydantic.StringConstraints(pattern=r"[a-zA-Z]{5,10}@example\.com")
             ]
 
         class Email(pydantic.BaseModel):
@@ -156,12 +164,12 @@ class TestHFALoraStuff:
         print(email)
 
         print("address:", email.to.email_address)
-        assert (
-            "@" in email.to.email_address
-        ), "The @ sign should be in the meail address."
-        assert email.to.email_address.endswith(
-            "example.com"
-        ), "The email address should be at example.com"
+        assert "@" in email.to.email_address, (
+            "The @ sign should be in the meail address."
+        )
+        assert email.to.email_address.endswith("example.com"), (
+            "The email address should be at example.com"
+        )
 
     def test_generate_from_raw(self):
         prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
@@ -191,9 +199,9 @@ class TestHFALoraStuff:
         try:
             answer = Answer.model_validate_json(random_result.value)
         except pydantic.ValidationError as e:
-            assert (
-                False
-            ), f"formatting directive failed for {random_result.value}: {e.json()}"
+            assert False, (
+                f"formatting directive failed for {random_result.value}: {e.json()}"
+            )
 
 
 if __name__ == "__main__":

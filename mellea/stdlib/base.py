@@ -157,8 +157,13 @@ class Context(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def linearize(self) -> list[Component | CBlock] | None:
-        """Provides a linear list of context components. This is not always possible, or None if that is not possible to construct."""
+    def render_for_generation(self) -> list[Component | CBlock] | None:
+        """Provides a linear list of context components to use for generation, or None if that is not possible to construct."""
+        ...
+
+    @abc.abstractmethod
+    def full_event_log(self) -> list[Component | CBlock]:
+        """Provides a list of all events stored in the context."""
         ...
 
     @abc.abstractmethod
@@ -262,6 +267,10 @@ class BasicContext(Context, abc.ABC):
                 )
                 return last, log[0]
 
+    def full_event_log(self) -> list[Component | CBlock]:
+        """Returns the underlying _ctx."""
+        return self._ctx
+
     def last_turn(self):
         """The last input/output turn of the context."""
         if len(self._ctx) == 0:
@@ -335,8 +344,8 @@ class LinearContext(BasicContext):
         if turn.output:
             self.insert(turn.output, generate_logs=generate_logs)
 
-    def linearize(self) -> list[Component | CBlock] | None:
-        """Returns the underlying _ctx list."""
+    def render_for_generation(self) -> list[Component | CBlock] | None:
+        """Returns the underlying _ctx list for generation."""
         return self._ctx
 
     def is_chat_history(self):
@@ -372,7 +381,7 @@ class SimpleContext(BasicContext):
         super().__init__()
         self.is_chat_context = True
 
-    def linearize(self) -> list[Component | CBlock] | None:
+    def render_for_generation(self) -> list[Component | CBlock] | None:
         """Uses _ctx ordering."""
         return []
 

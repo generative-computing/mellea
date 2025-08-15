@@ -111,10 +111,10 @@ def as_chat_history(ctx: Context) -> list[Message]:
             case _:
                 return None
 
-    linearized_ctx = ctx.linearize()
-    if linearized_ctx is None:
+    all_ctx_events = ctx.full_event_log()
+    if all_ctx_events is None:
         raise Exception("Trying to cast a non-linear history into a chat history.")
     else:
-        history = [_to_msg(c) for c in linearized_ctx]
+        history = [_to_msg(c) for c in all_ctx_events]
         assert None not in history, "Could not render this context as a chat history."
         return history  # type: ignore
