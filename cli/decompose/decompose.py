@@ -14,7 +14,7 @@ def run(
         typer.Option(help="Path to an existing directory to save the output files."),
     ],
     out_name: Annotated[
-        str, typer.Option(help='Name for the output files. Defaults to "m_result"')
+        str, typer.Option(help='Name for the output files. Defaults to "m_result".')
     ] = "m_decomp_result",
     prompt_file: Annotated[
         typer.FileText | None,
