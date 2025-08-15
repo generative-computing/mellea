@@ -1,4 +1,4 @@
-name: Verify Code Quality & Security
+name: Verify Code Quality
 
 on:
   push:
@@ -36,4 +36,14 @@ jobs:
         run: pre-commit run --all-files
       - name: Send failure message
         if: failure()  # This step will only run if a previous step failed
-        run: echo "The quality & security verification failed."
+        run: echo "The quality verification failed. Please run precommit "
+
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+      - name: Pull granite3.3:8b model
+        run: ollama pull granite3.3:8b
+      - name: Start serving the model
+        run: nohup ollama serve --model granite3.3:8b
+      - name: Run Tests
+        run: uv run pytest test
+
