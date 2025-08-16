@@ -309,6 +309,11 @@ final_options = {
 
 2. **Pushing and popping model state**. Sessions offer the ability to push and pop model state. This means you can temporarily change the `model_options` for a series of calls by pushing a new set of `model_options` and then revert those changes with a pop.
 
+#### System Messages
+In Mellea, `ModelOption.SYSTEM_PROMPT` is the recommended way to add/change the system message for a prompt. Setting it at the backend/session level will use the provided message as the system prompt for all future calls (just like any other model option). Similarly, you can specify the system prompt parameter for any session-level function (like `m.instruct`) to replace it for just that call. 
+
+Mellea recommends applying the system message this way because some model-provider apis don't properly serialize messages with the `system` role and expect them as a separate parameter.
+
 ### Conclusion
 
 We have now worked up from a simple "Hello, World" example to our first generative programming design pattern: **Instruct - Validate - Repair (IVR)**.
