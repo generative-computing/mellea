@@ -56,6 +56,7 @@ class SamplingStrategy(abc.ABC):
     This class provides a template for creating concrete sampling strategies that can be used to generate model outputs based on given instructions.
     It allows setting custom validation and generation functions through properties.
     """
+    requirements: list[Requirement] | None # TODO: JAL. see if Hendrik's changed function signature for sample means this isn't necessary.
 
     # the function signature here matches that of m.validate
     validate: (
@@ -195,7 +196,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         if self.requirements is not None:
             reqs = self.requirements
             if requirements is not None:
-                flog.warn("Some requirements are ignored.")
+                flog.warning("Some requirements are ignored.")
         else:
             reqs = requirements if requirements is not None else []
 

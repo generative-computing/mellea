@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.formatter import FormatterBackend
@@ -456,6 +456,7 @@ class MelleaSession:
 
         generate_logs: list[GenerateLog] = []
 
+        # TODO: JAL. always do a strategy for transform? ie default to one that uses reasonable depth and iterations?
         if strategy is not None:
             if strategy.validate is None:
                 strategy.validate = lambda reqs, output: self.validate(  # type: ignore
@@ -475,7 +476,35 @@ class MelleaSession:
                     )
 
                     # TODO: JAL. Do more stuff here...
+                    # Tools have to be processed and called here once...
+                    # then 
                 )
+
+            # TODO: JAL. pop this out if it applies to non-strategy case as well.
+            if strategy.requirements is None:
+                strategy.requirements = []
+            
+            # Only append the forced output type requirement if format is `None`.
+            if format is None:
+                strategy.requirements.append(
+                    Requirement(
+                        description="ensure the output type is the same as the input type",
+                        validation_fn=None # TODO: JAL. need to think about how this should operate...
+                    )
+                )
+
+            def test(ctx: Context) -> ValidationResult:
+                o = ctx.last_output()
+                if o is None:
+                    FancyLogger.get_logger().warning("FIX HERE")
+                    return ValidationResult(False)
+
+                # len(o.tool_calls) == 1 or o.value is not None... # for final iteration if you want the requirement to pass
+                # o.tool_calls # get output of the tools
+
+                # does there have to be just one tool called for this requirement to pass...
+                # yes...?
+                ...
 
             # TODO: JAL. change the function signature of sample and sample.generate
             res = strategy.sample(t, generate_logs=generate_logs)
@@ -483,6 +512,7 @@ class MelleaSession:
             # TODO. JAL. add in post processing. for results.
 
         # TODO: JAL. Remove this stuff if the strategy approach works.
+        # think about defaulting to some strategy for Transform...
         # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 
         # Check that your model / backend supports tool calling.
@@ -499,6 +529,8 @@ class MelleaSession:
         assert len(generate_logs) == 1, "Simple call can only add one generate_log"
         generate_logs[0].is_final_result = True
 
+        # TODO: JAL. don't need to add tools to the context here...
+        # we can just have the initial transform call be in the context (and not even the ultimate result? check other calls)
         # Insert the new turn into the context. Tool calls are handled afterwards.
         insert = False
         if isinstance(self.ctx, SimpleContext):

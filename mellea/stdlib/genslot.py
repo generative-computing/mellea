@@ -151,6 +151,10 @@ class GenerativeSlot(Component, Generic[P, R]):
         self._arguments: list[Argument] = []
         functools.update_wrapper(self, func)
 
+    # TODO: JAL, need to see how all these things are piped through, including model_options
+    # Do we need to add the ability to specify model_options, etc at creation time as well? so that they
+    # are there every time you call the generative slot?
+    # Generative slots don't need a default requirement either since they use format directives.
     def __call__(
         self, m, model_options: dict | None = None, *args: P.args, **kwargs: P.kwargs
     ) -> R:
