@@ -11,9 +11,12 @@ def classify_sentiment(text: str) -> Literal["positive", "negative"]: ...
 def write_me_an_email() -> str: ...
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def session():
-    return start_session()
+    """Fresh session for each test."""
+    session = start_session()
+    yield session
+    session.reset()
 
 
 @pytest.fixture
