@@ -1,6 +1,6 @@
 from typing import Literal
 
-from mellea import generative, session
+from mellea import generative, start_session
 
 
 @generative
@@ -16,7 +16,7 @@ def generate_summary(text: str) -> str:
 
 
 if __name__ == "__main__":
-    with session():
+    with start_session():
         sentiment_component = classify_sentiment(text="I love this!")
         print("Output sentiment is : ", sentiment_component)
 
