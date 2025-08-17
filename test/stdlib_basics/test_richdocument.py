@@ -6,6 +6,7 @@ from docling_core.types.doc.document import DoclingDocument
 import tempfile
 import pytest
 
+
 @pytest.fixture(scope="module")
 def rd() -> RichDocument:
     # Use a specific document so we can test some of the functionality
@@ -16,9 +17,9 @@ def rd() -> RichDocument:
 def test_richdocument_basics(rd: RichDocument):
     # Ensure basic parts of a rich document are as expected.
     # assert len(rd.parts()) == 0, "rich documents should have no parts"
-    assert isinstance(
-        rd.docling(), DoclingDocument
-    ), "rich documents should have docling documents"
+    assert isinstance(rd.docling(), DoclingDocument), (
+        "rich documents should have docling documents"
+    )
 
     repr = rd.format_for_llm()
     assert type(repr) == str, "rich document template args should be a dict"
@@ -38,53 +39,53 @@ def test_richdocument_save(rd: RichDocument):
         loaded_rd = RichDocument.load(path)
         assert loaded_rd.docling().export_to_markdown(
             to_element=10
-        ) == rd.docling().export_to_markdown(
-            to_element=10
-        ), "saved and loaded rich document text don't match."
+        ) == rd.docling().export_to_markdown(to_element=10), (
+            "saved and loaded rich document text don't match."
+        )
 
 
 def test_table(rd: RichDocument):
     # Getting the tables technically tests the functionality of richdocument,
     # but we do it here to make it easier. The provided document has one table.
     tables = rd.get_tables()
-    assert all(
-        type(t) == Table for t in tables
-    ), f"rich document `get_tables` returned a non-table value: {tables}"
-    assert (
-        len(tables) > 0
-    ), "rich document `get_tables` returned an empty array for a document known to have one table"
+    assert all(type(t) == Table for t in tables), (
+        f"rich document `get_tables` returned a non-table value: {tables}"
+    )
+    assert len(tables) > 0, (
+        "rich document `get_tables` returned an empty array for a document known to have one table"
+    )
 
     table = tables[0]
     repr = table.format_for_llm()
     assert type(repr) == TemplateRepresentation, "table template args should be a dict"
-    assert (
-        "table" in repr.args.keys() and len(repr.args.keys()) == 1
-    ), "table's should have a single `as_markdown` key"
+    assert "table" in repr.args.keys() and len(repr.args.keys()) == 1, (
+        "table's should have a single `as_markdown` key"
+    )
 
     mkd_table = table.to_markdown()
     assert type(mkd_table) == str, "table `to_markdown` should return a string"
 
     loaded_table = Table.from_markdown(mkd_table)
-    assert (
-        loaded_table is not None
-    ), "loaded table should not be None when loading from a known source"
+    assert loaded_table is not None, (
+        "loaded table should not be None when loading from a known source"
+    )
 
     # Use `in` since there might be some slight changes like the
     # title missing.
-    assert (
-        loaded_table.to_markdown() in mkd_table
-    ), "loaded table and original table don't match"
+    assert loaded_table.to_markdown() in mkd_table, (
+        "loaded table and original table don't match"
+    )
 
     transposed_table = table.transpose()
-    assert (
-        transposed_table is not None
-    ), "transposed table should not be None for known table"
+    assert transposed_table is not None, (
+        "transposed table should not be None for known table"
+    )
     mkd_transposed = transposed_table.to_markdown()
 
     expected_first_row = "|         | 0            | 1                                    | 2                              | 3                                   | 4                             |"
-    assert (
-        expected_first_row in mkd_transposed
-    ), "transposed table is not in the expected form"
+    assert expected_first_row in mkd_transposed, (
+        "transposed table is not in the expected form"
+    )
 
 
 def test_empty_table():
@@ -94,10 +95,10 @@ def test_empty_table():
 
 def test_richdocument_generation(rd: RichDocument):
     m = mellea.start_session(backend_name="hf")
-    response = m.chat(rd.to_markdown() + "\nSummarize the provided document.")
-    assert (
-        response.content is not ""
-    ), "response content should not be empty when summarizing a rich document"
-    assert (
-        "paper" in response.content.lower() or "gltr" in response.content.lower()
-    ), "response content should include the word paper or gltr when summarizing"
+    response = m.chat(rd.to_markdown()[:500] + "\nSummarize the provided document.")
+    assert response.content is not "", (
+        "response content should not be empty when summarizing a rich document"
+    )
+    assert "paper" in response.content.lower() or "gltr" in response.content.lower(), (
+        "response content should include the word paper or gltr when summarizing"
+    )

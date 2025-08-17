@@ -1,3 +1,4 @@
+
 import pytest
 from mellea.stdlib.base import ModelOutputThunk, LinearContext
 from mellea.stdlib.chat import as_chat_history, Message
@@ -32,6 +33,7 @@ def test_chat_view_simple_ctx(simple_session):
     simple_session.chat("What is 2+2?")
     assert len(as_chat_history(simple_session.ctx)) == 2
     assert all([type(x) == Message for x in as_chat_history(simple_session.ctx)])
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -6,7 +6,7 @@ import inspect
 import json
 from collections.abc import Callable
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import openai
@@ -14,11 +14,8 @@ import requests
 from huggingface_hub import snapshot_download
 from openai.types.chat import ChatCompletion
 from openai.types.completion import Completion
-from transformers import AutoTokenizer
-from transformers.tokenization_utils import PreTrainedTokenizer
 
 import mellea.backends.model_ids as model_ids
-from cli.serve.models import ChatCompletionMessage
 from mellea.backends import BaseModelSubclass
 from mellea.backends.aloras import Alora, AloraBackendMixin
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
@@ -37,6 +34,9 @@ from mellea.stdlib.base import (
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
+
+if TYPE_CHECKING:
+    from transformers.tokenization_utils import PreTrainedTokenizer
 
 openai_ollama_batching_error = "json: cannot unmarshal array into Go struct field CompletionRequest.prompt of type string"
 
@@ -328,7 +328,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                 )
 
         # Construct the linearized context. This is very similar to normal generation.
-        linearized_ctx = ctx.linearize()
+        linearized_ctx = ctx.render_for_generation()
         assert linearized_ctx is not None and len(linearized_ctx) > 1
         msgs = self.formatter.to_chat_messages(linearized_ctx)
         user_message, assistant_message = msgs[-2].content, msgs[-1].content
@@ -363,7 +363,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         model_opts = self._simplify_and_merge(
             model_options, is_chat_context=ctx.is_chat_context
         )
-        linearized_context = ctx.linearize()
+        linearized_context = ctx.render_for_generation()
         assert linearized_context is not None, (
             "Cannot generate from a non-linear context in a FormatterBackend."
         )
@@ -639,10 +639,12 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
     def apply_chat_template(self, chat: list[dict[str, str]]):
         """Apply the chat template for the model, if such a model is available (e.g., when it can deduce the huggingface model id)."""
+        from transformers import AutoTokenizer
+
         if not hasattr(self, "_tokenizer"):
             match _server_type(self._base_url):
                 case _ServerType.LOCALHOST:
-                    self._tokenizer: PreTrainedTokenizer = (
+                    self._tokenizer: "PreTrainedTokenizer" = (  # noqa: UP037
                         AutoTokenizer.from_pretrained(self._hf_model_id)
                     )
                 case _ServerType.OPENAI:

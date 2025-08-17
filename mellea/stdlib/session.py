@@ -5,9 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from mellea.backends import Backend, BaseModelSubclass
-from mellea.backends.aloras.huggingface.granite_aloras import add_granite_aloras
 from mellea.backends.formatter import FormatterBackend
-from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.model_ids import (
     IBM_GRANITE_3_2_8B,
     IBM_GRANITE_3_3_8B,
@@ -15,7 +13,6 @@ from mellea.backends.model_ids import (
 )
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
-from mellea.backends.watsonx import WatsonxAIBackend
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -31,7 +28,7 @@ from mellea.stdlib.chat import Message, ToolMessage
 from mellea.stdlib.instruction import Instruction
 from mellea.stdlib.mify import mify
 from mellea.stdlib.mobject import MObjectProtocol
-from mellea.stdlib.requirement import Requirement, check, req
+from mellea.stdlib.requirement import Requirement, ValidationResult, check, req
 from mellea.stdlib.sampling import SamplingResult, SamplingStrategy
 
 
@@ -40,10 +37,14 @@ def backend_name_to_class(name: str) -> Any:
     if name == "ollama":
         return OllamaModelBackend
     elif name == "hf" or name == "huggingface":
+        from mellea.backends.huggingface import LocalHFBackend
+
         return LocalHFBackend
     elif name == "openai":
         return OpenAIBackend
     elif name == "watsonx":
+        from mellea.backends.watsonx import WatsonxAIBackend
+
         return WatsonxAIBackend
     else:
         return None
@@ -275,8 +276,9 @@ class MelleaSession:
 
         parsed_assistant_message = output_thunk.parsed_repr
         assert type(parsed_assistant_message) is Message
-        self.ctx.insert(user_message)
-        self.ctx.insert(output_thunk, generate_logs=generate_logs)
+        self.ctx.insert_turn(
+            ContextTurn(user_message, output_thunk), generate_logs=generate_logs
+        )
         return parsed_assistant_message
 
     def act(self, c: Component, tool_calls: bool = False) -> Any:
@@ -293,11 +295,10 @@ class MelleaSession:
         reqs: Requirement | list[Requirement],
         *,
         output: CBlock | None = None,
-        return_full_validation_results: bool = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
-    ) -> list[bool] | list[tuple[Any, bool]]:
+    ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
         # Turn a solitary requirement in to a list of requirements, and then reqify if needed.
         reqs = [reqs] if not isinstance(reqs, list) else reqs
@@ -309,18 +310,16 @@ class MelleaSession:
             validation_target_ctx.insert(output)
         rvs = []
         for requirement in reqs:
-            req_v, req_satisfied = requirement.validate(
+            val_result = requirement.validate(
                 self.backend,
                 validation_target_ctx,
                 format=format,
                 model_options=model_options,
                 generate_logs=generate_logs,
             )
-            rvs.append((req_v, req_satisfied))
-        if return_full_validation_results:
-            return rvs
-        else:
-            return [b for (_, b) in rvs]
+            rvs.append(val_result)
+
+        return rvs
 
     def req(self, *args, **kwargs):
         """Shorthand for Requirement.__init__(...)."""
@@ -332,9 +331,15 @@ class MelleaSession:
 
     def load_default_aloras(self):
         """Loads the default Aloras for this model, if they exist and if the backend supports."""
+        from mellea.backends.huggingface import LocalHFBackend
+
         if self.backend.model_id == IBM_GRANITE_3_2_8B and isinstance(
             self.backend, LocalHFBackend
         ):
+            from mellea.backends.aloras.huggingface.granite_aloras import (
+                add_granite_aloras,
+            )
+
             add_granite_aloras(self.backend)
             return
         self._session_logger.warning(

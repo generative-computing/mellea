@@ -968,15 +968,15 @@ Let's look at how this agent is implemented in Mellea:
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/agents/react.py#L99
 def react(
-    m: mellea.MelleaSession,
-    goal: str,
-    react_toolbox: ReactToolbox,
-    budget: int=5,
+        m: mellea.MelleaSession,
+        goal: str,
+        react_toolbox: ReactToolbox,
+        budget: int = 5,
 ):
     assert m.ctx.is_chat_context, "ReACT requires a chat context."
-    test_ctx_lin = m.ctx.linearize()
+    test_ctx_lin = m.ctx.render_for_generation()
     assert (
-        test_ctx_lin is not None and len(test_ctx_lin) == 0
+            test_ctx_lin is not None and len(test_ctx_lin) == 0
     ), "ReACT expects a fresh context."
 
     # Construct the system prompt for ReACT.
@@ -1006,7 +1006,8 @@ def react(
             # model_options={mellea.backends.types.ModelOption.TOOLS: react_toolbox.tools_dict()},
             format=react_toolbox.tool_name_schema(),
         )
-        selected_tool: ReactTool = react_toolbox.get_tool_from_schema(act.content)
+        selected_tool: ReactTool = react_toolbox.get_tool_from_schema(
+            act.content)
         print(selected_tool.get_name())
 
         print(f"### Arguments for action")
@@ -1014,7 +1015,8 @@ def react(
             "Choose arguments for the tool. Respond using JSON and include only the tool arguments in your response.",
             format=selected_tool.args_schema(),
         )
-        print(f"```json\n{json.dumps(json.loads(act_args.content), indent=2)}\n```")
+        print(
+            f"```json\n{json.dumps(json.loads(act_args.content), indent=2)}\n```")
 
         # TODO: handle exceptions.
         print("### Observation")
