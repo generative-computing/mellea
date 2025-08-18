@@ -467,7 +467,20 @@ class ModelToolCall:
     name: str
     func: Callable
     args: Mapping[str, Any]
+    out: Any = None
+    called: bool = False # keeps track of if the function has already been called.
 
-    def call_func(self) -> Any:
-        """A helper function for calling the function/tool represented by this object."""
-        return self.func(**self.args)
+    def call_func(self) -> None:
+        """A helper function for calling the function/tool represented by this object.
+
+        If an error occurs, sets out to that error.
+        """
+        if not self.called:
+            self.called = True
+
+            try:
+                self.out = self.func(**self.args)
+            except Exception as e:
+                self.out = e
+
+        return self.out

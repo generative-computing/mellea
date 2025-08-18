@@ -59,6 +59,7 @@ class SamplingStrategy(abc.ABC):
     requirements: list[Requirement] | None # TODO: JAL. see if Hendrik's changed function signature for sample means this isn't necessary.
 
     # the function signature here matches that of m.validate
+    # TODO: JAL. the function signature no longer matches
     validate: (
         Callable[[list[Requirement], Context, Any], list[ValidationResult]] | None
     ) = None
@@ -196,7 +197,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         if self.requirements is not None:
             reqs = self.requirements
             if requirements is not None:
-                flog.warning("Some requirements are ignored.")
+                flog.warning("Some requirements are ignored.") # TODO: JAL. Add more descriptive error message here that the passed in reqs are being ignored.
         else:
             reqs = requirements if requirements is not None else []
 
@@ -207,7 +208,7 @@ class BaseSamplingStrategy(SamplingStrategy):
             else range(self.loop_budget)  # type: ignore
         )
 
-        new_action = deepcopy(action)
+        new_action = deepcopy(action) # TODO: JAL. This is making a lot of assumptions? Also, copy is good because tools might edit things.
         for _ in loop_budget_range_iterator:  # type: ignore
             loop_count += 1
             if not show_progress:
@@ -229,7 +230,7 @@ class BaseSamplingStrategy(SamplingStrategy):
 
             # if all vals are true -- break and return success
             if all(bool(s[1]) for s in constraint_scores):
-                flog.info("SUCCESS")
+                flog.info("SUCCESS") # TODO: JAL; change this.
                 return SamplingResult(
                     result,
                     success=True,
@@ -240,9 +241,18 @@ class BaseSamplingStrategy(SamplingStrategy):
             else:
                 # log partial success and continue
                 count_valid = len([s for s in constraint_scores if bool(s[1])])
-                flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}")
+                flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}") # TODO: JAL add more details?
 
             # If we did not pass all constraints, update the instruction and try again.
+            # TODO: JAL. BIG ISSUE. This creates a new_action; that removes any tools that were
+            # previously appended. If we are relying on component level tools we are stuck...
+            # options:
+            #   - set tools at some global level :(
+            #   - edit the repair function to append the tools ~~~
+            #   - create a composed component that grabs any tools from the original object
+            #   - change the way the repair function works
+            # TODO: JAL. Another slightly big issue; we need to be able to append the tool messages
+            # to the context as well... this makes me think we should be adding them as parsed ToolMessages...
             new_action = self.repair(
                 ctx, sampled_actions, sampled_results, sampled_scores
             )
@@ -363,12 +373,15 @@ class AgenticSamplingStrategy(BaseSamplingStrategy):
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> Component:
+        # TODO: JAL. This strategy needs to change because it fails with default options...
         assert isinstance(context, LinearContext), (
             " Need linear context to run agentic sampling."
         )
 
         # add failed execution to chat history
         context.insert_turn(ContextTurn(past_actions[-1], past_results[-1]))
+        # TODO: JAL. Need to do tool messages better here. Or have the model output thunk parsed_repr work better?
+        # CBlock(, {'chat_response': ChatResponse(model='granite3.3:8b', created_at='2025-08-18T18:13:51.767191Z', done=True, done_reason='stop', total_duration=32239884615, load_duration=4683174878, prompt_eval_count=382, prompt_eval_duration=24924694445, eval_count=14, eval_duration=2629830689, message=Message(role='assistant', content='', thinking=None, images=None, tool_name=None, tool_calls=[ToolCall(function=Function(name='from_markdown', arguments={}))]))})
 
         last_failed_reqs: list[Requirement] = [s[0] for s in past_val[-1] if not s[1]]
         last_failed_reqs_str = "* " + "\n* ".join(
@@ -379,6 +392,7 @@ class AgenticSamplingStrategy(BaseSamplingStrategy):
         next_action = Message(
             role="user",
             content=f"The following requirements have not been met: \n{last_failed_reqs_str}\n Please try again to fulfill the requirements.",
+            # TODO: JAL. either in this version or another, it should automatically grab the strings from validation results if they exist...
         )
 
         return next_action

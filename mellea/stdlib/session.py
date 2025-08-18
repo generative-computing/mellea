@@ -456,58 +456,76 @@ class MelleaSession:
 
         generate_logs: list[GenerateLog] = []
 
+        # TODO: JAL. move most of this logic into helper functions file (especially tool calling); it's
+        # way to annoying here.
+
         # TODO: JAL. always do a strategy for transform? ie default to one that uses reasonable depth and iterations?
         if strategy is not None:
             if strategy.validate is None:
-                strategy.validate = lambda reqs, output: self.validate(  # type: ignore
+                # TODO: JAL. I feel like this val_ctx should be respected by default?
+                strategy.validate = lambda reqs, val_ctx, output: self.validate(  # type: ignore
                     reqs,
                     output=output,  # type: ignore
                 )  # type: ignore
 
             if strategy.generate is None:
-                strategy.generate = lambda t, g_logs: (
-                    self.backend.generate_from_context(
+                def _gen(t: Component, ctx: Context, g_logs: list[GenerateLog] | None):
+                    """Helper function for generating and calling tools for transform."""
+                    transformed = self.backend.generate_from_context(
                         t,
-                        self.ctx,
+                        ctx,
                         format=format,
                         model_options=model_options,
                         generate_logs=g_logs,
                         tool_calls=True,
                     )
+                    self._call_mot_tools(transformed)
+                    return transformed
 
-                    # TODO: JAL. Do more stuff here...
-                    # Tools have to be processed and called here once...
-                    # then 
-                )
+                strategy.generate = _gen
+
 
             # TODO: JAL. pop this out if it applies to non-strategy case as well.
             if strategy.requirements is None:
                 strategy.requirements = []
-            
+
             # Only append the forced output type requirement if format is `None`.
             if format is None:
+                # TODO: JAL. move this and add a generator func for it...
+                # We should check if any provided tools result in this type as well and do a warning if not
+                def transform_type_requirement(ctx: Context) -> ValidationResult:
+                    o = ctx.last_output()
+                    if o is None:
+                        FancyLogger.get_logger().warning("something has gone wrong when validating the default transform requirement; there is not model output to process")
+                        return ValidationResult(False) # do not return a reason; it's not an error with prompting the model.
+
+                    # For this requirement to pass, a tool call returning the correct type must be made.
+                    if o.tool_calls is None:
+                        return ValidationResult(False, reason=f"no tools called, cannot be final result since it's not a value of the expected type {type(obj)}")
+
+                    # TODO: JAL. These reasonings also wipe out any ability to pass on errors.
+                    if len(o.tool_calls.keys()) > 1:
+                        return ValidationResult(False, reason="more than one tool called; cannot be final result")
+
+                    tool_output = next(iter(o.tool_calls.values())).out
+                    correct_type = isinstance(tool_output, type(obj))
+                    if not correct_type:
+                        return ValidationResult(False, reason=f"tool call did not result in expected value of type {type(obj)}")
+
+                    # This output contained a single tool call that returned the correct output type.
+                    return ValidationResult(True)
+
                 strategy.requirements.append(
                     Requirement(
                         description="ensure the output type is the same as the input type",
-                        validation_fn=None # TODO: JAL. need to think about how this should operate...
+                        validation_fn=transform_type_requirement
                     )
                 )
 
-            def test(ctx: Context) -> ValidationResult:
-                o = ctx.last_output()
-                if o is None:
-                    FancyLogger.get_logger().warning("FIX HERE")
-                    return ValidationResult(False)
-
-                # len(o.tool_calls) == 1 or o.value is not None... # for final iteration if you want the requirement to pass
-                # o.tool_calls # get output of the tools
-
-                # does there have to be just one tool called for this requirement to pass...
-                # yes...?
-                ...
-
             # TODO: JAL. change the function signature of sample and sample.generate
-            res = strategy.sample(t, generate_logs=generate_logs)
+            # I forget why I said this? maybe passing in requirements which is now handled elsewhere?
+            res = strategy.sample(t, self.ctx, generate_logs=generate_logs)
+            return res.result
 
             # TODO. JAL. add in post processing. for results.
 
@@ -589,6 +607,16 @@ class MelleaSession:
 
         return transformed
 
+    # TODO: JAL. Rename.
+    def _call_mot_tools(self, result: ModelOutputThunk) -> ModelOutputThunk:
+        """Returns the same ModelOutputThunk as passed in for convenience."""
+        if result.tool_calls:
+            for _, tool in result.tool_calls.items():
+                tool.call_func()
+        return result
+
+    # TODO: JAL. Remove? Broken with changes to tool.call_func()...
+    # ie the error and output capturing happening within tool.call_func()
     def _call_tools(self, result: ModelOutputThunk) -> list[ToolMessage]:
         """Call all the tools requested in a result's tool calls object.
 

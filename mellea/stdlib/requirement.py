@@ -1,5 +1,7 @@
 """Requirements are a special type of Component used as input to the "validate" step in Instruct/Validate/Repair design patterns."""
 
+from __future__ import annotations
+
 import inspect
 import re
 from collections.abc import Callable
@@ -101,8 +103,8 @@ class Requirement(Component):
             sig = inspect.signature(self.validation_fn)
             if not (
                 len(sig.parameters) == 1
-                and next(iter(sig.parameters.values())).annotation is Context
-                and sig.return_annotation is ValidationResult
+                and next(iter(sig.parameters.values())).annotation == "Context" # TODO: JAL. Revisit this.
+                and sig.return_annotation == "ValidationResult"
             ):
                 FancyLogger.get_logger().warning(
                     f"function signature for requirement's validation function doesn't match expected; may throw error during validation. fn signature: {sig}, req description: {self.description}"
