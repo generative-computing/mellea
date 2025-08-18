@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Literal
 
 from mellea.backends import Backend, BaseModelSubclass
@@ -361,13 +362,23 @@ class MelleaSession:
         Returns:
             ModelOutputThunk: Output thunk
         """
+        generate_logs: list[GenerateLog] = []
         result: ModelOutputThunk = self.backend.generate_from_context(
             action=gen_slot,
             ctx=self.ctx,
             model_options=model_options,
             format=format,
+            generate_logs=generate_logs,
             tool_calls=tool_calls,
         )
+        # make sure that the last and only Log is marked as the one related to result
+        assert len(generate_logs) == 1, "Simple call can only add one generate_log"
+        generate_logs[0].is_final_result = True
+
+        self.ctx.insert_turn(
+            ContextTurn(deepcopy(gen_slot), result), generate_logs=generate_logs
+        )
+
         return result
 
     def query(
