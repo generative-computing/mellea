@@ -150,7 +150,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 # Get the model and tokenizer.
                 self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
                     self._hf_model_id
-                ).to(self._device)
+                ).to(self._device)  # type: ignore
                 self._tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
                     self._hf_model_id
                 )
