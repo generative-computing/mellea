@@ -125,7 +125,7 @@ class GuardianCheck(Requirement):
         model = AutoModelForCausalLM.from_pretrained(
             self._model_version, device_map="auto", torch_dtype=torch.bfloat16
         )
-        model.to(self._device)
+        model.to(self._device) # type: ignore
         model.eval()
 
         tokenizer = AutoTokenizer.from_pretrained(self._model_version)
