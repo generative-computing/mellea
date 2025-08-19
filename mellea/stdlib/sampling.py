@@ -56,7 +56,10 @@ class SamplingStrategy(abc.ABC):
     This class provides a template for creating concrete sampling strategies that can be used to generate model outputs based on given instructions.
     It allows setting custom validation and generation functions through properties.
     """
-    requirements: list[Requirement] | None # TODO: JAL. see if Hendrik's changed function signature for sample means this isn't necessary.
+
+    requirements: (
+        list[Requirement] | None
+    )  # TODO: JAL. see if Hendrik's changed function signature for sample means this isn't necessary.
 
     # the function signature here matches that of m.validate
     # TODO: JAL. the function signature no longer matches
@@ -159,6 +162,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         generate_logs: list[GenerateLog] | None = None,
         requirements: list[Requirement] | None = None,
         validation_ctx: Context | None = None,
+        # TODO: JAL. add model options?
     ) -> SamplingResult:
         """This method performs a sampling operation based on the given instruction.
 
@@ -197,7 +201,9 @@ class BaseSamplingStrategy(SamplingStrategy):
         if self.requirements is not None:
             reqs = self.requirements
             if requirements is not None:
-                flog.warning("Some requirements are ignored.") # TODO: JAL. Add more descriptive error message here that the passed in reqs are being ignored.
+                flog.warning(
+                    "Some requirements are ignored."
+                )  # TODO: JAL. Add more descriptive error message here that the passed in reqs are being ignored.
         else:
             reqs = requirements if requirements is not None else []
 
@@ -208,7 +214,9 @@ class BaseSamplingStrategy(SamplingStrategy):
             else range(self.loop_budget)  # type: ignore
         )
 
-        new_action = deepcopy(action) # TODO: JAL. This is making a lot of assumptions? Also, copy is good because tools might edit things.
+        new_action = deepcopy(
+            action
+        )  # TODO: JAL. This is making a lot of assumptions? Also, copy is good because tools might edit things.
         for _ in loop_budget_range_iterator:  # type: ignore
             loop_count += 1
             if not show_progress:
@@ -230,7 +238,7 @@ class BaseSamplingStrategy(SamplingStrategy):
 
             # if all vals are true -- break and return success
             if all(bool(s[1]) for s in constraint_scores):
-                flog.info("SUCCESS") # TODO: JAL; change this.
+                flog.info("SUCCESS")  # TODO: JAL; change this.
                 return SamplingResult(
                     result,
                     success=True,
@@ -241,7 +249,9 @@ class BaseSamplingStrategy(SamplingStrategy):
             else:
                 # log partial success and continue
                 count_valid = len([s for s in constraint_scores if bool(s[1])])
-                flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}") # TODO: JAL add more details?
+                flog.info(
+                    f"FAILED. Valid: {count_valid}/{len(constraint_scores)}"
+                )  # TODO: JAL add more details?
 
             # If we did not pass all constraints, update the instruction and try again.
             # TODO: JAL. BIG ISSUE. This creates a new_action; that removes any tools that were
@@ -249,8 +259,10 @@ class BaseSamplingStrategy(SamplingStrategy):
             # options:
             #   - set tools at some global level :(
             #   - edit the repair function to append the tools ~~~
-            #   - create a composed component that grabs any tools from the original object
+            #   - create a composed component that grabs any tools from the original object :( the more iterations the more nesting, the uglier it is...
             #   - change the way the repair function works
+            #   - get tools from the context...? -> I like this one... doesn't require any repair specific finagling and works for other contexts as well. Just need to add a way to get tools from tool messages as well...
+            #       also allows for iterative changes...
             # TODO: JAL. Another slightly big issue; we need to be able to append the tool messages
             # to the context as well... this makes me think we should be adding them as parsed ToolMessages...
             new_action = self.repair(
@@ -379,7 +391,9 @@ class AgenticSamplingStrategy(BaseSamplingStrategy):
         )
 
         # add failed execution to chat history
-        context.insert_turn(ContextTurn(past_actions[-1], past_results[-1]))
+        context.insert_turn(
+            ContextTurn(past_actions[-1], past_results[-1])
+        )  # TODO: JAL. past results getting added here means parsing must change for model_tool calls...
         # TODO: JAL. Need to do tool messages better here. Or have the model output thunk parsed_repr work better?
         # CBlock(, {'chat_response': ChatResponse(model='granite3.3:8b', created_at='2025-08-18T18:13:51.767191Z', done=True, done_reason='stop', total_duration=32239884615, load_duration=4683174878, prompt_eval_count=382, prompt_eval_duration=24924694445, eval_count=14, eval_duration=2629830689, message=Message(role='assistant', content='', thinking=None, images=None, tool_name=None, tool_calls=[ToolCall(function=Function(name='from_markdown', arguments={}))]))})
 

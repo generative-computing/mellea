@@ -152,6 +152,7 @@ class Instruction(Component):
         """Returns a list of Requirement instances."""
         return self._requirements
 
+    # TODO: JAL. Remove?
     def copy_and_repair(self, repair_string: str) -> Instruction:
         """Creates a copy of the instruction and adds/overwrites the repair string."""
         res = deepcopy(self)
