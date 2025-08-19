@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 import contextvars
 from collections.abc import Generator
 from contextlib import contextmanager
+from copy import deepcopy
 from typing import Any, Literal, Optional
 
 from mellea.backends import Backend, BaseModelSubclass
