@@ -67,6 +67,8 @@ docling = [
     "docling>=2.45.0",
 ]
 
+all = ["mellea[watsonx,docling,hf]"]
+
 [dependency-groups]
 # Use these like:
 # pip install -e . --group dev
