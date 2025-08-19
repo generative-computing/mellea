@@ -3,6 +3,7 @@ from typing import TypedDict
 from typing_extensions import NotRequired
 
 from mellea import MelleaSession
+from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.prompt_modules import (
     constraint_extractor,
@@ -38,7 +39,10 @@ def decompose(
         user_input_variable = []
 
     m_ollama_session = MelleaSession(
-        OllamaModelBackend(model_id="mistral-small3.2:24b")
+        OllamaModelBackend(
+            model_id="mistral-small3.2:24b",
+            model_options={ModelOption.CONTEXT_WINDOW: 32768},
+        )
     )
 
     subtasks: list[SubtaskItem] = subtask_list.generate(
