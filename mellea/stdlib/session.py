@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 import contextvars
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Generator, Literal, Optional
+from typing import Any, Literal, Optional
 
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.formatter import FormatterBackend
@@ -34,14 +35,13 @@ from mellea.stdlib.mobject import MObjectProtocol
 from mellea.stdlib.requirement import Requirement, ValidationResult, check, req
 from mellea.stdlib.sampling import SamplingResult, SamplingStrategy
 
-
 # Global context variable for the context session
-_context_session: contextvars.ContextVar[Optional["MelleaSession"]] = contextvars.ContextVar(
+_context_session: contextvars.ContextVar[MelleaSession | None] = contextvars.ContextVar(
     "context_session", default=None
 )
 
 
-def get_session() -> "MelleaSession":
+def get_session() -> MelleaSession:
     """Get the current session from context.
 
     Raises:
@@ -71,6 +71,7 @@ def backend_name_to_class(name: str) -> Any:
         return WatsonxAIBackend
     else:
         return None
+
 
 def start_session(
     backend_name: Literal["ollama", "hf", "openai", "watsonx"] = "ollama",
@@ -147,6 +148,7 @@ def start_session(
     assert backend_class is not None
     backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
     return MelleaSession(backend, ctx)
+
 
 class MelleaSession:
     """Mellea sessions are a THIN wrapper around `m` convenience functions with NO special semantics.
