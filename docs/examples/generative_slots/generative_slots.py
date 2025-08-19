@@ -29,6 +29,6 @@ if __name__ == "__main__":
             surface. Compared with other rays, they have long tails, and well-defined, rhomboidal bodies.
             They are ovoviviparous, giving birth to up to six young at a time. They range from 0.48 to
             5.1 m (1.6 to 16.7 ft) in length and 7 m (23 ft) in wingspan.
-            """,
+            """
         )
         print("Generated summary is :", summary)
