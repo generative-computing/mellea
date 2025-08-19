@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+import contextvars
+from contextlib import contextmanager
+from typing import Any, Generator, Literal, Optional
 
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.formatter import FormatterBackend
@@ -32,6 +34,26 @@ from mellea.stdlib.requirement import Requirement, ValidationResult, check, req
 from mellea.stdlib.sampling import SamplingResult, SamplingStrategy
 
 
+# Global context variable for the context session
+_context_session: contextvars.ContextVar[Optional["MelleaSession"]] = contextvars.ContextVar(
+    "context_session", default=None
+)
+
+
+def get_session() -> "MelleaSession":
+    """Get the current session from context.
+
+    Raises:
+        RuntimeError: If no session is currently active.
+    """
+    session = _context_session.get()
+    if session is None:
+        raise RuntimeError(
+            "No active session found. Use 'with start_session(...):' to create one."
+        )
+    return session
+
+
 def backend_name_to_class(name: str) -> Any:
     """Resolves backend names to Backend classes."""
     if name == "ollama":
@@ -49,7 +71,6 @@ def backend_name_to_class(name: str) -> Any:
     else:
         return None
 
-
 def start_session(
     backend_name: Literal["ollama", "hf", "openai", "watsonx"] = "ollama",
     model_id: str | ModelIdentifier = IBM_GRANITE_3_3_8B,
@@ -58,14 +79,64 @@ def start_session(
     model_options: dict | None = None,
     **backend_kwargs,
 ) -> MelleaSession:
-    """Helper for starting a new mellea session.
+    """Start a new Mellea session. Can be used as a context manager or called directly.
+
+    This function creates and configures a new Mellea session with the specified backend
+    and model. When used as a context manager (with `with` statement), it automatically
+    sets the session as the current active session for use with convenience functions
+    like `instruct()`, `chat()`, `query()`, and `transform()`. When called directly,
+    it returns a session object that can be used directly.
 
     Args:
-        backend_name (str): ollama | hf | openai
-        model_id (ModelIdentifier): a `ModelIdentifier` from the mellea.backends.model_ids module
-        ctx (Optional[Context]): If not provided, a `LinearContext` is used.
-        model_options (Optional[dict]): Backend will be instantiated with these as its default, if provided.
-        backend_kwargs: kwargs that will be passed to the backend for instantiation.
+        backend_name: The backend to use. Options are:
+            - "ollama": Use Ollama backend for local models
+            - "hf" or "huggingface": Use HuggingFace transformers backend
+            - "openai": Use OpenAI API backend
+            - "watsonx": Use IBM WatsonX backend
+        model_id: Model identifier or name. Can be a `ModelIdentifier` from
+            mellea.backends.model_ids or a string model name.
+        ctx: Context manager for conversation history. Defaults to SimpleContext().
+            Use LinearContext() for chat-style conversations.
+        model_options: Additional model configuration options that will be passed
+            to the backend (e.g., temperature, max_tokens, etc.).
+        **backend_kwargs: Additional keyword arguments passed to the backend constructor.
+
+    Returns:
+        MelleaSession: A session object that can be used as a context manager
+        or called directly with session methods.
+
+    Usage:
+        # As a context manager (sets global session):
+        with start_session("ollama", "granite3.3:8b") as session:
+            result = instruct("Generate a story")  # Uses current session
+            # session is also available directly
+            other_result = session.chat("Hello")
+
+        # Direct usage (no global session set):
+        session = start_session("ollama", "granite3.3:8b")
+        result = session.instruct("Generate a story")
+        # Remember to call session.cleanup() when done
+        session.cleanup()
+
+    Examples:
+        # Basic usage with default settings
+        with start_session() as session:
+            response = instruct("Explain quantum computing")
+
+        # Using OpenAI with custom model options
+        with start_session("openai", "gpt-4", model_options={"temperature": 0.7}):
+            response = chat("Write a poem")
+
+        # Using HuggingFace with LinearContext for conversations
+        from mellea.stdlib.base import LinearContext
+        with start_session("hf", "microsoft/DialoGPT-medium", ctx=LinearContext()):
+            chat("Hello!")
+            chat("How are you?")  # Remembers previous message
+
+        # Direct usage without context manager
+        session = start_session()
+        response = session.instruct("Explain quantum computing")
+        session.cleanup()
     """
     backend_class = backend_name_to_class(backend_name)
     if backend_class is None:
@@ -75,7 +146,6 @@ def start_session(
     assert backend_class is not None
     backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
     return MelleaSession(backend, ctx)
-
 
 class MelleaSession:
     """Mellea sessions are a THIN wrapper around `m` convenience functions with NO special semantics.
@@ -103,6 +173,19 @@ class MelleaSession:
         self.ctx = ctx if ctx is not None else SimpleContext()
         self._backend_stack: list[tuple[Backend, dict | None]] = []
         self._session_logger = FancyLogger.get_logger()
+        self._context_token = None
+
+    def __enter__(self):
+        """Enter context manager and set this session as the current global session."""
+        self._context_token = _context_session.set(self)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager and cleanup session."""
+        self.cleanup()
+        if self._context_token is not None:
+            _context_session.reset(self._context_token)
+            self._context_token = None
 
     def _push_model_state(self, new_backend: Backend, new_model_opts: dict):
         """The backend and model options used within a `Context` can be temporarily changed. This method changes the model's backend and model_opts, while saving the current settings in the `self._backend_stack`.
@@ -132,6 +215,13 @@ class MelleaSession:
     def reset(self):
         """Reset the context state."""
         self.ctx.reset()
+
+    def cleanup(self) -> None:
+        """Clean up session resources."""
+        self.reset()
+        self._backend_stack.clear()
+        if hasattr(self.backend, "close"):
+            self.backend.close()
 
     def summarize(self) -> ModelOutputThunk:
         """Summarizes the current context."""
@@ -577,3 +667,29 @@ class MelleaSession:
             if isinstance(last_el, GenerateLog):
                 prompt = last_el.prompt
         return prompt
+
+
+# Convenience functions that use the current session
+def instruct(description: str, **kwargs) -> ModelOutputThunk | SamplingResult:
+    """Instruct using the current session."""
+    return get_session().instruct(description, **kwargs)
+
+
+def chat(content: str, **kwargs) -> Message:
+    """Chat using the current session."""
+    return get_session().chat(content, **kwargs)
+
+
+def validate(reqs, **kwargs):
+    """Validate using the current session."""
+    return get_session().validate(reqs, **kwargs)
+
+
+def query(obj: Any, query_str: str, **kwargs) -> ModelOutputThunk:
+    """Query using the current session."""
+    return get_session().query(obj, query_str, **kwargs)
+
+
+def transform(obj: Any, transformation: str, **kwargs):
+    """Transform using the current session."""
+    return get_session().transform(obj, transformation, **kwargs)
