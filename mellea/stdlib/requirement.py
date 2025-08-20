@@ -3,6 +3,7 @@
 import inspect
 import re
 from collections.abc import Callable
+from copy import copy
 from typing import Any, overload
 
 from mellea.backends import (
@@ -97,6 +98,9 @@ class Requirement(Component):
         self.validation_fn = validation_fn
         self.check_only = check_only
 
+        # Used for validation. Do not manually populate.
+        self._output: str | None = None
+
     def validate(
         self,
         backend: Backend,
@@ -117,17 +121,18 @@ class Requirement(Component):
             assert isinstance(last_output, ModelOutputThunk), (
                 " Context has no appropriate last output"
             )
-            self._output = last_output.value  # type: ignore
+
+            # Create a copy of the requirement that holds the output
+            # and its template gets populated with the output correctly.
+            req_copy = copy(self)
+            req_copy._output = last_output.value
             llm_as_a_judge_result = backend.generate_from_context(
-                self,
+                req_copy,
                 ctx,
                 format=format,
                 model_options=model_options,
                 generate_logs=generate_logs,
             )
-            # This is crucial, because requirements can get reused;
-            # this also means requirements are not thread-safe.
-            self._output = None
             return ValidationResult(
                 result=self.output_to_bool(llm_as_a_judge_result),
                 reason=llm_as_a_judge_result.value,
