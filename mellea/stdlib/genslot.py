@@ -153,7 +153,11 @@ class GenerativeSlot(Component, Generic[P, R]):
         functools.update_wrapper(self, func)
 
     def __call__(
-        self, m=None, model_options: dict | None = None, *args: P.args, **kwargs: P.kwargs
+        self,
+        m=None,
+        model_options: dict | None = None,
+        *args: P.args,
+        **kwargs: P.kwargs,
     ) -> R:
         """Call the generative slot.
 

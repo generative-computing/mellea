@@ -39,6 +39,7 @@ dependencies = [
     "typer",
     "click<8.2.0", # Newer versions will cause errors with --help in typer CLIs.
     "mistletoe>=1.4.0",
+    "huggingface-hub>=0.33.4",
 ]
 
 [project.scripts]
@@ -66,6 +67,8 @@ watsonx = [
 docling = [
     "docling>=2.45.0",
 ]
+
+all = ["mellea[watsonx,docling,hf]"]
 
 [dependency-groups]
 # Use these like:
