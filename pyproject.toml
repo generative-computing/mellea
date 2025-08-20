@@ -39,6 +39,7 @@ dependencies = [
     "typer",
     "click<8.2.0", # Newer versions will cause errors with --help in typer CLIs.
     "mistletoe>=1.4.0",
+    "huggingface-hub>=0.33.4",
 ]
 
 [project.scripts]
