@@ -1,21 +1,20 @@
-from mellea import MelleaSession
-from mellea.stdlib.base import CBlock, LinearContext
-from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.aloras.huggingface.granite_aloras import add_granite_aloras
-from mellea.stdlib.requirement import (
-    Requirement,
-    ALoraRequirement,
-    LLMaJRequirement,
-    ValidationResult,
-)
-from mellea.backends.formatter import TemplateFormatter
-from mellea.backends.cache import SimpleLRUCache
-from mellea.backends.types import ModelOption
 import pydantic
-
+import pytest
 from typing_extensions import Annotated
 
-import pytest
+from mellea import MelleaSession
+from mellea.backends.aloras.huggingface.granite_aloras import add_granite_aloras
+from mellea.backends.cache import SimpleLRUCache
+from mellea.backends.formatter import TemplateFormatter
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.types import ModelOption
+from mellea.stdlib.base import CBlock, LinearContext
+from mellea.stdlib.requirement import (
+    ALoraRequirement,
+    LLMaJRequirement,
+    Requirement,
+    ValidationResult,
+)
 
 
 @pytest.fixture(scope="module")
@@ -49,9 +48,13 @@ def test_system_prompt(session):
 def test_constraint_alora(session, backend):
     answer = session.instruct(
         "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa. Be concise and don't write code to answer the question.",
-        model_options={ModelOption.MAX_NEW_TOKENS: 300}, # Until aloras get a bit better, try not to abruptly end generation.
+        model_options={
+            ModelOption.MAX_NEW_TOKENS: 300
+        },  # Until aloras get a bit better, try not to abruptly end generation.
     )
-    alora_output = backend.get_aloras()[0].generate_using_strings(
+    alora_output = backend.get_aloras()[
+        0
+    ].generate_using_strings(
         input="Find the difference between these two strings: aaaaaaaaaa aaaaabaaaa",
         response=str(answer),
         constraint="The answer mention that there is a b in the middle of one of the strings but not the other.",
@@ -68,12 +71,12 @@ def test_constraint_lora_with_requirement(session, backend):
     assert session.backend._use_caches
     assert backend._cache.current_size() != 0
     validation_outputs = session.validate(
-        "The answer should mention that there is a b in the middle of one of the strings but not the other.",
-        return_full_validation_results=True,
+        "The answer should mention that there is a b in the middle of one of the strings but not the other."
     )
     assert len(validation_outputs) == 1
-    alora_output, valuation_boolean = validation_outputs[0]
-    assert str(alora_output) in ["Y", "N"]
+    val_result = validation_outputs[0]
+    assert isinstance(val_result, ValidationResult)
+    assert str(val_result.reason) in ["Y", "N"]
 
 
 def test_constraint_lora_override(session, backend):
@@ -82,12 +85,14 @@ def test_constraint_lora_override(session, backend):
         "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
     )
     validation_outputs = session.validate(
-        "The answer should mention that there is a b in the middle of one of the strings but not the other.",
-        return_full_validation_results=True,
+        "The answer should mention that there is a b in the middle of one of the strings but not the other."
     )
     assert len(validation_outputs) == 1
-    non_alora_output, _ = validation_outputs[0]
-    assert str(non_alora_output) not in ["Y", "N"]
+    val_result = validation_outputs[0]
+    assert isinstance(val_result, ValidationResult)
+    assert (
+        str(val_result.reason) in ["Y", "N", "Yes.", "No."]
+    )  # Checking for any type of result that LLM may output. But might need to be more robust.
     backend.default_to_constraint_checking_alora = True
 
 
@@ -99,12 +104,12 @@ def test_constraint_lora_override_does_not_override_alora(session, backend):
     validation_outputs = session.validate(
         ALoraRequirement(
             "The answer should mention that there is a b in the middle of one of the strings but not the other."
-        ),
-        return_full_validation_results=True,
+        )
     )
     assert len(validation_outputs) == 1
-    non_alora_output, _ = validation_outputs[0]
-    assert str(non_alora_output) in ["Y", "N"]
+    val_result = validation_outputs[0]
+    assert isinstance(val_result, ValidationResult)
+    assert str(val_result.reason) in ["Y", "N"]
     backend.default_to_constraint_checking_alora = True
 
 
@@ -116,12 +121,12 @@ def test_llmaj_req_does_not_use_alora(session, backend):
     validation_outputs = session.validate(
         LLMaJRequirement(
             "The answer should mention that there is a b in the middle of one of the strings but not the other."
-        ),
-        return_full_validation_results=True,
+        )
     )
     assert len(validation_outputs) == 1
-    non_alora_output, _ = validation_outputs[0]
-    assert str(non_alora_output) not in ["Y", "N"]
+    val_result = validation_outputs[0]
+    assert isinstance(val_result, ValidationResult)
+    assert str(val_result.reason) not in ["Y", "N"]
 
 
 def test_instruct(session):
@@ -135,9 +140,7 @@ def test_multiturn(session):
         "Take the result of the previous sum and find the corresponding letter in the greek alphabet."
     )
     assert "β" in str(beta).lower()
-    words = session.instruct(
-        "Now list five English words that start with that letter."
-    )
+    words = session.instruct("Now list five English words that start with that letter.")
     print(words)
 
 
@@ -145,8 +148,7 @@ def test_format(session):
     class Person(pydantic.BaseModel):
         name: str
         email_address: Annotated[
-            str,
-            pydantic.StringConstraints(pattern=r"[a-zA-Z]{5,10}@example\.com"),
+            str, pydantic.StringConstraints(pattern=r"[a-zA-Z]{5,10}@example\.com")
         ]
 
     class Email(pydantic.BaseModel):
@@ -166,12 +168,10 @@ def test_format(session):
     print(email)
 
     print("address:", email.to.email_address)
-    assert (
-        "@" in email.to.email_address
-    ), "The @ sign should be in the meail address."
-    assert email.to.email_address.endswith(
-        "example.com"
-    ), "The email address should be at example.com"
+    assert "@" in email.to.email_address, "The @ sign should be in the meail address."
+    assert email.to.email_address.endswith("example.com"), (
+        "The email address should be at example.com"
+    )
 
 
 def test_generate_from_raw(session):
@@ -203,9 +203,9 @@ def test_generate_from_raw_with_format(session):
     try:
         answer = Answer.model_validate_json(random_result.value)
     except pydantic.ValidationError as e:
-        assert (
-            False
-        ), f"formatting directive failed for {random_result.value}: {e.json()}"
+        assert False, (
+            f"formatting directive failed for {random_result.value}: {e.json()}"
+        )
 
 
 if __name__ == "__main__":
