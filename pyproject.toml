@@ -26,19 +26,11 @@ classifiers = [
 
 dependencies = [
     "pydantic",
-    "outlines<1.0.0",
     "openai",
     "jinja2",
-    "transformers",
-    "torchvision",
-    "accelerate>=0.26.0",
     "json5",
-    "docling==2.28.1",
     "ollama>=0.5.1",
-    "alora==0.2.0",
     "ansicolors",
-    "datasets",
-    "ibm-watsonx-ai",
     "requests>=2.32.3",
     "uvicorn",
     "fastapi",
@@ -47,9 +39,7 @@ dependencies = [
     "typer",
     "click<8.2.0", # Newer versions will cause errors with --help in typer CLIs.
     "mistletoe>=1.4.0",
-    "trl==0.19.0",
-    "peft",
-    "torch"
+    "huggingface-hub>=0.33.4",
 ]
 
 [project.scripts]
@@ -57,10 +47,28 @@ m = "cli.m:cli"
 
 [project.optional-dependencies]
 # Use these like:
-# pip install -e .[dev]
-# pip install mellea[dev]
-dev = ["mypy", "mypy-extensions", "tomli", "codespell"]
-sphinx = ["sphinx_rtd_theme", "sphinx-autodoc-typehints", "sphinx_mdinclude"]
+# uv pip install "mellea[hf]"
+# uv pip install -e .[hf, watsonx]
+# if you want to install all dependencies, use uv sync --all-extras
+
+hf = [
+    "accelerate>=1.9.0",
+    "alora>=0.2.0",
+    "datasets>=4.0.0",
+    "outlines<1.0.0",
+    "peft>=0.16.0",
+    "transformers>=4.53.2",
+    "trl>=0.19.0",
+]
+
+watsonx = [
+    "ibm-watsonx-ai>=1.3.31",
+]
+docling = [
+    "docling>=2.45.0",
+]
+
+all = ["mellea[watsonx,docling,hf]"]
 
 [dependency-groups]
 # Use these like:
@@ -75,20 +83,14 @@ dev = [
     "pytest",
     "mypy>=1.17.0",
 ]
-docling = [
-    "docling>=2.15.1",
-]
-all = [
-    "mellea",
-    "mellea[dev]"
-]
+
 notebook = [
     "ipykernel>=6.29.5",
     "ipython>=8.36.0",
     "jupyter>=1.1.1",
 ]
 
-sphinx = [
+docs = [
     "sphinx_rtd_theme",
     "sphinx-autodoc-typehints",
     "sphinx_mdinclude",
