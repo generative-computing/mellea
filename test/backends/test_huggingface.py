@@ -14,6 +14,7 @@ from mellea.stdlib.requirement import (
     LLMaJRequirement,
     Requirement,
     ValidationResult,
+    default_output_to_bool,
 )
 
 
@@ -90,9 +91,7 @@ def test_constraint_lora_override(session, backend):
     assert len(validation_outputs) == 1
     val_result = validation_outputs[0]
     assert isinstance(val_result, ValidationResult)
-    assert (
-        str(val_result.reason) in ["Y", "N", "Yes.", "No."]
-    )  # Checking for any type of result that LLM may output. But might need to be more robust.
+    assert isinstance(default_output_to_bool(str(val_result.reason)), bool)
     backend.default_to_constraint_checking_alora = True
 
 
