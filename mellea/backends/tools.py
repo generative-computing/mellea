@@ -54,26 +54,11 @@ def add_tools_from_context_actions(
             continue  # Only components have template representations.
 
         tr = action.format_for_llm()
-        if isinstance(tr, str) or tr.tools is None:
+        if not isinstance(tr, TemplateRepresentation) or tr.tools is None:
             continue
 
         for tool_name, func in tr.tools.items():
             tools_dict[tool_name] = func
-
-
-def get_tools_from_action(action: Any) -> dict[str, Callable]:
-    """If an object is a Component with a TemplateRepresentation, grabs it's tools field.
-
-    Returns:
-        dict: mapping function names to callables
-    """
-    if isinstance(action, Component):
-        tr = action.format_for_llm()
-        if isinstance(tr, TemplateRepresentation):
-            if tr.tools:
-                return tr.tools
-
-    return {}
 
 
 def convert_tools_to_json(tools: dict[str, Callable]) -> list[dict]:

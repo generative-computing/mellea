@@ -10,9 +10,8 @@ import dataclasses
 import datetime
 import inspect
 import json
-import os
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import outlines
 import outlines_core
@@ -35,7 +34,6 @@ from mellea.backends.tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
-    get_tools_from_action,
     parse_tools,
 )
 from mellea.backends.types import ModelOption
@@ -47,7 +45,6 @@ from mellea.stdlib.base import (
     GenerateLog,
     ModelOutputThunk,
     ModelToolCall,
-    TemplateRepresentation,
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
@@ -327,13 +324,15 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                         f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                     )
                 else:
-                    if isinstance(action, Component) and isinstance(
-                        action.format_for_llm(), TemplateRepresentation
-                    ):
-                        tools = get_tools_from_action(action)
-                add_tools_from_model_options(tools, model_options)
-                add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
-            FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+                    add_tools_from_model_options(tools, model_options)
+                    add_tools_from_context_actions(
+                        tools, ctx.actions_for_available_tools()
+                    )
+
+                    # Add the tools from the action for this generation last so that
+                    # they overwrite conflicting names.
+                    add_tools_from_context_actions(tools, [action])
+                FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
             seed = model_options.get(ModelOption.SEED, None)
             if seed is not None:

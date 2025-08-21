@@ -24,7 +24,6 @@ from mellea.backends.tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
-    get_tools_from_action,
 )
 from mellea.backends.types import ModelOption
 from mellea.helpers.fancy_logger import FancyLogger
@@ -35,7 +34,6 @@ from mellea.stdlib.base import (
     GenerateLog,
     ModelOutputThunk,
     ModelToolCall,
-    TemplateRepresentation,
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
@@ -409,14 +407,13 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
             else:
-                if isinstance(action, Component) and isinstance(
-                    action.format_for_llm(), TemplateRepresentation
-                ):
-                    tools = get_tools_from_action(action)
-
                 add_tools_from_model_options(tools, model_opts)
                 add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
-        FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+
+                # Add the tools from the action for this generation last so that
+                # they overwrite conflicting names.
+                add_tools_from_context_actions(tools, [action])
+            FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         thinking = model_opts.get(ModelOption.THINKING, None)
         if type(thinking) is bool and thinking:

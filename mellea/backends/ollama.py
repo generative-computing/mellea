@@ -2,7 +2,6 @@
 
 import asyncio
 import datetime
-import os
 from collections.abc import Callable
 from typing import Any
 
@@ -16,7 +15,6 @@ from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
-    get_tools_from_action,
 )
 from mellea.backends.types import ModelOption
 from mellea.helpers.fancy_logger import FancyLogger
@@ -299,13 +297,12 @@ class OllamaModelBackend(FormatterBackend):
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
             else:
-                if isinstance(action, Component) and isinstance(
-                    action.format_for_llm(), TemplateRepresentation
-                ):
-                    tools = get_tools_from_action(action)
-
                 add_tools_from_model_options(tools, model_opts)
                 add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
+
+                # Add the tools from the action for this generation last so that
+                # they overwrite conflicting names.
+                add_tools_from_context_actions(tools, [action])
             FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         # Generate a chat response from ollama, using the chat messages.
