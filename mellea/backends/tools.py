@@ -7,26 +7,58 @@ from typing import Any
 from ollama._utils import convert_function_to_tool
 
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import Component, TemplateRepresentation
+from mellea.stdlib.base import CBlock, Component, TemplateRepresentation
 
 
 def add_tools_from_model_options(
     tools_dict: dict[str, Callable], model_options: dict[str, Any]
 ):
-    """If model_options has tools, it will add those tools to the tools_dict."""
+    """If model_options has tools, add those tools to the tools_dict."""
     model_opts_tools = model_options.get(ModelOption.TOOLS, None)
-
     if model_opts_tools is None:
         return
 
+    # Mappings are iterable.
     assert isinstance(model_opts_tools, Iterable), (
-        "ModelOption.TOOLS must be a list of Callables"
+        "ModelOption.TOOLS must be a list of Callables or dict[str, Callable]"
     )
-    for func in model_opts_tools:
-        assert callable(func), (
-            f"ModelOption.TOOLS must be a list of Callables, found {type(func)}"
-        )
-        tools_dict[func.__name__] = func
+
+    if isinstance(model_opts_tools, Mapping):
+        # Handle the dict case.
+        for func_name, func in model_opts_tools.items():
+            assert isinstance(func_name, str), (
+                f"If ModelOption.TOOLS is a dict, it must be a dict of [str, Callable]; found {type(func_name)} as the key instead"
+            )
+            assert callable(func), (
+                f"If ModelOption.TOOLS is a dict, it must be a dict of [str, Callable]; found {type(func)} as the value instead"
+            )
+            tools_dict[func_name] = func
+    else:
+        # Handle any other iterable / list here.
+        for func in model_opts_tools:
+            assert callable(func), (
+                f"If ModelOption.TOOLS is a list, it must be a list of Callables; found {type(func)}"
+            )
+            tools_dict[func.__name__] = func
+
+
+def add_tools_from_context_actions(
+    tools_dict: dict[str, Callable], ctx_actions: list[Component | CBlock] | None
+):
+    """If any of the actions in ctx_actions have tools in their template_representation, add those to the tools_dict."""
+    if ctx_actions is None:
+        return
+
+    for action in ctx_actions:
+        if not isinstance(action, Component):
+            continue  # Only components have template representations.
+
+        tr = action.format_for_llm()
+        if isinstance(tr, str) or tr.tools is None:
+            continue
+
+        for tool_name, func in tr.tools.items():
+            tools_dict[tool_name] = func
 
 
 def get_tools_from_action(action: Any) -> dict[str, Callable]:
