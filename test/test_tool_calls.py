@@ -119,9 +119,34 @@ def test_add_tools_from_context_actions():
     assert tools["tool2"] == ftc1.tool2, f"{tools["tool2"]} should == {ftc1.tool2}"
 
 
+def test_tool_called_from_context_action(m: MelleaSession, table: Table):
+    """Make sure tools can be called from actions in the context."""
+    r = 10
+    m.ctx.reset()
+
+    # Insert a component with tools into the context.
+    m.ctx.insert(table)
+
+    returned_tool = False
+    for i in range(r):
+        # Make sure the specific generate call is on a different action with
+        # no tools to make sure it's a tool from the context.
+        result = m.backend.generate_from_context(
+            CBlock("Add a row to the table."),
+            m.ctx,
+            tool_calls=True
+        )
+        if result.tool_calls is not None and len(result.tool_calls) > 0:
+            returned_tool = True
+            break
+
+    assert returned_tool, f"did not return a tool after {r} attempts"
+
+
 def test_tool_called(m: MelleaSession, table: Table):
     """We don't force tools to be called. As a result, this test might unexpectedly fail."""
     r = 10
+    m.ctx.reset()
 
     returned_tool = False
     for i in range(r):
@@ -136,6 +161,7 @@ def test_tool_called(m: MelleaSession, table: Table):
 def test_tool_not_called(m: MelleaSession, table: Table):
     """Ensure tools aren't always called when provided."""
     r = 10
+    m.ctx.reset()
 
     returned_no_tool = False
     for i in range(r):

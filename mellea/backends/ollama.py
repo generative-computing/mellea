@@ -13,7 +13,11 @@ import mellea.backends.model_ids as model_ids
 from mellea.backends import BaseModelSubclass
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
-from mellea.backends.tools import add_tools_from_model_options, get_tools_from_action
+from mellea.backends.tools import (
+    add_tools_from_context_actions,
+    add_tools_from_model_options,
+    get_tools_from_action,
+)
 from mellea.backends.types import ModelOption
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
@@ -301,6 +305,7 @@ class OllamaModelBackend(FormatterBackend):
                     tools = get_tools_from_action(action)
 
                 add_tools_from_model_options(tools, model_opts)
+                add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
             FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         # Generate a chat response from ollama, using the chat messages.

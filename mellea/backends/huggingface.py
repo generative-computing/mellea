@@ -32,6 +32,7 @@ from mellea.backends.cache import Cache, SimpleLRUCache
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.tools import (
+    add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
     get_tools_from_action,
@@ -331,6 +332,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                     ):
                         tools = get_tools_from_action(action)
                 add_tools_from_model_options(tools, model_options)
+                add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
             FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
             seed = model_options.get(ModelOption.SEED, None)
