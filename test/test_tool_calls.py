@@ -119,34 +119,34 @@ def test_add_tools_from_context_actions():
     assert tools["tool2"] == ftc1.tool2, f"{tools["tool2"]} should == {ftc1.tool2}"
 
 
-# def test_tool_called(m: MelleaSession, table: Table):
-#     """We don't force tools to be called. As a result, this test might unexpectedly fail."""
-#     r = 10
+def test_tool_called(m: MelleaSession, table: Table):
+    """We don't force tools to be called. As a result, this test might unexpectedly fail."""
+    r = 10
 
-#     returned_tool = False
-#     for i in range(r):
-#         transformed = m.transform(table, "add a new row to this table")
-#         if isinstance(transformed, Table):
-#             returned_tool = True
-#             break
+    returned_tool = False
+    for i in range(r):
+        transformed = m.transform(table, "add a new row to this table")
+        if isinstance(transformed, Table):
+            returned_tool = True
+            break
 
-#     assert returned_tool, f"did not return a tool after {r} attempts"
+    assert returned_tool, f"did not return a tool after {r} attempts"
 
 
-# def test_tool_not_called(m: MelleaSession, table: Table):
-#     """Ensure tools aren't always called when provided."""
-#     r = 10
+def test_tool_not_called(m: MelleaSession, table: Table):
+    """Ensure tools aren't always called when provided."""
+    r = 10
 
-#     returned_no_tool = False
-#     for i in range(r):
-#         transformed = m.transform(table, "output a text description of this table")
-#         if isinstance(transformed, ModelOutputThunk):
-#             returned_no_tool = True
-#             break
+    returned_no_tool = False
+    for i in range(r):
+        transformed = m.transform(table, "output a text description of this table")
+        if isinstance(transformed, ModelOutputThunk):
+            returned_no_tool = True
+            break
 
-#     assert (
-#         returned_no_tool
-#     ), f"only returned tools after {r} attempts, should've returned a response with no tools"
+    assert (
+        returned_no_tool
+    ), f"only returned tools after {r} attempts, should've returned a response with no tools"
 
 if __name__ == "__main__":
     pytest.main([__file__])
