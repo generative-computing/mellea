@@ -20,7 +20,11 @@ from mellea.backends import BaseModelSubclass
 from mellea.backends.aloras import Alora, AloraBackendMixin
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
-from mellea.backends.tools import convert_tools_to_json, get_tools_from_action
+from mellea.backends.tools import (
+    add_tools_from_model_options,
+    convert_tools_to_json,
+    get_tools_from_action,
+)
 from mellea.backends.types import ModelOption
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
@@ -409,23 +413,8 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                 ):
                     tools = get_tools_from_action(action)
 
-                model_options_tools = model_opts.get(ModelOption.TOOLS, None)
-                if model_options_tools is not None:
-                    assert isinstance(model_options_tools, dict)
-                    for fn_name in model_options_tools:
-                        # invariant re: relationship between the model_options set of tools and the TemplateRepresentation set of tools
-                        assert fn_name not in tools.keys(), (
-                            f"Cannot add tool {fn_name} because that tool was already defined in the TemplateRepresentation for the action."
-                        )
-                        # type checking because ModelOptions is an untyped dict and the calling convention for tools isn't clearly documented at our abstraction boundaries.
-                        assert type(fn_name) is str, (
-                            "When providing a `ModelOption.TOOLS` parameter to `model_options`, always used the type Dict[str, Callable] where `str` is the function name and the callable is the function."
-                        )
-                        assert callable(model_options_tools[fn_name]), (
-                            "When providing a `ModelOption.TOOLS` parameter to `model_options`, always used the type Dict[str, Callable] where `str` is the function name and the callable is the function."
-                        )
-                        # Add the model_options tool to the existing set of tools.
-                        tools[fn_name] = model_options_tools[fn_name]
+                add_tools_from_model_options(tools, model_opts)
+        FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         thinking = model_opts.get(ModelOption.THINKING, None)
         if type(thinking) is bool and thinking:

@@ -1,12 +1,32 @@
 """Utilities for dealing with tools."""
 
 import json
-from collections.abc import Callable, Generator, Mapping
+from collections.abc import Callable, Generator, Iterable, Mapping
 from typing import Any
 
 from ollama._utils import convert_function_to_tool
 
+from mellea.backends.types import ModelOption
 from mellea.stdlib.base import Component, TemplateRepresentation
+
+
+def add_tools_from_model_options(
+    tools_dict: dict[str, Callable], model_options: dict[str, Any]
+):
+    """If model_options has tools, it will add those tools to the tools_dict."""
+    model_opts_tools = model_options.get(ModelOption.TOOLS, None)
+
+    if model_opts_tools is None:
+        return
+
+    assert isinstance(model_opts_tools, Iterable), (
+        "ModelOption.TOOLS must be a list of Callables"
+    )
+    for func in model_opts_tools:
+        assert callable(func), (
+            f"ModelOption.TOOLS must be a list of Callables, found {type(func)}"
+        )
+        tools_dict[func.__name__] = func
 
 
 def get_tools_from_action(action: Any) -> dict[str, Callable]:

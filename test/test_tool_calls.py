@@ -2,6 +2,8 @@ import pytest
 
 from mellea.backends import Backend
 from mellea.backends.ollama import OllamaModelBackend
+from mellea.backends.tools import add_tools_from_model_options
+from mellea.backends.types import ModelOption
 from mellea.stdlib.base import ModelOutputThunk
 from mellea.stdlib.docs.richdocument import Table
 from mellea.stdlib.session import LinearContext, MelleaSession
@@ -27,6 +29,22 @@ def table() -> Table:
     assert t is not None, "test setup failed: could not create table from markdown"
     return t
 
+def test_add_tools_from_model_options(table: Table):
+    def get_weather(location: str) -> int:
+        """Returns the weather in Celsius."""
+        return 21
+
+    model_options = {
+        ModelOption.TOOLS: [get_weather, table.content_as_string]
+    }
+
+    tools = {}
+    add_tools_from_model_options(tools, model_options)
+
+    assert tools["get_weather"] == get_weather
+
+    # Must use `==` for bound methods.
+    assert tools["content_as_string"] == table.content_as_string, f"{tools["content_as_string"]} is not {table.content_as_string}"
 
 def test_tool_called(m: MelleaSession, table: Table):
     """We don't force tools to be called. As a result, this test might unexpectedly fail."""
