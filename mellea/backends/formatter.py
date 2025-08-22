@@ -5,6 +5,7 @@ import os
 import re
 import sys
 from collections.abc import Iterable, Mapping
+from dataclasses import fields
 from typing import Any
 
 import jinja2
@@ -396,14 +397,13 @@ class TemplateFormatter(Formatter, abc.ABC):
             "model_id was neither a `str` nor `ModelIdentifier`"
         )
 
-        # Go through the ModelIdentifier's fields, find one that isn't `"None"` or `""`.
-        ids = [model_id.hf_model_name, model_id.ollama_name]
-        model_id = ""
-        for val in ids:
-            if val != "None" and val != "":
-                model_id = val  # type: ignore
-                break
-        return model_id
+        # Go through the ModelIdentifier's fields, find one that can be matched against.
+        for field in fields(model_id):
+            val = getattr(model_id, field.name)
+            if val is not None and val != "":
+                return val
+
+        return ""  # Cannot match against any model identifiers. Will ultimately use default.
 
 
 def _simplify_model_string(input: str) -> str:

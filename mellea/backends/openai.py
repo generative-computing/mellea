@@ -6,7 +6,7 @@ import inspect
 import json
 from collections.abc import Callable
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import openai
@@ -14,8 +14,6 @@ import requests
 from huggingface_hub import snapshot_download
 from openai.types.chat import ChatCompletion
 from openai.types.completion import Completion
-from transformers import AutoTokenizer
-from transformers.tokenization_utils import PreTrainedTokenizer
 
 import mellea.backends.model_ids as model_ids
 from mellea.backends import BaseModelSubclass
@@ -36,6 +34,9 @@ from mellea.stdlib.base import (
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
+
+if TYPE_CHECKING:
+    from transformers.tokenization_utils import PreTrainedTokenizer
 
 openai_ollama_batching_error = "json: cannot unmarshal array into Go struct field CompletionRequest.prompt of type string"
 
@@ -638,10 +639,12 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
     def apply_chat_template(self, chat: list[dict[str, str]]):
         """Apply the chat template for the model, if such a model is available (e.g., when it can deduce the huggingface model id)."""
+        from transformers import AutoTokenizer
+
         if not hasattr(self, "_tokenizer"):
             match _server_type(self._base_url):
                 case _ServerType.LOCALHOST:
-                    self._tokenizer: PreTrainedTokenizer = (
+                    self._tokenizer: "PreTrainedTokenizer" = (  # noqa: UP037
                         AutoTokenizer.from_pretrained(self._hf_model_id)
                     )
                 case _ServerType.OPENAI:

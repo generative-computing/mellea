@@ -14,7 +14,7 @@ def summarize_contract(contract_text: str) -> str:
 
 @generative
 def summarize_short_story(story: str) -> str:
-    """Summarize a short story, with one paragraph on plot and one paragraph on braod themes."""
+    """Summarize a short story, with one paragraph on plot and one paragraph on broad themes."""
 
 
 # The Decision Aides Library

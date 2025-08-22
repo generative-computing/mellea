@@ -1,10 +1,18 @@
 import pytest
 from mellea.stdlib.base import ModelOutputThunk
-from mellea.stdlib.requirement import simple_validate
-from mellea.stdlib.session import SimpleContext
+from mellea.stdlib.requirement import Requirement, simple_validate
+from mellea.stdlib.session import SimpleContext, start_session
 
 ctx = SimpleContext()
 ctx.insert(ModelOutputThunk("test"))
+
+def test_llmaj_validation_req_output_field():
+    m = start_session(ctx=ctx)
+    req = Requirement("Must output test.")
+    assert req._output is None
+
+    _ = req.validate(m.backend,ctx=ctx)
+    assert req._output is None, "requirement's output shouldn't be updated during/after validation"
 
 def test_simple_validate_bool():
     validation_func = simple_validate(lambda x: False, reason="static reason")
