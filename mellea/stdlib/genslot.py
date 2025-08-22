@@ -170,6 +170,8 @@ class GenerativeSlot(Component, Generic[P, R]):
         """
         if m is None:
             m = get_session()
+
+        # Need a deep copy so that the parameters can be bound to the underlying function.
         slot_copy = deepcopy(self)
         arguments = bind_function_arguments(self._function._func, *args, **kwargs)
         if arguments:

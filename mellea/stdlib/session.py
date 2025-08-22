@@ -469,9 +469,7 @@ class MelleaSession:
         assert len(generate_logs) == 1, "Simple call can only add one generate_log"
         generate_logs[0].is_final_result = True
 
-        self.ctx.insert_turn(
-            ContextTurn(deepcopy(gen_slot), result), generate_logs=generate_logs
-        )
+        self.ctx.insert_turn(ContextTurn(gen_slot, result), generate_logs=generate_logs)
 
         return result
 
