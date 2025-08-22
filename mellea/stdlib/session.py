@@ -444,30 +444,72 @@ class MelleaSession:
     def genslot(
         self,
         gen_slot: Component,
-        model_options: dict | None = None,
+        *,
+        strategy: SamplingStrategy | None = None,
         format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
         """Call generative Slot on a GenerativeSlot Component.
 
         Args:
             gen_slot (GenerativeSlot Component): A generative slot
+            strategy: A SamplingStrategy that describes the strategy for validating and repairing/retrying.
+            model_options: Additional model options, which will upsert into the model/backend's defaults.
 
         Returns:
             ModelOutputThunk: Output thunk
         """
         generate_logs: list[GenerateLog] = []
-        result: ModelOutputThunk = self.backend.generate_from_context(
-            action=gen_slot,
-            ctx=self.ctx,
-            model_options=model_options,
-            format=format,
-            generate_logs=generate_logs,
-            tool_calls=tool_calls,
-        )
-        # make sure that the last and only Log is marked as the one related to result
-        assert len(generate_logs) == 1, "Simple call can only add one generate_log"
-        generate_logs[0].is_final_result = True
+        if strategy is None:
+            result: ModelOutputThunk = self.backend.generate_from_context(
+                action=gen_slot,
+                ctx=self.ctx,
+                model_options=model_options,
+                format=format,
+                generate_logs=generate_logs,
+                tool_calls=tool_calls,
+            )
+
+            # make sure that the last and only Log is marked as the one related to result
+            assert len(generate_logs) == 1, "Simple call can only add one generate_log"
+            generate_logs[0].is_final_result = True
+        else:
+            if strategy.validate is None:
+                strategy.validate = lambda reqs, val_ctx, output: self.validate(
+                    reqs, output=output
+                )
+
+            if strategy.generate is None:
+                strategy.generate = (
+                    lambda gen_slot,
+                    gen_ctx,
+                    g_logs: self.backend.generate_from_context(
+                        action=gen_slot,
+                        ctx=gen_ctx,
+                        format=format,
+                        model_options=model_options,
+                        generate_logs=g_logs,
+                    )
+                )
+
+            res = strategy.sample(gen_slot, self.ctx, generate_logs=generate_logs)
+
+            # make sure that one Log is marked as the one related to res.result
+            if res.success:
+                # if successful, the last log is the one related
+                generate_logs[-1].is_final_result = True
+            else:
+                # find the one where log.result and res.result match
+                selected_log = [
+                    log for log in generate_logs if log.result == res.result
+                ]
+                assert len(selected_log) == 1, (
+                    "There should only be exactly one log corresponding to the single result. "
+                )
+                selected_log[0].is_final_result = True
+
+            result = res.result
 
         self.ctx.insert_turn(ContextTurn(gen_slot, result), generate_logs=generate_logs)
 

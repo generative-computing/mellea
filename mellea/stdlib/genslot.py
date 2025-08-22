@@ -9,7 +9,8 @@ from typing import Any, Generic, ParamSpec, TypedDict, TypeVar, get_type_hints
 from pydantic import BaseModel, Field, create_model
 
 from mellea.stdlib.base import Component, TemplateRepresentation
-from mellea.stdlib.session import get_session
+from mellea.stdlib.sampling import SamplingStrategy
+from mellea.stdlib.session import MelleaSession, get_session
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -154,7 +155,8 @@ class GenerativeSlot(Component, Generic[P, R]):
 
     def __call__(
         self,
-        m=None,
+        m: MelleaSession,
+        strategy: SamplingStrategy | None = None,
         model_options: dict | None = None,
         *args: P.args,
         **kwargs: P.kwargs,
@@ -162,7 +164,9 @@ class GenerativeSlot(Component, Generic[P, R]):
         """Call the generative slot.
 
         Args:
-            m: MelleaSession: A mellea session (optional, uses context if None)
+            m: MelleaSession: A mellea session
+            strategy: A SamplingStrategy that describes the strategy for validating and repairing/retrying.
+            model_options: Additional model options, which will upsert into the model/backend's defaults.
             **kwargs: Additional Kwargs to be passed to the func
 
         Returns:
@@ -175,7 +179,6 @@ class GenerativeSlot(Component, Generic[P, R]):
         slot_copy = deepcopy(self)
         arguments = bind_function_arguments(self._function._func, *args, **kwargs)
         if arguments:
-            # slot_copy._arguments = []
             for key, val in arguments.items():
                 annotation = get_annotation(slot_copy._function._func, key, val)
                 slot_copy._arguments.append(Argument(annotation, key, val))
@@ -183,12 +186,15 @@ class GenerativeSlot(Component, Generic[P, R]):
         response_model = create_response_format(self._function._func)
 
         response = m.genslot(
-            slot_copy, model_options=model_options, format=response_model
+            slot_copy,
+            strategy=strategy,
+            format=response_model,
+            model_options=model_options,
         )
 
         function_response: FunctionResponse[R] = response_model.model_validate_json(
-            response.value
-        )  # type: ignore
+            response.value  # type: ignore
+        )
 
         return function_response.result
 
