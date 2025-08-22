@@ -37,6 +37,12 @@ Here are some examples of what the response might look like:
 {%- endif -%}
 {% endblock icl_examples %}
 
+{%- block repair_block -%}
+{% if repair %}
+{{ repair -}}
+{%- endif -%}
+{% endblock repair_block %}
+
 {%- block output_prefix -%}
 {% if output_prefix %}
 {{ output_prefix -}}

@@ -1,5 +1,7 @@
 """Instructions."""
 
+from __future__ import annotations
+
 from copy import deepcopy
 
 import jinja2
@@ -106,6 +108,7 @@ class Instruction(Component):
         self._output_prefix = (
             blockify(output_prefix) if output_prefix is not None else None
         )
+        self._repair_string: str | None = None
 
     def parts(self):
         """Returns all of the constituent parts of an Instruction."""
@@ -132,6 +135,7 @@ class Instruction(Component):
                 "output_prefix": (
                     self._output_prefix if self._output_prefix is not None else None
                 ),
+                "repair": self._repair_string,
             },
             tools=None,
             template_order=["*", "Instruction"],
@@ -147,3 +151,9 @@ class Instruction(Component):
     def requirements(self) -> list[Requirement]:
         """Returns a list of Requirement instances."""
         return self._requirements
+
+    def copy_and_repair(self, repair_string: str) -> Instruction:
+        """Creates a copy of the instruction and adds/overwrites the repair string."""
+        res = deepcopy(self)
+        res._repair_string = repair_string
+        return res
