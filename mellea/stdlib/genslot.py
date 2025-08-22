@@ -9,6 +9,7 @@ from typing import Any, Generic, ParamSpec, TypedDict, TypeVar, get_type_hints
 from pydantic import BaseModel, Field, create_model
 
 from mellea.stdlib.base import Component, TemplateRepresentation
+from mellea.stdlib.session import get_session
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -152,17 +153,23 @@ class GenerativeSlot(Component, Generic[P, R]):
         functools.update_wrapper(self, func)
 
     def __call__(
-        self, m, model_options: dict | None = None, *args: P.args, **kwargs: P.kwargs
+        self,
+        m=None,
+        model_options: dict | None = None,
+        *args: P.args,
+        **kwargs: P.kwargs,
     ) -> R:
         """Call the generative slot.
 
         Args:
-            m: MelleaSession: A mellea session
+            m: MelleaSession: A mellea session (optional, uses context if None)
             **kwargs: Additional Kwargs to be passed to the func
 
         Returns:
             ModelOutputThunk: Output with generated Thunk.
         """
+        if m is None:
+            m = get_session()
         slot_copy = deepcopy(self)
         arguments = bind_function_arguments(self._function._func, *args, **kwargs)
         if arguments:
