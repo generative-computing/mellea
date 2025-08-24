@@ -37,6 +37,12 @@ Here is some grounding context:
 {%- endif -%}
 {% endblock grounding_context %}
 
+{%- block repair_block -%}
+{% if repair %}
+{{ repair -}}
+{%- endif -%}
+{% endblock repair_block %}
+
 {%- block output_prefix -%}
 {% if output_prefix %}
 {{ output_prefix -}}
