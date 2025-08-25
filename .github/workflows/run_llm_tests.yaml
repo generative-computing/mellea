@@ -1,6 +1,7 @@
 name: Test non-llm components
 
 on:
+  workflow_dispatch: {}
   workflow_run:
     workflows: [Verify Code Quality]
     types: [completed]
