@@ -31,9 +31,21 @@ jobs:
           path: ~/.cache/pre-commit
           key: pre-commit|${{ env.PY }}|${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Install dependencies
-        run: uv sync --frozen --all-extras
+        run: uv sync --frozen --all-extras --group dev
       - name: Check style and run tests
         run: pre-commit run --all-files
-      - name: Send failure message
+      - name: Send failure message pre-commit
         if: failure()  # This step will only run if a previous step failed
         run: echo "The quality verification failed. Please run precommit "
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+      - name: Pull Llama 3.2:1b model
+        run: ollama pull llama3.2:1b
+      - name: Start serving the model
+        run: nohup ollama serve &
+      - name: Run Tests
+        run: uv run -m pytest -v test
+      - name: Send failure message tests
+        if: failure()  # This step will only run if a previous step failed
+        run: echo "Tests failed. Please verify that tests are working locally."
+      
