@@ -160,7 +160,7 @@ def test_all_convenience_functions(model_id):
 
 def test_session_with_parameters(model_id):
     """Test contextual session with custom parameters."""
-    with start_session(backend_name="ollama", model_id=META_LLAMA_3_2_1B) as m:
+    with start_session(backend_name="ollama", model_id=model_id) as m:
         result = instruct("test with parameters")
         assert isinstance(result, ModelOutputThunk)
         assert isinstance(m, MelleaSession)
