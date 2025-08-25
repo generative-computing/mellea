@@ -29,21 +29,21 @@ def session(backend):
     session.reset()
 
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_instruct(session):
     result = session.instruct("Compute 1+1.")
     assert isinstance(result, ModelOutputThunk)
     assert "2" in result.value  # type: ignore
 
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_multiturn(session):
     session.instruct("What is the capital of France?")
     answer = session.instruct("Tell me the answer to the previous question.")
     assert "Paris" in answer.value  # type: ignore
 
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_format(session):
     class Person(pydantic.BaseModel):
         name: str
@@ -77,7 +77,7 @@ def test_format(session):
     pass
 
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_generate_from_raw(session):
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 

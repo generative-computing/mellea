@@ -74,7 +74,7 @@ def test_generative_with_contextual_session(model_id):
         assert isinstance(summary, str)
         assert len(summary) > 0
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_generative_backward_compatibility(model_id):
     """Test that generative slots still work with explicit session parameter."""
     with start_session(model_id=model_id) as m:

@@ -18,7 +18,7 @@ def session():
     session.reset()
 
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_simple_instruct(session):
     result = session.instruct(
         "Write an email to Hendrik trying to sell him self-sealing stembolts."
@@ -28,7 +28,7 @@ def test_simple_instruct(session):
     assert result._meta["chat_response"].message.role == "assistant"
 
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_instruct_with_requirement(session):
     response = session.instruct(
         "Write an email to Hendrik convincing him to buy some self-sealing stembolts."
@@ -51,14 +51,14 @@ def test_instruct_with_requirement(session):
     )
     print(results)
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_chat(session):
     output_message = session.chat("What is 1+1?")
     assert "2" in output_message.content, (
         f"Expected a message with content containing 2 but found {output_message}"
     )
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_format(session):
     class Person(pydantic.BaseModel):
         name: str
@@ -91,7 +91,7 @@ def test_format(session):
     # assert email.to.email_address.endswith("example.com")
     pass
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_generate_from_raw(session):
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 

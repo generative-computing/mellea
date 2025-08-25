@@ -37,13 +37,13 @@ def m_session(backend):
     yield session
     session.reset()
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_instruct(m_session):
     result = m_session.instruct("Compute 1+1.")
     assert isinstance(result, ModelOutputThunk)
     assert "2" in result.value  # type: ignore
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_multiturn(m_session):
     m_session.instruct("What is the capital of France?")
     answer = m_session.instruct("Tell me the answer to the previous question.")
@@ -64,7 +64,7 @@ def test_multiturn(m_session):
     #     assert "granite3.3:8b" in result.value
     #     self.m.reset()
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_format(m_session):
     class Person(pydantic.BaseModel):
         name: str

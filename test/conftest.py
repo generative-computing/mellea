@@ -14,7 +14,7 @@ def gh_run() -> int:
 
 
 def pytest_runtest_setup(item):
-    # Runs tests *not* marked with `@pytest.mark.llm` to run normally.
+    # Runs tests *not* marked with `@pytest.mark.qualitative` to run normally.
     if not item.get_closest_marker("qualitative"):
         return
 

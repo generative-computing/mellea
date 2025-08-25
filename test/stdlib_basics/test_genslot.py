@@ -33,7 +33,7 @@ def test_func(session):
     write_email_component = write_me_an_email(session)
     assert isinstance(write_email_component, str)
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_sentiment_output(classify_sentiment_output):
     assert classify_sentiment_output in ["positive", "negative"]
 

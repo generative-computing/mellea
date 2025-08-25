@@ -21,7 +21,6 @@ from mellea.stdlib.requirement import (
 @pytest.fixture(scope="module")
 def backend():
     """Shared HuggingFace backend for all tests in this module."""
-    # TODO: find a smalle 1B model to do Alora stuff on github actions.
     backend = LocalHFBackend(
         model_id="ibm-granite/granite-3.2-8b-instruct",
         formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
@@ -38,7 +37,7 @@ def session(backend):
     yield session
     session.reset()
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_system_prompt(session):
     result = session.chat(
         "Where are we going?",
@@ -46,7 +45,7 @@ def test_system_prompt(session):
     )
     print(result)
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_constraint_alora(session, backend):
     answer = session.instruct(
         "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa. Be concise and don't write code to answer the question.",
@@ -64,7 +63,7 @@ def test_constraint_alora(session, backend):
     )
     assert alora_output in ["Y", "N"], alora_output
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_constraint_lora_with_requirement(session, backend):
     answer = session.instruct(
         "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
@@ -80,7 +79,7 @@ def test_constraint_lora_with_requirement(session, backend):
     assert isinstance(val_result, ValidationResult)
     assert str(val_result.reason) in ["Y", "N"]
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_constraint_lora_override(session, backend):
     backend.default_to_constraint_checking_alora = False  # type: ignore
     answer = session.instruct(
@@ -95,7 +94,7 @@ def test_constraint_lora_override(session, backend):
     assert isinstance(default_output_to_bool(str(val_result.reason)), bool)
     backend.default_to_constraint_checking_alora = True
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_constraint_lora_override_does_not_override_alora(session, backend):
     backend.default_to_constraint_checking_alora = False  # type: ignore
     answer = session.instruct(
@@ -112,7 +111,7 @@ def test_constraint_lora_override_does_not_override_alora(session, backend):
     assert str(val_result.reason) in ["Y", "N"]
     backend.default_to_constraint_checking_alora = True
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_llmaj_req_does_not_use_alora(session, backend):
     backend.default_to_constraint_checking_alora = True  # type: ignore
     answer = session.instruct(
@@ -128,12 +127,12 @@ def test_llmaj_req_does_not_use_alora(session, backend):
     assert isinstance(val_result, ValidationResult)
     assert str(val_result.reason) not in ["Y", "N"]
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_instruct(session):
     result = session.instruct("Compute 1+1.")
     print(result)
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_multiturn(session):
     session.instruct("Compute 1+1")
     beta = session.instruct(
@@ -143,7 +142,7 @@ def test_multiturn(session):
     words = session.instruct("Now list five English words that start with that letter.")
     print(words)
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_format(session):
     class Person(pydantic.BaseModel):
         name: str
@@ -173,7 +172,7 @@ def test_format(session):
         "The email address should be at example.com"
     )
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_generate_from_raw(session):
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
@@ -183,7 +182,7 @@ def test_generate_from_raw(session):
 
     assert len(results) == len(prompts)
 
-@pytest.mark.llm
+@pytest.mark.qualitative
 def test_generate_from_raw_with_format(session):
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
