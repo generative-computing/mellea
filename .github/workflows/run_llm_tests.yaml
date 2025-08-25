@@ -2,9 +2,9 @@ name: Test non-llm components
 
 on:
   workflow_run:
-    workflows: ["Verify Code Quality"]
-    types:
-      - completed
+    workflows: [Verify Code Quality]
+    types: [completed]
+      
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref_name }}
