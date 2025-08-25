@@ -222,7 +222,7 @@ class MelleaSession:
         self.reset()
         self._backend_stack.clear()
         if hasattr(self.backend, "close"):
-            self.backend.close()
+            self.backend.close()  # type: ignore
 
     def summarize(self) -> ModelOutputThunk:
         """Summarizes the current context."""
@@ -231,7 +231,7 @@ class MelleaSession:
     @overload
     def act(
         self,
-        action: Component,  # TODO: JAL. make this able to be a CBLOCK as well?
+        action: Component,
         *,
         strategy: SamplingStrategy | None = None,
         return_sampling_results: Literal[False] = False,
@@ -243,7 +243,7 @@ class MelleaSession:
     @overload
     def act(
         self,
-        action: Component,  # TODO: JAL. make this able to be a CBLOCK as well?
+        action: Component,
         *,
         strategy: SamplingStrategy | None = None,
         return_sampling_results: Literal[True],
@@ -254,16 +254,27 @@ class MelleaSession:
 
     def act(
         self,
-        action: Component,  # TODO: JAL. make this able to be a CBLOCK as well?
+        action: Component,
         *,
         strategy: SamplingStrategy | None = None,
         return_sampling_results: bool = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-        # TODO: JAL. add more options here for context management. or maybe let the calling functions handle that?
     ) -> ModelOutputThunk | SamplingResult:
-        """Runs a generic action, and adds both the action and the result to the context."""  # TODO: JAL. fix this comment with params.
+        """Runs a generic action, and adds both the action and the result to the context.
+
+        Args:
+            action: the Component from which to generate.
+            strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
+            return_sampling_results: attach the (successful and failed) sampling attempts to the results.
+            format: if set, the BaseModel to use for constrained decoding.
+            model_options: additional model options, which will upsert into the model/backend's defaults.
+            tool_calls: if true, tool calling is enabled.
+
+        Returns:
+            A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+        """
         sampling_result: SamplingResult | None = None
         generate_logs: list[GenerateLog] = []
 
@@ -282,7 +293,7 @@ class MelleaSession:
                 tool_calls=tool_calls,
             )
             assert len(generate_logs) == 1, "Simple call can only add one generate_log"
-            generate_logs[-1].is_final_result = True  # TODO: JAL. Condense?
+            generate_logs[-1].is_final_result = True
 
         else:
             # Default validation strategy just validates all of the provided requirements.
@@ -294,10 +305,10 @@ class MelleaSession:
             # Default generation strategy just generates from context.
             if strategy.generate is None:
                 strategy.generate = (
-                    lambda instruction,
+                    lambda sample_action,
                     gen_ctx,
                     g_logs: self.backend.generate_from_context(
-                        instruction,
+                        sample_action,
                         ctx=gen_ctx,
                         format=format,
                         model_options=model_options,
@@ -313,12 +324,9 @@ class MelleaSession:
             # make sure that one Log is marked as the one related to sampling_result.result
             if sampling_result.success:
                 # if successful, the last log is the one related
-                generate_logs[
-                    -1
-                ].is_final_result = True  # TODO: JAL. Move this to common code.
+                generate_logs[-1].is_final_result = True
             else:
                 # Find the log where log.result and sampling_result.result match
-                # TODO: Change this to be a class field instead of having to find the chosen log this way.
                 selected_log = [
                     log for log in generate_logs if log.result == sampling_result.result
                 ]
