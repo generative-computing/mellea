@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import contextvars
-from collections.abc import Generator
-from contextlib import contextmanager
 from copy import deepcopy
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.formatter import FormatterBackend
@@ -230,6 +228,97 @@ class MelleaSession:
         """Summarizes the current context."""
         raise NotImplementedError()
 
+    # TODO: JAL. overload this so that return types are okay... see ollama stream: Literal[False] = False
+    def act(
+        self,
+        action: Component,  # TODO: JAL. make this able to be a CBLOCK as well?
+        *,
+        strategy: SamplingStrategy | None = None,
+        return_sampling_results: bool = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        # TODO: JAL. add more options here for context management. or maybe let the calling functions handle that?
+    ) -> (
+        ModelOutputThunk | SamplingResult
+    ):  # TODO: JAL. make sure this is the correct return type.
+        """Runs a generic action, and adds both the action and the result to the context."""  # TODO: JAL. fix this comment with params.
+        sampling_result: SamplingResult | None = None
+        generate_logs: list[GenerateLog] = []
+
+        if return_sampling_results:
+            assert strategy is not None, (
+                "Must provide a SamplingStrategy when return_sampling_results==True"
+            )
+
+        if strategy is None:
+            result = self.backend.generate_from_context(
+                action,
+                ctx=self.ctx,
+                format=format,
+                model_options=model_options,
+                generate_logs=generate_logs,
+                tool_calls=tool_calls,
+            )
+            assert len(generate_logs) == 1, "Simple call can only add one generate_log"
+            generate_logs[-1].is_final_result = True  # TODO: JAL. Condense?
+
+        else:
+            # Default validation strategy just validates all of the provided requirements.
+            if strategy.validate is None:
+                strategy.validate = lambda reqs, val_ctx, output: self.validate(
+                    reqs, output=output
+                )
+
+            # Default generation strategy just generates from context.
+            if strategy.generate is None:
+                strategy.generate = (
+                    lambda instruction,
+                    gen_ctx,
+                    g_logs: self.backend.generate_from_context(
+                        instruction,
+                        ctx=gen_ctx,
+                        format=format,
+                        model_options=model_options,
+                        generate_logs=g_logs,
+                        tool_calls=tool_calls,
+                    )
+                )
+
+            sampling_result = strategy.sample(
+                action, self.ctx, generate_logs=generate_logs
+            )
+
+            # make sure that one Log is marked as the one related to sampling_result.result
+            if sampling_result.success:
+                # if successful, the last log is the one related
+                generate_logs[
+                    -1
+                ].is_final_result = True  # TODO: JAL. Move this to common code.
+            else:
+                # Find the log where log.result and sampling_result.result match
+                # TODO: Change this to be a class field instead of having to find the chosen log this way.
+                selected_log = [
+                    log for log in generate_logs if log.result == sampling_result.result
+                ]
+                assert len(selected_log) == 1, (
+                    "There should only be exactly one log corresponding to the single result. "
+                )
+                selected_log[0].is_final_result = True
+
+            result = sampling_result.result
+
+        self.ctx.insert_turn(ContextTurn(action, result), generate_logs=generate_logs)
+
+        if return_sampling_results:
+            assert (
+                sampling_result is not None
+            )  # Needed for the type checker but should never happen.
+            return sampling_result
+        else:
+            return result
+
+    # TODO: JAL. overload this?
     def instruct(
         self,
         description: str,
@@ -265,7 +354,8 @@ class MelleaSession:
         requirements = [] if requirements is None else requirements
         icl_examples = [] if icl_examples is None else icl_examples
         grounding_context = dict() if grounding_context is None else grounding_context
-        # all instruction options are forwarded to create a new Instruction object
+
+        # All instruction options are forwarded to create a new Instruction object.
         i = Instruction(
             description=description,
             requirements=requirements,
@@ -276,68 +366,16 @@ class MelleaSession:
             output_prefix=output_prefix,
         )
 
-        res = None
-        generate_logs: list[GenerateLog] = []
-        if strategy is None:
-            result = self.backend.generate_from_context(
-                i,
-                ctx=self.ctx,
-                format=format,
-                model_options=model_options,
-                generate_logs=generate_logs,
-                tool_calls=tool_calls,
-            )
+        return self.act(
+            i,
+            strategy=strategy,
+            return_sampling_results=return_sampling_results,
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )
 
-            # make sure that one Log is marked as the one related to result
-            assert len(generate_logs) == 1, "Simple call can only add one generate_log"
-            generate_logs[0].is_final_result = True
-        else:
-            if strategy.validate is None:
-                strategy.validate = lambda reqs, val_ctx, output: self.validate(  # type: ignore
-                    reqs,
-                    output=output,  # type: ignore
-                )  # type: ignore
-            if strategy.generate is None:
-                strategy.generate = (
-                    lambda instruction,
-                    gen_ctx,
-                    g_logs: self.backend.generate_from_context(
-                        instruction,
-                        ctx=gen_ctx,
-                        format=format,
-                        model_options=model_options,
-                        generate_logs=g_logs,
-                        tool_calls=tool_calls,
-                    )
-                )
-
-            # sample
-            res = strategy.sample(i, self.ctx, generate_logs=generate_logs)
-
-            # make sure that one Log is marked as the one related to res.result
-            if res.success:
-                # if successful, the last log is the one related
-                generate_logs[-1].is_final_result = True
-            else:
-                # find the one where log.result and res.result match
-                selected_log = [
-                    log for log in generate_logs if log.result == res.result
-                ]
-                assert len(selected_log) == 1, (
-                    "There should only be exactly one log corresponding to the single result. "
-                )
-                selected_log[0].is_final_result = True
-
-            result = res.result
-
-        self.ctx.insert_turn(ContextTurn(i, result), generate_logs=generate_logs)
-
-        if return_sampling_results:
-            assert res is not None, "Asking for sampling results without sampling."
-            return res
-        else:
-            return result
-
+    # TODO: JAL. Add sampling strategies here? it would make sense to validate assistant output and tone.
     def chat(
         self,
         content: str,
@@ -356,34 +394,21 @@ class MelleaSession:
         else:
             content_resolved = content
         user_message = Message(role=role, content=content_resolved)
-        generate_logs: list[GenerateLog] = []
-        output_thunk = self.backend.generate_from_context(
-            action=user_message,
-            ctx=self.ctx,
+
+        result = self.act(
+            user_message,
             format=format,
             model_options=model_options,
-            generate_logs=generate_logs,
             tool_calls=tool_calls,
         )
-        # make sure that the last and only Log is marked as the one related to result
-        assert len(generate_logs) == 1, "Simple call can only add one generate_log"
-        generate_logs[0].is_final_result = True
-
-        parsed_assistant_message = output_thunk.parsed_repr
-        assert type(parsed_assistant_message) is Message
-        self.ctx.insert_turn(
-            ContextTurn(user_message, output_thunk), generate_logs=generate_logs
+        assert isinstance(result, ModelOutputThunk), (
+            "m.act should return a ModelOutputThunk if no SamplingStrategy provided"
         )
+
+        parsed_assistant_message = result.parsed_repr
+        assert isinstance(parsed_assistant_message, Message)
+
         return parsed_assistant_message
-
-    def act(self, c: Component, tool_calls: bool = False) -> Any:
-        """Runs a generic action, and adds both the action and the result to the context."""
-        generate_logs: list[GenerateLog] = []
-        result: ModelOutputThunk = self.backend.generate_from_context(
-            c, self.ctx, generate_logs=generate_logs, tool_calls=tool_calls
-        )
-        self.ctx.insert_turn(turn=ContextTurn(c, result), generate_logs=generate_logs)
-        return result
 
     def validate(
         self,
@@ -444,8 +469,8 @@ class MelleaSession:
     def genslot(
         self,
         gen_slot: Component,
-        model_options: dict | None = None,
         format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
         """Call generative Slot on a GenerativeSlot Component.
@@ -456,21 +481,11 @@ class MelleaSession:
         Returns:
             ModelOutputThunk: Output thunk
         """
-        generate_logs: list[GenerateLog] = []
-        result: ModelOutputThunk = self.backend.generate_from_context(
-            action=gen_slot,
-            ctx=self.ctx,
-            model_options=model_options,
-            format=format,
-            generate_logs=generate_logs,
-            tool_calls=tool_calls,
+        result = self.act(
+            gen_slot, format=format, model_options=model_options, tool_calls=tool_calls
         )
-        # make sure that the last and only Log is marked as the one related to result
-        assert len(generate_logs) == 1, "Simple call can only add one generate_log"
-        generate_logs[0].is_final_result = True
-
-        self.ctx.insert_turn(
-            ContextTurn(deepcopy(gen_slot), result), generate_logs=generate_logs
+        assert isinstance(result, ModelOutputThunk), (
+            "m.act should return a ModelOutputThunk if no SamplingStrategy provided"
         )
 
         return result
@@ -502,31 +517,12 @@ class MelleaSession:
         assert isinstance(obj, MObjectProtocol)
         q = obj.get_query_object(query)
 
-        generate_logs: list[GenerateLog] = []
-        answer = self.backend.generate_from_context(
-            q,
-            self.ctx,
-            format=format,
-            model_options=model_options,
-            generate_logs=generate_logs,
-            tool_calls=tool_calls,
+        answer = self.act(
+            q, format=format, model_options=model_options, tool_calls=tool_calls
         )
-        # make sure that the last and only Log is marked as the one related to result
-        assert len(generate_logs) == 1, "Simple call can only add one generate_log"
-        generate_logs[0].is_final_result = True
-
-        if isinstance(self.ctx, SimpleContext):
-            self.ctx.insert_turn(ContextTurn(q, answer), generate_logs=generate_logs)
-        elif isinstance(self.ctx, LinearContext) and len(self.ctx._ctx) == 0:
-            FancyLogger.get_logger().info(
-                "Adding the Object Query and its answer as first turn to a Linear Context (Chat History). "
-                "You can now run more .chat() or .instruct() with the object as reference."
-            )
-            self.ctx.insert_turn(ContextTurn(q, answer), generate_logs=generate_logs)
-        else:
-            FancyLogger.get_logger().info(
-                "The Linear Context has not been modified by this query."
-            )
+        assert isinstance(answer, ModelOutputThunk), (
+            "m.act should return a ModelOutputThunk if no SamplingStrategy provided"
+        )
 
         return answer
 
@@ -555,42 +551,14 @@ class MelleaSession:
         assert isinstance(obj, MObjectProtocol)
         t = obj.get_transform_object(transformation)
 
-        generate_logs: list[GenerateLog] = []
-
         # Check that your model / backend supports tool calling.
         # This might throw an error when tools are provided but can't be handled by one or the other.
-        transformed = self.backend.generate_from_context(
-            t,
-            self.ctx,
-            format=format,
-            model_options=model_options,
-            generate_logs=generate_logs,
-            tool_calls=True,
+        transformed = self.act(
+            t, format=format, model_options=model_options, tool_calls=True
         )
-
-        assert len(generate_logs) == 1, "Simple call can only add one generate_log"
-        generate_logs[0].is_final_result = True
-
-        # Insert the new turn into the context. Tool calls are handled afterwards.
-        insert = False
-        if isinstance(self.ctx, SimpleContext):
-            insert = True
-            self.ctx.insert_turn(
-                ContextTurn(t, transformed), generate_logs=generate_logs
-            )
-        elif isinstance(self.ctx, LinearContext) and len(self.ctx._ctx) == 0:
-            insert = True
-            FancyLogger.get_logger().info(
-                "Adding the Object Transform and its result as first turn to a Linear Context (Chat History). "
-                "You can now run more .chat() or .instruct() with the object as reference."
-            )
-            self.ctx.insert_turn(
-                ContextTurn(t, transformed), generate_logs=generate_logs
-            )
-        else:
-            FancyLogger.get_logger().info(
-                "The Linear Context has not been modified by this query."
-            )
+        assert isinstance(transformed, ModelOutputThunk), (
+            "m.act should return a ModelOutputThunk if no SamplingStrategy provided"
+        )
 
         tools = self._call_tools(transformed)
 
@@ -620,11 +588,11 @@ class MelleaSession:
                 FancyLogger.get_logger().warning(
                     f"the transform of {obj} with transformation description '{transformation}' resulted in a tool call with no generated arguments; consider calling the function `{chosen_tool._tool.name}` directly"
                 )
-            if insert:
-                self.ctx.insert(chosen_tool)
-                FancyLogger.get_logger().warning(
-                    "added a tool message from transform to the context as well."
-                )
+
+            self.ctx.insert(chosen_tool)
+            FancyLogger.get_logger().info(
+                "added a tool message from transform to the context"
+            )
             return chosen_tool._tool_output
 
         return transformed

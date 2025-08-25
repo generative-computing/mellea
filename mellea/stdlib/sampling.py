@@ -48,6 +48,7 @@ class SamplingResult(CBlock):
         self.success = success
         self.sample_generations = sample_generations
         self.sample_validations = sample_validations
+        self.sample_actions = sample_actions
 
 
 class SamplingStrategy(abc.ABC):
@@ -230,7 +231,7 @@ class BaseSamplingStrategy(SamplingStrategy):
             if all(bool(s[1]) for s in constraint_scores):
                 flog.info("SUCCESS")
                 return SamplingResult(
-                    result,
+                    result=result,
                     success=True,
                     sample_generations=sampled_results,
                     sample_validations=sampled_scores,
