@@ -16,14 +16,14 @@ def test_start_session_openai_with_kwargs(gh_run):
         m = start_session(
         "openai",
         model_id="llama3.2:1b",
-        base_url="http://localhost:11434/v1",
+        base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="ollama",
     )
     else:
         m = start_session(
             "openai",
             model_id="granite3.3:8b",
-            base_url="http://localhost:11434/v1",
+            base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
             api_key="ollama",
         )
     response = m.instruct("testing")

@@ -1,4 +1,6 @@
 # test/rits_backend_tests/test_openai_integration.py
+import os
+
 import pydantic
 import pytest
 from typing_extensions import Annotated
@@ -18,14 +20,14 @@ def backend(gh_run: int):
         return OpenAIBackend(
         model_id=META_LLAMA_3_2_1B,
         formatter=TemplateFormatter(model_id=META_LLAMA_3_2_1B),
-        base_url="http://localhost:11434/v1",
+        base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="ollama",
     )
     else:
         return OpenAIBackend(
             model_id="granite3.3:8b",
             formatter=TemplateFormatter(model_id="ibm-granite/granite-3.2-8b-instruct"),
-            base_url="http://localhost:11434/v1",
+            base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
             api_key="ollama",
         )
 
