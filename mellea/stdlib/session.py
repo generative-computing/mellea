@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextvars
 from copy import deepcopy
-from typing import Any, Literal
+from typing import Any, Literal, overload
 
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.formatter import FormatterBackend
@@ -228,7 +228,30 @@ class MelleaSession:
         """Summarizes the current context."""
         raise NotImplementedError()
 
-    # TODO: JAL. overload this so that return types are okay... see ollama stream: Literal[False] = False
+    @overload
+    def act(
+        self,
+        action: Component,  # TODO: JAL. make this able to be a CBLOCK as well?
+        *,
+        strategy: SamplingStrategy | None = None,
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk: ...
+
+    @overload
+    def act(
+        self,
+        action: Component,  # TODO: JAL. make this able to be a CBLOCK as well?
+        *,
+        strategy: SamplingStrategy | None = None,
+        return_sampling_results: Literal[True],
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> SamplingResult: ...
+
     def act(
         self,
         action: Component,  # TODO: JAL. make this able to be a CBLOCK as well?
@@ -239,9 +262,7 @@ class MelleaSession:
         model_options: dict | None = None,
         tool_calls: bool = False,
         # TODO: JAL. add more options here for context management. or maybe let the calling functions handle that?
-    ) -> (
-        ModelOutputThunk | SamplingResult
-    ):  # TODO: JAL. make sure this is the correct return type.
+    ) -> ModelOutputThunk | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context."""  # TODO: JAL. fix this comment with params.
         sampling_result: SamplingResult | None = None
         generate_logs: list[GenerateLog] = []
@@ -373,7 +394,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
-        )
+        )  # type: ignore[call-overload]
 
     # TODO: JAL. Add sampling strategies here? it would make sense to validate assistant output and tone.
     def chat(
@@ -401,10 +422,6 @@ class MelleaSession:
             model_options=model_options,
             tool_calls=tool_calls,
         )
-        assert isinstance(result, ModelOutputThunk), (
-            "m.act should return a ModelOutputThunk if no SamplingStrategy provided"
-        )
-
         parsed_assistant_message = result.parsed_repr
         assert isinstance(parsed_assistant_message, Message)
 
@@ -484,10 +501,6 @@ class MelleaSession:
         result = self.act(
             gen_slot, format=format, model_options=model_options, tool_calls=tool_calls
         )
-        assert isinstance(result, ModelOutputThunk), (
-            "m.act should return a ModelOutputThunk if no SamplingStrategy provided"
-        )
-
         return result
 
     def query(
@@ -520,10 +533,6 @@ class MelleaSession:
         answer = self.act(
             q, format=format, model_options=model_options, tool_calls=tool_calls
         )
-        assert isinstance(answer, ModelOutputThunk), (
-            "m.act should return a ModelOutputThunk if no SamplingStrategy provided"
-        )
-
         return answer
 
     def transform(
@@ -555,9 +564,6 @@ class MelleaSession:
         # This might throw an error when tools are provided but can't be handled by one or the other.
         transformed = self.act(
             t, format=format, model_options=model_options, tool_calls=True
-        )
-        assert isinstance(transformed, ModelOutputThunk), (
-            "m.act should return a ModelOutputThunk if no SamplingStrategy provided"
         )
 
         tools = self._call_tools(transformed)
