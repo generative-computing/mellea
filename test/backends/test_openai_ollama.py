@@ -1,41 +1,52 @@
 # test/rits_backend_tests/test_openai_integration.py
-from mellea import MelleaSession
-from mellea.stdlib.base import CBlock, LinearContext, ModelOutputThunk
-from mellea.backends.openai import OpenAIBackend
-from mellea.backends.formatter import TemplateFormatter
-from mellea.backends.types import ModelOption
-
 import pydantic
-from typing_extensions import Annotated
 import pytest
+from typing_extensions import Annotated
+
+from mellea import MelleaSession
+from mellea.backends.formatter import TemplateFormatter
+from mellea.backends.model_ids import META_LLAMA_3_2_1B
+from mellea.backends.openai import OpenAIBackend
+from mellea.backends.types import ModelOption
+from mellea.stdlib.base import CBlock, LinearContext, ModelOutputThunk
 
 
 @pytest.fixture(scope="module")
-def backend():
+def backend(gh_run: int):
     """Shared OpenAI backend configured for Ollama."""
-    return OpenAIBackend(
-        model_id="granite3.3:8b",
-        formatter=TemplateFormatter(model_id="ibm-granite/granite-3.2-8b-instruct"),
+    if gh_run == 1:
+        return OpenAIBackend(
+        model_id=META_LLAMA_3_2_1B,
+        formatter=TemplateFormatter(model_id=META_LLAMA_3_2_1B),
         base_url="http://localhost:11434/v1",
         api_key="ollama",
     )
+    else:
+        return OpenAIBackend(
+            model_id="granite3.3:8b",
+            formatter=TemplateFormatter(model_id="ibm-granite/granite-3.2-8b-instruct"),
+            base_url="http://localhost:11434/v1",
+            api_key="ollama",
+        )
 
 
 @pytest.fixture(scope="function")
-def session(backend):
+def m_session(backend):
     """Fresh OpenAI session for each test."""
     session = MelleaSession(backend, ctx=LinearContext(is_chat_context=True))
     yield session
     session.reset()
 
-def test_instruct(session):
-    result = session.instruct("Compute 1+1.")
+@pytest.mark.llm
+def test_instruct(m_session):
+    result = m_session.instruct("Compute 1+1.")
     assert isinstance(result, ModelOutputThunk)
     assert "2" in result.value  # type: ignore
 
-def test_multiturn(session):
-    session.instruct("What is the capital of France?")
-    answer = session.instruct("Tell me the answer to the previous question.")
+@pytest.mark.llm
+def test_multiturn(m_session):
+    m_session.instruct("What is the capital of France?")
+    answer = m_session.instruct("Tell me the answer to the previous question.")
     assert "Paris" in answer.value  # type: ignore
 
     # def test_api_timeout_error(self):
@@ -53,7 +64,8 @@ def test_multiturn(session):
     #     assert "granite3.3:8b" in result.value
     #     self.m.reset()
 
-def test_format(session):
+@pytest.mark.llm
+def test_format(m_session):
     class Person(pydantic.BaseModel):
         name: str
         # it does not support regex patterns in json schema
@@ -68,7 +80,7 @@ def test_format(session):
         subject: str
         body: str
 
-    output = session.instruct(
+    output = m_session.instruct(
         "Write a short email to Olivia, thanking her for organizing a sailing activity. Her email server is example.com. No more than two sentences. ",
         format=Email,
         model_options={ModelOption.MAX_NEW_TOKENS: 2**8},

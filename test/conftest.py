@@ -21,7 +21,7 @@ def pytest_runtest_setup(item):
     gh_run = int(os.environ.get("GITHUB_ACTION", 0))
 
     if gh_run == 1:
-        pytest.skip(
+        pytest.xfail(
             reason="Skipping LLM test: got env variable GITHUB_ACTION == 1. Used only in gh workflows."
         )
 
