@@ -89,6 +89,10 @@ META_LLAMA_GUARD3_1B = ModelIdentifier(
     ollama_name="llama-guard3:1b", hf_model_name="unsloth/Llama-Guard-3-1B"
 )
 
+META_LLAMA_3_2_1B = ModelIdentifier(
+    ollama_name="llama3.2:1b", hf_model_name="unsloth/Llama-3.2-1B"
+)
+
 ########################
 #### Mistral models ####
 ########################

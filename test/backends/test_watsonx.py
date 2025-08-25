@@ -1,14 +1,15 @@
 # test/rits_backend_tests/test_watsonx_integration.py
 import os
-from mellea import MelleaSession
-from mellea.stdlib.base import CBlock, LinearContext, ModelOutputThunk
-from mellea.backends.watsonx import WatsonxAIBackend
-from mellea.backends.formatter import TemplateFormatter
-from mellea.backends.types import ModelOption
 
 import pydantic
-from typing_extensions import Annotated
 import pytest
+from typing_extensions import Annotated
+
+from mellea import MelleaSession
+from mellea.backends.formatter import TemplateFormatter
+from mellea.backends.types import ModelOption
+from mellea.backends.watsonx import WatsonxAIBackend
+from mellea.stdlib.base import CBlock, LinearContext, ModelOutputThunk
 
 
 @pytest.fixture(scope="module")
@@ -28,18 +29,21 @@ def session(backend):
     session.reset()
 
 
-
-
+@pytest.mark.llm
 def test_instruct(session):
     result = session.instruct("Compute 1+1.")
     assert isinstance(result, ModelOutputThunk)
     assert "2" in result.value  # type: ignore
 
+
+@pytest.mark.llm
 def test_multiturn(session):
     session.instruct("What is the capital of France?")
     answer = session.instruct("Tell me the answer to the previous question.")
     assert "Paris" in answer.value  # type: ignore
 
+
+@pytest.mark.llm
 def test_format(session):
     class Person(pydantic.BaseModel):
         name: str
@@ -72,6 +76,8 @@ def test_format(session):
     # assert email.to.email_address.endswith("example.com")
     pass
 
+
+@pytest.mark.llm
 def test_generate_from_raw(session):
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 

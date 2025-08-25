@@ -1,5 +1,4 @@
-from mellea.stdlib.base import Component, CBlock
-from mellea.stdlib.base import LinearContext
+from mellea.stdlib.base import CBlock, Component, LinearContext
 
 
 def test_cblock():
