@@ -1,0 +1,41 @@
+name: Test non-llm components
+
+on:
+  workflow_run:
+    workflows: ["Verify Code Quality"]
+    types:
+      - completed
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12'] # Need to add 3.13 once we resolve outlines issues.
+    env:
+      GITHUB_ACTIONS: 1
+    
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras --group dev
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+      - name: Pull Llama 3.2:1b model
+        run: ollama pull llama3.2:1b
+      - name: Start serving the model
+        run: nohup ollama serve &
+
+      - name: Run Tests
+        run: uv run -m pytest -v test
