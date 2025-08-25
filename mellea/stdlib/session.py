@@ -339,7 +339,42 @@ class MelleaSession:
         else:
             return result
 
-    # TODO: JAL. overload this?
+    @overload
+    def instruct(
+        self,
+        description: str,
+        *,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: SamplingStrategy | None = None,
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk: ...
+
+    @overload
+    def instruct(
+        self,
+        description: str,
+        *,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: SamplingStrategy | None = None,
+        return_sampling_results: Literal[True],
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> SamplingResult: ...
+
     def instruct(
         self,
         description: str,
@@ -396,7 +431,6 @@ class MelleaSession:
             tool_calls=tool_calls,
         )  # type: ignore[call-overload]
 
-    # TODO: JAL. Add sampling strategies here? it would make sense to validate assistant output and tone.
     def chat(
         self,
         content: str,
