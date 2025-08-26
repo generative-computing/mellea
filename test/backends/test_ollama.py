@@ -1,11 +1,13 @@
-from mellea import start_session, SimpleContext
+import json
+
+import pydantic
+import pytest
+from typing_extensions import Annotated
+
+from mellea import SimpleContext, start_session
+from mellea.backends.types import ModelOption
 from mellea.stdlib.base import CBlock
 from mellea.stdlib.requirement import Requirement
-import pydantic
-import json
-from typing_extensions import Annotated
-from mellea.backends.types import ModelOption
-import pytest
 
 
 @pytest.fixture(scope="function")
@@ -15,6 +17,8 @@ def session():
     yield session
     session.reset()
 
+
+@pytest.mark.qualitative
 def test_simple_instruct(session):
     result = session.instruct(
         "Write an email to Hendrik trying to sell him self-sealing stembolts."
@@ -23,6 +27,8 @@ def test_simple_instruct(session):
     assert "chat_response" in result._meta
     assert result._meta["chat_response"].message.role == "assistant"
 
+
+@pytest.mark.qualitative
 def test_instruct_with_requirement(session):
     response = session.instruct(
         "Write an email to Hendrik convincing him to buy some self-sealing stembolts."
@@ -45,12 +51,14 @@ def test_instruct_with_requirement(session):
     )
     print(results)
 
+@pytest.mark.qualitative
 def test_chat(session):
     output_message = session.chat("What is 1+1?")
-    assert (
-        "2" in output_message.content
-    ), f"Expected a message with content containing 2 but found {output_message}"
+    assert "2" in output_message.content, (
+        f"Expected a message with content containing 2 but found {output_message}"
+    )
 
+@pytest.mark.qualitative
 def test_format(session):
     class Person(pydantic.BaseModel):
         name: str
@@ -83,6 +91,7 @@ def test_format(session):
     # assert email.to.email_address.endswith("example.com")
     pass
 
+@pytest.mark.qualitative
 def test_generate_from_raw(session):
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
@@ -113,9 +122,9 @@ def test_generate_from_raw_with_format(session):
     try:
         answer = Answer.model_validate_json(random_result.value)
     except pydantic.ValidationError as e:
-        assert (
-            False
-        ), f"formatting directive failed for {random_result.value}: {e.json()}"
+        assert False, (
+            f"formatting directive failed for {random_result.value}: {e.json()}"
+        )
 
 
 if __name__ == "__main__":

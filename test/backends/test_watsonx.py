@@ -1,46 +1,56 @@
 # test/rits_backend_tests/test_watsonx_integration.py
 import os
-from mellea import MelleaSession
-from mellea.stdlib.base import CBlock, LinearContext, ModelOutputThunk
-from mellea.backends.watsonx import WatsonxAIBackend
-from mellea.backends.formatter import TemplateFormatter
-from mellea.backends.types import ModelOption
 
 import pydantic
-from typing_extensions import Annotated
 import pytest
+from typing_extensions import Annotated
+
+from mellea import MelleaSession
+from mellea.backends.formatter import TemplateFormatter
+from mellea.backends.types import ModelOption
+from mellea.backends.watsonx import WatsonxAIBackend
+from mellea.stdlib.base import CBlock, LinearContext, ModelOutputThunk
 
 
 @pytest.fixture(scope="module")
 def backend():
     """Shared Watson backend for all tests in this module."""
-    return WatsonxAIBackend(
+    if os.environ.get("CICD") == 1:
+        pytest.skip("Skipping watsonx tests.")
+    else:
+        return WatsonxAIBackend(
         model_id="ibm/granite-3-3-8b-instruct",
         formatter=TemplateFormatter(model_id="ibm-granite/granite-3.3-8b-instruct"),
     )
 
 
 @pytest.fixture(scope="function")
-def session(backend):
-    """Fresh Watson session for each test."""
-    session = MelleaSession(backend, ctx=LinearContext(is_chat_context=True))
-    yield session
-    session.reset()
+def session(backend: WatsonxAIBackend):
+    if os.environ.get("CICD") == 1:
+        pytest.skip("Skipping watsonx tests.")
+    else:
+        """Fresh Watson session for each test."""
+        session = MelleaSession(backend, ctx=LinearContext(is_chat_context=True))
+        yield session
+        session.reset()
 
 
-
-
-def test_instruct(session):
+@pytest.mark.qualitative
+def test_instruct(session: MelleaSession):
     result = session.instruct("Compute 1+1.")
     assert isinstance(result, ModelOutputThunk)
     assert "2" in result.value  # type: ignore
 
-def test_multiturn(session):
+
+@pytest.mark.qualitative
+def test_multiturn(session: MelleaSession):
     session.instruct("What is the capital of France?")
     answer = session.instruct("Tell me the answer to the previous question.")
     assert "Paris" in answer.value  # type: ignore
 
-def test_format(session):
+
+@pytest.mark.qualitative
+def test_format(session: MelleaSession):
     class Person(pydantic.BaseModel):
         name: str
         # it does not support regex patterns in json schema
@@ -72,7 +82,9 @@ def test_format(session):
     # assert email.to.email_address.endswith("example.com")
     pass
 
-def test_generate_from_raw(session):
+
+@pytest.mark.qualitative
+def test_generate_from_raw(session: MelleaSession):
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
     results = session.backend._generate_from_raw(
