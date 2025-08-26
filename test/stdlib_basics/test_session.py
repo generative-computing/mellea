@@ -7,10 +7,13 @@ from mellea.stdlib.session import start_session
 
 
 def test_start_session_watsonx():
-    m = start_session(backend_name="watsonx")
-    response = m.instruct("testing")
-    assert isinstance(response, ModelOutputThunk)
-    assert response.value is not None
+    if os.environ.get("CICD") == 1:
+        pytest.skip("Skipping watsonx tests.")
+    else:
+        m = start_session(backend_name="watsonx")
+        response = m.instruct("testing")
+        assert isinstance(response, ModelOutputThunk)
+        assert response.value is not None
 
 
 def test_start_session_openai_with_kwargs(gh_run):
