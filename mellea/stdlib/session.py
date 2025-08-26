@@ -414,31 +414,6 @@ class MelleaSession:
 
         return rvs
 
-    def req(self, *args, **kwargs):
-        """Shorthand for Requirement.__init__(...)."""
-        return req(*args, **kwargs)
-
-    def check(self, *args, **kwargs):
-        """Shorthand for Requirement.__init__(..., check_only=True)."""
-        return check(*args, **kwargs)
-
-    def load_default_aloras(self):
-        """Loads the default Aloras for this model, if they exist and if the backend supports."""
-        from mellea.backends.huggingface import LocalHFBackend
-
-        if self.backend.model_id == IBM_GRANITE_3_2_8B and isinstance(
-            self.backend, LocalHFBackend
-        ):
-            from mellea.backends.aloras.huggingface.granite_aloras import (
-                add_granite_aloras,
-            )
-
-            add_granite_aloras(self.backend)
-            return
-        self._session_logger.warning(
-            "This model/backend combination does not support any aloras."
-        )
-
     def genslot(
         self,
         gen_slot: Component,
