@@ -6,8 +6,8 @@ from mellea.stdlib.base import ModelOutputThunk
 from mellea.stdlib.session import start_session
 
 
-def test_start_session_watsonx():
-    if os.environ.get("CICD") == 1:
+def test_start_session_watsonx(gh_run):
+    if gh_run == 1:
         pytest.skip("Skipping watsonx tests.")
     else:
         m = start_session(backend_name="watsonx")
