@@ -37,7 +37,7 @@ def session(backend):
     yield session
     session.reset()
 
-
+@pytest.mark.qualitative
 def test_system_prompt(session):
     result = session.chat(
         "Where are we going?",
@@ -45,7 +45,7 @@ def test_system_prompt(session):
     )
     print(result)
 
-
+@pytest.mark.qualitative
 def test_constraint_alora(session, backend):
     answer = session.instruct(
         "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa. Be concise and don't write code to answer the question.",
@@ -63,7 +63,7 @@ def test_constraint_alora(session, backend):
     )
     assert alora_output in ["Y", "N"], alora_output
 
-
+@pytest.mark.qualitative
 def test_constraint_lora_with_requirement(session, backend):
     answer = session.instruct(
         "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
@@ -130,7 +130,7 @@ def test_llmaj_req_does_not_use_alora(session, backend):
     assert isinstance(val_result, ValidationResult)
     assert str(val_result.reason) not in ["Y", "N"]
 
-
+@pytest.mark.qualitative
 def test_instruct(session):
     result = session.instruct("Compute 1+1.")
     print(result)
@@ -177,7 +177,7 @@ def test_format(session):
         "The email address should be at example.com"
     )
 
-
+@pytest.mark.qualitative
 def test_generate_from_raw(session):
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
