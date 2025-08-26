@@ -10,7 +10,7 @@ from mellea.stdlib.session import MelleaSession
 
 @pytest.fixture(scope="session")
 def gh_run() -> int:
-    return int(os.environ.get("GITHUB_ACTION", 0))  # type: ignore
+    return int(os.environ.get("CICD", 0))  # type: ignore
 
 
 def pytest_runtest_setup(item):
@@ -18,9 +18,9 @@ def pytest_runtest_setup(item):
     if not item.get_closest_marker("qualitative"):
         return
 
-    gh_run = int(os.environ.get("GITHUB_ACTION", 0))
+    gh_run = int(os.environ.get("CICD", 0))
 
     if gh_run == 1:
         pytest.skip(
-            reason="Skipping qualitative test: got env variable GITHUB_ACTION == 1. Used only in gh workflows."
+            reason="Skipping qualitative test: got env variable CICD == 1. Used only in gh workflows."
         )
