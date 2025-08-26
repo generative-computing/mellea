@@ -132,8 +132,8 @@ class MifiedProtocol(MObjectProtocol, Protocol):
         if self._fields_exclude:
             fields_exclude = self._fields_exclude
 
-        # This includes fields defined by any superclasses, as long as it's not object.
-        all_fields = _get_non_duplicate_fields(self, object)
+        # This includes fields defined by any superclasses, as long as it's not Protocol.
+        all_fields = _get_non_duplicate_fields(self, Protocol)
 
         # It does matter if include is an empty set. Handle it's cases here.
         if self._fields_include is not None:
@@ -366,18 +366,15 @@ def _mify(
 
 
 def _get_non_duplicate_members(
-    object: object, check_duplicates: object
+    obj: object, check_duplicates: object
 ) -> dict[str, Callable]:
     """Returns all methods/functions unique to the object."""
     members = dict(
         inspect.getmembers(
-            object,
+            obj,
             # Checks for ismethod or isfunction because of the methods added from the MifiedProtocol.
-            predicate=lambda x: inspect.ismethod(x)
-            or (
-                inspect.isfunction(x)
-                and x.__name__ not in dict(inspect.getmembers(check_duplicates)).keys()
-            ),
+            predicate=lambda x: (inspect.ismethod(x) or inspect.isfunction(x))
+            and x.__name__ not in dict(inspect.getmembers(check_duplicates)).keys(),
         )
     )
     return members

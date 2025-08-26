@@ -12,9 +12,12 @@ def classify_sentiment(text: str) -> Literal["positive", "negative"]: ...
 def write_me_an_email() -> str: ...
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def session():
-    return start_session(ctx=LinearContext())
+    """Fresh session for each test."""
+    session = start_session()
+    yield session
+    session.reset()
 
 
 @pytest.fixture
@@ -30,7 +33,7 @@ def test_func(session):
     write_email_component = write_me_an_email(session)
     assert isinstance(write_email_component, str)
 
-
+@pytest.mark.qualitative
 def test_sentiment_output(classify_sentiment_output):
     assert classify_sentiment_output in ["positive", "negative"]
 
