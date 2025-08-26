@@ -81,7 +81,7 @@ class ReactToolbox(pydantic.BaseModel):
     def tool_name_schema(self):
         names = self.tool_names()
         fields = dict()
-        fields["tool"] = Literal[Unpack[names]]
+        fields["tool"] = Literal[*names]
         return pydantic.create_model("ToolSelectionSchema", **fields)
 
     def get_tool_from_schema(self, content: str):
