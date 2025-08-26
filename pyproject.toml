@@ -68,7 +68,11 @@ docling = [
     "docling>=2.45.0",
 ]
 
-all = ["mellea[watsonx,docling,hf]"]
+beeai = [
+    "beeai-framework>=0.1.0",
+]
+
+all = ["mellea[watsonx,docling,hf,beeai]"]
 
 [dependency-groups]
 # Use these like:
