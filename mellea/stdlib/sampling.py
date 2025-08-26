@@ -19,7 +19,7 @@ from mellea.stdlib.base import (
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.instruction import Instruction
-from mellea.stdlib.requirement import Requirement, ValidationResult
+from mellea.stdlib.requirement import Requirement, ValidationResult, WithRequirements
 
 
 class SamplingResult(CBlock):
@@ -199,6 +199,10 @@ class BaseSamplingStrategy(SamplingStrategy):
         else:
             reqs = requirements if requirements is not None else []
 
+        new_action = deepcopy(action)
+        if not hasattr(new_action, "requirements"):
+            new_action = WithRequirements(new_action, reqs)
+
         loop_count = 0
         loop_budget_range_iterator = (
             tqdm.tqdm(range(self.loop_budget))  # type: ignore
@@ -206,7 +210,6 @@ class BaseSamplingStrategy(SamplingStrategy):
             else range(self.loop_budget)  # type: ignore
         )
 
-        new_action = deepcopy(action)
         for _ in loop_budget_range_iterator:  # type: ignore
             loop_count += 1
             if not show_progress:

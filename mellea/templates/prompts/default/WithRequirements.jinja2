@@ -1,0 +1,14 @@
+{%- block obj %}
+{%- if obj -%}
+  {{- obj -}}
+{%- endif -%}
+{% endblock obj %}
+
+{%- block requirements -%}
+{%- if requirements|length > 0 %}
+Fulfill the following requirements:
+{%- for req in requirements %}
+* {{ req -}}
+{% endfor %}
+{%- endif -%}
+{% endblock requirements %}

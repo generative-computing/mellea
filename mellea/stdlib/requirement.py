@@ -157,6 +157,36 @@ class Requirement(Component):
         )
 
 
+class WithRequirements(Component):
+    """Allows outputting arbitrary components with requirements."""
+
+    def __init__(self, obj: Component, requirements: list[Requirement]) -> None:
+        self.obj = obj
+        self.requirements = requirements
+
+    def parts(self) -> list[Component | CBlock]:
+        """Returns all parts of a WithRequirements component."""
+        raise NotImplementedError()
+
+    def format_for_llm(self) -> TemplateRepresentation:
+        """Formats the underlying object with the provided requirements."""
+        return TemplateRepresentation(
+            obj=self,
+            args={
+                "obj": self.obj,
+                "requirements": [
+                    r.description
+                    for r in self.requirements
+                    if r.description is not None
+                    and r.description != ""
+                    and not r.check_only
+                ],
+            },
+            tools=None,
+            template_order=["*", "WithRequirements"],
+        )
+
+
 class LLMaJRequirement(Requirement):
     """A requirement that always uses LLM-as-a-Judge. Any available constraint ALoRA will be ignored."""
 
