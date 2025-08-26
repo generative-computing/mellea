@@ -150,6 +150,10 @@ class RejectionSamplingStrategy(SamplingStrategy):
 
         flog = FancyLogger.get_logger()
 
+        # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
+        # flag to determine whether we should show the pbar.
+        show_progress = show_progress and flog.getEffectiveLevel() <= FancyLogger.INFO
+
         failed_results: list[ModelOutputThunk] = []
         failed_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         failed_instructions: list[Instruction] = []
