@@ -53,7 +53,8 @@ def test_add_tools_from_model_options_list():
     assert tools["get_weather"] == get_weather
 
     # Must use `==` for bound methods.
-    assert tools["tool1"] == ftc.tool1, f"{tools['tool1']} should == {ftc.tool1}"
+    tool1 = tools['tool1']
+    assert tool1 == ftc.tool1, f"{tool1} should == {ftc.tool1}"
 
 
 def test_add_tools_from_model_options_map():
