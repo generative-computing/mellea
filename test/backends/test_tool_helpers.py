@@ -76,7 +76,8 @@ def test_add_tools_from_model_options_map():
     assert tools["get_weather"] == get_weather
 
     # Must use `==` for bound methods.
-    assert tools["tool1"] == ftc.tool1, f"{tools["tool1"]} should == {ftc.tool1}"
+    tool1 = tools['tool1']
+    assert tool1 == ftc.tool1, f"{tool1} should == {ftc.tool1}"
 
 
 def test_add_tools_from_context_actions():
@@ -89,10 +90,12 @@ def test_add_tools_from_context_actions():
     add_tools_from_context_actions(tools, ctx_actions)
 
     # Check that tools with the same name get properly overwritten in order of ctx.
-    assert tools["tool1"] == ftc2.tool1, f"{tools["tool1"]} should == {ftc2.tool1}"
+    tool1 = tools['tool1']
+    assert tool1 == ftc2.tool1, f"{tool1} should == {ftc2.tool1}"
 
     # Check that tools that aren't overwritten are still there.
-    assert tools["tool2"] == ftc1.tool2, f"{tools["tool2"]} should == {ftc1.tool2}"
+    tool2 = tools["tool2"]
+    assert tool2 == ftc1.tool2, f"{tool2} should == {ftc1.tool2}"
 
 if __name__ == "__main__":
     pytest.main([__file__])
