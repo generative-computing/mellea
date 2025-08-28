@@ -99,25 +99,6 @@ class BaseSamplingStrategy(SamplingStrategy):
         self,
         *,
         loop_budget: int = 1,
-        repair: Callable[
-            [
-                Context,
-                list[Component],
-                list[ModelOutputThunk],
-                list[list[tuple[Requirement, ValidationResult]]],
-            ],
-            Component,
-        ]
-        | None,
-        select_from_failure: Callable[
-            [
-                list[Component],
-                list[ModelOutputThunk],
-                list[list[tuple[Requirement, ValidationResult]]],
-            ],
-            int,
-        ]
-        | None,
         validate: Callable[[list[Requirement], Context, Any], list[ValidationResult]]
         | None = None,
         generate: (
@@ -130,8 +111,6 @@ class BaseSamplingStrategy(SamplingStrategy):
 
         Args:
             loop_budget: Number of times to iterate through the process. Must be greater than 0.
-            repair: Function to apply "repairs" to an instruction based on its requirements and validation results.
-            select_from_failure: Function to select a model output thunk from failed attempts.
             validate: Function to validate the results against requirements. If None, validation is provided later through setter.
             generate: Function to generate new model output thunks. If None, generate is provided later through setter.
             requirements: List of requirements to test against. If None, test all requirements attached to the given instruction.
@@ -140,15 +119,52 @@ class BaseSamplingStrategy(SamplingStrategy):
             AssertionError: If loop_budget is not greater than 0.
         """
         assert loop_budget > 0, "Loop budget must be at least 1."
-        assert repair is not None, "Repair must be provided."
-        assert select_from_failure is not None, "Select from failure must be provided."
 
         self.loop_budget = loop_budget
-        self.repair = repair
-        self.select_from_failure = select_from_failure
         self.validate = validate  # it's ok to be None here
         self.generate = generate  # it's ok to be None here
         self.requirements = requirements
+
+    @staticmethod
+    @abc.abstractmethod
+    def repair(
+        ctx: Context,
+        past_actions: list[Component],
+        past_results: list[ModelOutputThunk],
+        past_val: list[list[tuple[Requirement, ValidationResult]]],
+    ) -> Component:
+        """
+        Repair function that is being invoked if not all requirements are fulfilled. It should return a next action component.
+
+        Args:
+            ctx: The context to be passed to the sampling strategy.
+            past_actions: List of actions that have been executed (without success).
+            past_results: List of (unsuccessful) generation results for these actions.
+            past_val: List of validation results for the results.
+
+        Returns:
+            The next action component.
+        """
+        ...
+
+    @staticmethod
+    @abc.abstractmethod
+    def select_from_failure(
+        sampled_actions: list[Component],
+        sampled_results: list[ModelOutputThunk],
+        sampled_val: list[list[tuple[Requirement, ValidationResult]]],
+    ):
+        """This function returns the index of the result that should be selected as `.value` iff the loop budget is exhausted and no success.
+
+        Args:
+            sampled_actions: List of actions that have been executed (without success).
+            sampled_results: List of (unsuccessful) generation results for these actions.
+            sampled_val: List of validation results for the results.
+
+        Returns:
+            The index of the result that should be selected as `.value`.
+        """
+        ...
 
     def sample(
         self,
@@ -176,10 +192,6 @@ class BaseSamplingStrategy(SamplingStrategy):
         Raises:
             AssertionError: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
         """
-        assert self.repair is not None, "Repair must be provided."
-        assert self.select_from_failure is not None, (
-            "Select from failure must be provided."
-        )
         assert self.validate is not None, "Validation must be provided."
         assert self.generate is not None, "Generate must be provided."
 
@@ -271,96 +283,75 @@ class BaseSamplingStrategy(SamplingStrategy):
 
 
 class RejectionSamplingStrategy(BaseSamplingStrategy):
-    """Simple rejection sampling strategy with optional repair."""
-
-    def __init__(
-        self,
-        *,
-        loop_budget: int = 1,
-        repair: Callable[
-            [
-                list[Component],
-                list[ModelOutputThunk],
-                list[list[tuple[Requirement, ValidationResult]]],
-            ],
-            Component,
-        ] = lambda past_actions, past_results, past_val: past_actions[-1],
-        select_from_failure: Callable[
-            [
-                list[Component],
-                list[ModelOutputThunk],
-                list[list[tuple[Requirement, ValidationResult]]],
-            ],
-            int,
-        ] = lambda past_actions, past_results, past_val: 0,
-        validate: Callable[[list[Requirement], Context, Any], list[ValidationResult]]
-        | None = None,
-        generate: (
-            Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
-            | None
-        ) = None,
-        requirements: list[Requirement] | None = None,
-    ):
-        def repair_wrapper(_, past_actions, past_results, past_val):
-            return repair(past_actions, past_results, past_val)
-
-        super().__init__(
-            loop_budget=loop_budget,
-            repair=repair_wrapper,
-            select_from_failure=select_from_failure,
-            validate=validate,
-            generate=generate,
-            requirements=requirements,
-        )
-
-
-class AgenticSamplingStrategy(BaseSamplingStrategy):
-    """Rejection sampling strategy with agentic (multi-turn) repair."""
-
-    def __init__(
-        self,
-        *,
-        loop_budget: int = 1,
-        repair: Callable[
-            [
-                Context,
-                list[Component],
-                list[ModelOutputThunk],
-                list[list[tuple[Requirement, ValidationResult]]],
-            ],
-            Component,
-        ]
-        | None = None,
-        select_from_failure: Callable[
-            [
-                list[Component],
-                list[ModelOutputThunk],
-                list[list[tuple[Requirement, ValidationResult]]],
-            ],
-            int,
-        ] = lambda past_actions, past_results, past_val: len(past_actions) - 1,
-        validate: Callable[[list[Requirement], Context, Any], list[ValidationResult]]
-        | None = None,
-        generate: (
-            Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
-            | None
-        ) = None,
-        requirements: list[Requirement] | None = None,
-    ):
-        if repair is None:
-            repair = AgenticSamplingStrategy.agentic_repair_default
-
-        super().__init__(
-            loop_budget=loop_budget,
-            repair=repair,
-            select_from_failure=select_from_failure,
-            validate=validate,
-            generate=generate,
-            requirements=requirements,
-        )
+    """Simple rejection sampling strategy that just repeats the same call on failure."""
 
     @staticmethod
-    def agentic_repair_default(
+    def select_from_failure(
+        sampled_actions: list[Component],
+        sampled_results: list[ModelOutputThunk],
+        sampled_val: list[list[tuple[Requirement, ValidationResult]]],
+    ) -> int:
+        # simply returns the first attempt if all loops fail
+        return 0
+
+    @staticmethod
+    def repair(
+        ctx: Context,
+        past_actions: list[Component],
+        past_results: list[ModelOutputThunk],
+        past_val: list[list[tuple[Requirement, ValidationResult]]],
+    ) -> Component:
+        # repeat the last action again.
+        return past_actions[-1]
+
+
+class RepairTemplateStrategy(BaseSamplingStrategy):
+    """A sampling strategy that adds a repair string to the instruction object."""
+
+    @staticmethod
+    def select_from_failure(
+        sampled_actions: list[Component],
+        sampled_results: list[ModelOutputThunk],
+        sampled_val: list[list[tuple[Requirement, ValidationResult]]],
+    ) -> int:
+        # simply returns the first attempt if all loops fail
+        return 0
+
+    @staticmethod
+    def repair(
+        ctx: Context,
+        past_actions: list[Component],
+        past_results: list[ModelOutputThunk],
+        past_val: list[list[tuple[Requirement, ValidationResult]]],
+    ) -> Component:
+        pa = past_actions[-1]
+        if isinstance(pa, Instruction):
+            last_failed_reqs: list[Requirement] = [
+                s[0] for s in past_val[-1] if not s[1]
+            ]
+            last_failed_reqs_str = "* " + "\n* ".join(
+                [str(r.description) for r in last_failed_reqs]
+            )
+            return pa.copy_and_repair(
+                repair_string=f"The following requirements failed before:\n{last_failed_reqs_str}"
+            )
+        return past_actions[-1]
+
+
+class MultiTurnStrategy(BaseSamplingStrategy):
+    """Rejection sampling strategy with (agentic) multi-turn repair."""
+
+    @staticmethod
+    def select_from_failure(
+        sampled_actions: list[Component],
+        sampled_results: list[ModelOutputThunk],
+        sampled_val: list[list[tuple[Requirement, ValidationResult]]],
+    ):
+        # return the last assistant message even if all attempts of repair failed.
+        return -1
+
+    @staticmethod
+    def repair(
         context: Context,
         past_actions: list[Component],
         past_results: list[ModelOutputThunk],

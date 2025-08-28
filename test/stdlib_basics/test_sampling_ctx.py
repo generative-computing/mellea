@@ -1,7 +1,7 @@
 from mellea import LinearContext, start_session
 from mellea.backends import ModelOption
 from mellea.stdlib.sampling import (
-    AgenticSamplingStrategy,
+    MultiTurnStrategy,
     RejectionSamplingStrategy,
     SamplingResult,
 )
@@ -45,7 +45,7 @@ class TestSamplingCtxCase:
         self._run_asserts_for_ctx_testing(res)
         assert len(self.m.last_prompt()) == 1, "Last prompt should only have only one instruction inside - independent of sampling iterations."
 
-    def test_ctx_for_agentic(self):
+    def test_ctx_for_multiturn(self):
         self.m.ctx.reset()
         res = self.m.instruct(
             "Write a sentence.",
@@ -54,7 +54,7 @@ class TestSamplingCtxCase:
                 "be formal",
                 "use only words starting with the letter w",
             ],
-            strategy=AgenticSamplingStrategy(loop_budget=3),
+            strategy=MultiTurnStrategy(loop_budget=3),
             return_sampling_results=True,
         )
 
