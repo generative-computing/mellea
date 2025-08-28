@@ -1,16 +1,18 @@
-"""A backend that uses the Huggingface Transformers library.
+"""A backend that uses a VLLM in the current process.
 
-The purpose of the Hugginface backend is to provide a setting for implementing experimental features. If you want a performance local backend, and do not need experimental features such as Span-based context or ALoras, consider using Ollama backends instead.
+The purpose of the VLLM backend is to provide a locally running fast inference engine.
 """
 
 from __future__ import annotations
 
 import abc
 import dataclasses
+import msgspec
 import datetime
 import inspect
 import json
 import os
+import shutil
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -23,8 +25,9 @@ from transformers import (
     DynamicCache,
     PreTrainedModel,
     PreTrainedTokenizer,
-    set_seed,
 )
+
+import vllm
 
 from mellea.backends import BaseModelSubclass
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
@@ -45,12 +48,16 @@ from mellea.stdlib.requirement import LLMaJRequirement, Requirement
 assert outlines, "outlines needs to be present to make outlines_core work"
 
 
-class LocalHFBackend(FormatterBackend, AloraBackendMixin):
-    """The LocalHFBackend uses Huggingface's transformers library for inference, and uses a Formatter to convert `Component`s into prompts. This backend also supports Activated LoRAs (ALoras)](https://arxiv.org/pdf/2504.12397).
+class LocalVLLMBackend(FormatterBackend):
+    """The LocalVLLMBackend uses vLLM's python interface for inference, and uses a Formatter to convert `Component`s into prompts.
+
+    The support for Activated LoRAs (ALoras)](https://arxiv.org/pdf/2504.12397) is planned.
 
     This backend is designed for running an HF model for small-scale inference locally on your machine.
 
-    This backend is NOT designed for inference scaling on CUDA-enabled hardware.
+    Its throughput is generally higher than that of LocalHFBackend.
+    However, it takes longer to load the weights during the instantiation.
+    Also, if you submit a request one by one, it can be slower.
     """
 
     def __init__(
@@ -78,10 +85,10 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
         # These are usually values that must be extracted before hand or that are common among backend providers
         self.to_mellea_model_opts_map = {
-            "system": ModelOption.SYSTEM_PROMPT,
-            "max_new_tokens": ModelOption.MAX_NEW_TOKENS,
+            # "system": ModelOption.SYSTEM_PROMPT,
+            "max_tokens": ModelOption.MAX_NEW_TOKENS,
             "seed": ModelOption.SEED,
-            "tools": ModelOption.TOOLS,
+            "temperature" : ModelOption.TEMPERATURE,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -89,9 +96,14 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # Usually, values that are intentionally extracted while prepping for the backend generate call
         # will be omitted here so that they will be removed when model_options are processed
         # for the call to the model.
-        self.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+        self.from_mellea_model_opts_map = {
+            ModelOption.MAX_NEW_TOKENS: "max_tokens",
+            ModelOption.SEED : "seed",
+            ModelOption.TEMPERATURE: "temperature",
+        }
 
-        self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
+        model_options = self._simplify_and_merge(model_options)
+        model_options = self._make_backend_specific_and_remove(model_options, vllm.EngineArgs)
 
         # Either use the custom config or load the model from its model_id
         match model_id:
@@ -102,44 +114,69 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                     "model_id is None. This can also happen if the ModelIdentifier has no hf_model_id name set."
                 )
                 self._hf_model_id = model_id.hf_model_name
-        match custom_config:
-            case None:
-                # Choose a device.
-                self._device = torch.device(
-                    "cuda"
-                    if torch.cuda.is_available()
-                    else "mps"
-                    if torch.backends.mps.is_available()
-                    else "cpu"
-                )
-                # Get the model and tokenizer.
-                self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-                    self._hf_model_id
-                ).to(self._device)  # type: ignore
-                self._tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
-                    self._hf_model_id
-                )
-            case _:
-                self._tokenizer, self._model, self._device = custom_config
 
-        self._use_caches = use_caches
-        self._cache = cache if cache is not None else SimpleLRUCache(3)
+        # Get the model and tokenizer.
+        # Getting vllm instantiated is tricky as it does not automatically detect some of these parameters.
+        model_options["gpu_memory_utilization"]=model_options.get("gpu_memory_utilization",0.9)
+        model_options["max_num_seqs"]=model_options.get("max_num_seqs",16)
+        model_options["max_model_len"]=model_options.get("max_model_len",16384)
+        print(f'Instantiating vllm with the following model parameters:\n'
+              f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
+              f"max_model_len: {model_options['max_model_len']}\n"
+              f"max_num_seqs: {model_options['max_num_seqs']}\n")
+        retry = 0
+        while True:
+            retry += 1
+            try:
+                self._model = vllm.LLM(
+                    model=self._hf_model_id,
+                    task="generate",
+                    **model_options,
+                    )
+                break
+            except torch._dynamo.exc.BackendCompilerFailed as e:
+                # example:
+                # torch._dynamo.exc.BackendCompilerFailed: backend='<vllm.compilation.backends.VllmBackend object at 0x7f6d3f341730>' raised:
+                # RuntimeError: vLLM failed to compile the model. The most likely reason for this is that a previous compilation failed, leading to a corrupted compilation artifact. We recommend trying to remove ~/.cache/vllm/torch_compile_cache and try again to see the real issue.
 
-        # Used when running aLoRAs with this backend.
-        self._alora_model: "aLoRAPeftModelForCausalLM | None" = None  # noqa: UP037
-        # ALoras that have been loaded for this model.
-        self._aloras: dict[str, HFAlora] = {}
+                if "~/.cache/vllm/torch_compile_cache" in str(e.inner_exception):
+                    print("removing ~/.cache/vllm/torch_compile_cache and retry")
+                    shutil.rmtree("~/.cache/vllm/torch_compile_cache")
+                    # then retry
 
-    @property
-    def alora_model(self) -> "aLoRAPeftModelForCausalLM | None":  # noqa: UP037
-        """The ALora model."""
-        return self._alora_model
+            except Exception as e:
+                print(e)
+                if retry % 3 == 0:
+                    model_options["max_model_len"] //= 2
+                elif retry % 3 == 1:
+                    model_options["max_num_seqs"] //= 2
+                elif retry % 3 == 2:
+                    model_options["gpu_memory_utilization"] *= 0.9
+                if model_options["max_model_len"] == 0 or \
+                   model_options["max_num_seqs"] == 0 or \
+                   model_options["gpu_memory_utilization"] < 0.1:
+                    raise RuntimeError("no matter how I reduced max_model_len and max_num_seqs, there is not enough memory! \n"
+                                       "final values:\n"
+                                       f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
+                                       f"max_model_len: {model_options['max_model_len']}\n"
+                                       f"max_num_seqs: {model_options['max_num_seqs']}\n")
+                print(f'Reducing vllm model parameters to make it fit in the GPU memory.\n'
+                      "current values:\n"
+                      f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
+                      f"max_model_len: {model_options['max_model_len']}\n"
+                      f"max_num_seqs: {model_options['max_num_seqs']}\n")
 
-    @alora_model.setter
-    def alora_model(self, model: "aLoRAPeftModelForCausalLM | None"):  # noqa: UP037
-        """Sets the ALora model. This should only happen once in a backend's lifetime."""
-        assert self._alora_model is None
-        self._alora_model = model
+        print(f'vllm instantiated.\n'
+              "final model parameters:\n"
+              f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
+              f"max_model_len: {model_options['max_model_len']}\n"
+              f"max_num_seqs: {model_options['max_num_seqs']}\n")
+
+        self._tokenizer: PreTrainedTokenizer = self._model.get_tokenizer()
+
+        # see notes in outlines.models.vllm.adapt_tokenizer
+        self._tokenizer_for_outlines: PreTrainedTokenizer = outlines.models.VLLM(self._model).tokenizer
+
 
     def generate_from_context(
         self,
@@ -153,7 +190,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
     ) -> ModelOutputThunk:
         """Generate using the huggingface model."""
         # Upsert model options.
-        model_opts = self._simplify_and_merge(model_options)
+        model_options = self._simplify_and_merge(model_options)
 
         # TODO: insert the alora code here.
 
@@ -163,7 +200,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             action,
             ctx,
             format=format,
-            model_options=model_opts,
+            model_options=model_options,
             generate_logs=generate_logs,
             tool_calls=tool_calls,
         )
@@ -182,6 +219,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
         # Otherwise, we will linearize the context and treat it as a raw input.
         decoded_result: str | None = None
+
         if ctx.is_chat_context:
             linearized_ctx = ctx.render_for_generation()
             assert linearized_ctx is not None, (
@@ -213,26 +251,17 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 }
                 ctx_as_conversation.insert(0, system_msg)
 
-            seed = model_options.get(ModelOption.SEED, None)
-            if seed is not None:
-                set_seed(seed)
-
-            input_ids = self._tokenizer.apply_chat_template(  # type: ignore
+            input_str = self._tokenizer.apply_chat_template(  # type: ignore
                 ctx_as_conversation,
-                tools=convert_tools_to_json(tools),  # type: ignore
-                return_tensors="pt",
-                **self._make_backend_specific_and_remove(model_options),
-            ).to(self._device)  # type: ignore
+                tokenize=False,
+            )
 
-            if format is None:
-                chat_output = self._model.generate(  # type: ignore
-                    input_ids,
-                    return_dict_in_generate=True,
-                    output_scores=True,
-                    **self._make_backend_specific_and_remove(model_options),
-                )  # type: ignore
+            sampling_params = vllm.SamplingParams(
+                **self._make_backend_specific_and_remove(model_options, vllm.SamplingParams),
+            )
 
-            else:
+            if format is not None:
+
                 # outlines.generate.json always parses the resulting json into a python dict.
                 # We however want to keep it as a json string for later storing it in ModelOutputThunk
                 schema: dict[str, Any] = format.model_json_schema()
@@ -241,29 +270,23 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                     schema_json
                 )
 
-                from outlines.models.transformers import TransformerTokenizer
                 from outlines.processors import RegexLogitsProcessor
-                from transformers import LogitsProcessorList
 
-                chat_output = self._model.generate(  # type: ignore
-                    input_ids,
-                    return_dict_in_generate=True,
-                    output_scores=True,
-                    logits_processor=LogitsProcessorList(
-                        [
-                            RegexLogitsProcessor(
-                                regex_str,
-                                tokenizer=TransformerTokenizer(self._tokenizer),
-                            )
-                        ]
-                    ),
-                    **self._make_backend_specific_and_remove(model_options),
+                logits_processor = RegexLogitsProcessor(regex_str, tokenizer=self._tokenizer_for_outlines)
+                sampling_params.logits_processors = (
+                    [logits_processor] if logits_processor is not None else []
                 )
 
-            decoded_result = self._tokenizer.decode(
-                chat_output.sequences[0, input_ids.shape[1] :], skip_special_tokens=True
-            )
+            ros : list[vllm.RequestOutput] = self._model.generate(  # type: ignore
+                [input_str],
+                sampling_params=sampling_params,
+            )  # type: ignore
 
+            decoded_results = [
+                ro.outputs[0].text for ro in ros
+            ]
+
+            decoded_result = decoded_results[0]
 
         else:
             raise Exception("Does not yet support non-chat contexts.")
@@ -285,7 +308,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 "format": format,
                 "tools_available": False,
                 "tools_called": result.tool_calls,
-                "seed": seed,
+                "seed": model_options.get(ModelOption.SEED, None),
             }
             generate_log.action = action
             generate_log.result = parsed_result
@@ -301,61 +324,39 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         generate_logs: list[GenerateLog] | None = None,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
-        model_opts = self._simplify_and_merge(model_options)
-        seed = model_opts.get(ModelOption.SEED, None)
-        if seed is not None:
-            set_seed(seed)
+        model_options = self._simplify_and_merge(model_options)
 
         prompts = [self.formatter.print(action) for action in actions]
 
-        # batch-encoding call is deprecated in favor of this
-        inputs = self._tokenizer(prompts, return_tensors="pt").to(self._device)
+        sampling_params = vllm.SamplingParams(
+            **self._make_backend_specific_and_remove(model_options, vllm.SamplingParams),
+        )
 
-        if format is None:
-            outputs = self._model.generate(  # type: ignore
-                input_ids=inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                return_dict_in_generate=True,
-                output_scores=True,
-                **self._make_backend_specific_and_remove(model_opts),
-            )
-        else:
+        if format is not None:
             schema: dict[str, Any] = format.model_json_schema()
             schema_json: str = json.dumps(schema)
             regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(
                 schema_json
             )
 
-            from outlines.models.transformers import TransformerTokenizer
             from outlines.processors import RegexLogitsProcessor
-            from transformers import LogitsProcessorList
 
-            outputs = self._model.generate(  # type: ignore
-                input_ids=inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                return_dict_in_generate=True,
-                output_scores=True,
-                logits_processor=LogitsProcessorList(
-                    [
-                        RegexLogitsProcessor(
-                            regex_str, tokenizer=TransformerTokenizer(self._tokenizer)
-                        )
-                    ]
-                ),
-                **self._make_backend_specific_and_remove(model_opts),
+            logits_processor = RegexLogitsProcessor(regex_str, tokenizer=self._tokenizer_for_outlines)
+            sampling_params.logits_processors = (
+                [logits_processor] if logits_processor is not None else []
             )
 
-        sequences_to_decode = [
-            sequence[inputs["input_ids"][i].size(0) :]  # type: ignore
-            for i, sequence in enumerate(outputs.sequences)
+        ros : list[vllm.RequestOutput] = self._model.generate(  # type: ignore
+            prompts,
+            sampling_params=sampling_params,
+        )  # type: ignore
+
+        decoded_results = [
+            ro.outputs[0].text for ro in ros
         ]
 
-        decoded_results = self._tokenizer.batch_decode(
-            sequences_to_decode, skip_special_tokens=True
-        )
-
         results = [
-            ModelOutputThunk(value=decoded_result) for decoded_result in decoded_results
+            ModelOutputThunk(value=text) for text in decoded_results
         ]
 
         for i, result in enumerate(results):
@@ -369,10 +370,10 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 generate_log = GenerateLog()
                 generate_log.prompt = prompts[i]
                 generate_log.backend = f"hf::{self.model_id!s}"
-                generate_log.model_options = model_opts
+                generate_log.model_options = model_options
                 generate_log.date = date
                 generate_log.model_output = decoded_results
-                generate_log.extra = {"format": format, "seed": seed}
+                generate_log.extra = {"format": format, "seed": model_options.get(ModelOption.SEED, None)}
                 generate_log.action = actions[i]
                 generate_log.result = results[i]
                 generate_logs.append(generate_log)
@@ -415,7 +416,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         )
 
     def _make_backend_specific_and_remove(
-        self, model_options: dict[str, Any]
+            self, model_options: dict[str, Any], cls: type[Any]
     ) -> dict[str, Any]:
         """Maps specified Mellea specific keys to their backend specific version and removes any remaining Mellea keys.
 
@@ -428,5 +429,18 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         backend_specific = ModelOption.replace_keys(
             model_options, self.from_mellea_model_opts_map
         )
-        return ModelOption.remove_special_keys(backend_specific)
+        backend_specific = ModelOption.remove_special_keys(backend_specific)
+        try:
+            # note: dataclasses.Field objects
+            fields = dataclasses.fields(cls)
+        except TypeError:
+            # note: msgspec.structs.FieldInfo objects
+            fields = msgspec.structs.fields(cls)
+
+        backend_specific = {
+            field.name : backend_specific[field.name]
+            for field in fields
+            if field.name in backend_specific
+        }
+        return backend_specific
 
