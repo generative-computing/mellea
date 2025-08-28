@@ -72,6 +72,7 @@ class SamplingStrategy(abc.ABC):
         self,
         action: Component,
         context: Context,
+        requirements: list[Requirement],
         *,
         generate_logs: list[GenerateLog] | None = None,
         validation_ctx: Context | None = None,
@@ -83,6 +84,7 @@ class SamplingStrategy(abc.ABC):
         Args:
             action : The action object to be sampled.
             context: The context to be passed to the sampling strategy.
+            requirements: The requirements to be used by the sampling strategy (merged with global requirements).
             generate_logs: Optional list of GenerateLog objects. If None, no collection happens.
             validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
         """
@@ -152,10 +154,10 @@ class BaseSamplingStrategy(SamplingStrategy):
         self,
         action: Component,
         context: Context,
+        requirements: list[Requirement],
         *,
         show_progress: bool = True,
         generate_logs: list[GenerateLog] | None = None,
-        requirements: list[Requirement] | None = None,
         validation_ctx: Context | None = None,
     ) -> SamplingResult:
         """This method performs a sampling operation based on the given instruction.
@@ -165,7 +167,7 @@ class BaseSamplingStrategy(SamplingStrategy):
             context: The context to be passed to the sampling strategy.
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
             generate_logs: If provided, the generations will be logged.
-            requirements: List of requirements to test against.
+            requirements: List of requirements to test against (merged with global requirements).
             validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
 
         Returns:
@@ -192,12 +194,14 @@ class BaseSamplingStrategy(SamplingStrategy):
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         sampled_actions: list[Component] = []
 
+        reqs = []
+        # global requirements supersede local requirements (global requiremenst can be defined by user)
+        # Todo: re-evaluate if this makes sense
         if self.requirements is not None:
-            reqs = self.requirements
-            if requirements is not None:
-                flog.warn("Some requirements are ignored.")
-        else:
-            reqs = requirements if requirements is not None else []
+            reqs += self.requirements
+        elif requirements is not None:
+            reqs += requirements
+        reqs = list(set(reqs))
 
         loop_count = 0
         loop_budget_range_iterator = (

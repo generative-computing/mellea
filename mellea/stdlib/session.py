@@ -218,7 +218,9 @@ class MelleaSession:
                 )
 
             # sample
-            res = strategy.sample(i, self.ctx, generate_logs=generate_logs)
+            res = strategy.sample(
+                i, self.ctx, i.requirements, generate_logs=generate_logs
+            )
 
             # make sure that one Log is marked as the one related to res.result
             if res.success:
