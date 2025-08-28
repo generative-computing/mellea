@@ -1,7 +1,8 @@
 
 import pytest
-from mellea.stdlib.base import ModelOutputThunk, LinearContext
-from mellea.stdlib.chat import as_chat_history, Message
+
+from mellea.stdlib.base import LinearContext, ModelOutputThunk
+from mellea.stdlib.chat import Message, as_chat_history
 from mellea.stdlib.session import start_session
 
 

@@ -162,6 +162,14 @@ class Context(abc.ABC):
         ...
 
     @abc.abstractmethod
+    def actions_for_available_tools(self) -> list[Component | CBlock] | None:
+        """Provides a list of actions to extract tools from for use with during generation, or None if that's not possible.
+
+        Can be used to make the available tools differ from the tools of all the actions in the context.
+        """
+        ...
+
+    @abc.abstractmethod
     def full_event_log(self) -> list[Component | CBlock]:
         """Provides a list of all events stored in the context."""
         ...
@@ -209,6 +217,14 @@ class BasicContext(Context, abc.ABC):
         """Constructs a basic context."""
         self._ctx = []
         self._log_ctx = []
+
+    def actions_for_available_tools(self) -> list[Component | CBlock] | None:
+        """Provides a list of actions to extract tools from for use with during generation, or None if that's not possible.
+
+        Can be used to make the available tools differ from the tools of all the actions in the context.
+        In most cases, this will just be the same context as `render_for_generation`.
+        """
+        return self.render_for_generation()
 
     def last_output(self):
         """The last output thunk of the context."""

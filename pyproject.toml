@@ -161,3 +161,8 @@ skip = 'requirements.txt,uv.lock'
 [tool.mypy]
 disable_error_code = ["empty-body", "import-untyped"]
 python_version = "3.10"
+
+[tool.pytest.ini_options]
+markers = [
+    "qualitative: Marks the test as needing an exact output from an LLM; set by an ENV variable for CICD. All tests marked with this will xfail in CI/CD"
+]
