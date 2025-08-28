@@ -20,6 +20,7 @@
 - [Chapter 9: Interoperability with Other Frameworks](#chapter-9-interoperability-with-other-frameworks)
 - [Chapter 10: Prompt Engineering for Mellea](#chapter-10-prompt-engineering-for-m)
   - [Custom  Templates](#custom-templates)
+- [Chapter 11: Tool Calling](#chapter-11-tool-calling)
 - [Appendix: Contributing to Melles](#appendix-contributing-to-mellea)
 
 ## Chapter 1: What Is Generative Programming
@@ -308,6 +309,11 @@ final_options = {
 ```
 
 2. **Pushing and popping model state**. Sessions offer the ability to push and pop model state. This means you can temporarily change the `model_options` for a series of calls by pushing a new set of `model_options` and then revert those changes with a pop.
+
+#### System Messages
+In Mellea, `ModelOption.SYSTEM_PROMPT` is the recommended way to add/change the system message for a prompt. Setting it at the backend/session level will use the provided message as the system prompt for all future calls (just like any other model option). Similarly, you can specify the system prompt parameter for any session-level function (like `m.instruct`) to replace it for just that call. 
+
+Mellea recommends applying the system message this way because some model-provider apis don't properly serialize messages with the `system` role and expect them as a separate parameter.
 
 ### Conclusion
 
@@ -1275,6 +1281,33 @@ If the default formatter searches the template path or the package, it uses the 
 To customize the template and template representation of an existing class, simply create a new class that inherits from the class you want to edit. Then, override the format_for_llm function and create a new template.
 
 See [`mellea/docs/examples/mify/rich_document_advanced.py`](./examples/mify/rich_document_advanced.py)
+
+## Chapter 11: Tool Calling
+Mellea supports tool calling for providers/models that support it. Most session level functions support setting a tool_calls boolean. Setting this to true allows tools to be called, but there's no guarantee that a model will call them.
+
+Tools can be made available for the model to call in a few ways:
+1. Components: components can have a TemplateRepresentation object that contains tools.
+2. Context: depending on the context, the components in that context can be used as sources of additional tools in the exact same way they would if they were the current action.
+3. `ModelOptions.TOOLS`: model options can include a tools parameter. The preferred way of passing these tools is as a list of function objects.
+
+Currently, tools are identified by the name of the function. If there are conflicts, the most recent tool with that name will be preferred. This means the tools available to the model will have the same priority listed above:
+1. Tools from the current component will always be included
+2. Tools from the context will be included if there are no name conflicts. A given context can decide what tools to surface, but in most cases, tools from the most recent component in the context will take priority over tools from older requests.
+3. Tools from `ModelOptions.TOOLS` will only be added if they do not conflict with any of the above functions.
+
+For examples on adding tools to the template representation of a component, see the `Table` object in [richdocument.py](../mellea/stdlib/docs/richdocument.py).
+
+Here's an example of adding a tool through model options. This can be useful when you want to add a tool like web search that should almost always be available:
+```python
+from mellea.backends.types import ModelOption
+
+def web_search(query: str) -> str:
+    ...
+
+model_opts = {
+    ModelOptions.TOOLS: [web_search]
+}
+```
 
 ## Appendix: Contributing to Mellea
 

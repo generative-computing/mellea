@@ -206,6 +206,10 @@ class BaseSamplingStrategy(SamplingStrategy):
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         sampled_actions: list[Component] = []
 
+        # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
+        # flag to determine whether we should show the pbar.
+        show_progress = show_progress and flog.getEffectiveLevel() <= FancyLogger.INFO
+
         reqs = []
         # global requirements supersede local requirements (global requiremenst can be defined by user)
         # Todo: re-evaluate if this makes sense

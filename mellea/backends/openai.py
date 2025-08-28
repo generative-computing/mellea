@@ -6,7 +6,7 @@ import inspect
 import json
 from collections.abc import Callable
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import openai
@@ -14,15 +14,17 @@ import requests
 from huggingface_hub import snapshot_download
 from openai.types.chat import ChatCompletion
 from openai.types.completion import Completion
-from transformers import AutoTokenizer
-from transformers.tokenization_utils import PreTrainedTokenizer
 
 import mellea.backends.model_ids as model_ids
 from mellea.backends import BaseModelSubclass
 from mellea.backends.aloras import Alora, AloraBackendMixin
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
-from mellea.backends.tools import convert_tools_to_json, get_tools_from_action
+from mellea.backends.tools import (
+    add_tools_from_context_actions,
+    add_tools_from_model_options,
+    convert_tools_to_json,
+)
 from mellea.backends.types import ModelOption
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
@@ -32,10 +34,12 @@ from mellea.stdlib.base import (
     GenerateLog,
     ModelOutputThunk,
     ModelToolCall,
-    TemplateRepresentation,
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
+
+if TYPE_CHECKING:
+    from transformers.tokenization_utils import PreTrainedTokenizer
 
 openai_ollama_batching_error = "json: cannot unmarshal array into Go struct field CompletionRequest.prompt of type string"
 
@@ -403,28 +407,13 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
             else:
-                if isinstance(action, Component) and isinstance(
-                    action.format_for_llm(), TemplateRepresentation
-                ):
-                    tools = get_tools_from_action(action)
+                add_tools_from_model_options(tools, model_opts)
+                add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
 
-                model_options_tools = model_opts.get(ModelOption.TOOLS, None)
-                if model_options_tools is not None:
-                    assert isinstance(model_options_tools, dict)
-                    for fn_name in model_options_tools:
-                        # invariant re: relationship between the model_options set of tools and the TemplateRepresentation set of tools
-                        assert fn_name not in tools.keys(), (
-                            f"Cannot add tool {fn_name} because that tool was already defined in the TemplateRepresentation for the action."
-                        )
-                        # type checking because ModelOptions is an untyped dict and the calling convention for tools isn't clearly documented at our abstraction boundaries.
-                        assert type(fn_name) is str, (
-                            "When providing a `ModelOption.TOOLS` parameter to `model_options`, always used the type Dict[str, Callable] where `str` is the function name and the callable is the function."
-                        )
-                        assert callable(model_options_tools[fn_name]), (
-                            "When providing a `ModelOption.TOOLS` parameter to `model_options`, always used the type Dict[str, Callable] where `str` is the function name and the callable is the function."
-                        )
-                        # Add the model_options tool to the existing set of tools.
-                        tools[fn_name] = model_options_tools[fn_name]
+                # Add the tools from the action for this generation last so that
+                # they overwrite conflicting names.
+                add_tools_from_context_actions(tools, [action])
+            FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         thinking = model_opts.get(ModelOption.THINKING, None)
         if type(thinking) is bool and thinking:
@@ -638,10 +627,12 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
     def apply_chat_template(self, chat: list[dict[str, str]]):
         """Apply the chat template for the model, if such a model is available (e.g., when it can deduce the huggingface model id)."""
+        from transformers import AutoTokenizer
+
         if not hasattr(self, "_tokenizer"):
             match _server_type(self._base_url):
                 case _ServerType.LOCALHOST:
-                    self._tokenizer: PreTrainedTokenizer = (
+                    self._tokenizer: "PreTrainedTokenizer" = (  # noqa: UP037
                         AutoTokenizer.from_pretrained(self._hf_model_id)
                     )
                 case _ServerType.OPENAI:
