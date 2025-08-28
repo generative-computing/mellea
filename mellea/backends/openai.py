@@ -467,6 +467,155 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
         return parsed_result
 
+    def generate_with_budget_forcing(
+        self,
+        action: CBlock,
+        *,
+        think_max_tokens: int = 3072,
+        answer_max_tokens: int | None = None,
+        start_think_token: str | None = "<think>",
+        end_think_token: str | None = "</think>",
+        begin_response_token: str | None = None,
+        end_response_token: str | None = None,
+        think_wait_suffix: str | None = None,
+        answer_suffix: str | None = "The final answer is:",
+        answer_token: str | None = "boxed",
+        model_options: dict | None = None,
+    ) -> list[ModelOutputThunk]:
+        """Generate with budget forcing using the completions APIs. This relies on raw autocompletion and assumes the model's output is structued in the following form: '<think> ... </think> summary answer'
+        The budget forcing method is proposed in the paper: https://arxiv.org/abs/2501.19393
+        This implementation tries to follow the key outlines in the paper while ensuring stable and fail-safe operation.
+        This is performed via multi-step generation. The model will be called multiple times until requirements are met, in other words, the response will be assembeled conditionally.
+
+        Args:
+            think_max_tokens: Budget in number of tokens allocated for the think block
+            answer_max_tokens: Budget in number of tokens allocated for the summary and answer block, None indicates generating till EoS
+            start_think_token: String indicating start of think block, default <think>
+            end_think_token: String indicating end of think block, default </think>
+            begin_response_token: Used by certain models, string indicating start of response block, e.g. "<response>", default None
+            end_response_token: Used by certain models, string indicating end of response block, e.g. "</response>", default None
+            think_wait_suffix: String to append to force continued thinking, e.g. "\nWait" if set to None we will not force additional thinking. Use None for upper-bound budget case
+            answer_suffix: String to append to force a final answer
+            answer_token: Token that indicates an answer is generated
+
+        Assumptions:
+            -  The chat template is applied on prompt, with think mode enabled
+            -  Model is think mode activated
+            -  enabling prefix-caching improves performance
+
+        Limitations:
+            -  Does not support batching
+        """
+
+        model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
+
+        responses = []
+        prompt = self.formatter.print(action)
+        if start_think_token is not None:
+            prompt += start_think_token
+            responses.append(start_think_token)
+        backend_opts = self._make_backend_specific_and_remove(
+            model_opts, is_chat_context=False
+        )
+        # Generate thinking portion
+        max_tok_thd = 0.8
+        backend_opts["max_tokens"] = think_max_tokens
+        # backend_opts["echo"] = True
+        # backend_opts["logprobs"] = 1
+        backend_opts["n"] = 1
+        gen_tok_count = 0
+        curr_prompt = prompt
+        min_step_len = 10  # minimum character length of step to be considered valid
+
+        # think block indefinite multi-step operation to satisfy user's budget
+        while True:
+            try:
+                completion_response: Completion = self._client.completions.create(
+                    model=self._hf_model_id, prompt=curr_prompt, **backend_opts
+                )  # type: ignore
+            except openai.BadRequestError as e:
+                if openai_ollama_batching_error in e.message:
+                    FancyLogger.get_logger().error(
+                        "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
+                        "your requests will fail since ollama doesn't support batching requests."
+                    )
+                raise e
+
+            gen_tok_count += completion_response.usage.completion_tokens
+            response = completion_response.choices[0].text
+            if think_wait_suffix is None:
+                responses.append(response)
+                break
+
+            if gen_tok_count >= max_tok_thd * think_max_tokens:
+                responses.append(response)
+                break
+
+            else:
+                step = response.split(end_think_token)[0]
+                # model fails to produce thoughts, let's exit
+                if len(step.strip()) <= min_step_len:
+                    responses.append(response)
+                    break
+
+                # request more steps
+                step = f"{step} {think_wait_suffix}"
+                responses.append(step)
+                curr_prompt += step
+
+        response = "".join(responses)
+        ### debug obtaining final answer
+        # response = response.split(end_think_token)[0]
+        # response = response.replace(answer_token, "")
+        ###
+        if answer_token is None or answer_suffix is None:
+            return response, gen_tok_count
+
+        # Now get a final answer if we need to
+        # TODO: Here we check if a final answer exists, technically we should check for an answer outside
+        # The think block, but we will use relaxed requirement of finding any answer in the model's response.
+        # Consider a strict structural approach in the future.
+        # e.g.
+        # ans_portion = response.split(end_think_token)[-1]
+        # if answer_token in ans_portion:
+        #     return response, gen_tok_count
+
+        if answer_token in response:
+            return response, gen_tok_count
+
+        # Answer is not in response, let's force an answer
+        if end_think_token not in response:
+            response = (
+                f"{response} {end_think_token}{begin_response_token} {answer_suffix}"
+            )
+
+        else:
+            response = f"{response} {begin_response_token}{answer_suffix}"
+
+        # update original prompt with assembled  response
+        prompt += response
+        if answer_max_tokens is not None:
+            backend_opts["max_tokens"] = answer_max_tokens
+
+        else:
+            del backend_opts["max_tokens"]
+
+        try:
+            completion_response: Completion = self._client.completions.create(
+                model=self._hf_model_id, prompt=prompt, **backend_opts
+            )  # type: ignore
+        except openai.BadRequestError as e:
+            if openai_ollama_batching_error in e.message:
+                FancyLogger.get_logger().error(
+                    "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
+                    "your requests will fail since ollama doesn't support batching requests."
+                )
+            raise e
+
+        response += completion_response.choices[0].text
+        gen_tok_count += completion_response.usage.completion_tokens
+        return response, gen_tok_count
+
     def _generate_from_raw(
         self,
         actions: list[Component | CBlock],
