@@ -37,29 +37,7 @@ class TestOpenAIBackend:
 
         return prompt
 
-    def test_generate_from_raw_small(self):
-        prompt = "what is 1+1?"
-        prompt = self.prepare_prmpt_for_math(prompt)
-        action = CBlock(value=prompt)
-        results = []
-        THINK_MAX_TOKENS = 64
-        ANSWER_MAX_TOKENS = 16
-        result, gen_tok_cnt = self.m.backend.generate_with_budget_forcing(
-            action=action,
-            think_max_tokens=THINK_MAX_TOKENS,
-            answer_max_tokens=ANSWER_MAX_TOKENS,
-            start_think_token = "<think>",
-            end_think_token="</think>",
-            think_wait_suffix="Wait",
-            answer_suffix="The final answer is:",
-            # answer_suffix="",
-            answer_token="boxed",
-        )
-
-        assert gen_tok_cnt <= 2 * THINK_MAX_TOKENS
-
-
-    def test_generate_from_raw_large(self):
+    def test_think_small(self):
         prompt = "what is 1+1?"
         prompt = self.prepare_prmpt_for_math(prompt)
         action = CBlock(value=prompt)
@@ -74,11 +52,52 @@ class TestOpenAIBackend:
             end_think_token="</think>",
             think_wait_suffix="Wait",
             answer_suffix="The final answer is:",
-            answer_token="boxed",
+            # answer_suffix="",
+            answer_regex= r"\\boxed{.*?}",
+        )
+
+        assert gen_tok_cnt <= 2 * THINK_MAX_TOKENS
+
+
+    def test_think_large(self):
+        prompt = "what is 1+1?"
+        prompt = self.prepare_prmpt_for_math(prompt)
+        action = CBlock(value=prompt)
+        results = []
+        THINK_MAX_TOKENS = 2048
+        ANSWER_MAX_TOKENS = 512
+        result, gen_tok_cnt = self.m.backend.generate_with_budget_forcing(
+            action=action,
+            think_max_tokens=THINK_MAX_TOKENS,
+            answer_max_tokens=ANSWER_MAX_TOKENS,
+            start_think_token = "<think>",
+            end_think_token="</think>",
+            think_wait_suffix="Wait",
+            answer_suffix="The final answer is:",
+            answer_regex=r"\\boxed{.*?}",
         )
 
         assert gen_tok_cnt >= 0.5 * THINK_MAX_TOKENS
 
+
+    def test_zero_think(self):
+        prompt = "what is 1+1?"
+        prompt = self.prepare_prmpt_for_math(prompt)
+        action = CBlock(value=prompt)
+        results = []
+        THINK_MAX_TOKENS = 0
+        ANSWER_MAX_TOKENS = 512
+        result, gen_tok_cnt = self.m.backend.generate_with_budget_forcing(
+            action=action,
+            think_max_tokens=THINK_MAX_TOKENS,
+            answer_max_tokens=ANSWER_MAX_TOKENS,
+            start_think_token = "",
+            end_think_token="<think> Okay, I think I have finished thinking. </think>",
+            think_wait_suffix="",
+            answer_suffix="The final answer is:",
+        )
+
+        assert gen_tok_cnt >= 0.5 * THINK_MAX_TOKENS
 
 if __name__ == "__main__":
     pytest.main(["-s", __file__])

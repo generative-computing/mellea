@@ -37,6 +37,7 @@ from mellea.stdlib.base import (
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
+import re
 
 if TYPE_CHECKING:
     from transformers.tokenization_utils import PreTrainedTokenizer
@@ -471,21 +472,21 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         self,
         action: CBlock,
         *,
-        think_max_tokens: int = 3072,
+        think_max_tokens: int = 4096,
         answer_max_tokens: int | None = None,
-        start_think_token: str | None = "<think>",
-        end_think_token: str | None = "</think>",
-        begin_response_token: str | None = None,
-        end_response_token: str | None = None,
-        think_wait_suffix: str | None = None,
-        answer_suffix: str | None = "The final answer is:",
-        answer_token: str | None = "boxed",
+        start_think_token: str = "<think>",
+        end_think_token: str = "</think>",
+        begin_response_token: str = "",
+        end_response_token: str = "",
+        think_wait_suffix: str = "",
+        answer_suffix: str = "The final answer is:",
+        answer_regex: str = "boxed",
         model_options: dict | None = None,
     ) -> list[ModelOutputThunk]:
-        """Generate with budget forcing using the completions APIs. This relies on raw autocompletion and assumes the model's output is structued in the following form: '<think> ... </think> summary answer'
+        """Generate with budget forcing using the completions APIs. This relies on raw autocompletion and assumes the model's output is structured in the following form: '<think> ... </think> summary answer'
         The budget forcing method is proposed in the paper: https://arxiv.org/abs/2501.19393
         This implementation tries to follow the key outlines in the paper while ensuring stable and fail-safe operation.
-        This is performed via multi-step generation. The model will be called multiple times until requirements are met, in other words, the response will be assembeled conditionally.
+        This is performed via multi-step generation. The model will be called multiple times until requirements are met, in other words, the response will be assembled conditionally.
 
         Args:
             think_max_tokens: Budget in number of tokens allocated for the think block
@@ -496,7 +497,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             end_response_token: Used by certain models, string indicating end of response block, e.g. "</response>", default None
             think_wait_suffix: String to append to force continued thinking, e.g. "\nWait" if set to None we will not force additional thinking. Use None for upper-bound budget case
             answer_suffix: String to append to force a final answer
-            answer_token: Token that indicates an answer is generated
+            answer_regex: Answer regex which indicates an answer is generated
 
         Assumptions:
             -  The chat template is applied on prompt, with think mode enabled
@@ -511,24 +512,33 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
         responses = []
         prompt = self.formatter.print(action)
-        if start_think_token is not None:
+        if start_think_token:
             prompt += start_think_token
             responses.append(start_think_token)
+
         backend_opts = self._make_backend_specific_and_remove(
             model_opts, is_chat_context=False
         )
         # Generate thinking portion
-        max_tok_thd = 0.8
-        backend_opts["max_tokens"] = think_max_tokens
+        max_tok_thd = 1.0
         # backend_opts["echo"] = True
         # backend_opts["logprobs"] = 1
         backend_opts["n"] = 1
+        rem_toks = think_max_tokens
         gen_tok_count = 0
         curr_prompt = prompt
         min_step_len = 10  # minimum character length of step to be considered valid
 
         # think block indefinite multi-step operation to satisfy user's budget
         while True:
+
+            if rem_toks <= 0:  # zero-think case
+                break
+
+            if rem_toks <= min_step_len:  # minimum step length reached
+                break
+
+            backend_opts["max_tokens"] = rem_toks
             try:
                 completion_response: Completion = self._client.completions.create(
                     model=self._hf_model_id, prompt=curr_prompt, **backend_opts
@@ -536,23 +546,27 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             except openai.BadRequestError as e:
                 if openai_ollama_batching_error in e.message:
                     FancyLogger.get_logger().error(
-                        "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
+                        "If you are trying to call `OpenAIBackend.generate_with_budget_forcing while targeting an ollama server, "
                         "your requests will fail since ollama doesn't support batching requests."
                     )
                 raise e
 
             gen_tok_count += completion_response.usage.completion_tokens
+            rem_toks = think_max_tokens - gen_tok_count
             response = completion_response.choices[0].text
-            if think_wait_suffix is None:
+
+            if think_wait_suffix == "":
+                # non-strict budget form
                 responses.append(response)
                 break
 
-            if gen_tok_count >= max_tok_thd * think_max_tokens:
+            if rem_toks <= 0:
                 responses.append(response)
                 break
 
             else:
-                step = response.split(end_think_token)[0]
+                if end_think_token:
+                    step = response.split(end_think_token)[0]
                 # model fails to produce thoughts, let's exit
                 if len(step.strip()) <= min_step_len:
                     responses.append(response)
@@ -564,11 +578,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                 curr_prompt += step
 
         response = "".join(responses)
-        ### debug obtaining final answer
-        # response = response.split(end_think_token)[0]
-        # response = response.replace(answer_token, "")
-        ###
-        if answer_token is None or answer_suffix is None:
+        if answer_regex is None or answer_suffix is None:
             return response, gen_tok_count
 
         # Now get a final answer if we need to
@@ -577,28 +587,31 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         # Consider a strict structural approach in the future.
         # e.g.
         # ans_portion = response.split(end_think_token)[-1]
-        # if answer_token in ans_portion:
+        # if answer_regex in ans_portion:
         #     return response, gen_tok_count
 
-        if answer_token in response:
+        # Check if answer in response
+        matches = re.findall(answer_regex, response, re.DOTALL)
+        if len(matches) > 0:
             return response, gen_tok_count
 
         # Answer is not in response, let's force an answer
-        if end_think_token not in response:
-            response = (
-                f"{response} {end_think_token}{begin_response_token} {answer_suffix}"
-            )
+        if end_think_token and end_think_token not in response:
+            response += f" {end_think_token}"
 
-        else:
-            response = f"{response} {begin_response_token}{answer_suffix}"
+        if begin_response_token and begin_response_token not in response:
+            response += f" {begin_response_token}"
 
-        # update original prompt with assembled  response
+        if answer_suffix:
+            response += f" {answer_suffix}"
+
+        # update original prompt with assembled response
         prompt += response
         if answer_max_tokens is not None:
             backend_opts["max_tokens"] = answer_max_tokens
 
         else:
-            del backend_opts["max_tokens"]
+            backend_opts.pop("max_tokens", None)   # generate unconditionally
 
         try:
             completion_response: Completion = self._client.completions.create(
@@ -607,7 +620,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         except openai.BadRequestError as e:
             if openai_ollama_batching_error in e.message:
                 FancyLogger.get_logger().error(
-                    "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
+                    "If you are trying to call `OpenAIBackend.generate_with_budget_forcing while targeting an ollama server, "
                     "your requests will fail since ollama doesn't support batching requests."
                 )
             raise e
