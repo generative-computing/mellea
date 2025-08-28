@@ -1,19 +1,23 @@
+from enum import Enum
 from typing import TypedDict
 
 from typing_extensions import NotRequired
 
 from mellea import MelleaSession
-from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.prompt_modules import (
+from mellea.backends.openai import OpenAIBackend
+from mellea.backends.types import ModelOption
+from mellea.helpers.prompt_modules import (
     constraint_extractor,
     subtask_constraint_assign,
     subtask_list,
     subtask_prompt_generator,
 )
-from mellea.prompt_modules.subtask_constraint_assign import SubtaskPromptConstraintsItem
-from mellea.prompt_modules.subtask_list import SubtaskItem
-from mellea.prompt_modules.subtask_prompt_generator import SubtaskPromptItem
+from mellea.helpers.prompt_modules.subtask_constraint_assign import (
+    SubtaskPromptConstraintsItem,
+)
+from mellea.helpers.prompt_modules.subtask_list import SubtaskItem
+from mellea.helpers.prompt_modules.subtask_prompt_generator import SubtaskPromptItem
 
 
 class DecompSubtasksResult(TypedDict):
@@ -32,29 +36,76 @@ class DecompPipelineResult(TypedDict):
     final_response: NotRequired[str]
 
 
+class DecompBackend(str, Enum):
+    ollama = "ollama"
+    openai = "openai"
+    rits = "rits"
+
+
 def decompose(
-    task_prompt: str, user_input_variable: list[str] | None = None
+    task_prompt: str,
+    user_input_variable: list[str] | None = None,
+    model_id: str = "mistral-small3.2:latest",
+    backend: DecompBackend = DecompBackend.ollama,
+    backend_req_timeout: int = 3600,
+    backend_endpoint: str | None = None,
+    backend_api_key: str | None = None,
 ) -> DecompPipelineResult:
     if user_input_variable is None:
         user_input_variable = []
 
-    m_ollama_session = MelleaSession(
-        OllamaModelBackend(
-            model_id="mistral-small3.2:24b",
-            model_options={ModelOption.CONTEXT_WINDOW: 32768},
-        )
-    )
+    match backend:
+        case DecompBackend.ollama:
+            m_session = MelleaSession(
+                OllamaModelBackend(
+                    model_id=model_id,
+                    model_options={
+                        ModelOption.CONTEXT_WINDOW: 32768,
+                        "timeout": backend_req_timeout,
+                    },
+                )
+            )
+        case DecompBackend.openai:
+            assert backend_endpoint is not None, (
+                'Required to provide "backend_endpoint" for this configuration'
+            )
+            assert backend_api_key is not None, (
+                'Required to provide "backend_api_key" for this configuration'
+            )
+            m_session = MelleaSession(
+                OpenAIBackend(
+                    model_id=model_id,
+                    base_url=backend_endpoint,
+                    api_key=backend_api_key,
+                    model_options={"timeout": backend_req_timeout},
+                )
+            )
+        case DecompBackend.rits:
+            assert backend_endpoint is not None, (
+                'Required to provide "backend_endpoint" for this configuration'
+            )
+            assert backend_api_key is not None, (
+                'Required to provide "backend_api_key" for this configuration'
+            )
 
-    subtasks: list[SubtaskItem] = subtask_list.generate(
-        m_ollama_session, task_prompt
-    ).parse()
+            from mellea_ibm.rits import RITSBackend, RITSModelIdentifier  # type: ignore
+
+            m_session = MelleaSession(
+                RITSBackend(
+                    RITSModelIdentifier(endpoint=backend_endpoint, model_name=model_id),
+                    api_key=backend_api_key,
+                    model_options={"timeout": backend_req_timeout},
+                )
+            )
+
+    subtasks: list[SubtaskItem] = subtask_list.generate(m_session, task_prompt).parse()
 
     task_prompt_constraints: list[str] = constraint_extractor.generate(
-        m_ollama_session, task_prompt
+        m_session, task_prompt
     ).parse()
 
     subtask_prompts: list[SubtaskPromptItem] = subtask_prompt_generator.generate(
-        m_ollama_session,
+        m_session,
         task_prompt,
         user_input_var_names=user_input_variable,
         subtasks_and_tags=subtasks,
@@ -62,7 +113,7 @@ def decompose(
 
     subtask_prompts_with_constraints: list[SubtaskPromptConstraintsItem] = (
         subtask_constraint_assign.generate(
-            m_ollama_session,
+            m_session,
             subtasks_tags_and_prompts=subtask_prompts,
             constraint_list=task_prompt_constraints,
         ).parse()

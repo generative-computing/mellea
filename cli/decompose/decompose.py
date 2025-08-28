@@ -5,6 +5,8 @@ from typing import Annotated
 
 import typer
 
+from .pipeline import DecompBackend
+
 this_file_dir = Path(__file__).resolve().parent
 
 
@@ -20,15 +22,69 @@ def run(
         typer.FileText | None,
         typer.Option(help="Path to a raw text file containing a task prompt."),
     ] = None,
+    model_id: Annotated[
+        str,
+        typer.Option(
+            help=(
+                "Model name/id to be used to run the decomposition pipeline."
+                + ' Defaults to "mistral-small3.2:latest", which is valid for the "ollama" backend.'
+                + " If you have a vLLM instance serving a model from HF with vLLM's OpenAI"
+                + " compatible endpoint, then this option should be set to the model's HF name/id,"
+                + ' e.g. "mistralai/Mistral-Small-3.2-24B-Instruct-2506" and the "--backend" option'
+                + ' should be set to "openai".'
+            )
+        ),
+    ] = "mistral-small3.2:latest",
+    backend: Annotated[
+        DecompBackend,
+        typer.Option(
+            help=(
+                'Backend to be used for inference. Defaults to "ollama".'
+                + ' Options are: "ollama" and "openai".'
+                + ' The "ollama" backend runs a local inference server.'
+                + ' The "openai" backend will send inference requests to any'
+                + " endpoint that's OpenAI compatible."
+            ),
+            case_sensitive=False,
+        ),
+    ] = DecompBackend.ollama,
+    backend_req_timeout: Annotated[
+        int,
+        typer.Option(
+            help='Time (in seconds) for timeout to be passed on the model inference requests. Defaults to "3600"'
+        ),
+    ] = 3600,
+    backend_endpoint: Annotated[
+        str | None,
+        typer.Option(
+            help=(
+                'The "endpoint URL", sometimes called "base URL",'
+                + ' to reach the model when using the "openai" backend.'
+                + ' This option is required if using "--backend openai".'
+            )
+        ),
+    ] = None,
+    backend_api_key: Annotated[
+        str | None,
+        typer.Option(
+            help=(
+                'The API key for the configured "--backend-endpoint".'
+                + ' If using "--backend openai" this option must be set,'
+                + " even if you are running locally (an OpenAI compatible server), you"
+                + ' must set this option, it can be set to "EMPTY" if your local'
+                + " server doesn't need it."
+            )
+        ),
+    ] = None,
     input_var: Annotated[
         list[str] | None,
         typer.Option(
             help=(
-                "If your task prompt needs user input data, you must pass"
-                + " a descriptive variable name using this option,"
-                + " so the name can be included when generating the prompt templates."
+                "If your task needs user input data, you must pass"
+                + " a descriptive variable name using this option, this way"
+                + " the variable names can be templated into the generated prompts."
                 + " You can pass this option multiple times, one for each input variable name."
-                + " These names must be all uppercase, alphanumeric with words separated by underscores."
+                + " These names must be all uppercase, alphanumeric, with words separated by underscores."
             )
         ),
     ] = None,
@@ -63,7 +119,13 @@ def run(
 
         if prompt_file:
             decomp_data = pipeline.decompose(
-                task_prompt=prompt_file.read(), user_input_variable=input_var
+                task_prompt=prompt_file.read(),
+                user_input_variable=input_var,
+                model_id=model_id,
+                backend=backend,
+                backend_req_timeout=backend_req_timeout,
+                backend_endpoint=backend_endpoint,
+                backend_api_key=backend_api_key,
             )
         else:
             task_prompt: str = typer.prompt(
@@ -76,7 +138,13 @@ def run(
             )
             task_prompt = task_prompt.replace("\\n", "\n")
             decomp_data = pipeline.decompose(
-                task_prompt=task_prompt, user_input_variable=None
+                task_prompt=task_prompt,
+                user_input_variable=None,
+                model_id=model_id,
+                backend=backend,
+                backend_req_timeout=backend_req_timeout,
+                backend_endpoint=backend_endpoint,
+                backend_api_key=backend_api_key,
             )
 
         with open(out_dir / f"{out_name}.json", "w") as f:

@@ -1,10 +1,15 @@
 import re
 from collections.abc import Callable, Sequence
-from typing import TypedDict, TypeVar, Unpack, cast, final
+from typing import TypedDict, TypeVar, cast, final
+
+from typing_extensions import Unpack
 
 from mellea import MelleaSession
 from mellea.backends.types import ModelOption
-from mellea.prompt_modules._prompt_modules import PromptModule, PromptModuleString
+from mellea.helpers.prompt_modules._prompt_modules import (
+    PromptModule,
+    PromptModuleString,
+)
 from mellea.stdlib.instruction import Instruction
 
 from ._exceptions import BackendGenerationError, TagExtractionError
