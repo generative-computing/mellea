@@ -27,8 +27,6 @@ from transformers import (
 )
 
 from mellea.backends import BaseModelSubclass
-from mellea.backends.aloras import Alora, AloraBackendMixin
-from mellea.backends.cache import Cache, SimpleLRUCache
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.tools import (
@@ -48,28 +46,9 @@ from mellea.stdlib.base import (
     TemplateRepresentation,
 )
 from mellea.stdlib.chat import Message
-from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
-
-if TYPE_CHECKING:
-    from alora.peft_model_alora import aLoRAPeftModelForCausalLM  # type: ignore
+from mellea.stdlib.requirement import LLMaJRequirement, Requirement
 
 assert outlines, "outlines needs to be present to make outlines_core work"
-
-"""A configuration type for the unhappy path: Tokenizer * Model * torch device string
-
-Huggingface backends can initialize themselves from a model string if the transformers `Auto*` classes can be used. Therefore, a TransformersTorchConfig usually isn't required. However, sometimes a model needs special care to instantiate properly, or a custom device type needs to bse used. Instead of trying to do a lot of partial magic, we basically have two modaliites: either the constructor can figure out everything from the model_id, or the user has to provide an entire config.
-"""
-TransformersTorchConfig = tuple[PreTrainedTokenizer, PreTrainedModel, torch.device]
-
-
-@dataclasses.dataclass
-class HFAloraCacheInfo:
-    """A dataclass for holding some KV cache and associated information."""
-
-    kv_cache: DynamicCache
-    merged_token_ids: Any
-    merged_attention: Any
-    q_end: int = -1
 
 
 class LocalHFBackend(FormatterBackend, AloraBackendMixin):
@@ -85,10 +64,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         model_id: str | ModelIdentifier,
         formatter: Formatter | None = None,
         *,
-        use_caches: bool = True,
-        cache: Cache | None = None,
-        custom_config: TransformersTorchConfig | None = None,
-        default_to_constraint_checking_alora: bool = True,
         model_options: dict | None = None,
     ):
         """Attempt to load model weights using the model_id by default, or using `custom_config` if provided.
@@ -98,10 +73,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         Args:
             model_id (str | ModelIdentifier): Used to load the model *and tokenizer* via transformers Auto* classes, and then moves the model to the best available device (cuda > mps > cpu). If loading the model and/or tokenizer from a string will not work, or if you want to use a different device string, then you can use custom_config.
             formatter (Formatter): A mechanism for turning `stdlib` stuff into strings. Experimental Span-based models should use `mellea.backends.span.*` backends.
-            use_caches (bool): If set to False, then caching will not be used even if a Cache is provided.
-            cache (Optional[Cache]): The caching strategy to use. If None, `LRUCache(3)` will be used.
-            custom_config (Optional[TransformersTorchConfig]): Overrides loading from the `model_id`. If set, then the specified tokenizer/model/device will be used instead of auto-loading from the model_id.
-            default_to_constraint_checking_alora: If set to False then aloras will be deactivated. This is primarily for performance benchmarking and debugging.
             model_options (Optional[dict]): Default model options.
         """
         formatter = (
@@ -190,25 +161,8 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # Upsert model options.
         model_opts = self._simplify_and_merge(model_options)
 
-        # See `docs/dev/requirement_aLoRA_rerouting.md` for an explanation of the following code block.
-        if issubclass(type(action), Requirement):
-            # The general rule is that we reroute to the alora if it exists.
-            reroute_to_alora = self.get_alora("constraint") is not None
-            # However, there are some exceptions:
-            if not self.default_to_constraint_checking_alora:
-                reroute_to_alora = False
-            if issubclass(type(action), LLMaJRequirement):
-                reroute_to_alora = False
-            if issubclass(type(action), ALoraRequirement):
-                reroute_to_alora = True
-            if reroute_to_alora:
-                return self._generate_from_context_alora(
-                    action,
-                    ctx,
-                    format=format,
-                    model_options=model_opts,
-                    generate_logs=generate_logs,
-                )
+        # TODO: insert the alora code here.
+
         return self._generate_from_context_standard(
             action,
             ctx,
@@ -216,60 +170,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             model_options=model_opts,
             generate_logs=generate_logs,
             tool_calls=tool_calls,
-        )
-
-    def _generate_from_context_alora(
-        self,
-        action: Component | CBlock,
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict[str, Any],
-        generate_logs: list[GenerateLog] | None = None,
-    ) -> ModelOutputThunk:
-        match action:
-            case ALoraRequirement():
-                alora_for_this_request = (
-                    self.get_alora("constraint")
-                    if action.alora is None
-                    else action.alora
-                )
-            case _:
-                alora_for_this_request = self.get_alora("constraint")
-                assert alora_for_this_request is not None, (
-                    "This code block should not execute unless there is a 'constraint' alora loaded."
-                )
-        # Construct the linearized context. This is very similar to normal generation.
-        linearized_ctx = ctx.render_for_generation()
-        assert linearized_ctx is not None and len(linearized_ctx) > 1
-        msgs = self.formatter.to_chat_messages(linearized_ctx)
-        user_message, assistant_message = msgs[-2].content, msgs[-1].content
-        assert alora_for_this_request is not None
-        assert type(user_message) is str
-        assert type(assistant_message) is str
-        assert format is None, "Structured outputs are not supported by ALoRAs."
-        alora_output = alora_for_this_request.generate_using_strings(
-            input=user_message,
-            response=assistant_message,
-            constraint=action.description,  # type: ignore
-        )
-
-        if generate_logs is not None:
-            mess = user_message.replace("\n", "\\n")
-            assist_mess = assistant_message.replace("\n", "\\n")
-            log = GenerateLog(
-                prompt=f"aLora(name='{alora_for_this_request.name}', input='{mess}', response='{assist_mess}', constraint='{action.description}') ",  # type: ignore
-                result=ModelOutputThunk(alora_output),
-                model_options=model_options,
-                date=datetime.datetime.now(),
-            )
-            generate_logs.append(log)
-
-        return self.formatter.parse(
-            action,
-            ModelOutputThunk(
-                alora_output, meta={"alora_name": alora_for_this_request.name}
-            ),
         )
 
     def _generate_from_context_standard(
@@ -399,20 +299,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 chat_output.sequences[0, input_ids.shape[1] :], skip_special_tokens=True
             )
 
-            # Add an entry to the cache for ALora reuse.
-            if self._use_caches:
-                output_complete = chat_output.sequences[0]
-                cache: DynamicCache = chat_output.past_key_values
 
-                cache_info = HFAloraCacheInfo(
-                    kv_cache=cache,
-                    merged_token_ids=output_complete,
-                    merged_attention=torch.ones_like(output_complete).to(self._device),
-                    q_end=len(input_ids[0]),
-                )
-
-                assert decoded_result is not None
-                self.cache_put(decoded_result, cache_info)
         else:
             raise Exception("Does not yet support non-chat contexts.")
 
@@ -531,18 +418,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
         return results
 
-    # region cache management
-    def cache_get(self, id: str) -> HFAloraCacheInfo | None:
-        """Retrieve from cache."""
-        v = self._cache.get(id)
-        assert v is None or type(v) is HFAloraCacheInfo
-        return v
-
-    def cache_put(self, id: str, v: HFAloraCacheInfo):
-        """Put into cache."""
-        self._cache.put(id, v)
-
-    # endregion
 
     def _simplify_and_merge(
         self, model_options: dict[str, Any] | None
@@ -618,69 +493,5 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             return model_tool_calls
         return None
 
-    # region ALora loading, unloading, and utility functions.
-    def add_alora(self, alora: HFAlora):
-        """Loads an ALora for this backend.
-
-        Args:
-            alora (str): identifier for the ALora adapter
-        """
-        from alora.peft_model_alora import aLoRAPeftModelForCausalLM  # type: ignore
-
-        assert issubclass(alora.__class__, HFAlora), (
-            f"cannot add an ALora of type {alora.__class__} to model; must inherit from {HFAlora.__class__}"
-        )
-        assert alora._backend == self, "Cannot load an ALora into the wrong backend."
-
-        if self.get_alora(alora.name) is not None:
-            FancyLogger.get_logger().warning(
-                f"Client code attempted to add {alora.name} but {alora.name} was already added to {self.__class__}. The backend is refusing to do this, because ALora loading is not idempotent."
-            )
-            return None
-
-        if self.alora_model is None:
-            base_model = self._model
-            self.alora_model = aLoRAPeftModelForCausalLM.from_pretrained(
-                base_model, alora.path_or_model_id, alora.name
-            )
-        else:
-            self.alora_model.load_adapter(alora.path_or_model_id, alora.name)
-
-        self._aloras[alora.name] = alora
-
-    def get_alora(self, alora_name: str) -> Alora | None:
-        """Returns the ALora by name, or None if that ALora isn't loaded."""
-        return self._aloras.get(alora_name)
-
-    def get_aloras(self) -> list[Alora]:
-        """Returns a list of all loaded ALora adapters."""
-        return list(self._aloras.values())
-
-    # endregion
 
 
-class HFAlora(Alora, abc.ABC):
-    """ALoras that work with the local huggingface backend."""
-
-    def __init__(
-        self,
-        name: str,
-        path_or_model_id: str,
-        generation_prompt: str,
-        backend: LocalHFBackend,
-    ):
-        """Initialize an ALora that should work with huggingface backends that support ALoras.
-
-        Args:
-            name (str): An arbitrary name/label to assign to an ALora. This is irrelevant from the alora's (huggingface) model id.
-            path_or_model_id (str): A local path to ALora's weights or a Huggingface model_id to an ALora.
-            generation_prompt (str): A prompt used to "activate" the Lora. This string goes between the pre-activation context and the aLora generate call. This needs to be provided by the entity that trained the ALora.
-            backend (LocalHFBackend): Mained as a pointer to the backend to which this this ALora is attached.
-        """
-        super().__init__(name)
-        self.path_or_model_id = path_or_model_id
-        self._backend = backend
-        self._generation_prompt = generation_prompt
-        self._generation_prompt_tokens = self._backend._tokenizer(
-            self._generation_prompt, return_tensors="pt"
-        ).to(self._backend._device)
