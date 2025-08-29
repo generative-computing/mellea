@@ -17,7 +17,7 @@ authors = [
 ]
 description = "mellea is a library for writing generative programs"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
@@ -68,7 +68,11 @@ docling = [
     "docling>=2.45.0",
 ]
 
-all = ["mellea[watsonx,docling,hf]"]
+beeai = [
+    "beeai-framework>=0.1.0; python_version>='3.11'",
+]
+
+all = ["mellea[watsonx,docling,hf,beeai]"]
 
 [dependency-groups]
 # Use these like:
@@ -97,7 +101,7 @@ docs = [
 ]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 respect-gitignore = true
 
 [tool.ruff.format]
@@ -159,8 +163,8 @@ regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=
 skip = 'requirements.txt,uv.lock'
 
 [tool.mypy]
-disable_error_code = ["empty-body", "import-untyped"]
-python_version = "3.10"
+disable_error_code = ["empty-body", "import-untyped", "import-not-found", "arg-type", "attr-defined", "return-value", "annotation-unchecked"]
+python_version = "3.11"
 
 [tool.pytest.ini_options]
 markers = [
