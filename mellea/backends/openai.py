@@ -4,6 +4,7 @@ import abc
 import datetime
 import inspect
 import json
+import re
 from collections.abc import Callable
 from enum import Enum
 from typing import TYPE_CHECKING, Any
@@ -13,7 +14,7 @@ import openai
 import requests
 from huggingface_hub import snapshot_download
 from openai.types.chat import ChatCompletion
-from openai.types.completion import Completion
+from openai.types.completion import Completion, CompletionUsage
 
 import mellea.backends.model_ids as model_ids
 from mellea.backends import BaseModelSubclass
@@ -37,7 +38,6 @@ from mellea.stdlib.base import (
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
-import re
 
 if TYPE_CHECKING:
     from transformers.tokenization_utils import PreTrainedTokenizer
@@ -482,7 +482,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         answer_suffix: str = "The final answer is:",
         answer_regex: str = "boxed",
         model_options: dict | None = None,
-    ) -> list[ModelOutputThunk]:
+    ) -> tuple[str, int]:
         """Generate with budget forcing using the completions APIs. This relies on raw autocompletion and assumes the model's output is structured in the following form: '<think> ... </think> summary answer'
         The budget forcing method is proposed in the paper: https://arxiv.org/abs/2501.19393
         This implementation tries to follow the key outlines in the paper while ensuring stable and fail-safe operation.
@@ -520,7 +520,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             model_opts, is_chat_context=False
         )
         # Generate thinking portion
-        max_tok_thd = 1.0
         # backend_opts["echo"] = True
         # backend_opts["logprobs"] = 1
         backend_opts["n"] = 1
@@ -531,7 +530,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
         # think block indefinite multi-step operation to satisfy user's budget
         while True:
-
             if rem_toks <= 0:  # zero-think case
                 break
 
@@ -540,7 +538,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
             backend_opts["max_tokens"] = rem_toks
             try:
-                completion_response: Completion = self._client.completions.create(
+                completion_response = self._client.completions.create(
                     model=self._hf_model_id, prompt=curr_prompt, **backend_opts
                 )  # type: ignore
             except openai.BadRequestError as e:
@@ -551,6 +549,8 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                     )
                 raise e
 
+            # Necessary for type checker.
+            assert isinstance(completion_response.usage, CompletionUsage)
             gen_tok_count += completion_response.usage.completion_tokens
             rem_toks = think_max_tokens - gen_tok_count
             response = completion_response.choices[0].text
@@ -586,9 +586,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         # The think block, but we will use relaxed requirement of finding any answer in the model's response.
         # Consider a strict structural approach in the future.
         # e.g.
-        # ans_portion = response.split(end_think_token)[-1]
-        # if answer_regex in ans_portion:
-        #     return response, gen_tok_count
+        # answer_blk = response.split(end_think_token)[-1]
 
         # Check if answer in response
         matches = re.findall(answer_regex, response, re.DOTALL)
@@ -611,10 +609,10 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             backend_opts["max_tokens"] = answer_max_tokens
 
         else:
-            backend_opts.pop("max_tokens", None)   # generate unconditionally
+            backend_opts.pop("max_tokens", None)  # generate unconditionally
 
         try:
-            completion_response: Completion = self._client.completions.create(
+            completion_response = self._client.completions.create(
                 model=self._hf_model_id, prompt=prompt, **backend_opts
             )  # type: ignore
         except openai.BadRequestError as e:
@@ -625,6 +623,8 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                 )
             raise e
 
+        # Necessary for type checker.
+        assert isinstance(completion_response.usage, CompletionUsage)
         response += completion_response.choices[0].text
         gen_tok_count += completion_response.usage.completion_tokens
         return response, gen_tok_count
