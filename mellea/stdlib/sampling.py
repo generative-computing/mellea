@@ -48,6 +48,7 @@ class SamplingResult(CBlock):
         self.success = success
         self.sample_generations = sample_generations
         self.sample_validations = sample_validations
+        self.sample_actions = sample_actions
 
 
 class SamplingStrategy(abc.ABC):
