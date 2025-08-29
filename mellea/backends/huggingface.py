@@ -272,10 +272,20 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             ),
         )
 
-    _cached_blocks = {}
-    _cached_toks = {}
+    _cached_blocks: dict[str, DynamicCache] = dict()
 
-    def _generate_from_context_with_kv_cache(
+    def _make_dc_cache(self, toks, **model_options):
+        dc = DynamicCache()
+        with torch.no_grad():
+            dc = self._model(
+                toks["input_ids"].to(self._device),
+                attention_mask=toks["attention_mask"].to(self._device),
+                past_key_values=dc,
+                **model_options,
+            ).past_key_values
+        return dc
+
+    def _generate_from_context_with_kv_cache(  # noqa: C901
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -372,9 +382,16 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             for c in linearized_ctx:
                 match c:
                     case CBlock() if c.cache:
-                        if c.value not in self._cached_blocks:
-                            FancyLogger.get_logger().info(f"Caching {hash(c.value)}")
-                            tokens = self._tokenizer(c.value)
+                        assert c.value is not None
+                        if c.value in self._cached_blocks:
+                            FancyLogger.get_logger().info(
+                                f"KV CACHE HIT for: {hash(c.value)} ({c.value[:3]}..{c.value[-3:]})"  # type: ignore
+                            )
+                        else:
+                            FancyLogger.get_logger().debug(
+                                f"HF backend is caching a CBlock with hashed contents: {hash(c.value)} ({c.value[:3]}..{c.value[-3:]})"
+                            )
+                            tokens = self._tokenizer(c.value, return_tensors="pt")
                             dc = DynamicCache()
                             with torch.no_grad():
                                 dc = self._model(
@@ -383,15 +400,16 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                                         self._device
                                     ),  # type: ignore
                                     past_key_values=dc,
+                                    use_cache=True,
                                 ).past_key_values
-                            legacy_cache = dc.to_legacy_cache()
-                            self._cached_blocks[c.value] = legacy_cache
-                            self._cached_toks[c.value] = tokens
+                            self._cached_blocks[c.value] = dc
                             cached_block_keys.append(c.value)
                     case _:
                         continue
 
-            # 3. apply the chat template without tokenization.
+            # 3. apply the chat template WITHOUT tokenization.
+            # Doing this without tokenization and then gluing together the tokens is necessary because
+            # things that KV cache together must tokenize together.
             input_text = self._tokenizer.apply_chat_template(  # type: ignore
                 ctx_as_conversation,
                 tools=convert_tools_to_json(tools),  # type: ignore
@@ -399,61 +417,80 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 tokenize=False,
             )
 
-            # 4. split on cache hits
-            parts: list[str | tuple[DynamicCache, Any]] = [input_text]
+            # 4. split the input_text back up again, re-using DC where it exists.
+            str_parts = []
+            tok_parts = []
+            dc_parts = []
+            current_suffix = input_text
             for key in cached_block_keys:
-                next_split = parts.pop()
-                parts_split = next_split.split(key)
-                assert len(parts_split) == 2, (
+                assert key is not None, (
+                    "Some input CBlock must not have bee ncomputed yet? The error comes far before this line."
+                )
+                assert key in current_suffix, (
+                    "Could happen but would be rare. related to the other assert in this block."
+                )
+                parts = current_suffix.split(key)  # type: ignore
+                assert len(parts) == 2, (
                     "Known issue: cached substring might occur more than once. We need to handle this situation earlier. Notice if this happens and keep a count."
                 )
-                parts.append(parts_split[0])
-                parts.append((self._cached_blocks[key], self._cached_toks[key]))
-                parts.append(parts_split[1])
+                prefix, suffix = parts
+                # Add the prefix, if any, to str+tok+dc parts.
+                if prefix != "":
+                    FancyLogger.get_logger().debug(
+                        f"Doing a forward pass on uncached block which is prefix to a cached CBlock: {prefix[:3]}.{len(prefix)}.{prefix[-3:]}"
+                    )
+                    str_parts.append(prefix)
+                    tok_parts.append(self._tokenizer(prefix, return_tensors="pt"))
+                    dc_parts.append(self._make_dc_cache(tok_parts[-1]))
+                # Add the cached CBlock to str+tok+dc parts.
+                FancyLogger.get_logger().debug(
+                    f"Replacing a substring with previously computed/retrieved cache with hahs value {hash(key)} ({key[:3]}..{key[-3:]})"
+                )
+                # str_parts.append(key)
+                # tok_parts.append(self._tokenizer(key, return_tensors="pt"))
+                # dc_parts.append(self._make_dc_cache(tok_parts[-1])) # TODO this is wrong.
+                str_parts.append(key)
+                tok_parts.append(self._tokenizer(key, return_tensors="pt"))
+                dc_parts.append(self._cached_blocks[key])
+                # set the suffix for the next loop iteration.
+                current_suffix = suffix
+            # "base" case: the final suffix.
+            if current_suffix != "":
+                FancyLogger.get_logger().debug(  # type: ignore
+                    f"Doing a forward pass on final suffix, an uncached block: {current_suffix[:3]}.{len(current_suffix)}.{current_suffix[-3:]}"  # type: ignore
+                )  # type: ignore
+                str_parts.append(current_suffix)
+                tok_parts.append(self._tokenizer(current_suffix, return_tensors="pt"))
+                dc_parts.append(self._make_dc_cache(tok_parts[-1]))
 
-            # 5. prefill + smash together everything.
-            prefilled: Any | None = None
-            parts_tokens: list[Any] = []
-            for part in parts:
-                if type(part) is str:
-                    part_toks = self._tokenizer(
-                        part,
-                        return_tensors="pt",
-                        **self._make_backend_specific_and_remove(model_options),
-                    )
-                    parts_tokens.append(part_toks)
-                    part_legacy_cache = kv_block_helpers.tokens_to_legacy_cache(
-                        self._model, self._device, part_toks
-                    )
-                    prefilled = (
-                        part_legacy_cache
-                        if prefilled is None
-                        else kv_block_helpers.legacy_cache_smash(
-                            prefilled, part_legacy_cache
-                        )
-                    )
-                else:
-                    parts_tokens.append(part[1])
-                    prefilled = (
-                        part[0]
-                        if prefilled is None
-                        else kv_block_helpers.legacy_cache_smash(
-                            prefilled, part_legacy_cache
-                        )
-                    )
+            # Smash together the caches, the input_ids, and the attention masks.
+            assert "".join(str_parts) == input_text, (
+                "Should've ended up with the same input text!"
+            )
+            input_ids = torch.cat([toks["input_ids"] for toks in tok_parts], dim=1)
+            attention_mask = torch.cat(
+                [toks["attention_mask"] for toks in tok_parts], dim=1
+            )
+            assert input_ids.shape == attention_mask.shape
+            merged_cache: DynamicCache = kv_block_helpers.merge_dynamic_caches(dc_parts)
+            # TODO: also assert that the merged cached is the correct shape given the input_ids and attention_mask shapes.
 
-            # also smash together the tokens.
-            input_ids = torch.cat([toks["input_ids"] for toks in parts_tokens], dim=1)
+            # rewind merged cache by 1 for safety.
+            merged_cache.crop(-1)
 
             if format is None:
                 chat_output = self._model.generate(  # type: ignore
-                    input_ids,
+                    input_ids.to(self._device),
+                    attention_mask=attention_mask.to(self._device),
+                    use_cache=True,
+                    past_key_values=merged_cache,
                     return_dict_in_generate=True,
                     output_scores=True,
                     **self._make_backend_specific_and_remove(model_options),
                 )  # type: ignore
 
             else:
+                raise NotImplementedError("Copy implementation from above.")
                 # outlines.generate.json always parses the resulting json into a python dict.
                 # We however want to keep it as a json string for later storing it in ModelOutputThunk
                 schema: dict[str, Any] = format.model_json_schema()
