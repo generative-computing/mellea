@@ -7,17 +7,19 @@ from mellea import MelleaSession
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
 from mellea.backends.types import ModelOption
-from mellea.helpers.prompt_modules import (
+from mellea.helpers.prompt_modules.decompose import (
     constraint_extractor,
     subtask_constraint_assign,
     subtask_list,
     subtask_prompt_generator,
 )
-from mellea.helpers.prompt_modules.subtask_constraint_assign import (
+from mellea.helpers.prompt_modules.decompose.subtask_constraint_assign import (
     SubtaskPromptConstraintsItem,
 )
-from mellea.helpers.prompt_modules.subtask_list import SubtaskItem
-from mellea.helpers.prompt_modules.subtask_prompt_generator import SubtaskPromptItem
+from mellea.helpers.prompt_modules.decompose.subtask_list import SubtaskItem
+from mellea.helpers.prompt_modules.decompose.subtask_prompt_generator import (
+    SubtaskPromptItem,
+)
 
 
 class DecompSubtasksResult(TypedDict):
@@ -47,7 +49,7 @@ def decompose(
     user_input_variable: list[str] | None = None,
     model_id: str = "mistral-small3.2:latest",
     backend: DecompBackend = DecompBackend.ollama,
-    backend_req_timeout: int = 3600,
+    backend_req_timeout: int = 300,
     backend_endpoint: str | None = None,
     backend_api_key: str | None = None,
 ) -> DecompPipelineResult:

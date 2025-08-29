@@ -51,9 +51,9 @@ def run(
     backend_req_timeout: Annotated[
         int,
         typer.Option(
-            help='Time (in seconds) for timeout to be passed on the model inference requests. Defaults to "3600"'
+            help='Time (in seconds) for timeout to be passed on the model inference requests. Defaults to "300"'
         ),
-    ] = 3600,
+    ] = 300,
     backend_endpoint: Annotated[
         str | None,
         typer.Option(
