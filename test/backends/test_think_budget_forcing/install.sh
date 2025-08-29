@@ -2,7 +2,7 @@
 
 ENV_NAME=mellea_tbf
 conda env remove -y -n $ENV_NAME || true
-conda env create -f $(readlink -ef $(dirname $0))/environment.yml
+conda env create -f $(readlink -f $(dirname $0))/environment.yml
 
 in-conda (){
     conda run -n $ENV_NAME $@

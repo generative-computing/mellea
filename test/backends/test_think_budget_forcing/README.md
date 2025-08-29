@@ -11,8 +11,8 @@ vllm could get stuck due to deadlock if so.
 
 ## Installation
 
-Needs to be done only once.
-I creates a new conda environment named "mallea_tbf" only for the purposes of testing or contributing to the think budget-forcing feature.
+Run the `install.sh` script, which needs to be done only once.
+The script creates a new conda environment named "mellea_tbf" only for the purposes of testing or contributing to the think budget-forcing feature.
 
 Run `./install.sh`
 
