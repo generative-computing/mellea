@@ -1,0 +1,18 @@
+Your task is to analyze and understand the poetic content provided in the task prompt. Follow these steps to accomplish your task:
+
+First, carefully read the poetic content provided below:
+<poetic_content>
+Give me a fragmented and broken body, and the endless moonlight over the frosty wilderness. The suffering prayer flags rustling in my ears. Worship the precipitous cliffs, I still remember the grand sound of the insects in vain. Cross the cold water plains the remaining fire is vast, put a lamp by my soul\u2019s table, for the hope thereafter.
+</poetic_content>
+
+Next, break down the poetic content into its key components:
+- Identify the main themes and emotions conveyed in the poem.
+- Understand the imagery and symbolism used in the poem.
+- Analyze the tone and mood of the poem.
+
+Consider the implications of each component:
+- What emotions does the poem evoke?
+- What symbols and metaphors are used, and what do they represent?
+- What is the overall message or meaning of the poem?
+
+Finally, summarize your analysis to ensure you have a clear understanding of the poetic content. This summary will serve as the basis for the next steps in drafting the appreciations.

@@ -1,0 +1,1 @@
+In the development of a medical imaging device like SkinSpect\u2122, which uses hyperspectral imaging for early melanoma detection, what are the key components that need to be integrated to ensure the device operates effectively?

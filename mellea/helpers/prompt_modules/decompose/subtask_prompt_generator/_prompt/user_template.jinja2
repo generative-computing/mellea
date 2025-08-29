@@ -1,0 +1,18 @@
+Here are the 4 parameters inside their respective tags, now I need you to write only the <subtask_prompt_template> for this target subtask:
+
+<entire_task_prompt>
+{{ task_prompt }}
+</entire_task_prompt>
+<execution_plan>
+{%- for step in execution_plan %}
+{{ step }}
+{%- endfor %}
+</execution_plan>
+<available_content_variables>
+{%- for variable in available_content_variables %}
+{{ variable }}
+{%- endfor %}
+</available_content_variables>
+<target_subtask>
+{{ target_subtask }}
+</target_subtask>

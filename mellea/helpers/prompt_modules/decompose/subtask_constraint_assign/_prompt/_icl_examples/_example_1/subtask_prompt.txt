@@ -1,0 +1,15 @@
+You are tasked with receiving and validating input data, then extracting relevant information to generate personas for Design Thinking sessions.
+
+To approach this task, first, you must analyze the received input data below:
+<input_data>
+{{INPUT_DATA}}
+</input_data>
+
+Next, you must validate the input data to ensure it is accurate and relevant for generating personas.
+Ensure that the input data content is safe, unbiased, and positive. Check for any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. If you detect any such content, flag it immediately and do not proceed with generating personas.
+
+After validation, you will extract relevant information. The input data can contain user details, market research, customer feedback, and etc.
+
+You can use the extracted information to identify patterns, trends, and insights that will help you generate fictional, yet realistic, personas for Design Thinking sessions.
+
+Finally, you must compile the relevant data combined with your insights to write your final answer. Your answer will serve as basis for the next steps.

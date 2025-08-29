@@ -71,7 +71,7 @@ def serve(
     host: str = typer.Option("0.0.0.0", help="Host to bind to"),
     port: int = typer.Option(8080, help="Port to bind to"),
 ):
-    """Serve a FastAPI endpoint for the given script."""
+    """Serve a FastAPI endpoint for a given script."""
     module = load_module_from_path(script_path)
     route_path = "/v1/chat/completions"
 

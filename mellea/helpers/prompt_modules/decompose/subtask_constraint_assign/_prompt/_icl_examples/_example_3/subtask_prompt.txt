@@ -1,0 +1,48 @@
+Your task is to rewrite the generated personas using the Markdown format and respecting the provided constraints. Follow these steps to accomplish your task:
+
+First, review the generated personas from the previous step:
+<generated_personas>
+{{PERSONA_GENERATION}}
+</generated_personas>
+
+Next, ensure that each persona includes the following properties:
+- **Name**
+- **Age**
+- **Occupation**
+- **Demographics**
+- **Goals**
+- **Behaviors**
+- **Pain Points**
+- **Motivations**
+
+Use Markdown formatting to present the personas in a clear and organized way. You can use headings, lists, and bold text to make the personas easy to read and understand.
+
+Here is an example structure to guide your writing:
+
+```markdown
+## Persona 1
+
+- **Name**: [Name]
+- **Age**: [Age]
+- **Occupation**: [Occupation]
+- **Demographics**: [Demographics]
+- **Goals**: [Goals]
+- **Behaviors**: [Behaviors]
+- **Pain Points**: [Pain Points]
+- **Motivations**: [Motivations]
+
+## Persona 2
+
+- **Name**: [Name]
+- **Age**: [Age]
+- **Occupation**: [Occupation]
+- **Demographics**: [Demographics]
+- **Goals**: [Goals]
+- **Behaviors**: [Behaviors]
+- **Pain Points**: [Pain Points]
+- **Motivations**: [Motivations]
+```
+
+Ensure that the personas are presented in a comprehensive and clear manner, adhering to the Markdown formatting guidelines provided in the original task prompt.
+
+Finally, rewrite the generated personas using the Markdown format and respecting the provided constraints.
