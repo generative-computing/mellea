@@ -48,6 +48,7 @@ class SamplingResult(CBlock):
         self.success = success
         self.sample_generations = sample_generations
         self.sample_validations = sample_validations
+        self.sample_actions = sample_actions
 
 
 class SamplingStrategy(abc.ABC):
@@ -153,7 +154,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         sampled_actions: list[Component],
         sampled_results: list[ModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
-    ):
+    ) -> int:
         """This function returns the index of the result that should be selected as `.value` iff the loop budget is exhausted and no success.
 
         Args:
@@ -356,17 +357,17 @@ class MultiTurnStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def repair(
-        context: Context,
+        ctx: Context,
         past_actions: list[Component],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> Component:
-        assert isinstance(context, LinearContext), (
+        assert isinstance(ctx, LinearContext), (
             " Need linear context to run agentic sampling."
         )
 
         # add failed execution to chat history
-        context.insert_turn(ContextTurn(past_actions[-1], past_results[-1]))
+        ctx.insert_turn(ContextTurn(past_actions[-1], past_results[-1]))
 
         last_failed_reqs: list[Requirement] = [s[0] for s in past_val[-1] if not s[1]]
         last_failed_reqs_str = "* " + "\n* ".join(

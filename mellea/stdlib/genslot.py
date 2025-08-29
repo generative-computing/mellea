@@ -9,7 +9,7 @@ from typing import Any, Generic, ParamSpec, TypedDict, TypeVar, get_type_hints
 from pydantic import BaseModel, Field, create_model
 
 from mellea.stdlib.base import Component, TemplateRepresentation
-from mellea.stdlib.session import get_session
+from mellea.stdlib.session import MelleaSession, get_session
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -154,7 +154,7 @@ class GenerativeSlot(Component, Generic[P, R]):
 
     def __call__(
         self,
-        m=None,
+        m: MelleaSession | None = None,
         model_options: dict | None = None,
         *args: P.args,
         **kwargs: P.kwargs,
@@ -180,13 +180,11 @@ class GenerativeSlot(Component, Generic[P, R]):
 
         response_model = create_response_format(self._function._func)
 
-        response = m.genslot(
-            slot_copy, model_options=model_options, format=response_model
-        )
+        response = m.act(slot_copy, format=response_model, model_options=model_options)
 
         function_response: FunctionResponse[R] = response_model.model_validate_json(
-            response.value
-        )  # type: ignore
+            response.value  # type: ignore
+        )
 
         return function_response.result
 
