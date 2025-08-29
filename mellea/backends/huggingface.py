@@ -10,9 +10,8 @@ import dataclasses
 import datetime
 import inspect
 import json
-import os
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import outlines
 import outlines_core
@@ -32,8 +31,9 @@ from mellea.backends.cache import Cache, SimpleLRUCache
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.tools import (
+    add_tools_from_context_actions,
+    add_tools_from_model_options,
     convert_tools_to_json,
-    get_tools_from_action,
     parse_tools,
 )
 from mellea.backends.types import ModelOption
@@ -45,7 +45,6 @@ from mellea.stdlib.base import (
     GenerateLog,
     ModelOutputThunk,
     ModelToolCall,
-    TemplateRepresentation,
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
@@ -620,28 +619,15 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                         f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                     )
                 else:
-                    if isinstance(action, Component) and isinstance(
-                        action.format_for_llm(), TemplateRepresentation
-                    ):
-                        tools = get_tools_from_action(action)
+                    add_tools_from_model_options(tools, model_options)
+                    add_tools_from_context_actions(
+                        tools, ctx.actions_for_available_tools()
+                    )
 
-                    model_options_tools = model_options.get(ModelOption.TOOLS, None)
-                    if model_options_tools is not None:
-                        assert isinstance(model_options_tools, dict)
-                        for fn_name in model_options_tools:
-                            # invariant re: relationship between the model_options set of tools and the TemplateRepresentation set of tools
-                            assert fn_name not in tools.keys(), (
-                                f"Cannot add tool {fn_name} because that tool was already defined in the TemplateRepresentation for the action."
-                            )
-                            # type checking because ModelOptions is an untyped dict and the calling convention for tools isn't clearly documented at our abstraction boundaries.
-                            assert type(fn_name) is str, (
-                                "When providing a `ModelOption.TOOLS` parameter to `model_options`, always used the type Dict[str, Callable] where `str` is the function name and the callable is the function."
-                            )
-                            assert callable(model_options_tools[fn_name]), (
-                                "When providing a `ModelOption.TOOLS` parameter to `model_options`, always used the type Dict[str, Callable] where `str` is the function name and the callable is the function."
-                            )
-                            # Add the model_options tool to the existing set of tools.
-                            tools[fn_name] = model_options_tools[fn_name]
+                    # Add the tools from the action for this generation last so that
+                    # they overwrite conflicting names.
+                    add_tools_from_context_actions(tools, [action])
+                FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
             seed = model_options.get(ModelOption.SEED, None)
             if seed is not None:

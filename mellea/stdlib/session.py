@@ -293,15 +293,17 @@ class MelleaSession:
             generate_logs[0].is_final_result = True
         else:
             if strategy.validate is None:
-                strategy.validate = lambda reqs, output: self.validate(  # type: ignore
+                strategy.validate = lambda reqs, val_ctx, output: self.validate(  # type: ignore
                     reqs,
                     output=output,  # type: ignore
                 )  # type: ignore
             if strategy.generate is None:
                 strategy.generate = (
-                    lambda instruction, g_logs: self.backend.generate_from_context(
+                    lambda instruction,
+                    gen_ctx,
+                    g_logs: self.backend.generate_from_context(
                         instruction,
-                        ctx=self.ctx,
+                        ctx=gen_ctx,
                         format=format,
                         model_options=model_options,
                         generate_logs=g_logs,
@@ -310,7 +312,9 @@ class MelleaSession:
                 )
 
             # sample
-            res = strategy.sample(i, generate_logs=generate_logs)
+            res = strategy.sample(
+                i, self.ctx, i.requirements, generate_logs=generate_logs
+            )
 
             # make sure that one Log is marked as the one related to res.result
             if res.success:
