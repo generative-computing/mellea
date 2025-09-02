@@ -29,11 +29,6 @@ from transformers import (
 from mellea.backends import BaseModelSubclass
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
-from mellea.backends.tools import (
-    convert_tools_to_json,
-    get_tools_from_action,
-    parse_tools,
-)
 from mellea.backends.types import ModelOption
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
@@ -42,7 +37,6 @@ from mellea.stdlib.base import (
     Context,
     GenerateLog,
     ModelOutputThunk,
-    ModelToolCall,
     TemplateRepresentation,
 )
 from mellea.stdlib.chat import Message
@@ -163,6 +157,8 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
         # TODO: insert the alora code here.
 
+        assert not tool_calls
+
         return self._generate_from_context_standard(
             action,
             ctx,
@@ -216,37 +212,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                     "content": system_prompt,
                 }
                 ctx_as_conversation.insert(0, system_msg)
-
-            # Append tool call information if applicable.
-            tools: dict[str, Callable] = dict()
-            if tool_calls:
-                if format:
-                    FancyLogger.get_logger().warning(
-                        f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
-                    )
-                else:
-                    if isinstance(action, Component) and isinstance(
-                        action.format_for_llm(), TemplateRepresentation
-                    ):
-                        tools = get_tools_from_action(action)
-
-                    model_options_tools = model_options.get(ModelOption.TOOLS, None)
-                    if model_options_tools is not None:
-                        assert isinstance(model_options_tools, dict)
-                        for fn_name in model_options_tools:
-                            # invariant re: relationship between the model_options set of tools and the TemplateRepresentation set of tools
-                            assert fn_name not in tools.keys(), (
-                                f"Cannot add tool {fn_name} because that tool was already defined in the TemplateRepresentation for the action."
-                            )
-                            # type checking because ModelOptions is an untyped dict and the calling convention for tools isn't clearly documented at our abstraction boundaries.
-                            assert type(fn_name) is str, (
-                                "When providing a `ModelOption.TOOLS` parameter to `model_options`, always used the type Dict[str, Callable] where `str` is the function name and the callable is the function."
-                            )
-                            assert callable(model_options_tools[fn_name]), (
-                                "When providing a `ModelOption.TOOLS` parameter to `model_options`, always used the type Dict[str, Callable] where `str` is the function name and the callable is the function."
-                            )
-                            # Add the model_options tool to the existing set of tools.
-                            tools[fn_name] = model_options_tools[fn_name]
 
             seed = model_options.get(ModelOption.SEED, None)
             if seed is not None:
@@ -307,10 +272,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
         result = ModelOutputThunk(value=decoded_result)
 
-        # Only scan for tools if we are not doing structured decoding and tool calls were provided to the model.
-        if format is None and tool_calls:
-            result.tool_calls = self._extract_model_tool_requests(tools, decoded_result)
-
         parsed_result = self.formatter.parse(action, result)
         if generate_logs is not None:
             assert isinstance(generate_logs, list)
@@ -322,7 +283,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             generate_log.model_output = decoded_result
             generate_log.extra = {
                 "format": format,
-                "tools_available": tools,
+                "tools_available": False,
                 "tools_called": result.tool_calls,
                 "seed": seed,
             }
@@ -468,30 +429,4 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             model_options, self.from_mellea_model_opts_map
         )
         return ModelOption.remove_special_keys(backend_specific)
-
-    def _extract_model_tool_requests(
-        self, tools: dict[str, Callable], decoded_result: str
-    ) -> dict[str, ModelToolCall] | None:
-        model_tool_calls: dict[str, ModelToolCall] = dict()
-        for tool_name, tool_args in parse_tools(decoded_result):
-            func = tools.get(tool_name)
-            if func is None:
-                FancyLogger.get_logger().warning(
-                    f"model attempted to call a non-existing function: {tool_name}"
-                )
-                continue
-
-            # Clean up the function args slightly. Some models seem to
-            # hallucinate parameters when none are required.
-            sig = inspect.signature(func)
-            if len(sig.parameters) == 0:
-                tool_args = {}
-
-            model_tool_calls[tool_name] = ModelToolCall(tool_name, func, tool_args)
-
-        if len(model_tool_calls) > 0:
-            return model_tool_calls
-        return None
-
-
 
