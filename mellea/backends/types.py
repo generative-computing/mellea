@@ -17,6 +17,8 @@ class ModelOption:
     """
 
     TOOLS = "@@@tools@@@"
+    """Must be a list of callables or a dict[str, Callable]."""
+
     MAX_NEW_TOKENS = "@@@max_new_tokens@@@"
     SYSTEM_PROMPT = "@@@system_prompt@@@"
     TEMPERATURE = "temperature"
