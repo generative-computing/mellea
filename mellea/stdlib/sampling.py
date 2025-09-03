@@ -7,7 +7,13 @@ from typing import Any
 import tqdm
 
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import CBlock, GenerateLog, ModelOutputThunk
+from mellea.stdlib.base import (
+    CBlock,
+    ContextTurn,
+    GenerateLog,
+    ModelOutputThunk,
+    SimpleContext,
+)
 from mellea.stdlib.instruction import Instruction
 from mellea.stdlib.requirement import Requirement, ValidationResult
 
@@ -216,4 +222,117 @@ class RejectionSamplingStrategy(SamplingStrategy):
             success=False,
             sample_generations=failed_results,
             sample_validations=failed_scores,
+        )
+
+
+class BestofNSamplingStrategy(SamplingStrategy):
+    """Sampling strategy that selects the best sample based on validator score."""
+
+    def __init__(
+        self,
+        *,
+        loop_budget: int = 1,
+        validate: Callable[[list[Requirement], Any], list[ValidationResult]]
+        | None = None,
+        generate: (
+            Callable[[Instruction, list[GenerateLog] | None], ModelOutputThunk] | None
+        ) = None,
+        requirement: Requirement,
+    ):
+        """Initialize a new instance of the class with default parameters.
+
+        Args:
+            loop_budget: Number of times to iterate through the process. Must be greater than 0.
+            validate: Function to score the results. If None, validation is provided later through setter.
+            generate: Function to generate new model output thunks. If None, generate is provided later through setter.
+            requirements: Requirement used to test best of N. Requires a single requirement.
+
+        Raises:
+            AssertionError: If loop_budget is not greater than 0.
+        """
+
+        assert loop_budget > 0, "Loop budget must be at least 1."
+        self.loop_budget = loop_budget
+        self.validate = validate  # it's ok to be None here
+        self.generate = generate  # it's ok to be None here
+
+        assert requirement is not None, (
+            "Best-of-N Sampling needs a single requirement for selecting responses"
+        )
+        self.requirement = requirement
+
+    def sample(
+        self,
+        instruction: Instruction,
+        *,
+        show_progress: bool = True,
+        generate_logs: list[GenerateLog] | None = None,
+    ) -> SamplingResult:
+        """This method performs a sampling operation based on the given instruction.
+
+        Args:
+            instruction: The Instruction object containing the instruction to generate a valid model output thunk.
+            show_progress: if true, a tqdm progress bar is used. Otherwise messages will still be sent to flog.
+            generate_logs: If provided, the generations will be logged.
+
+        Returns:
+            SamplingResult: A result object indicating the success or failure of the sampling process.
+
+        Raises:
+            AssertionError: Asserts that all required components (validate, and generate) are provided before proceeding with the sampling.
+        """
+
+        assert self.validate is not None, "Validation must be provided."
+        assert self.generate is not None, "Generate must be provided."
+
+        flog = FancyLogger.get_logger()
+
+        # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
+        # flag to determine whether we should show the pbar.
+        show_progress = show_progress and flog.getEffectiveLevel() <= FancyLogger.INFO
+
+        results: list[ModelOutputThunk] = []
+        val_scores_list: list[ValidationResult] = []
+        scores: list[list[tuple[Requirement, ValidationResult]]] = []
+        instructions: list[Instruction] = []
+
+        loop_count = 0
+
+        loop_budget_range_iterator = (
+            tqdm.tqdm(range(self.loop_budget))
+            if show_progress
+            else range(self.loop_budget)
+        )
+
+        for _ in loop_budget_range_iterator:  # type: ignore
+            loop_count += 1
+            if not show_progress:
+                flog.info(f"Running loop {loop_count} of {self.loop_budget}")
+
+            # run a pass
+            result = self.generate(instruction, generate_logs)
+
+            # get verifier scores
+            reqs = [self.requirement]
+            # type: ignore[call-arg]
+            val_scores = self.validate(
+                reqs=reqs,
+                output=result,
+                input=instruction._description,  # type: ignore[call-arg]
+            )
+
+            constraint_scores = list(zip(reqs, val_scores))
+
+            results.append(result)
+            val_scores_list.append(val_scores[0])
+            scores.append(constraint_scores)
+            instructions.append(instruction)
+
+        best_result, best_score = max(zip(results, val_scores_list), key=lambda x: x[1])  # type: ignore
+
+        return SamplingResult(
+            best_result,
+            success=True,
+            sample_generations=results,
+            sample_validations=scores,
         )
