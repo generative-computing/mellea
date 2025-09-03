@@ -32,6 +32,7 @@ with structured, maintainable, robust, and efficient AI workflows.
         - inference providers
         - model families
         - model sizes
+        - **BeeAI Framework** - Enterprise-grade AI orchestration with advanced tool calling
  * Easily integrate the power of LLMs into legacy code-bases (mify).
  * Sketch applications by writing specifications and letting `mellea` fill in
    the details (generative slots).
@@ -69,6 +70,8 @@ pip install mellea
 > uv pip install mellea[all] # for all the optional dependencies
 > ```
 >
+> **BeeAI backend is included by default** - no additional installation required!
+>
 > You can also install all the optional dependencies with `uv sync --all-extras`
 
 > [!NOTE]
@@ -89,7 +92,7 @@ print(m.chat("What is the etymology of mellea?").content)
 
 Then run it:
 > [!NOTE]
-> Before we get started, you will need to download and install [ollama](https://ollama.com/). Mellea can work with many different types of backends, but everything in this tutorial will "just work" on a Macbook running IBM's Granite 3.3 8B model.
+> Before we get started, you will need to download and install [ollama](https://ollama.com/). Mellea can work with many different types of backends, but everything in this tutorial will "just work" on a Macbook running IBM's Granite 3.3 2B model. The BeeAI backend automatically detects Ollama models and works seamlessly with local inference.
 ```shell
 uv run --with mellea docs/examples/tutorial/example.py
 ```
@@ -210,6 +213,79 @@ if __name__ == "__main__":
   sentiment = classify_sentiment(m, text="I love this!")
   print("Output sentiment is:", sentiment)
 ```
+
+## Getting Started with BeeAI Backend
+
+Mellea now supports the [BeeAI Framework](https://github.com/i-am-bee/beeai-framework), providing enterprise-grade AI orchestration with advanced tool calling capabilities. The BeeAI backend integrates seamlessly with Mellea's existing patterns and workflows.
+
+### Installation
+
+The BeeAI backend is included with Mellea by default. No additional installation is required.
+
+### Basic Usage
+
+```python
+from mellea.backends.beeai import BeeAIBackend
+from mellea.stdlib.session import MelleaSession
+from mellea.stdlib.base import CBlock
+
+# Initialize the BeeAI backend with local Ollama
+backend = BeeAIBackend(
+    model_id="granite3.3:2b",
+    base_url="http://localhost:11434"
+)
+
+# Create a session with the backend
+session = MelleaSession(backend=backend)
+
+# Generate text
+result = session.backend.generate_from_context(
+    action=CBlock("Write a short poem about AI"),
+    ctx=session.ctx
+)
+
+print(result.text)
+```
+
+**Note**: The BeeAI backend automatically detects Ollama models (like `granite3.3:2b`, `llama2`, `mistral`) and configures itself for local inference. No API key is required for local Ollama usage.
+
+### Advanced Features
+
+The BeeAI backend supports all Mellea features including:
+- **Structured Output**: Generate Pydantic models and structured data
+- **Tool Calling**: Advanced function calling with custom tools
+- **Model Options**: Temperature, max tokens, top-p, and more
+- **Context Management**: Full conversation history and context handling
+- **Formatting**: Jinja2 template support for complex prompts
+
+### Tool Calling Example
+
+```python
+from mellea.stdlib.base import Component, TemplateRepresentation
+
+class CalculatorComponent(Component):
+    def parts(self):
+        return []
+    
+    def format_for_llm(self):
+        return TemplateRepresentation(
+            obj=self,
+            args={"content": "Calculate 2+2"},
+            tools={"calculator": lambda x: eval(x)},
+            template_order=["*", "ContentBlock"]
+        )
+
+# Use with tool calling enabled
+result = session.backend.generate_from_context(
+    action=CalculatorComponent(),
+    ctx=session.ctx,
+    tool_calls=True
+)
+```
+
+For more examples, see [docs/examples/beeai/101_example.py](docs/examples/beeai/101_example.py).
+
+**Current Status**: The BeeAI backend is fully implemented and tested with comprehensive unit tests. It supports all Mellea features including structured output, tool calling, model options, and context management. The backend is ready for production use with proper API configuration.
 
 
 

@@ -4,6 +4,7 @@ import typer
 
 from cli.alora.commands import alora_app
 from cli.decomp.run import decompose
+from cli.gui.commands import gui_app
 from cli.serve.app import serve
 
 cli = typer.Typer(name="m", no_args_is_help=True)
@@ -25,3 +26,4 @@ cli.command(name="decompose")(decompose)
 # Add new subcommand groups by importing and adding with `cli.add_typer()`
 # as documented: https://typer.tiangolo.com/tutorial/subcommands/add-typer/#put-them-together.
 cli.add_typer(alora_app)
+cli.add_typer(gui_app)

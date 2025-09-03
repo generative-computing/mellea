@@ -25,6 +25,11 @@ class ModelOption:
     CONTEXT_WINDOW = "@@@context_window@@@"
     THINKING = "@@@thinking@@@"
     SEED = "@@@seed@@@"
+    TOP_P = "top_p"
+    TOP_K = "top_k"
+    FREQUENCY_PENALTY = "frequency_penalty"
+    PRESENCE_PENALTY = "presence_penalty"
+    STOP_SEQUENCES = "stop_sequences"
 
     @staticmethod
     def replace_keys(options: dict, from_to: dict[str, str]) -> dict[str, Any]:
