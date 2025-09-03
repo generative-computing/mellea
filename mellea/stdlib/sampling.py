@@ -381,3 +381,175 @@ class MultiTurnStrategy(BaseSamplingStrategy):
         )
 
         return next_action
+
+
+class BestofNSamplingStrategy(BaseSamplingStrategy):
+    """
+    Sampling strategy that selects the best response from a set of samples as given by a Requirement Scorer
+    """
+
+    def __init__(
+        self,
+        *,
+        loop_budget: int = 1,
+        validate: Callable[[list[Requirement], Context, Any], list[ValidationResult]]
+        | None = None,
+        generate: (
+            Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
+            | None
+        ) = None,
+        requirements: list[Requirement],
+    ):
+        """Initialize a new instance of the class with default parameters.
+
+        Args:
+            loop_budget: Number of times to iterate through the process. Must be greater than 0.
+            validate: Function to validate the results against requirements. If None, validation is provided later through setter.
+            generate: Function to generate new model output thunks. If None, generate is provided later through setter.
+            requirements: List of requirements to test against. If None, test all requirements attached to the given instruction.
+
+        Raises:
+            AssertionError: If loop_budget is not greater than 0.
+            AssertionError: If there is more/less than one requirements
+        """
+        super().__init__(
+            loop_budget=loop_budget,
+            validate=validate,
+            generate=generate,
+            requirements=requirements,
+        )
+
+        self.requirements = requirements
+        assert len(self.requirements) == 1
+
+    def sample(
+        self,
+        action: Component,
+        context: Context,
+        requirements: list[Requirement],
+        *,
+        show_progress: bool = True,
+        generate_logs: list[GenerateLog] | None = None,
+        validation_ctx: Context | None = None,
+    ) -> SamplingResult:
+        """This method performs a sampling operation based on the given instruction.
+
+        Args:
+            action : The action object to be sampled.
+            context: The context to be passed to the sampling strategy.
+            show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
+            generate_logs: If provided, the generations will be logged.
+            requirements: List of requirements to test against (merged with global requirements).
+            validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
+
+        Returns:
+            SamplingResult: A result object indicating the success or failure of the sampling process.
+
+        Raises:
+            AssertionError: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
+        """
+        assert self.validate is not None, "Validation must be provided."
+        assert self.generate is not None, "Generate must be provided."
+
+        # just to be sure to not cause issues to the OG context
+        ctx = context.copy()
+        validation_ctx = validation_ctx if validation_ctx is not None else context
+        assert validation_ctx is not None, "Validation context must be provided."
+
+        flog = FancyLogger.get_logger()
+
+        sampled_results: list[ModelOutputThunk] = []
+        sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
+        sampled_actions: list[Component] = []
+        sampled_val_scores: list[float] = []
+
+        # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
+        # flag to determine whether we should show the pbar.
+        show_progress = show_progress and flog.getEffectiveLevel() <= FancyLogger.INFO
+
+        reqs = []
+        if self.requirements is not None:
+            reqs += self.requirements
+        elif requirements is not None:
+            reqs += requirements
+
+        reqs = list(set(reqs))
+        assert len(reqs) == 1, "Bets of n only supports one requirement"
+
+        loop_count = 0
+        loop_budget_range_iterator = (
+            tqdm.tqdm(range(self.loop_budget))  # type: ignore
+            if show_progress
+            else range(self.loop_budget)  # type: ignore
+        )
+
+        new_action = deepcopy(action)
+        for _ in loop_budget_range_iterator:  # type: ignore
+            loop_count += 1
+            if not show_progress:
+                flog.info(f"Running loop {loop_count} of {self.loop_budget}")
+
+            # run a generation pass
+            result = self.generate(new_action, ctx, generate_logs)
+
+            # validation pass
+            # action has user turn
+            val_scores = self.validate(
+                reqs,
+                validation_ctx,
+                result,
+                input=action._description,  # type: ignore
+            )
+
+            # match up reqs with scores
+            constraint_scores = list(zip(reqs, val_scores))
+
+            # collect all data
+            sampled_results.append(result)
+            sampled_scores.append(constraint_scores)
+            sampled_actions.append(new_action)
+            # only a single requirement is used for BestofNSampling
+            sampled_val_scores.append(
+                val_scores[0]._score  # type: ignore
+            )
+
+        best_result, best_score = max(
+            zip(sampled_results, sampled_val_scores), key=lambda x: x[1]
+        )
+
+        return SamplingResult(
+            best_result,
+            success=True,
+            sample_generations=sampled_results,
+            sample_validations=sampled_scores,
+            sample_actions=sampled_actions,
+        )
+
+    @staticmethod
+    def select_from_failure(
+        sampled_actions: list[Component],
+        sampled_results: list[ModelOutputThunk],
+        sampled_val: list[list[tuple[Requirement, ValidationResult]]],
+    ) -> int:
+        # simply returns the first attempt if all loops fail
+        return 0
+
+    @staticmethod
+    def repair(
+        ctx: Context,
+        past_actions: list[Component],
+        past_results: list[ModelOutputThunk],
+        past_val: list[list[tuple[Requirement, ValidationResult]]],
+    ) -> Component:
+        pa = past_actions[-1]
+        if isinstance(pa, Instruction):
+            last_failed_reqs: list[Requirement] = [
+                s[0] for s in past_val[-1] if not s[1]
+            ]
+            last_failed_reqs_str = "* " + "\n* ".join(
+                [str(r.description) for r in last_failed_reqs]
+            )
+            return pa.copy_and_repair(
+                repair_string=f"The following requirements failed before:\n{last_failed_reqs_str}"
+            )
+        return past_actions[-1]
