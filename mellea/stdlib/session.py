@@ -293,9 +293,10 @@ class MelleaSession:
             generate_logs[0].is_final_result = True
         else:
             if strategy.validate is None:
-                strategy.validate = lambda reqs, output: self.validate(  # type: ignore
+                strategy.validate = lambda reqs, output, input=None: self.validate(  # type: ignore
                     reqs,
                     output=output,  # type: ignore
+                    input=input,
                 )  # type: ignore
             if strategy.generate is None:
                 strategy.generate = (
@@ -391,6 +392,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
+        input: CBlock | None = None,
     ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
         # Turn a solitary requirement in to a list of requirements, and then reqify if needed.
@@ -400,7 +402,18 @@ class MelleaSession:
             validation_target_ctx = self.ctx
         else:
             validation_target_ctx = SimpleContext()
-            validation_target_ctx.insert(output)
+            if input is not None:
+                # some validators may need input as well as output
+                validation_target_ctx.insert_turn(
+                    ContextTurn(
+                        input,
+                        output,  # type: ignore
+                    ),  # type: ignore
+                    generate_logs=generate_logs,
+                )
+
+            else:
+                validation_target_ctx.insert(output)
         rvs = []
         for requirement in reqs:
             val_result = requirement.validate(
