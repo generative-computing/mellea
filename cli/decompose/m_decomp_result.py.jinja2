@@ -1,0 +1,60 @@
+{% if user_inputs -%}
+import os
+{% endif -%}
+import textwrap
+
+import mellea
+
+m = mellea.start_session()
+{%- if user_inputs %}
+
+
+# User Input Variables
+try:
+    {%- for var in user_inputs %}
+    {{ var | lower }} = os.environ["{{ var | upper }}"]
+    {%- endfor %}
+except KeyError as e:
+    print(f"ERROR: One or more required environment variables are not set; {e}")
+    exit(1)
+{%- endif %}
+{% for item in subtasks%}
+{% set i = loop.index0 %}
+# {{ item.subtask }} - {{ item.tag }}
+subtask_{{ loop.index }} = m.instruct(
+    textwrap.dedent(
+        R"""
+        {{ item.prompt_template | trim  | indent(width=8, first=False) }}
+        """.strip()
+    ),
+    {%- if item.constraints %}
+    requirements=[
+        {%- for con in item.constraints %}
+        {{ con | tojson}},
+        {%- endfor %}
+    ],
+    {%- else %}
+    requirements=None,
+    {%- endif %}
+    {%- if loop.first and not user_inputs %}
+    {%- else %}
+    user_variables={
+        {%- if user_inputs %}
+        {%- for var in user_inputs %}
+        {{ var | upper | tojson }}: {{ var | lower }},
+        {%- endfor %}
+        {%- endif %}
+        
+        {%- for j in range(i) %}
+        {{ subtasks[j].tag | tojson }}: subtask_{{ i }}.value if subtask_{{ i }}.value is not None else "",
+        {%- endfor %}
+    },
+    {%- endif %}
+)
+{%- if loop.last %}
+
+final_response = subtask_{{ loop.index }}.value
+
+print(final_response)
+{%- endif -%}
+{%- endfor -%}
