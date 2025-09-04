@@ -4,12 +4,9 @@ from typing import Any, TypeVar, final
 
 from mellea import MelleaSession
 from mellea.backends.types import ModelOption
-from mellea.helpers.prompt_modules._prompt_modules import (
-    PromptModule,
-    PromptModuleString,
-)
 from mellea.stdlib.instruction import Instruction
 
+from .._prompt_modules import PromptModule, PromptModuleString
 from ._exceptions import BackendGenerationError, TagExtractionError
 from ._prompt import get_system_prompt, get_user_prompt
 

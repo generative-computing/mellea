@@ -7,19 +7,16 @@ from mellea import MelleaSession
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
 from mellea.backends.types import ModelOption
-from mellea.helpers.prompt_modules.decompose import (
+
+from .prompt_modules import (
     constraint_extractor,
     subtask_constraint_assign,
     subtask_list,
     subtask_prompt_generator,
 )
-from mellea.helpers.prompt_modules.decompose.subtask_constraint_assign import (
-    SubtaskPromptConstraintsItem,
-)
-from mellea.helpers.prompt_modules.decompose.subtask_list import SubtaskItem
-from mellea.helpers.prompt_modules.decompose.subtask_prompt_generator import (
-    SubtaskPromptItem,
-)
+from .prompt_modules.subtask_constraint_assign import SubtaskPromptConstraintsItem
+from .prompt_modules.subtask_list import SubtaskItem
+from .prompt_modules.subtask_prompt_generator import SubtaskPromptItem
 
 
 class DecompSubtasksResult(TypedDict):
