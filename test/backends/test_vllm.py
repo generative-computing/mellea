@@ -3,14 +3,11 @@ import pytest
 from typing_extensions import Annotated
 
 from mellea import MelleaSession
-from mellea.backends.aloras.huggingface.granite_aloras import add_granite_aloras
-from mellea.backends.cache import SimpleLRUCache
-from mellea.backends.formatter import TemplateFormatter
-from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.vllm import LocalVLLMBackend
 from mellea.backends.types import ModelOption
+import mellea.backends.model_ids as model_ids
 from mellea.stdlib.base import CBlock, LinearContext
 from mellea.stdlib.requirement import (
-    ALoraRequirement,
     LLMaJRequirement,
     Requirement,
     ValidationResult,
@@ -20,15 +17,19 @@ from mellea.stdlib.requirement import (
 
 @pytest.fixture(scope="module")
 def backend():
-    """Shared HuggingFace backend for all tests in this module."""
-    backend = LocalHFBackend(
-        model_id="ibm-granite/granite-3.2-8b-instruct",
-        formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
-        cache=SimpleLRUCache(5),
-    )
-    add_granite_aloras(backend)
+    """Shared vllm backend for all tests in this module."""
+    backend = LocalVLLMBackend(
+        model_id=model_ids.QWEN3_0_6B,
+        # formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
+        model_options = {
+            # made smaller for a testing environment with smaller gpus.
+            # such an environment could possibly be running other gpu applications, including slack
+            "gpu_memory_utilization":0.8,
+            "max_model_len":8192,
+            "max_num_seqs":8,
+        },
+       )
     return backend
-
 
 @pytest.fixture(scope="function")
 def session(backend):
@@ -45,90 +46,6 @@ def test_system_prompt(session):
     )
     print(result)
 
-@pytest.mark.qualitative
-def test_constraint_alora(session, backend):
-    answer = session.instruct(
-        "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa. Be concise and don't write code to answer the question.",
-        model_options={
-            ModelOption.MAX_NEW_TOKENS: 300
-        },  # Until aloras get a bit better, try not to abruptly end generation.
-    )
-    alora_output = backend.get_aloras()[
-        0
-    ].generate_using_strings(
-        input="Find the difference between these two strings: aaaaaaaaaa aaaaabaaaa",
-        response=str(answer),
-        constraint="The answer mention that there is a b in the middle of one of the strings but not the other.",
-        force_yn=False,  # make sure that the alora naturally output Y and N without constrained generation
-    )
-    assert alora_output in ["Y", "N"], alora_output
-
-@pytest.mark.qualitative
-def test_constraint_lora_with_requirement(session, backend):
-    answer = session.instruct(
-        "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
-    )
-    assert session.backend._cache is not None  # type: ignore
-    assert session.backend._use_caches
-    assert backend._cache.current_size() != 0
-    validation_outputs = session.validate(
-        "The answer should mention that there is a b in the middle of one of the strings but not the other."
-    )
-    assert len(validation_outputs) == 1
-    val_result = validation_outputs[0]
-    assert isinstance(val_result, ValidationResult)
-    assert str(val_result.reason) in ["Y", "N"]
-
-
-@pytest.mark.qualitative
-def test_constraint_lora_override(session, backend):
-    backend.default_to_constraint_checking_alora = False  # type: ignore
-    answer = session.instruct(
-        "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
-    )
-    validation_outputs = session.validate(
-        "The answer should mention that there is a b in the middle of one of the strings but not the other."
-    )
-    assert len(validation_outputs) == 1
-    val_result = validation_outputs[0]
-    assert isinstance(val_result, ValidationResult)
-    assert isinstance(default_output_to_bool(str(val_result.reason)), bool)
-    backend.default_to_constraint_checking_alora = True
-
-
-@pytest.mark.qualitative
-def test_constraint_lora_override_does_not_override_alora(session, backend):
-    backend.default_to_constraint_checking_alora = False  # type: ignore
-    answer = session.instruct(
-        "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
-    )
-    validation_outputs = session.validate(
-        ALoraRequirement(
-            "The answer should mention that there is a b in the middle of one of the strings but not the other."
-        )
-    )
-    assert len(validation_outputs) == 1
-    val_result = validation_outputs[0]
-    assert isinstance(val_result, ValidationResult)
-    assert str(val_result.reason) in ["Y", "N"]
-    backend.default_to_constraint_checking_alora = True
-
-
-@pytest.mark.qualitative
-def test_llmaj_req_does_not_use_alora(session, backend):
-    backend.default_to_constraint_checking_alora = True  # type: ignore
-    answer = session.instruct(
-        "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
-    )
-    validation_outputs = session.validate(
-        LLMaJRequirement(
-            "The answer should mention that there is a b in the middle of one of the strings but not the other."
-        )
-    )
-    assert len(validation_outputs) == 1
-    val_result = validation_outputs[0]
-    assert isinstance(val_result, ValidationResult)
-    assert str(val_result.reason) not in ["Y", "N"]
 
 @pytest.mark.qualitative
 def test_instruct(session):
