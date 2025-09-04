@@ -2,20 +2,21 @@ import torch
 
 from mellea.stdlib.base import CBlock, Context
 from mellea.stdlib.chat import Message
-from mellea.stdlib.requirement import Requirement, ValidationResult
+from mellea.stdlib.requirement import ScorerRequirement, ValidationResult
 from mellea.stdlib.rewards.prm import (
     GenerativePRMForInference,
     RegressionPRMForInference,
 )
 
 
-class PRMScorer(Requirement):
+class PRMScorer(ScorerRequirement):
     """A process reward model scorer based on local huggingface backend."""
 
     def __init__(
         self,
         *,
         model_version: str = "ibm-granite/granite-3.3-8b-lora-math-prm",
+        preference_ordering: str = "max",
         device: str | None = None,
         step_splitter="\n\n",
         prm_type: str = "generative",
@@ -25,6 +26,7 @@ class PRMScorer(Requirement):
 
         Args:
             model_version:  The version of the model, defaults to "ibm-granite/granite-3.3-8b-lora-math-prm".
+            preference_ordering: indicates whether the goal is to maximize or minimize the score. must be either "max" or "min"
             device: The computational device to use ("cuda" for GPU, "mps" for Apple Silicon, or "cpu"), defaults to None. If not specified, the best available device will be automatically selected.
             correct_token: PRM generated token that indicates step is correct
             generation_prompt: Generation prompt required for the PRM scorer
@@ -32,7 +34,11 @@ class PRMScorer(Requirement):
             prm_type: type of prm tobe used. must be either `generative` or `regression`
             prm_kwargs: args for PRM. For Generative, pass `correct_token`, `generation_prompt`. For Regression, pass `step_token`
         """
-        super().__init__(check_only=True, validation_fn=lambda c: self._prm_validate(c))
+        super().__init__(
+            check_only=True,
+            validation_fn=lambda c: self._prm_validate(c),
+            preference_ordering=preference_ordering,
+        )
 
         self._model_version = model_version
 
