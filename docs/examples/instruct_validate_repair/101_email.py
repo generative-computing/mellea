@@ -1,14 +1,17 @@
 # This is the 101 example for using `session` and `instruct`.
 # helper function to wrap text
 from docs.examples.helper import w
-from mellea import start_session
+from mellea import instruct, start_session
 from mellea.backends.types import ModelOption
 
 # create a session using Granite 3.3 8B on Ollama and a simple context [see below]
-m = start_session(model_options={ModelOption.MAX_NEW_TOKENS: 200})
+with start_session(model_options={ModelOption.MAX_NEW_TOKENS: 200}):
+    # write an email
+    email_v1 = instruct("Write an email to invite all interns to the office party.")
 
-# write an email
-email_v1 = m.instruct("Write an email to invite all interns to the office party.")
+with start_session(model_options={ModelOption.MAX_NEW_TOKENS: 200}) as m:
+    # write an email
+    email_v1 = m.instruct("Write an email to invite all interns to the office party.")
 
 # print result
 print(f"***** email ****\n{w(email_v1)}\n*******")

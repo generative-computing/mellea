@@ -7,7 +7,7 @@ from typing import List, Optional
 import pytest
 
 from mellea.backends.formatter import TemplateFormatter
-from mellea.backends.model_ids import IBM_GRANITE_3_2_8B
+from mellea.backends.model_ids import ModelIdentifier, IBM_GRANITE_3_2_8B
 from mellea.stdlib.base import (
     BasicContext,
     CBlock,
@@ -151,7 +151,7 @@ def test_print_context(tf: TemplateFormatter):
         def _hash_for_kv_cache(self):
             pass
 
-        def linearize(self) -> Optional[List[Component | CBlock]]:
+        def render_for_generation(self) -> Optional[List[Component | CBlock]]:
             pass
 
         def last_output(self) -> ModelOutputThunk | None:
@@ -278,6 +278,22 @@ def test_load_with_model_id(instr: Instruction):
 
 def test_fake_model_id(instr: Instruction):
     tf = TemplateFormatter("fake-model")
+    tmpl = tf._load_template(instr.format_for_llm())
+    assert tmpl.name is not None
+    assert (
+        "default" in tmpl.name
+    ), "there should always be a default instruction template"
+
+def test_custom_model_id():
+    model_id = ModelIdentifier(mlx_name="new-model-here")
+    tf = TemplateFormatter(model_id=model_id)
+    assert tf._get_model_id() == "new-model-here", "getting the model id should always give a string if one exists"
+
+def test_empty_model_id(instr: Instruction):
+    model_id = ModelIdentifier()
+    tf = TemplateFormatter(model_id=model_id)
+    assert tf._get_model_id() == ""
+
     tmpl = tf._load_template(instr.format_for_llm())
     assert tmpl.name is not None
     assert (

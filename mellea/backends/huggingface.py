@@ -10,14 +10,12 @@ import dataclasses
 import datetime
 import inspect
 import json
-import os
 from collections.abc import Callable
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import outlines
 import outlines_core
 import torch
-from alora.peft_model_alora import aLoRAPeftModelForCausalLM  # type: ignore
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -26,7 +24,6 @@ from transformers import (
     PreTrainedTokenizer,
     set_seed,
 )
-from transformers.generation import GenerateDecoderOnlyOutput
 
 from mellea.backends import BaseModelSubclass
 from mellea.backends.aloras import Alora, AloraBackendMixin
@@ -34,8 +31,9 @@ from mellea.backends.cache import Cache, SimpleLRUCache
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.tools import (
+    add_tools_from_context_actions,
+    add_tools_from_model_options,
     convert_tools_to_json,
-    get_tools_from_action,
     parse_tools,
 )
 from mellea.backends.types import ModelOption
@@ -47,10 +45,12 @@ from mellea.stdlib.base import (
     GenerateLog,
     ModelOutputThunk,
     ModelToolCall,
-    TemplateRepresentation,
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
+
+if TYPE_CHECKING:
+    from alora.peft_model_alora import aLoRAPeftModelForCausalLM  # type: ignore
 
 assert outlines, "outlines needs to be present to make outlines_core work"
 
@@ -149,7 +149,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 # Get the model and tokenizer.
                 self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
                     self._hf_model_id
-                ).to(self._device)
+                ).to(self._device)  # type: ignore
                 self._tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
                     self._hf_model_id
                 )
@@ -160,17 +160,17 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         self._cache = cache if cache is not None else SimpleLRUCache(3)
 
         # Used when running aLoRAs with this backend.
-        self._alora_model: aLoRAPeftModelForCausalLM | None = None
+        self._alora_model: "aLoRAPeftModelForCausalLM | None" = None  # noqa: UP037
         # ALoras that have been loaded for this model.
         self._aloras: dict[str, HFAlora] = {}
 
     @property
-    def alora_model(self) -> aLoRAPeftModelForCausalLM | None:
+    def alora_model(self) -> "aLoRAPeftModelForCausalLM | None":  # noqa: UP037
         """The ALora model."""
         return self._alora_model
 
     @alora_model.setter
-    def alora_model(self, model: aLoRAPeftModelForCausalLM | None):
+    def alora_model(self, model: "aLoRAPeftModelForCausalLM | None"):  # noqa: UP037
         """Sets the ALora model. This should only happen once in a backend's lifetime."""
         assert self._alora_model is None
         self._alora_model = model
@@ -239,7 +239,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                     "This code block should not execute unless there is a 'constraint' alora loaded."
                 )
         # Construct the linearized context. This is very similar to normal generation.
-        linearized_ctx = ctx.linearize()
+        linearized_ctx = ctx.render_for_generation()
         assert linearized_ctx is not None and len(linearized_ctx) > 1
         msgs = self.formatter.to_chat_messages(linearized_ctx)
         user_message, assistant_message = msgs[-2].content, msgs[-1].content
@@ -286,7 +286,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # Otherwise, we will linearize the context and treat it as a raw input.
         decoded_result: str | None = None
         if ctx.is_chat_context:
-            linearized_ctx = ctx.linearize()
+            linearized_ctx = ctx.render_for_generation()
             assert linearized_ctx is not None, (
                 "If ctx.is_chat_context, then the context should be linearizable."
             )
@@ -324,28 +324,15 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                         f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                     )
                 else:
-                    if isinstance(action, Component) and isinstance(
-                        action.format_for_llm(), TemplateRepresentation
-                    ):
-                        tools = get_tools_from_action(action)
+                    add_tools_from_model_options(tools, model_options)
+                    add_tools_from_context_actions(
+                        tools, ctx.actions_for_available_tools()
+                    )
 
-                    model_options_tools = model_options.get(ModelOption.TOOLS, None)
-                    if model_options_tools is not None:
-                        assert isinstance(model_options_tools, dict)
-                        for fn_name in model_options_tools:
-                            # invariant re: relationship between the model_options set of tools and the TemplateRepresentation set of tools
-                            assert fn_name not in tools.keys(), (
-                                f"Cannot add tool {fn_name} because that tool was already defined in the TemplateRepresentation for the action."
-                            )
-                            # type checking because ModelOptions is an untyped dict and the calling convention for tools isn't clearly documented at our abstraction boundaries.
-                            assert type(fn_name) is str, (
-                                "When providing a `ModelOption.TOOLS` parameter to `model_options`, always used the type Dict[str, Callable] where `str` is the function name and the callable is the function."
-                            )
-                            assert callable(model_options_tools[fn_name]), (
-                                "When providing a `ModelOption.TOOLS` parameter to `model_options`, always used the type Dict[str, Callable] where `str` is the function name and the callable is the function."
-                            )
-                            # Add the model_options tool to the existing set of tools.
-                            tools[fn_name] = model_options_tools[fn_name]
+                    # Add the tools from the action for this generation last so that
+                    # they overwrite conflicting names.
+                    add_tools_from_context_actions(tools, [action])
+                FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
             seed = model_options.get(ModelOption.SEED, None)
             if seed is not None:
@@ -624,6 +611,8 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         Args:
             alora (str): identifier for the ALora adapter
         """
+        from alora.peft_model_alora import aLoRAPeftModelForCausalLM  # type: ignore
+
         assert issubclass(alora.__class__, HFAlora), (
             f"cannot add an ALora of type {alora.__class__} to model; must inherit from {HFAlora.__class__}"
         )

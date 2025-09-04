@@ -103,7 +103,7 @@ def react(
     react_toolbox: ReactToolbox,
 ):
     assert m.ctx.is_chat_context, "ReACT requires a chat context."
-    test_ctx_lin = m.ctx.linearize()
+    test_ctx_lin = m.ctx.render_for_generation()
     assert test_ctx_lin is not None and len(test_ctx_lin) == 0, (
         "ReACT expects a fresh context."
     )

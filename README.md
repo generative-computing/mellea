@@ -47,11 +47,29 @@ You can get started with a local install, or by using Colab notebooks.
 
 <img src="https://github.com/generative-computing/mellea/raw/main/docs/GetStarted_py.png" style="max-width:800px">
 
-Install with pip:
+Install with [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```bash
 uv pip install mellea
 ```
+
+Install with pip:
+
+```bash
+pip install mellea
+```
+
+> [!NOTE]
+> `mellea` comes with some additional packages as defined in our `pyproject.toml`. If you would like to install all the extra optional dependencies, please run the following commands:
+>
+> ```bash
+> uv pip install mellea[hf] # for Huggingface extras and Alora capabilities.
+> uv pip install mellea[watsonx] # for watsonx backend
+> uv pip install mellea[docling] # for docling
+> uv pip install mellea[all] # for all the optional dependencies
+> ```
+>
+> You can also install all the optional dependencies with `uv sync --all-extras`
 
 > [!NOTE]
 > If running on an Intel mac, you may get errors related to torch/torchvision versions. Conda maintains updated versions of these packages. You will need to create a conda environment and run `conda install 'torchvision>=0.22.0'` (this should also install pytorch and torchvision-extra). Then, you should be able to run `uv pip install mellea`. To run the examples, you will need to use `python <filename>` inside the conda environment instead of `uv run --with mellea <filename>`.
@@ -110,7 +128,19 @@ uv venv .venv && source .venv/bin/activate
 Use `uv pip` to install from source with the editable flag:
 
 ```bash
-uv pip install -e .
+uv pip install -e .[all]
+```
+
+If you are planning to contribute to the repo, it would be good to have all the development requirements installed:
+
+```bash
+uv pip install .[all] --group dev --group notebook --group docs
+```
+
+or 
+
+```bash
+uv sync --all-extras --all-groups
 ```
 
 Ensure that you install the precommit hooks:
