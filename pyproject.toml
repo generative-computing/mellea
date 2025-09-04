@@ -13,7 +13,8 @@ authors = [
     { name = "Masataro Asai", email = "masataro.asai@ibm.com" },
     { name = "Supriya Lall", email = "supriya.lall@partner.ibm.com" },
     { name = "Xiaojie Guo", email = "xiaojie.guo@ibm.com" },
-    { name = "Jake LoRocco", email = "jake.lorocco@ibm.com" }
+    { name = "Jake LoRocco", email = "jake.lorocco@ibm.com" },
+    { name = "Ja Young Lee", email = "Ja.Young.Lee@ibm.com" },
 ]
 description = "mellea is a library for writing generative programs"
 readme = "README.md"
