@@ -1,4 +1,5 @@
-import mellea
+import pytest
+
 from mellea import MelleaSession, generative
 from mellea.backends import ModelOption
 from mellea.backends.litellm import LiteLLMBackend
@@ -9,11 +10,13 @@ from mellea.stdlib.sampling import RejectionSamplingStrategy
 class TestLitellmOllama:
     m = MelleaSession(LiteLLMBackend())
 
+    @pytest.mark.qualitative
     def test_litellm_ollama_chat(self):
         res = self.m.chat("hello world")
         assert res is not None
         assert isinstance(res, Message)
 
+    @pytest.mark.qualitative
     def test_litellm_ollama_instruct(self):
         res = self.m.instruct(
             "Write an email to the interns.",
@@ -23,6 +26,7 @@ class TestLitellmOllama:
         assert res is not None
         assert isinstance(res.value, str)
 
+    @pytest.mark.qualitative
     def test_litellm_ollama_instruct_options(self):
         res = self.m.instruct(
             "Write an email to the interns.",
@@ -32,7 +36,7 @@ class TestLitellmOllama:
                 ModelOption.TEMPERATURE: 0.5,
                 ModelOption.THINKING: True,
                 ModelOption.MAX_NEW_TOKENS: 100,
-                "reasoning_effort":True,
+                "reasoning_effort": True,
                 "stream": False,
                 "homer_simpson": "option should be kicked out",
             },
@@ -41,6 +45,7 @@ class TestLitellmOllama:
         assert isinstance(res.value, str)
         assert "homer_simpson" not in self.m.ctx.last_output_and_logs()[1].model_options
 
+    @pytest.mark.qualitative
     def test_gen_slot(self):
         @generative
         def is_happy(text: str) -> bool:
