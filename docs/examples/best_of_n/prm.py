@@ -18,11 +18,12 @@ prm = PRMScorer(
     step_splitter="\n\n",
 )
 
-# Do Best of N sampling with the PRM scorer
+# Do Best of N sampling with the PRM scorer and an additional requirement
 BoN_prm = m.instruct(
     "Sarah has 12 apples. She gives 5 of them to her friend. How many apples does Sarah have left?",
-    strategy=BestofNSamplingStrategy(loop_budget=3, requirements=[prm]),
+    strategy=BestofNSamplingStrategy(loop_budget=3),
     model_options={"temperature": 0.9, "do_sample": True},
+    requirements=["provide final answer like 'Final Answer:'", prm],
 )
 
 # print result

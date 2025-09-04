@@ -19,7 +19,7 @@ from mellea.stdlib.base import (
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.instruction import Instruction
-from mellea.stdlib.requirement import Requirement, ValidationResult
+from mellea.stdlib.requirement import Requirement, ScorerRequirement, ValidationResult
 
 
 class SamplingResult(CBlock):
@@ -388,40 +388,6 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
     Sampling strategy that selects the best response from a set of samples as given by a Requirement Scorer
     """
 
-    def __init__(
-        self,
-        *,
-        loop_budget: int = 1,
-        validate: Callable[[list[Requirement], Context, Any], list[ValidationResult]]
-        | None = None,
-        generate: (
-            Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
-            | None
-        ) = None,
-        requirements: list[Requirement],
-    ):
-        """Initialize a new instance of the class with default parameters.
-
-        Args:
-            loop_budget: Number of times to iterate through the process. Must be greater than 0.
-            validate: Function to validate the results against requirements. If None, validation is provided later through setter.
-            generate: Function to generate new model output thunks. If None, generate is provided later through setter.
-            requirements: List of requirements to test against. If None, test all requirements attached to the given instruction.
-
-        Raises:
-            AssertionError: If loop_budget is not greater than 0.
-            AssertionError: If there is more/less than one requirements
-        """
-        super().__init__(
-            loop_budget=loop_budget,
-            validate=validate,
-            generate=generate,
-            requirements=requirements,
-        )
-
-        self.requirements = requirements
-        assert len(self.requirements) == 1
-
     def sample(
         self,
         action: Component,
@@ -461,7 +427,12 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
         sampled_results: list[ModelOutputThunk] = []
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         sampled_actions: list[Component] = []
-        sampled_val_scores: list[float] = []
+
+        successful_sampled_results: list[ModelOutputThunk] = []
+        successful_sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
+        successful_sampled_actions: list[Component] = []
+
+        # sampled_val_scores: list[float] = []
 
         # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
         # flag to determine whether we should show the pbar.
@@ -474,7 +445,17 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
             reqs += requirements
 
         reqs = list(set(reqs))
-        assert len(reqs) == 1, "Bets of n only supports one requirement"
+
+        # check that there is exactly one ScorerRequirement
+        scorer_requirements = 0
+        for req in reqs:
+            # strict typecheck for scorer requirement
+            if isinstance(req, ScorerRequirement):
+                scorer_requirements += 1
+
+        assert scorer_requirements == 1, (
+            "BestOfNSamplingStrategy requires exactly one ScorerRequirement"
+        )
 
         loop_count = 0
         loop_budget_range_iterator = (
@@ -508,22 +489,69 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
             sampled_results.append(result)
             sampled_scores.append(constraint_scores)
             sampled_actions.append(new_action)
-            # only a single requirement is used for BestofNSampling
-            sampled_val_scores.append(
-                val_scores[0]._score  # type: ignore
+
+            # check if requirements pass else repair and re-sample
+            # if all vals are true, save it and continue to get next sample
+            if all(bool(s[1]) for s in constraint_scores):
+                flog.info("SUCCESS")
+                successful_sampled_results.append(result)
+                successful_sampled_scores.append(constraint_scores)
+                successful_sampled_actions.append(new_action)
+
+            else:
+                # log partial success and continue
+                count_valid = len([s for s in constraint_scores if bool(s[1])])
+                flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}")
+
+                # If we did not pass all constraints, update the instruction and try again.
+                new_action = self.repair(
+                    ctx, sampled_actions, sampled_results, sampled_scores
+                )
+
+        # find max reward amongst results for which all requirements have passed
+        if len(successful_sampled_scores) > 0:
+            scores: list[float] = []
+
+            for sample in successful_sampled_scores:
+                for req, val_score in sample:
+                    if isinstance(req, ScorerRequirement):
+                        assert val_score._score is not None
+                        scores.append(val_score._score)
+
+            assert len(successful_sampled_results) == len(scores)
+
+            best_result, best_score = max(
+                zip(successful_sampled_results, scores), key=lambda x: x[1]
             )
 
-        best_result, best_score = max(
-            zip(sampled_results, sampled_val_scores), key=lambda x: x[1]
-        )
+            return SamplingResult(
+                best_result,
+                success=True,
+                sample_generations=sampled_results,
+                sample_validations=sampled_scores,
+                sample_actions=sampled_actions,
+            )
 
-        return SamplingResult(
-            best_result,
-            success=True,
-            sample_generations=sampled_results,
-            sample_validations=sampled_scores,
-            sample_actions=sampled_actions,
-        )
+        # if all failures, call select from failure
+        else:
+            flog.info(
+                f"Invoking select_from_failure after {len(sampled_results)} failed attempts."
+            )
+
+            # if no valid result could be determined, find a last resort.
+            best_failed_index = self.select_from_failure(
+                sampled_actions, sampled_results, sampled_scores
+            )
+            assert best_failed_index < len(sampled_results), (
+                "The select_from_failure method did not return a valid result. It has to selected from failed_results."
+            )
+            return SamplingResult(
+                sampled_results[best_failed_index],
+                success=False,
+                sample_generations=sampled_results,
+                sample_validations=sampled_scores,
+                sample_actions=sampled_actions,
+            )
 
     @staticmethod
     def select_from_failure(
@@ -531,8 +559,19 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
         sampled_results: list[ModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
-        # simply returns the first attempt if all loops fail
-        return 0
+        # select attempt with highest ScoreRequirementScore if all loops fail
+
+        scores: list[float | None] = []
+
+        for sample in sampled_val:
+            for req, val_score in sample:
+                if isinstance(req, ScorerRequirement):
+                    assert val_score._score is not None
+                    scores.append(val_score._score)
+
+        assert len(sampled_results) == len(scores)
+
+        return scores.index(max(scores))  # type: ignore
 
     @staticmethod
     def repair(
