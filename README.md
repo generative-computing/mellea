@@ -60,7 +60,7 @@ pip install mellea
 ```
 
 > [!NOTE]
-> `mellea` comes with some additional packages as defined in our `pyproject.toml`. I you would like to install all the extra optional dependencies, please run the following commands:
+> `mellea` comes with some additional packages as defined in our `pyproject.toml`. If you would like to install all the extra optional dependencies, please run the following commands:
 >
 > ```bash
 > uv pip install mellea[hf] # for Huggingface extras and Alora capabilities.
