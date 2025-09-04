@@ -126,6 +126,10 @@ MISTRALAI_MISTRAL_LARGE_123B = ModelIdentifier(
 #### Qwen models ####
 #####################
 
+QWEN3_0_6B = ModelIdentifier(hf_model_name="Qwen/Qwen3-0.6B", ollama_name="qwen3:0.6b")
+
+QWEN3_1_7B = ModelIdentifier(hf_model_name="Qwen/Qwen3-1.7B", ollama_name="qwen3:1.7b")
+
 QWEN3_8B = ModelIdentifier(hf_model_name="Qwen/Qwen3-8B", ollama_name="qwen3:8b")
 
 QWEN3_14B = ModelIdentifier(hf_model_name="Qwen/Qwen3-14B", ollama_name="qwen3:14b")
