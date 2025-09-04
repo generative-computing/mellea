@@ -1,5 +1,5 @@
 import mellea
-from mellea import MelleaSession
+from mellea import MelleaSession, generative
 from mellea.backends import ModelOption
 from mellea.backends.litellm import LiteLLMBackend
 from mellea.stdlib.chat import Message
@@ -18,7 +18,7 @@ class TestLitellmOllama:
         res = self.m.instruct(
             "Write an email to the interns.",
             requirements=["be funny"],
-            strategy=RejectionSamplingStrategy(loop_budget=3)
+            strategy=RejectionSamplingStrategy(loop_budget=3),
         )
         assert res is not None
         assert isinstance(res.value, str)
@@ -29,14 +29,30 @@ class TestLitellmOllama:
             requirements=["be funny"],
             model_options={
                 ModelOption.SEED: 123,
-                ModelOption.TEMPERATURE: .5,
-                ModelOption.THINKING:True,
-                ModelOption.MAX_NEW_TOKENS:100,
-                "stream":False,
-                "homer_simpson":"option should be kicked out"
-            }
+                ModelOption.TEMPERATURE: 0.5,
+                ModelOption.THINKING: True,
+                ModelOption.MAX_NEW_TOKENS: 100,
+                "reasoning_effort":True,
+                "stream": False,
+                "homer_simpson": "option should be kicked out",
+            },
         )
         assert res is not None
         assert isinstance(res.value, str)
+        assert "homer_simpson" not in self.m.ctx.last_output_and_logs()[1].model_options
+
+    def test_gen_slot(self):
+        @generative
+        def is_happy(text: str) -> bool:
+            """Determine if text is of happy mood."""
+
+        h = is_happy(self.m, text="I'm enjoying life.")
+
+        assert isinstance(h, bool)
+        assert h is True
 
 
+if __name__ == "__main__":
+    import pytest
+
+    pytest.main([__file__])

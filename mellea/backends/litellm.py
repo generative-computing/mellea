@@ -12,7 +12,11 @@ import litellm.litellm_core_utils.get_supported_openai_params
 import mellea.backends.model_ids as model_ids
 from mellea.backends import BaseModelSubclass
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
-from mellea.backends.tools import convert_tools_to_json, get_tools_from_action
+from mellea.backends.tools import (
+    add_tools_from_context_actions,
+    add_tools_from_model_options,
+    convert_tools_to_json,
+)
 from mellea.backends.types import ModelOption
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
@@ -22,10 +26,9 @@ from mellea.stdlib.base import (
     GenerateLog,
     ModelOutputThunk,
     ModelToolCall,
-    TemplateRepresentation,
 )
 from mellea.stdlib.chat import Message
-from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
+from mellea.stdlib.requirement import ALoraRequirement
 
 
 class LiteLLMBackend(FormatterBackend):
@@ -86,7 +89,6 @@ class LiteLLMBackend(FormatterBackend):
         self.from_mellea_model_opts_map = {
             ModelOption.SEED: "seed",
             ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
-            ModelOption.THINKING: "reasoning_effort",
         }
 
     def generate_from_context(
@@ -165,7 +167,7 @@ class LiteLLMBackend(FormatterBackend):
         # We set `drop_params=True` which will drop non-supported openai params; check for non-openai
         # params that might cause errors and log which openai params aren't supported here.
         # See https://docs.litellm.ai/docs/completion/input.
-        standard_openai_subset = litellm.get_standard_openai_params(backend_specific)
+        # standard_openai_subset = litellm.get_standard_openai_params(backend_specific)
         supported_params_list = litellm.litellm_core_utils.get_supported_openai_params.get_supported_openai_params(
             self._model_id
         )
@@ -173,24 +175,23 @@ class LiteLLMBackend(FormatterBackend):
             set(supported_params_list) if supported_params_list is not None else set()
         )
 
-        unknown_keys = []  # keys that are unknown to litellm
+        # unknown_keys = []  # keys that are unknown to litellm
         unsupported_openai_params = []  # openai params that are known to litellm but not supported for this model/provider
         for key in backend_specific.keys():
-            if key not in standard_openai_subset.keys():
-                unknown_keys.append(key)
-
-            elif key not in supported_params:
+            if key not in supported_params:
                 unsupported_openai_params.append(key)
 
-        if len(unknown_keys) > 0:
-            FancyLogger.get_logger().warning(
-                f"litellm allows for unknown / non-openai input params; mellea won't validate the following params that may cause issues: {', '.join(unknown_keys)}"
-            )
+        # if len(unknown_keys) > 0:
+        #     FancyLogger.get_logger().warning(
+        #         f"litellm allows for unknown / non-openai input params; mellea won't validate the following params that may cause issues: {', '.join(unknown_keys)}"
+        #     )
 
         if len(unsupported_openai_params) > 0:
             FancyLogger.get_logger().warning(
                 f"litellm will automatically drop the following openai keys that aren't supported by the current model/provider: {', '.join(unsupported_openai_params)}"
             )
+            for key in unsupported_openai_params:
+                del backend_specific[key]
 
         return backend_specific
 
@@ -206,7 +207,7 @@ class LiteLLMBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
         model_opts = self._simplify_and_merge(model_options)
-        linearized_context = ctx.linearize()
+        linearized_context = ctx.render_for_generation()
         assert linearized_context is not None, (
             "Cannot generate from a non-linear context in a FormatterBackend."
         )
@@ -246,6 +247,8 @@ class LiteLLMBackend(FormatterBackend):
         tools = self._extract_tools(action, format, model_opts, tool_calls)
         formatted_tools = convert_tools_to_json(tools) if len(tools) > 0 else None
 
+        model_specific_options = self._make_backend_specific_and_remove(model_opts)
+
         chat_response: litellm.ModelResponse = litellm.completion(
             model=self._model_id,
             messages=conversation,
@@ -253,7 +256,7 @@ class LiteLLMBackend(FormatterBackend):
             response_format=response_format,
             reasoning_effort=thinking,  # type: ignore
             drop_params=True,  # See note in `_make_backend_specific_and_remove`.
-            **self._make_backend_specific_and_remove(model_opts),
+            **model_specific_options,
         )
 
         choice_0 = chat_response.choices[0]
@@ -275,7 +278,7 @@ class LiteLLMBackend(FormatterBackend):
             generate_log = GenerateLog()
             generate_log.prompt = conversation
             generate_log.backend = f"litellm::{self.model_id!s}"
-            generate_log.model_options = model_opts
+            generate_log.model_options = model_specific_options
             generate_log.date = datetime.datetime.now()
             generate_log.model_output = chat_response
             generate_log.extra = {
@@ -291,7 +294,7 @@ class LiteLLMBackend(FormatterBackend):
         return parsed_result
 
     @staticmethod
-    def _extract_tools(action, format, model_opts, tool_calls):
+    def _extract_tools(action, format, model_opts, tool_calls) -> dict[str, Callable]:
         tools: dict[str, Callable] = dict()
         if tool_calls:
             if format:
@@ -299,28 +302,8 @@ class LiteLLMBackend(FormatterBackend):
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
             else:
-                if isinstance(action, Component) and isinstance(
-                    action.format_for_llm(), TemplateRepresentation
-                ):
-                    tools = get_tools_from_action(action)
-
-                model_options_tools = model_opts.get(ModelOption.TOOLS, None)
-                if model_options_tools is not None:
-                    assert isinstance(model_options_tools, dict)
-                    for fn_name in model_options_tools:
-                        # invariant re: relationship between the model_options set of tools and the TemplateRepresentation set of tools
-                        assert fn_name not in tools.keys(), (
-                            f"Cannot add tool {fn_name} because that tool was already defined in the TemplateRepresentation for the action."
-                        )
-                        # type checking because ModelOptions is an untyped dict and the calling convention for tools isn't clearly documented at our abstraction boundaries.
-                        assert type(fn_name) is str, (
-                            "When providing a `ModelOption.TOOLS` parameter to `model_options`, always used the type Dict[str, Callable] where `str` is the function name and the callable is the function."
-                        )
-                        assert callable(model_options_tools[fn_name]), (
-                            "When providing a `ModelOption.TOOLS` parameter to `model_options`, always used the type Dict[str, Callable] where `str` is the function name and the callable is the function."
-                        )
-                        # Add the model_options tool to the existing set of tools.
-                        tools[fn_name] = model_options_tools[fn_name]
+                add_tools_from_context_actions(tools, [action])
+                add_tools_from_model_options(tools, model_opts)
         return tools
 
     def _generate_from_raw(
@@ -333,68 +316,6 @@ class LiteLLMBackend(FormatterBackend):
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
         raise NotImplementedError("This method is not implemented yet.")
-        # extra_body = {}
-        # if format is not None:
-        #     FancyLogger.get_logger().warning(
-        #         "The official OpenAI completion api does not accept response format / structured decoding; "
-        #         "it will be passed as an extra arg."
-        #     )
-        #
-        #     # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
-        #     extra_body["guided_json"] = format.model_json_schema()
-        #
-        # model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
-        #
-        # prompts = [self.formatter.print(action) for action in actions]
-        #
-        # try:
-        #     completion_response: Completion = self._client.completions.create(
-        #         model=self._hf_model_id,
-        #         prompt=prompts,
-        #         extra_body=extra_body,
-        #         **self._make_backend_specific_and_remove(
-        #             model_opts, is_chat_context=False
-        #         ),
-        #     )  # type: ignore
-        # except openai.BadRequestError as e:
-        #     if openai_ollama_batching_error in e.message:
-        #         FancyLogger.get_logger().error(
-        #             "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
-        #             "your requests will fail since ollama doesn't support batching requests."
-        #         )
-        #     raise e
-        #
-        # # Necessary for type checker.
-        # assert isinstance(completion_response, Completion)
-        #
-        # results = [
-        #     ModelOutputThunk(
-        #         value=response.text,
-        #         meta={"oai_completion_response": response.model_dump()},
-        #     )
-        #     for response in completion_response.choices
-        # ]
-        #
-        # for i, result in enumerate(results):
-        #     self.formatter.parse(actions[i], result)
-        #
-        # if generate_logs is not None:
-        #     assert isinstance(generate_logs, list)
-        #     date = datetime.datetime.now()
-        #
-        #     for i in range(len(prompts)):
-        #         generate_log = GenerateLog()
-        #         generate_log.prompt = prompts[i]
-        #         generate_log.backend = f"openai::{self.model_id!s}"
-        #         generate_log.model_options = model_opts
-        #         generate_log.date = date
-        #         generate_log.model_output = completion_response
-        #         generate_log.extra = {"seed": model_opts.get("seed", None)}
-        #         generate_log.action = actions[i]
-        #         generate_log.result = results[i]
-        #         generate_logs.append(generate_log)
-        #
-        # return results
 
     def _extract_model_tool_requests(
         self, tools: dict[str, Callable], chat_response: litellm.ModelResponse
