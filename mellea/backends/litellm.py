@@ -244,7 +244,7 @@ class LiteLLMBackend(FormatterBackend):
             thinking = "medium"
 
         # Append tool call information if applicable.
-        tools = self._extract_tools(action, format, model_opts, tool_calls)
+        tools = self._extract_tools(action, format, model_opts, tool_calls, ctx)
         formatted_tools = convert_tools_to_json(tools) if len(tools) > 0 else None
 
         model_specific_options = self._make_backend_specific_and_remove(model_opts)
@@ -294,7 +294,9 @@ class LiteLLMBackend(FormatterBackend):
         return parsed_result
 
     @staticmethod
-    def _extract_tools(action, format, model_opts, tool_calls) -> dict[str, Callable]:
+    def _extract_tools(
+        action, format, model_opts, tool_calls, ctx
+    ) -> dict[str, Callable]:
         tools: dict[str, Callable] = dict()
         if tool_calls:
             if format:
@@ -302,8 +304,13 @@ class LiteLLMBackend(FormatterBackend):
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
             else:
-                add_tools_from_context_actions(tools, [action])
                 add_tools_from_model_options(tools, model_opts)
+                add_tools_from_context_actions(tools, ctx.actions_for_available_tools())
+
+                # Add the tools from the action for this generation last so that
+                # they overwrite conflicting names.
+                add_tools_from_context_actions(tools, [action])
+            FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
         return tools
 
     def _generate_from_raw(
