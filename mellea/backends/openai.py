@@ -482,6 +482,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         answer_suffix: str = "The final answer is:",
         answer_regex: str = "boxed",
         model_options: dict | None = None,
+        generate_logs: list[GenerateLog] | None = None,
     ) -> tuple[str, int]:
         """Generate with budget forcing using the completions APIs. This relies on raw autocompletion and assumes the model's output is structured in the following form: '<think> ... </think> summary answer'
         The budget forcing method is proposed in the paper: https://arxiv.org/abs/2501.19393
@@ -537,23 +538,13 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                 break
 
             backend_opts["max_tokens"] = rem_toks
-            try:
-                completion_response = self._client.completions.create(
-                    model=self._hf_model_id, prompt=curr_prompt, **backend_opts
-                )  # type: ignore
-            except openai.BadRequestError as e:
-                if openai_ollama_batching_error in e.message:
-                    FancyLogger.get_logger().error(
-                        "If you are trying to call `OpenAIBackend.generate_with_budget_forcing while targeting an ollama server, "
-                        "your requests will fail since ollama doesn't support batching requests."
-                    )
-                raise e
-
-            # Necessary for type checker.
-            assert isinstance(completion_response.usage, CompletionUsage)
-            gen_tok_count += completion_response.usage.completion_tokens
+            # TODO workaround to obtain generated token counts
+            # The token count should be relayed by openai's CompletionUsage
+            backend_opts["logprobs"] = 1  # To get number of generated tokens
+            result = self._generate_from_raw([prompt], model_options=backend_opts, generate_logs=generate_logs)
+            gen_tok_count += len(result[0]._meta['oai_completion_response']['logprobs']['token_logprobs'])
             rem_toks = think_max_tokens - gen_tok_count
-            response = completion_response.choices[0].text
+            response = result[0].value
 
             if think_wait_suffix == "":
                 # non-strict budget form
@@ -611,22 +602,10 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         else:
             backend_opts.pop("max_tokens", None)  # generate unconditionally
 
-        try:
-            completion_response = self._client.completions.create(
-                model=self._hf_model_id, prompt=prompt, **backend_opts
-            )  # type: ignore
-        except openai.BadRequestError as e:
-            if openai_ollama_batching_error in e.message:
-                FancyLogger.get_logger().error(
-                    "If you are trying to call `OpenAIBackend.generate_with_budget_forcing while targeting an ollama server, "
-                    "your requests will fail since ollama doesn't support batching requests."
-                )
-            raise e
-
-        # Necessary for type checker.
-        assert isinstance(completion_response.usage, CompletionUsage)
-        response += completion_response.choices[0].text
-        gen_tok_count += completion_response.usage.completion_tokens
+        backend_opts["logprobs"] = 1  # To get number of generated tokens
+        result = self._generate_from_raw([prompt], model_options=backend_opts, generate_logs=generate_logs)
+        response += result[0].value
+        gen_tok_count += len(result[0]._meta['oai_completion_response']['logprobs']['token_logprobs'])
         return response, gen_tok_count
 
     def _generate_from_raw(

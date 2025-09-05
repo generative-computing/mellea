@@ -1,5 +1,9 @@
 #!/bin/bash
 
+export PYTHONBREAKPOINT="ipdb.set_trace"
+export LOCAL_TEST_MODEL="ibm-granite/granite-4.0-tiny-preview"
+# export LOCAL_TEST_MODEL="unsloth/Llama-3.2-1B"
+
 ENV_NAME=mellea_tbf
 eval "$(conda shell.bash hook)"
 conda activate $ENV_NAME

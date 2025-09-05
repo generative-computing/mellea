@@ -1,19 +1,35 @@
 from mellea import MelleaSession
+from mellea.backends.model_ids import OPENAI_GPT_OSS_20B, META_LLAMA_3_2_1B, IBM_GRANITE_4_TINY_PREVIEW_7B
 from mellea.stdlib.base import CBlock, SimpleContext
 from mellea.backends.openai import OpenAIBackend
+from mellea.backends.formatter import TemplateFormatter
 from transformers import AutoTokenizer
 import pytest
 import os
 
+
 class TestOpenAIBackend:
+    MODEL_ID = os.environ.get("LOCAL_TEST_MODEL", META_LLAMA_3_2_1B)
+    # Local testing mode
+    if MODEL_ID == "ibm-granite/granite-4.0-tiny-preview":
+        MODEL_ID = IBM_GRANITE_4_TINY_PREVIEW_7B
+
+    elif MODEL_ID == "unsloth/Llama-3.2-1B":
+        MODEL_ID = META_LLAMA_3_2_1B
+
+    else:
+        raise RuntimeError(f"Unsupported model-id:{MODEL_ID}")
+
     model_id = "ibm-granite/granite-4.0-tiny-preview"
     backend = OpenAIBackend(
-        model_id=model_id,
-        base_url="http://0.0.0.0:8000/v1",
-        api_key="EMPTY",
+        model_id=MODEL_ID,
+        formatter=TemplateFormatter(model_id=MODEL_ID),
+        base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:8000')}/v1",
+        api_key="ollama",
     )
+
     m = MelleaSession(backend, ctx=SimpleContext())
-    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID.hf_model_name, trust_remote_code=True)
 
     def prepare_prmpt_for_math(self, query):
         # Preparing prompt for math reasoning tasks
@@ -28,12 +44,16 @@ class TestOpenAIBackend:
             msg.append({"role": "system", "content": system_prompt})
 
         msg.append({"role": "user", "content": query})
-        prompt = self.tokenizer.apply_chat_template(
-            msg,
-            tokenize=False,
-            thinking=True,
-            add_generation_prompt=True,
-        )
+        if self.tokenizer.chat_template is None:
+            raise RuntimeError(f"No explicit chat template is defined for model-id: ")
+
+        else:
+            prompt = self.tokenizer.apply_chat_template(
+                msg,
+                tokenize=False,
+                thinking=True,
+                add_generation_prompt=True,
+            )
 
         return prompt
 

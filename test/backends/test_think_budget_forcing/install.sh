@@ -16,3 +16,6 @@ in-conda uv pip install pre-commit
 in-conda uv pip install pytest
 in-conda uv pip install vllm==0.10.0
 in-conda uv pip install outlines
+# in-conda uv pip install unsloth
+in-conda uv pip install ipdb
+
