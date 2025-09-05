@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import abc
 import dataclasses
-import msgspec
 import datetime
 import inspect
 import json
@@ -16,18 +15,12 @@ import shutil
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional
 
+import msgspec
 import outlines
 import outlines_core
 import torch
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    DynamicCache,
-    PreTrainedModel,
-    PreTrainedTokenizer,
-)
-
 import vllm
+from transformers import PreTrainedTokenizerBase
 
 from mellea.backends import BaseModelSubclass
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
@@ -88,7 +81,7 @@ class LocalVLLMBackend(FormatterBackend):
             # "system": ModelOption.SYSTEM_PROMPT,
             "max_tokens": ModelOption.MAX_NEW_TOKENS,
             "seed": ModelOption.SEED,
-            "temperature" : ModelOption.TEMPERATURE,
+            "temperature": ModelOption.TEMPERATURE,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -98,12 +91,14 @@ class LocalVLLMBackend(FormatterBackend):
         # for the call to the model.
         self.from_mellea_model_opts_map = {
             ModelOption.MAX_NEW_TOKENS: "max_tokens",
-            ModelOption.SEED : "seed",
+            ModelOption.SEED: "seed",
             ModelOption.TEMPERATURE: "temperature",
         }
 
         model_options = self._simplify_and_merge(model_options)
-        model_options = self._make_backend_specific_and_remove(model_options, vllm.EngineArgs)
+        model_options = self._make_backend_specific_and_remove(
+            model_options, vllm.EngineArgs
+        )
 
         # Either use the custom config or load the model from its model_id
         match model_id:
@@ -117,22 +112,24 @@ class LocalVLLMBackend(FormatterBackend):
 
         # Get the model and tokenizer.
         # Getting vllm instantiated is tricky as it does not automatically detect some of these parameters.
-        model_options["gpu_memory_utilization"]=model_options.get("gpu_memory_utilization",0.9)
-        model_options["max_num_seqs"]=model_options.get("max_num_seqs",16)
-        model_options["max_model_len"]=model_options.get("max_model_len",16384)
-        print(f'Instantiating vllm with the following model parameters:\n'
-              f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
-              f"max_model_len: {model_options['max_model_len']}\n"
-              f"max_num_seqs: {model_options['max_num_seqs']}\n")
+        model_options["gpu_memory_utilization"] = model_options.get(
+            "gpu_memory_utilization", 0.9
+        )
+        model_options["max_num_seqs"] = model_options.get("max_num_seqs", 16)
+        model_options["max_model_len"] = model_options.get("max_model_len", 16384)
+        print(
+            f"Instantiating vllm with the following model parameters:\n"
+            f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
+            f"max_model_len: {model_options['max_model_len']}\n"
+            f"max_num_seqs: {model_options['max_num_seqs']}\n"
+        )
         retry = 0
         while True:
             retry += 1
             try:
                 self._model = vllm.LLM(
-                    model=self._hf_model_id,
-                    task="generate",
-                    **model_options,
-                    )
+                    model=self._hf_model_id, task="generate", **model_options
+                )
                 break
             except torch._dynamo.exc.BackendCompilerFailed as e:
                 # example:
@@ -152,31 +149,40 @@ class LocalVLLMBackend(FormatterBackend):
                     model_options["max_num_seqs"] //= 2
                 elif retry % 3 == 2:
                     model_options["gpu_memory_utilization"] *= 0.9
-                if model_options["max_model_len"] == 0 or \
-                   model_options["max_num_seqs"] == 0 or \
-                   model_options["gpu_memory_utilization"] < 0.1:
-                    raise RuntimeError("no matter how I reduced max_model_len and max_num_seqs, there is not enough memory! \n"
-                                       "final values:\n"
-                                       f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
-                                       f"max_model_len: {model_options['max_model_len']}\n"
-                                       f"max_num_seqs: {model_options['max_num_seqs']}\n")
-                print(f'Reducing vllm model parameters to make it fit in the GPU memory.\n'
-                      "current values:\n"
-                      f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
-                      f"max_model_len: {model_options['max_model_len']}\n"
-                      f"max_num_seqs: {model_options['max_num_seqs']}\n")
+                if (
+                    model_options["max_model_len"] == 0
+                    or model_options["max_num_seqs"] == 0
+                    or model_options["gpu_memory_utilization"] < 0.1
+                ):
+                    raise RuntimeError(
+                        "no matter how I reduced max_model_len and max_num_seqs, there is not enough memory! \n"
+                        "final values:\n"
+                        f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
+                        f"max_model_len: {model_options['max_model_len']}\n"
+                        f"max_num_seqs: {model_options['max_num_seqs']}\n"
+                    )
+                print(
+                    f"Reducing vllm model parameters to make it fit in the GPU memory.\n"
+                    "current values:\n"
+                    f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
+                    f"max_model_len: {model_options['max_model_len']}\n"
+                    f"max_num_seqs: {model_options['max_num_seqs']}\n"
+                )
 
-        print(f'vllm instantiated.\n'
-              "final model parameters:\n"
-              f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
-              f"max_model_len: {model_options['max_model_len']}\n"
-              f"max_num_seqs: {model_options['max_num_seqs']}\n")
+        print(
+            f"vllm instantiated.\n"
+            "final model parameters:\n"
+            f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
+            f"max_model_len: {model_options['max_model_len']}\n"
+            f"max_num_seqs: {model_options['max_num_seqs']}\n"
+        )
 
-        self._tokenizer: PreTrainedTokenizer = self._model.get_tokenizer()
+        self._tokenizer: PreTrainedTokenizerBase = self._model.get_tokenizer()  # type:ignore
 
         # see notes in outlines.models.vllm.adapt_tokenizer
-        self._tokenizer_for_outlines: PreTrainedTokenizer = outlines.models.VLLM(self._model).tokenizer
-
+        self._tokenizer_for_outlines: PreTrainedTokenizerBase = outlines.models.VLLM(
+            self._model
+        ).tokenizer  # type:ignore
 
     def generate_from_context(
         self,
@@ -251,17 +257,17 @@ class LocalVLLMBackend(FormatterBackend):
                 }
                 ctx_as_conversation.insert(0, system_msg)
 
-            input_str = self._tokenizer.apply_chat_template(  # type: ignore
-                ctx_as_conversation,
-                tokenize=False,
+            input_str: str = self._tokenizer.apply_chat_template(  # type: ignore
+                ctx_as_conversation, tokenize=False
             )
 
             sampling_params = vllm.SamplingParams(
-                **self._make_backend_specific_and_remove(model_options, vllm.SamplingParams),
+                **self._make_backend_specific_and_remove(
+                    model_options, vllm.SamplingParams
+                )
             )
 
             if format is not None:
-
                 # outlines.generate.json always parses the resulting json into a python dict.
                 # We however want to keep it as a json string for later storing it in ModelOutputThunk
                 schema: dict[str, Any] = format.model_json_schema()
@@ -272,19 +278,19 @@ class LocalVLLMBackend(FormatterBackend):
 
                 from outlines.processors import RegexLogitsProcessor
 
-                logits_processor = RegexLogitsProcessor(regex_str, tokenizer=self._tokenizer_for_outlines)
+                logits_processor = RegexLogitsProcessor(
+                    regex_str,
+                    tokenizer=self._tokenizer_for_outlines,  # type: ignore
+                )
                 sampling_params.logits_processors = (
                     [logits_processor] if logits_processor is not None else []
                 )
 
-            ros : list[vllm.RequestOutput] = self._model.generate(  # type: ignore
-                [input_str],
-                sampling_params=sampling_params,
+            ros: list[vllm.RequestOutput] = self._model.generate(  # type: ignore
+                [input_str], sampling_params=sampling_params
             )  # type: ignore
 
-            decoded_results = [
-                ro.outputs[0].text for ro in ros
-            ]
+            decoded_results = [ro.outputs[0].text for ro in ros]
 
             decoded_result = decoded_results[0]
 
@@ -329,7 +335,7 @@ class LocalVLLMBackend(FormatterBackend):
         prompts = [self.formatter.print(action) for action in actions]
 
         sampling_params = vllm.SamplingParams(
-            **self._make_backend_specific_and_remove(model_options, vllm.SamplingParams),
+            **self._make_backend_specific_and_remove(model_options, vllm.SamplingParams)
         )
 
         if format is not None:
@@ -341,23 +347,21 @@ class LocalVLLMBackend(FormatterBackend):
 
             from outlines.processors import RegexLogitsProcessor
 
-            logits_processor = RegexLogitsProcessor(regex_str, tokenizer=self._tokenizer_for_outlines)
+            logits_processor = RegexLogitsProcessor(
+                regex_str,
+                tokenizer=self._tokenizer_for_outlines,  # type: ignore
+            )
             sampling_params.logits_processors = (
                 [logits_processor] if logits_processor is not None else []
             )
 
-        ros : list[vllm.RequestOutput] = self._model.generate(  # type: ignore
-            prompts,
-            sampling_params=sampling_params,
+        ros: list[vllm.RequestOutput] = self._model.generate(  # type: ignore
+            prompts, sampling_params=sampling_params
         )  # type: ignore
 
-        decoded_results = [
-            ro.outputs[0].text for ro in ros
-        ]
+        decoded_results = [ro.outputs[0].text for ro in ros]
 
-        results = [
-            ModelOutputThunk(value=text) for text in decoded_results
-        ]
+        results = [ModelOutputThunk(value=text) for text in decoded_results]
 
         for i, result in enumerate(results):
             self.formatter.parse(actions[i], result)
@@ -373,13 +377,15 @@ class LocalVLLMBackend(FormatterBackend):
                 generate_log.model_options = model_options
                 generate_log.date = date
                 generate_log.model_output = decoded_results
-                generate_log.extra = {"format": format, "seed": model_options.get(ModelOption.SEED, None)}
+                generate_log.extra = {
+                    "format": format,
+                    "seed": model_options.get(ModelOption.SEED, None),
+                }
                 generate_log.action = actions[i]
                 generate_log.result = results[i]
                 generate_logs.append(generate_log)
 
         return results
-
 
     def _simplify_and_merge(
         self, model_options: dict[str, Any] | None
@@ -416,7 +422,7 @@ class LocalVLLMBackend(FormatterBackend):
         )
 
     def _make_backend_specific_and_remove(
-            self, model_options: dict[str, Any], cls: type[Any]
+        self, model_options: dict[str, Any], cls: type[Any]
     ) -> dict[str, Any]:
         """Maps specified Mellea specific keys to their backend specific version and removes any remaining Mellea keys.
 
@@ -432,15 +438,15 @@ class LocalVLLMBackend(FormatterBackend):
         backend_specific = ModelOption.remove_special_keys(backend_specific)
         try:
             # note: dataclasses.Field objects
-            fields = dataclasses.fields(cls)
+            return {
+                field.name: backend_specific[field.name]
+                for field in dataclasses.fields(cls)
+                if field.name in backend_specific
+            }
         except TypeError:
             # note: msgspec.structs.FieldInfo objects
-            fields = msgspec.structs.fields(cls)
-
-        backend_specific = {
-            field.name : backend_specific[field.name]
-            for field in fields
-            if field.name in backend_specific
-        }
-        return backend_specific
-
+            return {
+                field.name: backend_specific[field.name]
+                for field in msgspec.structs.fields(cls)
+                if field.name in backend_specific
+            }
