@@ -117,7 +117,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         self.from_mellea_model_opts_map_chats = {
             ModelOption.SEED: "seed",
             ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
-            ModelOption.THINKING: "reasoning_effort",
         }
 
         # See notes above.
