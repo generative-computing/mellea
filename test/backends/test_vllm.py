@@ -1,3 +1,4 @@
+import os
 import pydantic
 import pytest
 from typing_extensions import Annotated
@@ -37,6 +38,10 @@ def session(backend):
     session = MelleaSession(backend, ctx=LinearContext())
     yield session
     session.reset()
+
+
+def test_v0_api(session):
+    assert os.environ["VLLM_USE_V1"] == "0"
 
 @pytest.mark.qualitative
 def test_system_prompt(session):
