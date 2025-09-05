@@ -1,0 +1,15 @@
+name: "Run CI"
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  push:
+    branches:
+      - "**"
+      - "!main"
+      - "!gh-pages"
+
+jobs:
+  code-checks:
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name != 'generative-computing/mellea' || github.event.pull_request.head.repo.full_name == 'generative-computing/mellea' }}
+    uses: ./.github/workflows/quality.yml
