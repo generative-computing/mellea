@@ -1,0 +1,4 @@
+To write a good prospecting email, one must first deeply understand the prospected company to create a personalized and compelling message that will establish rapport. The first step to completing this task would be deeply research and brainstorm about the prospected company needs and interests, always based on the research result.
+After understanding the company we can start writing our email by following the good practices on email writing and following the instructions provided in the task description.
+When the email writing is done, we need to come up with a compelling email subject that will increase the chances of our email being opened by our prospect.
+Then we can finally format the generated email and subject in JSON format as instructed by the task description and output only the JSON object's text as the prompt is asking.
