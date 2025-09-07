@@ -1,6 +1,7 @@
 #!/bin/bash -xe
 
-ENV_NAME=mellea_tbf
+source set_variables.sh
+
 conda env remove -y -n $ENV_NAME || true
 conda env create -f $(readlink -f $(dirname $0))/environment.yml
 

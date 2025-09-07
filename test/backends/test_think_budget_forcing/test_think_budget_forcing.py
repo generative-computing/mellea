@@ -7,9 +7,14 @@ from transformers import AutoTokenizer
 import pytest
 import os
 
+from mellea.stdlib.sampling_algos.budget_forcing import think_budget_forcing
 
-class TestOpenAIBackend:
-    MODEL_ID = os.environ.get("LOCAL_TEST_MODEL", META_LLAMA_3_2_1B)
+
+class TestBudgetForcingSampling:
+    MODEL_ID = os.environ.get("LOCAL_TEST_MODEL", None)
+    if MODEL_ID is None:
+        raise RuntimeError(f"Must set environment variable `LOCAL_TEST_MODEL` to a HF model id")
+
     # Local testing mode
     if MODEL_ID == "ibm-granite/granite-4.0-tiny-preview":
         MODEL_ID = IBM_GRANITE_4_TINY_PREVIEW_7B
@@ -30,6 +35,7 @@ class TestOpenAIBackend:
 
     m = MelleaSession(backend, ctx=SimpleContext())
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID.hf_model_name, trust_remote_code=True)
+
 
     def prepare_prmpt_for_math(self, query):
         # Preparing prompt for math reasoning tasks
@@ -57,58 +63,64 @@ class TestOpenAIBackend:
 
         return prompt
 
-    def test_think_small(self):
+    def test_think_little(self):
         prompt = "what is 1+1?"
         prompt = self.prepare_prmpt_for_math(prompt)
         action = CBlock(value=prompt)
         results = []
         THINK_MAX_TOKENS = 1024
         ANSWER_MAX_TOKENS = 256
-        result, gen_tok_cnt = self.m.backend.generate_with_budget_forcing(
-            action=action,
+
+        result, gen_tok_cnt = think_budget_forcing(
+            self.m,
+            action,
             think_max_tokens=THINK_MAX_TOKENS,
             answer_max_tokens=ANSWER_MAX_TOKENS,
             start_think_token = "<think>",
             end_think_token="</think>",
             think_wait_suffix="Wait",
             answer_suffix="The final answer is:",
-            # answer_suffix="",
-            answer_regex= r"\\boxed{.*?}",
+            answer_regex= r"\\boxed{.*?}"
         )
 
         assert gen_tok_cnt <= 2 * THINK_MAX_TOKENS
 
 
-    def test_think_large(self):
+    def test_think_big(self):
         prompt = "what is 1+1?"
         prompt = self.prepare_prmpt_for_math(prompt)
         action = CBlock(value=prompt)
         results = []
         THINK_MAX_TOKENS = 2048
         ANSWER_MAX_TOKENS = 512
-        result, gen_tok_cnt = self.m.backend.generate_with_budget_forcing(
-            action=action,
+
+        result, gen_tok_cnt = think_budget_forcing(
+            self.m,
+            action,
             think_max_tokens=THINK_MAX_TOKENS,
             answer_max_tokens=ANSWER_MAX_TOKENS,
             start_think_token = "<think>",
             end_think_token="</think>",
             think_wait_suffix="Wait",
             answer_suffix="The final answer is:",
-            answer_regex=r"\\boxed{.*?}",
+            answer_regex= r"\\boxed{.*?}"
         )
 
         assert gen_tok_cnt >= 0.5 * THINK_MAX_TOKENS
 
 
-    def test_zero_think(self):
+    def test_dont_think(self):
         prompt = "what is 1+1?"
         prompt = self.prepare_prmpt_for_math(prompt)
         action = CBlock(value=prompt)
         results = []
         THINK_MAX_TOKENS = 0
         ANSWER_MAX_TOKENS = 512
-        result, gen_tok_cnt = self.m.backend.generate_with_budget_forcing(
-            action=action,
+
+
+        result, gen_tok_cnt = think_budget_forcing(
+            self.m,
+            action,
             think_max_tokens=THINK_MAX_TOKENS,
             answer_max_tokens=ANSWER_MAX_TOKENS,
             start_think_token = "",

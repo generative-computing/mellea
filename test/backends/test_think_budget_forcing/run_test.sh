@@ -1,28 +1,24 @@
 #!/bin/bash
 
-export PYTHONBREAKPOINT="ipdb.set_trace"
-export LOCAL_TEST_MODEL="ibm-granite/granite-4.0-tiny-preview"
-# export LOCAL_TEST_MODEL="unsloth/Llama-3.2-1B"
+source set_variables.sh
 
-ENV_NAME=mellea_tbf
 eval "$(conda shell.bash hook)"
 conda activate $ENV_NAME
 
-dir=$(readlink -ef $(dirname $0))
-rm $dir/vllm.log $dir/vllm.err
+rm $VLLM_LOG $VLLM_ERR
 
-bash $dir/serve.sh &
-vllm_pid=$!
+bash ./serve.sh &
+VLLM_PID=$!
 
-trap "kill -SIGINT $vllm_pid ; wait" EXIT
+trap "kill -SIGINT $VLLM_PID ; wait" EXIT
 
 while sleep 1 ; do
-    if grep -q "Application startup complete." $dir/vllm.err
+    if grep -q "Application startup complete." $VLLM_ERR
     then
         break
     fi
 done
 
-python test_think_budget_forcing.py
+bash exec_sampling_test.sh
 
 
