@@ -11,5 +11,4 @@ on:
 
 jobs:
   code-checks:
-    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name != 'generative-computing/mellea' || github.event.pull_request.head.repo.full_name == 'generative-computing/mellea' }}
     uses: ./.github/workflows/quality.yml
