@@ -1,0 +1,24 @@
+Your task is to analyze the extracted and validated information to generate at least two personas with the required properties for Design Thinking sessions. Follow these steps to accomplish your task:
+
+First, review the validated input data from the previous step:
+<input_validation>
+{{INPUT_VALIDATION}}
+</input_validation>
+
+Use the validated data to identify patterns, trends, and correlations that can help you create realistic personas.
+
+Next, consider the required properties that each persona should have, including:
+- **Name**
+- **Age**
+- **Occupation**
+- **Demographics**
+- **Goals**
+- **Behaviors**
+- **Pain Points**
+- **Motivations**
+
+Analyze the validated data to determine the goals, behaviors, pain points, and motivations of the target audience. Identify common characteristics, such as age, occupation, and demographics, that can be used to create distinct personas.
+
+Create at least two personas that reflect the diversity of the target audience. Ensure that each persona is fictional, yet realistic, and includes all the required properties.
+
+Use the analyzed information to generate at least two personas that provide a comprehensive understanding of the target audience.
