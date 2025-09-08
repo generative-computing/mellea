@@ -1,4 +1,4 @@
-"""A generic OpenAI compatible backend that wraps around the openai python sdk."""
+"""A generic LiteLLM compatible backend that wraps around the openai python sdk."""
 
 import datetime
 import json
