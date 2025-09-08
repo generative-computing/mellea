@@ -3,11 +3,6 @@ name: "Run CI"
 on:
   pull_request:
     types: [opened, reopened, synchronize]
-  push:
-    branches:
-      - "**"
-      - "!main"
-      - "!gh-pages"
 
 jobs:
   code-checks:
