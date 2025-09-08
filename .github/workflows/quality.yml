@@ -2,14 +2,7 @@ name: Verify Code Quality
 
 on:
   workflow_call:
-    # inputs:
-    #   push_coverage:
-    #       type: boolean
-    #       description: "If true, the coverage results are pushed to codecov.io."
-    #       default: true
-    # secrets:
-    #   CODECOV_TOKEN:
-    #     required: false
+
 
 concurrency:
     group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref_name }}
