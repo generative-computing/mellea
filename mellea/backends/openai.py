@@ -455,34 +455,18 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
         formatted_tools = convert_tools_to_json(tools)
         use_tools = len(formatted_tools) > 0
-        # TODO: this might be solved by using a **dict deconstructor. Setting tool_choice and tools to None does not work with all backends.
 
-        chat_response: ChatCompletion
-        if not use_tools:
-            chat_response = self._client.chat.completions.create(
-                model=self._hf_model_id,
-                messages=conversation,  # type: ignore
-                reasoning_effort=thinking,  # type: ignore
-                response_format=response_format,  # type: ignore
-                **self._make_backend_specific_and_remove(
-                    model_opts, is_chat_context=ctx.is_chat_context
-                ),
-            )  # type: ignore
-        else:
-            chat_response = self._client.chat.completions.create(
-                model=self._hf_model_id,
-                messages=conversation,  # type: ignore
-                reasoning_effort=thinking,  # type: ignore
-                response_format=response_format,  # type: ignore
-                tool_choice=(
-                    "auto" if formatted_tools and len(formatted_tools) > 0 else "none"
-                ),
-                tools=formatted_tools,  # type: ignore
-                # parallel_tool_calls=False, # We only support calling one tool per turn. But we do the choosing on our side so we leave this False.
-                **self._make_backend_specific_and_remove(
-                    model_opts, is_chat_context=ctx.is_chat_context
-                ),
-            )  # type: ignore
+        chat_response: ChatCompletion = self._client.chat.completions.create(
+            model=self._hf_model_id,
+            messages=conversation,  # type: ignore
+            reasoning_effort=thinking,  # type: ignore
+            response_format=response_format,  # type: ignore
+            tools=formatted_tools if use_tools else None,  # type: ignore
+            # parallel_tool_calls=False, # We only support calling one tool per turn. But we do the choosing on our side so we leave this False.
+            **self._make_backend_specific_and_remove(
+                model_opts, is_chat_context=ctx.is_chat_context
+            ),
+        )  # type: ignore
 
         result = ModelOutputThunk(
             value=chat_response.choices[0].message.content,
