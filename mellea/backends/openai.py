@@ -351,7 +351,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         )
 
     @staticmethod
-    def _message_to_openai_input(msg: Message):
+    def message_to_openai_message(msg: Message):
         if msg.images is not None:
             img_list = [
                 {
@@ -418,7 +418,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
-        conversation.extend([self._message_to_openai_input(m) for m in messages])
+        conversation.extend([self.message_to_openai_message(m) for m in messages])
 
         if format is not None:
             response_format = {

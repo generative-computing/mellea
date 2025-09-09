@@ -12,6 +12,7 @@ import litellm.litellm_core_utils.get_supported_openai_params
 import mellea.backends.model_ids as model_ids
 from mellea.backends import BaseModelSubclass
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
+from mellea.backends.openai import OpenAIBackend
 from mellea.backends.tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
@@ -213,6 +214,7 @@ class LiteLLMBackend(FormatterBackend):
         )
         # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
+
         # Add the final message.
         match action:
             case ALoraRequirement():
@@ -220,11 +222,19 @@ class LiteLLMBackend(FormatterBackend):
             case _:
                 messages.extend(self.formatter.to_chat_messages([action]))
 
+        # TODO: the supports_vision function is not reliably predicting if models support vision. E.g., ollama/llava is not a vision model?
+        # if any(m.images is not None for m in messages):
+        #     # check if model can handle images
+        #     assert litellm.supports_vision(
+        #         model=self.model_id), f"Model {self.model_id} does not support vision. Please use a different model."
+
         conversation: list[dict] = []
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
-        conversation.extend([{"role": m.role, "content": m.content} for m in messages])
+        conversation.extend(
+            [OpenAIBackend.message_to_openai_message(m) for m in messages]
+        )
 
         if format is not None:
             response_format = {
