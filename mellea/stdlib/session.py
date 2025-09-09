@@ -486,6 +486,7 @@ class MelleaSession:
         content: str,
         role: Message.Role = "user",
         *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
         user_variables: dict[str, str] | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -498,7 +499,8 @@ class MelleaSession:
             )
         else:
             content_resolved = content
-        user_message = Message(role=role, content=content_resolved)
+        images = self._parse_and_clean_image_args(images)
+        user_message = Message(role=role, content=content_resolved, images=images)
 
         result = self.act(
             user_message,
