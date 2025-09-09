@@ -350,6 +350,40 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             ),
         )
 
+    @staticmethod
+    def _message_to_openai_input(msg: Message):
+        if msg.images is not None:
+            img_list = [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{img}"},
+                }
+                for img in msg.images
+            ]
+
+            return {
+                "role": msg.role,
+                "content": [{"type": "text", "text": msg.content}, *img_list],
+            }
+        else:
+            return {"role": msg.role, "content": msg.content}
+            # Target format:
+            # {
+            #     "role": "user",
+            #     "content": [
+            #       {
+            #         "type": "text",
+            #         "text": "What's in this picture?"
+            #       },
+            #       {
+            #         "type": "image_url",
+            #         "image_url": {
+            #           "url": "data:image/jpeg;base64,<base64_string>"
+            #         }
+            #       }
+            #     ]
+            #   }
+
     def _generate_from_chat_context_standard(
         self,
         action: Component | CBlock,
@@ -384,7 +418,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
-        conversation.extend([{"role": m.role, "content": m.content} for m in messages])
+        conversation.extend([self._message_to_openai_input(m) for m in messages])
 
         if format is not None:
             response_format = {
@@ -420,20 +454,35 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             thinking = "medium"
 
         formatted_tools = convert_tools_to_json(tools)
-        chat_response: ChatCompletion = self._client.chat.completions.create(
-            model=self._hf_model_id,
-            messages=conversation,  # type: ignore
-            reasoning_effort=thinking,  # type: ignore
-            response_format=response_format,  # type: ignore
-            tool_choice=(
-                "auto" if formatted_tools and len(formatted_tools) > 0 else "none"
-            ),
-            tools=formatted_tools,  # type: ignore
-            # parallel_tool_calls=False, # We only support calling one tool per turn. But we do the choosing on our side so we leave this False.
-            **self._make_backend_specific_and_remove(
-                model_opts, is_chat_context=ctx.is_chat_context
-            ),
-        )  # type: ignore
+        use_tools = len(formatted_tools) > 0
+        # TODO: this might be solved by using a **dict deconstructor. Setting tool_choice and tools to None does not work with all backends.
+
+        chat_response: ChatCompletion
+        if not use_tools:
+            chat_response = self._client.chat.completions.create(
+                model=self._hf_model_id,
+                messages=conversation,  # type: ignore
+                reasoning_effort=thinking,  # type: ignore
+                response_format=response_format,  # type: ignore
+                **self._make_backend_specific_and_remove(
+                    model_opts, is_chat_context=ctx.is_chat_context
+                ),
+            )  # type: ignore
+        else:
+            chat_response = self._client.chat.completions.create(
+                model=self._hf_model_id,
+                messages=conversation,  # type: ignore
+                reasoning_effort=thinking,  # type: ignore
+                response_format=response_format,  # type: ignore
+                tool_choice=(
+                    "auto" if formatted_tools and len(formatted_tools) > 0 else "none"
+                ),
+                tools=formatted_tools,  # type: ignore
+                # parallel_tool_calls=False, # We only support calling one tool per turn. But we do the choosing on our side so we leave this False.
+                **self._make_backend_specific_and_remove(
+                    model_opts, is_chat_context=ctx.is_chat_context
+                ),
+            )  # type: ignore
 
         result = ModelOutputThunk(
             value=chat_response.choices[0].message.content,
