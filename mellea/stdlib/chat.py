@@ -8,7 +8,7 @@ from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
-    ImageCBlock,
+    ImageBlock,
     ModelOutputThunk,
     ModelToolCall,
     TemplateRepresentation,
@@ -25,7 +25,7 @@ class Message(Component):
         role: "Message.Role",
         content: str,
         *,
-        images: None | list[ImageCBlock] = None,
+        images: None | list[ImageBlock] = None,
     ):
         """Initializer for Chat messages.
 

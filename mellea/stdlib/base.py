@@ -48,19 +48,19 @@ class CBlock:
         return f"CBlock({self.value}, {self._meta.__repr__()})"
 
 
-class ImageCBlock(CBlock):
-    """A `ImageCBlock` is a special type of `CBlock` that represents an image as base64 string."""
+class ImageBlock:
+    """A `ImageBlock` represents an image (as base64 PNG)."""
 
     def __init__(self, value: str, meta: dict[str, Any] | None = None):
-        """Initializes the ImageCBlock with a base64 string representation and metadata."""
-        assert self.is_valid_base64(value), (
+        """Initializes the ImageBlock with a base64 PNG string representation and some metadata."""
+        assert self.is_valid_base64_png(value), (
             "Invalid base64 string representation of image."
         )
-        super().__init__(value, meta)
-        self.is_image = True
+        self._value = value
+        self._meta = {} if meta is None else meta
 
     @staticmethod
-    def is_valid_base64(s: str) -> bool:
+    def is_valid_base64_png(s: str) -> bool:
         """Checks if a string is a valid base64 string [AIA PAI Nc Hin R v1.0]."""
         try:
             # Check if the string has a data URI prefix and remove it.
@@ -74,7 +74,16 @@ class ImageCBlock(CBlock):
                 s = s + "=" * (4 - mod4)
 
             # Attempt to decode the Base64 string
-            base64.b64decode(s, validate=True)
+            decoded_data = base64.b64decode(s, validate=True)
+
+            # The official PNG signature is 8 bytes long.
+            png_signature = b"\x89PNG\r\n\x1a\n"
+
+            if decoded_data.startswith(png_signature):
+                return True
+            else:
+                return False
+
             return True
         except (binascii.Error, ValueError):
             return False
@@ -89,10 +98,18 @@ class ImageCBlock(CBlock):
     @classmethod
     def from_pil_image(
         cls, image: PILImage.Image, meta: dict[str, Any] | None = None
-    ) -> ImageCBlock:
+    ) -> ImageBlock:
         """Converts a PIL image to a base64 string representation."""
         image_base64 = cls.pil_to_base64(image)
         return cls(image_base64, meta)
+
+    def __str__(self):
+        """Stringifies the block."""
+        return self._value
+
+    def __repr__(self):
+        """Provides a python-parsable representation of the block (usually)."""
+        return f"ImageBlock({self._value}, {self._meta.__repr__()})"
 
 
 @runtime_checkable
@@ -111,12 +128,19 @@ class Component(Protocol):
         raise NotImplementedError("format_for_llm isn't implemented by default")
 
 
-def get_images_from_component(c: Component) -> None | list[ImageCBlock]:
+def get_images_from_component(c: Component) -> None | list[ImageBlock]:
     """Gets images from a `Component` if they are present and a non-empty list, otherwise returns None."""
     if hasattr(c, "images"):
         imgs = c.images
-        if imgs is not None and len(imgs) > 0:
-            return imgs
+        if imgs is not None:
+            assert isinstance(imgs, list), "images field must be a list."
+            assert all(isinstance(im, ImageBlock) for im in imgs), (
+                "all elements of images list must be ImageBlocks."
+            )
+            if len(imgs) == 0:
+                return None
+            else:
+                return imgs
         else:
             return None
     else:
@@ -516,6 +540,7 @@ class TemplateRepresentation:
     fields: list[Any] | None = None
     template: str | None = None
     template_order: list[str] | None = None
+    images: list[ImageBlock] | None = None
 
 
 @dataclass

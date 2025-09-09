@@ -9,7 +9,7 @@ import jinja2
 from mellea.stdlib.base import (
     CBlock,
     Component,
-    ImageCBlock,
+    ImageBlock,
     TemplateRepresentation,
     blockify,
 )
@@ -28,7 +28,7 @@ class Instruction(Component):
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
-        images: list[ImageCBlock] | None = None,
+        images: list[ImageBlock] | None = None,
     ):
         """Initializes an instruction. All strings will be converted into CBlocks.
 
@@ -42,7 +42,6 @@ class Instruction(Component):
             output_prefix (Optional[str | CBlock]): A string or ContentBlock that defines a prefix for the output generation. Usually you do not need this.
             images (Optional[List[ImageCBlock]]): A list of images to use in the instruction.
         """
-        images = [] if images is None else images
         requirements = [] if requirements is None else requirements
         icl_examples = [] if icl_examples is None else icl_examples
         grounding_context = dict() if grounding_context is None else grounding_context
@@ -148,6 +147,7 @@ class Instruction(Component):
                 "repair": self._repair_string,
             },
             tools=None,
+            images=self._images,
             template_order=["*", "Instruction"],
         )
 
@@ -161,11 +161,6 @@ class Instruction(Component):
     def requirements(self) -> list[Requirement]:
         """Returns a list of Requirement instances."""
         return self._requirements
-
-    @property
-    def images(self) -> list[ImageCBlock]:
-        """Returns a list of ImageCBlocks."""
-        return self._images
 
     def copy_and_repair(self, repair_string: str) -> Instruction:
         """Creates a copy of the instruction and adds/overwrites the repair string."""
