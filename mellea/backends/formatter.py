@@ -22,6 +22,7 @@ from mellea.stdlib.base import (
     ModelOutputThunk,
     SimpleContext,
     TemplateRepresentation,
+    get_images_from_component,
 )
 from mellea.stdlib.chat import Message, ToolMessage
 from mellea.stdlib.mobject import Query, Transform
@@ -72,7 +73,15 @@ class Formatter(abc.ABC):
                 case Message():
                     return c
                 case _:
-                    return Message(role=role, content=self.print(c))
+                    if isinstance(c, Component):
+                        # components can have images
+                        return Message(
+                            role=role,
+                            content=self.print(c),
+                            images=get_images_from_component(c),
+                        )
+                    else:
+                        return Message(role=role, content=self.print(c))
 
         return [_to_msg(c) for c in cs]
 

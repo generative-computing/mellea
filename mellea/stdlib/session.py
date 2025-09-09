@@ -22,6 +22,7 @@ from mellea.stdlib.base import (
     Context,
     ContextTurn,
     GenerateLog,
+    ImageCBlock,
     LinearContext,
     ModelOutputThunk,
     SimpleContext,
@@ -357,6 +358,7 @@ class MelleaSession:
         self,
         description: str,
         *,
+        images: list[ImageCBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -375,6 +377,7 @@ class MelleaSession:
         self,
         description: str,
         *,
+        images: list[ImageCBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -392,6 +395,7 @@ class MelleaSession:
         self,
         description: str,
         *,
+        images: list[ImageCBlock] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -419,7 +423,9 @@ class MelleaSession:
             format: If set, the BaseModel to use for constrained decoding.
             model_options: Additional model options, which will upsert into the model/backend's defaults.
             tool_calls: If true, tool calling is enabled.
+            images: A list of images to be used in the instruction.
         """
+        images = [] if images is None else images
         requirements = [] if requirements is None else requirements
         icl_examples = [] if icl_examples is None else icl_examples
         grounding_context = dict() if grounding_context is None else grounding_context
@@ -433,6 +439,7 @@ class MelleaSession:
             user_variables=user_variables,
             prefix=prefix,
             output_prefix=output_prefix,
+            images=images,
         )
 
         return self.act(
@@ -588,7 +595,8 @@ class MelleaSession:
                 chosen_tool = tools[0]
 
             FancyLogger.get_logger().warning(
-                f"multiple tool calls returned in transform of {obj} with description '{transformation}'; picked `{chosen_tool.name}`"  # type: ignore
+                f"multiple tool calls returned in transform of {obj} with description '{transformation}'; picked `{chosen_tool.name}`"
+                # type: ignore
             )
 
         if chosen_tool:

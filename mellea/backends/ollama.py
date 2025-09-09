@@ -287,7 +287,12 @@ class OllamaModelBackend(FormatterBackend):
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
 
-        conversation.extend([{"role": m.role, "content": m.content} for m in messages])
+        conversation.extend(
+            [
+                {"role": m.role, "content": m.content, "images": m.images}
+                for m in messages
+            ]
+        )
 
         # Append tool call information if applicable.
         tools: dict[str, Callable] = dict()

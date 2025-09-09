@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import abc
+import base64
+import binascii
 import datetime
 from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
+from io import BytesIO
 from typing import Any, Protocol, runtime_checkable
+
+from PIL import Image as PILImage
 
 from mellea.helpers.fancy_logger import FancyLogger
 
@@ -43,6 +48,53 @@ class CBlock:
         return f"CBlock({self.value}, {self._meta.__repr__()})"
 
 
+class ImageCBlock(CBlock):
+    """A `ImageCBlock` is a special type of `CBlock` that represents an image as base64 string."""
+
+    def __init__(self, value: str, meta: dict[str, Any] | None = None):
+        """Initializes the ImageCBlock with a base64 string representation and metadata."""
+        assert self.is_valid_base64(value), (
+            "Invalid base64 string representation of image."
+        )
+        super().__init__(value, meta)
+        self.is_image = True
+
+    @staticmethod
+    def is_valid_base64(s: str) -> bool:
+        """Checks if a string is a valid base64 string [AIA PAI Nc Hin R v1.0]."""
+        try:
+            # Check if the string has a data URI prefix and remove it.
+            if "data:" in s and "base64," in s:
+                s = s.split("base64,")[1]
+
+            # Add padding if necessary
+            s = s.strip()
+            mod4 = len(s) % 4
+            if mod4 > 0:
+                s = s + "=" * (4 - mod4)
+
+            # Attempt to decode the Base64 string
+            base64.b64decode(s, validate=True)
+            return True
+        except (binascii.Error, ValueError):
+            return False
+
+    @staticmethod
+    def pil_to_base64(image: PILImage.Image) -> str:
+        """Converts a PIL image to a base64 string representation."""
+        img_io = BytesIO()
+        image.save(img_io, "PNG")
+        return base64.b64encode(img_io.getvalue()).decode("utf-8")
+
+    @classmethod
+    def from_pil_image(
+        cls, image: PILImage.Image, meta: dict[str, Any] | None = None
+    ) -> ImageCBlock:
+        """Converts a PIL image to a base64 string representation."""
+        image_base64 = cls.pil_to_base64(image)
+        return cls(image_base64, meta)
+
+
 @runtime_checkable
 class Component(Protocol):
     """A `Component` is a composite data structure that is intended to be represented to an LLM."""
@@ -57,6 +109,18 @@ class Component(Protocol):
         Returns: a `TemplateRepresentation` or string
         """
         raise NotImplementedError("format_for_llm isn't implemented by default")
+
+
+def get_images_from_component(c: Component) -> None | list[ImageCBlock]:
+    """Gets images from a `Component` if they are present and a non-empty list, otherwise returns None."""
+    if hasattr(c, "images"):
+        imgs = c.images
+        if imgs is not None and len(imgs) > 0:
+            return imgs
+        else:
+            return None
+    else:
+        return None
 
 
 class ModelOutputThunk(CBlock):

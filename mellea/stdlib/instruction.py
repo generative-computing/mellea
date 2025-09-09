@@ -6,7 +6,13 @@ from copy import deepcopy
 
 import jinja2
 
-from mellea.stdlib.base import CBlock, Component, TemplateRepresentation, blockify
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    ImageCBlock,
+    TemplateRepresentation,
+    blockify,
+)
 from mellea.stdlib.requirement import Requirement, reqify
 
 
@@ -22,6 +28,7 @@ class Instruction(Component):
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
+        images: list[ImageCBlock] | None = None,
     ):
         """Initializes an instruction. All strings will be converted into CBlocks.
 
@@ -33,7 +40,9 @@ class Instruction(Component):
             user_variables (Dict[str, str]): A dict of user-defined variables used to fill in Jinja placeholders in other parameters. This requires that all other provided parameters are provided as strings.
             prefix (Optional[str | CBlock]): A prefix string or ContentBlock to use when generating the instruction.
             output_prefix (Optional[str | CBlock]): A string or ContentBlock that defines a prefix for the output generation. Usually you do not need this.
+            images (Optional[List[ImageCBlock]]): A list of images to use in the instruction.
         """
+        images = [] if images is None else images
         requirements = [] if requirements is None else requirements
         icl_examples = [] if icl_examples is None else icl_examples
         grounding_context = dict() if grounding_context is None else grounding_context
@@ -108,6 +117,7 @@ class Instruction(Component):
         self._output_prefix = (
             blockify(output_prefix) if output_prefix is not None else None
         )
+        self._images = images
         self._repair_string: str | None = None
 
     def parts(self):
@@ -151,6 +161,11 @@ class Instruction(Component):
     def requirements(self) -> list[Requirement]:
         """Returns a list of Requirement instances."""
         return self._requirements
+
+    @property
+    def images(self) -> list[ImageCBlock]:
+        """Returns a list of ImageCBlocks."""
+        return self._images
 
     def copy_and_repair(self, repair_string: str) -> Instruction:
         """Creates a copy of the instruction and adds/overwrites the repair string."""
