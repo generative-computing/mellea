@@ -37,7 +37,7 @@ from mellea.backends.tools import (
     parse_tools,
 )
 from mellea.backends.types import ModelOption
-from mellea.backends.utils import to_chat
+from mellea.backends.utils import to_chat, use_alora
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -190,33 +190,27 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # Upsert model options.
         model_opts = self._simplify_and_merge(model_options)
 
-        # See `docs/dev/requirement_aLoRA_rerouting.md` for an explanation of the following code block.
-        if issubclass(type(action), Requirement):
-            # The general rule is that we reroute to the alora if it exists.
-            reroute_to_alora = self.get_alora("constraint") is not None
-            # However, there are some exceptions:
-            if not self.default_to_constraint_checking_alora:
-                reroute_to_alora = False
-            if issubclass(type(action), LLMaJRequirement):
-                reroute_to_alora = False
-            if issubclass(type(action), ALoraRequirement):
-                reroute_to_alora = True
-            if reroute_to_alora:
-                return self._generate_from_context_alora(
-                    action,
-                    ctx,
-                    format=format,
-                    model_options=model_opts,
-                    generate_logs=generate_logs,
-                )
-        return self._generate_from_context_standard(
+        if use_alora(
             action,
-            ctx,
-            format=format,
-            model_options=model_opts,
-            generate_logs=generate_logs,
-            tool_calls=tool_calls,
-        )
+            self.get_alora("constraint"),
+            self.default_to_constraint_checking_alora,
+        ):
+            return self._generate_from_context_alora(
+                action,
+                ctx,
+                format=format,
+                model_options=model_opts,
+                generate_logs=generate_logs,
+            )
+        else:
+            return self._generate_from_context_standard(
+                action,
+                ctx,
+                format=format,
+                model_options=model_opts,
+                generate_logs=generate_logs,
+                tool_calls=tool_calls,
+            )
 
     def _generate_from_context_alora(
         self,
