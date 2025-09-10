@@ -26,6 +26,7 @@ from mellea.backends import BaseModelSubclass
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.types import ModelOption
+from mellea.backends.utils import to_chat
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -227,38 +228,11 @@ class LocalVLLMBackend(FormatterBackend):
         decoded_result: str | None = None
 
         if ctx.is_chat_context:
-            linearized_ctx = ctx.render_for_generation()
-            assert linearized_ctx is not None, (
-                "If ctx.is_chat_context, then the context should be linearizable."
-            )
-            ctx_as_message_list: list[Message] = self.formatter.to_chat_messages(
-                linearized_ctx
-            )
-            # add action
-            ctx_as_message_list.extend(self.formatter.to_chat_messages([action]))
-            ctx_as_conversation = [
-                {"role": m.role, "content": m.content} for m in ctx_as_message_list
-            ]
-
-            # Check that we ddin't accidentally end up with CBlocks.
-            for msg in ctx_as_conversation:
-                for v in msg.values():
-                    if "CBlock" in v:
-                        FancyLogger.get_logger().error(
-                            f"Found the string `CBlock` in what should've been a stringified context: {ctx_as_conversation}"
-                        )
-
-            # handle custom system prompts. It's important that we do this before the _parse_and_**clean**_model_options step.
             system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, None)
-            if system_prompt is not None:
-                system_msg: dict[str, str] = {
-                    "role": "system",
-                    "content": system_prompt,
-                }
-                ctx_as_conversation.insert(0, system_msg)
+            ctx_as_chat = to_chat(action, ctx, self.formatter, system_prompt)
 
             input_str: str = self._tokenizer.apply_chat_template(  # type: ignore
-                ctx_as_conversation, tokenize=False
+                ctx_as_chat, tokenize=False
             )
 
             sampling_params = vllm.SamplingParams(
@@ -305,7 +279,7 @@ class LocalVLLMBackend(FormatterBackend):
         if generate_logs is not None:
             assert isinstance(generate_logs, list)
             generate_log = GenerateLog()
-            generate_log.prompt = ctx_as_conversation
+            generate_log.prompt = ctx_as_chat
             generate_log.backend = f"hf::{self.model_id!s}"
             generate_log.model_options = model_options
             generate_log.date = datetime.datetime.now()

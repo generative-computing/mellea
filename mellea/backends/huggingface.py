@@ -42,6 +42,7 @@ from mellea.backends.tools import (
     parse_tools,
 )
 from mellea.backends.types import ModelOption
+from mellea.backends.utils import to_chat
 from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
@@ -279,35 +280,8 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
         # Otherwise, we will linearize the context and treat it as a raw input.
         if ctx.is_chat_context:
-            linearized_ctx = ctx.view_for_generation()
-            assert linearized_ctx is not None, (
-                "If ctx.is_chat_context, then the context should be linearizable."
-            )
-            ctx_as_message_list: list[Message] = self.formatter.to_chat_messages(
-                linearized_ctx
-            )
-            # add action
-            ctx_as_message_list.extend(self.formatter.to_chat_messages([action]))
-            ctx_as_conversation = [
-                {"role": m.role, "content": m.content} for m in ctx_as_message_list
-            ]
-
-            # Check that we ddin't accidentally end up with CBlocks.
-            for msg in ctx_as_conversation:
-                for v in msg.values():
-                    if "CBlock" in v:
-                        FancyLogger.get_logger().error(
-                            f"Found the string `CBlock` in what should've been a stringified context: {ctx_as_conversation}"
-                        )
-
-            # handle custom system prompts. It's important that we do this before the _parse_and_**clean**_model_options step.
             system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, None)
-            if system_prompt is not None:
-                system_msg: dict[str, str] = {
-                    "role": "system",
-                    "content": system_prompt,
-                }
-                ctx_as_conversation.insert(0, system_msg)
+            ctx_as_chat = to_chat(action, ctx, self.formatter, system_prompt)
 
             # Append tool call information if applicable.
             tools: dict[str, Callable] = dict()
@@ -332,7 +306,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 set_seed(seed)
 
             input_ids = self._tokenizer.apply_chat_template(  # type: ignore
-                ctx_as_conversation,
+                ctx_as_chat,
                 tools=convert_tools_to_json(tools),  # type: ignore
                 add_generation_prompt=True,
                 return_tensors="pt",
@@ -397,7 +371,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             )
 
             output = ModelOutputThunk(None)
-            output._context = linearized_ctx
+            output._context = ctx.view_for_generation()
             output._action = action
             output._model_options = model_options
 
@@ -406,7 +380,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             output._process = functools.partial(self.processing, input_ids=input_ids)
             output._post_process = functools.partial(
                 self.post_processing,
-                conversation=ctx_as_conversation,
+                conversation=ctx_as_chat,
                 input_ids=input_ids,
                 _format=_format,
                 tool_calls=tool_calls,
