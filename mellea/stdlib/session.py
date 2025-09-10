@@ -70,12 +70,16 @@ def backend_name_to_class(name: str) -> Any:
         from mellea.backends.watsonx import WatsonxAIBackend
 
         return WatsonxAIBackend
+    elif name == "litellm":
+        from mellea.backends.litellm import LiteLLMBackend
+
+        return LiteLLMBackend
     else:
         return None
 
 
 def start_session(
-    backend_name: Literal["ollama", "hf", "openai", "watsonx"] = "ollama",
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
     model_id: str | ModelIdentifier = IBM_GRANITE_3_3_8B,
     ctx: Context | None = SimpleContext(),
     *,
