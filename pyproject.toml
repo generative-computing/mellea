@@ -54,7 +54,7 @@ m = "cli.m:cli"
 
 hf = [
     "accelerate>=1.9.0",
-    "alora>=0.2.0",
+    "alora==0.2.0",
     "datasets>=4.0.0",
     "outlines<1.0.0",
     "peft>=0.16.0",

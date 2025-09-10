@@ -64,7 +64,10 @@ class Message(Component):
 
     def __str__(self):
         """Pretty representation of messages, because they are a special case."""
-        return f'mellea.Message(role="{self.role}", content="{self.content}", images="{[f"{i[:20]}..." for i in self.images]}")'
+        images = []
+        if self.images is not None:
+            images = [f"{i[:20]}..." for i in self.images]
+        return f'mellea.Message(role="{self.role}", content="{self.content}", images="{images}")'
 
 
 class ToolMessage(Message):

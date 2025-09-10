@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'darwin'",
@@ -163,16 +163,16 @@ wheels = [
 
 [[package]]
 name = "alora"
-version = "0.3.0"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "peft" },
     { name = "transformers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/66/08/0a395f8547c87c8aa321a6e041d4d09103b8d25f7a6adc6c1930cf815e1e/alora-0.3.0.tar.gz", hash = "sha256:51a1e82c301c4160a9267b954b3404d8c0d81c30f82b1129971b43521d9b4fef", size = 68871, upload-time = "2025-06-09T21:50:39.717Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/f5/c88b856fbb53b8fccf472c387d758f5f84e47f44be17707cd26824810a39/alora-0.2.0.tar.gz", hash = "sha256:e71f2c69bd1813f69f540efeea210be192ecd871b1ba94906a2e00b428b8fcb3", size = 68868, upload-time = "2025-06-09T19:35:56.694Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/1e/c95ac9cc7d916ca590a0ee2a62a42f97f5f37a5282c89b4e9926a41a3f4f/alora-0.3.0-py3-none-any.whl", hash = "sha256:f2427936b7e3ea4b5b03b098f1a9b5aa8b3860aee212c1d0d80d5b90febd5f43", size = 62993, upload-time = "2025-06-09T21:50:37.598Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/bb/10bdbade587a26d0f95c6c44456d491a9c8cc5d60b793ae797b77e61da7c/alora-0.2.0-py3-none-any.whl", hash = "sha256:5b90607062037dd6953c81f32ec9ef5fca088484100c72fb2c88a5e8c2545eba", size = 62989, upload-time = "2025-06-09T19:35:55.44Z" },
 ]
 
 [[package]]
@@ -2389,7 +2389,7 @@ notebook = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", marker = "extra == 'hf'", specifier = ">=1.9.0" },
-    { name = "alora", marker = "extra == 'hf'", specifier = ">=0.2.0" },
+    { name = "alora", marker = "extra == 'hf'", specifier = "==0.2.0" },
     { name = "ansicolors" },
     { name = "click", specifier = "<8.2.0" },
     { name = "datasets", marker = "extra == 'hf'", specifier = ">=4.0.0" },
