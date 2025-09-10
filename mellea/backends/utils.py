@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import inspect
+from collections.abc import Callable
 from typing import Literal
 
 from mellea.backends.aloras import Alora
 from mellea.backends.formatter import Formatter
+from mellea.backends.tools import parse_tools
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import CBlock, Component, Context
+from mellea.stdlib.base import CBlock, Component, Context, ModelToolCall
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
 
@@ -70,3 +73,28 @@ def use_alora(
         return reroute_to_alora
     else:
         return False
+
+
+def extract_model_tool_requests(
+    tools: dict[str, Callable], decoded_result: str
+) -> dict[str, ModelToolCall] | None:
+    model_tool_calls: dict[str, ModelToolCall] = dict()
+    for tool_name, tool_args in parse_tools(decoded_result):
+        func = tools.get(tool_name)
+        if func is None:
+            FancyLogger.get_logger().warning(
+                f"model attempted to call a non-existing function: {tool_name}"
+            )
+            continue
+
+        # Clean up the function args slightly. Some models seem to
+        # hallucinate parameters when none are required.
+        sig = inspect.signature(func)
+        if len(sig.parameters) == 0:
+            tool_args = {}
+
+        model_tool_calls[tool_name] = ModelToolCall(tool_name, func, tool_args)
+
+    if len(model_tool_calls) > 0:
+        return model_tool_calls
+    return None
