@@ -34,10 +34,9 @@ from mellea.backends.tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
-    parse_tools,
 )
 from mellea.backends.types import ModelOption
-from mellea.backends.utils import to_chat, use_alora
+from mellea.backends.utils import extract_model_tool_requests, to_chat, use_alora
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -376,7 +375,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
         # Only scan for tools if we are not doing structured decoding and tool calls were provided to the model.
         if format is None and tool_calls:
-            result.tool_calls = self._extract_model_tool_requests(tools, decoded_result)
+            result.tool_calls = extract_model_tool_requests(tools, decoded_result)
 
         parsed_result = self.formatter.parse(action, result)
         if generate_logs is not None:
@@ -547,30 +546,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             model_options, self.from_mellea_model_opts_map
         )
         return ModelOption.remove_special_keys(backend_specific)
-
-    def _extract_model_tool_requests(
-        self, tools: dict[str, Callable], decoded_result: str
-    ) -> dict[str, ModelToolCall] | None:
-        model_tool_calls: dict[str, ModelToolCall] = dict()
-        for tool_name, tool_args in parse_tools(decoded_result):
-            func = tools.get(tool_name)
-            if func is None:
-                FancyLogger.get_logger().warning(
-                    f"model attempted to call a non-existing function: {tool_name}"
-                )
-                continue
-
-            # Clean up the function args slightly. Some models seem to
-            # hallucinate parameters when none are required.
-            sig = inspect.signature(func)
-            if len(sig.parameters) == 0:
-                tool_args = {}
-
-            model_tool_calls[tool_name] = ModelToolCall(tool_name, func, tool_args)
-
-        if len(model_tool_calls) > 0:
-            return model_tool_calls
-        return None
 
     # region ALora loading, unloading, and utility functions.
     def add_alora(self, alora: HFAlora):
