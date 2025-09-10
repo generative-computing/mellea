@@ -25,8 +25,13 @@ from transformers import PreTrainedTokenizerBase
 from mellea.backends import BaseModelSubclass
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
+from mellea.backends.tools import (
+    add_tools_from_context_actions,
+    add_tools_from_model_options,
+    convert_tools_to_json,
+)
 from mellea.backends.types import ModelOption
-from mellea.backends.utils import to_chat
+from mellea.backends.utils import extract_model_tool_requests, to_chat
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -201,8 +206,6 @@ class LocalVLLMBackend(FormatterBackend):
 
         # TODO: insert the alora code here.
 
-        assert not tool_calls
-
         return self._generate_from_context_standard(
             action,
             ctx,
@@ -231,8 +234,28 @@ class LocalVLLMBackend(FormatterBackend):
             system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, None)
             ctx_as_chat = to_chat(action, ctx, self.formatter, system_prompt)
 
+            # Append tool call information if applicable.
+            tools: dict[str, Callable] = dict()
+            if tool_calls:
+                if format:
+                    FancyLogger.get_logger().warning(
+                        f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
+                    )
+                else:
+                    add_tools_from_model_options(tools, model_options)
+                    add_tools_from_context_actions(
+                        tools, ctx.actions_for_available_tools()
+                    )
+
+                    # Add the tools from the action for this generation last so that
+                    # they overwrite conflicting names.
+                    add_tools_from_context_actions(tools, [action])
+                FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+
             input_str: str = self._tokenizer.apply_chat_template(  # type: ignore
-                ctx_as_chat, tokenize=False
+                ctx_as_chat,
+                tokenize=False,
+                tools=convert_tools_to_json(tools),  # type: ignore
             )
 
             sampling_params = vllm.SamplingParams(
@@ -275,6 +298,10 @@ class LocalVLLMBackend(FormatterBackend):
 
         result = ModelOutputThunk(value=decoded_result)
 
+        # Only scan for tools if we are not doing structured decoding and tool calls were provided to the model.
+        if format is None and tool_calls:
+            result.tool_calls = extract_model_tool_requests(tools, decoded_result)
+
         parsed_result = self.formatter.parse(action, result)
         if generate_logs is not None:
             assert isinstance(generate_logs, list)
@@ -286,7 +313,7 @@ class LocalVLLMBackend(FormatterBackend):
             generate_log.model_output = decoded_result
             generate_log.extra = {
                 "format": format,
-                "tools_available": False,
+                "tools_available": tools,
                 "tools_called": result.tool_calls,
                 "seed": model_options.get(ModelOption.SEED, None),
             }
