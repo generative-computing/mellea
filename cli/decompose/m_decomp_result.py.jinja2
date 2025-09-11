@@ -24,7 +24,7 @@ except KeyError as e:
 subtask_{{ loop.index }} = m.instruct(
     textwrap.dedent(
         R"""
-        {{ item.prompt_template | trim  | indent(width=8, first=False) }}
+        {{ item.prompt_template | trim | indent(width=8, first=False) }}
         """.strip()
     ),
     {%- if item.constraints %}
