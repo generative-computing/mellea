@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import abc
+import asyncio
 import base64
 import binascii
 import datetime
+import enum
 from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
@@ -131,7 +133,7 @@ class Component(Protocol):
 def get_images_from_component(c: Component) -> None | list[ImageBlock]:
     """Gets images from a `Component` if they are present and a non-empty list, otherwise returns None."""
     if hasattr(c, "images"):
-        imgs = c.images
+        imgs = c.images  # type: ignore
         if imgs is not None:
             assert isinstance(imgs, list), "images field must be a list."
             assert all(isinstance(im, ImageBlock) for im in imgs), (
@@ -147,6 +149,14 @@ def get_images_from_component(c: Component) -> None | list[ImageBlock]:
         return None
 
 
+class GenerateType(enum.Enum):
+    """Used to track what functions can be used to extract a value from a ModelOutputThunk."""
+
+    NONE = None
+    ASYNC = 1
+    SYNC = 2
+
+
 class ModelOutputThunk(CBlock):
     """A `ModelOutputThunk` is a special type of `CBlock` that we know came from a model's output. It is possible to instantiate one without the output being computed yet."""
 
@@ -160,11 +170,116 @@ class ModelOutputThunk(CBlock):
         """Initializes as a cblock, optionally also with a parsed representation from an output formatter."""
         super().__init__(value, meta)
         self.parsed_repr: CBlock | Component | Any | None = parsed_repr
+
+        # Set computed to True if a value is passed in.
+        self._computed: bool = True if value is not None else False
+
+        # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
+        self._thinking: str | None = None
+
+        # Used for tracking generation.
+        self._context: list[Component | CBlock] | None = None
+        self._action: Component | CBlock | None = None
+        self._model_options: dict[str, Any] | None = None
+
+        # Used for async and async streaming.
+        self._async_queue: asyncio.Queue = asyncio.Queue(maxsize=20)
+        self._chunk_size = 3  # Minimum number of chunks to stream at a single time.
+
+        # _generate and _generate_type are linked. _generate will determine
+        # what gets set for _generate_type. _generate_type determines what
+        # function(s) can be used to get the value of the ModelOutputThunk.
+        self._generate: asyncio.Task[None] | None = None
+        self._generate_type: GenerateType = GenerateType.NONE
+        self._process: Callable[[ModelOutputThunk, Any], None] | None = None
+        self._post_process: Callable[[ModelOutputThunk], None] | None = None
 
     def is_computed(self):
         """Returns true only if this Thunk has already been filled."""
-        return self.value is not None
+        return self._computed
+
+    @property
+    def value(self) -> str | None:
+        """Gets the value of the block."""
+        if not self._computed:
+            return None
+        return self._underlying_value
+
+    @value.setter
+    def value(self, v: str):
+        """Sets the value of the block."""
+        self._underlying_value = v
+
+    async def avalue(self) -> str:
+        """Returns the value of the ModelOutputThunk. Can be used for both async streaming and async non-streaming.
+
+        Raises:
+            RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible.
+        """
+        if self._computed:
+            assert self.value  # If computed, the value cannot be None.
+            return self.value
+
+        if not self._generate_type == GenerateType.ASYNC:
+            raise RuntimeError(
+                f"Cannot use `ModelOutputThunk.avalue()` when the generate function is using `{self._generate_type.name}`"
+            )
+
+        while not self._computed:
+            await self.astream()
+
+        assert self.value is not None  # If computed, the value cannot be None.
+        return self.value
+
+    async def astream(self) -> str | None:
+        """Returns the next chunk of data. Can be used for both async streaming and async non-streaming.
+
+        Returns `None` if the ModelOutputThunk is already computed or no values are left.
+
+        Raises:
+            RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible.
+        """
+        if self._computed:
+            # Return an empty item since there's nothing more to stream.
+            return None
+
+        if not self._generate_type == GenerateType.ASYNC:
+            raise RuntimeError(
+                f"Cannot use `ModelOutputThunk.astream()` when the generate function is using `{self._generate_type.name}`"
+            )
+
+        # Type of the chunk depends on the backend.
+        chunks: list[Any | None] = []
+        while True:
+            try:
+                item = self._async_queue.get_nowait()
+                chunks.append(item)
+            except asyncio.QueueEmpty:
+                # We've exhausted the current items in the queue.
+                break
+
+        # Make sure we always get the minimum chunk size.
+        while len(chunks) <= self._chunk_size:
+            if len(chunks) > 0 and chunks[-1] is None:
+                break  # Hit sentinel value.
+
+            item = await self._async_queue.get()
+            chunks.append(item)
+
+        # Process the sentinel value if it's there.
+        if chunks[-1] is None:
+            chunks.pop()  # Remove the sentinel value.
+            self._computed = True
+        for chunk in chunks:
+            assert self._process is not None
+            self._process(self, chunk)
+
+        if self._computed:
+            assert self._post_process is not None
+            self._post_process(self)
+
+        return self._underlying_value
 
 
 def blockify(s: str | CBlock | Component) -> CBlock | Component:

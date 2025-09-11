@@ -17,12 +17,14 @@ from mellea.backends.tools import (
     add_tools_from_model_options,
 )
 from mellea.backends.types import ModelOption
+from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
     GenerateLog,
+    GenerateType,
     ModelOutputThunk,
     ModelToolCall,
     TemplateRepresentation,
@@ -234,6 +236,7 @@ class OllamaModelBackend(FormatterBackend):
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
+        stream: bool = False,
     ):
         """See `generate_from_chat_context`."""
         assert ctx.is_chat_context, (
@@ -246,6 +249,7 @@ class OllamaModelBackend(FormatterBackend):
             model_options=model_options,
             generate_logs=generate_logs,
             tool_calls=tool_calls,
+            stream=stream,
         )
 
     def generate_from_chat_context(
@@ -257,11 +261,15 @@ class OllamaModelBackend(FormatterBackend):
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
+        stream: bool = False,
     ) -> ModelOutputThunk:
         """Generates a new completion from the provided Context using this backend's `Formatter`.
 
         This implementation treats the `Context` as a chat history, and uses the  `ollama.Client.chat()` interface to generate a completion.
         This will not always work, because sometimes we want to use non-chat models.
+
+        Raises:
+            RuntimeError: If not called from a thread with a running event loop.
         """
         model_opts = self._simplify_and_merge(model_options)
 
@@ -311,45 +319,87 @@ class OllamaModelBackend(FormatterBackend):
             FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         # Generate a chat response from ollama, using the chat messages.
-        chat_response: ollama.ChatResponse = self._client.chat(
+        chat_response = self._async_client.chat(
             model=self._get_ollama_model_id(),
             messages=conversation,
             tools=list(tools.values()),
             think=model_opts.get(ModelOption.THINKING, None),
             options=self._make_backend_specific_and_remove(model_opts),
-            stream=False,
+            stream=stream,
             format=format.model_json_schema() if format is not None else None,
         )  # type: ignore
 
-        result = ModelOutputThunk(
-            value=chat_response.message.content,  # For an ollama tool call, content will be an empty string.
-            meta={"chat_response": chat_response},
-            tool_calls=self._extract_model_tool_requests(tools, chat_response),
-        )
+        output = ModelOutputThunk(None)
+        output._context = linearized_context
+        output._action = action
 
-        formatted_result = self.formatter.parse(action, result)
+        def processing(mot: ModelOutputThunk, chunk: ollama.ChatResponse):
+            """Called during generation to add information from a single ChatResponse to the ModelOutputThunk."""
+            if mot._thinking is None:
+                mot._thinking = ""
+            thinking_chunk = chunk.message.thinking
+            if thinking_chunk is not None:
+                mot._thinking += thinking_chunk
 
-        if generate_logs is not None:
-            # noinspection DuplicatedCode
-            assert isinstance(generate_logs, list)
-            generate_log = GenerateLog()
-            generate_log.prompt = conversation
-            generate_log.backend = f"ollama::{self.model_id!s}"
-            generate_log.model_options = model_opts
-            generate_log.date = datetime.datetime.now()
-            generate_log.model_output = chat_response
-            generate_log.extra = {
-                "format": format,
-                "thinking": model_opts.get(ModelOption.THINKING, None),
-                "tools_available": tools,
-                "tools_called": result.tool_calls,
-                "seed": model_opts.get(ModelOption.SEED, None),
-            }
-            generate_log.action = action
-            generate_log.result = formatted_result
-            generate_logs.append(generate_log)
+            if mot._underlying_value is None:
+                mot._underlying_value = ""
+            content_chunk = chunk.message.content
+            if content_chunk is not None:
+                mot._underlying_value += content_chunk
 
-        return formatted_result
+            if mot.tool_calls is None:
+                mot.tool_calls = {}
+            tool_chunk = self._extract_model_tool_requests(tools, chunk)
+            if tool_chunk is not None:
+                # Merge the tool_chunk dict.
+                for key, val in tool_chunk.items():
+                    mot.tool_calls[key] = val
+
+        output._process = processing
+
+        def post_processing(mot: ModelOutputThunk):
+            """Called when generation is done."""
+            self.formatter.parse(action, mot)
+
+        output._post_process = post_processing
+
+        try:
+            # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
+            # We can also support synchronous calls by adding a flag and changing this ._generate function.
+
+            # This function should always be called from a running event loop so we don't have to worry about
+            # scheduling the task to a specific event loop here.
+            output._generate = asyncio.create_task(
+                send_to_queue(chat_response, output._async_queue)
+            )
+            output._generate_type = GenerateType.ASYNC
+        except RuntimeError as e:
+            # Most likely cause is running this function without an event loop present
+            raise e
+
+        return output
+
+        # if generate_logs is not None:
+        #     # noinspection DuplicatedCode
+        #     assert isinstance(generate_logs, list)
+        #     generate_log = GenerateLog()
+        #     generate_log.prompt = conversation
+        #     generate_log.backend = f"ollama::{self.model_id!s}"
+        #     generate_log.model_options = model_opts
+        #     generate_log.date = datetime.datetime.now()
+        #     generate_log.model_output = chat_response
+        #     generate_log.extra = {
+        #         "format": format,
+        #         "thinking": model_opts.get(ModelOption.THINKING, None),
+        #         "tools_available": tools,
+        #         "tools_called": result.tool_calls,
+        #         "seed": model_opts.get(ModelOption.SEED, None),
+        #     }
+        #     generate_log.action = action
+        #     generate_log.result = formatted_result
+        #     generate_logs.append(generate_log)
+
+        # return formatted_result
 
     def _generate_from_raw(
         self,

@@ -1,7 +1,7 @@
 """sampling methods go here."""
 
 import abc
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from copy import deepcopy
 from typing import Any
 
@@ -60,7 +60,11 @@ class SamplingStrategy(abc.ABC):
 
     # the function signature here matches that of m.validate
     validate: (
-        Callable[[list[Requirement], Context, Any], list[ValidationResult]] | None
+        Callable[
+            [list[Requirement], Context, Any],
+            Coroutine[Any, Any, list[ValidationResult]],
+        ]
+        | None
     ) = None
 
     generate: (
@@ -69,7 +73,7 @@ class SamplingStrategy(abc.ABC):
     ) = None
 
     @abc.abstractmethod
-    def sample(
+    async def sample(
         self,
         action: Component,
         context: Context,
@@ -100,7 +104,10 @@ class BaseSamplingStrategy(SamplingStrategy):
         self,
         *,
         loop_budget: int = 1,
-        validate: Callable[[list[Requirement], Context, Any], list[ValidationResult]]
+        validate: Callable[
+            [list[Requirement], Context, Any],
+            Coroutine[Any, Any, list[ValidationResult]],
+        ]
         | None = None,
         generate: (
             Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
@@ -167,7 +174,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         """
         ...
 
-    def sample(
+    async def sample(
         self,
         action: Component,
         context: Context,
@@ -235,9 +242,11 @@ class BaseSamplingStrategy(SamplingStrategy):
 
             # run a generation pass
             result = self.generate(new_action, ctx, generate_logs)
+            await result.avalue()
 
             # validation pass
-            val_scores = self.validate(reqs, validation_ctx, result)
+            val_scores_co = self.validate(reqs, validation_ctx, result)
+            val_scores = await val_scores_co
 
             # match up reqs with scores
             constraint_scores = list(zip(reqs, val_scores))
