@@ -74,7 +74,7 @@ class LiteLLMBackend(FormatterBackend):
         # users should only be specifying a single one in their request.
         self.to_mellea_model_opts_map = {
             "system": ModelOption.SYSTEM_PROMPT,
-            "reasoning_effort": ModelOption.THINKING,  # TODO: JAL; see which of these are actually extracted...
+            "reasoning_effort": ModelOption.THINKING,
             "seed": ModelOption.SEED,
             "max_completion_tokens": ModelOption.MAX_NEW_TOKENS,
             "max_tokens": ModelOption.MAX_NEW_TOKENS,

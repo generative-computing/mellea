@@ -101,7 +101,7 @@ class Requirement(Component):
         # Used for validation. Do not manually populate.
         self._output: str | None = None
 
-    def validate(
+    async def validate(
         self,
         backend: Backend,
         ctx: Context,
@@ -133,6 +133,7 @@ class Requirement(Component):
                 model_options=model_options,
                 generate_logs=generate_logs,
             )
+            await llm_as_a_judge_result.avalue()
             return ValidationResult(
                 result=self.output_to_bool(llm_as_a_judge_result),
                 reason=llm_as_a_judge_result.value,
