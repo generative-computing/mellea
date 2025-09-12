@@ -71,6 +71,14 @@ class Formatter(abc.ABC):
             match c:
                 case Message():
                     return c
+                case Component():
+                    images = None
+                    tr = c.format_for_llm()
+                    if isinstance(tr, TemplateRepresentation):
+                        images = tr.images
+
+                    # components can have images
+                    return Message(role=role, content=self.print(c), images=images)
                 case _:
                     return Message(role=role, content=self.print(c))
 

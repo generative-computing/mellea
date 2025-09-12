@@ -117,7 +117,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         self.from_mellea_model_opts_map_chats = {
             ModelOption.SEED: "seed",
             ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
-            ModelOption.THINKING: "reasoning_effort",
         }
 
         # See notes above.
@@ -351,6 +350,40 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             ),
         )
 
+    @staticmethod
+    def message_to_openai_message(msg: Message):
+        if msg.images is not None:
+            img_list = [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{img}"},
+                }
+                for img in msg.images
+            ]
+
+            return {
+                "role": msg.role,
+                "content": [{"type": "text", "text": msg.content}, *img_list],
+            }
+        else:
+            return {"role": msg.role, "content": msg.content}
+            # Target format:
+            # {
+            #     "role": "user",
+            #     "content": [
+            #       {
+            #         "type": "text",
+            #         "text": "What's in this picture?"
+            #       },
+            #       {
+            #         "type": "image_url",
+            #         "image_url": {
+            #           "url": "data:image/jpeg;base64,<base64_string>"
+            #         }
+            #       }
+            #     ]
+            #   }
+
     def _generate_from_chat_context_standard(
         self,
         action: Component | CBlock,
@@ -385,7 +418,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
-        conversation.extend([{"role": m.role, "content": m.content} for m in messages])
+        conversation.extend([self.message_to_openai_message(m) for m in messages])
 
         if format is not None:
             response_format = {
@@ -421,15 +454,14 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             thinking = "medium"
 
         formatted_tools = convert_tools_to_json(tools)
+        use_tools = len(formatted_tools) > 0
+
         chat_response: ChatCompletion = self._client.chat.completions.create(
             model=self._hf_model_id,
             messages=conversation,  # type: ignore
             reasoning_effort=thinking,  # type: ignore
             response_format=response_format,  # type: ignore
-            tool_choice=(
-                "auto" if formatted_tools and len(formatted_tools) > 0 else "none"
-            ),
-            tools=formatted_tools,  # type: ignore
+            tools=formatted_tools if use_tools else None,  # type: ignore
             # parallel_tool_calls=False, # We only support calling one tool per turn. But we do the choosing on our side so we leave this False.
             **self._make_backend_specific_and_remove(
                 model_opts, is_chat_context=ctx.is_chat_context

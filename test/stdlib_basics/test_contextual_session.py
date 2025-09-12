@@ -61,7 +61,7 @@ def test_no_active_session_error():
     with pytest.raises(RuntimeError, match="No active session found"):
         chat("test")
 
-
+@pytest.mark.qualitative
 def test_generative_with_contextual_session(model_id):
     """Test generative slots work with contextual sessions."""
     with start_session(model_id=model_id):
