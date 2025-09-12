@@ -1,22 +1,33 @@
-#!/bin/bash -xe
+#!/bin/bash -e
 
-conda=""
-if $(which mamba)
+CONDA=""
+if which mamba > /dev/null
 then
-    conda=$(which mamba)
+    CONDA=$(which mamba)
 fi
-if $(which conda)
+if which conda > /dev/null
 then
-    conda=$(which conda)
+    CONDA=$(which conda)
 fi
-if [ -z $conda ]
+
+if [ -z $CONDA ]
 then
     echo "Error: conda or mamba is not installed or is not in the PATH."
+    echo "Go to "
+    echo "* https://github.com/conda-forge/miniforge (open source)"
+    echo "* https://www.anaconda.com/download/success (registration required)"
+    echo "to obtain a conda/mamba installer."
+else
+    echo "Using $CONDA for environment setup"
 fi
 
-echo "using $conda for environment setup"
 
-$conda env remove -y -n mellea || true
-$conda env create -f environment.yml
+# note:
+# this is a portable way (works in linux and osx) to get the directory of this script.
+# readlink -ef may not work on osx.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+$CONDA env create -f $SCRIPT_DIR/environment.yml
 
-$conda run -n mellea uv pip install -e .[all] --group dev
+$CONDA run -n mellea uv pip install -e .[all] --group dev --group notebook --group docs
+
+$CONDA run -n mellea pre-commit install
