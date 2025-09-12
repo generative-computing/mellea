@@ -2,21 +2,33 @@
 
 from docs.examples.helper import w
 from mellea import start_session
+from mellea.backends.process_reward_models.huggingface.prms import (
+    HFGenerativePRM,
+    HFRegressionPRM,
+)
 from mellea.backends.types import ModelOption
 from mellea.stdlib.rewards.prm_scorer import PRMScorer
 from mellea.stdlib.sampling import BestofNSamplingStrategy
 
-# create a session using Granite 3.3 8B on Huggingface and a simple context [see below]
-m = start_session(backend_name="hf", model_options={ModelOption.MAX_NEW_TOKENS: 1024})
+# create a session for the generator using Granite 3.3 8B on Huggingface and a simple context [see below]
+m = start_session(backend_name="hf", model_options={ModelOption.MAX_NEW_TOKENS: 512})
+
+# initialize the PRM model
+prm_model = HFGenerativePRM(
+    model_name_or_path="ibm-granite/granite-3.3-8b-lora-math-prm",
+    score_token="Y",
+    generation_prompt="Is this response correct so far (Y/N)?",
+    step_separator="\n\n",
+)
+
+# # can also initialize a Regression PRM model
+# prm_model = HFRegressionPRM(
+#     model_name_or_path = "granite-3.3-8b-math-prm-regression",
+#     score_token= "<end_of_step>",
+#     step_separator= "\n\n")
 
 # create PRM scorer object
-prm = PRMScorer(
-    model_version="ibm-granite/granite-3.3-8b-lora-math-prm",
-    prm_type="generative",
-    correct_token="Y",
-    generation_prompt="Is this response correct so far (Y/N)?",
-    step_splitter="\n\n",
-)
+prm = PRMScorer(prm_model=prm_model, preference_ordering="max")
 
 # Do Best of N sampling with the PRM scorer and an additional requirement
 BoN_prm = m.instruct(

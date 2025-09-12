@@ -30,6 +30,7 @@ from mellea.backends.aloras import Alora, AloraBackendMixin
 from mellea.backends.cache import Cache, SimpleLRUCache
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
+from mellea.backends.process_reward_models import PRM
 from mellea.backends.tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
@@ -670,3 +671,56 @@ class HFAlora(Alora, abc.ABC):
         self._generation_prompt_tokens = self._backend._tokenizer(
             self._generation_prompt, return_tensors="pt"
         ).to(self._backend._device)
+
+
+class HFProcessRewardModel(PRM, abc.ABC):
+    def __init__(
+        self, model_name_or_path: str, score_token: str, device: str | None = None
+    ):
+        """Initialize an PRM that works with a huggingface backend. Currently supports and tested with IBM Process Reward Models
+
+        Args:
+            model_name_or_path (str): A local path to PRM or a huggingface PRM
+            score_token (str): token who's logits correspond to the PRM score. Can be a step demarker (for non-generative PRMs) or a correctness indicator (for generative PRMs)
+            device (str): device: The computational device to use ("cuda" for GPU, "mps" for Apple Silicon, or "cpu"), defaults to None. If not specified, the best available device will be automatically selected.
+        """
+        super().__init__(model_name_or_path)
+
+        # auto-device if not more specific
+        self._device = device
+        if device is None:
+            device_name: str = (
+                "cuda"
+                if torch.cuda.is_available()
+                else "mps"
+                if torch.backends.mps.is_available()
+                else "cpu"
+            )
+            assert device_name is not None
+            self._device = torch.device(device_name)  # type: ignore
+
+        self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
+            self.model_name_or_path, torch_dtype=torch.bfloat16
+        )
+        self.model.to(self._device)  # type: ignore
+        self.model.eval()
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path)
+
+        self._score_token = score_token
+        self._score_token_id = self.tokenizer.encode(
+            self._score_token, add_special_tokens=False
+        )[0]
+
+    def stepify(self, content: str, step_separator: str) -> list[str]:
+        """Splits the assistant response into steps to score
+
+        Args:
+            content: assistant response to score
+            step_separator: string on which to separate the content into steps
+        """
+
+        # convert assistant message into a list of steps
+        list_of_steps = [
+            step.strip() for step in content.split(step_separator) if step.strip != ""
+        ]
+        return list_of_steps
