@@ -25,7 +25,7 @@
 
 ## Chapter 1: What Is Generative Programming
 
-This tutorial is about Mellea. Mellea helps you write better generative programs. 
+This tutorial is about Mellea. Mellea helps you write better generative programs.
 
 A *generative program* is any computer program that contains calls to an LLM. As we will see throughout the tutorial, LLMs can be incorporated into software in a wide variety of ways. Some ways of incorporating LLMs into programs tend to result in robust and performant systems, while others result in software that is brittle and error-prone.
 
@@ -75,10 +75,10 @@ email = m.instruct("Write an email inviting interns to an office party at 3:30pm
 print(str(email))
 ```
 
-Here, we initialized a backend running Ollama on a local machine using the granite3.3-chat model. 
+Here, we initialized a backend running Ollama on a local machine using the granite3.3-chat model.
 We then ask the model to generate an email and print it to the console.
 
-> [!NOTE] 
+> [!NOTE]
 > Mellea supports many other models and backends. By default, a new Mellea session will run IBM's capable Granite 8B model on your own laptop. This is a good (and free!) way to get started. If you would like to try out other models or backends, you can explicitly specify the backend and model in the start_session method. For example, `mellea.start_session(backend_name="ollama", model_id=mellea.model_ids.IBM_GRANITE_3_3_8B)`.
 
 Before continuing, let's wrap this call into a function with some arguments:
@@ -107,7 +107,7 @@ The `m.instruct()` function returns a `ModelOutputThunk` per default, which has 
 
 ### Requirements
 
-But how do we know that the generated email is a good one? 
+But how do we know that the generated email is a good one?
 Good generative programmers don't leave this up to chance -- instead, they use pre-conditions to ensure that inputs to the LLM are as expected and then check post-conditions to ensure that the LLM's outputs are fit-for-purpose.
 
 Suppose that in this case we want to ensure that the email has a salutation and contains only lower-case letters. We can capture these post-conditions by specifying **requirements** on the `m.instruct` call:
@@ -170,20 +170,20 @@ print(
 ```
 
 A couple of things happened here. First, we added a sampling `strategy` to the instruction.
-This strategy (`RejectionSamplingStrategy()`) checks if all requirements are met. 
+This strategy (`RejectionSamplingStrategy()`) checks if all requirements are met.
 If any requirement fails, then the sampling strategy will sample a new email from the LLM.
 This process will repeat until the `loop_budget` on retries is consumed or all requirements are met.
 
-Even with retries, sampling might not generate results that fulfill all requirements (`email_candidate.success==False`). 
+Even with retries, sampling might not generate results that fulfill all requirements (`email_candidate.success==False`).
 Mellea forces you to think about what it means for an LLM call to fail;
 in this case, we handle the situation by simply returning the first sample as the final result.
 
 > [!NOTE]
-> When using the `return_sampling_results=True` parameter, the `instruct()` function returns a `SamplingResult` object (not a `ModelOutputThunk`) which carries the full history of sampling and validation results for each sample. 
+> When using the `return_sampling_results=True` parameter, the `instruct()` function returns a `SamplingResult` object (not a `ModelOutputThunk`) which carries the full history of sampling and validation results for each sample.
 
 ### Validating Requirements
 
-Now that we defined requirements and sampling we should have a 
+Now that we defined requirements and sampling we should have a
 look into **how requirements are validated**. The default validation strategy is [LLM-as-a-judge](https://arxiv.org/abs/2306.05685).
 
 Let's look on how we can customize requirement definitions:
@@ -200,10 +200,10 @@ requirements = [
 ```
 Here, the first requirement (r1) will be validated by LLM-as-a-judge on the output (last turn) of the instruction. This is the default behavior, since nothing else is specified.
 
-The second requirement (r2) simply  uses a function that takes the output of a sampling step and returns a boolean value indicating (un-)successful validation. While the `validation_fn` parameter requires to run validation on the full session context (see [Chapter 7](#chapter-7-on-context-management)), Mellea provides a wrapper for simpler validation functions (`simple_validate(fn: Callable[[str], bool])`) that take the output string and return a boolean as seen in this case.      
+The second requirement (r2) simply  uses a function that takes the output of a sampling step and returns a boolean value indicating (un-)successful validation. While the `validation_fn` parameter requires to run validation on the full session context (see [Chapter 7](#chapter-7-on-context-management)), Mellea provides a wrapper for simpler validation functions (`simple_validate(fn: Callable[[str], bool])`) that take the output string and return a boolean as seen in this case.
 
-The third requirement is a `check()`. Checks are only used for validation, not for generation. 
-Checks aim to avoid the "do not think about B" effect that often primes models (and humans) 
+The third requirement is a `check()`. Checks are only used for validation, not for generation.
+Checks aim to avoid the "do not think about B" effect that often primes models (and humans)
 to do the opposite and "think" about B.
 
 > [!NOTE]
@@ -254,7 +254,7 @@ print(write_email(m, "Olivia",
 
 Most LLM apis allow you to specify options to modify the request: temperature, max_tokens, seed, etc... Mellea supports specifying these options during backend initialization and when calling session-level functions with the `model_options` parameter.
 
-Mellea supports many different types of inference engines (ollama, openai-compatible vllm, huggingface, etc.). These inference engines, which we call `Backend`s, provide different and sometimes inconsistent dict keysets for specifying model options. For the most common options among model providers, Mellea provides some engine-agnostic options, which can be used by typing [`ModelOption.<TAB>`](../mellea/backends/types.py) in your favorite IDE; for example, temperature can be specified as `{"{ModelOption.TEMPERATURE": 0}` and this will "just work" across all inference engines. 
+Mellea supports many different types of inference engines (ollama, openai-compatible vllm, huggingface, etc.). These inference engines, which we call `Backend`s, provide different and sometimes inconsistent dict keysets for specifying model options. For the most common options among model providers, Mellea provides some engine-agnostic options, which can be used by typing [`ModelOption.<TAB>`](../mellea/backends/types.py) in your favorite IDE; for example, temperature can be specified as `{"{ModelOption.TEMPERATURE": 0}` and this will "just work" across all inference engines.
 
 You can add any key-value pair supported by the backend to the `model_options` dictionary, and those options will be passed along to the inference engine *even if a Mellea-specific `ModelOption.<KEY>` is defined for that option. This means you can safely copy over model option parameters from exiting codebases as-is:
 
@@ -311,7 +311,7 @@ final_options = {
 2. **Pushing and popping model state**. Sessions offer the ability to push and pop model state. This means you can temporarily change the `model_options` for a series of calls by pushing a new set of `model_options` and then revert those changes with a pop.
 
 #### System Messages
-In Mellea, `ModelOption.SYSTEM_PROMPT` is the recommended way to add/change the system message for a prompt. Setting it at the backend/session level will use the provided message as the system prompt for all future calls (just like any other model option). Similarly, you can specify the system prompt parameter for any session-level function (like `m.instruct`) to replace it for just that call. 
+In Mellea, `ModelOption.SYSTEM_PROMPT` is the recommended way to add/change the system message for a prompt. Setting it at the backend/session level will use the provided message as the system prompt for all future calls (just like any other model option). Similarly, you can specify the system prompt parameter for any session-level function (like `m.instruct`) to replace it for just that call.
 
 Mellea recommends applying the system message this way because some model-provider apis don't properly serialize messages with the `system` role and expect them as a separate parameter.
 
@@ -617,7 +617,7 @@ Let's create a RichDocument from an arxiv paper:
 from mellea.stdlib.docs.richdocument import RichDocument
 rd = RichDocument.from_document_file("https://arxiv.org/pdf/1906.04043")
 ```
-this loads the PDF file and parses it using the Docling parser into an 
+this loads the PDF file and parses it using the Docling parser into an
 intermediate representation.
 
 From the rich document we can extract some document content, e.g. the
@@ -639,7 +639,7 @@ Output:
 | (Test 2 - BERT) Top-K Buckets        | 0.85 ± 0.09 |
 ```
 
-The `Table` object is Mellea-ready and can be used immediately with LLMs. 
+The `Table` object is Mellea-ready and can be used immediately with LLMs.
 Let's just get it to work:
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/document_mobject.py#L10-L24
@@ -648,16 +648,16 @@ from mellea import start_session
 
 m = start_session()
 for seed in [x*12 for x in range(5)]:
-    table2 = m.transform(table1, 
-                         "Add a column 'Model' that extracts which model was used or 'None' if none.", 
-                         model_options={ModelOption.SEED: seed})    
+    table2 = m.transform(table1,
+                         "Add a column 'Model' that extracts which model was used or 'None' if none.",
+                         model_options={ModelOption.SEED: seed})
     if isinstance(table2, Table):
         print(table2.to_markdown())
         break
     else:
         print(f"==== TRYING AGAIN after non-useful output.====")
 ```
-In this example, `table1` should be transformed to have an extra column `Model` which contains the model string from the `Feature` column or `None` if there is none. Iterating through some seed values, we try to find a version which returns a parsable representation of the table. If found, print it out. 
+In this example, `table1` should be transformed to have an extra column `Model` which contains the model string from the `Feature` column or `None` if there is none. Iterating through some seed values, we try to find a version which returns a parsable representation of the table. If found, print it out.
 
 The output for this code sample could be:
 ```markdown
@@ -665,7 +665,7 @@ table1=
 | Feature                              | AUC         |
 |--------------------------------------|-------------|
 | Bag of Words                         | 0.63 ± 0.11 |
-| (Test 1 - GPT-2) Average Probability | 0.71 ± 0.25 | 
+| (Test 1 - GPT-2) Average Probability | 0.71 ± 0.25 |
 | (Test 2 - GPT-2) Top-K Buckets       | 0.87 ± 0.07 |
 | (Test 1 - BERT) Average Probability  | 0.70 ± 0.27 |
 | (Test 2 - BERT) Top-K Buckets        | 0.85 ± 0.09 |
@@ -688,7 +688,7 @@ The model has done a great job at fulfilling the task and coming back with a par
 
 ### MObject methods are tools
 
-When an object is `mified` all methods with a docstring get registered as tools for the LLM call. You can control if you only want a subset of these functions to be exposed by two parameters (`funcs_include` and `funcs_exclude`): 
+When an object is `mified` all methods with a docstring get registered as tools for the LLM call. You can control if you only want a subset of these functions to be exposed by two parameters (`funcs_include` and `funcs_exclude`):
 ```python
 from mellea.stdlib.mify import mify
 
@@ -703,11 +703,11 @@ class MyDocumentLoader:
         # Your parsing functions here.
         doc.content = text
         return doc
-    
+
     def do_hoops(self) -> str:
         return "hoop hoop"
 ```
-Above, the `mified` class `MyDocumentLoader` only exposes the `from_markdown()` method as tool to the LLM.  
+Above, the `mified` class `MyDocumentLoader` only exposes the `from_markdown()` method as tool to the LLM.
 
 
 Here is an example, how the methods are handled with an LLM call. Imagine the following two calls that should lead to the same result:
@@ -725,7 +725,7 @@ One of the main principles of generative programming is that you should prompt m
  * you are introducing a custom Component with non-trivial semantics that are not well-covered by any existing model's training data
  * off-shelf-models fail to recognize important business constraints
  * you have a proprietary labeled dataset which you would like to use for improving classification, intent detection, or another requirement-like task.
- 
+
 The third case is very common. In this tutorial we will explore a case-study focused on that case. we walk through fine-tuning a LoRA adapter using classification data to enhance a requirement checker. We then explain how this fine-tuned adapter can be incorporated into a Mellea program.
 
 ### Problem Statement
@@ -767,7 +767,7 @@ m alora train /to/stembolts_data.jsonl \
   --learning-rate 6e-6 \
   --batch-size 2 \
   --max-length 1024 \
-  --grad-accum 4 
+  --grad-accum 4
 ```
 
 The default prompt format is `<|start_of_role|>check_requirement<|end_of_role|>`; this prompt should be appended to the context just before activated our newly trained aLoRA. If needed, you can customize this prompt using the `--promptfile` argument.
@@ -810,7 +810,7 @@ huggingface-cli login  # Optional: only needed for uploads
 ```
 
 > [!NOTE]
-> **Warning on Privacy:** Before uploading your trained model to the Hugging Face Hub, review the visibility carefully. If you will be sharing your model with the public, consider whether your training data includes any proprietary, confidential, or sensitive information. Language models can unintentionally memorize details, and this problem compounds when operating over small or domain-specific datasets. 
+> **Warning on Privacy:** Before uploading your trained model to the Hugging Face Hub, review the visibility carefully. If you will be sharing your model with the public, consider whether your training data includes any proprietary, confidential, or sensitive information. Language models can unintentionally memorize details, and this problem compounds when operating over small or domain-specific datasets.
 
 
 ### Integrating the Tuned Model into Mellea
@@ -827,13 +827,13 @@ backend.add_alora(
     HFConstraintAlora(
         name="stembolts_failuremode_alora",
         path_or_model_id="stembolts/failuremode-alora", # can also be the checkpoint path
-        generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>", 
+        generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>",
         backend=m.backend,
     )
 )
 ```
 
-In the above arguments, `path_or_model_id` refers to the model checkpoint from last step, i.e., the `m alora train` process. 
+In the above arguments, `path_or_model_id` refers to the model checkpoint from last step, i.e., the `m alora train` process.
 
 > [!NOTE]
 > The `generation_prompt` passed to your `backend.add_alora` call should exactly match the prompt used for training.
@@ -907,7 +907,7 @@ Mellea manages context using two complementary mechanisms:
 
 We have already seen a lot about how Components can be used to define the context of an LLM request, so in this chapter we will focus on the `Context` mechanism.
 
-When you use the `start_session()` method, you are actually instantiating a `Mellea` with a default inference engine, a default model choice, and a default context manager. The following code is equivalent to `m.start_session()`: 
+When you use the `start_session()` method, you are actually instantiating a `Mellea` with a default inference engine, a default model choice, and a default context manager. The following code is equivalent to `m.start_session()`:
 
 ```python
 from mellea import MelleaSession
@@ -1063,10 +1063,10 @@ class ConstrainedGenerativeSlot(Component):
         self._genslot = generative_slot
         self._preconds = [reqify(precond) for precond in preconds]
         self._postconds = [reqify(postcond) for postcond in postconds]
-    
+
     def format_for_llm(self):
         return self._genslot.format_for_llm()
-    
+
     def action_name(self):
         return self._genslot._function._function_dict["name"]
 ```
@@ -1139,7 +1139,7 @@ def _check_action_preconditions(m: mellea.MelleaSession, action: ConstrainedGene
         if not m.validate(precondition, output=output):
             return False
     return True
-    
+
 
 def filter_actions(m: mellea.MelleaSession, actions: list[ConstrainedGenerativeSlot], *, output: ModelOutputThunk | None = None):
     return [act for act in actions if _check_action_preconditions(m, act, output=output)]
@@ -1167,7 +1167,7 @@ def select_action(m: mellea.MelleaSession, actions: list[ConstrainedGenerativeSl
 
 We will stop here for the basic tutorial, but notice that there are several natural extensions:
 
-1. We have not yet used the preconditions. Kripke agents can be optimized by **pre-computing** entailments between sets of pre-conditions and post-conditions; in this way, we only have to pay the cost of figuring out permissible interleaving of actions once. 
+1. We have not yet used the preconditions. Kripke agents can be optimized by **pre-computing** entailments between sets of pre-conditions and post-conditions; in this way, we only have to pay the cost of figuring out permissible interleaving of actions once.
 2. We can execute multiple actions at once, then prune likely unfruitful portions of the search process.
 
 We will dive into a full implementation of these and other Kripke agent tricks during a future deep-dive session on inference scaling with Mellea.
@@ -1217,7 +1217,7 @@ m serve --help
 
 #### Example `m serve` application
 
-While deploying programs using `m serve`, it is important for the programs to follow a specific structure. The programs needs a have function called `serve` with the following signature: 
+While deploying programs using `m serve`, it is important for the programs to follow a specific structure. The programs needs a have function called `serve` with the following signature:
 
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/agents/m_serve_example.py#L25-L29
@@ -1228,7 +1228,7 @@ def serve(
 )
 ```
 
-the `m serve` command then subsequently takes this function and runs a server that is openai compatible. For more information, please have a look at [this file](./examples/tutorial/m_serve_example.py) for how to write an `m serve` compatible program. To run the example: 
+the `m serve` command then subsequently takes this function and runs a server that is openai compatible. For more information, please have a look at [this file](./examples/tutorial/m_serve_example.py) for how to write an `m serve` compatible program. To run the example:
 
 ```shell
 m serve docs/examples/tutorial/m_serve_example.py
@@ -1252,13 +1252,13 @@ Along with a template, each class/object needs to define the arguments that will
 
 `string`: the simplest approach is for this method to return a string representation of the object. This avoids templating altogether.
 
-`TemplateRepresentation`: It can also return a `TemplateRepresentation` object. 
+`TemplateRepresentation`: It can also return a `TemplateRepresentation` object.
 This representation contains:
     - a reference to the component
     - a dictionary of arguments that will be passed to the template renderer
     - a list of tools/functions that relate to the component
 
-It also contains either of the following fields 
+It also contains either of the following fields
 - template: a string representation of a jinja2 template that can be rendered with the provided args
 - template_order: a list of strings describing the name of the template file to look up (without the ".jinja2" suffix); `*` denotes the class name.
 
@@ -1304,9 +1304,17 @@ from mellea.backends.types import ModelOption
 def web_search(query: str) -> str:
     ...
 
-model_opts = {
-    ModelOptions.TOOLS: [web_search]
-}
+output = m.instruct(
+    "Who is the 1st President of the United States?",
+    model_options={
+        ModelOptions.TOOLS: [web_search],
+    },
+    tool_calls = True,
+)
+
+assert "web_search" in output.tool_calls
+
+result = output.tool_calls["web_search"].call_func()
 ```
 
 ## Appendix: Contributing to Mellea
