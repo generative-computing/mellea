@@ -47,6 +47,13 @@ while getopts "h" OPTNAME ; do
     esac
 done
 
+if $CONDA env list | grep -q mellea
+then
+    echo "An existing mellea environment was found."
+    $CONDA env remove -n mellea
+fi
+
+
 # note:
 # this is a portable way (works in linux and osx) to get the directory of this script.
 # readlink -ef may not work on osx.
