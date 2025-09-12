@@ -23,16 +23,22 @@ fi
 
 
 usage(){
-    echo "Usage: install.sh [-h]"
+    echo "Usage: install.sh [-h] [-y]"
     echo
     echo "-h : show this help"
+    echo "-y : Adds '-y' option to '$CONDA env [create|remove|...]' command arguments."
     exit 1
 }
 
-while getopts "h" OPTNAME ; do
+CONDA_OPTIONS=""
+while getopts "yh" OPTNAME ; do
     case "${OPTNAME}" in
         h)
             usage
+            ;;
+        y)
+            CONDA_OPTIONS="-y"
+            shift 1
             ;;
         :)
             # If expected argument omitted:
@@ -50,7 +56,7 @@ done
 if $CONDA env list | grep -q mellea
 then
     echo "An existing mellea environment was found."
-    $CONDA env remove -n mellea
+    $CONDA env remove $CONDA_OPTIONS -n mellea
 fi
 
 
@@ -58,7 +64,7 @@ fi
 # this is a portable way (works in linux and osx) to get the directory of this script.
 # readlink -ef may not work on osx.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-$CONDA env create -f $SCRIPT_DIR/environment.yml
+$CONDA env create $CONDA_OPTIONS -f $SCRIPT_DIR/environment.yml
 
 $CONDA run -n mellea uv pip install -e .[all] --group dev --group notebook --group docs
 
