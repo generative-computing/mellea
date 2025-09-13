@@ -1,0 +1,5 @@
+Review the news article understanding and the celebrity inclusion segments.
+
+Condense the summary while maintaining the essential information and the inclusion of the celebrity name. Ensure the summary is concise and clear.
+
+Format of the condensed summary should be 3 paragraphs or less, ensuring it does not exceed the 600 character limit.

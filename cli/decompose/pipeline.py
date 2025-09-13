@@ -1,3 +1,4 @@
+import re
 from enum import Enum
 from typing import TypedDict
 
@@ -10,6 +11,7 @@ from mellea.backends.types import ModelOption
 
 from .prompt_modules import (
     constraint_extractor,
+    general_instructions,
     subtask_constraint_assign,
     subtask_list,
     subtask_prompt_generator,
@@ -24,6 +26,9 @@ class DecompSubtasksResult(TypedDict):
     tag: str
     constraints: list[str]
     prompt_template: str
+    general_instructions: str
+    input_vars_required: list[str]
+    depends_on: list[str]
     generated_response: NotRequired[str]
 
 
@@ -39,6 +44,9 @@ class DecompBackend(str, Enum):
     ollama = "ollama"
     openai = "openai"
     rits = "rits"
+
+
+RE_JINJA_VAR = re.compile(r"\{\{\s*(.*?)\s*\}\}")
 
 
 def decompose(
@@ -100,7 +108,7 @@ def decompose(
     subtasks: list[SubtaskItem] = subtask_list.generate(m_session, task_prompt).parse()
 
     task_prompt_constraints: list[str] = constraint_extractor.generate(
-        m_session, task_prompt
+        m_session, task_prompt, enforce_same_words=False
     ).parse()
 
     subtask_prompts: list[SubtaskPromptItem] = subtask_prompt_generator.generate(
@@ -124,6 +132,31 @@ def decompose(
             tag=subtask_data.tag,
             constraints=subtask_data.constraints,
             prompt_template=subtask_data.prompt_template,
+            general_instructions=general_instructions.generate(
+                m_session, input_str=subtask_data.prompt_template
+            ).parse(),
+            input_vars_required=list(
+                dict.fromkeys(  # Remove duplicates while preserving the original order.
+                    [
+                        item
+                        for item in re.findall(
+                            RE_JINJA_VAR, subtask_data.prompt_template
+                        )
+                        if item in user_input_variable
+                    ]
+                )
+            ),
+            depends_on=list(
+                dict.fromkeys(  # Remove duplicates while preserving the original order.
+                    [
+                        item
+                        for item in re.findall(
+                            RE_JINJA_VAR, subtask_data.prompt_template
+                        )
+                        if item not in user_input_variable
+                    ]
+                )
+            ),
         )
         for subtask_data in subtask_prompts_with_constraints
     ]

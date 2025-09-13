@@ -1,4 +1,5 @@
 from .constraint_extractor import constraint_extractor as constraint_extractor
+from .general_instructions import general_instructions as general_instructions
 from .subtask_constraint_assign import (
     subtask_constraint_assign as subtask_constraint_assign,
 )

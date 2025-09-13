@@ -18,7 +18,7 @@ except KeyError as e:
     print(f"ERROR: One or more required environment variables are not set; {e}")
     exit(1)
 {%- endif %}
-{% for item in subtasks%}
+{% for item in subtasks %}
 {% set i = loop.index0 %}
 # {{ item.subtask }} - {{ item.tag }}
 subtask_{{ loop.index }} = m.instruct(

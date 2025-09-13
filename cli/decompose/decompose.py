@@ -1,11 +1,21 @@
 import json
 import keyword
+from enum import Enum
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from .pipeline import DecompBackend
+
+
+# Must maintain declaration order
+# Newer versions must be declared on the bottom
+class DecompVersion(str, Enum):
+    latest = "latest"
+    v1 = "v1"
+    v2 = "v2"
+
 
 this_file_dir = Path(__file__).resolve().parent
 
@@ -76,6 +86,13 @@ def run(
             )
         ),
     ] = None,
+    version: Annotated[
+        DecompVersion,
+        typer.Option(
+            help=("Version of the mellea program generator template to be used."),
+            case_sensitive=False,
+        ),
+    ] = DecompVersion.latest,
     input_var: Annotated[
         list[str] | None,
         typer.Option(
@@ -99,7 +116,13 @@ def run(
         environment = Environment(
             loader=FileSystemLoader(this_file_dir), autoescape=False
         )
-        m_template = environment.get_template("m_decomp_result.py.jinja2")
+
+        ver = (
+            list(DecompVersion)[-1].value
+            if version == DecompVersion.latest
+            else version.value
+        )
+        m_template = environment.get_template(f"m_decomp_result_{ver}.py.jinja2")
 
         out_name = out_name.strip()
         assert validate_filename(out_name), (
