@@ -215,13 +215,14 @@ class _SubtaskPromptGenerator(PromptModule):
                 target_subtask=subtask_tag[0],
             )
 
-            instruction = Instruction(description=user_prompt, prefix=system_prompt)
+            instruction = Instruction(description=user_prompt)
 
             try:
                 gen_result = mellea_session.backend.generate_from_context(
                     action=instruction,
                     ctx=mellea_session.ctx,
                     model_options={
+                        ModelOption.SYSTEM_PROMPT: system_prompt,
                         ModelOption.TEMPERATURE: 0,
                         ModelOption.MAX_NEW_TOKENS: max_new_tokens,
                     },

@@ -111,13 +111,14 @@ class _ConstraintExtractor(PromptModule):
         system_prompt = get_system_prompt(enforce_same_words=enforce_same_words)
         user_prompt = get_user_prompt(task_prompt=input_str)
 
-        instruction = Instruction(description=user_prompt, prefix=system_prompt)
+        instruction = Instruction(description=user_prompt)
 
         try:
             gen_result = mellea_session.backend.generate_from_context(
                 action=instruction,
                 ctx=mellea_session.ctx,
                 model_options={
+                    ModelOption.SYSTEM_PROMPT: system_prompt,
                     ModelOption.TEMPERATURE: 0,
                     ModelOption.MAX_NEW_TOKENS: max_new_tokens,
                 },
