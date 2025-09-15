@@ -19,7 +19,7 @@ def think_budget_forcing(
     end_response_token: str = "",
     think_wait_suffix: str = "",
     answer_suffix: str = "The final answer is:",
-    answer_regex: str = "boxed",
+    answer_regex: str = r"\\boxed{.*?}",
     model_options: dict | None = None,
     generate_logs: list[GenerateLog] | None = None,
 ):
