@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'darwin'",
@@ -2322,6 +2322,7 @@ dependencies = [
     { name = "mistletoe" },
     { name = "ollama" },
     { name = "openai" },
+    { name = "pillow" },
     { name = "pydantic" },
     { name = "requests" },
     { name = "typer" },
@@ -2406,6 +2407,7 @@ requires-dist = [
     { name = "openai" },
     { name = "outlines", marker = "extra == 'hf'", specifier = "<1.0.0" },
     { name = "peft", marker = "extra == 'hf'", specifier = ">=0.16.0" },
+    { name = "pillow" },
     { name = "pydantic" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "transformers", marker = "extra == 'hf'", specifier = ">=4.53.2" },
