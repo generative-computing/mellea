@@ -1,6 +1,8 @@
 """sampling methods go here."""
 
 import abc
+import re
+from collections import Counter
 from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
@@ -381,3 +383,94 @@ class MultiTurnStrategy(BaseSamplingStrategy):
         )
 
         return next_action
+
+
+class MajorityVotingStrategyForMath(RejectionSamplingStrategy):
+    number_of_samples: int
+    answer_extraction_regex: str
+
+    def __init__(
+        self,
+        *,
+        number_of_samples: int = 8,
+        answer_extraction_regex: str = r"\\boxed{(.*?)}",
+        loop_budget: int = 1,
+        validate: Callable[[list[Requirement], Context, Any], list[ValidationResult]]
+        | None = None,
+        generate: (
+            Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
+            | None
+        ) = None,
+        requirements: list[Requirement] | None = None,
+    ):
+        """Initialize a new instance of the class with default parameters.
+
+        Args:
+            number_of_samples: Number of samples to generate and use for majority voting
+            loop_budget: Inner rejection sampling number of times to iterate through the process. Must be greater than 0.
+            validate: Function to validate the results against requirements. If None, validation is provided later through setter.
+            generate: Function to generate new model output thunks. If None, generate is provided later through setter.
+            requirements: List of requirements to test against. If None, test all requirements attached to the given instruction.
+
+        Raises:
+            AssertionError: If loop_budget is not greater than 0.
+        """
+        super().__init__(
+            loop_budget=loop_budget,
+            validate=validate,
+            generate=generate,
+            requirements=requirements,
+        )
+        self.number_of_samples = number_of_samples
+        self.answer_extraction_regex = answer_extraction_regex
+
+    def answer_extraction(self, response):
+        matches = re.findall(self.answer_extraction_regex, response, re.DOTALL)
+        if len(matches) > 0:
+            return matches[-1]  # return the last match
+        else:
+            return ""
+
+    def format_math(self, response):
+        # TODO implement
+        return response
+
+    def sample(
+        self,
+        action: Component,
+        context: Context,
+        requirements: list[Requirement],
+        *,
+        show_progress: bool = True,
+        generate_logs: list[GenerateLog] | None = None,
+        validation_ctx: Context | None = None,
+    ) -> SamplingResult:
+        results = dict()
+        # Generate samples
+        for i in range(self.number_of_samples):
+            result = super().sample(
+                action,
+                context,
+                requirements,
+                show_progress=show_progress,
+                generate_logs=generate_logs,
+                validation_ctx=validation_ctx,
+            )
+            if result.success:
+                output = str(result.result)
+            else:
+                output = result.sample_generations[0].value
+
+            answer = self.answer_extraction(output)
+            answer = self.format_math(answer)
+            if answer in results:
+                results[answer].append(result)
+            else:
+                results[answer] = [result]
+
+        assert len(results) > 0
+
+        # obtain majority voting answer
+        counts = Counter(results.keys())
+        ans, cnt = counts.most_common(1)[0]
+        return results[ans][0]  # return one of the MV answers
