@@ -451,7 +451,7 @@ class MajorityVotingStrategyForMath(RejectionSamplingStrategy):
         self.symmetric = False
 
     # https://github.com/huggingface/Math-Verify/blob/5d148cfaaf99214c2e4ffb4bc497ab042c592a7a/tests/test_all.py#L36
-    def compare_strings(self, gold: str, pred: str):
+    def compare_strings(self, ref: str, pred: str):
         """Helper function to compare strings using the math extraction metrics"""
         # Convert string match_types to ExtractionTarget objects
         extraction_targets = []
@@ -461,7 +461,7 @@ class MajorityVotingStrategyForMath(RejectionSamplingStrategy):
             elif match_type == "expr":
                 extraction_targets.append(ExprExtractionConfig())
 
-        gold_parsed = parse(gold, extraction_targets)
+        gold_parsed = parse(ref, extraction_targets)
         pred_parsed = parse(pred, extraction_targets)
         return verify(
             gold_parsed,
@@ -501,14 +501,19 @@ class MajorityVotingStrategyForMath(RejectionSamplingStrategy):
                 validation_ctx=validation_ctx,
             )
             if result.success:
-                results.append((str(result.result), result))
+                output = str(result.result)
             else:
-                results.append((result.sample_generations[0].value, result))
+                # avoid type checker error
+                assert isinstance(result.sample_generations, list)
+                output = str(result.sample_generations[0].value)
+
+            results.append((output, result))
 
         assert len(results) > 0
 
-        scr = [[0.0 for _ in range(len(results))] for _ in range(len(results))]
-        scr = np.asarray(scr)
+        scr = np.asarray(
+            [[0.0 for _ in range(len(results))] for _ in range(len(results))]
+        )
         for i in range(len(results)):
             for j in range(len(results)):
                 if j == i:
@@ -516,9 +521,10 @@ class MajorityVotingStrategyForMath(RejectionSamplingStrategy):
                     continue
 
                 # upper triangle
+                # For sample i compute votes against all j references
                 if j > i:
                     scr[i][j] = float(
-                        self.compare_strings(results[i][0], results[j][0])
+                        self.compare_strings(results[j][0], results[i][0])
                     )
                     continue
 
