@@ -7,7 +7,9 @@ from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
 
+import numpy as np
 import tqdm
+from math_verify import ExprExtractionConfig, LatexExtractionConfig, parse, verify
 
 from mellea import LinearContext
 from mellea.helpers.fancy_logger import FancyLogger
@@ -387,13 +389,22 @@ class MultiTurnStrategy(BaseSamplingStrategy):
 
 class MajorityVotingStrategyForMath(RejectionSamplingStrategy):
     number_of_samples: int
-    answer_extraction_regex: str
+    match_types: list[str]
+    float_rounding: int
+    strict: bool
+    allow_set_relation_comp: bool
+    weighted: bool
+    symmetric: bool
 
     def __init__(
         self,
         *,
         number_of_samples: int = 8,
-        answer_extraction_regex: str = r"\\boxed{(.*?)}",
+        match_types: list[str] = ["latex", "expr"],
+        float_rounding: int = 6,
+        strict: bool = True,
+        allow_set_relation_comp: bool = False,
+        weighted: bool = False,
         loop_budget: int = 1,
         validate: Callable[[list[Requirement], Context, Any], list[ValidationResult]]
         | None = None,
@@ -407,6 +418,14 @@ class MajorityVotingStrategyForMath(RejectionSamplingStrategy):
 
         Args:
             number_of_samples: Number of samples to generate and use for majority voting
+            match_type: type of match latex, expr (match only so far)
+            float_rounding: Number of decimal places to round floats to. Defaults to 6.
+            strict: Whether to enforce strict comparison mode. Defaults to True.
+                - In strict mode: Variables matter and sets are not comparable with tuples
+                - In non-strict mode: Variables are matched by position and sets can be compared with tuples
+            allow_set_relation_comp: Whether to allow set - relation (e.g 1 < x < 2 and (1, 2)) comparison. Defaults to False.
+                - If True, set - relation comparison will be allowed in all cases.
+                - If False, set - relation comparison will be allowed only if the prediction is a set.
             loop_budget: Inner rejection sampling number of times to iterate through the process. Must be greater than 0.
             validate: Function to validate the results against requirements. If None, validation is provided later through setter.
             generate: Function to generate new model output thunks. If None, generate is provided later through setter.
@@ -422,18 +441,43 @@ class MajorityVotingStrategyForMath(RejectionSamplingStrategy):
             requirements=requirements,
         )
         self.number_of_samples = number_of_samples
-        self.answer_extraction_regex = answer_extraction_regex
+        self.match_types = match_types
+        self.float_rounding = float_rounding
+        self.strict = strict
+        self.allow_set_relation_comp = allow_set_relation_comp
+        self.weighted = weighted
 
-    def answer_extraction(self, response):
-        matches = re.findall(self.answer_extraction_regex, response, re.DOTALL)
-        if len(matches) > 0:
-            return matches[-1]  # return the last match
-        else:
-            return ""
+        # Note: symmetry is not implied for certain expressions, see: https://github.com/huggingface/Math-Verify/blob/5d148cfaaf99214c2e4ffb4bc497ab042c592a7a/README.md?plain=1#L183
+        self.symmetric = False
 
-    def format_math(self, response):
-        # TODO implement
-        return response
+    # https://github.com/huggingface/Math-Verify/blob/5d148cfaaf99214c2e4ffb4bc497ab042c592a7a/tests/test_all.py#L36
+    def compare_strings(self, gold: str, pred: str):
+        """Helper function to compare strings using the math extraction metrics"""
+        # Convert string match_types to ExtractionTarget objects
+        extraction_targets = []
+        for match_type in self.match_types:
+            if match_type == "latex":
+                extraction_targets.append(LatexExtractionConfig(boxed_match_priority=0))
+            elif match_type == "expr":
+                extraction_targets.append(ExprExtractionConfig())
+
+        gold_parsed = parse(gold, extraction_targets)
+        pred_parsed = parse(pred, extraction_targets)
+        return verify(
+            gold_parsed,
+            pred_parsed,
+            float_rounding=self.float_rounding,
+            strict=self.strict,
+            allow_set_relation_comp=self.allow_set_relation_comp,
+        )
+
+    def maybe_apply_weighted(self, scr):
+        # TODO not implemented yet
+        if self.weighted:
+            weights = np.asarray([1.0 for _ in range(len(scr))])
+            scr = scr * weights
+
+        return scr
 
     def sample(
         self,
@@ -445,7 +489,7 @@ class MajorityVotingStrategyForMath(RejectionSamplingStrategy):
         generate_logs: list[GenerateLog] | None = None,
         validation_ctx: Context | None = None,
     ) -> SamplingResult:
-        results = dict()
+        results = []
         # Generate samples
         for i in range(self.number_of_samples):
             result = super().sample(
@@ -457,20 +501,42 @@ class MajorityVotingStrategyForMath(RejectionSamplingStrategy):
                 validation_ctx=validation_ctx,
             )
             if result.success:
-                output = str(result.result)
+                results.append((str(result.result), result))
             else:
-                output = result.sample_generations[0].value
-
-            answer = self.answer_extraction(output)
-            answer = self.format_math(answer)
-            if answer in results:
-                results[answer].append(result)
-            else:
-                results[answer] = [result]
+                results.append((result.sample_generations[0].value, result))
 
         assert len(results) > 0
 
-        # obtain majority voting answer
-        counts = Counter(results.keys())
-        ans, cnt = counts.most_common(1)[0]
-        return results[ans][0]  # return one of the MV answers
+        scr = [[0.0 for _ in range(len(results))] for _ in range(len(results))]
+        scr = np.asarray(scr)
+        for i in range(len(results)):
+            for j in range(len(results)):
+                if j == i:
+                    scr[i][j] = 0.0  # self voting is 0.
+                    continue
+
+                # upper triangle
+                if j > i:
+                    scr[i][j] = float(
+                        self.compare_strings(results[i][0], results[j][0])
+                    )
+                    continue
+
+                else:
+                    if self.symmetric:
+                        scr[i][j] = scr[j][i]
+                    else:
+                        scr[i][j] = float(
+                            self.compare_strings(results[j][0], results[i][0])
+                        )
+                    continue
+
+        # count votes
+        scr = scr.sum(axis=0)
+
+        # Apply weights
+        scr = self.maybe_apply_weighted(scr)
+
+        maxR = int(scr.argmax())
+
+        return results[maxR][1]  # return one of the MV answers

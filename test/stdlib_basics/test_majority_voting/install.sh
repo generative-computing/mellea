@@ -19,4 +19,5 @@ in-conda uv pip install vllm==0.10.0
 in-conda uv pip install outlines
 # in-conda uv pip install unsloth
 in-conda uv pip install ipdb
+in-conda uv pip install math-verify[antlr4_13_2]
 
