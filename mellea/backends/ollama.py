@@ -270,7 +270,7 @@ class OllamaModelBackend(FormatterBackend):
 
         Raises:
             RuntimeError: If not called from a thread with a running event loop.
-        """
+        """  # TODO: JAL; change this docstring
         model_opts = self._simplify_and_merge(model_options)
 
         linearized_context = ctx.render_for_generation()
@@ -332,8 +332,9 @@ class OllamaModelBackend(FormatterBackend):
         output = ModelOutputThunk(None)
         output._context = linearized_context
         output._action = action
+        output._model_options = model_opts
 
-        def processing(mot: ModelOutputThunk, chunk: ollama.ChatResponse):
+        async def processing(mot: ModelOutputThunk, chunk: ollama.ChatResponse):
             """Called during generation to add information from a single ChatResponse to the ModelOutputThunk."""
             if mot._thinking is None:
                 mot._thinking = ""
@@ -355,9 +356,12 @@ class OllamaModelBackend(FormatterBackend):
                 for key, val in tool_chunk.items():
                     mot.tool_calls[key] = val
 
+            # Ollama responses are mostly self-contained. Merge chunks immediately.
+            chat_response_delta_merge(mot, chunk)
+
         output._process = processing
 
-        def post_processing(mot: ModelOutputThunk):
+        async def post_processing(mot: ModelOutputThunk):
             """Called when generation is done."""
             self.formatter.parse(action, mot)
 
@@ -379,6 +383,7 @@ class OllamaModelBackend(FormatterBackend):
 
         return output
 
+        # TODO: JAL. Move this logging elsewhere
         # if generate_logs is not None:
         #     # noinspection DuplicatedCode
         #     assert isinstance(generate_logs, list)
@@ -506,3 +511,46 @@ class OllamaModelBackend(FormatterBackend):
         if len(model_tool_calls) > 0:
             return model_tool_calls
         return None
+
+
+def chat_response_delta_merge(mot: ModelOutputThunk, delta: ollama.ChatResponse):
+    if mot._meta.get("chat_response", None) is None:
+        mot._meta["chat_response"] = delta
+        return  # Return early, no need to merge.
+
+    merged: ollama.ChatResponse = mot._meta["chat_response"]
+    if not merged.done:
+        merged.done = delta.done
+    if merged.done_reason is None:
+        merged.done_reason = delta.done_reason
+    if merged.total_duration is None:
+        merged.total_duration = delta.total_duration
+    if merged.load_duration is None:
+        merged.load_duration = delta.load_duration
+    if merged.prompt_eval_count is None:
+        merged.prompt_eval_count = delta.prompt_eval_count
+    if merged.prompt_eval_duration is None:
+        merged.prompt_eval_duration = delta.prompt_eval_duration
+    if merged.eval_count is None:
+        merged.eval_count = delta.eval_count
+
+    if merged.message.role == "":
+        merged.message.role = delta.message.role
+
+    if merged.message.content is None:
+        merged.message.content = delta.message.content
+    elif delta.message.content is not None:
+        merged.message.content += delta.message.content
+
+    if merged.message.thinking is None:
+        merged.message.thinking = delta.message.thinking
+    elif delta.message.thinking is not None:
+        merged.message.thinking += delta.message.thinking
+
+    if merged.message.tool_calls is None:
+        merged.message.tool_calls = delta.message.tool_calls
+    elif delta.message.tool_calls is not None:
+        merged.message.tool_calls = [
+            *merged.message.tool_calls,
+            *delta.message.tool_calls,
+        ]

@@ -8,7 +8,7 @@ import base64
 import binascii
 import datetime
 import enum
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from io import BytesIO
@@ -192,8 +192,11 @@ class ModelOutputThunk(CBlock):
         # function(s) can be used to get the value of the ModelOutputThunk.
         self._generate: asyncio.Task[None] | None = None
         self._generate_type: GenerateType = GenerateType.NONE
-        self._process: Callable[[ModelOutputThunk, Any], None] | None = None
-        self._post_process: Callable[[ModelOutputThunk], None] | None = None
+        self._generate_extra: asyncio.Task[Any] | None = (
+            None  # Currently only used by hf.
+        )
+        self._process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
+        self._post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
 
     def is_computed(self):
         """Returns true only if this Thunk has already been filled."""
@@ -215,6 +218,7 @@ class ModelOutputThunk(CBlock):
         """Returns the value of the ModelOutputThunk. Can be used for both async streaming and async non-streaming.
 
         Raises:
+            Exception: Propagates any errors from the underlying inference engine api request.
             RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible.
         """
         if self._computed:
@@ -238,6 +242,7 @@ class ModelOutputThunk(CBlock):
         Returns `None` if the ModelOutputThunk is already computed or no values are left.
 
         Raises:
+            Exception: Propagates any errors from the underlying inference engine api request.
             RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible.
         """
         if self._computed:
@@ -261,8 +266,12 @@ class ModelOutputThunk(CBlock):
 
         # Make sure we always get the minimum chunk size.
         while len(chunks) <= self._chunk_size:
-            if len(chunks) > 0 and chunks[-1] is None:
-                break  # Hit sentinel value.
+            if len(chunks) > 0:
+                if chunks[-1] is None or isinstance(chunks[-1], Exception):
+                    break  # Hit sentinel value or an error.
+                # We could switch to relying on the `done` / `finish_reason` field of chunks,
+                # but that forces us to know about the chunk type here. Prefer sentinel values
+                # for now.
 
             item = await self._async_queue.get()
             chunks.append(item)
@@ -271,15 +280,38 @@ class ModelOutputThunk(CBlock):
         if chunks[-1] is None:
             chunks.pop()  # Remove the sentinel value.
             self._computed = True
+
+            # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk
+            # relied on.
+            if self._generate is not None:
+                self._generate.cancel()
+            if self._generate_extra is not None:
+                self._generate_extra.cancel()
+
+            # If ModelOutputThunks get too bulky, we can do additional cleanup here
+            # and set fields to None.
+
+        elif isinstance(chunks[-1], Exception):
+            # For now, just re-raise the exception.
+            # It's possible that we hit this error after already streaming some
+            # chunks. We should investigate allowing recovery in the future.
+            raise chunks[-1]
+
         for chunk in chunks:
             assert self._process is not None
-            self._process(self, chunk)
+            await self._process(self, chunk)
 
         if self._computed:
             assert self._post_process is not None
-            self._post_process(self)
+            await self._post_process(self)
 
         return self._underlying_value
+
+    def __repr__(self):
+        """Provides a python-parsable representation (usually).
+
+        Differs from CBlock because `._meta` can be very large for ModelOutputThunks."""
+        return f"ModelOutputThunk({self.value})"
 
 
 def blockify(s: str | CBlock | Component) -> CBlock | Component:

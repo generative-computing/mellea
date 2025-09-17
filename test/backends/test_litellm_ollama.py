@@ -44,7 +44,6 @@ def test_litellm_ollama_instruct_options(session):
             ModelOption.THINKING: True,
             ModelOption.MAX_NEW_TOKENS: 100,
             "reasoning_effort": True,
-            "stream": False,
             "homer_simpson": "option should be kicked out",
         },
     )

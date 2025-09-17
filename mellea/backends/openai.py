@@ -1,10 +1,11 @@
 """A generic OpenAI compatible backend that wraps around the openai python sdk."""
 
 import abc
+import asyncio
 import datetime
 import inspect
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
@@ -13,6 +14,7 @@ import openai
 import requests
 from huggingface_hub import snapshot_download
 from openai.types.chat import ChatCompletion
+from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.completion import Completion
 
 import mellea.backends.model_ids as model_ids
@@ -26,12 +28,18 @@ from mellea.backends.tools import (
     convert_tools_to_json,
 )
 from mellea.backends.types import ModelOption
+from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
+from mellea.helpers.openai_compatible_helpers import (
+    chat_completion_delta_merge,
+    extract_model_tool_requests,
+)
 from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
     GenerateLog,
+    GenerateType,
     ModelOutputThunk,
     ModelToolCall,
 )
@@ -156,6 +164,10 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         self._client = openai.OpenAI(  # type: ignore
             api_key=self._api_key, base_url=self._base_url, **openai_client_kwargs
         )
+        self._async_client = openai.AsyncOpenAI(
+            api_key=self._api_key, base_url=self._base_url, **openai_client_kwargs
+        )
+
         # ALoras that have been loaded for this model.
         self._aloras: dict[str, OpenAIAlora] = {}
 
@@ -256,6 +268,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
+        stream: bool = False,
     ):
         """See `generate_from_chat_context`."""
         assert ctx.is_chat_context, NotImplementedError(
@@ -268,6 +281,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             model_options=model_options,
             generate_logs=generate_logs,
             tool_calls=tool_calls,
+            stream=stream,
         )
 
     def generate_from_chat_context(
@@ -280,6 +294,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
+        stream: bool = False,
     ) -> ModelOutputThunk:
         """Generates a new completion from the provided Context using this backend's `Formatter`."""
         if issubclass(type(action), Requirement):
@@ -294,7 +309,11 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                 reroute_to_alora = True
             if reroute_to_alora:
                 return self._generate_from_chat_context_alora(
-                    action, ctx, format=format, model_options=model_options
+                    action,
+                    ctx,
+                    format=format,
+                    model_options=model_options,
+                    stream=stream,
                 )
 
         return self._generate_from_chat_context_standard(
@@ -304,8 +323,10 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             model_options=model_options,
             generate_logs=generate_logs,
             tool_calls=tool_calls,
+            stream=stream,
         )
 
+    # TODO: JAL; fix this function as well.
     def _generate_from_chat_context_alora(
         self,
         action: Component | CBlock,
@@ -315,6 +336,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
+        stream: bool = False,
     ) -> ModelOutputThunk:
         match action:
             case ALoraRequirement():
@@ -394,8 +416,8 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
+        stream: bool = False,
     ) -> ModelOutputThunk:
-        # NOTE: Currently, the `thinking` param is going to be set to "medium" if `thinking` is True, else it is None.
         model_opts = self._simplify_and_merge(
             model_options, is_chat_context=ctx.is_chat_context
         )
@@ -456,7 +478,9 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         formatted_tools = convert_tools_to_json(tools)
         use_tools = len(formatted_tools) > 0
 
-        chat_response: ChatCompletion = self._client.chat.completions.create(
+        chat_response: Coroutine[
+            Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]
+        ] = self._async_client.chat.completions.create(
             model=self._hf_model_id,
             messages=conversation,  # type: ignore
             reasoning_effort=thinking,  # type: ignore
@@ -466,38 +490,100 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             **self._make_backend_specific_and_remove(
                 model_opts, is_chat_context=ctx.is_chat_context
             ),
+            stream=stream,
         )  # type: ignore
 
-        result = ModelOutputThunk(
-            value=chat_response.choices[0].message.content,
-            meta={
-                "oai_chat_response": chat_response.choices[0].model_dump()
-            },  # NOTE: Using model dump here to comply with `TemplateFormatter`
-            tool_calls=self._extract_model_tool_requests(tools, chat_response),
-        )
+        output = ModelOutputThunk(None)
+        output._context = linearized_context
+        output._action = action
+        output._model_options = model_opts
 
-        parsed_result = self.formatter.parse(source_component=action, result=result)
+        async def processing(
+            mot: ModelOutputThunk, chunk: ChatCompletion | ChatCompletionChunk
+        ):
+            """Called during generation to add information from a single ChatCompletion or ChatCompletionChunk to the ModelOutputThunk.
 
-        if generate_logs is not None:
-            assert isinstance(generate_logs, list)
-            generate_log = GenerateLog()
-            generate_log.prompt = conversation
-            generate_log.backend = f"openai::{self.model_id!s}"
-            generate_log.model_options = model_opts
-            generate_log.date = datetime.datetime.now()
-            generate_log.model_output = chat_response
-            generate_log.extra = {
-                "format": format,
-                "thinking": thinking,
-                "tools_available": tools,
-                "tools_called": result.tool_calls,
-                "seed": model_opts.get("seed", None),
-            }
-            generate_log.action = action
-            generate_log.result = parsed_result
-            generate_logs.append(generate_log)
+            For OpenAI, tool call parsing is handled in the post processing step."""
+            if mot._thinking is None:
+                mot._thinking = ""
+            if mot._underlying_value is None:
+                mot._underlying_value = ""
 
-        return parsed_result
+            if isinstance(chunk, ChatCompletion):
+                message = chunk.choices[0].message
+
+                if hasattr(message, "reasoning_content"):
+                    thinking_chunk = message.reasoning_content  # type: ignore
+                    if thinking_chunk is not None:
+                        mot._thinking += thinking_chunk
+
+                content_chunk = message.content
+                if content_chunk is not None:
+                    mot._underlying_value += content_chunk
+
+                mot._meta["oai_chat_response"] = chunk.choices[0].model_dump()
+
+            elif isinstance(chunk, ChatCompletionChunk):
+                message_delta = chunk.choices[0].delta
+                if hasattr(message_delta, "reasoning_content"):
+                    thinking_chunk = message_delta.reasoning_content  # type: ignore
+                    if thinking_chunk is not None:
+                        mot._thinking += thinking_chunk
+
+                content_chunk = message_delta.content
+                if content_chunk is not None:
+                    mot._underlying_value += content_chunk
+
+                if mot._meta.get("oai_chat_response_streamed", None) is None:
+                    mot._meta["oai_chat_response_streamed"] = []
+                mot._meta["oai_chat_response_streamed"].append(
+                    chunk.choices[0].model_dump()
+                )
+
+        output._process = processing
+
+        async def post_processing(mot: ModelOutputThunk):
+            """Called when generation is done."""
+            # Reconstruct the chat_response from chunks if streamed.
+            streamed_chunks = mot._meta.get("oai_chat_response_streamed", None)
+            if streamed_chunks is not None:
+                mot._meta["oai_chat_response"] = chat_completion_delta_merge(
+                    streamed_chunks
+                )
+
+            # OpenAI streamed responses give you chunks of tool calls.
+            # As a result, we have to store data between calls and only then
+            # check for complete tool calls in the post_processing step.
+            tool_chunk = extract_model_tool_requests(
+                tools, mot._meta["oai_chat_response"]
+            )
+            if tool_chunk is not None:
+                if mot.tool_calls is None:
+                    mot.tool_calls = {}
+                # Merge the tool_chunk dict.
+                for key, val in tool_chunk.items():
+                    mot.tool_calls[key] = val
+
+            self.formatter.parse(action, mot)
+
+        output._post_process = post_processing
+
+        try:
+            # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
+            # We can also support synchronous calls by adding a flag and changing this ._generate function.
+
+            # This function should always be called from a running event loop so we don't have to worry about
+            # scheduling the task to a specific event loop here.
+            output._generate = asyncio.create_task(
+                send_to_queue(chat_response, output._async_queue)
+            )
+            output._generate_type = GenerateType.ASYNC
+        except RuntimeError as e:
+            # Most likely cause is running this function without an event loop present
+            raise e
+
+        # TODO: JAL. Add logging here and in the other backends?
+        return output
 
     def _generate_from_raw(
         self,
@@ -570,31 +656,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                 generate_logs.append(generate_log)
 
         return results
-
-    def _extract_model_tool_requests(
-        self, tools: dict[str, Callable], chat_response: ChatCompletion
-    ) -> dict[str, ModelToolCall] | None:
-        model_tool_calls: dict[str, ModelToolCall] = {}
-        calls = chat_response.choices[0].message.tool_calls
-        if calls:
-            for tool_call in calls:
-                tool_name = tool_call.function.name  # type: ignore
-                tool_args = tool_call.function.arguments  # type: ignore
-
-                func = tools.get(tool_name)
-                if func is None:
-                    FancyLogger.get_logger().warning(
-                        f"model attempted to call a non-existing function: {tool_name}"
-                    )
-                    continue  # skip this function if we can't find it.
-
-                # Returns the args as a string. Parse it here.
-                args = json.loads(tool_args)
-                model_tool_calls[tool_name] = ModelToolCall(tool_name, func, args)
-
-        if len(model_tool_calls) > 0:
-            return model_tool_calls
-        return None
 
     def add_alora(self, alora: "OpenAIAlora"):
         """Loads an ALora for this backend.

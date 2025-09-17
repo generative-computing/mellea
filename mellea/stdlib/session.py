@@ -277,6 +277,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        stream: bool = False,
     ) -> ModelOutputThunk: ...
 
     @overload
@@ -289,6 +290,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        stream: bool = False,
     ) -> SamplingResult: ...
 
     def act(
@@ -301,6 +303,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        stream: bool = False,
     ) -> ModelOutputThunk | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
@@ -327,11 +330,11 @@ class MelleaSession:
                 format=format,
                 model_options=model_options,
                 tool_calls=tool_calls,
+                stream=stream,
             ),
             self._event_loop,
         )
 
-        # Wait for and return the result.
         return out.result()
 
     async def _act(
@@ -344,6 +347,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        stream: bool = False,
     ) -> ModelOutputThunk | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
@@ -375,8 +379,10 @@ class MelleaSession:
                 model_options=model_options,
                 generate_logs=generate_logs,
                 tool_calls=tool_calls,
+                stream=stream,
             )
             await result.avalue()
+            # TODO: JAL; fix logging
             # assert len(generate_logs) == 1, "Simple call can only add one generate_log"
             # generate_logs[-1].is_final_result = True
 
@@ -399,6 +405,7 @@ class MelleaSession:
                         model_options=model_options,
                         generate_logs=g_logs,
                         tool_calls=tool_calls,
+                        stream=stream,
                     )
                 )
 
@@ -603,6 +610,7 @@ class MelleaSession:
         generate_logs: list[GenerateLog] | None = None,
     ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
+        # TODO: JAL; fix this docstring
         # Turn a solitary requirement in to a list of requirements, and then reqify if needed.
         reqs = [reqs] if not isinstance(reqs, list) else reqs
         reqs = [Requirement(req) if type(req) is str else req for req in reqs]
