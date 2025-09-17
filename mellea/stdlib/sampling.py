@@ -511,18 +511,28 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
         # find max reward amongst results for which all requirements have passed
         if len(successful_sampled_scores) > 0:
             scores: list[float] = []
+            scorer_preference_ordering = None
 
             for sample in successful_sampled_scores:
                 for req, val_score in sample:
                     if isinstance(req, ScorerRequirement):
                         assert val_score._score is not None
                         scores.append(val_score._score)
+                        scorer_preference_ordering = req.preference_ordering
 
             assert len(successful_sampled_results) == len(scores)
+            assert scorer_preference_ordering is not None
 
-            best_result, best_score = max(
-                zip(successful_sampled_results, scores), key=lambda x: x[1]
-            )
+            if scorer_preference_ordering == "max":
+                best_result, best_score = max(
+                    zip(successful_sampled_results, scores), key=lambda x: x[1]
+                )
+            elif scorer_preference_ordering == "min":
+                best_result, best_score = min(
+                    zip(successful_sampled_results, scores), key=lambda x: x[1]
+                )
+            else:
+                raise NotImplementedError
 
             return SamplingResult(
                 best_result,

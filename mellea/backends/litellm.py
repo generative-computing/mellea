@@ -5,9 +5,9 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-import litellm
-import litellm.litellm_core_utils
-import litellm.litellm_core_utils.get_supported_openai_params
+import litellm  # type: ignore
+import litellm.litellm_core_utils  # type: ignore
+import litellm.litellm_core_utils.get_supported_openai_params  # type: ignore
 
 import mellea.backends.model_ids as model_ids
 from mellea.backends import BaseModelSubclass
