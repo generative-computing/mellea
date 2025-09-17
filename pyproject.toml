@@ -183,6 +183,6 @@ branch = "main"
 
 # configure types which should trigger minor and patch version bumps respectively
 # (note that they must be a subset of the configured allowed types):
-parser_angular_allowed_types = "build,chore,ci,docs,feat,fix,perf,style,refactor,test"
-parser_angular_minor_types = "feat"
-parser_angular_patch_types = "fix,perf"
+parser_angular_allowed_types = "build,chore,ci,docs,feat,fix,perf,style,refactor,test,release"
+parser_angular_minor_types = "release"
+parser_angular_patch_types = "fix,perf,feat"
