@@ -179,7 +179,7 @@ def test_format(session):
 
 @pytest.mark.qualitative
 def test_generate_from_raw(session):
-    prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
+    prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?", "what is 4+2+2?"]
 
     results = session.backend._generate_from_raw(
         actions=[CBlock(value=prompt) for prompt in prompts], generate_logs=None
