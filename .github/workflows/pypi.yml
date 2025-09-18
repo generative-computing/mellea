@@ -1,5 +1,5 @@
 name: "Build and publish package"
-
+# Test comment for a build
 on:
   release:
     types: [published]
