@@ -12,7 +12,7 @@
 * Huggingface backend does not properly pad inputs ([#145](https://github.com/generative-computing/mellea/issues/145)) ([`a079c77`](https://github.com/generative-computing/mellea/commit/a079c77d17f250faaafb0cd9bcc83972c2186683))
 * Return to old logo ([#132](https://github.com/generative-computing/mellea/issues/132)) ([`f08d2ec`](https://github.com/generative-computing/mellea/commit/f08d2ec8af680ffee004ba436123a013efae7063))
 * Alora version and image printing in messages ([#130](https://github.com/generative-computing/mellea/issues/130)) ([`2b3ff55`](https://github.com/generative-computing/mellea/commit/2b3ff55fcfb61ef30a26365b9497b31df7339226))
-* Remove ModelOption.THINKING from automatic mapping because it's explicitely handled in line #417 (which was causing parameter conflicts) ([#124](https://github.com/generative-computing/mellea/issues/124)) ([`b5c2a39`](https://github.com/generative-computing/mellea/commit/b5c2a394e3bc62961a55310aeb5944238791dbc1))
+* Remove ModelOption.THINKING from automatic mapping because it's explicitly handled in line #417 (which was causing parameter conflicts) ([#124](https://github.com/generative-computing/mellea/issues/124)) ([`b5c2a39`](https://github.com/generative-computing/mellea/commit/b5c2a394e3bc62961a55310aeb5944238791dbc1))
 
 ### Documentation
 

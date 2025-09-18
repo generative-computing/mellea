@@ -163,7 +163,7 @@ ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd'
 check-filenames = true
 check-hidden = false
 regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=[A-Z])|\\d+"
-skip = 'requirements.txt,uv.lock'
+skip = 'requirements.txt,uv.lock,CHANGELOG.md'
 
 [tool.mypy]
 disable_error_code = ["empty-body", "import-untyped"]
