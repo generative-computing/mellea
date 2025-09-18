@@ -448,7 +448,9 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         prompts = [self.formatter.print(action) for action in actions]
 
         # batch-encoding call is deprecated in favor of this
-        inputs = self._tokenizer(prompts, return_tensors="pt").to(self._device)
+        inputs = self._tokenizer(prompts, return_tensors="pt", padding=True).to(
+            self._device
+        )
 
         if format is None:
             outputs = self._model.generate(  # type: ignore

@@ -61,5 +61,6 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TARGET_VERSION: ${{ needs.pre-release-check.outputs.TARGET_TAG_V }}
           CHGLOG_FILE: CHANGELOG.md
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: ./.github/scripts/release.sh
         shell: bash
