@@ -6,17 +6,19 @@ The purpose of the Hugginface backend is to provide a setting for implementing e
 from __future__ import annotations
 
 import abc
+import asyncio
 import dataclasses
 import datetime
 import inspect
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any
 
 import outlines
 import outlines_core
 import torch
 from transformers import (
+    AsyncTextIteratorStreamer,
     AutoModelForCausalLM,
     AutoTokenizer,
     DynamicCache,
@@ -24,6 +26,7 @@ from transformers import (
     PreTrainedTokenizer,
     set_seed,
 )
+from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 from mellea.backends import BaseModelSubclass
 from mellea.backends.aloras import Alora, AloraBackendMixin
@@ -37,12 +40,14 @@ from mellea.backends.tools import (
     parse_tools,
 )
 from mellea.backends.types import ModelOption
+from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
     GenerateLog,
+    GenerateType,
     ModelOutputThunk,
     ModelToolCall,
 )
@@ -184,6 +189,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
+        stream: bool = False,
     ) -> ModelOutputThunk:
         """Generate using the huggingface model."""
         # Upsert model options.
@@ -215,8 +221,10 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             model_options=model_opts,
             generate_logs=generate_logs,
             tool_calls=tool_calls,
+            stream=stream,
         )
 
+    # TODO: JAL. Fix this alora function.
     def _generate_from_context_alora(
         self,
         action: Component | CBlock,
@@ -271,7 +279,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             ),
         )
 
-    def _generate_from_context_standard(
+    def _generate_from_context_standard(  # ignore: C901
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -280,11 +288,11 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         model_options: dict[str, Any],
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
+        stream: bool = False,
     ) -> ModelOutputThunk:
         # Construct input.
         # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
         # Otherwise, we will linearize the context and treat it as a raw input.
-        decoded_result: str | None = None
         if ctx.is_chat_context:
             linearized_ctx = ctx.render_for_generation()
             assert linearized_ctx is not None, (
@@ -345,90 +353,146 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 **self._make_backend_specific_and_remove(model_options),
             ).to(self._device)  # type: ignore
 
-            if format is None:
-                chat_output = self._model.generate(  # type: ignore
-                    input_ids,
-                    return_dict_in_generate=True,
-                    output_scores=True,
-                    **self._make_backend_specific_and_remove(model_options),
-                )  # type: ignore
-
-            else:
+            format_kwargs = {}
+            if format:
                 # outlines.generate.json always parses the resulting json into a python dict.
                 # We however want to keep it as a json string for later storing it in ModelOutputThunk
                 schema: dict[str, Any] = format.model_json_schema()
                 schema_json: str = json.dumps(schema)
-                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(
+                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
                     schema_json
                 )
 
                 from outlines.models.transformers import TransformerTokenizer
-                from outlines.processors import RegexLogitsProcessor
+                from outlines.processors.structured import RegexLogitsProcessor
                 from transformers import LogitsProcessorList
 
-                chat_output = self._model.generate(  # type: ignore
-                    input_ids,
-                    return_dict_in_generate=True,
-                    output_scores=True,
-                    logits_processor=LogitsProcessorList(
-                        [
-                            RegexLogitsProcessor(
-                                regex_str,
-                                tokenizer=TransformerTokenizer(self._tokenizer),
-                            )
-                        ]
-                    ),
-                    **self._make_backend_specific_and_remove(model_options),
+                format_kwargs["logits_processor"] = LogitsProcessorList(
+                    [
+                        RegexLogitsProcessor(
+                            regex_str, tokenizer=TransformerTokenizer(self._tokenizer)
+                        )
+                    ]
                 )
 
-            decoded_result = self._tokenizer.decode(
-                chat_output.sequences[0, input_ids.shape[1] :], skip_special_tokens=True
+            streaming_kwargs = {}
+            streamer = None
+            if stream:
+                try:
+                    # HuggingFace uses a streaming interface that you pass to the generate call.
+                    # Must be called from a running event loop. This should always be the case given the same
+                    # requirement of the ._generate function below.
+                    streamer = AsyncTextIteratorStreamer(
+                        self._tokenizer,  # type: ignore
+                        skip_prompt=True,
+                        skip_special_tokens=True,
+                    )
+                    streaming_kwargs["streamer"] = streamer
+                except RuntimeError as e:
+                    # Most likely cause is creating this object without an event loop present.
+                    raise e
+
+            # Create a separate thread to handle the processing. Make it awaitable
+            # for non-streaming cases and to get the final output.
+            # Details: https://huggingface.co/docs/transformers/en/internal/generation_utils#transformers.AsyncTextIteratorStreamer
+            chat_response = asyncio.to_thread(
+                self._model.generate,  # type: ignore
+                input_ids,
+                return_dict_in_generate=True,
+                output_scores=True,
+                **self._make_backend_specific_and_remove(model_options),
+                **streaming_kwargs,  # type: ignore
+                **format_kwargs,  # type: ignore
             )
 
-            # Add an entry to the cache for ALora reuse.
-            if self._use_caches:
-                output_complete = chat_output.sequences[0]
-                cache: DynamicCache = chat_output.past_key_values
+            output = ModelOutputThunk(None)
+            output._context = linearized_ctx
+            output._action = action
+            output._model_options = model_options
 
-                cache_info = HFAloraCacheInfo(
-                    kv_cache=cache,
-                    merged_token_ids=output_complete,
-                    merged_attention=torch.ones_like(output_complete).to(self._device),
-                    q_end=len(input_ids[0]),
+            async def processing(
+                mot: ModelOutputThunk, chunk: str | GenerateDecoderOnlyOutput
+            ):
+                """Process the returned chunks or the complete response."""
+                if mot._underlying_value is None:
+                    mot._underlying_value = ""
+
+                # Because we use the AsyncTextIteratorStreamer, streaming responses are of type str;
+                # and already decoded.
+                if isinstance(chunk, str):
+                    mot._underlying_value += chunk
+                else:
+                    mot._meta["hf_output"] = chunk
+                    mot._underlying_value += self._tokenizer.decode(
+                        chunk.sequences[0, input_ids.shape[1] :],
+                        skip_special_tokens=True,
+                    )
+
+            output._process = processing
+
+            async def post_processing(mot: ModelOutputThunk):
+                """Called when generation is done."""
+                if mot._meta.get("hf_output", None) is None:
+                    if mot._generate_extra is not None:
+                        full_output = await mot._generate_extra
+                        assert isinstance(full_output, GenerateDecoderOnlyOutput)
+                        mot._meta["hf_output"] = full_output
+
+                # The ModelOutputThunk must be computed by this point.
+                assert mot.value is not None
+
+                # Add an entry to the cache for ALora reuse.
+                if self._use_caches:
+                    output_complete = mot._meta["hf_output"].sequences[0]
+                    cache: DynamicCache = mot._meta["hf_output"].past_key_values  # type: ignore
+
+                    cache_info = HFAloraCacheInfo(
+                        kv_cache=cache,
+                        merged_token_ids=output_complete,
+                        merged_attention=torch.ones_like(output_complete).to(
+                            self._device
+                        ),
+                        q_end=len(input_ids[0]),  # type: ignore
+                    )
+
+                    self.cache_put(mot.value, cache_info)
+
+                # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
+                if format is None and tool_calls:
+                    mot.tool_calls = self._extract_model_tool_requests(tools, mot.value)
+
+                self.formatter.parse(action, mot)
+
+            output._post_process = post_processing
+
+            try:
+                # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
+                # We can also support synchronous calls by adding a flag and changing this ._generate function.
+
+                response: AsyncTextIteratorStreamer | Coroutine = chat_response
+                if stream and streamer is not None:
+                    # For streaming, we want to pass the AsyncIterator to the function. Unlike other backends,
+                    # this isn't returned by the chat_response coroutine. So we handle it here.
+                    response = streamer
+
+                    # Since the async iterator isn't returned by the chat_response coroutine, we have to create a separate
+                    # task for it here so that it runs in the background. Attach it to the ModelOutputThunk.
+                    output._generate_extra = asyncio.create_task(chat_response)
+
+                # This function should always be called from a running event loop so we don't have to worry about
+                # scheduling the task to a specific event loop here.
+                output._generate = asyncio.create_task(
+                    send_to_queue(response, output._async_queue)  # type: ignore
                 )
+                output._generate_type = GenerateType.ASYNC
+            except RuntimeError as e:
+                # Most likely cause is running this function without an event loop present.
+                raise e
 
-                assert decoded_result is not None
-                self.cache_put(decoded_result, cache_info)
+            return output
+
         else:
             raise Exception("Does not yet support non-chat contexts.")
-
-        assert decoded_result is not None
-
-        result = ModelOutputThunk(value=decoded_result)
-
-        # Only scan for tools if we are not doing structured decoding and tool calls were provided to the model.
-        if format is None and tool_calls:
-            result.tool_calls = self._extract_model_tool_requests(tools, decoded_result)
-
-        parsed_result = self.formatter.parse(action, result)
-        if generate_logs is not None:
-            assert isinstance(generate_logs, list)
-            generate_log = GenerateLog()
-            generate_log.prompt = ctx_as_conversation
-            generate_log.backend = f"hf::{self.model_id!s}"
-            generate_log.model_options = model_options
-            generate_log.date = datetime.datetime.now()
-            generate_log.model_output = decoded_result
-            generate_log.extra = {
-                "format": format,
-                "tools_available": tools,
-                "tools_called": result.tool_calls,
-                "seed": seed,
-            }
-            generate_log.action = action
-            generate_log.result = parsed_result
-            generate_logs.append(generate_log)
-        return parsed_result
 
     def _generate_from_raw(
         self,
