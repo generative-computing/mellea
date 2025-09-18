@@ -31,6 +31,10 @@ mv "${TMP_CHGLOG}" "${CHGLOG_FILE}"
 # push changes
 git config --global user.name 'github-actions[bot]'
 git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+# Configure the remote with the token
+git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
 git add pyproject.toml uv.lock "${CHGLOG_FILE}"
 COMMIT_MSG="chore: bump version to ${TARGET_VERSION} [skip ci]"
 git commit -m "${COMMIT_MSG}"

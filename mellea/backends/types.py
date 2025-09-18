@@ -30,7 +30,12 @@ class ModelOption:
     def replace_keys(options: dict, from_to: dict[str, str]) -> dict[str, Any]:
         """Returns a new dict with the keys in `options` replaced with the corresponding value for that key in `from_to`.
 
-        If any keys already exist in `options`, don't edit the associated value.
+        * Any key with value == None is treated the same as the key missing.
+
+        * If the destination key already exists in `options`, the original value is kept in the output.
+
+        * Regardless of the presence of the destination key in `options`,
+          the source key is always absent in the output.
 
         Example:
         ```python
@@ -41,6 +46,9 @@ class ModelOption:
         >>> print(new_options)
         ... {"M1": "m1", "M2": "v2"}
         ```
+
+        * Notice that "M1" keeps the original value "m1", rather than "v1".
+        * Notice that both "k1" and "k2" are absent in the output.
         """
         new_options = {}
 
