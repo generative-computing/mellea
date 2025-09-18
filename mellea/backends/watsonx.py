@@ -199,7 +199,6 @@ class WatsonxAIBackend(FormatterBackend):
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
         stream: bool = False,
     ):
@@ -212,7 +211,6 @@ class WatsonxAIBackend(FormatterBackend):
             ctx,
             format=format,
             model_options=model_options,
-            generate_logs=generate_logs,
             tool_calls=tool_calls,
             stream=stream,
         )
@@ -225,7 +223,6 @@ class WatsonxAIBackend(FormatterBackend):
         format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
         stream: bool = False,
     ) -> ModelOutputThunk:
@@ -383,6 +380,23 @@ class WatsonxAIBackend(FormatterBackend):
                     mot.tool_calls[key] = val
 
             self.formatter.parse(action, mot)
+
+            # Generate the log for this ModelOutputThunk.
+            generate_log = GenerateLog()
+            generate_log.prompt = conversation
+            generate_log.backend = f"watsonx::{self.model_id!s}"
+            generate_log.model_options = model_opts
+            generate_log.date = datetime.datetime.now()
+            generate_log.model_output = mot._meta["oai_chat_response"]
+            generate_log.extra = {
+                "format": format,
+                "tools_available": tools,
+                "tools_called": mot.tool_calls,
+                "seed": model_opts.get(ModelOption.SEED, None),
+            }
+            generate_log.result = mot
+            generate_log.action = action
+            mot._generate_log = generate_log
 
         output._post_process = post_processing
 

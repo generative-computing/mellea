@@ -17,10 +17,12 @@ def session():
 
 @pytest.mark.qualitative
 def test_litellm_ollama_chat(session):
-    res = session.chat("hello world")
+    res = session.chat("What is 1+1?")
     assert res is not None
     assert isinstance(res, Message)
-
+    assert "2" in res.content, (
+        f"Expected a message with content containing 2 but found {output_message}"
+    )
 
 @pytest.mark.qualitative
 def test_litellm_ollama_instruct(session):

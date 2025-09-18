@@ -67,6 +67,13 @@ def test_multiturn(m_session):
     #     self.m.reset()
 
 @pytest.mark.qualitative
+def test_chat(m_session):
+    output_message = m_session.chat("What is 1+1?")
+    assert "2" in output_message.content, (
+        f"Expected a message with content containing 2 but found {output_message}"
+    )
+
+@pytest.mark.qualitative
 def test_format(m_session):
     class Person(pydantic.BaseModel):
         name: str

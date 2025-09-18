@@ -146,6 +146,13 @@ def test_multiturn(session):
     words = session.instruct("Now list five English words that start with that letter.")
     print(words)
 
+@pytest.mark.qualitative
+def test_chat(session):
+    output_message = session.chat("What is 1+1?")
+    assert "2" in output_message.content, (
+        f"Expected a message with content containing 2 but found {output_message}"
+    )
+
 
 @pytest.mark.qualitative
 def test_format(session):

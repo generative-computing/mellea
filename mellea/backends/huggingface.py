@@ -187,7 +187,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
         stream: bool = False,
     ) -> ModelOutputThunk:
@@ -208,18 +207,13 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 reroute_to_alora = True
             if reroute_to_alora:
                 return self._generate_from_context_alora(
-                    action,
-                    ctx,
-                    format=format,
-                    model_options=model_opts,
-                    generate_logs=generate_logs,
+                    action, ctx, format=format, model_options=model_opts
                 )
         return self._generate_from_context_standard(
             action,
             ctx,
             format=format,
             model_options=model_opts,
-            generate_logs=generate_logs,
             tool_calls=tool_calls,
             stream=stream,
         )
@@ -255,6 +249,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         assert type(user_message) is str
         assert type(assistant_message) is str
         assert format is None, "Structured outputs are not supported by ALoRAs."
+
         alora_output = alora_for_this_request.generate_using_strings(
             input=user_message,
             response=assistant_message,
@@ -279,7 +274,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             ),
         )
 
-    def _generate_from_context_standard(  # ignore: C901
+    def _generate_from_context_standard(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -462,6 +457,24 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                     mot.tool_calls = self._extract_model_tool_requests(tools, mot.value)
 
                 self.formatter.parse(action, mot)
+
+                # Generate the log for this ModelOutputThunk.
+                generate_log = GenerateLog()
+                generate_log.prompt = ctx_as_conversation
+                generate_log.backend = f"hf::{self.model_id!s}"
+                generate_log.model_options = model_options
+                generate_log.date = datetime.datetime.now()
+                generate_log.model_output = mot.value
+                generate_log.extra = {
+                    "format": format,
+                    "tools_available": tools,
+                    "tools_called": mot.tool_calls,
+                    "seed": seed,
+                }
+                generate_log.action = action
+                generate_log.result = mot
+
+                mot._generate_log = generate_log
 
             output._post_process = post_processing
 

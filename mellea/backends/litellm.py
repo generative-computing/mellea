@@ -107,7 +107,6 @@ class LiteLLMBackend(FormatterBackend):
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
         stream: bool = False,
     ):
@@ -120,7 +119,6 @@ class LiteLLMBackend(FormatterBackend):
             ctx,
             format=format,
             model_options=model_options,
-            generate_logs=generate_logs,
             tool_calls=tool_calls,
             stream=stream,
         )
@@ -288,8 +286,8 @@ class LiteLLMBackend(FormatterBackend):
 
         async def processing(
             mot: ModelOutputThunk,
-            chunk: litellm.ModelResponse | litellm.ModelResponseStream,
-        ):  # type: ignore
+            chunk: litellm.ModelResponse | litellm.ModelResponseStream,  # type: ignore
+        ):
             """Called during generation to add information from a single ModelResponse or a chunk / ModelResponseStream to the ModelOutputThunk.
 
             For LiteLLM, tool call parsing is handled in the post processing step."""
@@ -367,6 +365,23 @@ class LiteLLMBackend(FormatterBackend):
                     mot.tool_calls[key] = val
 
             self.formatter.parse(action, mot)
+
+            # Generate the log for this ModelOutputThunk.
+            generate_log = GenerateLog()
+            generate_log.prompt = conversation
+            generate_log.backend = f"litellm::{self.model_id!s}"
+            generate_log.model_options = model_specific_options
+            generate_log.date = datetime.datetime.now()
+            generate_log.model_output = mot._meta["litellm_chat_response"]
+            generate_log.extra = {
+                "format": format,
+                "tools_available": tools,
+                "tools_called": mot.tool_calls,
+                "seed": model_opts.get(ModelOption.THINKING, None),
+            }
+            generate_log.action = action
+            generate_log.result = mot
+            mot._generate_log = generate_log
 
         output._post_process = post_processing
 

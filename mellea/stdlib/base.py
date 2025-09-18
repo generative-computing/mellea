@@ -198,6 +198,8 @@ class ModelOutputThunk(CBlock):
         self._process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
         self._post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
 
+        self._generate_log: GenerateLog | None = None
+
     def is_computed(self):
         """Returns true only if this Thunk has already been filled."""
         return self._computed

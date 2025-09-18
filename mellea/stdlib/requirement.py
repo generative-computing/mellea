@@ -41,7 +41,12 @@ class ValidationResult:
     """ValidationResults store the output of a Requirement's validation. They can be used to return additional info from validation functions, which is useful for sampling/repairing."""
 
     def __init__(
-        self, result: bool, *, reason: str | None = None, score: float | None = None
+        self,
+        result: bool,
+        *,
+        reason: str | None = None,
+        score: float | None = None,
+        thunk: ModelOutputThunk | None = None,
     ):
         """The result of a requirement's validation.
 
@@ -51,10 +56,12 @@ class ValidationResult:
             result: a boolean that is true if the requirement passed
             reason: a reason for the result
             score: if your validator gives you a score back, you can add this as metadata
+            thunk: if your validator utilizes a backend to generate a response, the ModelOutputThunk returned from that request
         """
         self._result = result
         self._reason = reason
         self._score = score
+        self._thunk = thunk
 
     @property
     def reason(self) -> str | None:
@@ -63,6 +70,10 @@ class ValidationResult:
     @property
     def score(self) -> float | None:
         return self._score
+
+    @property
+    def thunk(self) -> ModelOutputThunk | None:
+        return self._thunk
 
     def as_bool(self) -> bool:
         """"""
@@ -127,16 +138,14 @@ class Requirement(Component):
             req_copy = copy(self)
             req_copy._output = last_output.value
             llm_as_a_judge_result = backend.generate_from_context(
-                req_copy,
-                ctx,
-                format=format,
-                model_options=model_options,
-                generate_logs=generate_logs,
+                req_copy, ctx, format=format, model_options=model_options
             )
             await llm_as_a_judge_result.avalue()
+
             return ValidationResult(
                 result=self.output_to_bool(llm_as_a_judge_result),
                 reason=llm_as_a_judge_result.value,
+                thunk=llm_as_a_judge_result,
             )
 
     def parts(self):

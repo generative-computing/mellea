@@ -377,14 +377,15 @@ class MelleaSession:
                 ctx=self.ctx,
                 format=format,
                 model_options=model_options,
-                generate_logs=generate_logs,
                 tool_calls=tool_calls,
                 stream=stream,
             )
             await result.avalue()
-            # TODO: JAL; fix logging
-            # assert len(generate_logs) == 1, "Simple call can only add one generate_log"
-            # generate_logs[-1].is_final_result = True
+
+            # ._generate_log should never be None after generation.
+            assert result._generate_log is not None
+            result._generate_log.is_final_result = True
+            generate_logs.append(result._generate_log)
 
         else:
             # Default validation strategy just validates all of the provided requirements.
@@ -403,7 +404,6 @@ class MelleaSession:
                         ctx=gen_ctx,
                         format=format,
                         model_options=model_options,
-                        generate_logs=g_logs,
                         tool_calls=tool_calls,
                         stream=stream,
                     )
@@ -416,21 +416,18 @@ class MelleaSession:
                 action, self.ctx, requirements=requirements, generate_logs=generate_logs
             )
 
-            # make sure that one Log is marked as the one related to sampling_result.result
-            # if sampling_result.success:
-            #     # if successful, the last log is the one related
-            #     generate_logs[-1].is_final_result = True
-            # else:
-            #     # Find the log where log.result and sampling_result.result match
-            #     selected_log = [
-            #         log for log in generate_logs if log.result == sampling_result.result
-            #     ]
-            #     assert len(selected_log) == 1, (
-            #         "There should only be exactly one log corresponding to the single result. "
-            #     )
-            #     selected_log[0].is_final_result = True
+            assert sampling_result.sample_generations is not None
+            for result in sampling_result.sample_generations:
+                assert (
+                    result._generate_log is not None
+                )  # Cannot be None after generation.
+                generate_logs.append(result._generate_log)
 
             result = sampling_result.result
+            assert sampling_result.result._generate_log is not None
+            assert sampling_result.result._generate_log.is_final_result, (
+                "generate logs from the final result returned by the sampling strategy must be marked as final"
+            )
 
         self.ctx.insert_turn(ContextTurn(action, result), generate_logs=generate_logs)
 
@@ -619,6 +616,7 @@ class MelleaSession:
         else:
             validation_target_ctx = SimpleContext()
             validation_target_ctx.insert(output)
+
         rvs: list[ValidationResult] = []
         coroutines: list[Coroutine[Any, Any, ValidationResult]] = []
         for requirement in reqs:
@@ -633,6 +631,22 @@ class MelleaSession:
 
         for val_result in await asyncio.gather(*coroutines):
             rvs.append(val_result)
+
+            # If the validator utilized a backend to generate a result, attach the corresponding
+            # info to the generate_logs list.
+            if generate_logs is not None:
+                if val_result.thunk is not None:
+                    thunk = val_result.thunk
+                    assert (
+                        thunk._generate_log is not None
+                    )  # Cannot be None after generation.
+                    generate_logs.append(thunk._generate_log)
+                else:
+                    # We have to append None here so that the logs line-up.
+                    # TODO: A better solution should be found for this edge case.
+                    #       This is the only scenario where ValidationResults are supposed to line
+                    #       up with GenerateLogs.
+                    generate_logs.append(None)  # type: ignore
 
         return rvs
 

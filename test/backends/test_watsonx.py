@@ -48,6 +48,13 @@ def test_multiturn(session: MelleaSession):
     answer = session.instruct("Tell me the answer to the previous question.")
     assert "Paris" in answer.value  # type: ignore
 
+@pytest.mark.qualitative
+def test_chat(session):
+    output_message = session.chat("What is 1+1?")
+    assert "2" in output_message.content, (
+        f"Expected a message with content containing 2 but found {output_message}"
+    )
+
 
 # @pytest.mark.qualitative
 # def test_format(session: MelleaSession):

@@ -44,7 +44,9 @@ class Formatter(abc.ABC):
     def parse(
         self, source_component: Component | CBlock, result: ModelOutputThunk
     ) -> ModelOutputThunk:
-        """Parses the output from a model."""
+        """Parses the output from a model and sets the parsed_repr of the result ModelOutputThunk.
+
+        Returns the ModelOutputThunk that was passed in."""
         ...
 
     def to_chat_messages(self, cs: list[Component | CBlock]) -> list[Message]:

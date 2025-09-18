@@ -264,6 +264,11 @@ class BaseSamplingStrategy(SamplingStrategy):
             # if all vals are true -- break and return success
             if all(bool(s[1]) for s in constraint_scores):
                 flog.info("SUCCESS")
+                assert (
+                    result._generate_log is not None
+                )  # Cannot be None after generation.
+                result._generate_log.is_final_result = True
+
                 return SamplingResult(
                     result,
                     success=True,
@@ -292,6 +297,12 @@ class BaseSamplingStrategy(SamplingStrategy):
         assert best_failed_index < len(sampled_results), (
             "The select_from_failure method did not return a valid result. It has to selected from failed_results."
         )
+
+        assert (
+            sampled_results[best_failed_index]._generate_log is not None
+        )  # Cannot be None after generation.
+        sampled_results[best_failed_index]._generate_log.is_final_result = True  # type: ignore
+
         return SamplingResult(
             sampled_results[best_failed_index],
             success=False,

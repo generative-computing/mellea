@@ -266,7 +266,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
         stream: bool = False,
     ):
@@ -279,7 +278,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             ctx,
             format=format,
             model_options=model_options,
-            generate_logs=generate_logs,
             tool_calls=tool_calls,
             stream=stream,
         )
@@ -292,7 +290,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
         stream: bool = False,
     ) -> ModelOutputThunk:
@@ -321,7 +318,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             ctx,
             format=format,
             model_options=model_options,
-            generate_logs=generate_logs,
             tool_calls=tool_calls,
             stream=stream,
         )
@@ -414,7 +410,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
         stream: bool = False,
     ) -> ModelOutputThunk:
@@ -565,6 +560,24 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                     mot.tool_calls[key] = val
 
             self.formatter.parse(action, mot)
+
+            # Generate the log for this ModelOutputThunk.
+            generate_log = GenerateLog()
+            generate_log.prompt = conversation
+            generate_log.backend = f"openai::{self.model_id!s}"
+            generate_log.model_options = model_opts
+            generate_log.date = datetime.datetime.now()
+            generate_log.model_output = mot._meta["oai_chat_response"]
+            generate_log.extra = {
+                "format": format,
+                "thinking": thinking,
+                "tools_available": tools,
+                "tools_called": mot.tool_calls,
+                "seed": model_opts.get(ModelOption.SEED, None),
+            }
+            generate_log.action = action
+            generate_log.result = mot
+            mot._generate_log = generate_log
 
         output._post_process = post_processing
 

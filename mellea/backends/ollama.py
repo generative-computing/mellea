@@ -348,10 +348,12 @@ class OllamaModelBackend(FormatterBackend):
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
 
-            if mot.tool_calls is None:
-                mot.tool_calls = {}
             tool_chunk = self._extract_model_tool_requests(tools, chunk)
             if tool_chunk is not None:
+                # Only set tool_calls if there is one.
+                if mot.tool_calls is None:
+                    mot.tool_calls = {}
+
                 # Merge the tool_chunk dict.
                 for key, val in tool_chunk.items():
                     mot.tool_calls[key] = val
@@ -361,9 +363,29 @@ class OllamaModelBackend(FormatterBackend):
 
         output._process = processing
 
+        # TODO: Need to partially bind all these vars across backends because of context var things
         async def post_processing(mot: ModelOutputThunk):
             """Called when generation is done."""
             self.formatter.parse(action, mot)
+
+            # Generate the log for this ModelOutputThunk.
+            generate_log = GenerateLog()
+            generate_log.prompt = conversation
+            generate_log.backend = f"ollama::{self._get_ollama_model_id()}"
+            generate_log.model_options = model_opts
+            generate_log.date = datetime.datetime.now()
+            generate_log.model_output = mot._meta["chat_response"]
+            generate_log.extra = {
+                "format": format,
+                "thinking": model_opts.get(ModelOption.THINKING, None),
+                "tools_available": tools,
+                "tools_called": mot.tool_calls,
+                "seed": model_opts.get(ModelOption.SEED, None),
+            }
+            generate_log.action = action
+            generate_log.result = mot
+
+            mot._generate_log = generate_log
 
         output._post_process = post_processing
 
@@ -382,29 +404,6 @@ class OllamaModelBackend(FormatterBackend):
             raise e
 
         return output
-
-        # TODO: JAL. Move this logging elsewhere
-        # if generate_logs is not None:
-        #     # noinspection DuplicatedCode
-        #     assert isinstance(generate_logs, list)
-        #     generate_log = GenerateLog()
-        #     generate_log.prompt = conversation
-        #     generate_log.backend = f"ollama::{self.model_id!s}"
-        #     generate_log.model_options = model_opts
-        #     generate_log.date = datetime.datetime.now()
-        #     generate_log.model_output = chat_response
-        #     generate_log.extra = {
-        #         "format": format,
-        #         "thinking": model_opts.get(ModelOption.THINKING, None),
-        #         "tools_available": tools,
-        #         "tools_called": result.tool_calls,
-        #         "seed": model_opts.get(ModelOption.SEED, None),
-        #     }
-        #     generate_log.action = action
-        #     generate_log.result = formatted_result
-        #     generate_logs.append(generate_log)
-
-        # return formatted_result
 
     def _generate_from_raw(
         self,
