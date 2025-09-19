@@ -35,9 +35,9 @@ from mellea.backends.tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
-    parse_tools,
 )
 from mellea.backends.types import ModelOption
+from mellea.backends.utils import extract_model_tool_requests, to_chat, use_alora
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -190,33 +190,27 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # Upsert model options.
         model_opts = self._simplify_and_merge(model_options)
 
-        # See `docs/dev/requirement_aLoRA_rerouting.md` for an explanation of the following code block.
-        if issubclass(type(action), Requirement):
-            # The general rule is that we reroute to the alora if it exists.
-            reroute_to_alora = self.get_alora("constraint") is not None
-            # However, there are some exceptions:
-            if not self.default_to_constraint_checking_alora:
-                reroute_to_alora = False
-            if issubclass(type(action), LLMaJRequirement):
-                reroute_to_alora = False
-            if issubclass(type(action), ALoraRequirement):
-                reroute_to_alora = True
-            if reroute_to_alora:
-                return self._generate_from_context_alora(
-                    action,
-                    ctx,
-                    format=format,
-                    model_options=model_opts,
-                    generate_logs=generate_logs,
-                )
-        return self._generate_from_context_standard(
+        if use_alora(
             action,
-            ctx,
-            format=format,
-            model_options=model_opts,
-            generate_logs=generate_logs,
-            tool_calls=tool_calls,
-        )
+            self.get_alora("constraint"),
+            self.default_to_constraint_checking_alora,
+        ):
+            return self._generate_from_context_alora(
+                action,
+                ctx,
+                format=format,
+                model_options=model_opts,
+                generate_logs=generate_logs,
+            )
+        else:
+            return self._generate_from_context_standard(
+                action,
+                ctx,
+                format=format,
+                model_options=model_opts,
+                generate_logs=generate_logs,
+                tool_calls=tool_calls,
+            )
 
     def _generate_from_context_alora(
         self,
@@ -287,35 +281,8 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # Otherwise, we will linearize the context and treat it as a raw input.
         decoded_result: str | None = None
         if ctx.is_chat_context:
-            linearized_ctx = ctx.render_for_generation()
-            assert linearized_ctx is not None, (
-                "If ctx.is_chat_context, then the context should be linearizable."
-            )
-            ctx_as_message_list: list[Message] = self.formatter.to_chat_messages(
-                linearized_ctx
-            )
-            # add action
-            ctx_as_message_list.extend(self.formatter.to_chat_messages([action]))
-            ctx_as_conversation = [
-                {"role": m.role, "content": m.content} for m in ctx_as_message_list
-            ]
-
-            # Check that we ddin't accidentally end up with CBlocks.
-            for msg in ctx_as_conversation:
-                for v in msg.values():
-                    if "CBlock" in v:
-                        FancyLogger.get_logger().error(
-                            f"Found the string `CBlock` in what should've been a stringified context: {ctx_as_conversation}"
-                        )
-
-            # handle custom system prompts. It's important that we do this before the _parse_and_**clean**_model_options step.
             system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, None)
-            if system_prompt is not None:
-                system_msg: dict[str, str] = {
-                    "role": "system",
-                    "content": system_prompt,
-                }
-                ctx_as_conversation.insert(0, system_msg)
+            ctx_as_chat = to_chat(action, ctx, self.formatter, system_prompt)
 
             # Append tool call information if applicable.
             tools: dict[str, Callable] = dict()
@@ -340,7 +307,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 set_seed(seed)
 
             input_ids = self._tokenizer.apply_chat_template(  # type: ignore
-                ctx_as_conversation,
+                ctx_as_chat,
                 tools=convert_tools_to_json(tools),  # type: ignore
                 return_tensors="pt",
                 **self._make_backend_specific_and_remove(model_options),
@@ -409,13 +376,13 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
         # Only scan for tools if we are not doing structured decoding and tool calls were provided to the model.
         if format is None and tool_calls:
-            result.tool_calls = self._extract_model_tool_requests(tools, decoded_result)
+            result.tool_calls = extract_model_tool_requests(tools, decoded_result)
 
         parsed_result = self.formatter.parse(action, result)
         if generate_logs is not None:
             assert isinstance(generate_logs, list)
             generate_log = GenerateLog()
-            generate_log.prompt = ctx_as_conversation
+            generate_log.prompt = ctx_as_chat
             generate_log.backend = f"hf::{self.model_id!s}"
             generate_log.model_options = model_options
             generate_log.date = datetime.datetime.now()
@@ -582,30 +549,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             model_options, self.from_mellea_model_opts_map
         )
         return ModelOption.remove_special_keys(backend_specific)
-
-    def _extract_model_tool_requests(
-        self, tools: dict[str, Callable], decoded_result: str
-    ) -> dict[str, ModelToolCall] | None:
-        model_tool_calls: dict[str, ModelToolCall] = dict()
-        for tool_name, tool_args in parse_tools(decoded_result):
-            func = tools.get(tool_name)
-            if func is None:
-                FancyLogger.get_logger().warning(
-                    f"model attempted to call a non-existing function: {tool_name}"
-                )
-                continue
-
-            # Clean up the function args slightly. Some models seem to
-            # hallucinate parameters when none are required.
-            sig = inspect.signature(func)
-            if len(sig.parameters) == 0:
-                tool_args = {}
-
-            model_tool_calls[tool_name] = ModelToolCall(tool_name, func, tool_args)
-
-        if len(model_tool_calls) > 0:
-            return model_tool_calls
-        return None
 
     # region ALora loading, unloading, and utility functions.
     def add_alora(self, alora: HFAlora):
