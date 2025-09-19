@@ -117,6 +117,7 @@ class LocalVLLMBackend(FormatterBackend):
             engine_args, vllm.EngineArgs
         )
 
+        logger = FancyLogger.get_logger()
         # Get the model and tokenizer.
         # Getting vllm instantiated is tricky as it does not automatically detect some of these parameters.
         engine_args["gpu_memory_utilization"] = engine_args.get(
@@ -124,7 +125,7 @@ class LocalVLLMBackend(FormatterBackend):
         )
         engine_args["max_num_seqs"] = engine_args.get("max_num_seqs", 16)
         engine_args["max_model_len"] = engine_args.get("max_model_len", 16384)
-        print(
+        logger.info(
             f"Instantiating vllm with the following model parameters:\n"
             f"gpu_memory_utilization: {engine_args['gpu_memory_utilization']}\n"
             f"max_model_len: {engine_args['max_model_len']}\n"
@@ -144,12 +145,14 @@ class LocalVLLMBackend(FormatterBackend):
                 # RuntimeError: vLLM failed to compile the model. The most likely reason for this is that a previous compilation failed, leading to a corrupted compilation artifact. We recommend trying to remove ~/.cache/vllm/torch_compile_cache and try again to see the real issue.
 
                 if "~/.cache/vllm/torch_compile_cache" in str(e.inner_exception):
-                    print("removing ~/.cache/vllm/torch_compile_cache and retry")
+                    logger.warning(
+                        "removing ~/.cache/vllm/torch_compile_cache and retry"
+                    )
                     shutil.rmtree("~/.cache/vllm/torch_compile_cache")
                     # then retry
 
             except Exception as e:
-                print(e)
+                logger.info(e)
                 if retry % 3 == 0:
                     engine_args["max_model_len"] //= 2
                 elif retry % 3 == 1:
@@ -168,7 +171,7 @@ class LocalVLLMBackend(FormatterBackend):
                         f"max_model_len: {engine_args['max_model_len']}\n"
                         f"max_num_seqs: {engine_args['max_num_seqs']}\n"
                     )
-                print(
+                logger.info(
                     f"Reducing vllm model parameters to make it fit in the GPU memory.\n"
                     "current values:\n"
                     f"gpu_memory_utilization: {engine_args['gpu_memory_utilization']}\n"
@@ -176,7 +179,7 @@ class LocalVLLMBackend(FormatterBackend):
                     f"max_num_seqs: {engine_args['max_num_seqs']}\n"
                 )
 
-        print(
+        logger.info(
             f"vllm instantiated.\n"
             "final model parameters:\n"
             f"gpu_memory_utilization: {engine_args['gpu_memory_utilization']}\n"
