@@ -101,11 +101,6 @@ class LocalVLLMBackend(FormatterBackend):
             ModelOption.TEMPERATURE: "temperature",
         }
 
-        model_options = self._simplify_and_merge(model_options)
-        model_options = self._make_backend_specific_and_remove(
-            model_options, vllm.EngineArgs
-        )
-
         # Either use the custom config or load the model from its model_id
         match model_id:
             case str():
@@ -116,25 +111,31 @@ class LocalVLLMBackend(FormatterBackend):
                 )
                 self._hf_model_id = model_id.hf_model_name
 
+        # vllm requires some model options during instantiation.
+        engine_args = self._simplify_and_merge(model_options)
+        engine_args = self._make_backend_specific_and_remove(
+            engine_args, vllm.EngineArgs
+        )
+
         # Get the model and tokenizer.
         # Getting vllm instantiated is tricky as it does not automatically detect some of these parameters.
-        model_options["gpu_memory_utilization"] = model_options.get(
+        engine_args["gpu_memory_utilization"] = engine_args.get(
             "gpu_memory_utilization", 0.9
         )
-        model_options["max_num_seqs"] = model_options.get("max_num_seqs", 16)
-        model_options["max_model_len"] = model_options.get("max_model_len", 16384)
+        engine_args["max_num_seqs"] = engine_args.get("max_num_seqs", 16)
+        engine_args["max_model_len"] = engine_args.get("max_model_len", 16384)
         print(
             f"Instantiating vllm with the following model parameters:\n"
-            f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
-            f"max_model_len: {model_options['max_model_len']}\n"
-            f"max_num_seqs: {model_options['max_num_seqs']}\n"
+            f"gpu_memory_utilization: {engine_args['gpu_memory_utilization']}\n"
+            f"max_model_len: {engine_args['max_model_len']}\n"
+            f"max_num_seqs: {engine_args['max_num_seqs']}\n"
         )
         retry = 0
         while True:
             retry += 1
             try:
                 self._model = vllm.LLM(
-                    model=self._hf_model_id, task="generate", **model_options
+                    model=self._hf_model_id, task="generate", **engine_args
                 )
                 break
             except torch._dynamo.exc.BackendCompilerFailed as e:
@@ -150,37 +151,37 @@ class LocalVLLMBackend(FormatterBackend):
             except Exception as e:
                 print(e)
                 if retry % 3 == 0:
-                    model_options["max_model_len"] //= 2
+                    engine_args["max_model_len"] //= 2
                 elif retry % 3 == 1:
-                    model_options["max_num_seqs"] //= 2
+                    engine_args["max_num_seqs"] //= 2
                 elif retry % 3 == 2:
-                    model_options["gpu_memory_utilization"] *= 0.9
+                    engine_args["gpu_memory_utilization"] *= 0.9
                 if (
-                    model_options["max_model_len"] == 0
-                    or model_options["max_num_seqs"] == 0
-                    or model_options["gpu_memory_utilization"] < 0.1
+                    engine_args["max_model_len"] == 0
+                    or engine_args["max_num_seqs"] == 0
+                    or engine_args["gpu_memory_utilization"] < 0.1
                 ):
                     raise RuntimeError(
                         "no matter how I reduced max_model_len and max_num_seqs, there is not enough memory! \n"
                         "final values:\n"
-                        f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
-                        f"max_model_len: {model_options['max_model_len']}\n"
-                        f"max_num_seqs: {model_options['max_num_seqs']}\n"
+                        f"gpu_memory_utilization: {engine_args['gpu_memory_utilization']}\n"
+                        f"max_model_len: {engine_args['max_model_len']}\n"
+                        f"max_num_seqs: {engine_args['max_num_seqs']}\n"
                     )
                 print(
                     f"Reducing vllm model parameters to make it fit in the GPU memory.\n"
                     "current values:\n"
-                    f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
-                    f"max_model_len: {model_options['max_model_len']}\n"
-                    f"max_num_seqs: {model_options['max_num_seqs']}\n"
+                    f"gpu_memory_utilization: {engine_args['gpu_memory_utilization']}\n"
+                    f"max_model_len: {engine_args['max_model_len']}\n"
+                    f"max_num_seqs: {engine_args['max_num_seqs']}\n"
                 )
 
         print(
             f"vllm instantiated.\n"
             "final model parameters:\n"
-            f"gpu_memory_utilization: {model_options['gpu_memory_utilization']}\n"
-            f"max_model_len: {model_options['max_model_len']}\n"
-            f"max_num_seqs: {model_options['max_num_seqs']}\n"
+            f"gpu_memory_utilization: {engine_args['gpu_memory_utilization']}\n"
+            f"max_model_len: {engine_args['max_model_len']}\n"
+            f"max_num_seqs: {engine_args['max_num_seqs']}\n"
         )
 
         self._tokenizer: PreTrainedTokenizerBase = self._model.get_tokenizer()  # type:ignore
