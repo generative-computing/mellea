@@ -8,6 +8,7 @@ from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
+    ImageBlock,
     ModelOutputThunk,
     ModelToolCall,
     TemplateRepresentation,
@@ -19,7 +20,13 @@ class Message(Component):
 
     Role = Literal["system", "user", "assistant", "tool"]
 
-    def __init__(self, role: "Message.Role", content: str):
+    def __init__(
+        self,
+        role: "Message.Role",
+        content: str,
+        *,
+        images: None | list[ImageBlock] = None,
+    ):
         """Initializer for Chat messages.
 
         Args:
@@ -28,6 +35,14 @@ class Message(Component):
         """
         self.role = role
         self.content = content
+        self._images = images
+
+    @property
+    def images(self) -> None | list[str]:
+        """Returns the images associated with this message as list of base 64 strings."""
+        if self._images is not None:
+            return [str(i) for i in self._images]
+        return None
 
     def parts(self):
         """Returns all of the constituent parts of an Instruction."""
@@ -43,13 +58,16 @@ class Message(Component):
         """
         return TemplateRepresentation(
             obj=self,
-            args={"role": self.role, "content": self.content},
+            args={"role": self.role, "content": self.content, "images": self.images},
             template_order=["*", "Message"],
         )
 
     def __str__(self):
         """Pretty representation of messages, because they are a special case."""
-        return f'mellea.Message(role="{self.role}", content="{self.content}")'
+        images = []
+        if self.images is not None:
+            images = [f"{i[:20]}..." for i in self.images]
+        return f'mellea.Message(role="{self.role}", content="{self.content}", images="{images}")'
 
 
 class ToolMessage(Message):
