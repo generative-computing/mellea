@@ -9,6 +9,7 @@ import abc
 import asyncio
 import dataclasses
 import datetime
+import functools
 import inspect
 import json
 from collections.abc import Callable, Coroutine
@@ -121,6 +122,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             "max_new_tokens": ModelOption.MAX_NEW_TOKENS,
             "seed": ModelOption.SEED,
             "tools": ModelOption.TOOLS,
+            "stream": ModelOption.STREAM,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -188,7 +190,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-        stream: bool = False,
     ) -> ModelOutputThunk:
         """Generate using the huggingface model."""
         # Upsert model options.
@@ -210,12 +211,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                     action, ctx, format=format, model_options=model_opts
                 )
         return self._generate_from_context_standard(
-            action,
-            ctx,
-            format=format,
-            model_options=model_opts,
-            tool_calls=tool_calls,
-            stream=stream,
+            action, ctx, format=format, model_options=model_opts, tool_calls=tool_calls
         )
 
     # TODO: JAL. Fix this alora function.
@@ -250,6 +246,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         assert type(assistant_message) is str
         assert format is None, "Structured outputs are not supported by ALoRAs."
 
+        # TODO: JAL. Make this async?... and then use it to create the task and assign it...
         alora_output = alora_for_this_request.generate_using_strings(
             input=user_message,
             response=assistant_message,
@@ -281,9 +278,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict[str, Any],
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
-        stream: bool = False,
     ) -> ModelOutputThunk:
         # Construct input.
         # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
@@ -372,6 +367,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
             streaming_kwargs = {}
             streamer = None
+            stream = model_options.get(ModelOption.STREAM, False)
             if stream:
                 try:
                     # HuggingFace uses a streaming interface that you pass to the generate call.
@@ -405,78 +401,17 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             output._action = action
             output._model_options = model_options
 
-            async def processing(
-                mot: ModelOutputThunk, chunk: str | GenerateDecoderOnlyOutput
-            ):
-                """Process the returned chunks or the complete response."""
-                if mot._underlying_value is None:
-                    mot._underlying_value = ""
-
-                # Because we use the AsyncTextIteratorStreamer, streaming responses are of type str;
-                # and already decoded.
-                if isinstance(chunk, str):
-                    mot._underlying_value += chunk
-                else:
-                    mot._meta["hf_output"] = chunk
-                    mot._underlying_value += self._tokenizer.decode(
-                        chunk.sequences[0, input_ids.shape[1] :],
-                        skip_special_tokens=True,
-                    )
-
-            output._process = processing
-
-            async def post_processing(mot: ModelOutputThunk):
-                """Called when generation is done."""
-                if mot._meta.get("hf_output", None) is None:
-                    if mot._generate_extra is not None:
-                        full_output = await mot._generate_extra
-                        assert isinstance(full_output, GenerateDecoderOnlyOutput)
-                        mot._meta["hf_output"] = full_output
-
-                # The ModelOutputThunk must be computed by this point.
-                assert mot.value is not None
-
-                # Add an entry to the cache for ALora reuse.
-                if self._use_caches:
-                    output_complete = mot._meta["hf_output"].sequences[0]
-                    cache: DynamicCache = mot._meta["hf_output"].past_key_values  # type: ignore
-
-                    cache_info = HFAloraCacheInfo(
-                        kv_cache=cache,
-                        merged_token_ids=output_complete,
-                        merged_attention=torch.ones_like(output_complete).to(
-                            self._device
-                        ),
-                        q_end=len(input_ids[0]),  # type: ignore
-                    )
-
-                    self.cache_put(mot.value, cache_info)
-
-                # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
-                if format is None and tool_calls:
-                    mot.tool_calls = self._extract_model_tool_requests(tools, mot.value)
-
-                self.formatter.parse(action, mot)
-
-                # Generate the log for this ModelOutputThunk.
-                generate_log = GenerateLog()
-                generate_log.prompt = ctx_as_conversation
-                generate_log.backend = f"hf::{self.model_id!s}"
-                generate_log.model_options = model_options
-                generate_log.date = datetime.datetime.now()
-                generate_log.model_output = mot.value
-                generate_log.extra = {
-                    "format": format,
-                    "tools_available": tools,
-                    "tools_called": mot.tool_calls,
-                    "seed": seed,
-                }
-                generate_log.action = action
-                generate_log.result = mot
-
-                mot._generate_log = generate_log
-
-            output._post_process = post_processing
+            # Processing functions only pass the ModelOutputThunk (and current chunk of response). Bind the other vars necessary for
+            # each processing step.
+            output._process = functools.partial(self.processing, input_ids=input_ids)
+            output._post_process = functools.partial(
+                self.post_processing,
+                conversation=ctx_as_conversation,
+                input_ids=input_ids,
+                tool_calls=tool_calls,
+                tools=tools,
+                seed=seed,
+            )
 
             try:
                 # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -506,6 +441,88 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
         else:
             raise Exception("Does not yet support non-chat contexts.")
+
+    async def processing(
+        self, mot: ModelOutputThunk, chunk: str | GenerateDecoderOnlyOutput, input_ids
+    ):
+        """Process the returned chunks or the complete response."""
+        if mot._underlying_value is None:
+            mot._underlying_value = ""
+
+        # Because we use the AsyncTextIteratorStreamer, streaming responses are of type str;
+        # and already decoded.
+        if isinstance(chunk, str):
+            mot._underlying_value += chunk
+        else:
+            # Otherwise, it's a non-streaming request. Decode it here.
+            mot._meta["hf_output"] = chunk
+            mot._underlying_value += self._tokenizer.decode(
+                chunk.sequences[0, input_ids.shape[1] :], skip_special_tokens=True
+            )
+
+    async def post_processing(
+        self,
+        mot: ModelOutputThunk,
+        conversation: list[dict],
+        tool_calls: bool,
+        tools: dict[str, Callable],
+        seed,
+        input_ids,
+    ):
+        """Called when generation is done."""
+        if mot._meta.get("hf_output", None) is None:
+            if mot._generate_extra is not None:
+                full_output = await mot._generate_extra
+                assert isinstance(full_output, GenerateDecoderOnlyOutput)
+                mot._meta["hf_output"] = full_output
+
+        # The ModelOutputThunk must be computed by this point.
+        assert mot.value is not None
+
+        # Add an entry to the cache for ALora reuse.
+        if self._use_caches:
+            output_complete = mot._meta["hf_output"].sequences[0]
+            cache: DynamicCache = mot._meta["hf_output"].past_key_values  # type: ignore
+
+            cache_info = HFAloraCacheInfo(
+                kv_cache=cache,
+                merged_token_ids=output_complete,
+                merged_attention=torch.ones_like(output_complete).to(self._device),
+                q_end=len(input_ids[0]),  # type: ignore
+            )
+
+            self.cache_put(mot.value, cache_info)
+
+        # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
+        if format is None and tool_calls:
+            mot.tool_calls = self._extract_model_tool_requests(tools, mot.value)
+
+        assert mot._action is not None, (
+            "ModelOutputThunks should have their action assigned during generation"
+        )
+        assert mot._model_options is not None, (
+            "ModelOutputThunks should have their model_opts assigned during generation"
+        )
+
+        self.formatter.parse(mot._action, mot)
+
+        # Generate the log for this ModelOutputThunk.
+        generate_log = GenerateLog()
+        generate_log.prompt = conversation
+        generate_log.backend = f"hf::{self.model_id!s}"
+        generate_log.model_options = mot._model_options
+        generate_log.date = datetime.datetime.now()
+        generate_log.model_output = mot.value
+        generate_log.extra = {
+            "format": format,
+            "tools_available": tools,
+            "tools_called": mot.tool_calls,
+            "seed": seed,
+        }
+        generate_log.action = mot._action
+        generate_log.result = mot
+
+        mot._generate_log = generate_log
 
     def _generate_from_raw(
         self,

@@ -1,3 +1,4 @@
+import pytest
 from mellea import LinearContext, start_session
 from mellea.backends import ModelOption
 from mellea.stdlib.sampling import (
@@ -61,3 +62,6 @@ class TestSamplingCtxCase:
         self._run_asserts_for_ctx_testing(res)
 
         assert len(self.m.last_prompt()) == len(res.sample_generations)*2-1, "For n sampling iterations there should be 2n-1 prompt conversation elements in the last prompt."
+
+if __name__ == "__main__":
+    pytest.main([__file__])

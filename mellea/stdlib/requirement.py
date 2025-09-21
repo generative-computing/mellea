@@ -119,7 +119,6 @@ class Requirement(Component):
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
     ) -> ValidationResult:
         """Chooses the appropriate validation strategy and applies that strategy."""
         if self.validation_fn is not None:

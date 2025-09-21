@@ -277,7 +277,6 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-        stream: bool = False,
     ) -> ModelOutputThunk: ...
 
     @overload
@@ -290,7 +289,6 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-        stream: bool = False,
     ) -> SamplingResult: ...
 
     def act(
@@ -303,7 +301,6 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-        stream: bool = False,
     ) -> ModelOutputThunk | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
@@ -330,7 +327,6 @@ class MelleaSession:
                 format=format,
                 model_options=model_options,
                 tool_calls=tool_calls,
-                stream=stream,
             ),
             self._event_loop,
         )
@@ -347,7 +343,6 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-        stream: bool = False,
     ) -> ModelOutputThunk | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
@@ -378,7 +373,6 @@ class MelleaSession:
                 format=format,
                 model_options=model_options,
                 tool_calls=tool_calls,
-                stream=stream,
             )
             await result.avalue()
 
@@ -397,15 +391,12 @@ class MelleaSession:
             # Default generation strategy just generates from context.
             if strategy.generate is None:
                 strategy.generate = (
-                    lambda sample_action,
-                    gen_ctx,
-                    g_logs: self.backend.generate_from_context(
+                    lambda sample_action, gen_ctx: self.backend.generate_from_context(
                         sample_action,
                         ctx=gen_ctx,
                         format=format,
                         model_options=model_options,
                         tool_calls=tool_calls,
-                        stream=stream,
                     )
                 )
 
@@ -413,7 +404,7 @@ class MelleaSession:
                 requirements = []
 
             sampling_result = await strategy.sample(
-                action, self.ctx, requirements=requirements, generate_logs=generate_logs
+                action, self.ctx, requirements=requirements
             )
 
             assert sampling_result.sample_generations is not None
@@ -625,7 +616,6 @@ class MelleaSession:
                 validation_target_ctx,
                 format=format,
                 model_options=model_options,
-                generate_logs=generate_logs,
             )
             coroutines.append(val_result_co)
 

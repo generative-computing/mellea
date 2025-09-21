@@ -42,7 +42,6 @@ class Backend(abc.ABC):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-        stream: bool = False,
     ) -> ModelOutputThunk:  # i.e., ContextDiff
         """Generates a model output from a context. May not mutate the context.
 

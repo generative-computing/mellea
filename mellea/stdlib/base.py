@@ -283,12 +283,13 @@ class ModelOutputThunk(CBlock):
             chunks.pop()  # Remove the sentinel value.
             self._computed = True
 
-            # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk
-            # relied on.
+            # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk relied on.
             if self._generate is not None:
                 self._generate.cancel()
             if self._generate_extra is not None:
-                self._generate_extra.cancel()
+                # Covers an hf edge case. The task is done generating anything useful but
+                # isn't `done` yet.
+                await self._generate_extra
 
             # If ModelOutputThunks get too bulky, we can do additional cleanup here
             # and set fields to None.

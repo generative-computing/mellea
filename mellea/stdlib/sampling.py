@@ -70,10 +70,7 @@ class SamplingStrategy(abc.ABC):
         | None
     ) = None
 
-    generate: (
-        Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
-        | None
-    ) = None
+    generate: Callable[[Component, Context], ModelOutputThunk] | None = None
 
     @abc.abstractmethod
     async def sample(
@@ -82,7 +79,6 @@ class SamplingStrategy(abc.ABC):
         context: Context,
         requirements: list[Requirement],
         *,
-        generate_logs: list[GenerateLog] | None = None,
         validation_ctx: Context | None = None,
     ) -> SamplingResult:
         """This method is the abstract method for sampling a given instruction.
@@ -93,7 +89,6 @@ class SamplingStrategy(abc.ABC):
             action : The action object to be sampled.
             context: The context to be passed to the sampling strategy.
             requirements: The requirements to be used by the sampling strategy (merged with global requirements).
-            generate_logs: Optional list of GenerateLog objects. If None, no collection happens.
             validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
         """
 
@@ -112,10 +107,7 @@ class BaseSamplingStrategy(SamplingStrategy):
             Coroutine[Any, Any, list[ValidationResult]],
         ]
         | None = None,
-        generate: (
-            Callable[[Component, Context, list[GenerateLog] | None], ModelOutputThunk]
-            | None
-        ) = None,
+        generate: (Callable[[Component, Context], ModelOutputThunk] | None) = None,
         requirements: list[Requirement] | None = None,
     ):
         """Initialize a new instance of the class with default parameters.
@@ -186,7 +178,6 @@ class BaseSamplingStrategy(SamplingStrategy):
         requirements: list[Requirement],
         *,
         show_progress: bool = True,
-        generate_logs: list[GenerateLog] | None = None,
         validation_ctx: Context | None = None,
     ) -> SamplingResult:
         """This method performs a sampling operation based on the given instruction.
@@ -195,7 +186,6 @@ class BaseSamplingStrategy(SamplingStrategy):
             action : The action object to be sampled.
             context: The context to be passed to the sampling strategy.
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
-            generate_logs: If provided, the generations will be logged.
             requirements: List of requirements to test against (merged with global requirements).
             validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
 
@@ -246,7 +236,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
             # run a generation pass
-            result = self.generate(new_action, ctx, generate_logs)
+            result = self.generate(new_action, ctx)
             await result.avalue()
 
             # validation pass

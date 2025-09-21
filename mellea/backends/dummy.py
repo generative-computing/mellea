@@ -24,7 +24,6 @@ class DummyBackend(Backend):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-        stream: bool = False,
     ) -> ModelOutputThunk:
         """See constructor for an exmplanation of how DummyBackends work."""
         assert format is None, "The DummyBackend does not support constrained decoding."
