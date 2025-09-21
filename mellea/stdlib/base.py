@@ -9,7 +9,7 @@ import binascii
 import datetime
 import enum
 from collections.abc import Callable, Coroutine, Iterable, Mapping
-from copy import deepcopy
+from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Any, Protocol, runtime_checkable
@@ -385,7 +385,9 @@ class Context(abc.ABC):
 
     @abc.abstractmethod
     def copy(self) -> Context:
-        """Produces a deep copy of the current Context's contents, allowing for branch-and-merge style semantics over a Context."""
+        """Produces a copy of the current Context's contents, allowing for branch-and-merge style semantics over a Context.
+
+        Implementations should not copy the actual objects in the context but retain a reference to them."""
         ...
 
     @abc.abstractmethod
@@ -546,6 +548,16 @@ class BasicContext(Context, abc.ABC):
             [f"    {c!s}" for c in self._ctx]
         )
 
+    def copy(self):
+        """Copies all attributes of the Context. `_ctx` and `_log_ctx` are shallow copies.
+
+        This means that the lists are different (you can independently insert to the new/old context), but that the objects in the old/new lists are the same at copy time.
+        """
+        new = copy(self)
+        new._ctx = copy(self._ctx)
+        new._log_ctx = copy(self._log_ctx)
+        return new
+
 
 class LinearContext(BasicContext):
     """Initializes a linear context with unbounded window_size and is_chat=True by default."""
@@ -614,10 +626,6 @@ class LinearContext(BasicContext):
         """Constructs a hash that corresponds to the string contents of the KV cache associated with this context."""
         assert False, "not supported yet."
 
-    def copy(self):
-        """Constructs a deep copy of this Context."""
-        return deepcopy(self)
-
 
 class SimpleContext(BasicContext):
     """A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved.
@@ -668,10 +676,6 @@ class SimpleContext(BasicContext):
     def _hash_for_kv_cache(self):
         """Constructs a hash that corresponds to the string contents of the KV cache associated with this context."""
         assert False, "not supported yet."
-
-    def copy(self):
-        """Constructs a deep copy of this Context."""
-        return deepcopy(self)
 
 
 @dataclass
