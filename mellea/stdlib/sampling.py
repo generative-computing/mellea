@@ -169,8 +169,6 @@ class BaseSamplingStrategy(SamplingStrategy):
         """
         ...
 
-    # TODO: JAL; this sampling strategy would use synchronous generation if
-    #            we want to keep that. Still use asynchronous validation.
     async def sample(
         self,
         action: Component,

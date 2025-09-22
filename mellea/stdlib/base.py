@@ -238,18 +238,19 @@ class ModelOutputThunk(CBlock):
         assert self.value is not None  # If computed, the value cannot be None.
         return self.value
 
-    async def astream(self) -> str | None:
-        """Returns the next chunk of data. Can be used for both async streaming and async non-streaming.
+    # If we require a function that returns only the new chunks of data, we can implement that similarly.
+    async def astream(self) -> str:
+        """Returns the ModelOutputThunk's partial value including the next chunk(s). Can be used for both async streaming and async non-streaming.
 
-        Returns `None` if the ModelOutputThunk is already computed or no values are left.
+        Returns the value of the ModelOutputThunk if streaming is done.
 
         Raises:
             Exception: Propagates any errors from the underlying inference engine api request.
             RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible.
         """
         if self._computed:
-            # Return an empty item since there's nothing more to stream.
-            return None
+            assert self.value is not None  # If computed, the value cannot be None.
+            return self.value
 
         if not self._generate_type == GenerateType.ASYNC:
             raise RuntimeError(
@@ -308,7 +309,7 @@ class ModelOutputThunk(CBlock):
             assert self._post_process is not None
             await self._post_process(self)
 
-        return self._underlying_value
+        return self._underlying_value  # type: ignore
 
     def __repr__(self):
         """Provides a python-parsable representation (usually).

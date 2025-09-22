@@ -259,14 +259,16 @@ class OllamaModelBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
-        """Generates a new completion from the provided Context using this backend's `Formatter`.
+        """Generates a ModelOutputThunk. The final value for this object can be awaited.
+
+        The new completion is generated from the provided Context using this backend's `Formatter`.
 
         This implementation treats the `Context` as a chat history, and uses the  `ollama.Client.chat()` interface to generate a completion.
         This will not always work, because sometimes we want to use non-chat models.
 
         Raises:
             RuntimeError: If not called from a thread with a running event loop.
-        """  # TODO: JAL; change this docstring
+        """
         model_opts = self._simplify_and_merge(model_options)
 
         linearized_context = ctx.render_for_generation()
