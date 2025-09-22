@@ -214,7 +214,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             action, ctx, format=format, model_options=model_opts, tool_calls=tool_calls
         )
 
-    # TODO: JAL. Fix this alora function.
     def _generate_from_context_alora(
         self,
         action: Component | CBlock,
@@ -222,7 +221,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict[str, Any],
-        generate_logs: list[GenerateLog] | None = None,
     ) -> ModelOutputThunk:
         match action:
             case ALoraRequirement():
@@ -246,30 +244,22 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         assert type(assistant_message) is str
         assert format is None, "Structured outputs are not supported by ALoRAs."
 
-        # TODO: JAL. Make this async?... and then use it to create the task and assign it...
         alora_output = alora_for_this_request.generate_using_strings(
             input=user_message,
             response=assistant_message,
             constraint=action.description,  # type: ignore
+            stream=model_options.get(ModelOption.STREAM, False),
         )
 
-        if generate_logs is not None:
-            mess = user_message.replace("\n", "\\n")
-            assist_mess = assistant_message.replace("\n", "\\n")
-            log = GenerateLog(
-                prompt=f"aLora(name='{alora_for_this_request.name}', input='{mess}', response='{assist_mess}', constraint='{action.description}') ",  # type: ignore
-                result=ModelOutputThunk(alora_output),
-                model_options=model_options,
-                date=datetime.datetime.now(),
-            )
-            generate_logs.append(log)
+        # The alora function doesn't set up all the fields.
+        alora_output._context = linearized_ctx
+        alora_output._action = action
+        alora_output._model_options = model_options
 
-        return self.formatter.parse(
-            action,
-            ModelOutputThunk(
-                alora_output, meta={"alora_name": alora_for_this_request.name}
-            ),
-        )
+        # TODO: Figure out what info we want to populate for aloras here.
+        alora_output._generate_log = GenerateLog()
+
+        return alora_output
 
     def _generate_from_context_standard(
         self,

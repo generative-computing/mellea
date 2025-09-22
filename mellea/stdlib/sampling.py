@@ -51,9 +51,6 @@ class SamplingResult(CBlock):
         self.sample_actions = sample_actions
 
 
-# TODO: JAL. Sampling strategies need to define a parallel width parameter...
-#            ie, how many generation threads should run at the same time
-#            the breadth of the tree rather than the depth
 class SamplingStrategy(abc.ABC):
     """A SamplingStrategy class defines an abstract base class for implementing various sampling strategies.
 

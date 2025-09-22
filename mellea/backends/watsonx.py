@@ -5,6 +5,7 @@ import datetime
 import functools
 import json
 import os
+import warnings
 from collections.abc import AsyncGenerator, Callable, Coroutine
 from typing import Any
 
@@ -64,6 +65,15 @@ class WatsonxAIBackend(FormatterBackend):
             api_key : watsonx API key. Defaults to None.
             project_id : watsonx project ID. Defaults to None.
         """
+
+        # There are bugs with the Watsonx python sdk related to async event loops;
+        # using the same watsonx backend across multiple event loops causes errors.
+        warnings.warn(
+            "Watsonx Backend is deprecated, use 'LiteLLM' or 'OpenAI' Backends instead",
+            DeprecationWarning,
+            2,
+        )
+
         super().__init__(
             model_id=model_id,
             formatter=(

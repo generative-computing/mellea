@@ -39,22 +39,30 @@ def test_litellm_ollama_instruct(session):
 
 @pytest.mark.qualitative
 def test_litellm_ollama_instruct_options(session):
+    model_options={
+        ModelOption.SEED: 123,
+        ModelOption.TEMPERATURE: 0.5,
+        ModelOption.THINKING: True,
+        ModelOption.MAX_NEW_TOKENS: 100,
+        "reasoning_effort": True,
+        "homer_simpson": "option should be kicked out",
+    }
+
     res = session.instruct(
         "Write an email to the interns.",
         requirements=["be funny"],
-        model_options={
-            ModelOption.SEED: 123,
-            ModelOption.TEMPERATURE: 0.5,
-            ModelOption.THINKING: True,
-            ModelOption.MAX_NEW_TOKENS: 100,
-            "reasoning_effort": True,
-            "homer_simpson": "option should be kicked out",
-        },
+        model_options=model_options,
     )
     assert res is not None
     assert isinstance(res.value, str)
-    # make sure that homer_simpson is ignored for generation
-    assert "homer_simpson" not in session.ctx.last_output_and_logs()[1].model_options
+
+    # make sure that homer_simpson is in the logged model_options
+    assert "homer_simpson" in session.ctx.last_output_and_logs()[1].model_options
+
+    # make sure the backend function filters out the model option when passing to the generate call
+    backend = session.backend
+    assert isinstance(backend, LiteLLMBackend)
+    assert "homer_simpson" not in backend._make_backend_specific_and_remove(model_options)
 
 
 @pytest.mark.qualitative

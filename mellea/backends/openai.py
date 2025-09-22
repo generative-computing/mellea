@@ -319,7 +319,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             tool_calls=tool_calls,
         )
 
-    # TODO: JAL; fix this function as well.
     def _generate_from_chat_context_alora(
         self,
         action: Component | CBlock,
@@ -328,7 +327,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
     ) -> ModelOutputThunk:
         match action:
             case ALoraRequirement():
@@ -352,17 +350,25 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         assert type(user_message) is str
         assert type(assistant_message) is str
         assert format is None, "Structured outputs are not supported by ALoRAs."
+
+        model_opts = self._simplify_and_merge(model_options, is_chat_context=True)
+
         alora_output = alora_for_this_request.generate_using_strings(
             input=user_message,
             response=assistant_message,
             constraint=action.description,  # type: ignore
+            stream=model_opts.get(ModelOption.STREAM, False),
         )
-        return self.formatter.parse(
-            action,
-            ModelOutputThunk(
-                alora_output, meta={"alora_name": alora_for_this_request.name}
-            ),
-        )
+
+        # The alora function doesn't set up all the fields.
+        alora_output._context = linearized_ctx
+        alora_output._action = action
+        alora_output._model_options = model_options
+
+        # TODO: Figure out what info we want to populate for aloras here.
+        alora_output._generate_log = GenerateLog()
+
+        return alora_output
 
     @staticmethod
     def message_to_openai_message(msg: Message):
@@ -512,7 +518,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             # Most likely cause is running this function without an event loop present
             raise e
 
-        # TODO: JAL. Add logging here and in the other backends?
         return output
 
     async def processing(

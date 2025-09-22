@@ -598,7 +598,6 @@ class MelleaSession:
         generate_logs: list[GenerateLog] | None = None,
     ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
-        # TODO: JAL; fix this docstring
         # Turn a solitary requirement in to a list of requirements, and then reqify if needed.
         reqs = [reqs] if not isinstance(reqs, list) else reqs
         reqs = [Requirement(req) if type(req) is str else req for req in reqs]

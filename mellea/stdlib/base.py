@@ -288,9 +288,9 @@ class ModelOutputThunk(CBlock):
             if self._generate is not None:
                 self._generate.cancel()
             if self._generate_extra is not None:
-                # Covers an hf edge case. The task is done generating anything useful but
-                # isn't `done` yet.
+                # Covers an hf edge case. The task is done generating anything useful but isn't `done` yet.
                 await self._generate_extra
+                self._generate_extra.cancel()
 
             # If ModelOutputThunks get too bulky, we can do additional cleanup here
             # and set fields to None.
