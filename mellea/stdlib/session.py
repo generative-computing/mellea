@@ -202,6 +202,9 @@ class MelleaSession:
             _context_session.reset(self._context_token)
             self._context_token = None
 
+    def __del__(self):
+        self.cleanup()
+
     def _push_model_state(self, new_backend: Backend, new_model_opts: dict):
         """The backend and model options used within a `Context` can be temporarily changed. This method changes the model's backend and model_opts, while saving the current settings in the `self._backend_stack`.
 
@@ -233,10 +236,15 @@ class MelleaSession:
 
     def cleanup(self) -> None:
         """Clean up session resources."""
+        self._close_event_loop()
         self.reset()
         self._backend_stack.clear()
         if hasattr(self.backend, "close"):
             self.backend.close()  # type: ignore
+
+    def _close_event_loop(self) -> None:
+        if self._event_loop:
+            self._event_loop.stop()
 
     def summarize(self) -> ModelOutputThunk:
         """Summarizes the current context."""
