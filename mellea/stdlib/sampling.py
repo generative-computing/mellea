@@ -61,7 +61,7 @@ class SamplingStrategy(abc.ABC):
     # the function signature here matches that of m.validate
     validate: (
         Callable[
-            [list[Requirement], Context, Any],
+            [list[Requirement], Context, Any, Any],  # TODO: JAL> DOes this change?
             Coroutine[Any, Any, list[ValidationResult]],
         ]
         | None
@@ -100,7 +100,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         *,
         loop_budget: int = 1,
         validate: Callable[
-            [list[Requirement], Context, Any],
+            [list[Requirement], Context, Any, Any],
             Coroutine[Any, Any, list[ValidationResult]],
         ]
         | None = None,
@@ -235,7 +235,12 @@ class BaseSamplingStrategy(SamplingStrategy):
             await result.avalue()
 
             # validation pass
-            val_scores_co = self.validate(reqs, validation_ctx, result)
+            val_scores_co = self.validate(
+                reqs,
+                validation_ctx,
+                result,
+                input=None,  # type: ignore
+            )
             val_scores = await val_scores_co
 
             # match up reqs with scores
@@ -398,14 +403,13 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
     Sampling strategy that selects the best response from a set of samples as given by a Requirement Scorer
     """
 
-    def sample(
+    async def sample(
         self,
         action: Component,
         context: Context,
         requirements: list[Requirement],
         *,
         show_progress: bool = True,
-        generate_logs: list[GenerateLog] | None = None,
         validation_ctx: Context | None = None,
     ) -> SamplingResult:
         """This method performs a sampling operation based on the given instruction.
@@ -414,7 +418,6 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
             action : The action object to be sampled.
             context: The context to be passed to the sampling strategy.
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
-            generate_logs: If provided, the generations will be logged.
             requirements: List of requirements to test against (merged with global requirements).
             validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
 
@@ -481,16 +484,18 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
             # run a generation pass
-            result = self.generate(new_action, ctx, generate_logs)
+            result = self.generate(new_action, ctx)
+            await result.avalue()
 
             # validation pass
             # action has user turn
-            val_scores = self.validate(
+            val_scores_co = self.validate(
                 reqs,
                 validation_ctx,
                 result,
                 input=action._description,  # type: ignore
             )
+            val_scores = await val_scores_co
 
             # match up reqs with scores
             constraint_scores = list(zip(reqs, val_scores))
@@ -504,6 +509,11 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
             # if all vals are true, save it and continue to get next sample
             if all(bool(s[1]) for s in constraint_scores):
                 flog.info("SUCCESS")
+                assert (
+                    result._generate_log is not None
+                )  # Cannot be None after generation.
+                result._generate_log.is_final_result = True
+
                 successful_sampled_results.append(result)
                 successful_sampled_scores.append(constraint_scores)
                 successful_sampled_actions.append(new_action)

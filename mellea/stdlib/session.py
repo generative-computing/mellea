@@ -384,8 +384,10 @@ class MelleaSession:
         else:
             # Default validation strategy just validates all of the provided requirements.
             if strategy.validate is None:
-                strategy.validate = lambda reqs, val_ctx, output, input=None: self._validate(
-                    reqs, output=output, input=input
+                strategy.validate = (
+                    lambda reqs, val_ctx, output, input=None: self._validate(  # type: ignore
+                        reqs, output=output, input=input
+                    )
                 )
 
             # Default generation strategy just generates from context.
@@ -582,6 +584,7 @@ class MelleaSession:
                 format=format,
                 model_options=model_options,
                 generate_logs=generate_logs,
+                input=input,
             ),
             self._event_loop,
         )
@@ -597,6 +600,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
+        input: CBlock | None = None,
     ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
         # Turn a solitary requirement in to a list of requirements, and then reqify if needed.

@@ -219,14 +219,13 @@ class ScorerRequirement(Requirement):
             raise NotImplementedError
         self.preference_ordering: str = preference_ordering.lower()
 
-    def validate(
+    async def validate(
         self,
         backend: Backend,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
     ) -> ValidationResult:
         """Chooses the appropriate validation strategy and applies that strategy. Asserts that the returned ValidationResult has a valid score."""
         if self.validation_fn is not None:
@@ -250,18 +249,16 @@ class ScorerRequirement(Requirement):
             req_copy = copy(self)
             req_copy._output = last_output.value
             llm_as_a_judge_result = backend.generate_from_context(
-                req_copy,
-                ctx,
-                format=format,
-                model_options=model_options,
-                generate_logs=generate_logs,
+                req_copy, ctx, format=format, model_options=model_options
             )
+            await llm_as_a_judge_result.avalue()
             result = self.output_to_bool(llm_as_a_judge_result)
 
             return ValidationResult(
                 result=result,
                 reason=llm_as_a_judge_result.value,
                 score=1 if result else 0,
+                thunk=llm_as_a_judge_result,
             )
 
 
