@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "mellea"
-version = "0.0.4"
+version = "0.0.6"
 authors = [
     { name = "Nathan Fulton", email = "nathan@ibm.com" },
     { name = "Hendrik Strobelt", email = "hendrik.strobelt@ibm.com" },
@@ -41,6 +41,7 @@ dependencies = [
     "click<8.2.0", # Newer versions will cause errors with --help in typer CLIs.
     "mistletoe>=1.4.0",
     "huggingface-hub>=0.33.4",
+    "pillow",
 ]
 
 [project.scripts]
@@ -163,7 +164,7 @@ ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot'
 check-filenames = true
 check-hidden = false
 regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=[A-Z])|\\d+"
-skip = 'requirements.txt,uv.lock'
+skip = 'requirements.txt,uv.lock,CHANGELOG.md'
 
 [tool.mypy]
 disable_error_code = ["empty-body", "import-untyped"]
@@ -184,6 +185,6 @@ branch = "main"
 
 # configure types which should trigger minor and patch version bumps respectively
 # (note that they must be a subset of the configured allowed types):
-parser_angular_allowed_types = "build,chore,ci,docs,feat,fix,perf,style,refactor,test"
-parser_angular_minor_types = "feat"
-parser_angular_patch_types = "fix,perf"
+parser_angular_allowed_types = "build,chore,ci,docs,feat,fix,perf,style,refactor,test,release"
+parser_angular_minor_types = "release"
+parser_angular_patch_types = "fix,perf,feat"

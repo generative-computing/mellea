@@ -384,8 +384,8 @@ class MelleaSession:
         else:
             # Default validation strategy just validates all of the provided requirements.
             if strategy.validate is None:
-                strategy.validate = lambda reqs, val_ctx, output: self._validate(
-                    reqs, output=output
+                strategy.validate = lambda reqs, val_ctx, output, input=None: self._validate(
+                    reqs, output=output, input=input
                 )
 
             # Default generation strategy just generates from context.
@@ -571,6 +571,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
+        input: CBlock | None = None,
     ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
         # Run everything in the specific event loop for this session.
@@ -605,10 +606,22 @@ class MelleaSession:
             validation_target_ctx = self.ctx
         else:
             validation_target_ctx = SimpleContext()
-            validation_target_ctx.insert(output)
+
+            if input is not None:
+                # some validators may need input as well as output
+                validation_target_ctx.insert_turn(
+                    ContextTurn(
+                        input,
+                        output,  # type: ignore
+                    ),  # type: ignore
+                    generate_logs=generate_logs,
+                )
+            else:
+                validation_target_ctx.insert(output)
 
         rvs: list[ValidationResult] = []
         coroutines: list[Coroutine[Any, Any, ValidationResult]] = []
+
         for requirement in reqs:
             val_result_co = requirement.validate(
                 self.backend,

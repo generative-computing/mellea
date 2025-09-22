@@ -187,6 +187,84 @@ class ALoraRequirement(Requirement):
         self.alora = alora
 
 
+class ScorerRequirement(Requirement):
+    """A requirement that always returns a non-None score. The scorer must also define a preference ordering to indicate whether the goal is to maximize or minimize the score."""
+
+    def __init__(
+        self,
+        description: str | None = None,
+        validation_fn: Callable[[Context], ValidationResult] | None = None,
+        preference_ordering: str = "max",
+        *,
+        output_to_bool: Callable[[CBlock | str], bool] | None = default_output_to_bool,
+        check_only: bool = False,
+    ):
+        """A requirement that is validated by an ALora.
+
+        Args:
+            description: See `Requirement.__init__`
+            validation_fn:  If provided, this function will be executed instead of using LLM-as-a-Judge. This function must return a valid score
+            preference_ordering: indicates whether the goal is to maximize or minimize the score. must be either "max" or "min". Defaults to None
+            output_to_bool: See `Requirement.__init__`
+            check_only: See `Requirement.__init__`
+        """
+        super().__init__(
+            description,
+            validation_fn=validation_fn,
+            output_to_bool=output_to_bool,
+            check_only=check_only,
+        )
+
+        if preference_ordering.lower() not in ["max", "min"]:
+            raise NotImplementedError
+        self.preference_ordering: str = preference_ordering.lower()
+
+    def validate(
+        self,
+        backend: Backend,
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        generate_logs: list[GenerateLog] | None = None,
+    ) -> ValidationResult:
+        """Chooses the appropriate validation strategy and applies that strategy. Asserts that the returned ValidationResult has a valid score."""
+        if self.validation_fn is not None:
+            # Python validation strategy
+            validation_result = self.validation_fn(ctx)
+            assert validation_result._score is not None, (
+                "ScorerRequirement must have a score that is not None"
+            )
+            return validation_result
+        else:
+            # LLMaJ validation strategy. This includes ALora because the backend generate call will appropriately dispatch.
+            # For ScorerRequirement, provide score of 1 for result=True, 0 for result=False
+            assert self.output_to_bool is not None
+            last_output = ctx.last_output()
+            assert isinstance(last_output, ModelOutputThunk), (
+                " Context has no appropriate last output"
+            )
+
+            # Create a copy of the requirement that holds the output
+            # and its template gets populated with the output correctly.
+            req_copy = copy(self)
+            req_copy._output = last_output.value
+            llm_as_a_judge_result = backend.generate_from_context(
+                req_copy,
+                ctx,
+                format=format,
+                model_options=model_options,
+                generate_logs=generate_logs,
+            )
+            result = self.output_to_bool(llm_as_a_judge_result)
+
+            return ValidationResult(
+                result=result,
+                reason=llm_as_a_judge_result.value,
+                score=1 if result else 0,
+            )
+
+
 def reqify(r: str | Requirement) -> Requirement:
     """Maps strings to Requirements.
 
