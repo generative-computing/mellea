@@ -140,7 +140,7 @@ class _SubtaskConstraintAssign(PromptModule):
         self,
         mellea_session: MelleaSession,
         input_str: str | None = None,
-        max_new_tokens: int = 8192,
+        max_new_tokens: int = 4096,
         parser: Callable[[str], T] = _default_parser,  # type: ignore[assignment]
         # About the mypy ignore statement above: https://github.com/python/mypy/issues/3737
         **kwargs: Unpack[SubtaskConstraintAssignArgs],

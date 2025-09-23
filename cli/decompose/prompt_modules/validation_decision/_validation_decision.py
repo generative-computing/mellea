@@ -1,10 +1,9 @@
 import re
 from collections.abc import Callable
-from typing import Any, TypeVar, final
+from typing import Any, Final, Literal, TypeVar, final
 
 from mellea import MelleaSession
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock
 from mellea.stdlib.instruction import Instruction
 
 from .._prompt_modules import PromptModule, PromptModuleString
@@ -13,17 +12,30 @@ from ._prompt import get_system_prompt, get_user_prompt
 
 T = TypeVar("T")
 
-RE_VERIFIED_CONS_COND = re.compile(
-    r"<constraints_and_requirements>(.+?)</constraints_and_requirements>",
-    flags=re.IGNORECASE | re.DOTALL,
+RE_VALIDATION_DECISION = re.compile(
+    r"<validation_decision>(.+?)</validation_decision>", flags=re.IGNORECASE | re.DOTALL
 )
 
 
 @final
-class _ConstraintExtractor(PromptModule):
+class _ValidationDecision(PromptModule):
     @staticmethod
-    def _default_parser(generated_str: str) -> list[str]:
-        r"""Default parser of the `constraint_extractor` module.
+    def _assert_output_format(output_str: str) -> Literal["code", "llm"]:
+        if output_str == "code":
+            code_result: Final = "code"
+            return code_result
+        elif output_str == "llm":
+            llm_result: Final = "llm"
+            return llm_result
+        else:
+            raise AssertionError(
+                f'LLM generated invalid output: "{output_str}". '
+                'Expected either "code" or "llm".'
+            )
+
+    @staticmethod
+    def _default_parser(generated_str: str) -> Literal["code", "llm"]:
+        r"""Default parser of the `validation_decision` module.
 
         _**Disclaimer**: This is a LLM-prompting module, so the results will vary depending
         on the size and capabilities of the LLM used. The results are also not guaranteed, so
@@ -33,90 +45,70 @@ class _ConstraintExtractor(PromptModule):
             generated_str (`str`): The LLM's answer to be parsed.
 
         Returns:
-            list[str]: A list of identified constraints and requirements in natural language. The list
-            will be empty if no constraints were identified by the LLM.
+            Literal["code", "llm"]: Either "code" or "llm" based on the LLM's decision.
 
         Raises:
             TagExtractionError: An error occurred trying to extract content from the
                 generated output. The LLM probably failed to open and close
-                the \<constraints_and_requirements\> tags.
+                the \<validation_decision\> tags.
         """
-        constraint_extractor_match = re.search(RE_VERIFIED_CONS_COND, generated_str)
+        validation_decision_match = re.search(RE_VALIDATION_DECISION, generated_str)
 
-        constraint_extractor_str: str | None = (
-            constraint_extractor_match.group(1).strip()
-            if constraint_extractor_match
+        validation_decision_str: str | None = (
+            validation_decision_match.group(1).strip()
+            if validation_decision_match
             else None
         )
 
-        if constraint_extractor_str is None:
+        if validation_decision_str is None:
             raise TagExtractionError(
-                'LLM failed to generate correct tags for extraction: "<constraints_and_requirements>"'
+                'LLM failed to generate correct tags for extraction: "<validation_decision>"'
             )
 
-        # TODO: Maybe replace this logic with a RegEx?
-        constraint_extractor_str_upper = constraint_extractor_str.upper()
-        if (
-            "N/A" in constraint_extractor_str_upper
-            or "N / A" in constraint_extractor_str_upper
-            or "N/ A" in constraint_extractor_str_upper
-            or "N /A" in constraint_extractor_str_upper
-        ):
-            return []
+        normalized_decision = validation_decision_str.lower().strip()
 
-        return [
-            line.strip()[2:] if line.strip()[:2] == "- " else line.strip()
-            for line in constraint_extractor_str.splitlines()
-        ]
+        return _ValidationDecision._assert_output_format(normalized_decision)
 
     def generate(  # type: ignore[override]
-        # About the mypy ignore above:
-        # Since the extra argument has a default value, it should be safe to override.
-        # It doesn't violate the Liskov Substitution Principle, but mypy doesn't like it.
         self,
         mellea_session: MelleaSession,
         input_str: str | None,
         max_new_tokens: int = 4096,
         parser: Callable[[str], T] = _default_parser,  # type: ignore[assignment]
         # About the mypy ignore above: https://github.com/python/mypy/issues/3737
-        enforce_same_words: bool = False,
         **kwargs: dict[str, Any],
     ) -> PromptModuleString[T]:
-        """Generates an unordered list of identified constraints and requirements based on a provided task prompt.
-
-        _**Disclaimer**: This is a LLM-prompting module, so the results will vary depending
-        on the size and capabilities of the LLM used. The results are also not guaranteed, so
-        take a look at this module's Exceptions and use them accordingly._
+        """Generates a validation decision ("code" or "llm") based on a provided requirement.
 
         Args:
             mellea_session (`MelleaSession`): A mellea session with a backend.
-            input_str (`str`): Natural language (non-templated) prompt describing a task to be executed.
+            input_str (`str`): Natural language requirement to analyze for validation approach.
             max_new_tokens (`int`, optional): Maximum tokens to generate.
-                Try increasing the value if you are getting `TagExtractionError`.
-                Defaults to `8192`.
+                Defaults to `4096`.
             parser (`Callable[[str], Any]`, optional): A string parsing function.
-                Defaults to `_ConstraintExtractor._default_parser`.
+                Defaults to `_ValidationDecision._default_parser`.
 
         Returns:
             PromptModuleString: A `PromptModuleString` class containing the generated output.
 
             The `PromptModuleString` class behaves like a `str`, but with an additional `parse()` method
             to execute the parsing function passed in the `parser` argument of
-            this method (the `parser` argument defaults to `_ConstraintExtractor._default_parser`).
+            this method (the `parser` argument defaults to `_ValidationDecision._default_parser`).
 
         Raises:
             BackendGenerationError: Some error occurred during the LLM generation call.
         """
         assert input_str is not None, 'This module requires the "input_str" argument'
 
-        system_prompt = get_system_prompt(enforce_same_words=enforce_same_words)
-        user_prompt = get_user_prompt(task_prompt=input_str)
+        system_prompt = get_system_prompt()
+        user_prompt = get_user_prompt(requirement=input_str)
 
         instruction = Instruction(description=user_prompt)
 
         try:
-            gen_result = mellea_session.act(
+            gen_result = mellea_session.backend.generate_from_context(
                 action=instruction,
+                ctx=mellea_session.ctx,
                 model_options={
                     ModelOption.SYSTEM_PROMPT: system_prompt,
                     ModelOption.TEMPERATURE: 0,
@@ -134,4 +126,4 @@ class _ConstraintExtractor(PromptModule):
         return PromptModuleString(gen_result, parser)
 
 
-constraint_extractor = _ConstraintExtractor()
+validation_decision = _ValidationDecision()

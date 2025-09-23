@@ -41,7 +41,7 @@ class _GeneralInstructions(PromptModule):
         self,
         mellea_session: MelleaSession,
         input_str: str | None,
-        max_new_tokens: int = 8192,
+        max_new_tokens: int = 4096,
         parser: Callable[[str], T] = _default_parser,  # type: ignore[assignment]
         # About the mypy ignore above: https://github.com/python/mypy/issues/3737
         **kwargs: dict[str, Any],
