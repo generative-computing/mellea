@@ -247,15 +247,12 @@ class MelleaSession:
             tasks = asyncio.all_tasks(self._event_loop)
             for task in tasks:
                 task.cancel()
-            
+
             async def finalize_tasks():
                 # TODO: We can log errors here if needed.
                 await asyncio.gather(*tasks, return_exceptions=True)
 
-            out = asyncio.run_coroutine_threadsafe(
-                finalize_tasks(),
-                self._event_loop
-            )
+            out = asyncio.run_coroutine_threadsafe(finalize_tasks(), self._event_loop)
             out.result()
             self._event_loop.stop()
 
