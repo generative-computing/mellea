@@ -224,6 +224,7 @@ def test_generate_from_raw_with_format(session):
             f"formatting directive failed for {random_result.value}: {e.json()}"
         )
 
+@pytest.mark.qualitative
 def test_async_parallel_requests(session):
     async def parallel_requests():
         model_opts = {ModelOption.STREAM: True}
@@ -252,6 +253,7 @@ def test_async_parallel_requests(session):
         assert m2_final_val == mot2.value
     asyncio.run(parallel_requests())
 
+@pytest.mark.qualitative
 def test_async_avalue(session):
     async def avalue():
         mot1 = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext())

@@ -37,10 +37,9 @@ def test_tool_called_from_context_action(m: MelleaSession, table: Table):
     # Insert a component with tools into the context.
     m.ctx.insert(table)
 
-    def test1():
-        ...
-    def test2():
-        ...
+    # Create fake tools.
+    def test1(): ...
+    def test2(): ...
 
     model_opts = {
         ModelOption.TOOLS: [test1, test2]

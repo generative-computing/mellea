@@ -244,6 +244,10 @@ class ModelOutputThunk(CBlock):
 
         Returns the value of the ModelOutputThunk if streaming is done.
 
+        **Note**: Be careful with calling this function. Only call it from one location at a time. This means you shouldn't pass a ModelOutputThunk to
+        multiple coroutines/tasks and call astream from those coroutines/tasks simultaneously. We have considered solutions to this but are waiting until
+        we see this error happen in a real use case.
+
         Raises:
             Exception: Propagates any errors from the underlying inference engine api request.
             RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible.

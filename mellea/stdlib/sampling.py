@@ -61,7 +61,7 @@ class SamplingStrategy(abc.ABC):
     # the function signature here matches that of m.validate
     validate: (
         Callable[
-            [list[Requirement], Context, Any, Any],  # TODO: JAL> DOes this change?
+            [list[Requirement], Context, Any, Any],
             Coroutine[Any, Any, list[ValidationResult]],
         ]
         | None

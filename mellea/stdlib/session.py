@@ -245,19 +245,22 @@ class MelleaSession:
     def _close_event_loop(self) -> None:
         """Called when deleting the session. Cleans up the session's event loop."""
         if self._event_loop:
-            tasks = asyncio.all_tasks(self._event_loop)
-            for task in tasks:
-                task.cancel()
-
-            async def finalize_tasks():
-                # TODO: We can log errors here if needed.
-                await asyncio.gather(*tasks, return_exceptions=True)
-
-            out = asyncio.run_coroutine_threadsafe(finalize_tasks(), self._event_loop)
             try:
+                tasks = asyncio.all_tasks(self._event_loop)
+                for task in tasks:
+                    task.cancel()
+
+                async def finalize_tasks():
+                    # TODO: We can log errors here if needed.
+                    await asyncio.gather(*tasks, return_exceptions=True)
+
+                out = asyncio.run_coroutine_threadsafe(
+                    finalize_tasks(), self._event_loop
+                )
+
                 # Timeout if needed.
-                out.result(10)
-            except TimeoutError:
+                out.result(5)
+            except Exception:
                 pass
 
             # Finally stop the event loop for this session.
@@ -369,7 +372,7 @@ class MelleaSession:
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk | SamplingResult:
-        """Runs a generic action, and adds both the action and the result to the context.
+        """Asynchronous version of .act; runs a generic action, and adds both the action and the result to the context.
 
         Args:
             action: the Component from which to generate.
@@ -627,7 +630,7 @@ class MelleaSession:
         generate_logs: list[GenerateLog] | None = None,
         input: CBlock | None = None,
     ) -> list[ValidationResult]:
-        """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
+        """Asynchronous version of .validate; validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
         # Turn a solitary requirement in to a list of requirements, and then reqify if needed.
         reqs = [reqs] if not isinstance(reqs, list) else reqs
         reqs = [Requirement(req) if type(req) is str else req for req in reqs]
