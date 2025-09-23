@@ -101,6 +101,7 @@ def test_generate_from_raw(session: MelleaSession):
 
     assert len(results) == len(prompts)
 
+@pytest.mark.qualitative
 def test_async_parallel_requests(session):
     async def parallel_requests():
         model_opts = {ModelOption.STREAM: True}
@@ -132,6 +133,7 @@ def test_async_parallel_requests(session):
 # TODO: If this becomes a big issue, we will just have to re-instantiate the ModelInference object between requests.
 #       Ideally, we would only do this when creating a new m.session from the same backend.
 @pytest.mark.xfail(reason="watsonx python sdk apparently doesn't support running across multiple async event loops.")
+@pytest.mark.qualitative
 def test_async_avalue(session):
     async def avalue():
         mot1 = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext())

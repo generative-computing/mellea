@@ -77,6 +77,7 @@ def test_gen_slot(session):
     # should yield to true - but, of course, is model dependent
     assert h is True
 
+@pytest.mark.qualitative
 def test_async_parallel_requests(session):
     async def parallel_requests():
         model_opts = {ModelOption.STREAM: True}
@@ -105,6 +106,7 @@ def test_async_parallel_requests(session):
         assert m2_final_val == mot2.value
     asyncio.run(parallel_requests())
 
+@pytest.mark.qualitative
 def test_async_avalue(session):
     async def avalue():
         mot1 = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext())
