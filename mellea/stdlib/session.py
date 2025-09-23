@@ -203,7 +203,7 @@ class MelleaSession:
             self._context_token = None
 
     def __del__(self):
-        self.cleanup()
+        self._close_event_loop()
 
     def _push_model_state(self, new_backend: Backend, new_model_opts: dict):
         """The backend and model options used within a `Context` can be temporarily changed. This method changes the model's backend and model_opts, while saving the current settings in the `self._backend_stack`.
@@ -243,6 +243,7 @@ class MelleaSession:
             self.backend.close()  # type: ignore
 
     def _close_event_loop(self) -> None:
+        """Called when deleting the session. Cleans up the session's event loop."""
         if self._event_loop:
             tasks = asyncio.all_tasks(self._event_loop)
             for task in tasks:
@@ -253,7 +254,13 @@ class MelleaSession:
                 await asyncio.gather(*tasks, return_exceptions=True)
 
             out = asyncio.run_coroutine_threadsafe(finalize_tasks(), self._event_loop)
-            out.result()
+            try:
+                # Timeout if needed.
+                out.result(10)
+            except TimeoutError:
+                pass
+
+            # Finally stop the event loop for this session.
             self._event_loop.stop()
 
     def summarize(self) -> ModelOutputThunk:
