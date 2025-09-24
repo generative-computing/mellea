@@ -6,8 +6,11 @@ The purpose of the VLLM backend is to provide a locally running fast inference e
 from __future__ import annotations
 
 import abc
+import asyncio
 import dataclasses
 import datetime
+import functools
+import importlib
 import inspect
 import json
 import os
@@ -20,7 +23,7 @@ import outlines
 import outlines_core
 import torch
 import vllm  # type:ignore
-from transformers import PreTrainedTokenizerBase
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from mellea.backends import BaseModelSubclass
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
@@ -32,12 +35,14 @@ from mellea.backends.tools import (
 )
 from mellea.backends.types import ModelOption
 from mellea.backends.utils import extract_model_tool_requests, to_chat
+from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
     GenerateLog,
+    GenerateType,
     ModelOutputThunk,
     TemplateRepresentation,
 )
@@ -114,7 +119,7 @@ class LocalVLLMBackend(FormatterBackend):
         # vllm requires some model options during instantiation.
         engine_args = self._simplify_and_merge(model_options)
         engine_args = self._make_backend_specific_and_remove(
-            engine_args, vllm.EngineArgs
+            engine_args, vllm.AsyncEngineArgs
         )
 
         logger = FancyLogger.get_logger()
@@ -135,8 +140,8 @@ class LocalVLLMBackend(FormatterBackend):
         while True:
             retry += 1
             try:
-                self._model = vllm.LLM(
-                    model=self._hf_model_id, task="generate", **engine_args
+                self._model = vllm.AsyncLLMEngine.from_engine_args(
+                    vllm.AsyncEngineArgs(model=self._hf_model_id, **engine_args)
                 )
                 break
             except torch._dynamo.exc.BackendCompilerFailed as e:
@@ -187,12 +192,18 @@ class LocalVLLMBackend(FormatterBackend):
             f"max_num_seqs: {engine_args['max_num_seqs']}\n"
         )
 
-        self._tokenizer: PreTrainedTokenizerBase = self._model.get_tokenizer()  # type:ignore
+        self._tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
+            self._hf_model_id
+        )  # type:ignore
 
-        # see notes in outlines.models.vllm.adapt_tokenizer
-        self._tokenizer_for_outlines: PreTrainedTokenizerBase = outlines.models.VLLM(
-            self._model
-        ).tokenizer  # type:ignore
+        # See the notes in outlines.models.vllm.adapt_tokenizer for why this is needed.
+        # Note: there is a module named outlines.models.vllm and a function named outlines.models.vllm.vllm .
+        # However, outlines.models import outlines.models.vllm.vllm as vllm,
+        # thus the module outlines.models.vllm becomes inaccessible,
+        # hence the use of importlib to get the module.
+        self._tokenizer_for_outlines: PreTrainedTokenizerBase = importlib.import_module(
+            "outlines.models.vllm"
+        ).adapt_tokenizer(self._tokenizer)
 
     def generate_from_context(
         self,
@@ -232,8 +243,6 @@ class LocalVLLMBackend(FormatterBackend):
         # Construct input.
         # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
         # Otherwise, we will linearize the context and treat it as a raw input.
-        decoded_result: str | None = None
-
         if ctx.is_chat_context:
             system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, None)
             ctx_as_chat = to_chat(action, ctx, self.formatter, system_prompt)
@@ -265,7 +274,8 @@ class LocalVLLMBackend(FormatterBackend):
             sampling_params = vllm.SamplingParams(
                 **self._make_backend_specific_and_remove(
                     model_options, vllm.SamplingParams
-                )
+                ),
+                output_kind=vllm.sampling_params.RequestOutputKind.DELTA,  # returns results incrementally
             )
 
             if format is not None:
@@ -287,44 +297,95 @@ class LocalVLLMBackend(FormatterBackend):
                     [logits_processor] if logits_processor is not None else []
                 )
 
-            ros: list[vllm.RequestOutput] = self._model.generate(  # type: ignore
-                [input_str], sampling_params=sampling_params
+            # stream = model_options.get(ModelOption.STREAM, False)
+            # if stream:
+
+            output = ModelOutputThunk(None)
+
+            generator = self._model.generate(  # type: ignore
+                request_id=str(id(output)),
+                prompt=input_str,
+                sampling_params=sampling_params,
             )  # type: ignore
 
-            decoded_results = [ro.outputs[0].text for ro in ros]
+            output._context = ctx.view_for_generation()
+            output._action = action
+            output._model_options = model_options
 
-            decoded_result = decoded_results[0]
+            output._process = self.processing
+            output._post_process = functools.partial(
+                self.post_processing,
+                conversation=ctx_as_chat,
+                tool_calls=tool_calls,
+                tools=tools,
+                seed=model_options.get(ModelOption.SEED, None),
+            )
+
+            try:
+                # This function should always be called from a running event loop so we don't have to worry about
+                # scheduling the task to a specific event loop here.
+                output._generate = asyncio.create_task(
+                    send_to_queue(generator, output._async_queue)  # type: ignore
+                )
+                output._generate_type = GenerateType.ASYNC
+            except RuntimeError as e:
+                # Most likely cause is running this function without an event loop present.
+                raise e
+
+            return output
 
         else:
             raise Exception("Does not yet support non-chat contexts.")
 
-        assert decoded_result is not None
+    async def processing(self, mot: ModelOutputThunk, chunk: vllm.RequestOutput):
+        """Process the returned chunks or the complete response."""
+        if mot._underlying_value is None:
+            mot._underlying_value = ""
+        mot._underlying_value += chunk.outputs[0].text
 
-        result = ModelOutputThunk(value=decoded_result)
+    async def post_processing(
+        self,
+        mot: ModelOutputThunk,
+        conversation: list[dict],
+        tool_calls: bool,
+        tools: dict[str, Callable],
+        seed,
+    ):
+        """Called when generation is done."""
 
-        # Only scan for tools if we are not doing structured decoding and tool calls were provided to the model.
+        # The ModelOutputThunk must be computed by this point.
+        assert mot.value is not None
+
+        # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if format is None and tool_calls:
-            result.tool_calls = extract_model_tool_requests(tools, decoded_result)
+            mot.tool_calls = extract_model_tool_requests(tools, mot.value)
 
-        parsed_result = self.formatter.parse(action, result)
-        if generate_logs is not None:
-            assert isinstance(generate_logs, list)
-            generate_log = GenerateLog()
-            generate_log.prompt = ctx_as_chat
-            generate_log.backend = f"vllm::{self.model_id!s}"
-            generate_log.model_options = model_options
-            generate_log.date = datetime.datetime.now()
-            generate_log.model_output = decoded_result
-            generate_log.extra = {
-                "format": format,
-                "tools_available": tools,
-                "tools_called": result.tool_calls,
-                "seed": model_options.get(ModelOption.SEED, None),
-            }
-            generate_log.action = action
-            generate_log.result = parsed_result
-            generate_logs.append(generate_log)
-        return parsed_result
+        assert mot._action is not None, (
+            "ModelOutputThunks should have their action assigned during generation"
+        )
+        assert mot._model_options is not None, (
+            "ModelOutputThunks should have their model_opts assigned during generation"
+        )
+
+        self.formatter.parse(mot._action, mot)
+
+        # Generate the log for this ModelOutputThunk.
+        generate_log = GenerateLog()
+        generate_log.prompt = conversation
+        generate_log.backend = f"vllm::{self.model_id!s}"
+        generate_log.model_options = mot._model_options
+        generate_log.date = datetime.datetime.now()
+        generate_log.model_output = mot.value
+        generate_log.extra = {
+            "format": format,
+            "tools_available": tools,
+            "tools_called": mot.tool_calls,
+            "seed": seed,
+        }
+        generate_log.action = mot._action
+        generate_log.result = mot
+
+        mot._generate_log = generate_log
 
     def _generate_from_raw(
         self,
@@ -340,7 +401,10 @@ class LocalVLLMBackend(FormatterBackend):
         prompts = [self.formatter.print(action) for action in actions]
 
         sampling_params = vllm.SamplingParams(
-            **self._make_backend_specific_and_remove(model_options, vllm.SamplingParams)
+            **self._make_backend_specific_and_remove(
+                model_options, vllm.SamplingParams
+            ),
+            output_kind=vllm.sampling_params.RequestOutputKind.FINAL_ONLY,  # returns only the final results
         )
 
         if format is not None:
@@ -360,11 +424,18 @@ class LocalVLLMBackend(FormatterBackend):
                 [logits_processor] if logits_processor is not None else []
             )
 
-        ros: list[vllm.RequestOutput] = self._model.generate(  # type: ignore
-            prompts, sampling_params=sampling_params
-        )  # type: ignore
+        async def generate(prompt, request_id):
+            async for result_output in self._model.generate(
+                request_id=request_id, prompt=prompt, sampling_params=sampling_params
+            ):
+                assert result_output.finished
+                return result_output.outputs[0].text
 
-        decoded_results = [ro.outputs[0].text for ro in ros]
+        async def generate_all(prompts):
+            tasks = [generate(p, f"{id(prompts)}-{i}") for i, p in enumerate(prompts)]
+            return await asyncio.gather(*tasks)
+
+        decoded_results = asyncio.run(generate_all(prompts))
 
         results = [ModelOutputThunk(value=text) for text in decoded_results]
 
