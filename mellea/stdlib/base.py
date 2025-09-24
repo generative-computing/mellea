@@ -344,6 +344,106 @@ class ContextTurn:
     output: ModelOutputThunk | None
 
 
+class RootContext:
+    """A `RootContext` is a special type of `Context` that is empty and is used to represent the root context of a `MelleaSession`."""
+
+
+class Context(abc.ABC):
+    """A `Context` is used to track the state of a `MelleaSession`."""
+
+    _previous: Context | RootContext
+    _data: Component | CBlock | None = None
+
+    def __init__(self):
+        """Constructs a new context."""
+        self._previous = RootContext()
+        self._data = None
+
+    @classmethod
+    def from_previous(cls, previous: Context, data: Component | CBlock) -> Context:
+        """Constructs a new context from an existing context."""
+
+        assert isinstance(previous, Context), (
+            "Cannot create a new context from a non-Context object."
+        )
+        assert data is not None, "Cannot create a new context from None data."
+
+        # if previous is an empty root context, create a new root context with the data.
+        if previous._data is None and isinstance(previous._previous, RootContext):
+            x = cls()
+            x._previous = RootContext()
+            x._data = data
+            return x
+        else:
+            x = cls()
+            x._previous = previous
+            x._data = data
+            return x
+
+    @abc.abstractmethod
+    def expand(self, c: Component | CBlock) -> Context:
+        """Returns a new context obtained by adding `c` to this context."""
+        # something along ....from_previous(self, c)
+        ...
+
+    @property
+    def previous(self) -> Context | RootContext:
+        """Returns the context from which this context was created."""
+        return self._previous
+
+    @property
+    def data(self) -> Component | CBlock | None:
+        """Returns the data associated with this context."""
+        return self._data
+
+    def full_data_as_list(self) -> list[Component | CBlock]:
+        """Returns a list of all components in the context from root to current context."""
+        context_list: list[Component | CBlock] = []
+        current_context: Context | RootContext = self
+
+        while not isinstance(current_context, RootContext):
+            # only an empty Context can have a data field that is None.
+            if current_context.data is not None:
+                context_list.append(current_context.data)
+            current_context = current_context.previous
+        context_list.reverse()
+        return context_list
+
+    @abc.abstractmethod
+    def render_for_generation(self) -> list[Component | CBlock] | None:
+        """Provides a linear list of context components to use for generation, or None if that is not possible to construct."""
+        ...
+
+
+class ChatContext(Context):
+    """Initializes a linear context with unbounded window_size and is_chat=True by default."""
+
+    def __init__(self, *, window_size: int | None = None):
+        """Constructs a new linear context."""
+        super().__init__()
+        self._window_size = window_size
+
+    def render_for_generation(self) -> list[Component | CBlock] | None:
+        all_events = self.full_data_as_list()
+        ws = self._window_size
+        ws = ws if ws is not None else len(all_events)
+
+        return all_events[-ws:]
+
+    def expand(self, c: Component | CBlock) -> Context:
+        return ChatContext.from_previous(self, c)
+
+
+class SimpleContext(Context):
+    """A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved.."""
+
+    def expand(self, c: Component | CBlock) -> Context:
+        return SimpleContext.from_previous(self, c)
+
+    def render_for_generation(self) -> list[Component | CBlock] | None:
+        return []
+
+
 class LegacyContext(abc.ABC):
     """A `Context` is used to track the state of a `MelleaSession`."""
 
