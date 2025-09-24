@@ -1,7 +1,7 @@
 import pytest
 from typing import Literal
 from mellea import generative, start_session
-from mellea.stdlib.base import LinearContext
+from mellea.stdlib.base import LegacyLinearContext
 
 
 @generative

@@ -1,4 +1,4 @@
-from mellea import LinearContext, generative, start_session
+from mellea import LegacyLinearContext, generative, start_session
 from mellea.backends.types import ModelOption
 from mellea.stdlib.base import CBlock
 
@@ -34,7 +34,7 @@ def give_feedback(essay: str) -> list[str]:
 
 if __name__ == "__main__":
     m = start_session(
-        ctx=LinearContext(), model_options={ModelOption.MAX_NEW_TOKENS: 100}
+        ctx=LegacyLinearContext(), model_options={ModelOption.MAX_NEW_TOKENS: 100}
     )
 
     text = """

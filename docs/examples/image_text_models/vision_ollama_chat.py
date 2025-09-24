@@ -2,10 +2,10 @@
 
 from PIL import Image
 
-from mellea import LinearContext, start_session
+from mellea import LegacyLinearContext, start_session
 from mellea.stdlib.base import ImageBlock
 
-m = start_session(model_id="granite3.2-vision", ctx=LinearContext())
+m = start_session(model_id="granite3.2-vision", ctx=LegacyLinearContext())
 # m = start_session(model_id="llava", ctx=LinearContext())
 
 # load image

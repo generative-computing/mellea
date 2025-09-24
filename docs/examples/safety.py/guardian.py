@@ -7,8 +7,8 @@ from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.base import (
     ContextTurn,
     LegacyContext,
+    LegacySimpleContext,
     ModelOutputThunk,
-    SimpleContext,
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.safety.guardian import GuardianCheck, GuardianRisk

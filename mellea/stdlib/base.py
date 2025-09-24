@@ -452,7 +452,7 @@ class LegacyContext(abc.ABC):
         ...
 
 
-class BasicContext(LegacyContext, abc.ABC):
+class LegacyBasicContext(LegacyContext, abc.ABC):
     """Implementing some common functionality for Contexts."""
 
     _ctx: list[CBlock | Component | ModelOutputThunk] = []
@@ -565,7 +565,7 @@ class BasicContext(LegacyContext, abc.ABC):
         return new
 
 
-class LinearContext(BasicContext):
+class LegacyLinearContext(LegacyBasicContext):
     """Initializes a linear context with unbounded window_size and is_chat=True by default."""
 
     def __init__(
@@ -633,7 +633,7 @@ class LinearContext(BasicContext):
         assert False, "not supported yet."
 
 
-class SimpleContext(BasicContext):
+class LegacySimpleContext(LegacyBasicContext):
     """A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved.
 
     This context is intended for applications where each LLM call is (mostly) a stand-alone request. Patterns like instruct-validate-repair fall into this category.

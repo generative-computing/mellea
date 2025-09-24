@@ -18,9 +18,9 @@ from mellea.stdlib.base import (
     CBlock,
     Component,
     LegacyContext,
-    LinearContext,
+    LegacyLinearContext,
+    LegacySimpleContext,
     ModelOutputThunk,
-    SimpleContext,
     TemplateRepresentation,
 )
 from mellea.stdlib.chat import Message, ToolMessage
@@ -176,11 +176,11 @@ class TemplateFormatter(Formatter, abc.ABC):
             "Chat contexts should be handled in a backend by first using `Formatter.to_chat_messages` and then passing the dict to an API endpoint or using hf.apply_chat_template."
         )
         match ctx:
-            case LinearContext():
+            case LegacyLinearContext():
                 linearized_ctx = ctx.render_for_generation()
                 assert linearized_ctx is not None
                 return "".join([self.print(x) for x in linearized_ctx])
-            case SimpleContext():
+            case LegacySimpleContext():
                 raise Exception("Do not know how to handle a SimpleContext yet.")
             case _:
                 raise Exception(

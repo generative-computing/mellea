@@ -28,9 +28,9 @@ from mellea.stdlib.base import (
     GenerateLog,
     ImageBlock,
     LegacyContext,
-    LinearContext,
+    LegacyLinearContext,
+    LegacySimpleContext,
     ModelOutputThunk,
-    SimpleContext,
 )
 from mellea.stdlib.chat import Message, ToolMessage
 from mellea.stdlib.instruction import Instruction
@@ -84,7 +84,7 @@ def backend_name_to_class(name: str) -> Any:
 def start_session(
     backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
     model_id: str | ModelIdentifier = IBM_GRANITE_3_3_8B,
-    ctx: LegacyContext | None = SimpleContext(),
+    ctx: LegacyContext | None = LegacySimpleContext(),
     *,
     model_options: dict | None = None,
     **backend_kwargs,
@@ -181,7 +181,7 @@ class MelleaSession:
             model_options (Optional[dict]): model options, which will upsert into the model/backend's defaults.
         """
         self.backend = backend
-        self.ctx = ctx if ctx is not None else SimpleContext()
+        self.ctx = ctx if ctx is not None else LegacySimpleContext()
         self._backend_stack: list[tuple[Backend, dict | None]] = []
         self._session_logger = FancyLogger.get_logger()
         self._context_token = None
@@ -637,7 +637,7 @@ class MelleaSession:
         if output is None:
             validation_target_ctx = self.ctx
         else:
-            validation_target_ctx = SimpleContext()
+            validation_target_ctx = LegacySimpleContext()
 
             if input is not None:
                 # some validators may need input as well as output

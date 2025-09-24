@@ -187,7 +187,7 @@ def react(
 
 
 if __name__ == "__main__":
-    m = mellea.start_session(ctx=mellea.stdlib.base.LinearContext())
+    m = mellea.start_session(ctx=mellea.stdlib.base.LegacyLinearContext())
 
     def zip_lookup_tool_fn(city: str):
         """Returns the ZIP code for the `city`."""

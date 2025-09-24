@@ -4,11 +4,11 @@ from typing import Any
 
 import mellea
 from cli.serve.models import ChatMessage
-from mellea.stdlib.base import LinearContext, ModelOutputThunk
+from mellea.stdlib.base import LegacyLinearContext, ModelOutputThunk
 from mellea.stdlib.requirement import Requirement, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy, SamplingResult
 
-session = mellea.start_session(ctx=LinearContext())
+session = mellea.start_session(ctx=LegacyLinearContext())
 
 
 def validate_hi_bob(email: str) -> bool:

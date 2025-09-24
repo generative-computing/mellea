@@ -7,7 +7,7 @@ from typing import Any
 
 import tqdm
 
-from mellea import LinearContext
+from mellea import LegacyLinearContext
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -379,7 +379,7 @@ class MultiTurnStrategy(BaseSamplingStrategy):
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> Component:
-        assert isinstance(ctx, LinearContext), (
+        assert isinstance(ctx, LegacyLinearContext), (
             " Need linear context to run agentic sampling."
         )
 

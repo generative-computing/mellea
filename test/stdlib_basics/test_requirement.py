@@ -1,10 +1,10 @@
 import asyncio
 import pytest
-from mellea.stdlib.base import LinearContext, ModelOutputThunk
+from mellea.stdlib.base import LegacyLinearContext, ModelOutputThunk
 from mellea.stdlib.requirement import Requirement, simple_validate
 from mellea.stdlib.session import start_session
 
-ctx = LinearContext()
+ctx = LegacyLinearContext()
 ctx.insert(ModelOutputThunk("test"))
 
 def test_llmaj_validation_req_output_field():

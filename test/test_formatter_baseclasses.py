@@ -9,15 +9,15 @@ import pytest
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier, IBM_GRANITE_3_2_8B
 from mellea.stdlib.base import (
-    BasicContext,
+    LegacyBasicContext,
     CBlock,
     Component,
     LegacyContext,
     ContextTurn,
     GenerateLog,
-    LinearContext,
+    LegacyLinearContext,
     ModelOutputThunk,
-    SimpleContext,
+    LegacySimpleContext,
     TemplateRepresentation,
 )
 from mellea.stdlib.chat import Message
@@ -118,11 +118,11 @@ def test_parse(tf: TemplateFormatter):
 
 
 def test_print_context(tf: TemplateFormatter):
-    ctx = LinearContext()
+    ctx = LegacyLinearContext()
     with pytest.raises(AssertionError):
         tf.print_context(ctx)
 
-    ctx = LinearContext(is_chat_context=False)
+    ctx = LegacyLinearContext(is_chat_context=False)
     ctx._ctx = [CBlock("1"), CBlock("2")]
     output = tf.print_context(ctx)
     assert type(output) == str
@@ -131,11 +131,11 @@ def test_print_context(tf: TemplateFormatter):
     with pytest.raises(
         Exception, match="Do not know how to handle a SimpleContext yet."
     ):
-        st_ctx = SimpleContext()
+        st_ctx = LegacySimpleContext()
         st_ctx.is_chat_context = False
         tf.print_context(st_ctx)
 
-    class _TestContext(BasicContext):
+    class _TestContext(LegacyBasicContext):
         def reset(self):
             pass
 

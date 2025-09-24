@@ -1,5 +1,5 @@
 import pytest
-from mellea.stdlib.base import CBlock, Component, LinearContext
+from mellea.stdlib.base import CBlock, Component, LegacyLinearContext
 
 
 def test_cblock():
@@ -28,7 +28,7 @@ def test_component():
 
 
 def test_context():
-    ctx = LinearContext(window_size=3)
+    ctx = LegacyLinearContext(window_size=3)
     ctx.insert(CBlock("a"))
     ctx.insert(CBlock("b"))
     ctx.insert(CBlock("c"))
@@ -36,7 +36,7 @@ def test_context():
 
 
 def test_actions_for_available_tools():
-    ctx = LinearContext(window_size=3)
+    ctx = LegacyLinearContext(window_size=3)
     ctx.insert(CBlock("a"))
     ctx.insert(CBlock("b"))
     for_generation = ctx.render_for_generation()

@@ -3,8 +3,8 @@ from mellea.stdlib.base import (
     GenerateLog,
     ModelOutputThunk,
     ContextTurn,
-    LinearContext,
-    SimpleContext,
+    LegacyLinearContext,
+    LegacySimpleContext,
     LegacyContext,
 )
 
@@ -40,26 +40,26 @@ def run_on_context_3(ctx: LegacyContext):
 
 
 def test_ctx_single_log():
-    ctx = SimpleContext()
+    ctx = LegacySimpleContext()
     run_on_context_1(ctx)
     run_on_context_2(ctx)
     run_on_context_3(ctx)
 
 
 def test_ctx_multi_log():
-    ctx = LinearContext()
+    ctx = LegacyLinearContext()
     run_on_context_1(ctx)
     run_on_context_2(ctx)
     run_on_context_3(ctx)
 
 
 def test_ctx_overlap():
-    ctx = SimpleContext()
+    ctx = LegacySimpleContext()
     run_on_context_1(ctx)
-    ctx = LinearContext()
+    ctx = LegacyLinearContext()
     run_on_context_1(ctx)
 
-    ctx2 = SimpleContext()
+    ctx2 = LegacySimpleContext()
     last_logs = ctx.get_logs_by_index(-1)
     assert isinstance(last_logs, list)
     assert len(last_logs) == 1

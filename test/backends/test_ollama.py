@@ -5,7 +5,7 @@ import pydantic
 import pytest
 from typing_extensions import Annotated
 
-from mellea import SimpleContext, start_session
+from mellea import LegacySimpleContext, start_session
 from mellea.backends.types import ModelOption
 from mellea.stdlib.base import CBlock
 from mellea.stdlib.requirement import Requirement
@@ -130,8 +130,8 @@ def test_generate_from_raw_with_format(session):
 def test_async_parallel_requests(session):
     async def parallel_requests():
         model_opts = {ModelOption.STREAM: True}
-        mot1 = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext(), model_options=model_opts)
-        mot2 = session.backend.generate_from_context(CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts)
+        mot1 = session.backend.generate_from_context(CBlock("Say Hello."), LegacySimpleContext(), model_options=model_opts)
+        mot2 = session.backend.generate_from_context(CBlock("Say Goodbye!"), LegacySimpleContext(), model_options=model_opts)
 
         m1_val = None
         m2_val = None
@@ -139,7 +139,7 @@ def test_async_parallel_requests(session):
             m1_val = await mot1.astream()
         if not mot2.is_computed():
             m2_val = await mot2.astream()
-        
+
         assert m1_val is not None, "should be a string val after generation"
         assert m2_val is not None, "should be a string val after generation"
 
@@ -157,7 +157,7 @@ def test_async_parallel_requests(session):
 
 def test_async_avalue(session):
     async def avalue():
-        mot1 = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext())
+        mot1 = session.backend.generate_from_context(CBlock("Say Hello."), LegacySimpleContext())
         m1_final_val = await mot1.avalue()
         assert m1_final_val is not None
         assert m1_final_val == mot1.value

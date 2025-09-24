@@ -1,6 +1,6 @@
 # test/rits_backend_tests/test_openai_integration.py
 from mellea import MelleaSession
-from mellea.stdlib.base import CBlock, LinearContext, ModelOutputThunk
+from mellea.stdlib.base import CBlock, LegacyLinearContext, ModelOutputThunk
 from mellea.backends.openai import OpenAIBackend
 from mellea.backends.aloras.openai.granite_aloras import add_granite_aloras
 from mellea.stdlib.requirement import Requirement, ALoraRequirement, LLMaJRequirement
@@ -34,7 +34,7 @@ class TestOpenAIBackend:
         base_url="http://0.0.0.0:8000/v1",
         api_key="EMPTY",
     )
-    m = MelleaSession(backend, ctx=LinearContext(is_chat_context=True))
+    m = MelleaSession(backend, ctx=LegacyLinearContext(is_chat_context=True))
 
     def test_instruct(self):
         self.m.reset()
@@ -136,7 +136,7 @@ class TestOpenAIALoraStuff:
         base_url="http://localhost:8000/v1",
         api_key="EMPTY",
     )
-    m = MelleaSession(backend, ctx=LinearContext())
+    m = MelleaSession(backend, ctx=LegacyLinearContext())
     add_granite_aloras(backend)
 
     def test_system_prompt(self):

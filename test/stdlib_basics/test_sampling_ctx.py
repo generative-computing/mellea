@@ -1,5 +1,5 @@
 import pytest
-from mellea import LinearContext, start_session
+from mellea import LegacyLinearContext, start_session
 from mellea.backends import ModelOption
 from mellea.stdlib.sampling import (
     MultiTurnStrategy,
@@ -10,7 +10,7 @@ from mellea.stdlib.sampling import (
 
 class TestSamplingCtxCase:
     m = start_session(
-        model_options={ModelOption.MAX_NEW_TOKENS: 100}, ctx=LinearContext()
+        model_options={ModelOption.MAX_NEW_TOKENS: 100}, ctx=LegacyLinearContext()
     )
 
     def _run_asserts_for_ctx_testing(self, res):

@@ -1,7 +1,7 @@
 """Mellea is a library for building robust LLM applications."""
 
 import mellea.backends.model_ids as model_ids
-from mellea.stdlib.base import LinearContext, SimpleContext
+from mellea.stdlib.base import LegacyLinearContext, LegacySimpleContext
 from mellea.stdlib.genslot import generative
 from mellea.stdlib.session import (
     MelleaSession,
@@ -14,9 +14,9 @@ from mellea.stdlib.session import (
 )
 
 __all__ = [
-    "LinearContext",
+    "LegacyLinearContext",
+    "LegacySimpleContext",
     "MelleaSession",
-    "SimpleContext",
     "chat",
     "generative",
     "instruct",

@@ -1,12 +1,12 @@
 import pytest
 
-from mellea.stdlib.base import CBlock, ModelOutputThunk, LinearContext, LegacyContext
+from mellea.stdlib.base import CBlock, ModelOutputThunk, LegacyLinearContext, LegacyContext
 from mellea.stdlib.reqlib.md import is_markdown_list, is_markdown_table, as_markdown_list
 from mellea.stdlib.requirement import default_output_to_bool
 
 
 def from_model(s: str) -> LegacyContext:
-    ctx = LinearContext()
+    ctx = LegacyLinearContext()
     ctx.insert(ModelOutputThunk(value=s, meta={"test": True}))
     return ctx
 

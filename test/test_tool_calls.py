@@ -6,14 +6,14 @@ from mellea.backends.tools import add_tools_from_context_actions, add_tools_from
 from mellea.backends.types import ModelOption
 from mellea.stdlib.base import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 from mellea.stdlib.docs.richdocument import Table
-from mellea.stdlib.session import LinearContext, MelleaSession
+from mellea.stdlib.session import LegacyLinearContext, MelleaSession
 
 
 @pytest.fixture(scope="module")
 def m() -> MelleaSession:
     return MelleaSession(
         backend=OllamaModelBackend(),
-        ctx=LinearContext(),
+        ctx=LegacyLinearContext(),
     )
 
 

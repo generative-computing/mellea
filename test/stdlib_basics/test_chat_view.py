@@ -1,7 +1,7 @@
 
 import pytest
 
-from mellea.stdlib.base import LinearContext, ModelOutputThunk
+from mellea.stdlib.base import LegacyLinearContext, ModelOutputThunk
 from mellea.stdlib.chat import Message, as_chat_history
 from mellea.stdlib.session import start_session
 
@@ -9,7 +9,7 @@ from mellea.stdlib.session import start_session
 @pytest.fixture(scope="function")
 def linear_session():
     """Session with linear context for chat tests."""
-    session = start_session(ctx=LinearContext())
+    session = start_session(ctx=LegacyLinearContext())
     yield session
     session.reset()
 

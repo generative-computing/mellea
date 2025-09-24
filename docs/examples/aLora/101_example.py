@@ -1,6 +1,6 @@
 import time
 
-from mellea import LinearContext, MelleaSession
+from mellea import LegacyLinearContext, MelleaSession
 from mellea.backends.aloras.huggingface.granite_aloras import HFConstraintAlora
 from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.huggingface import LocalHFBackend
@@ -22,7 +22,7 @@ custom_stembolt_failure_constraint = HFConstraintAlora(
 backend.add_alora(custom_stembolt_failure_constraint)
 
 # Create M session
-m = MelleaSession(backend, ctx=LinearContext())
+m = MelleaSession(backend, ctx=LegacyLinearContext())
 
 # define a requirement
 failure_check = ALoraRequirement(

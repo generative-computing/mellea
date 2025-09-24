@@ -3,7 +3,12 @@ from typing import Literal
 from mellea import MelleaSession
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.stdlib.base import CBlock, LegacyContext, LinearContext, ModelOutputThunk
+from mellea.stdlib.base import (
+    CBlock,
+    LegacyContext,
+    LegacyLinearContext,
+    ModelOutputThunk,
+)
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import Requirement, reqify
 from mellea.stdlib.safety.guardian import GuardianCheck, GuardianRisk
@@ -66,7 +71,7 @@ class ChatCheckingSession(MelleaSession):
 m = ChatCheckingSession(
     requirements=[GuardianCheck("jailbreak"), GuardianCheck("profanity")],
     backend=OllamaModelBackend(),
-    ctx=LinearContext(),
+    ctx=LegacyLinearContext(),
 )
 
 # You can run this code to see the immediate checks working.
