@@ -1,3 +1,4 @@
+import asyncio
 import os
 import pydantic
 import pytest
@@ -7,7 +8,7 @@ from mellea import MelleaSession
 from mellea.backends.vllm import LocalVLLMBackend
 from mellea.backends.types import ModelOption
 import mellea.backends.model_ids as model_ids
-from mellea.stdlib.base import CBlock, LinearContext
+from mellea.stdlib.base import CBlock, LinearContext, SimpleContext
 from mellea.stdlib.requirement import (
     LLMaJRequirement,
     Requirement,
@@ -134,6 +135,44 @@ def test_generate_from_raw_with_format(session):
             f"formatting directive failed for {random_result.value}: {e.json()}"
         )
 
+
+@pytest.mark.qualitative
+def test_async_parallel_requests(session):
+    async def parallel_requests():
+        model_opts = {ModelOption.STREAM: True}
+        mot1 = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext(), model_options=model_opts)
+        mot2 = session.backend.generate_from_context(CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts)
+
+        m1_val = None
+        m2_val = None
+        if not mot1.is_computed():
+            m1_val = await mot1.astream()
+        if not mot2.is_computed():
+            m2_val = await mot2.astream()
+
+        assert m1_val is not None, "should be a string val after generation"
+        assert m2_val is not None, "should be a string val after generation"
+
+        m1_final_val = await mot1.avalue()
+        m2_final_val = await mot2.avalue()
+
+        # Ideally, we would be able to assert that m1_final_val != m1_val, but sometimes the first streaming response
+        # contains the full response.
+        assert m1_final_val.startswith(m1_val), "final val should contain the first streamed chunk"
+        assert m2_final_val.startswith(m2_val), "final val should contain the first streamed chunk"
+
+        assert m1_final_val == mot1.value
+        assert m2_final_val == mot2.value
+    asyncio.run(parallel_requests())
+
+@pytest.mark.qualitative
+def test_async_avalue(session):
+    async def avalue():
+        mot1 = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext())
+        m1_final_val = await mot1.avalue()
+        assert m1_final_val is not None
+        assert m1_final_val == mot1.value
+    asyncio.run(avalue())
 
 if __name__ == "__main__":
     import pytest
