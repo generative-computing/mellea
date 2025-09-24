@@ -11,7 +11,7 @@ from mellea.backends import (
     BaseModelSubclass,
     CBlock,
     Component,
-    Context,
+    LegacyContext,
     ModelOutputThunk,
 )
 from mellea.backends.aloras import Alora
@@ -89,7 +89,7 @@ class Requirement(Component):
     def __init__(
         self,
         description: str | None = None,
-        validation_fn: Callable[[Context], ValidationResult] | None = None,
+        validation_fn: Callable[[LegacyContext], ValidationResult] | None = None,
         *,
         output_to_bool: Callable[[CBlock | str], bool] | None = default_output_to_bool,
         check_only: bool = False,
@@ -115,7 +115,7 @@ class Requirement(Component):
     async def validate(
         self,
         backend: Backend,
-        ctx: Context,
+        ctx: LegacyContext,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -193,7 +193,7 @@ class ScorerRequirement(Requirement):
     def __init__(
         self,
         description: str | None = None,
-        validation_fn: Callable[[Context], ValidationResult] | None = None,
+        validation_fn: Callable[[LegacyContext], ValidationResult] | None = None,
         preference_ordering: str = "max",
         *,
         output_to_bool: Callable[[CBlock | str], bool] | None = default_output_to_bool,
@@ -222,7 +222,7 @@ class ScorerRequirement(Requirement):
     async def validate(
         self,
         backend: Backend,
-        ctx: Context,
+        ctx: LegacyContext,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -288,18 +288,18 @@ def check(*args, **kwargs) -> Requirement:
 @overload
 def simple_validate(
     fn: Callable[[str], tuple[bool, str]],
-) -> Callable[[Context], ValidationResult]: ...
+) -> Callable[[LegacyContext], ValidationResult]: ...
 
 
 @overload
 def simple_validate(
     fn: Callable[[str], bool], *, reason: str | None = None
-) -> Callable[[Context], ValidationResult]: ...
+) -> Callable[[LegacyContext], ValidationResult]: ...
 
 
 def simple_validate(
     fn: Callable[[str], Any], *, reason: str | None = None
-) -> Callable[[Context], ValidationResult]:
+) -> Callable[[LegacyContext], ValidationResult]:
     """Syntactic sugar for writing validation functions that only operate over the last output from the model (interpreted as a string).
 
     This is useful when your validation logic only depends upon the most recent model output. For example:
@@ -317,7 +317,7 @@ def simple_validate(
         reason: only used if the provided function returns a bool; if the validation function fails, a static reason for that failure to give to the llm when repairing
     """
 
-    def validate(ctx: Context) -> ValidationResult:
+    def validate(ctx: LegacyContext) -> ValidationResult:
         o = ctx.last_output()
         if o is None or o.value is None:
             FancyLogger.get_logger().warn(

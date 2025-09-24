@@ -1,5 +1,5 @@
 from mellea.backends.huggingface import HFProcessRewardModel
-from mellea.stdlib.base import CBlock, Context
+from mellea.stdlib.base import CBlock, LegacyContext
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ScorerRequirement, ValidationResult
 
@@ -24,7 +24,7 @@ class PRMScorer(ScorerRequirement):
 
         self.model: HFProcessRewardModel = prm_model
 
-    def _prm_validate(self, ctx: Context):
+    def _prm_validate(self, ctx: LegacyContext):
         """
         Returns PRM score of last turn of context
         """

@@ -1,17 +1,17 @@
 import pytest
 
-from mellea.stdlib.base import CBlock, ModelOutputThunk, LinearContext, Context
+from mellea.stdlib.base import CBlock, ModelOutputThunk, LinearContext, LegacyContext
 from mellea.stdlib.reqlib.md import is_markdown_list, is_markdown_table, as_markdown_list
 from mellea.stdlib.requirement import default_output_to_bool
 
 
-def from_model(s: str) -> Context:
+def from_model(s: str) -> LegacyContext:
     ctx = LinearContext()
     ctx.insert(ModelOutputThunk(value=s, meta={"test": True}))
     return ctx
 
 
-MARKDOWN_LIST_CTX: Context = from_model(
+MARKDOWN_LIST_CTX: LegacyContext = from_model(
     """
  * This is the first item
  * This is the second item
@@ -19,7 +19,7 @@ MARKDOWN_LIST_CTX: Context = from_model(
 """
 )
 
-MARKDOWN_OL_LIST_CTX: Context = from_model(
+MARKDOWN_OL_LIST_CTX: LegacyContext = from_model(
     """
 1. The first item is the most important.
 2. The second item is not as important.
@@ -29,7 +29,7 @@ MARKDOWN_OL_LIST_CTX: Context = from_model(
 )
 
 
-MARKDOWN_TABLE_CONTEXT: Context = from_model(
+MARKDOWN_TABLE_CONTEXT: LegacyContext = from_model(
     """
 | Month    | Revenue |
 | -------- | ------- |

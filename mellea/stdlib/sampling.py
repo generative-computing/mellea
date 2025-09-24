@@ -12,9 +12,9 @@ from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
     Component,
-    Context,
     ContextTurn,
     GenerateLog,
+    LegacyContext,
     ModelOutputThunk,
 )
 from mellea.stdlib.chat import Message
@@ -61,22 +61,22 @@ class SamplingStrategy(abc.ABC):
     # the function signature here matches that of m.validate
     validate: (
         Callable[
-            [list[Requirement], Context, Any, Any],
+            [list[Requirement], LegacyContext, Any, Any],
             Coroutine[Any, Any, list[ValidationResult]],
         ]
         | None
     ) = None
 
-    generate: Callable[[Component, Context], ModelOutputThunk] | None = None
+    generate: Callable[[Component, LegacyContext], ModelOutputThunk] | None = None
 
     @abc.abstractmethod
     async def sample(
         self,
         action: Component,
-        context: Context,
+        context: LegacyContext,
         requirements: list[Requirement],
         *,
-        validation_ctx: Context | None = None,
+        validation_ctx: LegacyContext | None = None,
     ) -> SamplingResult:
         """This method is the abstract method for sampling a given instruction.
 
@@ -100,11 +100,13 @@ class BaseSamplingStrategy(SamplingStrategy):
         *,
         loop_budget: int = 1,
         validate: Callable[
-            [list[Requirement], Context, Any, Any],
+            [list[Requirement], LegacyContext, Any, Any],
             Coroutine[Any, Any, list[ValidationResult]],
         ]
         | None = None,
-        generate: (Callable[[Component, Context], ModelOutputThunk] | None) = None,
+        generate: (
+            Callable[[Component, LegacyContext], ModelOutputThunk] | None
+        ) = None,
         requirements: list[Requirement] | None = None,
     ):
         """Initialize a new instance of the class with default parameters.
@@ -128,7 +130,7 @@ class BaseSamplingStrategy(SamplingStrategy):
     @staticmethod
     @abc.abstractmethod
     def repair(
-        ctx: Context,
+        ctx: LegacyContext,
         past_actions: list[Component],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
@@ -169,11 +171,11 @@ class BaseSamplingStrategy(SamplingStrategy):
     async def sample(
         self,
         action: Component,
-        context: Context,
+        context: LegacyContext,
         requirements: list[Requirement],
         *,
         show_progress: bool = True,
-        validation_ctx: Context | None = None,
+        validation_ctx: LegacyContext | None = None,
     ) -> SamplingResult:
         """This method performs a sampling operation based on the given instruction.
 
@@ -316,7 +318,7 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def repair(
-        ctx: Context,
+        ctx: LegacyContext,
         past_actions: list[Component],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
@@ -339,7 +341,7 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def repair(
-        ctx: Context,
+        ctx: LegacyContext,
         past_actions: list[Component],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
@@ -372,7 +374,7 @@ class MultiTurnStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def repair(
-        ctx: Context,
+        ctx: LegacyContext,
         past_actions: list[Component],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
@@ -406,11 +408,11 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
     async def sample(
         self,
         action: Component,
-        context: Context,
+        context: LegacyContext,
         requirements: list[Requirement],
         *,
         show_progress: bool = True,
-        validation_ctx: Context | None = None,
+        validation_ctx: LegacyContext | None = None,
     ) -> SamplingResult:
         """This method performs a sampling operation based on the given instruction.
 
@@ -605,7 +607,7 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def repair(
-        ctx: Context,
+        ctx: LegacyContext,
         past_actions: list[Component],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],

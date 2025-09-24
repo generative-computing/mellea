@@ -12,7 +12,7 @@ from mellea.stdlib.base import (
     BasicContext,
     CBlock,
     Component,
-    Context,
+    LegacyContext,
     ContextTurn,
     GenerateLog,
     LinearContext,
@@ -145,7 +145,7 @@ def test_print_context(tf: TemplateFormatter):
         def insert_turn(self, turn, *, generate_logs: list[GenerateLog] | None = None,):
             pass
 
-        def copy(self) -> Context:
+        def copy(self) -> LegacyContext:
             return self
 
         def _hash_for_kv_cache(self):

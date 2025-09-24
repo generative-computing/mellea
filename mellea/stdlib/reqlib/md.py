@@ -2,13 +2,13 @@
 
 import mistletoe
 
-from mellea.stdlib.base import Context
+from mellea.stdlib.base import LegacyContext
 from mellea.stdlib.requirement import Requirement
 
 # region lists
 
 
-def as_markdown_list(ctx: Context) -> list[str] | None:
+def as_markdown_list(ctx: LegacyContext) -> list[str] | None:
     xs = list()
     raw_output = ctx.last_output()
     assert raw_output is not None
@@ -24,7 +24,7 @@ def as_markdown_list(ctx: Context) -> list[str] | None:
         return None
 
 
-def _md_list(ctx: Context):
+def _md_list(ctx: LegacyContext):
     return as_markdown_list(ctx) is not None
 
 
@@ -39,7 +39,7 @@ is_markdown_list = Requirement(
 # region tables
 
 
-def _md_table(ctx: Context):
+def _md_table(ctx: LegacyContext):
     raw_output = ctx.last_output()
     assert raw_output is not None
     try:

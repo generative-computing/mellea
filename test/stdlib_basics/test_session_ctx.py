@@ -5,11 +5,11 @@ from mellea.stdlib.base import (
     ContextTurn,
     LinearContext,
     SimpleContext,
-    Context,
+    LegacyContext,
 )
 
 
-def run_on_context_1(ctx: Context):
+def run_on_context_1(ctx: LegacyContext):
     ctx.insert(CBlock("abc"), generate_logs=[GenerateLog()])
     o, l = ctx.last_output_and_logs()
     assert (
@@ -18,7 +18,7 @@ def run_on_context_1(ctx: Context):
     assert l is None, "If there is no output, there should be no corresponding log"
 
 
-def run_on_context_2(ctx: Context):
+def run_on_context_2(ctx: LegacyContext):
     ctx.insert(ModelOutputThunk("def"), generate_logs=[GenerateLog(), GenerateLog()])
     o, l = ctx.last_output_and_logs(all_intermediate_results=True)
     assert o is not None
@@ -27,7 +27,7 @@ def run_on_context_2(ctx: Context):
     assert isinstance(l[0], GenerateLog)
 
 
-def run_on_context_3(ctx: Context):
+def run_on_context_3(ctx: LegacyContext):
     for is_final in (True, False):
         ctx.insert_turn(
             ContextTurn(None, ModelOutputThunk("def")),

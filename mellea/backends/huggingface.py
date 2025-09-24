@@ -47,9 +47,9 @@ from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
     Component,
-    Context,
     GenerateLog,
     GenerateType,
+    LegacyContext,
     ModelOutputThunk,
     ModelToolCall,
 )
@@ -186,7 +186,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
     def generate_from_context(
         self,
         action: Component | CBlock,
-        ctx: Context,
+        ctx: LegacyContext,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -218,7 +218,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
     def _generate_from_context_alora(
         self,
         action: Component | CBlock,
-        ctx: Context,
+        ctx: LegacyContext,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict[str, Any],
@@ -265,7 +265,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
     def _generate_from_context_standard(
         self,
         action: Component | CBlock,
-        ctx: Context,
+        ctx: LegacyContext,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict[str, Any],

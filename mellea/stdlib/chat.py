@@ -7,8 +7,8 @@ from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
     Component,
-    Context,
     ImageBlock,
+    LegacyContext,
     ModelOutputThunk,
     ModelToolCall,
     TemplateRepresentation,
@@ -113,7 +113,7 @@ class ToolMessage(Message):
         return f'mellea.Message(role="{self.role}", content="{self.content}", name="{self.name}")'
 
 
-def as_chat_history(ctx: Context) -> list[Message]:
+def as_chat_history(ctx: LegacyContext) -> list[Message]:
     """Returns a list of Messages corresponding to a Context."""
 
     def _to_msg(c: CBlock | Component | ModelOutputThunk) -> Message | None:

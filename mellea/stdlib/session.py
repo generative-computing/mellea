@@ -24,10 +24,10 @@ from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
     Component,
-    Context,
     ContextTurn,
     GenerateLog,
     ImageBlock,
+    LegacyContext,
     LinearContext,
     ModelOutputThunk,
     SimpleContext,
@@ -84,7 +84,7 @@ def backend_name_to_class(name: str) -> Any:
 def start_session(
     backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
     model_id: str | ModelIdentifier = IBM_GRANITE_3_3_8B,
-    ctx: Context | None = SimpleContext(),
+    ctx: LegacyContext | None = SimpleContext(),
     *,
     model_options: dict | None = None,
     **backend_kwargs,
@@ -172,12 +172,12 @@ class MelleaSession:
     Note: we put the `instruct`, `validate`, and other convenience functions here instead of in `Context` or `Backend` to avoid import resolution issues.
     """
 
-    def __init__(self, backend: Backend, ctx: Context | None = None):
+    def __init__(self, backend: Backend, ctx: LegacyContext | None = None):
         """Initializes a new Mellea session with the provided backend and context.
 
         Args:
             backend (Backend): This is always required.
-            ctx (Context): The way in which the model's context will be managed. By default, each interaction with the model is a stand-alone interaction, so we use SimpleContext as the default.
+            ctx (LegacyContext): The way in which the model's context will be managed. By default, each interaction with the model is a stand-alone interaction, so we use SimpleContext as the default.
             model_options (Optional[dict]): model options, which will upsert into the model/backend's defaults.
         """
         self.backend = backend

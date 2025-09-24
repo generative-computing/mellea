@@ -1,7 +1,13 @@
 """This module holds shim backends used for smoke tests."""
 
 from mellea.backends import Backend, BaseModelSubclass
-from mellea.stdlib.base import CBlock, Component, Context, GenerateLog, ModelOutputThunk
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    GenerateLog,
+    LegacyContext,
+    ModelOutputThunk,
+)
 
 
 class DummyBackend(Backend):
@@ -19,7 +25,7 @@ class DummyBackend(Backend):
     def generate_from_context(
         self,
         action: Component | CBlock,
-        ctx: Context,
+        ctx: LegacyContext,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,

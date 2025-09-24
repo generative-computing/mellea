@@ -3,7 +3,7 @@ from typing import Literal
 from mellea import MelleaSession
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.stdlib.base import CBlock, Context, LinearContext, ModelOutputThunk
+from mellea.stdlib.base import CBlock, LegacyContext, LinearContext, ModelOutputThunk
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import Requirement, reqify
 from mellea.stdlib.safety.guardian import GuardianCheck, GuardianRisk
@@ -18,7 +18,7 @@ class ChatCheckingSession(MelleaSession):
         self,
         requirements: list[str | Requirement],
         backend: Backend,
-        ctx: Context | None = None,
+        ctx: LegacyContext | None = None,
         check_immediately: bool = True,
     ):
         super().__init__(backend, ctx)

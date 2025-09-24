@@ -344,7 +344,7 @@ class ContextTurn:
     output: ModelOutputThunk | None
 
 
-class Context(abc.ABC):
+class LegacyContext(abc.ABC):
     """A `Context` is used to track the state of a `MelleaSession`."""
 
     is_chat_context: bool = False
@@ -390,7 +390,7 @@ class Context(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def copy(self) -> Context:
+    def copy(self) -> LegacyContext:
         """Produces a copy of the current Context's contents, allowing for branch-and-merge style semantics over a Context.
 
         Implementations should not copy the actual objects in the context but retain a reference to them."""
@@ -452,7 +452,7 @@ class Context(abc.ABC):
         ...
 
 
-class BasicContext(Context, abc.ABC):
+class BasicContext(LegacyContext, abc.ABC):
     """Implementing some common functionality for Contexts."""
 
     _ctx: list[CBlock | Component | ModelOutputThunk] = []

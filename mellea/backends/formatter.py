@@ -17,7 +17,7 @@ from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
     Component,
-    Context,
+    LegacyContext,
     LinearContext,
     ModelOutputThunk,
     SimpleContext,
@@ -36,7 +36,7 @@ class Formatter(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def print_context(self, ctx: Context) -> str:
+    def print_context(self, ctx: LegacyContext) -> str:
         """Renders a Context for input to a model."""
         ...
 
@@ -170,7 +170,7 @@ class TemplateFormatter(Formatter, abc.ABC):
         else:
             return result
 
-    def print_context(self, ctx: Context) -> str:
+    def print_context(self, ctx: LegacyContext) -> str:
         """Renders a Context for input to a model."""
         assert not ctx.is_chat_context, (
             "Chat contexts should be handled in a backend by first using `Formatter.to_chat_messages` and then passing the dict to an API endpoint or using hf.apply_chat_template."

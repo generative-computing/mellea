@@ -9,7 +9,13 @@ import pydantic
 
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock, Component, Context, GenerateLog, ModelOutputThunk
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    GenerateLog,
+    LegacyContext,
+    ModelOutputThunk,
+)
 
 BaseModelSubclass = TypeVar(
     "BaseModelSubclass", bound=pydantic.BaseModel
@@ -37,7 +43,7 @@ class Backend(abc.ABC):
     def generate_from_context(
         self,
         action: Component | CBlock,
-        ctx: Context,
+        ctx: LegacyContext,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
