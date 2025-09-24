@@ -298,7 +298,7 @@ class MelleaSession:
     @overload
     def act(
         self,
-        action: Component,
+        action: Component | CBlock,
         *,
         strategy: SamplingStrategy | None = None,
         return_sampling_results: Literal[False] = False,
@@ -310,7 +310,7 @@ class MelleaSession:
     @overload
     def act(
         self,
-        action: Component,
+        action: Component | CBlock,
         *,
         strategy: SamplingStrategy | None = None,
         return_sampling_results: Literal[True],
@@ -321,7 +321,7 @@ class MelleaSession:
 
     def act(
         self,
-        action: Component,
+        action: Component | CBlock,
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = None,
@@ -363,7 +363,7 @@ class MelleaSession:
 
     async def _act(
         self,
-        action: Component,
+        action: Component | CBlock,
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = None,

@@ -33,7 +33,7 @@ class SamplingResult(CBlock):
         sample_generations: list[ModelOutputThunk] | None = None,
         sample_validations: list[list[tuple[Requirement, ValidationResult]]]
         | None = None,
-        sample_actions: list[Component] | None = None,
+        sample_actions: list[Component | CBlock] | None = None,
     ):
         """Initialize a new instance of sampling results.
 
@@ -67,12 +67,12 @@ class SamplingStrategy(abc.ABC):
         | None
     ) = None
 
-    generate: Callable[[Component, Context], ModelOutputThunk] | None = None
+    generate: Callable[[Component | CBlock, Context], ModelOutputThunk] | None = None
 
     @abc.abstractmethod
     async def sample(
         self,
-        action: Component,
+        action: Component | CBlock,
         context: Context,
         requirements: list[Requirement],
         *,
@@ -104,7 +104,9 @@ class BaseSamplingStrategy(SamplingStrategy):
             Coroutine[Any, Any, list[ValidationResult]],
         ]
         | None = None,
-        generate: (Callable[[Component, Context], ModelOutputThunk] | None) = None,
+        generate: (
+            Callable[[Component | CBlock, Context], ModelOutputThunk] | None
+        ) = None,
         requirements: list[Requirement] | None = None,
     ):
         """Initialize a new instance of the class with default parameters.
@@ -129,10 +131,10 @@ class BaseSamplingStrategy(SamplingStrategy):
     @abc.abstractmethod
     def repair(
         ctx: Context,
-        past_actions: list[Component],
+        past_actions: list[Component | CBlock],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> Component:
+    ) -> Component | CBlock:
         """
         Repair function that is being invoked if not all requirements are fulfilled. It should return a next action component.
 
@@ -150,7 +152,7 @@ class BaseSamplingStrategy(SamplingStrategy):
     @staticmethod
     @abc.abstractmethod
     def select_from_failure(
-        sampled_actions: list[Component],
+        sampled_actions: list[Component | CBlock],
         sampled_results: list[ModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
@@ -168,7 +170,7 @@ class BaseSamplingStrategy(SamplingStrategy):
 
     async def sample(
         self,
-        action: Component,
+        action: Component | CBlock,
         context: Context,
         requirements: list[Requirement],
         *,
@@ -202,7 +204,7 @@ class BaseSamplingStrategy(SamplingStrategy):
 
         sampled_results: list[ModelOutputThunk] = []
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
-        sampled_actions: list[Component] = []
+        sampled_actions: list[Component | CBlock] = []
 
         # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
         # flag to determine whether we should show the pbar.
@@ -307,7 +309,7 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def select_from_failure(
-        sampled_actions: list[Component],
+        sampled_actions: list[Component | CBlock],
         sampled_results: list[ModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
@@ -317,10 +319,10 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
     @staticmethod
     def repair(
         ctx: Context,
-        past_actions: list[Component],
+        past_actions: list[Component | CBlock],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> Component:
+    ) -> Component | CBlock:
         # repeat the last action again.
         return past_actions[-1]
 
@@ -330,7 +332,7 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def select_from_failure(
-        sampled_actions: list[Component],
+        sampled_actions: list[Component | CBlock],
         sampled_results: list[ModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
@@ -340,10 +342,10 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
     @staticmethod
     def repair(
         ctx: Context,
-        past_actions: list[Component],
+        past_actions: list[Component | CBlock],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> Component:
+    ) -> Component | CBlock:
         pa = past_actions[-1]
         if isinstance(pa, Instruction):
             last_failed_reqs: list[Requirement] = [
@@ -363,7 +365,7 @@ class MultiTurnStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def select_from_failure(
-        sampled_actions: list[Component],
+        sampled_actions: list[Component | CBlock],
         sampled_results: list[ModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ):
@@ -373,10 +375,10 @@ class MultiTurnStrategy(BaseSamplingStrategy):
     @staticmethod
     def repair(
         ctx: Context,
-        past_actions: list[Component],
+        past_actions: list[Component | CBlock],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> Component:
+    ) -> Component | CBlock:
         assert isinstance(ctx, LinearContext), (
             " Need linear context to run agentic sampling."
         )
@@ -405,7 +407,7 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
 
     async def sample(
         self,
-        action: Component,
+        action: Component | CBlock,
         context: Context,
         requirements: list[Requirement],
         *,
@@ -439,11 +441,11 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
 
         sampled_results: list[ModelOutputThunk] = []
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
-        sampled_actions: list[Component] = []
+        sampled_actions: list[Component | CBlock] = []
 
         successful_sampled_results: list[ModelOutputThunk] = []
         successful_sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
-        successful_sampled_actions: list[Component] = []
+        successful_sampled_actions: list[Component | CBlock] = []
 
         # sampled_val_scores: list[float] = []
 
@@ -585,7 +587,7 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def select_from_failure(
-        sampled_actions: list[Component],
+        sampled_actions: list[Component | CBlock],
         sampled_results: list[ModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
@@ -606,10 +608,10 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
     @staticmethod
     def repair(
         ctx: Context,
-        past_actions: list[Component],
+        past_actions: list[Component | CBlock],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> Component:
+    ) -> Component | CBlock:
         pa = past_actions[-1]
         if isinstance(pa, Instruction):
             last_failed_reqs: list[Requirement] = [

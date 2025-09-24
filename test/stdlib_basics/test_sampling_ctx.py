@@ -1,6 +1,8 @@
 import pytest
 from mellea import LinearContext, start_session
 from mellea.backends import ModelOption
+from mellea.stdlib.base import CBlock
+from mellea.stdlib.requirement import req
 from mellea.stdlib.sampling import (
     MultiTurnStrategy,
     RejectionSamplingStrategy,
@@ -62,6 +64,19 @@ class TestSamplingCtxCase:
         self._run_asserts_for_ctx_testing(res)
 
         assert len(self.m.last_prompt()) == len(res.sample_generations)*2-1, "For n sampling iterations there should be 2n-1 prompt conversation elements in the last prompt."
+
+def test_sampling_with_cblocks():
+    m = start_session(
+        model_options={ModelOption.MAX_NEW_TOKENS: 10}, ctx=LinearContext()
+    )
+
+    strat = RejectionSamplingStrategy(
+        loop_budget=2,
+        requirements=[req("It should be a fairytale."), req("It should have a happy end.")]
+    )
+
+    out = m.act(CBlock("Write a short story."), strategy=strat)
+    assert out.value is not None
 
 if __name__ == "__main__":
     pytest.main([__file__])
