@@ -15,11 +15,11 @@ import shutil
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional
 
-import msgspec
+import msgspec  # type:ignore
 import outlines
 import outlines_core
 import torch
-import vllm
+import vllm  # type:ignore
 from transformers import PreTrainedTokenizerBase
 
 from mellea.backends import BaseModelSubclass
