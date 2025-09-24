@@ -275,7 +275,13 @@ class LocalVLLMBackend(FormatterBackend):
                 **self._make_backend_specific_and_remove(
                     model_options, vllm.SamplingParams
                 ),
-                output_kind=vllm.sampling_params.RequestOutputKind.DELTA,  # returns results incrementally
+                output_kind=(
+                    # returns results incrementally
+                    vllm.sampling_params.RequestOutputKind.DELTA
+                    if model_options.get(ModelOption.STREAM, False)
+                    # returns only the final result
+                    else vllm.sampling_params.RequestOutputKind.FINAL_ONLY
+                ),
             )
 
             if format is not None:
