@@ -311,7 +311,7 @@ class LocalVLLMBackend(FormatterBackend):
             assert isinstance(generate_logs, list)
             generate_log = GenerateLog()
             generate_log.prompt = ctx_as_chat
-            generate_log.backend = f"hf::{self.model_id!s}"
+            generate_log.backend = f"vllm::{self.model_id!s}"
             generate_log.model_options = model_options
             generate_log.date = datetime.datetime.now()
             generate_log.model_output = decoded_result
@@ -378,7 +378,7 @@ class LocalVLLMBackend(FormatterBackend):
             for i in range(len(prompts)):
                 generate_log = GenerateLog()
                 generate_log.prompt = prompts[i]
-                generate_log.backend = f"hf::{self.model_id!s}"
+                generate_log.backend = f"vllm::{self.model_id!s}"
                 generate_log.model_options = model_options
                 generate_log.date = date
                 generate_log.model_output = decoded_results
