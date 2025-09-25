@@ -488,7 +488,9 @@ class ChatContext(Context):
         return all_events[-ws:]
 
     def add(self, c: Component | CBlock) -> ChatContext:
-        return ChatContext.from_previous(self, c)
+        new = ChatContext.from_previous(self, c)
+        new._window_size = self._window_size
+        return new
 
 
 class SimpleContext(Context):
