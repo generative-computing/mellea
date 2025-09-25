@@ -2,19 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextvars
-import threading
-from collections.abc import Coroutine
-from copy import deepcopy
 from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
 
 from mellea.backends import Backend, BaseModelSubclass
-from mellea.backends.formatter import FormatterBackend
 from mellea.backends.model_ids import (
-    IBM_GRANITE_3_2_8B,
     IBM_GRANITE_3_3_8B,
     ModelIdentifier,
 )
@@ -24,26 +18,21 @@ from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
     Component,
-    ContextTurn,
+    Context,
     GenerateLog,
     ImageBlock,
-    LegacyContext,
-    LegacyLinearContext,
-    LegacySimpleContext,
     ModelOutputThunk,
+    SimpleContext,
 )
-from mellea.stdlib.chat import Message, ToolMessage
-from mellea.stdlib.instruction import Instruction
-from mellea.stdlib.mify import mify
-from mellea.stdlib.mobject import MObjectProtocol
-from mellea.stdlib.requirement import Requirement, ValidationResult, check, req
+from mellea.stdlib.chat import Message
+from mellea.stdlib.requirement import Requirement, ValidationResult
 from mellea.stdlib.sampling import SamplingResult, SamplingStrategy
+import mellea.stdlib.mellea_functions as mfuncs
 
 # Global context variable for the context session
 _context_session: contextvars.ContextVar[MelleaSession | None] = contextvars.ContextVar(
     "context_session", default=None
 )
-
 
 def get_session() -> MelleaSession:
     """Get the current session from context.
@@ -84,7 +73,7 @@ def backend_name_to_class(name: str) -> Any:
 def start_session(
     backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
     model_id: str | ModelIdentifier = IBM_GRANITE_3_3_8B,
-    ctx: LegacyContext | None = LegacySimpleContext(),
+    ctx: Context | None = None,
     *,
     model_options: dict | None = None,
     **backend_kwargs,
@@ -103,10 +92,11 @@ def start_session(
             - "hf" or "huggingface": Use HuggingFace transformers backend
             - "openai": Use OpenAI API backend
             - "watsonx": Use IBM WatsonX backend
+            - "litellm": Use the LiteLLM backend
         model_id: Model identifier or name. Can be a `ModelIdentifier` from
             mellea.backends.model_ids or a string model name.
         ctx: Context manager for conversation history. Defaults to SimpleContext().
-            Use LinearContext() for chat-style conversations.
+            Use ChatContext() for chat-style conversations.
         model_options: Additional model configuration options that will be passed
             to the backend (e.g., temperature, max_tokens, etc.).
         **backend_kwargs: Additional keyword arguments passed to the backend constructor.
@@ -155,6 +145,9 @@ def start_session(
         )
     assert backend_class is not None
     backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
+
+    if ctx is None:
+        ctx = SimpleContext()
     return MelleaSession(backend, ctx)
 
 
@@ -172,23 +165,19 @@ class MelleaSession:
     Note: we put the `instruct`, `validate`, and other convenience functions here instead of in `Context` or `Backend` to avoid import resolution issues.
     """
 
-    def __init__(self, backend: Backend, ctx: LegacyContext | None = None):
+    def __init__(self, backend: Backend, ctx: Context | None = None):
         """Initializes a new Mellea session with the provided backend and context.
 
         Args:
             backend (Backend): This is always required.
-            ctx (LegacyContext): The way in which the model's context will be managed. By default, each interaction with the model is a stand-alone interaction, so we use SimpleContext as the default.
+            ctx (Context): The way in which the model's context will be managed. By default, each interaction with the model is a stand-alone interaction, so we use SimpleContext as the default.
             model_options (Optional[dict]): model options, which will upsert into the model/backend's defaults.
         """
         self.backend = backend
-        self.ctx = ctx if ctx is not None else LegacySimpleContext()
+        self.ctx = ctx if ctx is not None else SimpleContext()
         self._backend_stack: list[tuple[Backend, dict | None]] = []
         self._session_logger = FancyLogger.get_logger()
         self._context_token = None
-
-        # Necessary for async. `m.*` functions should always run in this event loop.
-        self._event_loop = asyncio.new_event_loop()
-        threading.Thread(target=self._event_loop.run_forever, daemon=True).start()
 
     def __enter__(self):
         """Enter context manager and set this session as the current global session."""
@@ -201,9 +190,6 @@ class MelleaSession:
         if self._context_token is not None:
             _context_session.reset(self._context_token)
             self._context_token = None
-
-    def __del__(self):
-        self._close_event_loop()
 
     def _push_model_state(self, new_backend: Backend, new_model_opts: dict):
         """The backend and model options used within a `Context` can be temporarily changed. This method changes the model's backend and model_opts, while saving the current settings in the `self._backend_stack`.
@@ -236,64 +222,10 @@ class MelleaSession:
 
     def cleanup(self) -> None:
         """Clean up session resources."""
-        self._close_event_loop()
         self.reset()
         self._backend_stack.clear()
         if hasattr(self.backend, "close"):
             self.backend.close()  # type: ignore
-
-    def _close_event_loop(self) -> None:
-        """Called when deleting the session. Cleans up the session's event loop."""
-        if self._event_loop:
-            try:
-                tasks = asyncio.all_tasks(self._event_loop)
-                for task in tasks:
-                    task.cancel()
-
-                async def finalize_tasks():
-                    # TODO: We can log errors here if needed.
-                    await asyncio.gather(*tasks, return_exceptions=True)
-
-                out = asyncio.run_coroutine_threadsafe(
-                    finalize_tasks(), self._event_loop
-                )
-
-                # Timeout if needed.
-                out.result(5)
-            except Exception:
-                pass
-
-            # Finally stop the event loop for this session.
-            self._event_loop.stop()
-
-    def summarize(self) -> ModelOutputThunk:
-        """Summarizes the current context."""
-        raise NotImplementedError()
-
-    @staticmethod
-    def _parse_and_clean_image_args(
-        images_: list[ImageBlock] | list[PILImage.Image] | None = None,
-    ) -> list[ImageBlock] | None:
-        images: list[ImageBlock] | None = None
-        if images_ is not None:
-            assert isinstance(images_, list), "Images should be a list or None."
-
-            if len(images_) > 0:
-                if isinstance(images_[0], PILImage.Image):
-                    images = [
-                        ImageBlock.from_pil_image(i)
-                        for i in images_
-                        if isinstance(i, PILImage.Image)
-                    ]
-                else:
-                    images = images_  # type: ignore
-                assert isinstance(images, list)
-                assert all(isinstance(i, ImageBlock) for i in images), (
-                    "All images should be ImageBlocks now."
-                )
-            else:
-                images = None
-        return images
 
     @overload
     def act(
@@ -321,14 +253,8 @@ class MelleaSession:
 
     def act(
         self,
-        action: Component,
-        *,
-        requirements: list[Requirement] | None = None,
-        strategy: SamplingStrategy | None = None,
-        return_sampling_results: bool = False,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
+        *args,
+        **kwargs,
     ) -> ModelOutputThunk | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
@@ -345,120 +271,9 @@ class MelleaSession:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
         """
 
-        # Run everything in the specific event loop for this session.
-        out = asyncio.run_coroutine_threadsafe(
-            self._act(
-                action,
-                requirements=requirements,
-                strategy=strategy,
-                return_sampling_results=return_sampling_results,
-                format=format,
-                model_options=model_options,
-                tool_calls=tool_calls,
-            ),
-            self._event_loop,
-        )
-
-        return out.result()
-
-    async def _act(
-        self,
-        action: Component,
-        *,
-        requirements: list[Requirement] | None = None,
-        strategy: SamplingStrategy | None = None,
-        return_sampling_results: bool = False,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> ModelOutputThunk | SamplingResult:
-        """Asynchronous version of .act; runs a generic action, and adds both the action and the result to the context.
-
-        Args:
-            action: the Component from which to generate.
-            requirements: used as additional requirements when a sampling strategy is provided
-            strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
-            return_sampling_results: attach the (successful and failed) sampling attempts to the results.
-            format: if set, the BaseModel to use for constrained decoding.
-            model_options: additional model options, which will upsert into the model/backend's defaults.
-            tool_calls: if true, tool calling is enabled.
-
-        Returns:
-            A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
-        """
-        sampling_result: SamplingResult | None = None
-        generate_logs: list[GenerateLog] = []
-
-        if return_sampling_results:
-            assert strategy is not None, (
-                "Must provide a SamplingStrategy when return_sampling_results==True"
-            )
-
-        if strategy is None:
-            result = self.backend.generate_from_context(
-                action,
-                ctx=self.ctx,
-                format=format,
-                model_options=model_options,
-                tool_calls=tool_calls,
-            )
-            await result.avalue()
-
-            # ._generate_log should never be None after generation.
-            assert result._generate_log is not None
-            result._generate_log.is_final_result = True
-            generate_logs.append(result._generate_log)
-
-        else:
-            # Default validation strategy just validates all of the provided requirements.
-            if strategy.validate is None:
-                strategy.validate = (
-                    lambda reqs, val_ctx, output, input=None: self._validate(  # type: ignore
-                        reqs, output=output, input=input
-                    )
-                )
-
-            # Default generation strategy just generates from context.
-            if strategy.generate is None:
-                strategy.generate = (
-                    lambda sample_action, gen_ctx: self.backend.generate_from_context(
-                        sample_action,
-                        ctx=gen_ctx,
-                        format=format,
-                        model_options=model_options,
-                        tool_calls=tool_calls,
-                    )
-                )
-
-            if requirements is None:
-                requirements = []
-
-            sampling_result = await strategy.sample(
-                action, self.ctx, requirements=requirements
-            )
-
-            assert sampling_result.sample_generations is not None
-            for result in sampling_result.sample_generations:
-                assert (
-                    result._generate_log is not None
-                )  # Cannot be None after generation.
-                generate_logs.append(result._generate_log)
-
-            result = sampling_result.result
-            assert sampling_result.result._generate_log is not None
-            assert sampling_result.result._generate_log.is_final_result, (
-                "generate logs from the final result returned by the sampling strategy must be marked as final"
-            )
-
-        self.ctx.insert_turn(ContextTurn(action, result), generate_logs=generate_logs)
-
-        if return_sampling_results:
-            assert (
-                sampling_result is not None
-            )  # Needed for the type checker but should never happen.
-            return sampling_result
-        else:
-            return result
+        result, context = mfuncs.act(*args, context=self.ctx, backend=self.backend, **kwargs)
+        self.ctx = context
+        return result
 
     @overload
     def instruct(
@@ -500,20 +315,8 @@ class MelleaSession:
 
     def instruct(
         self,
-        description: str,
-        *,
-        images: list[ImageBlock] | list[PILImage.Image] | None = None,
-        requirements: list[Requirement | str] | None = None,
-        icl_examples: list[str | CBlock] | None = None,
-        grounding_context: dict[str, str | CBlock | Component] | None = None,
-        user_variables: dict[str, str] | None = None,
-        prefix: str | CBlock | None = None,
-        output_prefix: str | CBlock | None = None,
-        strategy: SamplingStrategy | None = None,
-        return_sampling_results: bool = False,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
+        *args,
+        **kwargs,
     ) -> ModelOutputThunk | SamplingResult:
         """Generates from an instruction.
 
@@ -533,33 +336,10 @@ class MelleaSession:
             images: A list of images to be used in the instruction or None if none.
         """
 
-        requirements = [] if requirements is None else requirements
-        icl_examples = [] if icl_examples is None else icl_examples
-        grounding_context = dict() if grounding_context is None else grounding_context
+        result, context = mfuncs.instruct(*args, context=self.ctx, backend=self.backend, **kwargs)
+        self.ctx = context
+        return result
 
-        images = self._parse_and_clean_image_args(images)
-
-        # All instruction options are forwarded to create a new Instruction object.
-        i = Instruction(
-            description=description,
-            requirements=requirements,
-            icl_examples=icl_examples,
-            grounding_context=grounding_context,
-            user_variables=user_variables,
-            prefix=prefix,
-            output_prefix=output_prefix,
-            images=images,
-        )
-
-        return self.act(
-            i,
-            requirements=i.requirements,
-            strategy=strategy,
-            return_sampling_results=return_sampling_results,
-            format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )  # type: ignore[call-overload]
 
     def chat(
         self,
@@ -573,25 +353,21 @@ class MelleaSession:
         tool_calls: bool = False,
     ) -> Message:
         """Sends a simple chat message and returns the response. Adds both messages to the Context."""
-        if user_variables is not None:
-            content_resolved = Instruction.apply_user_dict_from_jinja(
-                user_variables, content
-            )
-        else:
-            content_resolved = content
-        images = self._parse_and_clean_image_args(images)
-        user_message = Message(role=role, content=content_resolved, images=images)
 
-        result = self.act(
-            user_message,
+        result, context = mfuncs.chat(
+            content=content,
+            context=self.ctx,
+            backend=self.backend,
+            role=role,
+            images=images,
+            user_variables=user_variables,
             format=format,
             model_options=model_options,
-            tool_calls=tool_calls,
+            tool_calls=tool_calls
         )
-        parsed_assistant_message = result.parsed_repr
-        assert isinstance(parsed_assistant_message, Message)
 
-        return parsed_assistant_message
+        self.ctx = context
+        return result
 
     def validate(
         self,
@@ -604,85 +380,17 @@ class MelleaSession:
         input: CBlock | None = None,
     ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
-        # Run everything in the specific event loop for this session.
-        out = asyncio.run_coroutine_threadsafe(
-            self._validate(
-                reqs=reqs,
-                output=output,
-                format=format,
-                model_options=model_options,
-                generate_logs=generate_logs,
-                input=input,
-            ),
-            self._event_loop,
+
+        return mfuncs.validate(
+            reqs=reqs,
+            context=self.ctx,
+            backend=self.backend,
+            output=output,
+            format=format,
+            model_options=model_options,
+            generate_logs=generate_logs,
+            input=input
         )
-
-        # Wait for and return the result.
-        return out.result()
-
-    async def _validate(
-        self,
-        reqs: Requirement | list[Requirement],
-        *,
-        output: CBlock | None = None,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
-        input: CBlock | None = None,
-    ) -> list[ValidationResult]:
-        """Asynchronous version of .validate; validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
-        # Turn a solitary requirement in to a list of requirements, and then reqify if needed.
-        reqs = [reqs] if not isinstance(reqs, list) else reqs
-        reqs = [Requirement(req) if type(req) is str else req for req in reqs]
-        if output is None:
-            validation_target_ctx = self.ctx
-        else:
-            validation_target_ctx = LegacySimpleContext()
-
-            if input is not None:
-                # some validators may need input as well as output
-                validation_target_ctx.insert_turn(
-                    ContextTurn(
-                        input,
-                        output,  # type: ignore
-                    ),  # type: ignore
-                    generate_logs=generate_logs,
-                )
-            else:
-                validation_target_ctx.insert(output)
-
-        rvs: list[ValidationResult] = []
-        coroutines: list[Coroutine[Any, Any, ValidationResult]] = []
-
-        for requirement in reqs:
-            val_result_co = requirement.validate(
-                self.backend,
-                validation_target_ctx,
-                format=format,
-                model_options=model_options,
-            )
-            coroutines.append(val_result_co)
-
-        for val_result in await asyncio.gather(*coroutines):
-            rvs.append(val_result)
-
-            # If the validator utilized a backend to generate a result, attach the corresponding
-            # info to the generate_logs list.
-            if generate_logs is not None:
-                if val_result.thunk is not None:
-                    thunk = val_result.thunk
-                    assert (
-                        thunk._generate_log is not None
-                    )  # Cannot be None after generation.
-                    generate_logs.append(thunk._generate_log)
-                else:
-                    # We have to append None here so that the logs line-up.
-                    # TODO: A better solution should be found for this edge case.
-                    #       This is the only scenario where ValidationResults are supposed to line
-                    #       up with GenerateLogs.
-                    generate_logs.append(None)  # type: ignore
-
-        return rvs
 
     def query(
         self,
@@ -705,16 +413,17 @@ class MelleaSession:
         Returns:
             ModelOutputThunk: The result of the query as processed by the backend.
         """
-        if not isinstance(obj, MObjectProtocol):
-            obj = mify(obj)
-
-        assert isinstance(obj, MObjectProtocol)
-        q = obj.get_query_object(query)
-
-        answer = self.act(
-            q, format=format, model_options=model_options, tool_calls=tool_calls
+        result, context = mfuncs.query(
+            obj=obj,
+            query=query,
+            context=self.ctx,
+            backend=self.backend,
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls
         )
-        return answer
+        self.ctx = context
+        return result
 
     def transform(
         self,
@@ -735,93 +444,21 @@ class MelleaSession:
             the return type will be always be ModelOutputThunk. If a tool was called, the return type will be the return type
             of the function called, usually the type of the object passed in.
         """
-        if not isinstance(obj, MObjectProtocol):
-            obj = mify(obj)
-
-        assert isinstance(obj, MObjectProtocol)
-        t = obj.get_transform_object(transformation)
-
-        # Check that your model / backend supports tool calling.
-        # This might throw an error when tools are provided but can't be handled by one or the other.
-        transformed = self.act(
-            t, format=format, model_options=model_options, tool_calls=True
+        result, context = mfuncs.transform(
+            obj=obj,
+            transformation=transformation,
+            context=self.ctx,
+            backend=self.backend,
+            format=format,
+            model_options=model_options
         )
-
-        tools = self._call_tools(transformed)
-
-        # Transform only supports calling one tool call since it cannot currently synthesize multiple outputs.
-        # Attempt to choose the best one to call.
-        chosen_tool: ToolMessage | None = None
-        if len(tools) == 1:
-            # Only one function was called. Choose that one.
-            chosen_tool = tools[0]
-
-        elif len(tools) > 1:
-            for output in tools:
-                if type(output._tool_output) is type(obj):
-                    chosen_tool = output
-                    break
-
-            if chosen_tool is None:
-                chosen_tool = tools[0]
-
-            FancyLogger.get_logger().warning(
-                f"multiple tool calls returned in transform of {obj} with description '{transformation}'; picked `{chosen_tool.name}`"
-                # type: ignore
-            )
-
-        if chosen_tool:
-            # Tell the user the function they should've called if no generated values were added.
-            if len(chosen_tool._tool.args.keys()) == 0:
-                FancyLogger.get_logger().warning(
-                    f"the transform of {obj} with transformation description '{transformation}' resulted in a tool call with no generated arguments; consider calling the function `{chosen_tool._tool.name}` directly"
-                )
-
-            self.ctx.insert(chosen_tool)
-            FancyLogger.get_logger().info(
-                "added a tool message from transform to the context"
-            )
-            return chosen_tool._tool_output
-
-        return transformed
-
-    def _call_tools(self, result: ModelOutputThunk) -> list[ToolMessage]:
-        """Call all the tools requested in a result's tool calls object.
-
-        Returns:
-            list[ToolMessage]: A list of tool messages that can be empty.
-        """
-        # There might be multiple tool calls returned.
-        outputs: list[ToolMessage] = []
-        tool_calls = result.tool_calls
-        if tool_calls:
-            # Call the tools and decide what to do.
-            for name, tool in tool_calls.items():
-                try:
-                    output = tool.call_func()
-                except Exception as e:
-                    output = e
-
-                content = str(output)
-                if isinstance(self.backend, FormatterBackend):
-                    content = self.backend.formatter.print(output)  # type: ignore
-
-                outputs.append(
-                    ToolMessage(
-                        role="tool",
-                        content=content,
-                        tool_output=output,
-                        name=name,
-                        args=tool.args,
-                        tool=tool,
-                    )
-                )
-        return outputs
+        self.ctx = context
+        return result
 
     # ###############################
     #  Convenience functions
     # ###############################
-
+# TODO: JAL. Investigate this.
     def last_prompt(self) -> str | list[dict] | None:
         """Returns the last prompt that has been called from the session context.
 
@@ -840,27 +477,35 @@ class MelleaSession:
         return prompt
 
 
+# old code
+# m.instruct -> m.act -> act
+# m.chat -> m.act -> act
+
+# with new changes
+# m.instruct -> instruct (creates instruction) -> act
+
+# TODO: JAL. Do we want to keep these versions of the functions... Probably not...
 # Convenience functions that use the current session
-def instruct(description: str, **kwargs) -> ModelOutputThunk | SamplingResult:
-    """Instruct using the current session."""
-    return get_session().instruct(description, **kwargs)
+# def instruct(description: str, **kwargs) -> ModelOutputThunk | SamplingResult:
+#     """Instruct using the current session."""
+#     return get_session().instruct(description, **kwargs)
 
 
-def chat(content: str, **kwargs) -> Message:
-    """Chat using the current session."""
-    return get_session().chat(content, **kwargs)
+# def chat(content: str, **kwargs) -> Message:
+#     """Chat using the current session."""
+#     return get_session().chat(content, **kwargs)
 
 
-def validate(reqs, **kwargs):
-    """Validate using the current session."""
-    return get_session().validate(reqs, **kwargs)
+# def validate(reqs, **kwargs):
+#     """Validate using the current session."""
+#     return get_session().validate(reqs, **kwargs)
 
 
-def query(obj: Any, query_str: str, **kwargs) -> ModelOutputThunk:
-    """Query using the current session."""
-    return get_session().query(obj, query_str, **kwargs)
+# def query(obj: Any, query_str: str, **kwargs) -> ModelOutputThunk:
+#     """Query using the current session."""
+#     return get_session().query(obj, query_str, **kwargs)
 
 
-def transform(obj: Any, transformation: str, **kwargs):
-    """Transform using the current session."""
-    return get_session().transform(obj, transformation, **kwargs)
+# def transform(obj: Any, transformation: str, **kwargs):
+#     """Transform using the current session."""
+#     return get_session().transform(obj, transformation, **kwargs)

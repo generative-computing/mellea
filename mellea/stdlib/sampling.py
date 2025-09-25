@@ -1,17 +1,17 @@
 """sampling methods go here."""
 
 import abc
-from collections.abc import Callable, Coroutine
 from copy import deepcopy
-from typing import Any
 
 import tqdm
 
 from mellea import LegacyLinearContext
+from mellea.backends import Backend, BaseModelSubclass
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
     Component,
+    Context,
     ContextTurn,
     GenerateLog,
     LegacyContext,
@@ -20,6 +20,7 @@ from mellea.stdlib.base import (
 from mellea.stdlib.chat import Message
 from mellea.stdlib.instruction import Instruction
 from mellea.stdlib.requirement import Requirement, ScorerRequirement, ValidationResult
+import mellea.stdlib.mellea_functions as mfuncs
 
 
 class SamplingResult(CBlock):
@@ -50,6 +51,11 @@ class SamplingResult(CBlock):
         self.sample_validations = sample_validations
         self.sample_actions = sample_actions
 
+        # TODO: JAL. add these fields
+        # context,
+        # sample_contexts=[Context] # TODO: JAL. implement this.
+
+
 
 class SamplingStrategy(abc.ABC):
     """A SamplingStrategy class defines an abstract base class for implementing various sampling strategies.
@@ -58,25 +64,18 @@ class SamplingStrategy(abc.ABC):
     It allows setting custom validation and generation functions through properties.
     """
 
-    # the function signature here matches that of m.validate
-    validate: (
-        Callable[
-            [list[Requirement], LegacyContext, Any, Any],
-            Coroutine[Any, Any, list[ValidationResult]],
-        ]
-        | None
-    ) = None
-
-    generate: Callable[[Component, LegacyContext], ModelOutputThunk] | None = None
-
     @abc.abstractmethod
     async def sample(
         self,
         action: Component,
-        context: LegacyContext,
+        context: Context,
+        backend: Backend,
         requirements: list[Requirement],
         *,
-        validation_ctx: LegacyContext | None = None,
+        validation_ctx: Context | None = None,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
     ) -> SamplingResult:
         """This method is the abstract method for sampling a given instruction.
 
@@ -99,14 +98,6 @@ class BaseSamplingStrategy(SamplingStrategy):
         self,
         *,
         loop_budget: int = 1,
-        validate: Callable[
-            [list[Requirement], LegacyContext, Any, Any],
-            Coroutine[Any, Any, list[ValidationResult]],
-        ]
-        | None = None,
-        generate: (
-            Callable[[Component, LegacyContext], ModelOutputThunk] | None
-        ) = None,
         requirements: list[Requirement] | None = None,
     ):
         """Initialize a new instance of the class with default parameters.
@@ -123,8 +114,6 @@ class BaseSamplingStrategy(SamplingStrategy):
         assert loop_budget > 0, "Loop budget must be at least 1."
 
         self.loop_budget = loop_budget
-        self.validate = validate  # it's ok to be None here
-        self.generate = generate  # it's ok to be None here
         self.requirements = requirements
 
     @staticmethod
@@ -171,11 +160,15 @@ class BaseSamplingStrategy(SamplingStrategy):
     async def sample(
         self,
         action: Component,
-        context: LegacyContext,
+        context: Context,
+        backend: Backend,
         requirements: list[Requirement],
         *,
+        validation_ctx: Context | None = None,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
         show_progress: bool = True,
-        validation_ctx: LegacyContext | None = None,
     ) -> SamplingResult:
         """This method performs a sampling operation based on the given instruction.
 
@@ -192,13 +185,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         Raises:
             AssertionError: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
         """
-        assert self.validate is not None, "Validation must be provided."
-        assert self.generate is not None, "Generate must be provided."
-
-        # just to be sure to not cause issues to the OG context
-        ctx = context.copy()
         validation_ctx = validation_ctx if validation_ctx is not None else context
-        assert validation_ctx is not None, "Validation context must be provided."
 
         flog = FancyLogger.get_logger()
 
@@ -233,15 +220,26 @@ class BaseSamplingStrategy(SamplingStrategy):
                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
             # run a generation pass
-            result = self.generate(new_action, ctx)
+            # TODO: JAL. figure out where to put new_ctx; ie we also need to return it with sampling results
+            result, new_ctx = backend.generate_from_context(
+                new_action,
+                ctx=context,
+                format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
             await result.avalue()
 
             # validation pass
-            val_scores_co = self.validate(
-                reqs,
-                validation_ctx,
-                result,
-                input=None,  # type: ignore
+            # TODO: JAL. see if we are supposed to be passing output here since the new_ctx theoretically already has it
+            val_scores_co = mfuncs._validate(
+                reqs=reqs,
+                context=new_ctx,
+                backend=backend,
+                output=result,
+                format=format,
+                model_options=model_options,
+                # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.
             )
             val_scores = await val_scores_co
 
@@ -400,6 +398,7 @@ class MultiTurnStrategy(BaseSamplingStrategy):
         return next_action
 
 
+# TODO: JAL. SEE if we have test cases for this sampling strategy, see if we need them...
 class BestofNSamplingStrategy(BaseSamplingStrategy):
     """
     Sampling strategy that selects the best response from a set of samples as given by a Requirement Scorer
@@ -429,9 +428,6 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
         Raises:
             AssertionError: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
         """
-        assert self.validate is not None, "Validation must be provided."
-        assert self.generate is not None, "Generate must be provided."
-
         # just to be sure to not cause issues to the OG context
         ctx = context.copy()
         validation_ctx = validation_ctx if validation_ctx is not None else context
