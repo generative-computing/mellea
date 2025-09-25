@@ -7,11 +7,9 @@ from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
 
+import mellea.stdlib.mellea_functions as mfuncs
 from mellea.backends import Backend, BaseModelSubclass
-from mellea.backends.model_ids import (
-    IBM_GRANITE_3_3_8B,
-    ModelIdentifier,
-)
+from mellea.backends.model_ids import IBM_GRANITE_3_3_8B, ModelIdentifier
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
 from mellea.helpers.fancy_logger import FancyLogger
@@ -27,12 +25,12 @@ from mellea.stdlib.base import (
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import Requirement, ValidationResult
 from mellea.stdlib.sampling import SamplingResult, SamplingStrategy
-import mellea.stdlib.mellea_functions as mfuncs
 
 # Global context variable for the context session
 _context_session: contextvars.ContextVar[MelleaSession | None] = contextvars.ContextVar(
     "context_session", default=None
 )
+
 
 def get_session() -> MelleaSession:
     """Get the current session from context.
@@ -251,11 +249,7 @@ class MelleaSession:
         tool_calls: bool = False,
     ) -> SamplingResult: ...
 
-    def act(
-        self,
-        *args,
-        **kwargs,
-    ) -> ModelOutputThunk | SamplingResult:
+    def act(self, action: Component, **kwargs) -> ModelOutputThunk | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
         Args:
@@ -271,7 +265,9 @@ class MelleaSession:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
         """
 
-        result, context = mfuncs.act(*args, context=self.ctx, backend=self.backend, **kwargs)
+        result, context = mfuncs.act(
+            action, context=self.ctx, backend=self.backend, **kwargs
+        )
         self.ctx = context
         return result
 
@@ -313,11 +309,7 @@ class MelleaSession:
         tool_calls: bool = False,
     ) -> SamplingResult: ...
 
-    def instruct(
-        self,
-        *args,
-        **kwargs,
-    ) -> ModelOutputThunk | SamplingResult:
+    def instruct(self, description: str, **kwargs) -> ModelOutputThunk | SamplingResult:
         """Generates from an instruction.
 
         Args:
@@ -336,10 +328,17 @@ class MelleaSession:
             images: A list of images to be used in the instruction or None if none.
         """
 
-        result, context = mfuncs.instruct(*args, context=self.ctx, backend=self.backend, **kwargs)
-        self.ctx = context
-        return result
+        r = mfuncs.instruct(
+            description, context=self.ctx, backend=self.backend, **kwargs
+        )
 
+        # TODO JAL, Hen. Investigate this. What happens to context when Sampling Result returns?
+        if isinstance(r, SamplingResult):
+            return r
+        else:
+            result, context = r
+            self.ctx = context
+            return result
 
     def chat(
         self,
@@ -363,7 +362,7 @@ class MelleaSession:
             user_variables=user_variables,
             format=format,
             model_options=model_options,
-            tool_calls=tool_calls
+            tool_calls=tool_calls,
         )
 
         self.ctx = context
@@ -389,7 +388,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             generate_logs=generate_logs,
-            input=input
+            input=input,
         )
 
     def query(
@@ -420,7 +419,7 @@ class MelleaSession:
             backend=self.backend,
             format=format,
             model_options=model_options,
-            tool_calls=tool_calls
+            tool_calls=tool_calls,
         )
         self.ctx = context
         return result
@@ -450,7 +449,7 @@ class MelleaSession:
             context=self.ctx,
             backend=self.backend,
             format=format,
-            model_options=model_options
+            model_options=model_options,
         )
         self.ctx = context
         return result
@@ -458,26 +457,29 @@ class MelleaSession:
     # ###############################
     #  Convenience functions
     # ###############################
-# TODO: JAL. Investigate this.
+    # TODO: JAL, Hen. Investigate this. What happens to Sampling Result returns ?
     def last_prompt(self) -> str | list[dict] | None:
         """Returns the last prompt that has been called from the session context.
 
         Returns:
             A string if the last prompt was a raw call to the model OR a list of messages (as role-msg-dicts). Is None if none could be found.
         """
-        _, log = self.ctx.last_output_and_logs()
 
-        prompt = None
+        op = self.ctx.last_output()
+        if op is None:
+            return None
+        log = op._generate_log
         if isinstance(log, GenerateLog):
-            prompt = log.prompt
+            return log.prompt
         elif isinstance(log, list):
             last_el = log[-1]
             if isinstance(last_el, GenerateLog):
-                prompt = last_el.prompt
-        return prompt
+                return last_el.prompt
+        return None
+
+    # old code
 
 
-# old code
 # m.instruct -> m.act -> act
 # m.chat -> m.act -> act
 
