@@ -31,8 +31,8 @@ class TestMajorityVoting:
             output =  str(result.result)
         else:
             output =  result.sample_generations[0].value
-        print(output)
 
+        print(output)
         assert output
 
 
@@ -52,7 +52,7 @@ class TestMajorityVoting:
         email_candidate = self.m.instruct(
             "Write an email to {{name}} using the notes following: {{notes}}.",
             requirements=requirements,
-            strategy=MBRDRougeLStrategy(loop_budget=1),
+            strategy=MBRDRougeLStrategy(number_of_samples=8, loop_budget=1),
             user_variables={"name": name, "notes": notes},
             return_sampling_results=True,
         )
@@ -61,8 +61,8 @@ class TestMajorityVoting:
             output =  str(email_candidate.result)
         else:
             output =  email_candidate.sample_generations[0].value
-        print(output)
 
+        print(output)
         assert output
 
 if __name__ == "__main__":

@@ -1,11 +1,19 @@
 """OpenAI implementations for IBM's "starter pack" of Activated LoRAs."""
 
+import asyncio
+import functools
+from collections.abc import Coroutine
+from typing import Any
+
 import openai
+from openai.types.completion import Completion
 
 from mellea.backends.aloras import Alora
 from mellea.backends.openai import OpenAIAlora, OpenAIBackend
 from mellea.backends.types import ModelOption
+from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
+from mellea.stdlib.base import GenerateType, ModelOutputThunk
 
 
 class OpenAIConstraintAlora(OpenAIAlora):
@@ -21,9 +29,14 @@ class OpenAIConstraintAlora(OpenAIAlora):
         self._logger = FancyLogger.get_logger()
 
     def generate_using_strings(
-        self, input: str, response: str, constraint: str, force_yn: bool = True
-    ) -> str:
-        """Generates a constraint response from the ALora."""
+        self,
+        input: str,
+        response: str,
+        constraint: str,
+        force_yn: bool = True,
+        stream: bool = False,
+    ) -> ModelOutputThunk:
+        """Generates a constraint response from the ALora. Must be run in a running event loop."""
         # Go ahead and do runtime type-checking because passing CBlocks into this function is a common error.
         assert type(input) is str
         assert type(response) is str
@@ -40,38 +53,65 @@ class OpenAIConstraintAlora(OpenAIAlora):
         ]
 
         prompt = self._backend.apply_chat_template(chat)
-        prompt += f"\nRequirement: {constraint}<|end_of_text|>\n"
+        prompt += f"\nRequirement: {constraint}<|end_of_text|>\n"  # type: ignore
         prompt += self._generation_prompt
 
         self._logger.debug(f"Prompt for non-cached aLoRA({self.name}):\n{prompt}")
 
+        force_yn_args = {}
         if force_yn:
             assert hasattr(self._backend, "_tokenizer")
             token_Y = self._backend._tokenizer("Y", add_special_tokens=False)[
                 "input_ids"
-            ][0]
+            ][0]  # type: ignore
             token_N = self._backend._tokenizer("N", add_special_tokens=False)[
                 "input_ids"
-            ][0]
-            return (
-                self._backend._client.completions.create(
-                    model=self.name,
-                    prompt=prompt,
-                    max_tokens=1,
-                    n=1,
-                    logit_bias={str(token_Y): 100, str(token_N): 100},
-                )
-                .choices[0]
-                .text
+            ][0]  # type: ignore
+
+            force_yn_args["logit_bias"] = {str(token_Y): 100, str(token_N): 100}
+
+        chat_response: Coroutine[
+            Any, Any, openai.AsyncStream[Completion] | Completion
+        ] = self._backend._async_client.completions.create(
+            model=self.name,
+            prompt=prompt,
+            max_tokens=1,
+            n=1,
+            stream=stream,
+            **force_yn_args,
+        )  # type: ignore
+
+        output = ModelOutputThunk(None)
+        output._meta["alora_name"] = self.name
+
+        output._process = processing
+        output._post_process = functools.partial(post_processing, backend=self._backend)
+
+        try:
+            # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
+            # We can also support synchronous calls by adding a flag and changing this ._generate function.
+
+            # This function should always be called from a running event loop so we don't have to worry about
+            # scheduling the task to a specific event loop here.
+            output._generate = asyncio.create_task(
+                send_to_queue(chat_response, output._async_queue)
             )
-        else:
-            return (
-                self._backend._client.completions.create(
-                    model=self.name, prompt=prompt, max_tokens=1, n=1
-                )
-                .choices[0]
-                .text
-            )
+            output._generate_type = GenerateType.ASYNC
+        except RuntimeError as e:
+            # Most likely cause is running this function without an event loop present
+            raise e
+
+        return output
+
+
+async def processing(mot: ModelOutputThunk, chunk: Completion):
+    if mot._underlying_value is None:
+        mot._underlying_value = ""
+    mot._underlying_value += chunk.choices[0].text
+
+
+async def post_processing(backend: OpenAIBackend, mot: ModelOutputThunk):
+    backend.formatter.parse(mot._action, mot)  # type: ignore
 
 
 def add_granite_aloras(backend: OpenAIBackend):

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import abc
+import asyncio
 import base64
 import binascii
 import datetime
-from collections.abc import Callable, Iterable, Mapping
-from copy import deepcopy
+import enum
+from collections.abc import Callable, Coroutine, Iterable, Mapping
+from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Any, Protocol, runtime_checkable
@@ -131,7 +133,7 @@ class Component(Protocol):
 def get_images_from_component(c: Component) -> None | list[ImageBlock]:
     """Gets images from a `Component` if they are present and a non-empty list, otherwise returns None."""
     if hasattr(c, "images"):
-        imgs = c.images
+        imgs = c.images  # type: ignore
         if imgs is not None:
             assert isinstance(imgs, list), "images field must be a list."
             assert all(isinstance(im, ImageBlock) for im in imgs), (
@@ -147,6 +149,14 @@ def get_images_from_component(c: Component) -> None | list[ImageBlock]:
         return None
 
 
+class GenerateType(enum.Enum):
+    """Used to track what functions can be used to extract a value from a ModelOutputThunk."""
+
+    NONE = None
+    ASYNC = 1
+    SYNC = 2
+
+
 class ModelOutputThunk(CBlock):
     """A `ModelOutputThunk` is a special type of `CBlock` that we know came from a model's output. It is possible to instantiate one without the output being computed yet."""
 
@@ -160,11 +170,156 @@ class ModelOutputThunk(CBlock):
         """Initializes as a cblock, optionally also with a parsed representation from an output formatter."""
         super().__init__(value, meta)
         self.parsed_repr: CBlock | Component | Any | None = parsed_repr
+
+        # Set computed to True if a value is passed in.
+        self._computed: bool = True if value is not None else False
+
+        # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
+        self._thinking: str | None = None
+
+        # Used for tracking generation.
+        self._context: list[Component | CBlock] | None = None
+        self._action: Component | CBlock | None = None
+        self._model_options: dict[str, Any] | None = None
+
+        # Used for async and async streaming.
+        self._async_queue: asyncio.Queue = asyncio.Queue(maxsize=20)
+        self._chunk_size = 3  # Minimum number of chunks to stream at a single time.
+
+        # _generate and _generate_type are linked. _generate will determine
+        # what gets set for _generate_type. _generate_type determines what
+        # function(s) can be used to get the value of the ModelOutputThunk.
+        self._generate: asyncio.Task[None] | None = None
+        self._generate_type: GenerateType = GenerateType.NONE
+        self._generate_extra: asyncio.Task[Any] | None = (
+            None  # Currently only used by hf.
+        )
+        self._process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
+        self._post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
+
+        self._generate_log: GenerateLog | None = None
 
     def is_computed(self):
         """Returns true only if this Thunk has already been filled."""
-        return self.value is not None
+        return self._computed
+
+    @property
+    def value(self) -> str | None:
+        """Gets the value of the block."""
+        if not self._computed:
+            return None
+        return self._underlying_value
+
+    @value.setter
+    def value(self, v: str):
+        """Sets the value of the block."""
+        self._underlying_value = v
+
+    async def avalue(self) -> str:
+        """Returns the value of the ModelOutputThunk. Can be used for both async streaming and async non-streaming.
+
+        Raises:
+            Exception: Propagates any errors from the underlying inference engine api request.
+            RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible.
+        """
+        if self._computed:
+            assert self.value  # If computed, the value cannot be None.
+            return self.value
+
+        if not self._generate_type == GenerateType.ASYNC:
+            raise RuntimeError(
+                f"Cannot use `ModelOutputThunk.avalue()` when the generate function is using `{self._generate_type.name}`"
+            )
+
+        while not self._computed:
+            await self.astream()
+
+        assert self.value is not None  # If computed, the value cannot be None.
+        return self.value
+
+    # If we require a function that returns only the new chunks of data, we can implement that similarly.
+    async def astream(self) -> str:
+        """Returns the ModelOutputThunk's partial value including the next chunk(s). Can be used for both async streaming and async non-streaming.
+
+        Returns the value of the ModelOutputThunk if streaming is done.
+
+        **Note**: Be careful with calling this function. Only call it from one location at a time. This means you shouldn't pass a ModelOutputThunk to
+        multiple coroutines/tasks and call astream from those coroutines/tasks simultaneously. We have considered solutions to this but are waiting until
+        we see this error happen in a real use case.
+
+        Raises:
+            Exception: Propagates any errors from the underlying inference engine api request.
+            RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible.
+        """
+        if self._computed:
+            assert self.value is not None  # If computed, the value cannot be None.
+            return self.value
+
+        if not self._generate_type == GenerateType.ASYNC:
+            raise RuntimeError(
+                f"Cannot use `ModelOutputThunk.astream()` when the generate function is using `{self._generate_type.name}`"
+            )
+
+        # Type of the chunk depends on the backend.
+        chunks: list[Any | None] = []
+        while True:
+            try:
+                item = self._async_queue.get_nowait()
+                chunks.append(item)
+            except asyncio.QueueEmpty:
+                # We've exhausted the current items in the queue.
+                break
+
+        # Make sure we always get the minimum chunk size.
+        while len(chunks) <= self._chunk_size:
+            if len(chunks) > 0:
+                if chunks[-1] is None or isinstance(chunks[-1], Exception):
+                    break  # Hit sentinel value or an error.
+                # We could switch to relying on the `done` / `finish_reason` field of chunks,
+                # but that forces us to know about the chunk type here. Prefer sentinel values
+                # for now.
+
+            item = await self._async_queue.get()
+            chunks.append(item)
+
+        # Process the sentinel value if it's there.
+        if chunks[-1] is None:
+            chunks.pop()  # Remove the sentinel value.
+            self._computed = True
+
+            # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk relied on.
+            if self._generate is not None:
+                self._generate.cancel()
+            if self._generate_extra is not None:
+                # Covers an hf edge case. The task is done generating anything useful but isn't `done` yet.
+                await self._generate_extra
+                self._generate_extra.cancel()
+
+            # If ModelOutputThunks get too bulky, we can do additional cleanup here
+            # and set fields to None.
+
+        elif isinstance(chunks[-1], Exception):
+            # For now, just re-raise the exception.
+            # It's possible that we hit this error after already streaming some
+            # chunks. We should investigate allowing recovery in the future.
+            raise chunks[-1]
+
+        for chunk in chunks:
+            assert self._process is not None
+            await self._process(self, chunk)
+
+        if self._computed:
+            assert self._post_process is not None
+            await self._post_process(self)
+
+        return self._underlying_value  # type: ignore
+
+    def __repr__(self):
+        """Provides a python-parsable representation (usually).
+
+        Differs from CBlock because `._meta` can be very large for ModelOutputThunks."""
+        return f"ModelOutputThunk({self.value})"
 
 
 def blockify(s: str | CBlock | Component) -> CBlock | Component:
@@ -236,7 +391,9 @@ class Context(abc.ABC):
 
     @abc.abstractmethod
     def copy(self) -> Context:
-        """Produces a deep copy of the current Context's contents, allowing for branch-and-merge style semantics over a Context."""
+        """Produces a copy of the current Context's contents, allowing for branch-and-merge style semantics over a Context.
+
+        Implementations should not copy the actual objects in the context but retain a reference to them."""
         ...
 
     @abc.abstractmethod
@@ -397,6 +554,16 @@ class BasicContext(Context, abc.ABC):
             [f"    {c!s}" for c in self._ctx]
         )
 
+    def copy(self):
+        """Copies all attributes of the Context. `_ctx` and `_log_ctx` are shallow copies.
+
+        This means that the lists are different (you can independently insert to the new/old context), but that the objects in the old/new lists are the same at copy time.
+        """
+        new = copy(self)
+        new._ctx = copy(self._ctx)
+        new._log_ctx = copy(self._log_ctx)
+        return new
+
 
 class LinearContext(BasicContext):
     """Initializes a linear context with unbounded window_size and is_chat=True by default."""
@@ -465,10 +632,6 @@ class LinearContext(BasicContext):
         """Constructs a hash that corresponds to the string contents of the KV cache associated with this context."""
         assert False, "not supported yet."
 
-    def copy(self):
-        """Constructs a deep copy of this Context."""
-        return deepcopy(self)
-
 
 class SimpleContext(BasicContext):
     """A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved.
@@ -519,10 +682,6 @@ class SimpleContext(BasicContext):
     def _hash_for_kv_cache(self):
         """Constructs a hash that corresponds to the string contents of the KV cache associated with this context."""
         assert False, "not supported yet."
-
-    def copy(self):
-        """Constructs a deep copy of this Context."""
-        return deepcopy(self)
 
 
 @dataclass

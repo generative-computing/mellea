@@ -2,7 +2,7 @@
 
 import abc
 
-from mellea.stdlib.base import CBlock
+from mellea.stdlib.base import CBlock, ModelOutputThunk
 
 
 class Alora(abc.ABC):
@@ -24,8 +24,8 @@ class Alora(abc.ABC):
         self.name: str = name
 
     @abc.abstractmethod
-    def generate_using_strings(self, *args, **kwargs) -> str:
-        """Generates from the ALora using raw strings as the interface for both inputs and outputs.
+    def generate_using_strings(self, *args, **kwargs) -> ModelOutputThunk:
+        """Generates from the ALora using raw strings as the interface for inputs. In most cases, must be run from a running event loop.
 
         This has a generic signature because each aLoRA has different parameters depending on its functionality and how it gets called.
         """

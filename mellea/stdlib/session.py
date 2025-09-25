@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextvars
+import threading
+from collections.abc import Coroutine
 from copy import deepcopy
 from typing import Any, Literal, overload
 
@@ -183,6 +186,10 @@ class MelleaSession:
         self._session_logger = FancyLogger.get_logger()
         self._context_token = None
 
+        # Necessary for async. `m.*` functions should always run in this event loop.
+        self._event_loop = asyncio.new_event_loop()
+        threading.Thread(target=self._event_loop.run_forever, daemon=True).start()
+
     def __enter__(self):
         """Enter context manager and set this session as the current global session."""
         self._context_token = _context_session.set(self)
@@ -194,6 +201,9 @@ class MelleaSession:
         if self._context_token is not None:
             _context_session.reset(self._context_token)
             self._context_token = None
+
+    def __del__(self):
+        self._close_event_loop()
 
     def _push_model_state(self, new_backend: Backend, new_model_opts: dict):
         """The backend and model options used within a `Context` can be temporarily changed. This method changes the model's backend and model_opts, while saving the current settings in the `self._backend_stack`.
@@ -226,10 +236,35 @@ class MelleaSession:
 
     def cleanup(self) -> None:
         """Clean up session resources."""
+        self._close_event_loop()
         self.reset()
         self._backend_stack.clear()
         if hasattr(self.backend, "close"):
             self.backend.close()  # type: ignore
+
+    def _close_event_loop(self) -> None:
+        """Called when deleting the session. Cleans up the session's event loop."""
+        if self._event_loop:
+            try:
+                tasks = asyncio.all_tasks(self._event_loop)
+                for task in tasks:
+                    task.cancel()
+
+                async def finalize_tasks():
+                    # TODO: We can log errors here if needed.
+                    await asyncio.gather(*tasks, return_exceptions=True)
+
+                out = asyncio.run_coroutine_threadsafe(
+                    finalize_tasks(), self._event_loop
+                )
+
+                # Timeout if needed.
+                out.result(5)
+            except Exception:
+                pass
+
+            # Finally stop the event loop for this session.
+            self._event_loop.stop()
 
     def summarize(self) -> ModelOutputThunk:
         """Summarizes the current context."""
@@ -309,6 +344,48 @@ class MelleaSession:
         Returns:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
         """
+
+        # Run everything in the specific event loop for this session.
+        out = asyncio.run_coroutine_threadsafe(
+            self._act(
+                action,
+                requirements=requirements,
+                strategy=strategy,
+                return_sampling_results=return_sampling_results,
+                format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            ),
+            self._event_loop,
+        )
+
+        return out.result()
+
+    async def _act(
+        self,
+        action: Component,
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: SamplingStrategy | None = None,
+        return_sampling_results: bool = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk | SamplingResult:
+        """Asynchronous version of .act; runs a generic action, and adds both the action and the result to the context.
+
+        Args:
+            action: the Component from which to generate.
+            requirements: used as additional requirements when a sampling strategy is provided
+            strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
+            return_sampling_results: attach the (successful and failed) sampling attempts to the results.
+            format: if set, the BaseModel to use for constrained decoding.
+            model_options: additional model options, which will upsert into the model/backend's defaults.
+            tool_calls: if true, tool calling is enabled.
+
+        Returns:
+            A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+        """
         sampling_result: SamplingResult | None = None
         generate_logs: list[GenerateLog] = []
 
@@ -323,30 +400,32 @@ class MelleaSession:
                 ctx=self.ctx,
                 format=format,
                 model_options=model_options,
-                generate_logs=generate_logs,
                 tool_calls=tool_calls,
             )
-            assert len(generate_logs) == 1, "Simple call can only add one generate_log"
-            generate_logs[-1].is_final_result = True
+            await result.avalue()
+
+            # ._generate_log should never be None after generation.
+            assert result._generate_log is not None
+            result._generate_log.is_final_result = True
+            generate_logs.append(result._generate_log)
 
         else:
             # Default validation strategy just validates all of the provided requirements.
             if strategy.validate is None:
-                strategy.validate = lambda reqs, val_ctx, output: self.validate(
-                    reqs, output=output
+                strategy.validate = (
+                    lambda reqs, val_ctx, output, input=None: self._validate(  # type: ignore
+                        reqs, output=output, input=input
+                    )
                 )
 
             # Default generation strategy just generates from context.
             if strategy.generate is None:
                 strategy.generate = (
-                    lambda sample_action,
-                    gen_ctx,
-                    g_logs: self.backend.generate_from_context(
+                    lambda sample_action, gen_ctx: self.backend.generate_from_context(
                         sample_action,
                         ctx=gen_ctx,
                         format=format,
                         model_options=model_options,
-                        generate_logs=g_logs,
                         tool_calls=tool_calls,
                     )
                 )
@@ -354,25 +433,22 @@ class MelleaSession:
             if requirements is None:
                 requirements = []
 
-            sampling_result = strategy.sample(
-                action, self.ctx, requirements=requirements, generate_logs=generate_logs
+            sampling_result = await strategy.sample(
+                action, self.ctx, requirements=requirements
             )
 
-            # make sure that one Log is marked as the one related to sampling_result.result
-            if sampling_result.success:
-                # if successful, the last log is the one related
-                generate_logs[-1].is_final_result = True
-            else:
-                # Find the log where log.result and sampling_result.result match
-                selected_log = [
-                    log for log in generate_logs if log.result == sampling_result.result
-                ]
-                assert len(selected_log) == 1, (
-                    "There should only be exactly one log corresponding to the single result. "
-                )
-                selected_log[0].is_final_result = True
+            assert sampling_result.sample_generations is not None
+            for result in sampling_result.sample_generations:
+                assert (
+                    result._generate_log is not None
+                )  # Cannot be None after generation.
+                generate_logs.append(result._generate_log)
 
             result = sampling_result.result
+            assert sampling_result.result._generate_log is not None
+            assert sampling_result.result._generate_log.is_final_result, (
+                "generate logs from the final result returned by the sampling strategy must be marked as final"
+            )
 
         self.ctx.insert_turn(ContextTurn(action, result), generate_logs=generate_logs)
 
@@ -525,8 +601,36 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
+        input: CBlock | None = None,
     ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
+        # Run everything in the specific event loop for this session.
+        out = asyncio.run_coroutine_threadsafe(
+            self._validate(
+                reqs=reqs,
+                output=output,
+                format=format,
+                model_options=model_options,
+                generate_logs=generate_logs,
+                input=input,
+            ),
+            self._event_loop,
+        )
+
+        # Wait for and return the result.
+        return out.result()
+
+    async def _validate(
+        self,
+        reqs: Requirement | list[Requirement],
+        *,
+        output: CBlock | None = None,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        generate_logs: list[GenerateLog] | None = None,
+        input: CBlock | None = None,
+    ) -> list[ValidationResult]:
+        """Asynchronous version of .validate; validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
         # Turn a solitary requirement in to a list of requirements, and then reqify if needed.
         reqs = [reqs] if not isinstance(reqs, list) else reqs
         reqs = [Requirement(req) if type(req) is str else req for req in reqs]
@@ -534,17 +638,49 @@ class MelleaSession:
             validation_target_ctx = self.ctx
         else:
             validation_target_ctx = SimpleContext()
-            validation_target_ctx.insert(output)
-        rvs = []
+
+            if input is not None:
+                # some validators may need input as well as output
+                validation_target_ctx.insert_turn(
+                    ContextTurn(
+                        input,
+                        output,  # type: ignore
+                    ),  # type: ignore
+                    generate_logs=generate_logs,
+                )
+            else:
+                validation_target_ctx.insert(output)
+
+        rvs: list[ValidationResult] = []
+        coroutines: list[Coroutine[Any, Any, ValidationResult]] = []
+
         for requirement in reqs:
-            val_result = requirement.validate(
+            val_result_co = requirement.validate(
                 self.backend,
                 validation_target_ctx,
                 format=format,
                 model_options=model_options,
-                generate_logs=generate_logs,
             )
+            coroutines.append(val_result_co)
+
+        for val_result in await asyncio.gather(*coroutines):
             rvs.append(val_result)
+
+            # If the validator utilized a backend to generate a result, attach the corresponding
+            # info to the generate_logs list.
+            if generate_logs is not None:
+                if val_result.thunk is not None:
+                    thunk = val_result.thunk
+                    assert (
+                        thunk._generate_log is not None
+                    )  # Cannot be None after generation.
+                    generate_logs.append(thunk._generate_log)
+                else:
+                    # We have to append None here so that the logs line-up.
+                    # TODO: A better solution should be found for this edge case.
+                    #       This is the only scenario where ValidationResults are supposed to line
+                    #       up with GenerateLogs.
+                    generate_logs.append(None)  # type: ignore
 
         return rvs
 

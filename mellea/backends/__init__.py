@@ -41,10 +41,9 @@ class Backend(abc.ABC):
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk:  # i.e., ContextDiff
-        """Generates a model output from a context. May not mutate the context.
+        """Generates a model output from a context. May not mutate the context. This must be called from a running event loop as it creates a task to run the generation request.
 
         Args:
             action: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.

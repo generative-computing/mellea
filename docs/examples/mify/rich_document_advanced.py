@@ -44,7 +44,7 @@ rd = RichDocument.from_document_file(source)
 # Note: Because the template for a RichDocument just outputs it as markdown,
 # the model doesn't really know what to do with it in this context. However, this
 # is a useful pattern if you want to use a component with a specified template.
-thunk = m.backend.generate_from_context(action=rd, ctx=m.ctx)
+thunk = m.act(action=rd)
 print(thunk.value)  # > - user: What is the primary goal of the GLTR tool...
 
 # 5. The class is opinionated and outputs the document as markdown to the model (like in the initial example).
@@ -87,7 +87,7 @@ print(
     rds.format_for_llm().args
 )  # > {'titles': ['GLTR: Statistical Detection and Visualization of Generated Text', 'Abstract', ..., 'References']}
 
-thunk = m.backend.generate_from_context(action=rds, ctx=m.ctx)
+thunk = m.act(action=rds)
 print(thunk.value)  # > The document appears to be an academic research paper...
 
 # 6. We can also pass this document as grounding context to an instruction.

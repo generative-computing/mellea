@@ -1,9 +1,12 @@
 """A generic WatsonX.ai compatible backend that wraps around the watson_machine_learning library."""
 
+import asyncio
 import datetime
+import functools
 import json
 import os
-from collections.abc import Callable
+import warnings
+from collections.abc import AsyncGenerator, Callable, Coroutine
 from typing import Any
 
 from ibm_watsonx_ai import APIClient, Credentials
@@ -19,12 +22,18 @@ from mellea.backends.tools import (
     convert_tools_to_json,
 )
 from mellea.backends.types import ModelOption
+from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
+from mellea.helpers.openai_compatible_helpers import (
+    chat_completion_delta_merge,
+    extract_model_tool_requests,
+)
 from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
     GenerateLog,
+    GenerateType,
     ModelOutputThunk,
     ModelToolCall,
 )
@@ -56,6 +65,15 @@ class WatsonxAIBackend(FormatterBackend):
             api_key : watsonx API key. Defaults to None.
             project_id : watsonx project ID. Defaults to None.
         """
+
+        # There are bugs with the Watsonx python sdk related to async event loops;
+        # using the same watsonx backend across multiple event loops causes errors.
+        warnings.warn(
+            "Watsonx Backend is deprecated, use 'LiteLLM' or 'OpenAI' Backends instead",
+            DeprecationWarning,
+            2,
+        )
+
         super().__init__(
             model_id=model_id,
             formatter=(
@@ -91,6 +109,7 @@ class WatsonxAIBackend(FormatterBackend):
             "system": ModelOption.SYSTEM_PROMPT,
             "max_tokens": ModelOption.MAX_NEW_TOKENS,
             "tools": ModelOption.TOOLS,
+            "stream": ModelOption.STREAM,
         }
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
         # These options should almost always be a subset of those specified in the `to_mellea_model_opts_map`.
@@ -105,6 +124,7 @@ class WatsonxAIBackend(FormatterBackend):
         self.to_mellea_model_opts_map_completions = {
             "random_seed": ModelOption.SEED,
             "max_new_tokens": ModelOption.MAX_NEW_TOKENS,
+            "stream": ModelOption.STREAM,
         }
         # See notes above.
         self.from_mellea_model_opts_map_completions = {
@@ -192,7 +212,6 @@ class WatsonxAIBackend(FormatterBackend):
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
     ):
         """See `generate_from_chat_context`."""
@@ -204,7 +223,6 @@ class WatsonxAIBackend(FormatterBackend):
             ctx,
             format=format,
             model_options=model_options,
-            generate_logs=generate_logs,
             tool_calls=tool_calls,
         )
 
@@ -216,7 +234,6 @@ class WatsonxAIBackend(FormatterBackend):
         format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
         """Generates a new completion from the provided Context using this backend's `Formatter`."""
@@ -274,47 +291,159 @@ class WatsonxAIBackend(FormatterBackend):
             FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         formatted_tools = convert_tools_to_json(tools)
-        chat_response = self._model.chat(
-            messages=conversation,
-            tools=formatted_tools,
-            tool_choice_option=(
-                "auto" if formatted_tools and len(formatted_tools) > 0 else "none"
-            ),
-            params=self._make_backend_specific_and_remove(
-                model_opts, is_chat_context=ctx.is_chat_context
-            ),
+
+        chat_response: (
+            Coroutine[Any, Any, AsyncGenerator] | Coroutine[Any, Any, dict] | None
+        ) = None
+
+        stream = model_opts.get(ModelOption.STREAM, False)
+        if stream:
+            chat_response = self._model.achat_stream(
+                messages=conversation,
+                tools=formatted_tools,
+                tool_choice_option=(
+                    "auto" if formatted_tools and len(formatted_tools) > 0 else "none"
+                ),
+                params=self._make_backend_specific_and_remove(
+                    model_opts, is_chat_context=ctx.is_chat_context
+                ),
+            )
+        else:
+            chat_response = self._model.achat(
+                messages=conversation,
+                tools=formatted_tools,
+                tool_choice_option=(
+                    "auto" if formatted_tools and len(formatted_tools) > 0 else "none"
+                ),
+                params=self._make_backend_specific_and_remove(
+                    model_opts, is_chat_context=ctx.is_chat_context
+                ),
+            )
+
+        output = ModelOutputThunk(None)
+        output._context = linearized_context
+        output._action = action
+        output._model_options = model_opts
+
+        # Processing functions only pass the ModelOutputThunk (and current chunk of response). Bind the other vars necessary for
+        # each processing step.
+        output._process = self.processing
+        output._post_process = functools.partial(
+            self.post_processing,
+            conversation=conversation,
+            tools=tools,
+            seed=model_opts.get(ModelOption.SEED, None),
         )
 
-        # If a tool is called, there might not be content in the message.
-        response_message = chat_response["choices"][0]["message"].get("content", "")
-        result = ModelOutputThunk(
-            value=response_message,
-            meta={"oai_chat_response": chat_response["choices"][0]},
-            tool_calls=self._extract_model_tool_requests(tools, chat_response),
+        try:
+            # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
+            # We can also support synchronous calls by adding a flag and changing this ._generate function.
+
+            # This function should always be called from a running event loop so we don't have to worry about
+            # scheduling the task to a specific event loop here.
+            output._generate = asyncio.create_task(
+                send_to_queue(chat_response, output._async_queue)
+            )
+            output._generate_type = GenerateType.ASYNC
+        except RuntimeError as e:
+            # Most likely cause is running this function without an event loop present
+            raise e
+
+        return output
+
+    async def processing(self, mot: ModelOutputThunk, chunk: dict):
+        """Called during generation to add information from a single ChatCompletion or ChatCompletionChunk to the ModelOutputThunk.
+
+        For OpenAI-like APIs, tool call parsing is handled in the post processing step."""
+        if mot._thinking is None:
+            mot._thinking = ""
+        if mot._underlying_value is None:
+            mot._underlying_value = ""
+
+        if len(chunk["choices"]) < 1:
+            return  # Empty chunk. Note: this has some metadata information, but ignoring for now.
+
+        # Watsonx returns dicts. Distinguish streaming and non-streaming based on their fields.
+        not_streaming = chunk["choices"][0].get("message", None) is not None
+        if not_streaming:
+            message: dict = chunk["choices"][0].get("message", dict())
+
+            thinking_chunk = message.get("reasoning_content", None)
+            if thinking_chunk is not None:
+                mot._thinking += thinking_chunk
+
+            content_chunk = message.get("content", "")
+            if content_chunk is not None:
+                mot._underlying_value += content_chunk
+
+            mot._meta["oai_chat_response"] = chunk["choices"][0]
+
+        else:  # Streaming.
+            message_delta: dict = chunk["choices"][0].get("delta", dict())
+
+            thinking_chunk = message_delta.get("reasoning_content", None)
+            if thinking_chunk is not None:
+                mot._thinking += thinking_chunk
+
+            content_chunk = message_delta.get("content", None)
+            if content_chunk is not None:
+                mot._underlying_value += content_chunk
+
+            if mot._meta.get("oai_chat_response_streamed", None) is None:
+                mot._meta["oai_chat_response_streamed"] = []
+            mot._meta["oai_chat_response_streamed"].append(chunk["choices"][0])
+
+    async def post_processing(
+        self,
+        mot: ModelOutputThunk,
+        conversation: list[dict],
+        tools: dict[str, Callable],
+        seed,
+    ):
+        """Called when generation is done."""
+        # Reconstruct the chat_response from chunks if streamed.
+        streamed_chunks = mot._meta.get("oai_chat_response_streamed", None)
+        if streamed_chunks is not None:
+            mot._meta["oai_chat_response"] = chat_completion_delta_merge(
+                streamed_chunks
+            )
+
+        assert mot._action is not None, (
+            "ModelOutputThunks should have their action assigned during generation"
+        )
+        assert mot._model_options is not None, (
+            "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
-        parsed_result = self.formatter.parse(source_component=action, result=result)
+        # OpenAI streamed responses give you chunks of tool calls.
+        # As a result, we have to store data between calls and only then
+        # check for complete tool calls in the post_processing step.
+        tool_chunk = extract_model_tool_requests(tools, mot._meta["oai_chat_response"])
+        if tool_chunk is not None:
+            if mot.tool_calls is None:
+                mot.tool_calls = {}
+            # Merge the tool_chunk dict.
+            for key, val in tool_chunk.items():
+                mot.tool_calls[key] = val
 
-        if generate_logs is not None:
-            assert isinstance(generate_logs, list)
-            generate_log = GenerateLog()
-            generate_log.prompt = conversation
-            generate_log.backend = f"watsonx::{self.model_id!s}"
-            generate_log.model_options = model_opts
-            generate_log.date = datetime.datetime.now()
-            generate_log.model_output = chat_response
-            generate_log.extra = {
-                "format": format,
-                # "thinking": thinking,
-                "tools_available": tools,
-                "tools_called": result.tool_calls,
-                "seed": model_opts.get(ModelOption.SEED, None),
-            }
-            generate_log.result = parsed_result
-            generate_log.action = action
-            generate_logs.append(generate_log)
+        self.formatter.parse(mot._action, mot)
 
-        return parsed_result
+        # Generate the log for this ModelOutputThunk.
+        generate_log = GenerateLog()
+        generate_log.prompt = conversation
+        generate_log.backend = f"watsonx::{self.model_id!s}"
+        generate_log.model_options = mot._model_options
+        generate_log.date = datetime.datetime.now()
+        generate_log.model_output = mot._meta["oai_chat_response"]
+        generate_log.extra = {
+            "format": format,
+            "tools_available": tools,
+            "tools_called": mot.tool_calls,
+            "seed": seed,
+        }
+        generate_log.result = mot
+        generate_log.action = mot._action
+        mot._generate_log = generate_log
 
     def _generate_from_raw(
         self,

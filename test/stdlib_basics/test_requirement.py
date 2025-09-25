@@ -1,9 +1,10 @@
+import asyncio
 import pytest
-from mellea.stdlib.base import ModelOutputThunk
+from mellea.stdlib.base import LinearContext, ModelOutputThunk
 from mellea.stdlib.requirement import Requirement, simple_validate
-from mellea.stdlib.session import SimpleContext, start_session
+from mellea.stdlib.session import start_session
 
-ctx = SimpleContext()
+ctx = LinearContext()
 ctx.insert(ModelOutputThunk("test"))
 
 def test_llmaj_validation_req_output_field():
@@ -11,7 +12,10 @@ def test_llmaj_validation_req_output_field():
     req = Requirement("Must output test.")
     assert req._output is None
 
-    _ = req.validate(m.backend,ctx=ctx)
+    async def val():
+        _ = await req.validate(m.backend,ctx=ctx)
+    asyncio.run(val())
+
     assert req._output is None, "requirement's output shouldn't be updated during/after validation"
 
 def test_simple_validate_bool():

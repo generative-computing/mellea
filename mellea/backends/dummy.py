@@ -23,7 +23,6 @@ class DummyBackend(Backend):
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
         """See constructor for an exmplanation of how DummyBackends work."""

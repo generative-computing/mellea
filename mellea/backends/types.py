@@ -17,7 +17,7 @@ class ModelOption:
     """
 
     TOOLS = "@@@tools@@@"
-    """Must be a list of callables or a dict[str, Callable]."""
+    """Must be a list[Callable] or a dict[str, Callable] where str is the name of the function."""
 
     MAX_NEW_TOKENS = "@@@max_new_tokens@@@"
     SYSTEM_PROMPT = "@@@system_prompt@@@"
@@ -25,6 +25,7 @@ class ModelOption:
     CONTEXT_WINDOW = "@@@context_window@@@"
     THINKING = "@@@thinking@@@"
     SEED = "@@@seed@@@"
+    STREAM = "@@@stream@@@"
 
     @staticmethod
     def replace_keys(options: dict, from_to: dict[str, str]) -> dict[str, Any]:
