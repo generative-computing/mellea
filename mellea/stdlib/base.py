@@ -12,7 +12,7 @@ from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from PIL import Image as PILImage
 
@@ -348,6 +348,9 @@ class RootContext:
     """A `RootContext` is a special type of `Context` that is empty and is used to represent the root context of a `MelleaSession`."""
 
 
+ContextT = TypeVar("ContextT", bound="Context")
+
+
 class Context(abc.ABC):
     """A `Context` is used to track the state of a `MelleaSession`."""
 
@@ -360,7 +363,9 @@ class Context(abc.ABC):
         self._data = None
 
     @classmethod
-    def from_previous(cls, previous: Context, data: Component | CBlock) -> Context:
+    def from_previous(
+        cls: type[ContextT], previous: Context, data: Component | CBlock
+    ) -> ContextT:
         """Constructs a new context from an existing context."""
 
         assert isinstance(previous, Context), (
@@ -381,7 +386,7 @@ class Context(abc.ABC):
             return x
 
     @abc.abstractmethod
-    def expand(self, c: Component | CBlock) -> Context:
+    def add(self, c: Component | CBlock) -> Context:
         """Returns a new context obtained by adding `c` to this context."""
         # something along ....from_previous(self, c)
         ...
@@ -430,14 +435,14 @@ class ChatContext(Context):
 
         return all_events[-ws:]
 
-    def expand(self, c: Component | CBlock) -> Context:
+    def add(self, c: Component | CBlock) -> ChatContext:
         return ChatContext.from_previous(self, c)
 
 
 class SimpleContext(Context):
     """A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved.."""
 
-    def expand(self, c: Component | CBlock) -> Context:
+    def add(self, c: Component | CBlock) -> SimpleContext:
         return SimpleContext.from_previous(self, c)
 
     def render_for_generation(self) -> list[Component | CBlock] | None:
