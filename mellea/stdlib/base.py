@@ -382,12 +382,6 @@ class Context(abc.ABC):
         x._is_root = False
         return x
 
-    @abc.abstractmethod
-    def add(self, c: Component | CBlock) -> Context:
-        """Returns a new context obtained by adding `c` to this context."""
-        # something along ....from_previous(self, c)
-        ...
-
     @classmethod
     def reset(cls: type[ContextT]) -> ContextT:
         """Resets the context to a fresh state."""
@@ -423,6 +417,21 @@ class Context(abc.ABC):
 
         context_list.reverse()
         return context_list
+
+    def actions_for_available_tools(self) -> list[Component | CBlock] | None:
+        """Provides a list of actions to extract tools from for use with during generation, or None if that's not possible.
+
+        Can be used to make the available tools differ from the tools of all the actions in the context. Can be overwritten by subclasses.
+        """
+        return self.render_for_generation()
+
+    # Abstract methods
+
+    @abc.abstractmethod
+    def add(self, c: Component | CBlock) -> Context:
+        """Returns a new context obtained by adding `c` to this context."""
+        # something along ....from_previous(self, c)
+        ...
 
     @abc.abstractmethod
     def render_for_generation(self) -> list[Component | CBlock] | None:
