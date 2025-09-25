@@ -344,23 +344,26 @@ class ContextTurn:
     output: ModelOutputThunk | None
 
 
-class RootContext:
-    """A `RootContext` is a special type of `Context` that is empty and is used to represent the root context of a `MelleaSession`."""
-
-
 ContextT = TypeVar("ContextT", bound="Context")
 
 
 class Context(abc.ABC):
     """A `Context` is used to track the state of a `MelleaSession`."""
 
-    _previous: Context | RootContext
-    _data: Component | CBlock | None = None
+    _previous: Context | None
+    _data: Component | CBlock | None
+    _is_root: bool
 
     def __init__(self):
         """Constructs a new context."""
-        self._previous = RootContext()
+        self._previous = None
         self._data = None
+        self._is_root = True
+
+    @property
+    def is_root(self) -> bool:
+        """Returns whether this context is the root context."""
+        return self._is_root
 
     @classmethod
     def from_previous(
@@ -373,17 +376,11 @@ class Context(abc.ABC):
         )
         assert data is not None, "Cannot create a new context from None data."
 
-        # if previous is an empty root context, create a new root context with the data.
-        if previous._data is None and isinstance(previous._previous, RootContext):
-            x = cls()
-            x._previous = RootContext()
-            x._data = data
-            return x
-        else:
-            x = cls()
-            x._previous = previous
-            x._data = data
-            return x
+        x = cls()
+        x._previous = previous
+        x._data = data
+        x._is_root = False
+        return x
 
     @abc.abstractmethod
     def add(self, c: Component | CBlock) -> Context:
@@ -391,8 +388,13 @@ class Context(abc.ABC):
         # something along ....from_previous(self, c)
         ...
 
+    @classmethod
+    def reset(cls: type[ContextT]) -> ContextT:
+        """Resets the context to a fresh state."""
+        return cls()
+
     @property
-    def previous(self) -> Context | RootContext:
+    def previous(self) -> Context | None:
         """Returns the context from which this context was created."""
         return self._previous
 
@@ -404,13 +406,21 @@ class Context(abc.ABC):
     def full_data_as_list(self) -> list[Component | CBlock]:
         """Returns a list of all components in the context from root to current context."""
         context_list: list[Component | CBlock] = []
-        current_context: Context | RootContext = self
+        current_context: Context = self
 
-        while not isinstance(current_context, RootContext):
-            # only an empty Context can have a data field that is None.
-            if current_context.data is not None:
-                context_list.append(current_context.data)
-            current_context = current_context.previous
+        while not current_context.is_root:
+            data = current_context.data
+            assert data not in context_list, (
+                "There might be a cycle in the context tree. That is not allowed."
+            )
+            assert data is not None, "Data cannot be None (except for root context)."
+            context_list.append(data)
+
+            current_context = current_context.previous  # type: ignore
+            assert current_context is not None, (
+                "Previous context cannot be None (except for root context)."
+            )
+
         context_list.reverse()
         return context_list
 
