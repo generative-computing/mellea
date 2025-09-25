@@ -123,7 +123,7 @@ class LiteLLMBackend(FormatterBackend):
             model_options=model_options,
             tool_calls=tool_calls,
         )
-        return mot, ctx.add(mot)
+        return mot, ctx.add(action).add(mot)
 
     def _simplify_and_merge(
         self, model_options: dict[str, Any] | None

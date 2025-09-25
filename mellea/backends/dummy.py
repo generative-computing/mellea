@@ -29,11 +29,11 @@ class DummyBackend(Backend):
         assert format is None, "The DummyBackend does not support constrained decoding."
         if self.responses is None:
             mot = ModelOutputThunk(value="dummy")
-            return mot, ctx.add(mot)
+            return mot, ctx.add(action).add(mot)
         elif self.idx < len(self.responses):
             return_value = ModelOutputThunk(value=self.responses[self.idx])
             self.idx += 1
-            return return_value, ctx.add(return_value)
+            return return_value, ctx.add(action).add(return_value)
         else:
             raise Exception(
                 f"DummyBackend expected no more than {len(self.responses)} calls."

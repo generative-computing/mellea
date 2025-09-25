@@ -249,7 +249,7 @@ class OllamaModelBackend(FormatterBackend):
             tool_calls=tool_calls,
         )
 
-        return mot, ctx.add(mot)
+        return mot, ctx.add(action).add(mot)
 
     def generate_from_chat_context(
         self,
