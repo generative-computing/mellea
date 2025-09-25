@@ -31,9 +31,9 @@ from mellea.helpers.openai_compatible_helpers import (
 from mellea.stdlib.base import (
     CBlock,
     Component,
+    Context,
     GenerateLog,
     GenerateType,
-    LegacyContext,
     ModelOutputThunk,
     ModelToolCall,
 )
@@ -208,7 +208,7 @@ class WatsonxAIBackend(FormatterBackend):
     def generate_from_context(
         self,
         action: Component | CBlock,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -218,18 +218,19 @@ class WatsonxAIBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The watsonx.ai backend only supports chat-like contexts."
         )
-        return self.generate_from_chat_context(
+        mot = self.generate_from_chat_context(
             action,
             ctx,
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
+        return mot, ctx.add(mot)
 
     def generate_from_chat_context(
         self,
         action: Component | CBlock,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel

@@ -38,11 +38,10 @@ from mellea.helpers.openai_compatible_helpers import (
 from mellea.stdlib.base import (
     CBlock,
     Component,
+    Context,
     GenerateLog,
     GenerateType,
-    LegacyContext,
     ModelOutputThunk,
-    ModelToolCall,
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
@@ -267,7 +266,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
     def generate_from_context(
         self,
         action: Component | CBlock,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -277,18 +276,19 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
-        return self.generate_from_chat_context(
+        mot = self.generate_from_chat_context(
             action,
             ctx,
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
+        return mot, ctx.add(mot)
 
     def generate_from_chat_context(
         self,
         action: Component | CBlock,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
@@ -322,7 +322,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
     def _generate_from_chat_context_alora(
         self,
         action: Component | CBlock,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
@@ -407,7 +407,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
     def _generate_from_chat_context_standard(
         self,
         action: Component | CBlock,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel

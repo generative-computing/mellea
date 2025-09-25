@@ -31,9 +31,9 @@ from mellea.helpers.openai_compatible_helpers import (
 from mellea.stdlib.base import (
     CBlock,
     Component,
+    Context,
     GenerateLog,
     GenerateType,
-    LegacyContext,
     ModelOutputThunk,
     ModelToolCall,
 )
@@ -106,7 +106,7 @@ class LiteLLMBackend(FormatterBackend):
     def generate_from_context(
         self,
         action: Component | CBlock,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -116,13 +116,14 @@ class LiteLLMBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
-        return self._generate_from_chat_context_standard(
+        mot = self._generate_from_chat_context_standard(
             action,
             ctx,
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
+        return mot, ctx.add(mot)
 
     def _simplify_and_merge(
         self, model_options: dict[str, Any] | None
@@ -208,7 +209,7 @@ class LiteLLMBackend(FormatterBackend):
     def _generate_from_chat_context_standard(
         self,
         action: Component | CBlock,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel

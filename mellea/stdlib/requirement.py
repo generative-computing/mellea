@@ -6,17 +6,17 @@ from collections.abc import Callable
 from copy import copy
 from typing import Any, overload
 
-from mellea.backends import (
-    Backend,
-    BaseModelSubclass,
-    CBlock,
-    Component,
-    LegacyContext,
-    ModelOutputThunk,
-)
+from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.aloras import Alora
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import GenerateLog, ModelOutputThunk, TemplateRepresentation
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    Context,
+    GenerateLog,
+    ModelOutputThunk,
+    TemplateRepresentation,
+)
 
 
 def default_output_to_bool(x: CBlock | str) -> bool:
@@ -89,7 +89,7 @@ class Requirement(Component):
     def __init__(
         self,
         description: str | None = None,
-        validation_fn: Callable[[LegacyContext], ValidationResult] | None = None,
+        validation_fn: Callable[[Context], ValidationResult] | None = None,
         *,
         output_to_bool: Callable[[CBlock | str], bool] | None = default_output_to_bool,
         check_only: bool = False,
@@ -115,7 +115,7 @@ class Requirement(Component):
     async def validate(
         self,
         backend: Backend,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -136,7 +136,7 @@ class Requirement(Component):
             # and its template gets populated with the output correctly.
             req_copy = copy(self)
             req_copy._output = last_output.value
-            llm_as_a_judge_result = backend.generate_from_context(
+            llm_as_a_judge_result, _ = backend.generate_from_context(
                 req_copy, ctx, format=format, model_options=model_options
             )
             await llm_as_a_judge_result.avalue()
@@ -193,7 +193,7 @@ class ScorerRequirement(Requirement):
     def __init__(
         self,
         description: str | None = None,
-        validation_fn: Callable[[LegacyContext], ValidationResult] | None = None,
+        validation_fn: Callable[[Context], ValidationResult] | None = None,
         preference_ordering: str = "max",
         *,
         output_to_bool: Callable[[CBlock | str], bool] | None = default_output_to_bool,
@@ -222,7 +222,7 @@ class ScorerRequirement(Requirement):
     async def validate(
         self,
         backend: Backend,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -248,7 +248,7 @@ class ScorerRequirement(Requirement):
             # and its template gets populated with the output correctly.
             req_copy = copy(self)
             req_copy._output = last_output.value
-            llm_as_a_judge_result = backend.generate_from_context(
+            llm_as_a_judge_result, _ = backend.generate_from_context(
                 req_copy, ctx, format=format, model_options=model_options
             )
             await llm_as_a_judge_result.avalue()
@@ -288,18 +288,18 @@ def check(*args, **kwargs) -> Requirement:
 @overload
 def simple_validate(
     fn: Callable[[str], tuple[bool, str]],
-) -> Callable[[LegacyContext], ValidationResult]: ...
+) -> Callable[[Context], ValidationResult]: ...
 
 
 @overload
 def simple_validate(
     fn: Callable[[str], bool], *, reason: str | None = None
-) -> Callable[[LegacyContext], ValidationResult]: ...
+) -> Callable[[Context], ValidationResult]: ...
 
 
 def simple_validate(
     fn: Callable[[str], Any], *, reason: str | None = None
-) -> Callable[[LegacyContext], ValidationResult]:
+) -> Callable[[Context], ValidationResult]:
     """Syntactic sugar for writing validation functions that only operate over the last output from the model (interpreted as a string).
 
     This is useful when your validation logic only depends upon the most recent model output. For example:
@@ -317,7 +317,7 @@ def simple_validate(
         reason: only used if the provided function returns a bool; if the validation function fails, a static reason for that failure to give to the llm when repairing
     """
 
-    def validate(ctx: LegacyContext) -> ValidationResult:
+    def validate(ctx: Context) -> ValidationResult:
         o = ctx.last_output()
         if o is None or o.value is None:
             FancyLogger.get_logger().warn(

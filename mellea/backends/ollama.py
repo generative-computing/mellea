@@ -23,12 +23,11 @@ from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
     Component,
+    Context,
     GenerateLog,
     GenerateType,
-    LegacyContext,
     ModelOutputThunk,
     ModelToolCall,
-    TemplateRepresentation,
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement
@@ -232,7 +231,7 @@ class OllamaModelBackend(FormatterBackend):
     def generate_from_context(
         self,
         action: Component | CBlock,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -242,7 +241,7 @@ class OllamaModelBackend(FormatterBackend):
         assert ctx.is_chat_context, (
             "The ollama backend only supports chat-like contexts."
         )
-        return self.generate_from_chat_context(
+        mot = self.generate_from_chat_context(
             action,
             ctx,
             format=format,
@@ -250,10 +249,12 @@ class OllamaModelBackend(FormatterBackend):
             tool_calls=tool_calls,
         )
 
+        return mot, ctx.add(mot)
+
     def generate_from_chat_context(
         self,
         action: Component | CBlock,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,

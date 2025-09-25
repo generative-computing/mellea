@@ -4,7 +4,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import CBlock, LegacyContext
+from mellea.stdlib.base import CBlock, Context
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import Requirement
 
@@ -88,7 +88,7 @@ class GuardianCheck(Requirement):
 
         return label, confidence_level
 
-    def _guardian_validate(self, ctx: LegacyContext):
+    def _guardian_validate(self, ctx: Context):
         """Validates the last turn of a conversation context using wrt given risk.
 
         Code is adopted from https://huggingface.co/ibm-granite/granite-guardian-3.2-3b-a800m#quickstart-example

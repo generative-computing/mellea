@@ -353,6 +353,7 @@ class Context(abc.ABC):
     _previous: Context | None
     _data: Component | CBlock | None
     _is_root: bool
+    _is_chat_context: bool = True
 
     def __init__(self):
         """Constructs a new context."""
@@ -364,6 +365,11 @@ class Context(abc.ABC):
     def is_root(self) -> bool:
         """Returns whether this context is the root context."""
         return self._is_root
+
+    @property
+    def is_chat_context(self) -> bool:
+        """Returns whether this context is a chat context."""
+        return self._is_chat_context
 
     @classmethod
     def from_previous(
@@ -424,6 +430,33 @@ class Context(abc.ABC):
         Can be used to make the available tools differ from the tools of all the actions in the context. Can be overwritten by subclasses.
         """
         return self.render_for_generation()
+
+    def last_output(self) -> ModelOutputThunk | None:
+        """The last output thunk of the context."""
+
+        for c in self.full_data_as_list()[::-1]:
+            if isinstance(c, ModelOutputThunk):
+                return c
+        return None
+
+    def last_turn(self):
+        """The last input/output turn of the context."""
+
+        history = self.full_data_as_list()
+
+        if len(history) == 0:
+            return None
+        last_element = history[-1]
+        if isinstance(last_element, ModelOutputThunk):
+            if len(history) >= 2:
+                # assuming that the last two elements are input and output
+                return ContextTurn(history[-2], last_element)
+            else:
+                # if self._ctx is of size 1 and only element is output element, return partial turn without an input.
+                return ContextTurn(None, last_element)
+        else:
+            # if the last element is input element, return partial turn without output
+            return ContextTurn(last_element, None)
 
     # Abstract methods
 

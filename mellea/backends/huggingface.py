@@ -47,6 +47,7 @@ from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
     Component,
+    Context,
     GenerateLog,
     GenerateType,
     LegacyContext,
@@ -186,12 +187,12 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
     def generate_from_context(
         self,
         action: Component | CBlock,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk:
+    ):
         """Generate using the huggingface model."""
         # Upsert model options.
         model_opts = self._simplify_and_merge(model_options)
@@ -208,17 +209,19 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             if issubclass(type(action), ALoraRequirement):
                 reroute_to_alora = True
             if reroute_to_alora:
-                return self._generate_from_context_alora(
+                mot = self._generate_from_context_alora(
                     action, ctx, format=format, model_options=model_opts
                 )
-        return self._generate_from_context_standard(
+                return mot, ctx.add(mot)
+        mot = self._generate_from_context_standard(
             action, ctx, format=format, model_options=model_opts, tool_calls=tool_calls
         )
+        return mot, ctx.add(mot)
 
     def _generate_from_context_alora(
         self,
         action: Component | CBlock,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict[str, Any],
@@ -265,7 +268,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
     def _generate_from_context_standard(
         self,
         action: Component | CBlock,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict[str, Any],

@@ -9,13 +9,7 @@ import pydantic
 
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import (
-    CBlock,
-    Component,
-    GenerateLog,
-    LegacyContext,
-    ModelOutputThunk,
-)
+from mellea.stdlib.base import CBlock, Component, Context, GenerateLog, ModelOutputThunk
 
 BaseModelSubclass = TypeVar(
     "BaseModelSubclass", bound=pydantic.BaseModel
@@ -43,12 +37,12 @@ class Backend(abc.ABC):
     def generate_from_context(
         self,
         action: Component | CBlock,
-        ctx: LegacyContext,
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk:  # i.e., ContextDiff
+    ) -> tuple[ModelOutputThunk, Context]:
         """Generates a model output from a context. May not mutate the context. This must be called from a running event loop as it creates a task to run the generation request.
 
         Args:
@@ -56,8 +50,10 @@ class Backend(abc.ABC):
             ctx: The rest of the context.
             format: A response format to used for structured outputs / constrained decoding.
             model_options: Any model options to upsert into the defaults for this call.
-            generate_logs: a `GenerateLog` instance to add log information to.
             tool_calls: If `True`, then tool calls are extracts from the `action` `Component`. Assumption: if tool_calls is enabled, then the action `Component` has a TemplateRepresentation
+
+        Returns:
+            a tuple of (ModelOutputThunk, Context) where the Context is the new context after the generation has been completed.
         """
         ...
 
