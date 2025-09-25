@@ -410,10 +410,10 @@ class Context(abc.ABC):
 
         while not current_context.is_root:
             data = current_context.data
+            assert data is not None, "Data cannot be None (except for root context)."
             assert data not in context_list, (
                 "There might be a cycle in the context tree. That is not allowed."
             )
-            assert data is not None, "Data cannot be None (except for root context)."
             context_list.append(data)
 
             current_context = current_context.previous  # type: ignore
