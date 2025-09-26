@@ -216,7 +216,7 @@ class MelleaSession:
 
     def reset(self):
         """Reset the context state."""
-        self.ctx.reset()
+        self.ctx = self.ctx.reset_to_new()
 
     def cleanup(self) -> None:
         """Clean up session resources."""

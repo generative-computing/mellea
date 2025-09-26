@@ -385,7 +385,7 @@ class Context(abc.ABC):
         return x
 
     @classmethod
-    def reset(cls: type[ContextT]) -> ContextT:
+    def reset_to_new(cls: type[ContextT]) -> ContextT:
         """Returns an empty context for convenience."""
         return cls()
 
