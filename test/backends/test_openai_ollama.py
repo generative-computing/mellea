@@ -11,7 +11,7 @@ from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.model_ids import META_LLAMA_3_2_1B
 from mellea.backends.openai import OpenAIBackend
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock, LegacyLinearContext, ModelOutputThunk, LegacySimpleContext
+from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext, SimpleContext
 
 
 @pytest.fixture(scope="module")
@@ -36,7 +36,7 @@ def backend(gh_run: int):
 @pytest.fixture(scope="function")
 def m_session(backend):
     """Fresh OpenAI session for each test."""
-    session = MelleaSession(backend, ctx=LegacyLinearContext(is_chat_context=True))
+    session = MelleaSession(backend, ctx=ChatContext())
     yield session
     session.reset()
 
@@ -147,11 +147,11 @@ def test_format(m_session):
 def test_async_parallel_requests(m_session):
     async def parallel_requests():
         model_opts = {ModelOption.STREAM: True}
-        mot1 = m_session.backend.generate_from_context(
-            CBlock("Say Hello."), LegacySimpleContext(), model_options=model_opts
+        mot1, _ = m_session.backend.generate_from_context(
+            CBlock("Say Hello."), SimpleContext(), model_options=model_opts
         )
-        mot2 = m_session.backend.generate_from_context(
-            CBlock("Say Goodbye!"), LegacySimpleContext(), model_options=model_opts
+        mot2, _ = m_session.backend.generate_from_context(
+            CBlock("Say Goodbye!"),SimpleContext(), model_options=model_opts
         )
 
         m1_val = None
@@ -184,8 +184,8 @@ def test_async_parallel_requests(m_session):
 
 def test_async_avalue(m_session):
     async def avalue():
-        mot1 = m_session.backend.generate_from_context(
-            CBlock("Say Hello."), LegacySimpleContext()
+        mot1, _ = m_session.backend.generate_from_context(
+            CBlock("Say Hello."), SimpleContext()
         )
         m1_final_val = await mot1.avalue()
         assert m1_final_val is not None

@@ -9,7 +9,7 @@ from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock, LegacyLinearContext, LegacySimpleContext
+from mellea.stdlib.base import CBlock, ChatContext, SimpleContext
 from mellea.stdlib.requirement import (
     ALoraRequirement,
     LLMaJRequirement,
@@ -34,7 +34,7 @@ def backend():
 @pytest.fixture(scope="function")
 def session(backend):
     """Fresh HuggingFace session for each test."""
-    session = MelleaSession(backend, ctx=LegacyLinearContext())
+    session = MelleaSession(backend, ctx=ChatContext())
     yield session
     session.reset()
 
@@ -145,7 +145,8 @@ def test_instruct(session):
 def test_multiturn(session):
     session.instruct("Compute 1+1")
     beta = session.instruct(
-        "Take the result of the previous sum and find the corresponding letter in the greek alphabet."
+        "Take the result of the previous sum and find the corresponding letter in the greek alphabet.",
+        model_options={ModelOption.MAX_NEW_TOKENS: 300},
     )
     assert "β" in str(beta).lower()
     words = session.instruct("Now list five English words that start with that letter.")
@@ -228,8 +229,8 @@ def test_generate_from_raw_with_format(session):
 def test_async_parallel_requests(session):
     async def parallel_requests():
         model_opts = {ModelOption.STREAM: True}
-        mot1 = session.backend.generate_from_context(CBlock("Say Hello."), LegacySimpleContext(), model_options=model_opts)
-        mot2 = session.backend.generate_from_context(CBlock("Say Goodbye!"), LegacySimpleContext(), model_options=model_opts)
+        mot1, _ = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext(), model_options=model_opts)
+        mot2, _ = session.backend.generate_from_context(CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts)
 
         m1_val = None
         m2_val = None
@@ -256,7 +257,7 @@ def test_async_parallel_requests(session):
 @pytest.mark.qualitative
 def test_async_avalue(session):
     async def avalue():
-        mot1 = session.backend.generate_from_context(CBlock("Say Hello."), LegacySimpleContext())
+        mot1, _ = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext())
         m1_final_val = await mot1.avalue()
         assert m1_final_val is not None
         assert m1_final_val == mot1.value

@@ -1,6 +1,7 @@
 import pytest
-from mellea import LegacyLinearContext, start_session
+from mellea import start_session
 from mellea.backends import ModelOption
+from mellea.stdlib.base import ChatContext
 from mellea.stdlib.sampling import (
     MultiTurnStrategy,
     RejectionSamplingStrategy,
@@ -10,7 +11,7 @@ from mellea.stdlib.sampling import (
 
 class TestSamplingCtxCase:
     m = start_session(
-        model_options={ModelOption.MAX_NEW_TOKENS: 100}, ctx=LegacyLinearContext()
+        model_options={ModelOption.MAX_NEW_TOKENS: 100}, ctx=ChatContext()
     )
 
     def _run_asserts_for_ctx_testing(self, res):
@@ -27,12 +28,12 @@ class TestSamplingCtxCase:
         assert len(res.sample_validations[0]) == 3, (
             "there should be 3 validation results."
         )
-        assert len(self.m.ctx._ctx) == 2, (
+        assert len(self.m.ctx.as_list()) == 2, (
             "there should only be a message and a response in the ctx."
         )
 
     def test_ctx_for_rejection_sampling(self):
-        self.m.ctx.reset()
+        self.m.reset()
         res = self.m.instruct(
             "Write a sentence.",
             requirements=[
@@ -47,7 +48,7 @@ class TestSamplingCtxCase:
         assert len(self.m.last_prompt()) == 1, "Last prompt should only have only one instruction inside - independent of sampling iterations."
 
     def test_ctx_for_multiturn(self):
-        self.m.ctx.reset()
+        self.m.reset()
         res = self.m.instruct(
             "Write a sentence.",
             requirements=[

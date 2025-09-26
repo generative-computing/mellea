@@ -5,10 +5,10 @@ import pydantic
 import pytest
 from typing_extensions import Annotated
 
-from mellea import LegacySimpleContext, start_session
+from mellea import start_session
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock
-from mellea.stdlib.requirement import Requirement
+from mellea.stdlib.base import CBlock, SimpleContext
+from mellea.stdlib.requirement import Requirement, simple_validate
 
 
 @pytest.fixture(scope="function")
@@ -37,7 +37,7 @@ def test_instruct_with_requirement(session):
 
     email_word_count_req = Requirement(
         f"The email should be at most 100",
-        validation_fn=lambda x: len(" ".split(x.last_output().value)) <= 100,
+        validation_fn=simple_validate(lambda x: len(" ".split(x)) <= 100),
     )
 
     happy_tone_req = Requirement(
@@ -52,12 +52,14 @@ def test_instruct_with_requirement(session):
     )
     print(results)
 
+
 @pytest.mark.qualitative
 def test_chat(session):
     output_message = session.chat("What is 1+1?")
     assert "2" in output_message.content, (
         f"Expected a message with content containing 2 but found {output_message}"
     )
+
 
 @pytest.mark.qualitative
 def test_format(session):
@@ -78,7 +80,7 @@ def test_format(session):
     output = session.instruct(
         "Write a short email to Olivia, thanking her for organizing a sailing activity. Her email server is example.com. No more than two sentences. ",
         format=Email,
-        model_options={ModelOption.MAX_NEW_TOKENS: 2**8},
+        model_options={ModelOption.MAX_NEW_TOKENS: 2 ** 8},
     )
     print("Formatted output:")
     email = Email.model_validate_json(
@@ -91,6 +93,7 @@ def test_format(session):
     # assert "@" in email.to.email_address
     # assert email.to.email_address.endswith("example.com")
     pass
+
 
 @pytest.mark.qualitative
 def test_generate_from_raw(session):
@@ -127,11 +130,14 @@ def test_generate_from_raw_with_format(session):
             f"formatting directive failed for {random_result.value}: {e.json()}"
         )
 
+
 def test_async_parallel_requests(session):
     async def parallel_requests():
         model_opts = {ModelOption.STREAM: True}
-        mot1 = session.backend.generate_from_context(CBlock("Say Hello."), LegacySimpleContext(), model_options=model_opts)
-        mot2 = session.backend.generate_from_context(CBlock("Say Goodbye!"), LegacySimpleContext(), model_options=model_opts)
+        mot1, _ = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext(),
+                                                     model_options=model_opts)
+        mot2, _ = session.backend.generate_from_context(CBlock("Say Goodbye!"), SimpleContext(),
+                                                     model_options=model_opts)
 
         m1_val = None
         m2_val = None
@@ -153,15 +159,19 @@ def test_async_parallel_requests(session):
 
         assert m1_final_val == mot1.value
         assert m2_final_val == mot2.value
+
     asyncio.run(parallel_requests())
+
 
 def test_async_avalue(session):
     async def avalue():
-        mot1 = session.backend.generate_from_context(CBlock("Say Hello."), LegacySimpleContext())
+        mot1, _ = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext())
         m1_final_val = await mot1.avalue()
         assert m1_final_val is not None
         assert m1_final_val == mot1.value
+
     asyncio.run(avalue())
+
 
 if __name__ == "__main__":
     pytest.main([__file__])
