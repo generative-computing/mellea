@@ -332,8 +332,8 @@ class MelleaSession:
             description, context=self.ctx, backend=self.backend, **kwargs
         )
 
-        # TODO JAL, Hen. Investigate this. What happens to context when Sampling Result returns?
         if isinstance(r, SamplingResult):
+            self.ctx = r.result_ctx
             return r
         else:
             result, context = r

@@ -26,7 +26,11 @@ from mellea.stdlib.instruction import Instruction
 from mellea.stdlib.mify import mify
 from mellea.stdlib.mobject import MObjectProtocol
 from mellea.stdlib.requirement import Requirement, ValidationResult
-from mellea.stdlib.sampling import SamplingResult, SamplingStrategy
+from mellea.stdlib.sampling import (
+    RejectionSamplingStrategy,
+    SamplingResult,
+    SamplingStrategy,
+)
 
 
 # TODO: JAL
@@ -40,7 +44,7 @@ def act(
     context: Context,
     backend: Backend,
     *,
-    strategy: SamplingStrategy | None = None,
+    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=1),
     return_sampling_results: Literal[False] = False,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -54,7 +58,7 @@ def act(
     context: Context,
     backend: Backend,
     *,
-    strategy: SamplingStrategy | None = None,
+    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=1),
     return_sampling_results: Literal[True],
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -68,7 +72,7 @@ def act(
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
-    strategy: SamplingStrategy | None = None,
+    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=1),
     return_sampling_results: bool = False,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -114,7 +118,7 @@ async def _act(
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
-    strategy: SamplingStrategy | None = None,
+    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=1),
     return_sampling_results: bool = False,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -144,12 +148,8 @@ async def _act(
             "Must provide a SamplingStrategy when return_sampling_results==True"
         )
 
-    if strategy is None:
-        # TODO: JAL.
-        # Change this to just call a rejection sampling strategy with loop = 1 so that we don't dupe the code
-        # That will only work if sampling strategies let you run with no requirements...
-        # maybe we create a sampling strategy just for this use case...
-        # can probably just pass in an empty list and it will work...
+    # if there is no reason to sample, just generate from the context.
+    if strategy is None or requirements is None or len(requirements) == 0:
         result, new_ctx = backend.generate_from_context(
             action,
             ctx=context,
@@ -165,8 +165,7 @@ async def _act(
         generate_logs.append(result._generate_log)
 
     else:
-        if requirements is None:
-            requirements = []
+        # if there is a reason to sample, use the sampling strategy.
 
         sampling_result = await strategy.sample(
             action,
@@ -185,7 +184,7 @@ async def _act(
             generate_logs.append(result._generate_log)
 
         # TODO: JAL. Extract the context from the sampling result.
-        new_ctx = ChatContext()
+        new_ctx = sampling_result.result_ctx
         result = sampling_result.result
         assert sampling_result.result._generate_log is not None
         assert sampling_result.result._generate_log.is_final_result, (
@@ -214,7 +213,7 @@ def instruct(
     user_variables: dict[str, str] | None = None,
     prefix: str | CBlock | None = None,
     output_prefix: str | CBlock | None = None,
-    strategy: SamplingStrategy | None = None,
+    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=1),
     return_sampling_results: Literal[False] = False,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -235,7 +234,7 @@ def instruct(
     user_variables: dict[str, str] | None = None,
     prefix: str | CBlock | None = None,
     output_prefix: str | CBlock | None = None,
-    strategy: SamplingStrategy | None = None,
+    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=1),
     return_sampling_results: Literal[True],
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -255,7 +254,7 @@ def instruct(
     user_variables: dict[str, str] | None = None,
     prefix: str | CBlock | None = None,
     output_prefix: str | CBlock | None = None,
-    strategy: SamplingStrategy | None = None,
+    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=1),
     return_sampling_results: bool = False,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
