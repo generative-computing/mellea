@@ -1,18 +1,18 @@
 """Risk checking with Guardian models."""
 
 import json
-import torch
 from enum import Enum
 from typing import Dict, List, Any, Optional, Tuple, Union, Literal
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 try:
     import requests
 except ImportError:
     requests = None
 
+from mellea.backends.ollama import OllamaModelBackend
+from mellea.backends.huggingface import LocalHFBackend
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import CBlock, Context
+from mellea.stdlib.base import CBlock, Context, Component, ModelOutputThunk
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import Requirement, ValidationResult
 
@@ -45,7 +45,14 @@ BackendType = Literal["huggingface", "ollama"]
 
 def _parse_safety_result(result: str, logger) -> str:
     """Parse the safety result from model output."""
-    result_lower = result.lower().strip()
+    if result is None:
+        logger.warning("Guardian returned None result")
+        return "Failed"
+
+    result_lower = str(result).lower().strip()
+
+    # Handle chat template artifacts - remove any remaining tags
+    result_lower = result_lower.replace("<|im_end|>", "").replace("<|im_start|>", "").strip()
 
     # Handle score tags format: <score> yes/no </score>
     if "<score>" in result_lower and "</score>" in result_lower:
@@ -68,10 +75,14 @@ def _parse_safety_result(result: str, logger) -> str:
         return "No"
 
     # Check for safety indicators
-    if any(word in result_lower for word in ["safe", "no risk", "acceptable"]):
+    if any(word in result_lower for word in ["safe", "no risk", "acceptable", "not harmful"]):
         return "No"
-    elif any(word in result_lower for word in ["unsafe", "risky", "harmful", "violation"]):
+    elif any(word in result_lower for word in ["unsafe", "risky", "harmful", "violation", "inappropriate", "offensive"]):
         return "Yes"
+
+    # Special handling for refusal responses (model refusing to evaluate harmful content)
+    if any(phrase in result_lower for phrase in ["can't engage", "won't engage", "don't engage", "inappropriate", "personal attack"]):
+        return "Yes"  # If model refuses, likely because content is harmful
 
     # Default to failed parsing
     logger.warning(f"Could not parse safety result: {result}")
@@ -91,76 +102,150 @@ class GuardianBackend:
         """Validate messages for specified risk. Returns (result, trace, raw_data)."""
         raise NotImplementedError
 
+    def _get_result_sync(self, result_thunk) -> str:
+        """Get result from ModelOutputThunk synchronously."""
+        import asyncio
+
+        try:
+            # Try direct value access first (might be already resolved)
+            if hasattr(result_thunk, 'value') and result_thunk.value is not None:
+                return str(result_thunk.value)
+        except Exception:
+            pass
+
+        try:
+            # Try to get the underlying value directly
+            if hasattr(result_thunk, '_underlying_value') and result_thunk._underlying_value:
+                return str(result_thunk._underlying_value)
+        except Exception:
+            pass
+
+        try:
+            # If we have a generation task, wait for it
+            if hasattr(result_thunk, '_generate') and result_thunk._generate:
+                # Create new event loop if needed
+                try:
+                    loop = asyncio.get_running_loop()
+                    # If we're in an async context, this is more complex
+                    raise RuntimeError("In async context - need special handling")
+                except RuntimeError:
+                    # No running loop or we're in one - use asyncio.run
+                    asyncio.run(result_thunk._generate)
+                    return str(getattr(result_thunk, '_underlying_value', ""))
+        except Exception as e:
+            self._logger.warning(f"Async result handling failed: {e}")
+
+        # Final fallback
+        return str(result_thunk) if result_thunk else ""
+
+    def _prepare_guardian_messages(self, messages: List[Dict[str, str]], risk: str,
+                                  thinking: bool, context_text: Optional[str] = None,
+                                  tools: Optional[List[Dict]] = None) -> List[Dict[str, str]]:
+        """Prepare messages in Guardian format exactly like example script."""
+        guardian_messages = []
+
+        # System message contains ONLY the risk type (like example script)
+        guardian_messages.append({"role": "system", "content": risk})
+
+        # For groundedness, add document context as separate message (like example script)
+        if risk == "groundedness" and context_text:
+            guardian_messages.append({"role": "document 0", "content": context_text})
+
+        # Add the original conversation messages exactly as provided
+        guardian_messages.extend(messages)
+
+        # NO additional instruction messages - Guardian model knows what to do
+        # This matches the example script pattern exactly
+
+        return guardian_messages
+
 
 class HuggingFaceGuardianBackend(GuardianBackend):
-    """HuggingFace-based Guardian backend for local model inference."""
+    """HuggingFace-based Guardian backend that wraps LocalHFBackend."""
 
-    def __init__(self, model_version: str = "ibm-granite/granite-guardian-3.0-8b", device: Optional[str] = None):
+    def __init__(self, model_version: str = "ibm-granite/granite-guardian-3.3-8b", device: Optional[str] = None):
         super().__init__(model_version, device)
-        self._model = None
-        self._tokenizer = None
 
-        # Auto-device selection if not specified
-        if device is None:
-            device_name: str = (
-                "cuda"
-                if torch.cuda.is_available()
-                else "mps"
-                if torch.backends.mps.is_available()
-                else "cpu"
-            )
-            self.device = torch.device(device_name)
-
-    def _load_model(self):
-        """Lazy load model and tokenizer."""
-        if self._model is None:
-            self._logger.info(f"Loading Granite Guardian model: {self.model_version}")
-            self._model = AutoModelForCausalLM.from_pretrained(
-                self.model_version,
-                device_map="auto",
+        # Create custom config if device is specified, otherwise let LocalHFBackend auto-detect
+        custom_config = None
+        if device is not None:
+            import torch
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+            tokenizer = AutoTokenizer.from_pretrained(model_version)
+            model = AutoModelForCausalLM.from_pretrained(
+                model_version,
                 torch_dtype=torch.bfloat16
             )
-            self._model.to(self.device)
-            self._model.eval()
+            torch_device = torch.device(device)
+            model = model.to(torch_device)
+            custom_config = (tokenizer, model, torch_device)
 
-            self._tokenizer = AutoTokenizer.from_pretrained(self.model_version)
+        # Wrap the existing LocalHFBackend
+        self._hf_backend = LocalHFBackend(
+            model_id=model_version,
+            custom_config=custom_config
+        )
+        self._logger.info(f"Initialized HuggingFace Guardian backend with model: {model_version}")
 
     def validate_messages(self, messages: List[Dict[str, str]], risk: str,
                          thinking: bool = False, tools: Optional[List[Dict]] = None,
                          context_text: Optional[str] = None) -> Tuple[str, Optional[str], Dict]:
-        """Validate messages using HuggingFace backend."""
-        self._load_model()
+        """Validate messages using wrapped LocalHFBackend with event loop."""
 
-        guardian_config = {"risk_name": risk}
+        # Create async wrapper to handle event loop
+        async def run_validation():
+            # Prepare messages in Guardian format (like example script)
+            guardian_messages = self._prepare_guardian_messages(messages, risk, thinking, context_text, tools)
 
-        # Apply chat template with thinking mode support
-        input_ids = self._tokenizer.apply_chat_template(
-            messages,
-            guardian_config=guardian_config,
-            add_generation_prompt=True,
-            return_tensors="pt",
-            think=thinking  # Enable thinking mode if supported
-        ).to(self._model.device)
+            # Use the backend's native chat template capabilities
+            from mellea.stdlib.base import LinearContext, ContextTurn
 
-        input_len = input_ids.shape[1]
+            ctx = LinearContext()
 
-        # Generate with appropriate tokens for thinking mode
-        max_tokens = 2000 if thinking else 20
+            # Add all Guardian messages to context
+            for msg in guardian_messages:
+                if msg["role"] in ["user", "assistant", "system"]:
+                    ctx.insert_turn(ContextTurn(Message(msg["role"], msg["content"]), None))
+                elif msg["role"].startswith("document"):
+                    # Handle document messages for groundedness
+                    ctx.insert_turn(ContextTurn(Message("user", f"Document: {msg['content']}"), None))
 
-        with torch.no_grad():
-            output = self._model.generate(
-                input_ids,
-                do_sample=False,
-                max_new_tokens=max_tokens,
-                return_dict_in_generate=True,
-                output_scores=True,
-            )
+            # Prepare model options
+            model_options = {
+                "max_new_tokens": 2000 if thinking else 50,
+                "do_sample": False,
+                "temperature": 0.0,
+                "system": risk  # System prompt is just the risk type
+            }
 
-        # Parse output
-        full_response = self._tokenizer.decode(
-            output.sequences[:, input_len:][0],
-            skip_special_tokens=True
-        ).strip()
+            if thinking:
+                model_options["think"] = True
+
+            # Add an empty assistant message to trigger generation
+            generation_prompt = Message("assistant", "")
+
+            # Use native chat template generation
+            if hasattr(self._hf_backend, 'generate_from_chat_context'):
+                result_thunk = self._hf_backend.generate_from_chat_context(
+                    generation_prompt, ctx, model_options=model_options
+                )
+            else:
+                result_thunk = self._hf_backend.generate_from_context(
+                    generation_prompt, ctx, model_options=model_options
+                )
+
+            # Wait for async result
+            result_value = result_thunk.value
+            # Handle None or empty results
+            return str(result_value) if result_value is not None else ""
+
+        # Run the async validation in a new event loop
+        import asyncio
+        try:
+            full_response = asyncio.run(run_validation())
+        except Exception as e:
+            self._logger.error(f"HuggingFace validation failed: {e}")
+            return "Failed", None, {"error": str(e)}
 
         # Extract thinking trace if present
         trace = None
@@ -178,66 +263,110 @@ class HuggingFaceGuardianBackend(GuardianBackend):
         return label, trace, {"full_response": full_response, "model": self.model_version}
 
 
+
 class OllamaGuardianBackend(GuardianBackend):
-    """Ollama-based Guardian backend for local model inference."""
+    """Ollama-based Guardian backend that wraps OllamaModelBackend."""
 
     def __init__(self, model_version: str = "ibm/granite3.3-guardian:8b",
                  ollama_url: str = "http://localhost:11434"):
         super().__init__(model_version)
         self.ollama_url = ollama_url
 
-        if requests is None:
-            raise ImportError("requests library is required for Ollama backend. Install with: pip install requests")
+        # Wrap the existing OllamaModelBackend
+        self._ollama_backend = OllamaModelBackend(
+            model_id=model_version,
+            base_url=ollama_url
+        )
+        self._logger.info(f"Initialized Ollama Guardian backend with model: {model_version}")
 
     def validate_messages(self, messages: List[Dict[str, str]], risk: str,
                          thinking: bool = False, tools: Optional[List[Dict]] = None,
                          context_text: Optional[str] = None) -> Tuple[str, Optional[str], Dict]:
-        """Validate messages using Ollama backend."""
+        """Validate messages using wrapped OllamaModelBackend with event loop."""
 
-        # Prepare messages for Guardian checking
-        guardian_messages = [{"role": "system", "content": risk}]
+        # Create async wrapper to handle event loop
+        async def run_validation():
+            # Prepare messages in Guardian format (like example script)
+            guardian_messages = self._prepare_guardian_messages(messages, risk, thinking, context_text, tools)
 
-        # For groundedness/context relevance, add document context
-        if risk in ["groundedness", "context_relevance"] and context_text:
-            guardian_messages.append({"role": "document", "content": context_text})
+            # Use the backend's native chat template capabilities
+            from mellea.stdlib.base import LinearContext, ContextTurn
 
-        guardian_messages.extend(messages)
+            ctx = LinearContext()
 
-        payload = {
-            "model": self.model_version,
-            "messages": guardian_messages,
-            "stream": False,
-            "think": thinking
-        }
+            # Add all Guardian messages to context
+            for msg in guardian_messages:
+                if msg["role"] in ["user", "assistant", "system"]:
+                    ctx.insert_turn(ContextTurn(Message(msg["role"], msg["content"]), None))
+                elif msg["role"].startswith("document"):
+                    # Handle document messages for groundedness
+                    ctx.insert_turn(ContextTurn(Message("user", f"Document: {msg['content']}"), None))
 
-        # For function call validation, add tools to the payload
-        if risk == "function_call" and tools:
-            payload["tools"] = tools
+            # Prepare model options
+            model_options = {
+                "temperature": 0.0,
+                "num_predict": 2000 if thinking else 50,
+                "stream": False,
+                "system": risk  # System prompt is just the risk type
+            }
 
+            if thinking:
+                model_options["think"] = True
+
+            # Add tools for function call validation
+            if risk == "function_call" and tools:
+                model_options["tools"] = self._convert_tools_to_functions(tools)
+
+            # Add an empty assistant message to trigger generation
+            generation_prompt = Message("assistant", "")
+
+            # Use native chat template generation
+            result_thunk = self._ollama_backend.generate_from_chat_context(
+                generation_prompt, ctx, model_options=model_options
+            )
+
+            # Wait for async result
+            result_value = result_thunk.value
+            # Handle None or empty results
+            return str(result_value) if result_value is not None else ""
+
+        # Run the async validation in a new event loop
+        import asyncio
         try:
-            response = requests.post(
-                f"{self.ollama_url}/api/chat",
-                json=payload,
-                timeout=120
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            # Extract content and trace
-            content = data.get("message", {}).get("content", "")
-            trace = (
-                data.get("message", {}).get("reasoning") or
-                data.get("message", {}).get("thinking")
-            )
-
-            # Parse safety result
-            label = _parse_safety_result(content, self._logger)
-
-            return label, trace, data
-
+            full_response = asyncio.run(run_validation())
         except Exception as e:
-            self._logger.error(f"Ollama Guardian request failed: {e}")
+            self._logger.error(f"Ollama validation failed: {e}")
             return "Failed", None, {"error": str(e)}
+
+        # Extract thinking trace if present
+        trace = None
+        result = full_response
+
+        if thinking and "<think>" in str(full_response):
+            parts = str(full_response).split("</think>")
+            if len(parts) > 1:
+                trace = parts[0].replace("<think>", "").strip()
+                result = parts[1].strip()
+
+        # Parse safety result
+        label = _parse_safety_result(result, self._logger)
+
+        return label, trace, {"full_response": full_response, "model": self.model_version}
+
+
+    def _convert_tools_to_functions(self, tools: List[Dict]) -> List[callable]:
+        """Convert tool definitions to callable functions for Ollama backend."""
+        functions = []
+        for tool in tools:
+            # Create a dummy function that matches the tool signature
+            def dummy_func(**kwargs):
+                return f"Tool {tool['name']} called with args: {kwargs}"
+
+            dummy_func.__name__ = tool['name']
+            dummy_func.__doc__ = tool.get('description', '')
+            functions.append(dummy_func)
+
+        return functions
 
 
 class GuardianCheck(Requirement):
