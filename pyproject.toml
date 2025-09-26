@@ -160,7 +160,7 @@ combine-as-imports = true
 split-on-trailing-comma = false
 
 [tool.codespell]
-ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,rouge,Rouge'
+ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge'
 check-filenames = true
 check-hidden = false
 regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=[A-Z])|\\d+"
