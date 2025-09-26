@@ -42,7 +42,6 @@ def test_instruct(session: MelleaSession):
     assert isinstance(result, ModelOutputThunk)
     assert "2" in result.value  # type: ignore
 
-@pytest.mark.xfail(reason="watsonx python sdk has weird interactions with event loops; causes some errors with pytest.")
 @pytest.mark.qualitative
 def test_multiturn(session: MelleaSession):
     session.instruct("What is the capital of France?")
@@ -56,7 +55,6 @@ def test_chat(session):
         f"Expected a message with content containing 2 but found {output_message}"
     )
 
-@pytest.mark.xfail(reason="watsonx python sdk has weird interactions with event loops; causes some errors with pytest.")
 @pytest.mark.qualitative
 def test_format(session: MelleaSession):
     class Person(pydantic.BaseModel):
@@ -130,9 +128,6 @@ def test_async_parallel_requests(session):
         assert m2_final_val == mot2.value
     asyncio.run(parallel_requests())
 
-# TODO: If this becomes a big issue, we will just have to re-instantiate the ModelInference object between requests.
-#       Ideally, we would only do this when creating a new m.session from the same backend.
-@pytest.mark.xfail(reason="watsonx python sdk apparently doesn't support running across multiple async event loops.")
 @pytest.mark.qualitative
 def test_async_avalue(session):
     async def avalue():

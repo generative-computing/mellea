@@ -172,7 +172,7 @@ class MelleaSession:
             model_options (Optional[dict]): model options, which will upsert into the model/backend's defaults.
         """
         self.backend = backend
-        self.ctx = ctx if ctx is not None else SimpleContext()
+        self.ctx: Context = ctx if ctx is not None else SimpleContext()
         self._backend_stack: list[tuple[Backend, dict | None]] = []
         self._session_logger = FancyLogger.get_logger()
         self._context_token = None

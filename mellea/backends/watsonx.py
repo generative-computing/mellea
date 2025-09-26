@@ -92,14 +92,14 @@ class WatsonxAIBackend(FormatterBackend):
         if project_id is None:
             project_id = os.environ.get("WATSONX_PROJECT_ID")
 
-        _creds = Credentials(url=base_url, api_key=api_key)
-        _client = APIClient(credentials=_creds)
-        self._model = ModelInference(
+        self._creds = Credentials(url=base_url, api_key=api_key)
+        _client = APIClient(credentials=self._creds)
+        self._model_inference = ModelInference(
             model_id=self._get_watsonx_model_id(),
             api_client=_client,
-            credentials=_creds,
+            credentials=self._creds,
             project_id=project_id,
-            params=model_options,
+            params=self.model_options,
             **kwargs,
         )
 
@@ -131,6 +131,12 @@ class WatsonxAIBackend(FormatterBackend):
             ModelOption.SEED: "random_seed",
             ModelOption.MAX_NEW_TOKENS: "max_new_tokens",
         }
+
+    @property
+    def _model(self) -> ModelInference:
+        """Watsonx's client gets tied to a specific event loop. Reset it here."""
+        self._model_inference.set_api_client(APIClient(self._creds))
+        return self._model_inference
 
     def _get_watsonx_model_id(self) -> str:
         """Gets the watsonx model id from the model_id that was provided in the constructor. Raises AssertionError if the ModelIdentifier does not provide a watsonx_name."""
