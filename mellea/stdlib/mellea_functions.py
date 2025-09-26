@@ -1,11 +1,10 @@
-
 # TODO: JAL rename this file...
 from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Literal, Tuple, TypeVar, overload
+from typing import Any, Literal, TypeVar, overload
 
 from PIL import Image as PILImage
 
@@ -46,7 +45,8 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> Tuple[ModelOutputThunk, Context]: ...
+) -> tuple[ModelOutputThunk, Context]: ...
+
 
 @overload
 def act(
@@ -61,6 +61,7 @@ def act(
     tool_calls: bool = False,
 ) -> SamplingResult: ...
 
+
 def act(
     action: Component,
     context: Context,
@@ -72,13 +73,13 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> Tuple[ModelOutputThunk, Context] | SamplingResult:
+) -> tuple[ModelOutputThunk, Context] | SamplingResult:
     """Runs a generic action, and adds both the action and the result to the context.
 
     Args:
         action: the Component from which to generate.
         context: the context being used as a history from which to generate the response.
-        backend: the backend used to generate the response. 
+        backend: the backend used to generate the response.
         requirements: used as additional requirements when a sampling strategy is provided.
         strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
         return_sampling_results: attach the (successful and failed) sampling attempts to the results.
@@ -106,6 +107,7 @@ def act(
 
     return out
 
+
 async def _act(
     action: Component,
     context: Context,
@@ -117,13 +119,13 @@ async def _act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> Tuple[ModelOutputThunk, Context] | SamplingResult:
+) -> tuple[ModelOutputThunk, Context] | SamplingResult:
     """Asynchronous version of .act; runs a generic action, and adds both the action and the result to the context.
 
     Args:
         action: the Component from which to generate.
         context: the context being used as a history from which to generate the response.
-        backend: the backend used to generate the response. 
+        backend: the backend used to generate the response.
         requirements: used as additional requirements when a sampling strategy is provided
         strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
         return_sampling_results: attach the (successful and failed) sampling attempts to the results.
@@ -167,10 +169,10 @@ async def _act(
             requirements = []
 
         sampling_result = await strategy.sample(
-            action, 
-            context=context, 
-            backend=backend, 
-            requirements=requirements, 
+            action,
+            context=context,
+            backend=backend,
+            requirements=requirements,
             validation_ctx=None,
             format=format,
             model_options=model_options,
@@ -179,9 +181,7 @@ async def _act(
 
         assert sampling_result.sample_generations is not None
         for result in sampling_result.sample_generations:
-            assert (
-                result._generate_log is not None
-            )  # Cannot be None after generation.
+            assert result._generate_log is not None  # Cannot be None after generation.
             generate_logs.append(result._generate_log)
 
         # TODO: JAL. Extract the context from the sampling result.
@@ -199,6 +199,7 @@ async def _act(
         return sampling_result
     else:
         return result, new_ctx
+
 
 @overload
 def instruct(
@@ -218,7 +219,8 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> Tuple[ModelOutputThunk, Context]: ...
+) -> tuple[ModelOutputThunk, Context]: ...
+
 
 @overload
 def instruct(
@@ -240,6 +242,7 @@ def instruct(
     tool_calls: bool = False,
 ) -> SamplingResult: ...
 
+
 def instruct(
     description: str,
     context: Context,
@@ -257,7 +260,7 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> Tuple[ModelOutputThunk, Context] | SamplingResult:
+) -> tuple[ModelOutputThunk, Context] | SamplingResult:
     """Generates from an instruction.
 
     Args:
@@ -308,6 +311,7 @@ def instruct(
         tool_calls=tool_calls,
     )  # type: ignore[call-overload]
 
+
 def chat(
     content: str,
     context: Context,
@@ -319,7 +323,7 @@ def chat(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> Tuple[Message, Context]:
+) -> tuple[Message, Context]:
     """Sends a simple chat message and returns the response. Adds both messages to the Context."""
     if user_variables is not None:
         content_resolved = Instruction.apply_user_dict_from_jinja(
@@ -343,6 +347,7 @@ def chat(
 
     return parsed_assistant_message, new_ctx
 
+
 def validate(
     reqs: Requirement | list[Requirement],
     context: Context,
@@ -351,7 +356,8 @@ def validate(
     output: CBlock | None = None,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
-    generate_logs: list[GenerateLog] | None = None, # TODO: Can we get rid of gen logs here and in act?
+    generate_logs: list[GenerateLog]
+    | None = None,  # TODO: Can we get rid of gen logs here and in act?
     input: CBlock | None = None,
 ) -> list[ValidationResult]:
     """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
@@ -367,11 +373,12 @@ def validate(
             model_options=model_options,
             generate_logs=generate_logs,
             input=input,
-        ),
+        )
     )
 
     # Wait for and return the result.
     return out
+
 
 async def _validate(
     reqs: Requirement | list[Requirement],
@@ -383,7 +390,9 @@ async def _validate(
     model_options: dict | None = None,
     generate_logs: list[GenerateLog] | None = None,
     input: CBlock | None = None,
-) -> list[ValidationResult]: # TODO: JAL. We should think about returning the contexts as well.
+) -> list[
+    ValidationResult
+]:  # TODO: JAL. We should think about returning the contexts as well.
     """Asynchronous version of .validate; validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
     # Turn a solitary requirement in to a list of requirements, and then reqify if needed.
     reqs = [reqs] if not isinstance(reqs, list) else reqs
@@ -403,10 +412,7 @@ async def _validate(
 
     for requirement in reqs:
         val_result_co = requirement.validate(
-            backend,
-            validation_target_ctx,
-            format=format,
-            model_options=model_options,
+            backend, validation_target_ctx, format=format, model_options=model_options
         )
         # TODO: JAL. do we ever need the context of a requirement / validation result.
         coroutines.append(val_result_co)
@@ -432,6 +438,7 @@ async def _validate(
 
     return rvs
 
+
 def query(
     obj: Any,
     query: str,
@@ -441,7 +448,7 @@ def query(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> Tuple[ModelOutputThunk, Context]:
+) -> tuple[ModelOutputThunk, Context]:
     """Query method for retrieving information from an object.
 
     Args:
@@ -463,9 +470,15 @@ def query(
     q = obj.get_query_object(query)
 
     answer = act(
-        q, context=context, backend=backend, format=format, model_options=model_options, tool_calls=tool_calls
+        q,
+        context=context,
+        backend=backend,
+        format=format,
+        model_options=model_options,
+        tool_calls=tool_calls,
     )
     return answer
+
 
 def transform(
     obj: Any,
@@ -475,7 +488,7 @@ def transform(
     *,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
-) -> Tuple[ModelOutputThunk | Any, Context]:
+) -> tuple[ModelOutputThunk | Any, Context]:
     """Transform method for creating a new object with the transformation applied.
 
     Args:
@@ -498,7 +511,12 @@ def transform(
     # Check that your model / backend supports tool calling.
     # This might throw an error when tools are provided but can't be handled by one or the other.
     transformed, new_ctx = act(
-        t, context=context, backend=backend, format=format, model_options=model_options, tool_calls=True
+        t,
+        context=context,
+        backend=backend,
+        format=format,
+        model_options=model_options,
+        tool_calls=True,
     )
 
     tools = _call_tools(transformed, backend)
@@ -539,6 +557,7 @@ def transform(
 
     return transformed, new_ctx
 
+
 def _parse_and_clean_image_args(
     images_: list[ImageBlock] | list[PILImage.Image] | None = None,
 ) -> list[ImageBlock] | None:
@@ -562,6 +581,7 @@ def _parse_and_clean_image_args(
         else:
             images = None
     return images
+
 
 def _call_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]:
     """Call all the tools requested in a result's tool calls object.
@@ -596,13 +616,17 @@ def _call_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]
             )
     return outputs
 
+
 R = TypeVar("R")
+
+
 def _run_async_in_thread(co: Coroutine[Any, Any, R]) -> R:
     """Runs the provided coroutine.
-    
+
     Checks if an event loop is running in this thread. If one is running in this thread,
     we use a separate thread to run the async code. Otherwise, run the code using asyncio.run.
     """
+
     def run_async(co: Coroutine):
         """Helper function to run the coroutine."""
         return asyncio.run(co)
@@ -611,7 +635,7 @@ def _run_async_in_thread(co: Coroutine[Any, Any, R]) -> R:
     loop = None
     try:
         loop = asyncio.get_running_loop()
-    except:
+    except Exception:
         pass
 
     if loop is None:
@@ -625,5 +649,3 @@ def _run_async_in_thread(co: Coroutine[Any, Any, R]) -> R:
             out = future.result()
 
     return out
-
-
