@@ -1,5 +1,5 @@
 import pytest
-from mellea.stdlib.base import CBlock, Component, LinearContext
+from mellea.stdlib.base import CBlock, Component
 
 
 def test_cblock():
@@ -26,28 +26,6 @@ def test_component():
     c = _ClosuredComponent()
     assert len(c.parts()) == 0
 
-
-def test_context():
-    ctx = LinearContext(window_size=3)
-    ctx.insert(CBlock("a"))
-    ctx.insert(CBlock("b"))
-    ctx.insert(CBlock("c"))
-    ctx.insert(CBlock("d"))
-
-
-def test_actions_for_available_tools():
-    ctx = LinearContext(window_size=3)
-    ctx.insert(CBlock("a"))
-    ctx.insert(CBlock("b"))
-    for_generation = ctx.render_for_generation()
-    assert for_generation is not None
-
-    actions = ctx.actions_for_available_tools()
-    assert actions is not None
-
-    assert len(for_generation) == len(actions)
-    for i in range(len(actions)):
-        assert actions[i] == for_generation[i]
 
 if __name__ == "__main__":
     pytest.main([__file__])

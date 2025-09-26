@@ -69,8 +69,9 @@ def test_image_block_in_instruction(m_session: MelleaSession, pil_image: Image.I
         assert "yes" in instr.value.lower() or "no" in instr.value.lower()
 
     # make sure you get the last action
-    _, log = m_session.ctx.last_output_and_logs()
-    last_action = log.action
+    turn = m_session.ctx.last_turn()
+    assert turn is not None
+    last_action = turn.model_input
     assert isinstance(last_action, Instruction)
     assert len(last_action._images) > 0
 
@@ -79,7 +80,7 @@ def test_image_block_in_instruction(m_session: MelleaSession, pil_image: Image.I
     assert image0 == image_block
 
     # get prompt message
-    lp = log.prompt
+    lp = turn.output._generate_log.prompt
     assert isinstance(lp, list)
     assert len(lp) == 1
 
@@ -111,8 +112,9 @@ def test_image_block_in_chat(m_session: MelleaSession, pil_image: Image.Image, g
         assert "yes" in ct.content.lower() or "no" in ct.content.lower()
 
     # make sure you get the last action
-    _, log = m_session.ctx.last_output_and_logs()
-    last_action = log.action
+    turn = m_session.ctx.last_turn()
+    assert turn is not None
+    last_action = turn.model_input
     assert isinstance(last_action, Message)
     assert len(last_action.images) > 0
 
@@ -121,7 +123,7 @@ def test_image_block_in_chat(m_session: MelleaSession, pil_image: Image.Image, g
     assert image0_str == ImageBlock.from_pil_image(pil_image)._value
 
     # get prompt message
-    lp = log.prompt
+    lp = turn.output._generate_log.prompt
     assert isinstance(lp, list)
     assert len(lp) == 1
 

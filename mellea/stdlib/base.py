@@ -12,7 +12,7 @@ from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from PIL import Image as PILImage
 
@@ -344,203 +344,138 @@ class ContextTurn:
     output: ModelOutputThunk | None
 
 
+ContextT = TypeVar("ContextT", bound="Context")
+
+
 class Context(abc.ABC):
-    """A `Context` is used to track the state of a `MelleaSession`."""
+    """A `Context` is used to track the state of a `MelleaSession`.
 
-    is_chat_context: bool = False
+    A context is immutable. Every alteration leads to a new context.
+    """
 
-    @abc.abstractmethod
-    def reset(self):
-        """Resets the context to a fresh state.
-
-        Note: resetting a context does NOT free memory or clear cache. For this reason, you probably want to be calling this method from a `Session`.
-        """
-        ...
-
-    @abc.abstractmethod
-    def insert(
-        self,
-        value: CBlock | Component,
-        *,
-        key: Any | None = None,
-        generate_logs: list[GenerateLog] | None = None,
-    ):
-        """Each `Context` must define its own semantics for inserting something into the context.
-
-        Args:
-            value (CBlock | Component): the thing to insert.
-            key (Optional[Any]): a key by which the value is indexed to. This is optional and only needed for fairly sophisticated Context types. Note that this is NOT necessarily a key that can be used for KV cache lookups!
-            generate_logs: Adding log information about the insertion. Should only be used for output objects.
-        """
-        ...
-
-    @abc.abstractmethod
-    def insert_turn(
-        self, turn: ContextTurn, *, generate_logs: list[GenerateLog] | None = None
-    ):
-        """Insert a turn into the chat history.
-
-        Args:
-            turn: the turn to insert.
-            generate_logs: Adding log information about the insertion. Will be bound to the output part of the turn.
-
-        Returns:
-            None
-        """
-        ...
-
-    @abc.abstractmethod
-    def copy(self) -> Context:
-        """Produces a copy of the current Context's contents, allowing for branch-and-merge style semantics over a Context.
-
-        Implementations should not copy the actual objects in the context but retain a reference to them."""
-        ...
-
-    @abc.abstractmethod
-    def _hash_for_kv_cache(self):
-        """A `Context` is responsible for maintaining a hash representation of itself. This hash is used by backends to refer to a Context's state."""
-        ...
-
-    @abc.abstractmethod
-    def render_for_generation(self) -> list[Component | CBlock] | None:
-        """Provides a linear list of context components to use for generation, or None if that is not possible to construct."""
-        ...
-
-    @abc.abstractmethod
-    def actions_for_available_tools(self) -> list[Component | CBlock] | None:
-        """Provides a list of actions to extract tools from for use with during generation, or None if that's not possible.
-
-        Can be used to make the available tools differ from the tools of all the actions in the context.
-        """
-        ...
-
-    @abc.abstractmethod
-    def full_event_log(self) -> list[Component | CBlock]:
-        """Provides a list of all events stored in the context."""
-        ...
-
-    @abc.abstractmethod
-    def last_output(self) -> ModelOutputThunk | None:
-        """The last output thunk of the context."""
-        ...
-
-    @abc.abstractmethod
-    def last_turn(self) -> ContextTurn | None:
-        """The last input/output turn of the context."""
-        ...
-
-    @property
-    @abc.abstractmethod
-    def logs(self) -> list[list[GenerateLog] | None]:
-        """Returns a list of all logs in the context."""
-        ...
-
-    @abc.abstractmethod
-    def get_logs_by_index(self, index: int) -> list[GenerateLog] | None:
-        """Returns a `GenerateLog` for the given index."""
-        ...
-
-    @abc.abstractmethod
-    def last_output_and_logs(
-        self, all_intermediate_results: bool = False
-    ) -> tuple[ModelOutputThunk | None, list[GenerateLog] | None | GenerateLog]:
-        """Returns a `ModelOutputThunk` for the last output and the corresponding `GenerateLog`.
-
-        Args:
-            all_intermediate_results: if False (default), only returns the Log for the that led to the final output, if True, a list of all intermediate results (including the final one) is returned.
-        """
-        ...
-
-
-class BasicContext(Context, abc.ABC):
-    """Implementing some common functionality for Contexts."""
-
-    _ctx: list[CBlock | Component | ModelOutputThunk] = []
-    _log_ctx: list[list[GenerateLog] | None] = []
+    _previous: Context | None
+    _data: Component | CBlock | None
+    _is_root: bool
+    _is_chat_context: bool = True
 
     def __init__(self):
-        """Constructs a basic context."""
-        self._ctx = []
-        self._log_ctx = []
+        """Constructs a new root context with no content."""
+        self._previous = None
+        self._data = None
+        self._is_root = True
+
+    # factory functions below this line.
+
+    @classmethod
+    def from_previous(
+        cls: type[ContextT], previous: Context, data: Component | CBlock
+    ) -> ContextT:
+        """Constructs a new context from an existing context."""
+
+        assert isinstance(previous, Context), (
+            "Cannot create a new context from a non-Context object."
+        )
+        assert data is not None, "Cannot create a new context from None data."
+
+        x = cls()
+        x._previous = previous
+        x._data = data
+        x._is_root = False
+        x._is_chat_context = previous._is_chat_context
+        return x
+
+    @classmethod
+    def reset_to_new(cls: type[ContextT]) -> ContextT:
+        """Returns an empty context for convenience."""
+        return cls()
+
+    # Internal functions below this line.
+
+    @property
+    def is_root_node(self) -> bool:
+        """Returns whether this context is the root context node."""
+        return self._is_root
+
+    @property
+    def previous_node(self) -> Context | None:
+        """Returns the context node from which this context node was created.
+
+        Internal use: Users should not need to use this property.
+        """
+        return self._previous
+
+    @property
+    def node_data(self) -> Component | CBlock | None:
+        """Returns the data associated with this context node.
+
+        Internal use: Users should not need to use this property.
+        """
+        return self._data
+
+    @property
+    def is_chat_context(self) -> bool:
+        """Returns whether this context is a chat context."""
+        return self._is_chat_context
+
+    # User functions below this line.
+
+    def as_list(self, last_n_components: int | None = None) -> list[Component | CBlock]:
+        """Returns a list of the last n components in the context sorted from FIRST TO LAST.
+
+        If `last_n_components` is `None`, then all components are returned."""
+        context_list: list[Component | CBlock] = []
+        current_context: Context = self
+
+        last_n_count = 0
+        while not current_context.is_root_node and (
+            last_n_components is None or last_n_count < last_n_components
+        ):
+            data = current_context.node_data
+            assert data is not None, "Data cannot be None (except for root context)."
+            assert data not in context_list, (
+                "There might be a cycle in the context tree. That is not allowed."
+            )
+            context_list.append(data)
+            last_n_count += 1
+
+            current_context = current_context.previous_node  # type: ignore
+            assert current_context is not None, (
+                "Previous context cannot be None (except for root context)."
+            )
+
+        context_list.reverse()
+        return context_list
 
     def actions_for_available_tools(self) -> list[Component | CBlock] | None:
         """Provides a list of actions to extract tools from for use with during generation, or None if that's not possible.
 
-        Can be used to make the available tools differ from the tools of all the actions in the context.
-        In most cases, this will just be the same context as `render_for_generation`.
+        Can be used to make the available tools differ from the tools of all the actions in the context. Can be overwritten by subclasses.
         """
-        return self.render_for_generation()
+        return self.view_for_generation()
 
-    def last_output(self):
+    def last_output(self, check_last_n_components: int = 3) -> ModelOutputThunk | None:
         """The last output thunk of the context."""
-        for c in self._ctx[::-1]:
+
+        for c in self.as_list(last_n_components=check_last_n_components)[::-1]:
             if isinstance(c, ModelOutputThunk):
                 return c
         return None
 
-    @property
-    def logs(self) -> list[list[GenerateLog] | None]:
-        """Returns a list of all logs in the context."""
-        return list(self._log_ctx)
-
-    def get_logs_by_index(self, index: int) -> list[GenerateLog] | None:
-        """Returns the log of a given index from the context."""
-        try:
-            return self._log_ctx[index]
-        except IndexError:
-            FancyLogger.get_logger().warn(f"Index {index} for logs is out of range")
-            return None
-
-    def last_output_and_logs(
-        self, all_intermediate_results: bool = False
-    ) -> tuple[ModelOutputThunk | None, list[GenerateLog] | GenerateLog | None]:
-        """The last output thunk of the context and the corresponding log."""
-        last: ModelOutputThunk | None = None
-        last_i = 0
-        for c in self._ctx[::-1]:
-            last_i -= 1
-            if isinstance(c, ModelOutputThunk):
-                last = c
-                break
-        if last is None:
-            return None, None
-        else:
-            logs = self.get_logs_by_index(last_i)
-            if all_intermediate_results or logs is None:
-                # return everything
-                return last, logs
-            else:
-                log = [log for log in logs if log.is_final_result]
-                # if there is only one log in history, this should be the one.
-                if len(log) == 0:
-                    if len(logs) == 1:
-                        FancyLogger.get_logger().warn(
-                            f"No final result found for log {logs[0]}. Returning the only result."
-                        )
-                        log = logs
-                    else:
-                        FancyLogger.get_logger().warn(
-                            f"No final result found for log {logs[0]}. Could not decide which log to return. Returning None."
-                        )
-                        return last, None
-                assert len(log) == 1, (
-                    f"Found multiple/none final results for logs: {len(log)}, "
-                )
-                return last, log[0]
-
-    def full_event_log(self) -> list[Component | CBlock]:
-        """Returns the underlying _ctx."""
-        return self._ctx
-
     def last_turn(self):
-        """The last input/output turn of the context."""
-        if len(self._ctx) == 0:
+        """The last input/output turn of the context.
+
+        This can be partial. If the last event is an input, then the output is None.
+        """
+
+        history = self.as_list(last_n_components=2)
+
+        if len(history) == 0:
             return None
-        last_element = self._ctx[-1]
+        last_element = history[-1]
         if isinstance(last_element, ModelOutputThunk):
-            if len(self._ctx) >= 2:
+            if len(history) >= 2:
                 # assuming that the last two elements are input and output
-                return ContextTurn(self._ctx[-2], last_element)
+                return ContextTurn(history[-2], last_element)
             else:
                 # if self._ctx is of size 1 and only element is output element, return partial turn without an input.
                 return ContextTurn(None, last_element)
@@ -548,140 +483,45 @@ class BasicContext(Context, abc.ABC):
             # if the last element is input element, return partial turn without output
             return ContextTurn(last_element, None)
 
-    def __str__(self):
-        """Pretty prints the context. For debugging."""
-        return f"{self.__class__.__name__} := \n" + "\n".join(
-            [f"    {c!s}" for c in self._ctx]
-        )
+    # Abstract methods below this line.
 
-    def copy(self):
-        """Copies all attributes of the Context. `_ctx` and `_log_ctx` are shallow copies.
+    @abc.abstractmethod
+    def add(self, c: Component | CBlock) -> Context:
+        """Returns a new context obtained by adding `c` to this context."""
+        # something along ....from_previous(self, c)
+        ...
 
-        This means that the lists are different (you can independently insert to the new/old context), but that the objects in the old/new lists are the same at copy time.
-        """
-        new = copy(self)
-        new._ctx = copy(self._ctx)
-        new._log_ctx = copy(self._log_ctx)
+    @abc.abstractmethod
+    def view_for_generation(self) -> list[Component | CBlock] | None:
+        """Provides a linear list of context components to use for generation, or None if that is not possible to construct."""
+        ...
+
+
+class ChatContext(Context):
+    """Initializes a chat context with unbounded window_size and is_chat=True by default."""
+
+    def __init__(self, *, window_size: int | None = None):
+        """Constructs a new chat context."""
+        super().__init__()
+        self._window_size = window_size
+
+    def add(self, c: Component | CBlock) -> ChatContext:
+        new = ChatContext.from_previous(self, c)
+        new._window_size = self._window_size
         return new
 
-
-class LinearContext(BasicContext):
-    """Initializes a linear context with unbounded window_size and is_chat=True by default."""
-
-    def __init__(
-        self,
-        *,
-        window_size: int | None = None,
-        log_window_size: int | None = 10,
-        is_chat_context=True,
-    ):
-        """Initializes a linear context with unbounded window_size (log_window_size = 10) and is_chat=True by default."""
-        super().__init__()
-        self.window_size = window_size
-        self._log_window_size = log_window_size
-        self.is_chat_context = is_chat_context
-
-    def reset(self):
-        """Resets the context to a fresh state.
-
-        Note: resetting a context does NOT free memory or clear cache. For this reason, you probably want to be calling this method from a `Session`.
-        """
-        self._ctx = []
-
-    def insert(
-        self,
-        value: CBlock | Component,
-        *,
-        key: Any | None = None,
-        generate_logs: list[GenerateLog] | None = None,
-    ):
-        """Inserts into the context and then shifts the window forward if necessary."""
-        self._ctx.append(value)
-        self._log_ctx.append(generate_logs)
-        if self.window_size is not None and len(self._ctx) > self.window_size:
-            del self._ctx[0]
-        if (
-            self._log_window_size is not None
-            and len(self._log_ctx) > self._log_window_size
-        ):
-            del self._log_ctx[0]
-
-    def insert_turn(
-        self, turn: ContextTurn, *, generate_logs: list[GenerateLog] | None = None
-    ):
-        """Insert a turn into the context."""
-        if turn.model_input:
-            self.insert(turn.model_input, generate_logs=None)
-        if turn.output:
-            self.insert(turn.output, generate_logs=generate_logs)
-
-    def render_for_generation(self) -> list[Component | CBlock] | None:
-        """Returns the underlying _ctx list for generation."""
-        return self._ctx
-
-    def is_chat_history(self):
-        FancyLogger.get_logger().warning(
-            "is_chat_history doesn't work properly, because ModelOutputThunks are not Messages."
-        )
-        """Returns true if everything in the LinearContext is a chat `Message`."""
-        return all(
-            str(type(x)) == "Message" for x in self._ctx
-        )  # sic: avoids circular import.
-
-    def _hash_for_kv_cache(self):
-        """Constructs a hash that corresponds to the string contents of the KV cache associated with this context."""
-        assert False, "not supported yet."
+    def view_for_generation(self) -> list[Component | CBlock] | None:
+        return self.as_list(self._window_size)
 
 
-class SimpleContext(BasicContext):
-    """A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved.
+class SimpleContext(Context):
+    """A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved.."""
 
-    This context is intended for applications where each LLM call is (mostly) a stand-alone request. Patterns like instruct-validate-repair fall into this category.
+    def add(self, c: Component | CBlock) -> SimpleContext:
+        return SimpleContext.from_previous(self, c)
 
-    It is possible for a single turn to have many different CBlocks/Components. This can happen for a variety of reasons:
-    1. Instruct/Repair is actually up to 3 (not 4!) turns: a system, a user, an assistant, and then the ALora output.
-    2. It's possible to have a Component with a bunch of other stuff in it. We haven't decided how to represent this in Span world yet, but it's possible that one approach would be to have any causal dependency structure represented in terms of a linearization or poset.
-    """
-
-    def __init__(self):
-        """Initializes a SimpleContext which contains at max one turn. with is_chat_context=True."""
-        super().__init__()
-        self.is_chat_context = True
-
-    def render_for_generation(self) -> list[Component | CBlock] | None:
-        """Uses _ctx ordering."""
+    def view_for_generation(self) -> list[Component | CBlock] | None:
         return []
-
-    def reset(self):
-        """Resets the context to a fresh state.
-
-        Note: resetting a context does NOT free memory or clear cache. For this reason, you probably want to be calling this method from a `Session`.
-        """
-        self._ctx = []
-
-    def insert(
-        self,
-        value: CBlock | Component,
-        *,
-        key: Any | None = None,
-        generate_logs: list[GenerateLog] | None = None,
-    ):
-        """Adds the value to the context."""
-        assert key is None
-        self._ctx = [value]
-        self._log_ctx = [generate_logs]
-
-    def insert_turn(
-        self, turn: ContextTurn, *, generate_logs: list[GenerateLog] | None = None
-    ):
-        """Removes the previous turn and starts a new one."""
-        self.reset()
-        self._ctx = [x for x in [turn.model_input, turn.output] if x]
-        self._log_ctx = [None, generate_logs]
-
-    def _hash_for_kv_cache(self):
-        """Constructs a hash that corresponds to the string contents of the KV cache associated with this context."""
-        assert False, "not supported yet."
 
 
 @dataclass

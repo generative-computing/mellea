@@ -116,13 +116,14 @@ class LiteLLMBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
-        return self._generate_from_chat_context_standard(
+        mot = self._generate_from_chat_context_standard(
             action,
             ctx,
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
+        return mot, ctx.add(action).add(mot)
 
     def _simplify_and_merge(
         self, model_options: dict[str, Any] | None
@@ -216,7 +217,7 @@ class LiteLLMBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
         model_opts = self._simplify_and_merge(model_options)
-        linearized_context = ctx.render_for_generation()
+        linearized_context = ctx.view_for_generation()
         assert linearized_context is not None, (
             "Cannot generate from a non-linear context in a FormatterBackend."
         )

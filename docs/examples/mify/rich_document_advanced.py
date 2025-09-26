@@ -9,7 +9,7 @@ import mellea
 from mellea.stdlib.base import ModelOutputThunk, TemplateRepresentation
 
 # Use a `SimpleContext` so that each LLM call is independent.
-m = mellea.start_session(backend_name="hf", ctx=mellea.SimpleContext())
+m = mellea.start_session(backend_name="hf")
 
 # 2. Let's import docling so that we can process pdf documents.
 

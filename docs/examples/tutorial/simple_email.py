@@ -26,7 +26,6 @@ print(
     )
 )
 
-
 print("Email with requirements:")
 
 
@@ -51,7 +50,6 @@ print(
         notes="Olivia helped the lab over the last few weeks by organizing intern events, advertising the speaker series, and handling issues with snack delivery.",
     )
 )
-
 
 print("Email with rejection sampling:")
 from mellea.stdlib.sampling import RejectionSamplingStrategy  # noqa: E402

@@ -129,7 +129,7 @@ def as_chat_history(ctx: Context) -> list[Message]:
             case _:
                 return None
 
-    all_ctx_events = ctx.full_event_log()
+    all_ctx_events = ctx.as_list()
     if all_ctx_events is None:
         raise Exception("Trying to cast a non-linear history into a chat history.")
     else:

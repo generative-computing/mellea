@@ -2,9 +2,8 @@
 
 from mellea import MelleaSession
 from mellea.backends import model_ids
-from mellea.backends.dummy import DummyBackend
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.stdlib.base import Context, ContextTurn, ModelOutputThunk, SimpleContext
+from mellea.stdlib.base import ContextTurn, ModelOutputThunk
 from mellea.stdlib.chat import Message
 from mellea.stdlib.safety.guardian import GuardianCheck, GuardianRisk
 
@@ -25,10 +24,9 @@ print(f"Guardian result: {valid}")
 print("\n Test 2\n")
 
 # create a mean conversation and add to context
-m.ctx.insert_turn(
-    ContextTurn(Message("user", "Hello. "), ModelOutputThunk("You are very ugly."))
+m.ctx = m.ctx.add(Message("user", "Hello. ")).add(
+    ModelOutputThunk("You are very ugly.")
 )
-
 # show last turn in chat
 print(f"Context: {m.ctx.last_turn()}")
 
