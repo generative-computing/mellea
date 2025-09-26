@@ -4,22 +4,11 @@ import abc
 from copy import deepcopy
 
 import tqdm
-from PIL.IcnsImagePlugin import nextheader
 
 import mellea.stdlib.mellea_functions as mfuncs
-from mellea import LegacyLinearContext
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import (
-    CBlock,
-    ChatContext,
-    Component,
-    Context,
-    ContextTurn,
-    GenerateLog,
-    LegacyContext,
-    ModelOutputThunk,
-)
+from mellea.stdlib.base import CBlock, ChatContext, Component, Context, ModelOutputThunk
 from mellea.stdlib.chat import Message
 from mellea.stdlib.instruction import Instruction
 from mellea.stdlib.requirement import Requirement, ScorerRequirement, ValidationResult
@@ -31,12 +20,14 @@ class SamplingResult(CBlock):
     def __init__(
         self,
         result: ModelOutputThunk,
+        result_ctx: Context,
         success: bool,
         *,
         sample_generations: list[ModelOutputThunk] | None = None,
         sample_validations: list[list[tuple[Requirement, ValidationResult]]]
         | None = None,
         sample_actions: list[Component] | None = None,
+        sample_contexts: list[Context] | None = None,
     ):
         """Initialize a new instance of sampling results.
 
@@ -48,14 +39,12 @@ class SamplingResult(CBlock):
         """
         super().__init__(value=result.value)
         self.result = result
+        self.result_ctx = result_ctx
         self.success = success
         self.sample_generations = sample_generations
         self.sample_validations = sample_validations
         self.sample_actions = sample_actions
-
-        # TODO: JAL. add these fields
-        # context,
-        # sample_contexts=[Context] # TODO: JAL. implement this.
+        self.sample_contexts = sample_contexts
 
 
 class SamplingStrategy(abc.ABC):
@@ -222,8 +211,8 @@ class BaseSamplingStrategy(SamplingStrategy):
                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
             # run a generation pass
-            # TODO: JAL. figure out where to put new_ctx; ie we also need to return it with sampling results
-            result, new_ctx = backend.generate_from_context(
+            # TODO: JAL. figure out where to put result_ctx; ie we also need to return it with sampling results
+            result, result_ctx = backend.generate_from_context(
                 next_action,
                 ctx=next_context,
                 format=format,
@@ -233,10 +222,10 @@ class BaseSamplingStrategy(SamplingStrategy):
             await result.avalue()
 
             # validation pass
-            # TODO: JAL. see if we are supposed to be passing output here since the new_ctx theoretically already has it
+            # TODO: JAL. see if we are supposed to be passing output here since the result_ctx theoretically already has it
             val_scores_co = mfuncs._validate(
                 reqs=reqs,
-                context=new_ctx,
+                context=result_ctx,
                 backend=backend,
                 output=result,
                 format=format,
@@ -252,7 +241,7 @@ class BaseSamplingStrategy(SamplingStrategy):
             sampled_results.append(result)
             sampled_scores.append(constraint_scores)
             sampled_actions.append(next_action)
-            sample_contexts.append(new_ctx)
+            sample_contexts.append(result_ctx)
 
             # if all vals are true -- break and return success
             if all(bool(s[1]) for s in constraint_scores):
@@ -262,11 +251,15 @@ class BaseSamplingStrategy(SamplingStrategy):
                 )  # Cannot be None after generation.
                 result._generate_log.is_final_result = True
 
+                # SUCCESS !!!!
                 return SamplingResult(
-                    result,
+                    result=result,
+                    result_ctx=result_ctx,
                     success=True,
                     sample_generations=sampled_results,
                     sample_validations=sampled_scores,
+                    sample_contexts=sample_contexts,
+                    sample_actions=sampled_actions,
                 )
 
             else:
@@ -276,7 +269,11 @@ class BaseSamplingStrategy(SamplingStrategy):
 
             # If we did not pass all constraints, update the instruction and try again.
             next_action, next_context = self.repair(
-                next_context, new_ctx, sampled_actions, sampled_results, sampled_scores
+                next_context,
+                result_ctx,
+                sampled_actions,
+                sampled_results,
+                sampled_scores,
             )
 
         flog.info(
@@ -297,11 +294,13 @@ class BaseSamplingStrategy(SamplingStrategy):
         sampled_results[best_failed_index]._generate_log.is_final_result = True  # type: ignore
 
         return SamplingResult(
-            sampled_results[best_failed_index],
+            result=sampled_results[best_failed_index],
+            result_ctx=sample_contexts[best_failed_index],
             success=False,
             sample_generations=sampled_results,
             sample_validations=sampled_scores,
             sample_actions=sampled_actions,
+            sample_contexts=sample_contexts,
         )
 
 
