@@ -239,7 +239,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                     "This code block should not execute unless there is a 'constraint' alora loaded."
                 )
         # Construct the linearized context. This is very similar to normal generation.
-        linearized_ctx = ctx.render_for_generation()
+        linearized_ctx = ctx.view_for_generation()
         assert linearized_ctx is not None and len(linearized_ctx) > 1
         msgs = self.formatter.to_chat_messages(linearized_ctx)
         user_message, assistant_message = msgs[-2].content, msgs[-1].content
@@ -278,7 +278,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
         # Otherwise, we will linearize the context and treat it as a raw input.
         if ctx.is_chat_context:
-            linearized_ctx = ctx.render_for_generation()
+            linearized_ctx = ctx.view_for_generation()
             assert linearized_ctx is not None, (
                 "If ctx.is_chat_context, then the context should be linearizable."
             )

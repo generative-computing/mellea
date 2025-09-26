@@ -242,7 +242,7 @@ class WatsonxAIBackend(FormatterBackend):
             model_options, is_chat_context=ctx.is_chat_context
         )
 
-        linearized_context = ctx.render_for_generation()
+        linearized_context = ctx.view_for_generation()
         assert linearized_context is not None, (
             "Cannot generate from a non-linear context in a FormatterBackend."
         )

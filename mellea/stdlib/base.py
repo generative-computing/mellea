@@ -348,7 +348,10 @@ ContextT = TypeVar("ContextT", bound="Context")
 
 
 class Context(abc.ABC):
-    """A `Context` is used to track the state of a `MelleaSession`."""
+    """A `Context` is used to track the state of a `MelleaSession`.
+
+    A context is immutable. Every alteration leads to a new context.
+    """
 
     _previous: Context | None
     _data: Component | CBlock | None
@@ -356,7 +359,7 @@ class Context(abc.ABC):
     _is_chat_context: bool = True
 
     def __init__(self):
-        """Constructs a new context."""
+        """Constructs a new root context with no content."""
         self._previous = None
         self._data = None
         self._is_root = True
@@ -403,18 +406,24 @@ class Context(abc.ABC):
         """Returns the data associated with this context."""
         return self._data
 
-    def full_data_as_list(self) -> list[Component | CBlock]:
-        """Returns a list of all components in the context from root to current context."""
+    def as_list(self, last_n_components: int | None = None) -> list[Component | CBlock]:
+        """Returns a list of the last n components in the context sorted from FIRST TO LAST.
+
+        If `last_n_elements` is `None`, then all components are returned."""
         context_list: list[Component | CBlock] = []
         current_context: Context = self
 
-        while not current_context.is_root:
+        last_n_count = 0
+        while not current_context.is_root and (
+            last_n_components is None or last_n_count < last_n_components
+        ):
             data = current_context.data
             assert data is not None, "Data cannot be None (except for root context)."
             assert data not in context_list, (
                 "There might be a cycle in the context tree. That is not allowed."
             )
             context_list.append(data)
+            last_n_count += 1
 
             current_context = current_context.previous  # type: ignore
             assert current_context is not None, (
@@ -429,12 +438,12 @@ class Context(abc.ABC):
 
         Can be used to make the available tools differ from the tools of all the actions in the context. Can be overwritten by subclasses.
         """
-        return self.render_for_generation()
+        return self.view_for_generation()
 
     def last_output(self) -> ModelOutputThunk | None:
         """The last output thunk of the context."""
 
-        for c in self.full_data_as_list()[::-1]:
+        for c in self.as_list()[::-1]:
             if isinstance(c, ModelOutputThunk):
                 return c
         return None
@@ -442,7 +451,7 @@ class Context(abc.ABC):
     def last_turn(self):
         """The last input/output turn of the context."""
 
-        history = self.full_data_as_list()
+        history = self.as_list()
 
         if len(history) == 0:
             return None
@@ -467,7 +476,7 @@ class Context(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def render_for_generation(self) -> list[Component | CBlock] | None:
+    def view_for_generation(self) -> list[Component | CBlock] | None:
         """Provides a linear list of context components to use for generation, or None if that is not possible to construct."""
         ...
 
@@ -480,17 +489,13 @@ class ChatContext(Context):
         super().__init__()
         self._window_size = window_size
 
-    def render_for_generation(self) -> list[Component | CBlock] | None:
-        all_events = self.full_data_as_list()
-        ws = self._window_size
-        ws = ws if ws is not None else len(all_events)
-
-        return all_events[-ws:]
-
     def add(self, c: Component | CBlock) -> ChatContext:
         new = ChatContext.from_previous(self, c)
         new._window_size = self._window_size
         return new
+
+    def view_for_generation(self) -> list[Component | CBlock] | None:
+        return self.as_list(self._window_size)
 
 
 class SimpleContext(Context):
@@ -499,7 +504,7 @@ class SimpleContext(Context):
     def add(self, c: Component | CBlock) -> SimpleContext:
         return SimpleContext.from_previous(self, c)
 
-    def render_for_generation(self) -> list[Component | CBlock] | None:
+    def view_for_generation(self) -> list[Component | CBlock] | None:
         return []
 
 
