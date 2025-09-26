@@ -163,6 +163,8 @@ class MelleaSession:
     Note: we put the `instruct`, `validate`, and other convenience functions here instead of in `Context` or `Backend` to avoid import resolution issues.
     """
 
+    ctx: Context
+
     def __init__(self, backend: Backend, ctx: Context | None = None):
         """Initializes a new Mellea session with the provided backend and context.
 
