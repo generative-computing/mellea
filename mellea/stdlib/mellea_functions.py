@@ -150,6 +150,11 @@ async def _act(
 
     # if there is no reason to sample, just generate from the context.
     if strategy is None or requirements is None or len(requirements) == 0:
+        if strategy is None and requirements is not None:
+            FancyLogger.get_logger().warning(
+                "Calling the function with NO strategy BUT requirements. No requirement is being checked!"
+            )
+
         result, new_ctx = backend.generate_from_context(
             action,
             ctx=context,
