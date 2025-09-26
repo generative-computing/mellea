@@ -66,8 +66,9 @@ class OllamaModelBackend(FormatterBackend):
         self._get_ollama_model_id()
 
         # Setup the client and ensure that we have the model available.
+        self._base_url = base_url
         self._client = ollama.Client(base_url)
-        self._async_client = ollama.AsyncClient(base_url)
+
         if not self._check_ollama_server():
             err = f"could not create OllamaModelBackend: ollama server not running at {base_url}"
             FancyLogger.get_logger().error(err)
@@ -317,10 +318,13 @@ class OllamaModelBackend(FormatterBackend):
                 add_tools_from_context_actions(tools, [action])
             FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
+        # Ollama ties its async client to an event loop so we have to create it here.
+        async_client = ollama.AsyncClient(self._base_url)
+
         # Generate a chat response from ollama, using the chat messages. Can be either type since stream is passed as a model option.
         chat_response: Coroutine[
             Any, Any, AsyncIterator[ollama.ChatResponse] | ollama.ChatResponse
-        ] = self._async_client.chat(
+        ] = async_client.chat(
             model=self._get_ollama_model_id(),
             messages=conversation,
             tools=list(tools.values()),
@@ -382,10 +386,11 @@ class OllamaModelBackend(FormatterBackend):
             responses = await asyncio.gather(*coroutines, return_exceptions=True)
             return responses
 
+        async_client = ollama.AsyncClient(self._base_url)
         # Run async so that we can make use of Ollama's concurrency.
         coroutines = []
         for prompt in prompts:
-            co = self._async_client.generate(
+            co = async_client.generate(
                 model=self._get_ollama_model_id(),
                 prompt=prompt,
                 raw=True,
