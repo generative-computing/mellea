@@ -364,15 +364,7 @@ class Context(abc.ABC):
         self._data = None
         self._is_root = True
 
-    @property
-    def is_root(self) -> bool:
-        """Returns whether this context is the root context."""
-        return self._is_root
-
-    @property
-    def is_chat_context(self) -> bool:
-        """Returns whether this context is a chat context."""
-        return self._is_chat_context
+    # factory functions below this line.
 
     @classmethod
     def from_previous(
@@ -389,35 +381,56 @@ class Context(abc.ABC):
         x._previous = previous
         x._data = data
         x._is_root = False
+        x._is_chat_context = previous._is_chat_context
         return x
 
     @classmethod
     def reset(cls: type[ContextT]) -> ContextT:
-        """Resets the context to a fresh state."""
+        """Returns an empty context for convenience."""
         return cls()
 
+    # Internal functions below this line.
+
     @property
-    def previous(self) -> Context | None:
-        """Returns the context from which this context was created."""
+    def is_root_node(self) -> bool:
+        """Returns whether this context is the root context node."""
+        return self._is_root
+
+    @property
+    def previous_node(self) -> Context | None:
+        """Returns the context node from which this context node was created.
+
+        Internal use: Users should not need to use this property.
+        """
         return self._previous
 
     @property
-    def data(self) -> Component | CBlock | None:
-        """Returns the data associated with this context."""
+    def node_data(self) -> Component | CBlock | None:
+        """Returns the data associated with this context node.
+
+        Internal use: Users should not need to use this property.
+        """
         return self._data
+
+    @property
+    def is_chat_context(self) -> bool:
+        """Returns whether this context is a chat context."""
+        return self._is_chat_context
+
+    # User functions below this line.
 
     def as_list(self, last_n_components: int | None = None) -> list[Component | CBlock]:
         """Returns a list of the last n components in the context sorted from FIRST TO LAST.
 
-        If `last_n_elements` is `None`, then all components are returned."""
+        If `last_n_components` is `None`, then all components are returned."""
         context_list: list[Component | CBlock] = []
         current_context: Context = self
 
         last_n_count = 0
-        while not current_context.is_root and (
+        while not current_context.is_root_node and (
             last_n_components is None or last_n_count < last_n_components
         ):
-            data = current_context.data
+            data = current_context.node_data
             assert data is not None, "Data cannot be None (except for root context)."
             assert data not in context_list, (
                 "There might be a cycle in the context tree. That is not allowed."
@@ -425,7 +438,7 @@ class Context(abc.ABC):
             context_list.append(data)
             last_n_count += 1
 
-            current_context = current_context.previous  # type: ignore
+            current_context = current_context.previous_node  # type: ignore
             assert current_context is not None, (
                 "Previous context cannot be None (except for root context)."
             )
@@ -440,18 +453,21 @@ class Context(abc.ABC):
         """
         return self.view_for_generation()
 
-    def last_output(self) -> ModelOutputThunk | None:
+    def last_output(self, check_last_n_components: int = 3) -> ModelOutputThunk | None:
         """The last output thunk of the context."""
 
-        for c in self.as_list()[::-1]:
+        for c in self.as_list(last_n_components=check_last_n_components)[::-1]:
             if isinstance(c, ModelOutputThunk):
                 return c
         return None
 
     def last_turn(self):
-        """The last input/output turn of the context."""
+        """The last input/output turn of the context.
 
-        history = self.as_list()
+        This can be partial. If the last event is an input, then the output is None.
+        """
+
+        history = self.as_list(last_n_components=2)
 
         if len(history) == 0:
             return None
@@ -467,7 +483,7 @@ class Context(abc.ABC):
             # if the last element is input element, return partial turn without output
             return ContextTurn(last_element, None)
 
-    # Abstract methods
+    # Abstract methods below this line.
 
     @abc.abstractmethod
     def add(self, c: Component | CBlock) -> Context:
@@ -482,10 +498,10 @@ class Context(abc.ABC):
 
 
 class ChatContext(Context):
-    """Initializes a linear context with unbounded window_size and is_chat=True by default."""
+    """Initializes a chat context with unbounded window_size and is_chat=True by default."""
 
     def __init__(self, *, window_size: int | None = None):
-        """Constructs a new linear context."""
+        """Constructs a new chat context."""
         super().__init__()
         self._window_size = window_size
 
