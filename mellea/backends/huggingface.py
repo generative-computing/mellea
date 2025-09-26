@@ -50,7 +50,6 @@ from mellea.stdlib.base import (
     Context,
     GenerateLog,
     GenerateType,
-    LegacyContext,
     ModelOutputThunk,
     ModelToolCall,
 )
