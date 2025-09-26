@@ -28,9 +28,6 @@ class TestSamplingCtxCase:
         assert len(res.sample_validations[0]) == 3, (
             "there should be 3 validation results."
         )
-        assert len(self.m.ctx.as_list()) == 2, (
-            "there should only be a message and a response in the ctx."
-        )
 
     def test_ctx_for_rejection_sampling(self):
         self.m.reset()
@@ -45,6 +42,9 @@ class TestSamplingCtxCase:
             return_sampling_results=True,
         )
         self._run_asserts_for_ctx_testing(res)
+        assert len(self.m.ctx.as_list()) == 2, (
+            "there should only be a message and a response in the ctx."
+        )
         assert len(self.m.last_prompt()) == 1, "Last prompt should only have only one instruction inside - independent of sampling iterations."
 
     def test_ctx_for_multiturn(self):
@@ -61,7 +61,9 @@ class TestSamplingCtxCase:
         )
 
         self._run_asserts_for_ctx_testing(res)
-
+        assert len(self.m.ctx.as_list()) >= 2, (
+            "there should be at least a message and a response in the ctx; more if the first result failed validation"
+        )
         assert len(self.m.last_prompt()) == len(res.sample_generations)*2-1, "For n sampling iterations there should be 2n-1 prompt conversation elements in the last prompt."
 
 if __name__ == "__main__":
