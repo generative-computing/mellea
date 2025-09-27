@@ -5,7 +5,7 @@ from copy import deepcopy
 
 import tqdm
 
-import mellea.stdlib.mellea_functions as mfuncs
+import mellea.stdlib.funcs as mfuncs
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import CBlock, ChatContext, Component, Context, ModelOutputThunk
@@ -211,7 +211,6 @@ class BaseSamplingStrategy(SamplingStrategy):
                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
             # run a generation pass
-            # TODO: JAL. figure out where to put result_ctx; ie we also need to return it with sampling results
             result, result_ctx = backend.generate_from_context(
                 next_action,
                 ctx=next_context,
@@ -222,7 +221,6 @@ class BaseSamplingStrategy(SamplingStrategy):
             await result.avalue()
 
             # validation pass
-            # TODO: JAL. see if we are supposed to be passing output here since the result_ctx theoretically already has it
             val_scores_co = mfuncs._validate(
                 reqs=reqs,
                 context=result_ctx,
@@ -400,230 +398,250 @@ class MultiTurnStrategy(BaseSamplingStrategy):
         return next_action, new_ctx
 
 
-# TODO: JAL. SEE if we have test cases for this sampling strategy, see if we need them...
-# class BestofNSamplingStrategy(BaseSamplingStrategy):
-#     """
-#     Sampling strategy that selects the best response from a set of samples as given by a Requirement Scorer
-#     """
-#
-#     async def sample(
-#             self,
-#             action: Component,
-#             context: Context,
-#             backend: Backend,
-#             requirements: list[Requirement],
-#             *,
-#             validation_ctx: Context | None = None,
-#             format: type[BaseModelSubclass] | None = None,
-#             model_options: dict | None = None,
-#             tool_calls: bool = False,
-#             show_progress: bool = True,
-#     ) -> SamplingResult:
-#         """This method performs a sampling operation based on the given instruction.
-#
-#         Args:
-#             action : The action object to be sampled.
-#             context: The context to be passed to the sampling strategy.
-#             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
-#             requirements: List of requirements to test against (merged with global requirements).
-#             validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
-#
-#         Returns:
-#             SamplingResult: A result object indicating the success or failure of the sampling process.
-#
-#         Raises:
-#             AssertionError: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
-#         """
-#         # just to be sure to not cause issues to the OG context
-#         # ctx = context.copy()
-#         validation_ctx = validation_ctx if validation_ctx is not None else context
-#         assert validation_ctx is not None, "Validation context must be provided."
-#
-#         flog = FancyLogger.get_logger()
-#
-#         sampled_results: list[ModelOutputThunk] = []
-#         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
-#         sampled_actions: list[Component] = []
-#
-#         successful_sampled_results: list[ModelOutputThunk] = []
-#         successful_sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
-#         successful_sampled_actions: list[Component] = []
-#
-#         # sampled_val_scores: list[float] = []
-#
-#         # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
-#         # flag to determine whether we should show the pbar.
-#         show_progress = show_progress and flog.getEffectiveLevel() <= FancyLogger.INFO
-#
-#         reqs = []
-#         if self.requirements is not None:
-#             reqs += self.requirements
-#         elif requirements is not None:
-#             reqs += requirements
-#
-#         reqs = list(set(reqs))
-#
-#         # check that there is exactly one ScorerRequirement
-#         scorer_requirements = 0
-#         for req in reqs:
-#             # strict typecheck for scorer requirement
-#             if isinstance(req, ScorerRequirement):
-#                 scorer_requirements += 1
-#
-#         assert scorer_requirements == 1, (
-#             "BestOfNSamplingStrategy requires exactly one ScorerRequirement"
-#         )
-#
-#         loop_count = 0
-#         loop_budget_range_iterator = (
-#             tqdm.tqdm(range(self.loop_budget))  # type: ignore
-#             if show_progress
-#             else range(self.loop_budget)  # type: ignore
-#         )
-#
-#         new_action = deepcopy(action)
-#         for _ in loop_budget_range_iterator:  # type: ignore
-#             loop_count += 1
-#             if not show_progress:
-#                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
-#
-#             # run a generation pass
-#             result = self.generate(new_action, ctx)
-#             await result.avalue()
-#
-#             # validation pass
-#             # action has user turn
-#             val_scores_co = self.validate(
-#                 reqs,
-#                 validation_ctx,
-#                 result,
-#                 input=action._description,  # type: ignore
-#             )
-#             val_scores = await val_scores_co
-#
-#             # match up reqs with scores
-#             constraint_scores = list(zip(reqs, val_scores))
-#
-#             # collect all data
-#             sampled_results.append(result)
-#             sampled_scores.append(constraint_scores)
-#             sampled_actions.append(new_action)
-#
-#             # check if requirements pass else repair and re-sample
-#             # if all vals are true, save it and continue to get next sample
-#             if all(bool(s[1]) for s in constraint_scores):
-#                 flog.info("SUCCESS")
-#                 assert (
-#                         result._generate_log is not None
-#                 )  # Cannot be None after generation.
-#                 result._generate_log.is_final_result = True
-#
-#                 successful_sampled_results.append(result)
-#                 successful_sampled_scores.append(constraint_scores)
-#                 successful_sampled_actions.append(new_action)
-#
-#             else:
-#                 # log partial success and continue
-#                 count_valid = len([s for s in constraint_scores if bool(s[1])])
-#                 flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}")
-#
-#                 # If we did not pass all constraints, update the instruction and try again.
-#                 new_action = self.repair(
-#                     ctx, sampled_actions, sampled_results, sampled_scores
-#                 )
-#
-#         # find max reward amongst results for which all requirements have passed
-#         if len(successful_sampled_scores) > 0:
-#             scores: list[float] = []
-#             scorer_preference_ordering = None
-#
-#             for sample in successful_sampled_scores:
-#                 for req, val_score in sample:
-#                     if isinstance(req, ScorerRequirement):
-#                         assert val_score._score is not None
-#                         scores.append(val_score._score)
-#                         scorer_preference_ordering = req.preference_ordering
-#
-#             assert len(successful_sampled_results) == len(scores)
-#             assert scorer_preference_ordering is not None
-#
-#             if scorer_preference_ordering == "max":
-#                 best_result, best_score = max(
-#                     zip(successful_sampled_results, scores), key=lambda x: x[1]
-#                 )
-#             elif scorer_preference_ordering == "min":
-#                 best_result, best_score = min(
-#                     zip(successful_sampled_results, scores), key=lambda x: x[1]
-#                 )
-#             else:
-#                 raise NotImplementedError
-#
-#             return SamplingResult(
-#                 best_result,
-#                 success=True,
-#                 sample_generations=sampled_results,
-#                 sample_validations=sampled_scores,
-#                 sample_actions=sampled_actions,
-#             )
-#
-#         # if all failures, call select from failure
-#         else:
-#             flog.info(
-#                 f"Invoking select_from_failure after {len(sampled_results)} failed attempts."
-#             )
-#
-#             # if no valid result could be determined, find a last resort.
-#             best_failed_index = self.select_from_failure(
-#                 sampled_actions, sampled_results, sampled_scores
-#             )
-#             assert best_failed_index < len(sampled_results), (
-#                 "The select_from_failure method did not return a valid result. It has to selected from failed_results."
-#             )
-#             return SamplingResult(
-#                 sampled_results[best_failed_index],
-#                 success=False,
-#                 sample_generations=sampled_results,
-#                 sample_validations=sampled_scores,
-#                 sample_actions=sampled_actions,
-#             )
-#
-#     @staticmethod
-#     def select_from_failure(
-#             sampled_actions: list[Component],
-#             sampled_results: list[ModelOutputThunk],
-#             sampled_val: list[list[tuple[Requirement, ValidationResult]]],
-#     ) -> int:
-#         # select attempt with highest ScoreRequirementScore if all loops fail
-#
-#         scores: list[float | None] = []
-#
-#         for sample in sampled_val:
-#             for req, val_score in sample:
-#                 if isinstance(req, ScorerRequirement):
-#                     assert val_score._score is not None
-#                     scores.append(val_score._score)
-#
-#         assert len(sampled_results) == len(scores)
-#
-#         return scores.index(max(scores))  # type: ignore
-#
-#     @staticmethod
-#     def repair(
-#             old_ctx: Context,
-#             new_ctx: Context,
-#             past_actions: list[Component],
-#             past_results: list[ModelOutputThunk],
-#             past_val: list[list[tuple[Requirement, ValidationResult]]],
-#     ) -> tuple[Component, Context]:
-#         pa = past_actions[-1]
-#         if isinstance(pa, Instruction):
-#             last_failed_reqs: list[Requirement] = [
-#                 s[0] for s in past_val[-1] if not s[1]
-#             ]
-#             last_failed_reqs_str = "* " + "\n* ".join(
-#                 [str(r.description) for r in last_failed_reqs]
-#             )
-#             return pa.copy_and_repair(
-#                 repair_string=f"The following requirements failed before:\n{last_failed_reqs_str}"
-#             ), old_ctx
-#         return past_actions[-1], old_ctx
+class BestofNSamplingStrategy(BaseSamplingStrategy):
+    """
+    Sampling strategy that selects the best response from a set of samples as given by a Requirement Scorer
+    """
+
+    async def sample(
+        self,
+        action: Component,
+        context: Context,
+        backend: Backend,
+        requirements: list[Requirement],
+        *,
+        validation_ctx: Context | None = None,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        show_progress: bool = True,
+    ) -> SamplingResult:
+        """This method performs a sampling operation based on the given instruction.
+
+        Args:
+            action : The action object to be sampled.
+            context: The context to be passed to the sampling strategy.
+            show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
+            requirements: List of requirements to test against (merged with global requirements).
+            validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
+
+        Returns:
+            SamplingResult: A result object indicating the success or failure of the sampling process.
+
+        Raises:
+            AssertionError: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
+        """
+        validation_ctx = validation_ctx if validation_ctx is not None else context
+        assert validation_ctx is not None, "Validation context must be provided."
+
+        flog = FancyLogger.get_logger()
+
+        sampled_results: list[ModelOutputThunk] = []
+        sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
+        sampled_actions: list[Component] = []
+        sample_contexts: list[Context] = []
+
+        successful_sampled_results: list[ModelOutputThunk] = []
+        successful_sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
+        successful_sampled_actions: list[Component] = []
+        successful_sample_contexts: list[Context] = []
+
+        # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
+        # flag to determine whether we should show the pbar.
+        show_progress = show_progress and flog.getEffectiveLevel() <= FancyLogger.INFO
+
+        reqs = []
+        if self.requirements is not None:
+            reqs += self.requirements
+        elif requirements is not None:
+            reqs += requirements
+
+        reqs = list(set(reqs))
+
+        # check that there is exactly one ScorerRequirement
+        scorer_requirements = 0
+        for req in reqs:
+            # strict typecheck for scorer requirement
+            if isinstance(req, ScorerRequirement):
+                scorer_requirements += 1
+
+        assert scorer_requirements == 1, (
+            "BestOfNSamplingStrategy requires exactly one ScorerRequirement"
+        )
+
+        loop_count = 0
+        loop_budget_range_iterator = (
+            tqdm.tqdm(range(self.loop_budget))  # type: ignore
+            if show_progress
+            else range(self.loop_budget)  # type: ignore
+        )
+
+        next_action = deepcopy(action)
+        next_context = context
+        for _ in loop_budget_range_iterator:  # type: ignore
+            loop_count += 1
+            if not show_progress:
+                flog.info(f"Running loop {loop_count} of {self.loop_budget}")
+
+            # run a generation pass
+            result, result_ctx = backend.generate_from_context(
+                next_action,
+                ctx=next_context,
+                format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
+            await result.avalue()
+
+            # validation pass
+            # action has user turn
+            val_scores_co = mfuncs._validate(
+                reqs=reqs,
+                context=result_ctx,
+                backend=backend,
+                output=result,
+                format=format,
+                model_options=model_options,
+                input=action._description,  # type: ignore
+                # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.
+            )
+            val_scores = await val_scores_co
+
+            # match up reqs with scores
+            constraint_scores = list(zip(reqs, val_scores))
+
+            # collect all data
+            sampled_results.append(result)
+            sampled_scores.append(constraint_scores)
+            sampled_actions.append(next_action)
+            sample_contexts.append(result_ctx)
+
+            # check if requirements pass else repair and re-sample
+            # if all vals are true, save it and continue to get next sample
+            if all(bool(s[1]) for s in constraint_scores):
+                flog.info("SUCCESS")
+                assert (
+                    result._generate_log is not None
+                )  # Cannot be None after generation.
+                result._generate_log.is_final_result = True
+
+                successful_sampled_results.append(result)
+                successful_sampled_scores.append(constraint_scores)
+                successful_sampled_actions.append(next_action)
+                successful_sample_contexts.append(result_ctx)
+
+            else:
+                # log partial success and continue
+                count_valid = len([s for s in constraint_scores if bool(s[1])])
+                flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}")
+
+                # If we did not pass all constraints, update the instruction and try again.
+                next_action, next_context = self.repair(
+                    next_context,
+                    result_ctx,
+                    sampled_actions,
+                    sampled_results,
+                    sampled_scores,
+                )
+
+        # find max reward amongst results for which all requirements have passed
+        if len(successful_sampled_scores) > 0:
+            scores: list[float] = []
+            scorer_preference_ordering = None
+
+            for sample in successful_sampled_scores:
+                for req, val_score in sample:
+                    if isinstance(req, ScorerRequirement):
+                        assert val_score._score is not None
+                        scores.append(val_score._score)
+                        scorer_preference_ordering = req.preference_ordering
+
+            assert len(successful_sampled_results) == len(scores)
+            assert scorer_preference_ordering is not None
+
+            if scorer_preference_ordering == "max":
+                best_result, best_score, best_context = max(
+                    zip(successful_sampled_results, scores, successful_sample_contexts),
+                    key=lambda x: x[1],
+                )
+            elif scorer_preference_ordering == "min":
+                best_result, best_score, best_context = min(
+                    zip(successful_sampled_results, scores, successful_sample_contexts),
+                    key=lambda x: x[1],
+                )
+            else:
+                raise NotImplementedError
+
+            return SamplingResult(
+                best_result,
+                result_ctx=best_context,
+                success=True,
+                sample_generations=sampled_results,
+                sample_validations=sampled_scores,
+                sample_actions=sampled_actions,
+                sample_contexts=sample_contexts,
+            )
+
+        # if all failures, call select from failure
+        else:
+            flog.info(
+                f"Invoking select_from_failure after {len(sampled_results)} failed attempts."
+            )
+
+            # if no valid result could be determined, find a last resort.
+            best_failed_index = self.select_from_failure(
+                sampled_actions, sampled_results, sampled_scores
+            )
+            assert best_failed_index < len(sampled_results), (
+                "The select_from_failure method did not return a valid result. It has to selected from failed_results."
+            )
+            return SamplingResult(
+                sampled_results[best_failed_index],
+                result_ctx=sample_contexts[best_failed_index],
+                success=False,
+                sample_generations=sampled_results,
+                sample_validations=sampled_scores,
+                sample_actions=sampled_actions,
+                sample_contexts=sample_contexts,
+            )
+
+    @staticmethod
+    def select_from_failure(
+        sampled_actions: list[Component],
+        sampled_results: list[ModelOutputThunk],
+        sampled_val: list[list[tuple[Requirement, ValidationResult]]],
+    ) -> int:
+        # select attempt with highest ScoreRequirementScore if all loops fail
+
+        scores: list[float | None] = []
+
+        for sample in sampled_val:
+            for req, val_score in sample:
+                if isinstance(req, ScorerRequirement):
+                    assert val_score._score is not None
+                    scores.append(val_score._score)
+
+        assert len(sampled_results) == len(scores)
+
+        return scores.index(max(scores))  # type: ignore
+
+    @staticmethod
+    def repair(
+        old_ctx: Context,
+        new_ctx: Context,
+        past_actions: list[Component],
+        past_results: list[ModelOutputThunk],
+        past_val: list[list[tuple[Requirement, ValidationResult]]],
+    ) -> tuple[Component, Context]:
+        pa = past_actions[-1]
+        if isinstance(pa, Instruction):
+            last_failed_reqs: list[Requirement] = [
+                s[0] for s in past_val[-1] if not s[1]
+            ]
+            last_failed_reqs_str = "* " + "\n* ".join(
+                [str(r.description) for r in last_failed_reqs]
+            )
+            return pa.copy_and_repair(
+                repair_string=f"The following requirements failed before:\n{last_failed_reqs_str}"
+            ), old_ctx
+        return past_actions[-1], old_ctx

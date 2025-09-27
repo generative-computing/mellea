@@ -7,7 +7,7 @@ from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
 
-import mellea.stdlib.mellea_functions as mfuncs
+import mellea.stdlib.funcs as mfuncs
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.model_ids import IBM_GRANITE_3_3_8B, ModelIdentifier
 from mellea.backends.ollama import OllamaModelBackend
@@ -459,7 +459,6 @@ class MelleaSession:
     # ###############################
     #  Convenience functions
     # ###############################
-    # TODO: JAL, Hen. Investigate this. What happens to Sampling Result returns ?
     def last_prompt(self) -> str | list[dict] | None:
         """Returns the last prompt that has been called from the session context.
 
@@ -478,38 +477,3 @@ class MelleaSession:
             if isinstance(last_el, GenerateLog):
                 return last_el.prompt
         return None
-
-    # old code
-
-
-# m.instruct -> m.act -> act
-# m.chat -> m.act -> act
-
-# with new changes
-# m.instruct -> instruct (creates instruction) -> act
-
-# TODO: JAL. Do we want to keep these versions of the functions... Probably not...
-# Convenience functions that use the current session
-# def instruct(description: str, **kwargs) -> ModelOutputThunk | SamplingResult:
-#     """Instruct using the current session."""
-#     return get_session().instruct(description, **kwargs)
-
-
-# def chat(content: str, **kwargs) -> Message:
-#     """Chat using the current session."""
-#     return get_session().chat(content, **kwargs)
-
-
-# def validate(reqs, **kwargs):
-#     """Validate using the current session."""
-#     return get_session().validate(reqs, **kwargs)
-
-
-# def query(obj: Any, query_str: str, **kwargs) -> ModelOutputThunk:
-#     """Query using the current session."""
-#     return get_session().query(obj, query_str, **kwargs)
-
-
-# def transform(obj: Any, transformation: str, **kwargs):
-#     """Transform using the current session."""
-#     return get_session().transform(obj, transformation, **kwargs)

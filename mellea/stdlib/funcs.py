@@ -1,4 +1,5 @@
-# TODO: JAL rename this file...
+"""Functions for Mellea operations like Instruct, Chat, etc..."""
+
 from __future__ import annotations
 
 import asyncio
@@ -33,11 +34,6 @@ from mellea.stdlib.sampling import (
 )
 
 
-# TODO: JAL
-# TODO: JAL: write tests to check that the correct context is being returned
-# TODO: Think about how SamplingResults work with contexts... it makes sense with these non-session functions, but weird with the session function...
-#       this needs to be separate from validationresults, we likely don't want them in the final context we return...
-# TODO: Figure out what to do with last_prompt function
 @overload
 def act(
     action: Component,
@@ -188,7 +184,6 @@ async def _act(
             assert result._generate_log is not None  # Cannot be None after generation.
             generate_logs.append(result._generate_log)
 
-        # TODO: JAL. Extract the context from the sampling result.
         new_ctx = sampling_result.result_ctx
         result = sampling_result.result
         assert sampling_result.result._generate_log is not None
@@ -394,9 +389,7 @@ async def _validate(
     model_options: dict | None = None,
     generate_logs: list[GenerateLog] | None = None,
     input: CBlock | None = None,
-) -> list[
-    ValidationResult
-]:  # TODO: JAL. We should think about returning the contexts as well.
+) -> list[ValidationResult]:
     """Asynchronous version of .validate; validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
     # Turn a solitary requirement in to a list of requirements, and then reqify if needed.
     reqs = [reqs] if not isinstance(reqs, list) else reqs
@@ -418,7 +411,6 @@ async def _validate(
         val_result_co = requirement.validate(
             backend, validation_target_ctx, format=format, model_options=model_options
         )
-        # TODO: JAL. do we ever need the context of a requirement / validation result.
         coroutines.append(val_result_co)
 
     for val_result in await asyncio.gather(*coroutines):
