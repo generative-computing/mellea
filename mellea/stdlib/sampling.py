@@ -7,6 +7,7 @@ import tqdm
 
 import mellea.stdlib.funcs as mfuncs
 from mellea.backends import Backend, BaseModelSubclass
+from mellea.helpers.async_helpers import wait_for_all_mots
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import CBlock, ChatContext, Component, Context, ModelOutputThunk
 from mellea.stdlib.chat import Message
@@ -470,7 +471,12 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
         )
 
         loop_count = 0
-        loop_budget_range_iterator = (
+        generate_loop_budget_iterator = (
+            tqdm.tqdm(range(self.loop_budget))  # type: ignore
+            if show_progress
+            else range(self.loop_budget)  # type: ignore
+        )
+        validate_loop_budget_iterator = (
             tqdm.tqdm(range(self.loop_budget))  # type: ignore
             if show_progress
             else range(self.loop_budget)  # type: ignore
@@ -478,7 +484,8 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
 
         next_action = deepcopy(action)
         next_context = context
-        for _ in loop_budget_range_iterator:  # type: ignore
+        flog.info("BestofNSampling Generating Loop:")
+        for _ in generate_loop_budget_iterator:  # type: ignore
             loop_count += 1
             if not show_progress:
                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
@@ -491,10 +498,18 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
                 model_options=model_options,
                 tool_calls=tool_calls,
             )
-            await result.avalue()
+            sampled_results.append(result)
+            sampled_actions.append(next_action)
+            sample_contexts.append(result_ctx)
 
-            # validation pass
-            # action has user turn
+        await wait_for_all_mots(sampled_results)
+
+        flog.info("BestofNSampling Validation Loop:")
+        for i in validate_loop_budget_iterator:
+            result_ctx = sample_contexts[i]
+            result = sampled_results[i]
+            next_action = sampled_actions[i]
+
             val_scores_co = mfuncs._validate(
                 reqs=reqs,
                 context=result_ctx,
@@ -502,7 +517,7 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
                 output=result,
                 format=format,
                 model_options=model_options,
-                input=action._description,  # type: ignore
+                input=next_action._description,  # type: ignore
                 # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.
             )
             val_scores = await val_scores_co
@@ -511,10 +526,7 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
             constraint_scores = list(zip(reqs, val_scores))
 
             # collect all data
-            sampled_results.append(result)
             sampled_scores.append(constraint_scores)
-            sampled_actions.append(next_action)
-            sample_contexts.append(result_ctx)
 
             # check if requirements pass else repair and re-sample
             # if all vals are true, save it and continue to get next sample
