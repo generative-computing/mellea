@@ -6,7 +6,7 @@ from mellea import start_session
 from mellea.stdlib.base import ChatContext, ImageBlock
 
 m = start_session(model_id="granite3.2-vision", ctx=ChatContext())
-# m = start_session(model_id="llava", ctx=LinearContext())
+# m = start_session(model_id="llava", ctx=ChatContext())
 
 # load image
 test_img = Image.open("pointing_up.jpg")

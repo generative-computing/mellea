@@ -125,9 +125,9 @@ def start_session(
         with start_session("openai", "gpt-4", model_options={"temperature": 0.7}):
             response = chat("Write a poem")
 
-        # Using HuggingFace with LinearContext for conversations
-        from mellea.stdlib.base import LinearContext
-        with start_session("hf", "microsoft/DialoGPT-medium", ctx=LinearContext()):
+        # Using HuggingFace with ChatContext for conversations
+        from mellea.stdlib.base import ChatContext
+        with start_session("hf", "microsoft/DialoGPT-medium", ctx=ChatContext()):
             chat("Hello!")
             chat("How are you?")  # Remembers previous message
 
