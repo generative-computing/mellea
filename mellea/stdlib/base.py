@@ -284,7 +284,7 @@ class ModelOutputThunk(CBlock):
                 # but that forces us to know about the chunk type here. Prefer sentinel values
                 # for now.
 
-            item = await self._async_queue.get()
+            item = await self._async_queue.get() # <---- stuck here
             print(item)
             chunks.append(item)
 
