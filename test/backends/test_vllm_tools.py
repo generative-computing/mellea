@@ -7,7 +7,7 @@ from mellea import MelleaSession
 from mellea.backends.vllm import LocalVLLMBackend
 from mellea.backends.types import ModelOption
 import mellea.backends.model_ids as model_ids
-from mellea.stdlib.base import CBlock, LinearContext
+from mellea.stdlib.base import CBlock, ChatContext
 from mellea.stdlib.requirement import (
     LLMaJRequirement,
     Requirement,
@@ -34,7 +34,7 @@ def backend():
 @pytest.fixture(scope="function")
 def session(backend):
     """Fresh HuggingFace session for each test."""
-    session = MelleaSession(backend, ctx=LinearContext())
+    session = MelleaSession(backend, ctx=ChatContext())
     yield session
     session.reset()
 
