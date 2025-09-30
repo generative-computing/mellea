@@ -6,7 +6,7 @@ from typing_extensions import Unpack
 
 from mellea import MelleaSession
 from mellea.backends.types import ModelOption
-from mellea.stdlib.instruction import Instruction
+from mellea.stdlib.chat import Message
 
 from .._prompt_modules import PromptModule, PromptModuleString
 from ._exceptions import BackendGenerationError, TagExtractionError
@@ -213,11 +213,11 @@ class _SubtaskConstraintAssign(PromptModule):
                 subtask_prompt=subtask_tag_prompt[2],
             )
 
-            instruction = Instruction(description=user_prompt)
+            action = Message("user", user_prompt)
 
             try:
                 gen_result = mellea_session.act(
-                    action=instruction,
+                    action=action,
                     model_options={
                         ModelOption.SYSTEM_PROMPT: system_prompt,
                         ModelOption.TEMPERATURE: 0,

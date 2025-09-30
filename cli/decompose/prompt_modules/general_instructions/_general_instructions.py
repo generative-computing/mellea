@@ -4,7 +4,7 @@ from typing import Any, TypeVar, final
 
 from mellea import MelleaSession
 from mellea.backends.types import ModelOption
-from mellea.stdlib.instruction import Instruction
+from mellea.stdlib.chat import Message
 
 from .._prompt_modules import PromptModule, PromptModuleString
 from ._exceptions import BackendGenerationError, TagExtractionError
@@ -51,12 +51,11 @@ class _GeneralInstructions(PromptModule):
         system_prompt = get_system_prompt()
         user_prompt = get_user_prompt(task_prompt=input_str)
 
-        instruction = Instruction(description=user_prompt)
+        action = Message("user", user_prompt)
 
         try:
-            gen_result = mellea_session.backend.generate_from_context(
-                action=instruction,
-                ctx=mellea_session.ctx,
+            gen_result = mellea_session.act(
+                action=action,
                 model_options={
                     ModelOption.SYSTEM_PROMPT: system_prompt,
                     ModelOption.TEMPERATURE: 0,
