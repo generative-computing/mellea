@@ -14,7 +14,7 @@ from .pipeline import DecompBackend
 class DecompVersion(str, Enum):
     latest = "latest"
     v1 = "v1"
-    v2 = "v2"
+    # v2 = "v2"
 
 
 this_file_dir = Path(__file__).resolve().parent

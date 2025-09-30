@@ -11,7 +11,7 @@ from mellea.backends.types import ModelOption
 
 from .prompt_modules import (
     constraint_extractor,
-    general_instructions,
+    # general_instructions,
     subtask_constraint_assign,
     subtask_list,
     subtask_prompt_generator,
@@ -32,7 +32,7 @@ class DecompSubtasksResult(TypedDict):
     tag: str
     constraints: list[ConstraintResult]
     prompt_template: str
-    general_instructions: str
+    # general_instructions: str
     input_vars_required: list[str]
     depends_on: list[str]
     generated_response: NotRequired[str]
@@ -147,9 +147,9 @@ def decompose(
                 for cons_str in subtask_data.constraints
             ],
             prompt_template=subtask_data.prompt_template,
-            general_instructions=general_instructions.generate(
-                m_session, input_str=subtask_data.prompt_template
-            ).parse(),
+            # general_instructions=general_instructions.generate(
+            #     m_session, input_str=subtask_data.prompt_template
+            # ).parse(),
             input_vars_required=list(
                 dict.fromkeys(  # Remove duplicates while preserving the original order.
                     [
