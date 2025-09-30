@@ -4,6 +4,7 @@ from typing import Any, TypeVar, final
 
 from mellea import MelleaSession
 from mellea.backends.types import ModelOption
+from mellea.stdlib.base import CBlock
 from mellea.stdlib.instruction import Instruction
 
 from .._prompt_modules import PromptModule, PromptModuleString
@@ -114,9 +115,8 @@ class _ConstraintExtractor(PromptModule):
         instruction = Instruction(description=user_prompt)
 
         try:
-            gen_result = mellea_session.backend.generate_from_context(
+            gen_result = mellea_session.act(
                 action=instruction,
-                ctx=mellea_session.ctx,
                 model_options={
                     ModelOption.SYSTEM_PROMPT: system_prompt,
                     ModelOption.TEMPERATURE: 0,

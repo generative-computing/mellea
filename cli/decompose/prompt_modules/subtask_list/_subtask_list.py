@@ -144,9 +144,8 @@ class _SubtaskList(PromptModule):
         instruction = Instruction(description=user_prompt)
 
         try:
-            gen_result = mellea_session.backend.generate_from_context(
+            gen_result = mellea_session.act(
                 action=instruction,
-                ctx=mellea_session.ctx,
                 model_options={
                     ModelOption.SYSTEM_PROMPT: system_prompt,
                     ModelOption.TEMPERATURE: 0,

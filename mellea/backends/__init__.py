@@ -41,18 +41,19 @@ class Backend(abc.ABC):
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk:  # i.e., ContextDiff
-        """Generates a model output from a context. May not mutate the context.
+    ) -> tuple[ModelOutputThunk, Context]:
+        """Generates a model output from a context. May not mutate the context. This must be called from a running event loop as it creates a task to run the generation request.
 
         Args:
             action: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
             ctx: The rest of the context.
             format: A response format to used for structured outputs / constrained decoding.
             model_options: Any model options to upsert into the defaults for this call.
-            generate_logs: a `GenerateLog` instance to add log information to.
             tool_calls: If `True`, then tool calls are extracts from the `action` `Component`. Assumption: if tool_calls is enabled, then the action `Component` has a TemplateRepresentation
+
+        Returns:
+            a tuple of (ModelOutputThunk, Context) where the Context is the new context after the generation has been completed.
         """
         ...
 

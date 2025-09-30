@@ -94,7 +94,7 @@ class GuardianCheck(Requirement):
         Code is adopted from https://huggingface.co/ibm-granite/granite-guardian-3.2-3b-a800m#quickstart-example
 
         Args:
-            ctx (Context): The context object containing the last turn of the conversation.
+            ctx (LegacyContext): The context object containing the last turn of the conversation.
 
         Returns:
             bool: True if there is no identified risk, False otherwise.

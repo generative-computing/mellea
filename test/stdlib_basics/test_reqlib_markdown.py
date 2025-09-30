@@ -1,13 +1,13 @@
 import pytest
 
-from mellea.stdlib.base import CBlock, ModelOutputThunk, LinearContext, Context
+from mellea.stdlib.base import CBlock, ModelOutputThunk, Context, ChatContext
 from mellea.stdlib.reqlib.md import is_markdown_list, is_markdown_table, as_markdown_list
 from mellea.stdlib.requirement import default_output_to_bool
 
 
 def from_model(s: str) -> Context:
-    ctx = LinearContext()
-    ctx.insert(ModelOutputThunk(value=s, meta={"test": True}))
+    ctx = ChatContext()
+    ctx = ctx.add(ModelOutputThunk(value=s, meta={"test": True}))
     return ctx
 
 

@@ -5,7 +5,7 @@ from mellea.backends.types import ModelOption
 # create a session using Granite 3.3 8B on Ollama and a simple context [see below]
 m = start_session(model_options={ModelOption.MAX_NEW_TOKENS: 200})
 
-# write an email
+# write an email with automatic requirement checking.
 email_v1 = m.instruct(
     "Write an email to invite all interns to the office party.",
     requirements=["be formal", "Use 'Dear interns' as greeting."],

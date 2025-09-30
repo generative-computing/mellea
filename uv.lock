@@ -2310,7 +2310,7 @@ wheels = [
 
 [[package]]
 name = "mellea"
-version = "0.0.4"
+version = "0.0.6"
 source = { editable = "." }
 dependencies = [
     { name = "ansicolors" },
@@ -2322,6 +2322,7 @@ dependencies = [
     { name = "mistletoe" },
     { name = "ollama" },
     { name = "openai" },
+    { name = "pillow" },
     { name = "pydantic" },
     { name = "requests" },
     { name = "typer" },
@@ -2406,6 +2407,7 @@ requires-dist = [
     { name = "openai" },
     { name = "outlines", marker = "extra == 'hf'", specifier = "<1.0.0" },
     { name = "peft", marker = "extra == 'hf'", specifier = ">=0.16.0" },
+    { name = "pillow" },
     { name = "pydantic" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "transformers", marker = "extra == 'hf'", specifier = ">=4.53.2" },
