@@ -140,8 +140,8 @@ def test_generate_from_raw_with_format(session):
 def test_async_parallel_requests(session):
     async def parallel_requests():
         model_opts = {ModelOption.STREAM: True}
-        mot1 = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext(), model_options=model_opts)
-        mot2 = session.backend.generate_from_context(CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts)
+        mot1, _ = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext(), model_options=model_opts)
+        mot2, _ = session.backend.generate_from_context(CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts)
 
         m1_val = None
         m2_val = None
@@ -168,7 +168,7 @@ def test_async_parallel_requests(session):
 @pytest.mark.qualitative
 def test_async_avalue(session):
     async def avalue():
-        mot1 = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext())
+        mot1, _ = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext())
         m1_final_val = await mot1.avalue()
         assert m1_final_val is not None
         assert m1_final_val == mot1.value
