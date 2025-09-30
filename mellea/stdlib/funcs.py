@@ -103,6 +103,7 @@ def act(
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            silence_context_type_warning=True,  # We can safely silence this here since it's in a sync function.
         )  # type: ignore[call-overload]
         # Mypy doesn't like the bool for return_sampling_results.
     )
@@ -425,6 +426,7 @@ async def aact(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
 ) -> tuple[ModelOutputThunk, Context]: ...
 
 
@@ -440,6 +442,7 @@ async def aact(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
 ) -> SamplingResult: ...
 
 
@@ -454,6 +457,7 @@ async def aact(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
 ) -> tuple[ModelOutputThunk, Context] | SamplingResult:
     """Asynchronous version of .act; runs a generic action, and adds both the action and the result to the context.
 
@@ -467,10 +471,18 @@ async def aact(
         format: if set, the BaseModel to use for constrained decoding.
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tool_calls: if true, tool calling is enabled.
+        silence_context_type_warning: if called directly from an asynchronous function, will log a warning if not using a SimpleContext
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
     """
+
+    if not silence_context_type_warning and not isinstance(context, SimpleContext):
+        FancyLogger().get_logger().warning(
+            "Not using a SimpleContext with asynchronous requests could cause unexpected results due to stale contexts. Ensure you await between requests."
+            "\nSee the async section of the tutorial: https://github.com/generative-computing/mellea/blob/main/docs/tutorial.md#chapter-12-asynchronicity"
+        )
+
     sampling_result: SamplingResult | None = None
     generate_logs: list[GenerateLog] = []
 
