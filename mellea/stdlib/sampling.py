@@ -669,7 +669,7 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
         )
         self.number_of_samples = number_of_samples
         self.weighted = weighted
-        self.symmetric = False
+        self.symmetric = True
 
     @abc.abstractmethod
     def compare_strings(self, ref: str, pred: str) -> float:
@@ -728,7 +728,7 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
         for i in range(len(results)):
             for j in range(len(results)):
                 if j == i:
-                    scr[i][j] = 0.0  # self voting is 0.
+                    scr[i][j] = 1.0  # self voting is 1.
                     continue
 
                 # upper triangle
@@ -765,8 +765,6 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
     float_rounding: int
     strict: bool
     allow_set_relation_comp: bool
-    weighted: bool
-    symmetric: bool
 
     def __init__(
         self,
@@ -821,10 +819,9 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
         self.float_rounding = float_rounding
         self.strict = strict
         self.allow_set_relation_comp = allow_set_relation_comp
-        self.weighted = weighted
 
         # Note: symmetry is not implied for certain expressions, see: https://github.com/huggingface/Math-Verify/blob/5d148cfaaf99214c2e4ffb4bc497ab042c592a7a/README.md?plain=1#L183
-        self.symmetric = False
+        self.symmetric = True
 
     # https://github.com/huggingface/Math-Verify/blob/5d148cfaaf99214c2e4ffb4bc497ab042c592a7a/tests/test_all.py#L36
     def compare_strings(self, ref: str, pred: str):
@@ -851,10 +848,7 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
 
 
 class MBRDRougeLStrategy(BaseMBRDSampling):
-    number_of_samples: int
     match_types: list[str]
-    weighted: bool
-    symmetric: bool
     scorer: RougeScorer
 
     def __init__(
@@ -894,9 +888,7 @@ class MBRDRougeLStrategy(BaseMBRDSampling):
             generate=generate,
             requirements=requirements,
         )
-        self.number_of_samples = number_of_samples
         self.match_types = ["rougeL"]
-        self.weighted = weighted
         self.symmetric = True
         self.scorer = RougeScorer(self.match_types, use_stemmer=True)
 
