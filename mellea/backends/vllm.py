@@ -214,14 +214,14 @@ class LocalVLLMBackend(FormatterBackend):
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk:
+    ) -> tuple[ModelOutputThunk, Context]:
         """Generate using the huggingface model."""
         # Upsert model options.
         model_options = self._simplify_and_merge(model_options)
 
         # TODO: insert the alora code here.
 
-        return self._generate_from_context_standard(
+        mot = self._generate_from_context_standard(
             action,
             ctx,
             format=format,
@@ -229,6 +229,7 @@ class LocalVLLMBackend(FormatterBackend):
             generate_logs=generate_logs,
             tool_calls=tool_calls,
         )
+        return mot, ctx.add(action).add(mot)
 
     def _generate_from_context_standard(
         self,
