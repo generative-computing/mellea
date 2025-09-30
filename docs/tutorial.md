@@ -21,6 +21,7 @@
 - [Chapter 10: Prompt Engineering for Mellea](#chapter-10-prompt-engineering-for-m)
   - [Custom  Templates](#custom-templates)
 - [Chapter 11: Tool Calling](#chapter-11-tool-calling)
+- [Chapter 12: Asynchronicity](#chapter-12-asynchronicity)
 - [Appendix: Contributing to Melles](#appendix-contributing-to-mellea)
 
 ## Chapter 1: What Is Generative Programming
@@ -1316,6 +1317,55 @@ assert "web_search" in output.tool_calls
 
 result = output.tool_calls["web_search"].call_func()
 ```
+
+## Chapter 12: Asynchronicity
+Mellea supports asynchronous behavior in several ways: asynchronous functions and asynchronous event loops in synchronous functions.
+
+### Asynchronous Functions:
+`MelleaSession`s have asynchronous functions that work just like regular async functions in python. These async session functions mirror their synchronous counterparts:
+```
+m = start_session()
+result = await m.ainstruct("Write your instruction here!")
+```
+
+However, if you want to run multiple async functions at the same time, you need to be careful with your context. By default, `MelleaSession`s use a `SimpleContext` that has no history. This will work just fine when running multiple async requests at once:
+```
+m = start_session()
+coroutines = []
+
+for i in range(5):
+    coroutines.append(m.ainstruct(f"Write a math problem using {i}"))
+
+results = await asyncio.gather(*coroutines)
+```
+
+If you try to use a `ChatContext`, you will need to await between each request so that the context can be properly modified:
+```
+m = start_session(ctx=ChatContext())
+
+result = await m.ainstruct("Write a short fairy tale.")
+print(result)
+
+main_character = await m.ainstruct("Who is the main character of the previous fairy tail?")
+print(main_character)
+```
+
+Otherwise, you're requests will use outdated contexts that don't have the messages you expect. For example,
+```
+m = start_session(ctx=ChatContext())
+
+co1 = m.ainstruct("Write a very long math problem.")  # Start first request.
+co2 = m.ainstruct("Solve the math problem.")  # Start second request with an empty context.
+
+results = await asyncio.gather(co1, co2)
+for result in results:
+    print(result)  # Neither request had anything in its context.
+```
+
+### Asynchronicity in Synchronous Functions
+Mellea utilizes asynchronicity internally. When you call `m.instruct`, you are using synchronous code that executes an asynchronous request to an LLM to generate the result. For a single request, this won't cause any differences in execution speed.
+
+When using `SamplingStrategy`s or during validation, Mellea can speed up the execution time of your program by generating multiple results and validating those results against multiple requirements simultaneously. Whether you use `m.instruct` or the asynchronous `m.ainstruct`, Mellea will attempt to speed up your requests by dispatching those requests as quickly as possible and asynchronously awaiting the results.
 
 ## Appendix: Contributing to Mellea
 
