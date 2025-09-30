@@ -254,7 +254,17 @@ class MelleaSession:
         tool_calls: bool = False,
     ) -> SamplingResult: ...
 
-    def act(self, action: Component, **kwargs) -> ModelOutputThunk | SamplingResult:
+    def act(
+        self,
+        action: Component,
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        return_sampling_results: bool = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
         Args:
@@ -270,12 +280,21 @@ class MelleaSession:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
         """
 
-        r = mfuncs.act(action, context=self.ctx, backend=self.backend, **kwargs)
+        r = mfuncs.act(
+            action,
+            context=self.ctx,
+            backend=self.backend,
+            requirements=requirements,
+            strategy=strategy,
+            return_sampling_results=return_sampling_results,
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )  # type: ignore
 
         if isinstance(r, SamplingResult):
             return r
         else:
-            # It's a tuple[ModelOutputThunk, Context].
             result, context = r
             self.ctx = context
             return result
@@ -318,7 +337,23 @@ class MelleaSession:
         tool_calls: bool = False,
     ) -> SamplingResult: ...
 
-    def instruct(self, description: str, **kwargs) -> ModelOutputThunk | SamplingResult:
+    def instruct(
+        self,
+        description: str,
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        return_sampling_results: bool = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk | SamplingResult:
         """Generates from an instruction.
 
         Args:
@@ -338,7 +373,21 @@ class MelleaSession:
         """
 
         r = mfuncs.instruct(
-            description, context=self.ctx, backend=self.backend, **kwargs
+            description,
+            context=self.ctx,
+            backend=self.backend,
+            images=images,
+            requirements=requirements,
+            icl_examples=icl_examples,
+            grounding_context=grounding_context,
+            user_variables=user_variables,
+            prefix=prefix,
+            output_prefix=output_prefix,
+            strategy=strategy,
+            return_sampling_results=return_sampling_results,  # type: ignore
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
         )
 
         if isinstance(r, SamplingResult):
@@ -491,7 +540,15 @@ class MelleaSession:
     ) -> SamplingResult: ...
 
     async def aact(
-        self, action: Component, **kwargs
+        self,
+        action: Component,
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        return_sampling_results: bool = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
     ) -> ModelOutputThunk | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
@@ -508,13 +565,22 @@ class MelleaSession:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
         """
 
-        r = await mfuncs.aact(action, context=self.ctx, backend=self.backend, **kwargs)
+        r = await mfuncs.aact(
+            action,
+            context=self.ctx,
+            backend=self.backend,
+            requirements=requirements,
+            strategy=strategy,
+            return_sampling_results=return_sampling_results,
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )  # type: ignore
 
         if isinstance(r, SamplingResult):
             self.ctx = r.result_ctx
             return r
         else:
-            # It's a tuple[ModelOutputThunk, Context].
             result, context = r
             self.ctx = context
             return result
@@ -558,7 +624,21 @@ class MelleaSession:
     ) -> SamplingResult: ...
 
     async def ainstruct(
-        self, description: str, **kwargs
+        self,
+        description: str,
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        return_sampling_results: bool = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
     ) -> ModelOutputThunk | SamplingResult:
         """Generates from an instruction.
 
@@ -579,7 +659,21 @@ class MelleaSession:
         """
 
         r = await mfuncs.ainstruct(
-            description, context=self.ctx, backend=self.backend, **kwargs
+            description,
+            context=self.ctx,
+            backend=self.backend,
+            images=images,
+            requirements=requirements,
+            icl_examples=icl_examples,
+            grounding_context=grounding_context,
+            user_variables=user_variables,
+            prefix=prefix,
+            output_prefix=output_prefix,
+            strategy=strategy,
+            return_sampling_results=return_sampling_results,  # type: ignore
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
         )
 
         if isinstance(r, SamplingResult):
