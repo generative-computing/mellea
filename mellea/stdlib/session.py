@@ -29,6 +29,7 @@ from mellea.stdlib.base import (
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import Requirement, ValidationResult
 from mellea.stdlib.sampling import SamplingResult, SamplingStrategy
+from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 
 # Global context variable for the context session
 _context_session: contextvars.ContextVar[MelleaSession | None] = contextvars.ContextVar(
@@ -237,7 +238,7 @@ class MelleaSession:
         action: Component,
         *,
         requirements: list[Requirement] | None = None,
-        strategy: SamplingStrategy | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: Literal[False] = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -250,7 +251,7 @@ class MelleaSession:
         action: Component,
         *,
         requirements: list[Requirement] | None = None,
-        strategy: SamplingStrategy | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: Literal[True],
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -296,7 +297,7 @@ class MelleaSession:
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
-        strategy: SamplingStrategy | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: Literal[False] = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -315,7 +316,7 @@ class MelleaSession:
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
-        strategy: SamplingStrategy | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: Literal[True],
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -473,7 +474,7 @@ class MelleaSession:
         action: Component,
         *,
         requirements: list[Requirement] | None = None,
-        strategy: SamplingStrategy | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: Literal[False] = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -486,7 +487,7 @@ class MelleaSession:
         action: Component,
         *,
         requirements: list[Requirement] | None = None,
-        strategy: SamplingStrategy | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: Literal[True],
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -534,7 +535,7 @@ class MelleaSession:
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
-        strategy: SamplingStrategy | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: Literal[False] = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -553,7 +554,7 @@ class MelleaSession:
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
-        strategy: SamplingStrategy | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: Literal[True],
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
