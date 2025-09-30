@@ -44,8 +44,8 @@ except KeyError as e:
     {%- endif %}
     {%- if item.constraints %}
     requirements=[
-        {%- for con in item.constraints %}
-        {{ con | tojson}},
+        {%- for c in item.constraints %}
+        {{ c.constraint | tojson}},
         {%- endfor %}
     ],
     {%- else %}
