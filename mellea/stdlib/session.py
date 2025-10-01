@@ -180,7 +180,6 @@ class MelleaSession:
         """
         self.backend = backend
         self.ctx: Context = ctx if ctx is not None else SimpleContext()
-        self._backend_stack: list[Backend] = []
         self._session_logger = FancyLogger.get_logger()
         self._context_token = None
 
@@ -196,29 +195,8 @@ class MelleaSession:
             _context_session.reset(self._context_token)
             self._context_token = None
 
-    def _push_model_state(self, new_backend: Backend):
-        """The backend used within a `Context` can be temporarily changed. This method changes the model's backend, while saving the current settings in the `self._backend_stack`."""
-        self._backend_stack.append(self.backend)
-        self.backend = new_backend
-
-    def _pop_model_state(self) -> bool:
-        """Pops the model state.
-
-        The backend and model options used within a `Context` can be temporarily changed by pushing and popping from the model state.
-        This function restores the model's previous backend and model_opts from the `self._backend_stack`.
-
-        Question: should this logic be moved into context? I really want to keep `Session` as simple as possible... see true motivation in the docstring for the class.
-        """
-        try:
-            b = self._backend_stack.pop()
-            self.backend = b
-            return True
-        except Exception:
-            return False
-
     def __copy__(self):
         new = MelleaSession(backend=self.backend, ctx=self.ctx)
-        new._backend_stack = self._backend_stack.copy()
         new._session_logger = self._session_logger
         # Explicitly don't copy over the _context_token.
 
@@ -254,7 +232,6 @@ class MelleaSession:
     def cleanup(self) -> None:
         """Clean up session resources."""
         self.reset()
-        self._backend_stack.clear()
         if hasattr(self.backend, "close"):
             self.backend.close()  # type: ignore
 
