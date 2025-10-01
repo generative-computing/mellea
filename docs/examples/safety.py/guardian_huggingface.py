@@ -1,28 +1,35 @@
 """Example of using GuardianCheck with HuggingFace backend for direct model inference
 
-NOTE: This example reuses a single session to avoid loading multiple models into memory.
-We only need to load one model (for generating test content), and the Guardian validators
-share their backend instances to minimize memory usage.
+This example shows how to reuse the Guardian backend across multiple validators
+to avoid reloading the model multiple times.
 """
 
 from mellea import MelleaSession
 from mellea.backends import model_ids
 from mellea.backends.ollama import OllamaModelBackend
+from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.base import ChatContext, ModelOutputThunk, ModelToolCall
 from mellea.stdlib.chat import Message
 from mellea.stdlib.safety.guardian import GuardianCheck, GuardianRisk
 
 print("=== GuardianCheck HuggingFace Backend Example ===")
-print("NOTE: Loading Granite Guardian model (this may take a while on first run)...\n")
 
 # Create a single reusable session with Ollama backend for test content generation
 # We'll reuse this session and just reset its context for each test
 session = MelleaSession(OllamaModelBackend(model_ids.DEEPSEEK_R1_8B), ctx=ChatContext())
 
-# Create Guardian validators (these share the same HF backend internally via __deepcopy__)
-print("Initializing Guardian validators...")
-harm_guardian = GuardianCheck(GuardianRisk.HARM, thinking=True, backend_type="huggingface")
-print(f"Backend: {harm_guardian._backend.model_version}")
+# Create a single shared HuggingFace backend for Guardian (loads model once)
+print("Loading Granite Guardian model (this happens only once)...")
+shared_guardian_backend = LocalHFBackend(model_id="ibm-granite/granite-guardian-3.3-8b")
+print(f"Loaded backend: {shared_guardian_backend.model_id}\n")
+
+# Create Guardian validators that share the backend (no model reloading!)
+print("Creating harm guardian...")
+harm_guardian = GuardianCheck(
+    GuardianRisk.HARM,
+    thinking=True,
+    backend=shared_guardian_backend
+)
 
 # Test 1: Harmful content detection
 print("\n=== Test 1: Harmful Content Detection ===")
@@ -47,12 +54,13 @@ if validation_result[0]._reason:
 print("\n=== Test 2: Groundedness Detection ===")
 context_text = "Python is a high-level programming language created by Guido van Rossum in 1991."
 
-# Create groundedness guardian with context
+# Create groundedness guardian with context (reuse shared backend)
+print("Creating groundedness guardian...")
 groundedness_guardian = GuardianCheck(
     GuardianRisk.GROUNDEDNESS,
     thinking=False,
-    backend_type="huggingface",
-    context_text=context_text
+    context_text=context_text,
+    backend=shared_guardian_backend
 )
 
 # Reset context with ungrounded response
@@ -83,11 +91,13 @@ tools = [
     }
 ]
 
+# Create function call guardian (reuse shared backend)
+print("Creating function call guardian...")
 function_guardian = GuardianCheck(
     GuardianRisk.FUNCTION_CALL,
     thinking=False,
-    backend_type="huggingface",
-    tools=tools
+    tools=tools,
+    backend=shared_guardian_backend
 )
 
 # User asks for weather but model calls wrong function

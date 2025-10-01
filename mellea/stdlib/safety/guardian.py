@@ -75,8 +75,22 @@ class GuardianCheck(Requirement):
         custom_criteria: Optional[str] = None,
         context_text: Optional[str] = None,
         tools: Optional[List[Dict]] = None,
+        backend: Optional[Backend] = None,
     ):
-        """Initialize GuardianCheck using existing backends with minimal glue."""
+        """Initialize GuardianCheck using existing backends with minimal glue.
+
+        Args:
+            risk: The type of risk to check for (harm, jailbreak, etc.)
+            backend_type: Type of backend to use ("ollama" or "huggingface")
+            model_version: Specific model version to use
+            device: Device for model inference (for HuggingFace)
+            ollama_url: URL for Ollama server
+            thinking: Enable thinking/reasoning mode
+            custom_criteria: Custom criteria for validation
+            context_text: Context document for groundedness checks
+            tools: Tool schemas for function call validation
+            backend: Pre-initialized backend to reuse (avoids loading model multiple times)
+        """
         super().__init__(check_only=True)
 
         # Handle risk specification with custom criteria priority
@@ -103,28 +117,32 @@ class GuardianCheck(Requirement):
         self._context_text = context_text
         self._tools = tools
 
-        # Choose defaults and initialize the chosen backend directly.
-        if model_version is None:
-            model_version = (
-                "ibm-granite/granite-guardian-3.3-8b"
-                if backend_type == "huggingface"
-                else "ibm/granite3.3-guardian:8b"
-            )
-
-        if backend_type == "huggingface":
-            from mellea.backends.huggingface import LocalHFBackend
-            self._backend = LocalHFBackend(model_id=model_version)
-        elif backend_type == "ollama":
-            from mellea.backends.ollama import OllamaModelBackend
-            self._backend = OllamaModelBackend(model_id=model_version, base_url=ollama_url)
+        # Use provided backend or create a new one
+        if backend is not None:
+            self._backend = backend
         else:
-            raise ValueError(f"Unsupported backend type: {backend_type}")
+            # Choose defaults and initialize the chosen backend directly.
+            if model_version is None:
+                model_version = (
+                    "ibm-granite/granite-guardian-3.3-8b"
+                    if backend_type == "huggingface"
+                    else "ibm/granite3.3-guardian:8b"
+                )
 
-        # Provide a predictable attribute for the example to print.
-        try:
-            setattr(self._backend, "model_version", model_version)
-        except Exception:
-            pass
+            if backend_type == "huggingface":
+                from mellea.backends.huggingface import LocalHFBackend
+                self._backend = LocalHFBackend(model_id=model_version)
+            elif backend_type == "ollama":
+                from mellea.backends.ollama import OllamaModelBackend
+                self._backend = OllamaModelBackend(model_id=model_version, base_url=ollama_url)
+            else:
+                raise ValueError(f"Unsupported backend type: {backend_type}")
+
+            # Provide a predictable attribute for the example to print.
+            try:
+                setattr(self._backend, "model_version", model_version)
+            except Exception:
+                pass
 
         self._logger = FancyLogger.get_logger()
 
