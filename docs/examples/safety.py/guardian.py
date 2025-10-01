@@ -59,10 +59,6 @@ print("  ...")
 
 print(f"\nConfigured guardians: {len(guardians)} total")
 
-# Show thinking mode capability
-thinking_guardian = GuardianCheck(GuardianRisk.HARM, thinking=True)
-print(f"  Thinking mode supported: {thinking_guardian.supports_thinking_mode()}")
-
 # Show Ollama backend configuration
 ollama_guardian = GuardianCheck(GuardianRisk.HARM, backend_type="ollama")
 print(f"  Ollama backend: {ollama_guardian._backend.model_version}")

@@ -1,11 +1,12 @@
 """Risk checking with Granite Guardian models via existing backends."""
 
 from enum import Enum
-from typing import Dict, List, Optional, Union, Literal, Callable
+from typing import Dict, List, Optional, Union, Literal
 
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import CBlock, Context, ChatContext
 from mellea.stdlib.chat import Message
+from mellea.stdlib.funcs import _run_async_in_thread
 from mellea.stdlib.requirement import Requirement, ValidationResult
 
 
@@ -36,56 +37,27 @@ BackendType = Literal["huggingface", "ollama"]
 
 
 def _parse_safety_result(result: Optional[str], logger) -> str:
-    """Parse the model output to a Guardian label: Yes/No/Failed."""
+    """Parse the model output to a Guardian label: Yes/No/Failed.
+
+    Guardian returns yes/no between <score> and </score> tags.
+    Handles case variations (Yes/yes, No/no) and whitespace.
+    """
     if not result:
         logger.warning("Guardian returned empty result")
         return "Failed"
 
-    s = str(result).lower().strip()
-    s = s.replace("<|im_end|>", "").replace("<|im_start|>", "").strip()
+    s = str(result).lower()
 
-    # Inline <score>yes/no</score>
+    # Extract from <score>yes/no</score> tags
     if "<score>" in s and "</score>" in s:
-        inner = s.split("<score>")[1].split("</score>")[0].strip()
-        if inner.startswith("yes") or " yes" in inner:
+        score = s.split("<score>")[1].split("</score>")[0].strip()
+        if score == "yes":
             return "Yes"
-        if inner.startswith("no") or " no" in inner:
+        if score == "no":
             return "No"
-
-    if s.startswith("yes") or s.endswith(" yes") or " yes " in s:
-        return "Yes"
-    if s.startswith("no") or s.endswith(" no") or " no " in s:
-        return "No"
-
-    if any(w in s for w in ["safe", "no risk", "acceptable", "not harmful"]):
-        return "No"
-    if any(w in s for w in ["unsafe", "risky", "harmful", "violation", "inappropriate", "offensive"]):
-        return "Yes"
-
-    if any(p in s for p in ["can't engage", "won't engage", "don't engage", "inappropriate", "personal attack"]):
-        return "Yes"
 
     logger.warning(f"Could not parse safety result: {result}")
     return "Failed"
-
-
-def _dummy_tool_functions(tools: Optional[List[Dict]]) -> Dict[str, Callable]:
-    """Create simple callable stubs from tool specs for tool-aware backends."""
-    funcs: Dict[str, Callable] = {}
-    if not tools:
-        return funcs
-
-    for spec in tools:
-        name = spec.get("name", "tool")
-        desc = spec.get("description", "")
-
-        def _f(**kwargs):  # noqa: ANN001 - generic stub
-            return None
-
-        _f.__name__ = name
-        _f.__doc__ = desc
-        funcs[name] = _f
-    return funcs
 
 
 class GuardianCheck(Requirement):
@@ -160,11 +132,6 @@ class GuardianCheck(Requirement):
         """Get the effective risk criteria to use for validation."""
         return self._custom_criteria if self._custom_criteria else self._risk
 
-    def supports_thinking_mode(self) -> bool:
-        """Check if current backend supports thinking mode."""
-        # Thinking is supported for Ollama backends; other backends may ignore it.
-        return True
-
     @classmethod
     def get_available_risks(cls) -> List[str]:
         """Get list of all available standard risk types."""
@@ -191,9 +158,6 @@ class GuardianCheck(Requirement):
 
     def _guardian_validate(self, ctx: Context) -> ValidationResult:
         """Validate the last turn using Granite Guardian via selected backend."""
-        import asyncio
-        from concurrent.futures import ThreadPoolExecutor
-
         # Define async validation logic
         async def _async_validate():
             logger = self._logger
@@ -264,9 +228,10 @@ class GuardianCheck(Requirement):
                     "stream": False,
                 })
 
-            # Attach tools for function_call checks (as callable stubs).
+            # Attach tools for function_call checks.
+            # Guardian only needs tool schemas for validation, not actual callable functions.
             if (self._risk == "function_call" or effective_risk == "function_call") and self._tools:
-                model_options["tools"] = list(_dummy_tool_functions(self._tools).values())
+                model_options["tools"] = self._tools
 
             # Generate the guardian decision with a blank assistant turn.
             mot, _ = self._backend.generate_from_context(
@@ -292,19 +257,5 @@ class GuardianCheck(Requirement):
 
             return ValidationResult(result=is_safe, reason="; ".join(reason_parts), thunk=mot)
 
-        # Run the async code using the same pattern as mellea's _run_async_in_thread
-        def run_async(co):
-            return asyncio.run(co)
-
-        loop = None
-        try:
-            loop = asyncio.get_running_loop()
-        except Exception:
-            pass
-
-        if loop is None:
-            return run_async(_async_validate())
-        else:
-            with ThreadPoolExecutor(max_workers=1) as exec:
-                future = exec.submit(run_async, _async_validate())
-                return future.result()
+        # Run the async validation using mellea's standard pattern
+        return _run_async_in_thread(_async_validate())
