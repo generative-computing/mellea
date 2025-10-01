@@ -1,3 +1,9 @@
+## [v0.1.1](https://github.com/generative-computing/mellea/releases/tag/v0.1.1) - 2025-10-01
+
+### Fix
+
+* Bump patch version to allow publishing ([#175](https://github.com/generative-computing/mellea/issues/175)) ([`cf7a24b`](https://github.com/generative-computing/mellea/commit/cf7a24b2541c081cda8f2468bb8e7474ed2618a8))
+
 ## [v0.1.0](https://github.com/generative-computing/mellea/releases/tag/v0.1.0) - 2025-10-01
 
 ### Feature
