@@ -25,7 +25,7 @@ print(f"Custom guardian: {custom_guardian.get_effective_risk()}")
 print("\n=== Test 1: Normal Content ===")
 # Run a query against an Ollama model with ChatContext to support insert_turn
 m = MelleaSession(OllamaModelBackend(model_ids.DEEPSEEK_R1_8B), ctx=ChatContext())
-m.chat("Write a professional email to your colleague. Use less than 100 words.")
+m.chat("Write a professional email to your colleague. Use less than 50 words.")
 
 # Validate on the last turn of the conversation
 valid = m.validate([guardian])

@@ -3,10 +3,10 @@
 from enum import Enum
 from typing import Dict, List, Optional, Union, Literal
 
+from mellea.backends import Backend, BaseModelSubclass
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import CBlock, Context, ChatContext
 from mellea.stdlib.chat import Message
-from mellea.stdlib.funcs import _run_async_in_thread
 from mellea.stdlib.requirement import Requirement, ValidationResult
 
 
@@ -77,7 +77,7 @@ class GuardianCheck(Requirement):
         tools: Optional[List[Dict]] = None,
     ):
         """Initialize GuardianCheck using existing backends with minimal glue."""
-        super().__init__(check_only=True, validation_fn=lambda c: self._guardian_validate(c))
+        super().__init__(check_only=True)
 
         # Handle risk specification with custom criteria priority
         if custom_criteria:
@@ -156,106 +156,108 @@ class GuardianCheck(Requirement):
                 setattr(result, k, deepcopy(v, memo))
         return result
 
-    def _guardian_validate(self, ctx: Context) -> ValidationResult:
+    async def validate(
+        self,
+        backend: Backend,
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+    ) -> ValidationResult:
         """Validate the last turn using Granite Guardian via selected backend."""
-        # Define async validation logic
-        async def _async_validate():
-            logger = self._logger
+        logger = self._logger
 
-            last_turn = ctx.last_turn()
-            if last_turn is None:
-                logger.warning("No last turn found in context")
-                return ValidationResult(False, reason="No content to validate")
+        last_turn = ctx.last_turn()
+        if last_turn is None:
+            logger.warning("No last turn found in context")
+            return ValidationResult(False, reason="No content to validate")
 
-            # Build a fresh chat context for the guardian model.
-            gctx = ChatContext()
+        # Build a fresh chat context for the guardian model.
+        gctx = ChatContext()
 
-            effective_risk = self.get_effective_risk()
+        effective_risk = self.get_effective_risk()
 
-            if (self._risk == "groundedness" or effective_risk == "groundedness") and self._context_text:
-                gctx = gctx.add(Message("user", f"Document: {self._context_text}"))
+        if (self._risk == "groundedness" or effective_risk == "groundedness") and self._context_text:
+            gctx = gctx.add(Message("user", f"Document: {self._context_text}"))
 
-            # Add the last user message if present.
-            if last_turn.model_input is not None:
-                if isinstance(last_turn.model_input, CBlock) and last_turn.model_input.value is not None:
-                    gctx = gctx.add(Message("user", last_turn.model_input.value))
-                elif isinstance(last_turn.model_input, Message):
-                    gctx = gctx.add(Message(last_turn.model_input.role, last_turn.model_input.content))
-                else:
-                    gctx = gctx.add(Message("user", str(last_turn.model_input)))
+        # Add the last user message if present.
+        if last_turn.model_input is not None:
+            if isinstance(last_turn.model_input, CBlock) and last_turn.model_input.value is not None:
+                gctx = gctx.add(Message("user", last_turn.model_input.value))
+            elif isinstance(last_turn.model_input, Message):
+                gctx = gctx.add(Message(last_turn.model_input.role, last_turn.model_input.content))
+            else:
+                gctx = gctx.add(Message("user", str(last_turn.model_input)))
 
-            # Add the assistant response, optionally including tool call info for function_call risk.
-            if last_turn.output is not None:
-                assistant_text = last_turn.output.value or ""
-                if getattr(last_turn.output, "tool_calls", None) and (self._risk == "function_call" or effective_risk == "function_call"):
-                    calls = []
-                    for name, tc in last_turn.output.tool_calls.items():
-                        calls.append(f"{name}({getattr(tc, 'args', {})})")
-                    if calls:
-                        suffix = f" [Function calls: {', '.join(calls)}]"
-                        assistant_text = (assistant_text + suffix) if assistant_text else suffix
-                if assistant_text:
-                    gctx = gctx.add(Message("assistant", assistant_text))
+        # Add the assistant response, optionally including tool call info for function_call risk.
+        if last_turn.output is not None:
+            assistant_text = last_turn.output.value or ""
+            if getattr(last_turn.output, "tool_calls", None) and (self._risk == "function_call" or effective_risk == "function_call"):
+                calls = []
+                for name, tc in last_turn.output.tool_calls.items():
+                    calls.append(f"{name}({getattr(tc, 'args', {})})")
+                if calls:
+                    suffix = f" [Function calls: {', '.join(calls)}]"
+                    assistant_text = (assistant_text + suffix) if assistant_text else suffix
+            if assistant_text:
+                gctx = gctx.add(Message("assistant", assistant_text))
 
-            # Ensure we have something to validate.
-            history = gctx.view_for_generation() or []
-            if len(history) == 0:
-                logger.warning("No messages found to validate")
-                return ValidationResult(False, reason="No messages to validate")
+        # Ensure we have something to validate.
+        history = gctx.view_for_generation() or []
+        if len(history) == 0:
+            logger.warning("No messages found to validate")
+            return ValidationResult(False, reason="No messages to validate")
 
-            # Backend options (mapped by backends internally to their specific keys).
-            model_options: Dict[str, object] = {}
-            if self._backend_type == "ollama":
-                # Ollama templates expect the risk as the system prompt
-                model_options["system"] = effective_risk
-                model_options.update({
-                    "temperature": 0.0,
-                    "num_predict": 4000 if self._thinking else 50,
-                    "stream": False,
-                    "think": True if self._thinking else None,
-                })
-            else:  # huggingface
-                # HF chat template for guardian expects guardian_config instead of a system message
-                guardian_cfg: Dict[str, object] = {"risk": effective_risk}
-                if self._custom_criteria:
-                    guardian_cfg["custom_criteria"] = self._custom_criteria
-                if self._context_text and (self._risk == "groundedness" or effective_risk == "groundedness"):
-                    guardian_cfg["context"] = self._context_text
+        # Backend options (mapped by backends internally to their specific keys).
+        guardian_options: Dict[str, object] = {}
+        if self._backend_type == "ollama":
+            # Ollama templates expect the risk as the system prompt
+            guardian_options["system"] = effective_risk
+            guardian_options.update({
+                "temperature": 0.0,
+                "num_predict": 4000 if self._thinking else 50,
+                "stream": False,
+                "think": True if self._thinking else None,
+            })
+        else:  # huggingface
+            # HF chat template for guardian expects guardian_config instead of a system message
+            guardian_cfg: Dict[str, object] = {"risk": effective_risk}
+            if self._custom_criteria:
+                guardian_cfg["custom_criteria"] = self._custom_criteria
+            if self._context_text and (self._risk == "groundedness" or effective_risk == "groundedness"):
+                guardian_cfg["context"] = self._context_text
 
-                model_options.update({
-                    "guardian_config": guardian_cfg,
-                    "max_new_tokens": 4000 if self._thinking else 50,
-                    "stream": False,
-                })
+            guardian_options.update({
+                "guardian_config": guardian_cfg,
+                "max_new_tokens": 4000 if self._thinking else 50,
+                "stream": False,
+            })
 
-            # Attach tools for function_call checks.
-            # Guardian only needs tool schemas for validation, not actual callable functions.
-            if (self._risk == "function_call" or effective_risk == "function_call") and self._tools:
-                model_options["tools"] = self._tools
+        # Attach tools for function_call checks.
+        # Guardian only needs tool schemas for validation, not actual callable functions.
+        if (self._risk == "function_call" or effective_risk == "function_call") and self._tools:
+            guardian_options["tools"] = self._tools
 
-            # Generate the guardian decision with a blank assistant turn.
-            mot, _ = self._backend.generate_from_context(
-                Message("assistant", ""), gctx, model_options=model_options
-            )
-            await mot.avalue()
+        # Generate the guardian decision with a blank assistant turn.
+        mot, _ = self._backend.generate_from_context(
+            Message("assistant", ""), gctx, model_options=guardian_options
+        )
+        await mot.avalue()
 
-            # Prefer explicit thinking if available, else try to split from output text.
-            trace = getattr(mot, "_thinking", None)
-            text = mot.value or ""
-            if trace is None and "</think>" in text:
-                parts = text.split("</think>")
-                if len(parts) > 1:
-                    trace = parts[0].replace("<think>", "").strip()
-                    text = parts[1].strip()
+        # Prefer explicit thinking if available, else try to split from output text.
+        trace = getattr(mot, "_thinking", None)
+        text = mot.value or ""
+        if trace is None and "</think>" in text:
+            parts = text.split("</think>")
+            if len(parts) > 1:
+                trace = parts[0].replace("<think>", "").strip()
+                text = parts[1].strip()
 
-            label = _parse_safety_result(text, logger)
-            is_safe = label == "No"
+        label = _parse_safety_result(text, logger)
+        is_safe = label == "No"
 
-            reason_parts = [f"Guardian check for '{effective_risk}': {label}"]
-            if trace:
-                reason_parts.append(f"Reasoning: {trace}")
+        reason_parts = [f"Guardian check for '{effective_risk}': {label}"]
+        if trace:
+            reason_parts.append(f"Reasoning: {trace}")
 
-            return ValidationResult(result=is_safe, reason="; ".join(reason_parts), thunk=mot)
-
-        # Run the async validation using mellea's standard pattern
-        return _run_async_in_thread(_async_validate())
+        return ValidationResult(result=is_safe, reason="; ".join(reason_parts), thunk=mot)
