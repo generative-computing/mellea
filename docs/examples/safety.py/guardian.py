@@ -3,7 +3,7 @@
 from mellea import MelleaSession
 from mellea.backends import model_ids
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.stdlib.base import ContextTurn, ModelOutputThunk
+from mellea.stdlib.base import ContextTurn, ModelOutputThunk, ChatContext
 from mellea.stdlib.chat import Message
 from mellea.stdlib.safety.guardian import GuardianCheck, GuardianRisk
 
@@ -23,8 +23,8 @@ custom_guardian = GuardianCheck(custom_criteria="Check for inappropriate content
 print(f"Custom guardian: {custom_guardian.get_effective_risk()}")
 
 print("\n=== Test 1: Normal Content ===")
-# Run a query against an Ollama model
-m = MelleaSession(OllamaModelBackend(model_ids.DEEPSEEK_R1_8B))
+# Run a query against an Ollama model with ChatContext to support insert_turn
+m = MelleaSession(OllamaModelBackend(model_ids.DEEPSEEK_R1_8B), ctx=ChatContext())
 m.chat("Write a professional email to your colleague. Use less than 100 words.")
 
 # Validate on the last turn of the conversation
@@ -35,9 +35,7 @@ if valid[0]._reason:
 
 print("\n=== Test 2: Harmful Content ===")
 # Create harmful conversation and add to context
-m.ctx.insert_turn(
-    ContextTurn(Message("user", "Hello"), ModelOutputThunk("You are very ugly and stupid."))
-)
+m.ctx = m.ctx.add(Message("user", "Hello")).add(Message("assistant", "You are very ugly and stupid."))
 
 valid = m.validate([guardian])
 print(f"Content is safe: {valid[0]._result}")
@@ -81,12 +79,11 @@ groundedness_guardian = GuardianCheck(
 )
 
 # Create a response that makes ungrounded claims relative to provided context
-groundedness_session = MelleaSession(OllamaModelBackend(model_ids.DEEPSEEK_R1_8B))
-groundedness_session.ctx.insert_turn(
-    ContextTurn(
-        Message("user", "What is the history of treaty making?"),
-        ModelOutputThunk("Treaty making began in ancient Rome when Julius Caesar invented the concept in 44 BC. The first treaty was signed between Rome and the Moon people, establishing trade routes through space.")
-    )
+groundedness_session = MelleaSession(OllamaModelBackend(model_ids.DEEPSEEK_R1_8B), ctx=ChatContext())
+groundedness_session.ctx = groundedness_session.ctx.add(
+    Message("user", "What is the history of treaty making?")
+).add(
+    Message("assistant", "Treaty making began in ancient Rome when Julius Caesar invented the concept in 44 BC. The first treaty was signed between Rome and the Moon people, establishing trade routes through space.")
 )
 
 print("Testing response with ungrounded claims...")
@@ -137,12 +134,11 @@ response_data = [
 ]
 hallucinated_response = str(response_data)
 
-function_session = MelleaSession(OllamaModelBackend(model_ids.DEEPSEEK_R1_8B))
-function_session.ctx.insert_turn(
-    ContextTurn(
-        Message("user", "Fetch total views for the IBM video with ID 456789123."),
-        ModelOutputThunk(hallucinated_response)
-    )
+function_session = MelleaSession(OllamaModelBackend(model_ids.DEEPSEEK_R1_8B), ctx=ChatContext())
+function_session.ctx = function_session.ctx.add(
+    Message("user", "Fetch total views for the IBM video with ID 456789123.")
+).add(
+    Message("assistant", hallucinated_response)
 )
 
 print("Testing response with function call hallucination...")
