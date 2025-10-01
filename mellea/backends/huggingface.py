@@ -381,12 +381,16 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             # Create a separate thread to handle the processing. Make it awaitable
             # for non-streaming cases and to get the final output.
             # Details: https://huggingface.co/docs/transformers/en/internal/generation_utils#transformers.AsyncTextIteratorStreamer
+
+            # Filter out chat template-only options before passing to generate()
+            generate_options = self._filter_chat_template_only_options(model_options)
+
             chat_response = asyncio.to_thread(
                 self._model.generate,  # type: ignore
                 input_ids,
                 return_dict_in_generate=True,
                 output_scores=True,
-                **self._make_backend_specific_and_remove(model_options),
+                **self._make_backend_specific_and_remove(generate_options),
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
             )
@@ -670,6 +674,21 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             model_options, self.from_mellea_model_opts_map
         )
         return ModelOption.remove_special_keys(backend_specific)
+
+    def _filter_chat_template_only_options(
+        self, model_options: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Remove options that are only for apply_chat_template, not for generate().
+
+        Args:
+            model_options: the model_options for this call
+
+        Returns:
+            a new dict without chat template-specific options
+        """
+        # Options that should only go to apply_chat_template, not generate()
+        chat_template_only = {"guardian_config", "think", "add_generation_prompt"}
+        return {k: v for k, v in model_options.items() if k not in chat_template_only}
 
     def _extract_model_tool_requests(
         self, tools: dict[str, Callable], decoded_result: str
