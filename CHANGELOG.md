@@ -1,3 +1,18 @@
+## [v0.1.1](https://github.com/generative-computing/mellea/releases/tag/v0.1.1) - 2025-10-01
+
+### Fix
+
+* Bump patch version to allow publishing ([#175](https://github.com/generative-computing/mellea/issues/175)) ([`cf7a24b`](https://github.com/generative-computing/mellea/commit/cf7a24b2541c081cda8f2468bb8e7474ed2618a8))
+
+## [v0.1.0](https://github.com/generative-computing/mellea/releases/tag/v0.1.0) - 2025-10-01
+
+### Feature
+
+* Add fix to watsonx and note to litellm ([#173](https://github.com/generative-computing/mellea/issues/173)) ([`307dbe1`](https://github.com/generative-computing/mellea/commit/307dbe14d430b0128e56a2ed7b735dbe93adf2a7))
+* New context, new sampling,. ([#166](https://github.com/generative-computing/mellea/issues/166)) ([`4ae6d7c`](https://github.com/generative-computing/mellea/commit/4ae6d7c23e4aff63a0887dccaf7c96bc9e50121a))
+* Add async and streaming support ([#137](https://github.com/generative-computing/mellea/issues/137)) ([`4ee56a9`](https://github.com/generative-computing/mellea/commit/4ee56a9f9e74302cf677377d6eab19e11ab0a715))
+* Best-of-N Sampling with Process Reward Models ([#118](https://github.com/generative-computing/mellea/issues/118)) ([`b18e03d`](https://github.com/generative-computing/mellea/commit/b18e03d655f18f923202acf96a49d4acafa0701d))
+
 ## [v0.0.6](https://github.com/generative-computing/mellea/releases/tag/v0.0.6) - 2025-09-18
 
 ### Feature
