@@ -281,15 +281,23 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
     ) -> tuple[Component, Context]:
         pa = past_actions[-1]
         if isinstance(pa, Instruction):
-            last_failed_reqs: list[Requirement] = [
-                s[0] for s in past_val[-1] if not s[1]
+            # Get failed requirements and their detailed validation reasons
+            failed_items = [
+                (req, val) for req, val in past_val[-1] if not val.as_bool()
             ]
-            last_failed_reqs_str = "* " + "\n* ".join(
-                [str(r.description) for r in last_failed_reqs]
-            )
-            return pa.copy_and_repair(
-                repair_string=f"The following requirements failed before:\n{last_failed_reqs_str}"
-            ), old_ctx
+
+            # Build repair feedback using ValidationResult.reason when available
+            repair_lines = []
+            for req, validation in failed_items:
+                if validation.reason:
+                    repair_lines.append(f"* {validation.reason}")
+                else:
+                    # Fallback to requirement description if no reason
+                    repair_lines.append(f"* {req.description}")
+
+            repair_string = "The following requirements failed before:\n" + "\n".join(repair_lines)
+
+            return pa.copy_and_repair(repair_string=repair_string), old_ctx
         return pa, old_ctx
 
 

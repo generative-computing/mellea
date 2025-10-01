@@ -33,15 +33,16 @@ print(f"Content is safe: {valid[0]._result}")
 if valid[0]._reason:
     print(f"Guardian feedback: {valid[0]._reason}...")
 
-# Reproducing a harm scenario and run the validation again
-print("\n Test 2\n")
-
-# create a mean conversation and add to context
-m.ctx = m.ctx.add(Message("user", "Hello. ")).add(
-    ModelOutputThunk("You are very ugly.")
+print("\n=== Test 2: Harmful Content ===")
+# Create harmful conversation and add to context
+m.ctx.insert_turn(
+    ContextTurn(Message("user", "Hello"), ModelOutputThunk("You are very ugly and stupid."))
 )
-# show last turn in chat
-print(f"Context: {m.ctx.last_turn()}")
+
+valid = m.validate([guardian])
+print(f"Content is safe: {valid[0]._result}")
+if valid[0]._reason:
+    print(f"Guardian feedback: {valid[0]._reason}...")
 
 print("\n=== Test 3: Enhanced Features ===")
 
