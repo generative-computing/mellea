@@ -258,6 +258,7 @@ class GuardianCheck(Requirement):
             guardian_options.update({
                 "guardian_config": guardian_cfg,
                 "think": self._thinking,  # Passed to apply_chat_template (not guardian_config)
+                "add_generation_prompt": True,  # Required for Guardian template
                 "max_new_tokens": 4000 if self._thinking else 50,
                 "stream": False,
             })
@@ -267,9 +268,17 @@ class GuardianCheck(Requirement):
         if (self._risk == "function_call" or effective_risk == "function_call") and self._tools:
             guardian_options["tools"] = self._tools
 
-        # Generate the guardian decision with a blank assistant turn.
+        # Generate the guardian decision.
+        # For Ollama: add blank assistant turn to trigger generation
+        # For HuggingFace: use CBlock (won't be added to conversation, add_generation_prompt handles the judge role)
+        if self._backend_type == "ollama":
+            action = Message("assistant", "")
+        else:
+            # Use a CBlock for HuggingFace - it won't be added as a message
+            action = CBlock("")
+
         mot, _ = self._backend.generate_from_context(
-            Message("assistant", ""), gctx, model_options=guardian_options
+            action, gctx, model_options=guardian_options
         )
         await mot.avalue()
 
