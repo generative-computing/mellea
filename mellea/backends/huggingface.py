@@ -131,7 +131,10 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # Usually, values that are intentionally extracted while prepping for the backend generate call
         # will be omitted here so that they will be removed when model_options are processed
         # for the call to the model.
-        self.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
+        self.from_mellea_model_opts_map = {
+            ModelOption.MAX_NEW_TOKENS: "max_new_tokens",
+            "guardian_config": "guardian_config",  # Pass through for Granite Guardian models
+        }
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
 
