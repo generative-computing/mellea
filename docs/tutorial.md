@@ -841,7 +841,7 @@ In the above arguments, `path_or_model_id` refers to the model checkpoint from l
 We are now ready to create a M session, define the requirement, and run the instruction:
 
 ```python
-m = MelleaSession(backend, ctx=LinearContext())
+m = MelleaSession(backend, ctx=ChatContext())
 failure_check = req("The failure mode should not be none.")
 res = m.instruct("Write triage summaries based on technician note.", requirements=[failure_check])
 ```
@@ -918,13 +918,13 @@ m = mellea.MelleaSession(
 )
 ```
 
-The `SimpleContext` -- which is the only context we have used so far -- is a context manager that resets the chat message history on each model call. That is, the model's context is entirely determined by the current Component. Mellea also provides a `LinearContext`, which behaves like a chat history. We can use the LinearContext to interact with chat models:
+The `SimpleContext` -- which is the only context we have used so far -- is a context manager that resets the chat message history on each model call. That is, the model's context is entirely determined by the current Component. Mellea also provides a `ChatContext`, which behaves like a chat history. We can use the ChatContext to interact with chat models:
 
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/context_example.py#L1-L5
 from mellea import start_session
 
-m = mellea.start_session(ctx=LinearContext())
+m = mellea.start_session(ctx=ChatContext())
 m.chat("Make up a math problem.")
 m.chat("Solve your math problem.")
 ```

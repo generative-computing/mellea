@@ -8,7 +8,7 @@ from mellea.backends.process_reward_models.huggingface.prms import (
 )
 from mellea.backends.types import ModelOption
 from mellea.stdlib.rewards.prm_scorer import PRMScorer
-from mellea.stdlib.sampling import BestofNSamplingStrategy
+from mellea.stdlib.sampling.best_of_n import BestofNSamplingStrategy
 
 # create a session for the generator using Granite 3.3 8B on Huggingface and a simple context [see below]
 m = start_session(backend_name="hf", model_options={ModelOption.MAX_NEW_TOKENS: 512})

@@ -2,6 +2,8 @@ import asyncio
 from collections.abc import AsyncIterator, Coroutine
 from typing import Any
 
+from mellea.stdlib.base import ModelOutputThunk
+
 
 async def send_to_queue(
     co: Coroutine[Any, Any, AsyncIterator | Any] | AsyncIterator, aqueue: asyncio.Queue
@@ -29,3 +31,15 @@ async def send_to_queue(
     # them to the queue.
     except Exception as e:
         await aqueue.put(e)
+
+
+async def wait_for_all_mots(mots: list[ModelOutputThunk]):
+    """Helper function to make waiting for multiple ModelOutputThunks to be computed easier.
+
+    All ModelOutputThunks must be from the same event loop. This should always be the case in sampling
+    functions, session functions, and top-level mellea functions."""
+    coroutines: list[Coroutine[Any, Any, str]] = []
+    for mot in mots:
+        coroutines.append(mot.avalue())
+
+    await asyncio.gather(*coroutines)

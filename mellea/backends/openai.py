@@ -42,7 +42,6 @@ from mellea.stdlib.base import (
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
-    ModelToolCall,
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
@@ -277,13 +276,14 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
-        return self.generate_from_chat_context(
+        mot = self.generate_from_chat_context(
             action,
             ctx,
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
+        return mot, ctx.add(action).add(mot)
 
     def generate_from_chat_context(
         self,
@@ -342,7 +342,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                 )
 
         # Construct the linearized context. This is very similar to normal generation.
-        linearized_ctx = ctx.render_for_generation()
+        linearized_ctx = ctx.view_for_generation()
         assert linearized_ctx is not None and len(linearized_ctx) > 1
         msgs = self.formatter.to_chat_messages(linearized_ctx)
         user_message, assistant_message = msgs[-2].content, msgs[-1].content
@@ -417,7 +417,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         model_opts = self._simplify_and_merge(
             model_options, is_chat_context=ctx.is_chat_context
         )
-        linearized_context = ctx.render_for_generation()
+        linearized_context = ctx.view_for_generation()
         assert linearized_context is not None, (
             "Cannot generate from a non-linear context in a FormatterBackend."
         )

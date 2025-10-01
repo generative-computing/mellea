@@ -23,7 +23,7 @@ def test_litellm_ollama_chat(session):
     assert res is not None
     assert isinstance(res, Message)
     assert "2" in res.content, (
-        f"Expected a message with content containing 2 but found {output_message}"
+        f"Expected a message with content containing 2 but found {res}"
     )
 
 @pytest.mark.qualitative
@@ -57,7 +57,7 @@ def test_litellm_ollama_instruct_options(session):
     assert isinstance(res.value, str)
 
     # make sure that homer_simpson is in the logged model_options
-    assert "homer_simpson" in session.ctx.last_output_and_logs()[1].model_options
+    assert "homer_simpson" in res._generate_log.model_options
 
     # make sure the backend function filters out the model option when passing to the generate call
     backend = session.backend
@@ -81,8 +81,8 @@ def test_gen_slot(session):
 def test_async_parallel_requests(session):
     async def parallel_requests():
         model_opts = {ModelOption.STREAM: True}
-        mot1 = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext(), model_options=model_opts)
-        mot2 = session.backend.generate_from_context(CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts)
+        mot1, _ = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext(), model_options=model_opts)
+        mot2, _ = session.backend.generate_from_context(CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts)
 
         m1_val = None
         m2_val = None
@@ -90,7 +90,7 @@ def test_async_parallel_requests(session):
             m1_val = await mot1.astream()
         if not mot2.is_computed():
             m2_val = await mot2.astream()
-        
+
         assert m1_val is not None, "should be a string val after generation"
         assert m2_val is not None, "should be a string val after generation"
 
@@ -109,7 +109,7 @@ def test_async_parallel_requests(session):
 @pytest.mark.qualitative
 def test_async_avalue(session):
     async def avalue():
-        mot1 = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext())
+        mot1, _ = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext())
         m1_final_val = await mot1.avalue()
         assert m1_final_val is not None
         assert m1_final_val == mot1.value
