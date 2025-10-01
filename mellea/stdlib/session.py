@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextvars
+from copy import copy
 from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
@@ -176,11 +177,10 @@ class MelleaSession:
         Args:
             backend (Backend): This is always required.
             ctx (Context): The way in which the model's context will be managed. By default, each interaction with the model is a stand-alone interaction, so we use SimpleContext as the default.
-            model_options (Optional[dict]): model options, which will upsert into the model/backend's defaults.
         """
         self.backend = backend
         self.ctx: Context = ctx if ctx is not None else SimpleContext()
-        self._backend_stack: list[tuple[Backend, dict | None]] = []
+        self._backend_stack: list[Backend] = []
         self._session_logger = FancyLogger.get_logger()
         self._context_token = None
 
@@ -196,14 +196,10 @@ class MelleaSession:
             _context_session.reset(self._context_token)
             self._context_token = None
 
-    def _push_model_state(self, new_backend: Backend, new_model_opts: dict):
-        """The backend and model options used within a `Context` can be temporarily changed. This method changes the model's backend and model_opts, while saving the current settings in the `self._backend_stack`.
-
-        Question: should this logic be moved into context? I really want to keep `Session` as simple as possible... see true motivation in the docstring for the class.
-        """
-        self._backend_stack.append((self.backend, self.model_options))
+    def _push_model_state(self, new_backend: Backend):
+        """The backend used within a `Context` can be temporarily changed. This method changes the model's backend, while saving the current settings in the `self._backend_stack`."""
+        self._backend_stack.append(self.backend)
         self.backend = new_backend
-        self.opts = new_model_opts
 
     def _pop_model_state(self) -> bool:
         """Pops the model state.
@@ -214,12 +210,42 @@ class MelleaSession:
         Question: should this logic be moved into context? I really want to keep `Session` as simple as possible... see true motivation in the docstring for the class.
         """
         try:
-            b, b_model_opts = self._backend_stack.pop()
+            b = self._backend_stack.pop()
             self.backend = b
-            self.model_options = b_model_opts
             return True
         except Exception:
             return False
+
+    def __copy__(self):
+        new = MelleaSession(backend=self.backend, ctx=self.ctx)
+        new._backend_stack = self._backend_stack.copy()
+        new._session_logger = self._session_logger
+        # Explicitly don't copy over the _context_token.
+
+        return new
+
+    def clone(self):
+        """Useful for running multiple generation requests while keeping the context at a given point in time.
+
+        Returns:
+            a copy of the current session. Keeps the context, backend, backend stack, and session logger.
+
+        Examples:
+            >>> from mellea import start_session
+            >>> m = start_session()
+            >>> m.instruct("What is 2x2?")
+            >>>
+            >>> m1 = m.clone()
+            >>> out = m1.instruct("Multiply that by 2")
+            >>> print(out)
+            ... 8
+            >>>
+            >>> m2 = m.clone()
+            >>> out = m2.instruct("Multiply that by 3")
+            >>> print(out)
+            ... 12
+        """
+        return copy(self)
 
     def reset(self):
         """Reset the context state."""
