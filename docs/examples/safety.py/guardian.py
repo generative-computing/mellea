@@ -90,7 +90,7 @@ if groundedness_valid[0]._reason:
 
 print("\n=== Test 5: Function Call Hallucination Detection ===")
 # Test function calling hallucination using IBM video example
-import json
+from mellea.stdlib.base import ModelOutputThunk, ModelToolCall
 
 tools = [
     {
@@ -101,11 +101,6 @@ tools = [
                 "description": "The ID of the IBM video.",
                 "type": "int",
                 "default": "7178094165614464282"
-            },
-            "count": {
-                "description": "The number of comments to fetch. Maximum is 30. Defaults to 20.",
-                "type": "int, optional",
-                "default": "20"
             }
         }
     }
@@ -119,23 +114,27 @@ function_guardian = GuardianCheck(
 )
 
 # User asks for views but assistant calls wrong function (comments_list instead of views_list)
-response_data = [
-    {
-        "name": "comments_list",
-        "arguments": {
-            "video_id": 456789123,
-            "count": 15
-        }
-    }
-]
-hallucinated_response = str(response_data)
+# Create a proper ModelOutputThunk with tool_calls
+def dummy_func(**kwargs):
+    pass
+
+hallucinated_tool_calls = {
+    "comments_list": ModelToolCall(
+        name="comments_list",
+        func=dummy_func,
+        args={"video_id": 456789123, "count": 15}
+    )
+}
+
+hallucinated_output = ModelOutputThunk(
+    value="I'll fetch the views for you.",
+    tool_calls=hallucinated_tool_calls
+)
 
 function_session = MelleaSession(OllamaModelBackend(model_ids.DEEPSEEK_R1_8B), ctx=ChatContext())
 function_session.ctx = function_session.ctx.add(
     Message("user", "Fetch total views for the IBM video with ID 456789123.")
-).add(
-    Message("assistant", hallucinated_response)
-)
+).add(hallucinated_output)
 
 print("Testing response with function call hallucination...")
 function_valid = function_session.validate([function_guardian])
