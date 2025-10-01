@@ -53,6 +53,8 @@ class LiteLLMBackend(FormatterBackend):
     ):
         """Initialize and OpenAI compatible backend. For any additional kwargs that you need to pass the the client, pass them as a part of **kwargs.
 
+        Note: If getting `Unclosed client session`, set `export DISABLE_AIOHTTP_TRANSPORT=True` in your environment. See: https://github.com/BerriAI/litellm/issues/13251.
+
         Args:
             model_id : The LiteLLM model identifier. Make sure that all necessary credentials are in OS environment variables.
             formatter: A custom formatter based on backend.If None, defaults to TemplateFormatter
@@ -293,6 +295,7 @@ class LiteLLMBackend(FormatterBackend):
             conversation=conversation,
             tools=tools,
             thinking=thinking,
+            format=format,
         )
 
         try:
@@ -369,6 +372,7 @@ class LiteLLMBackend(FormatterBackend):
         conversation: list[dict],
         tools: dict[str, Callable],
         thinking,
+        format,
     ):
         """Called when generation is done."""
         # Reconstruct the chat_response from chunks if streamed.

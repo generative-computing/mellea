@@ -5,5 +5,5 @@ merge_protections:
       - base = main
     success_conditions:
       - "title ~=
-        ^(fix|feat|docs|style|refactor|perf|test|build|ci|chore|revert)(?:\\(.+\
+        ^(fix|feat|docs|style|refactor|perf|test|build|ci|chore|revert|release)(?:\\(.+\
         \\))?:"
