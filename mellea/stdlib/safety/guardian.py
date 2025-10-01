@@ -113,14 +113,24 @@ class GuardianCheck(Requirement):
 
         self._custom_criteria = custom_criteria
         self._thinking = thinking
-        self._backend_type = backend_type
         self._context_text = context_text
         self._tools = tools
 
         # Use provided backend or create a new one
         if backend is not None:
             self._backend = backend
+            # Infer backend_type from the provided backend
+            from mellea.backends.huggingface import LocalHFBackend
+            from mellea.backends.ollama import OllamaModelBackend
+            if isinstance(backend, LocalHFBackend):
+                self._backend_type = "huggingface"
+            elif isinstance(backend, OllamaModelBackend):
+                self._backend_type = "ollama"
+            else:
+                # Keep the provided backend_type as fallback
+                self._backend_type = backend_type
         else:
+            self._backend_type = backend_type
             # Choose defaults and initialize the chosen backend directly.
             if model_version is None:
                 model_version = (
@@ -247,6 +257,7 @@ class GuardianCheck(Requirement):
 
             guardian_options.update({
                 "guardian_config": guardian_cfg,
+                "think": self._thinking,  # Passed to apply_chat_template (not guardian_config)
                 "max_new_tokens": 4000 if self._thinking else 50,
                 "stream": False,
             })
