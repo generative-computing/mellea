@@ -293,6 +293,7 @@ class LiteLLMBackend(FormatterBackend):
             conversation=conversation,
             tools=tools,
             thinking=thinking,
+            format=format,
         )
 
         try:
@@ -369,6 +370,7 @@ class LiteLLMBackend(FormatterBackend):
         conversation: list[dict],
         tools: dict[str, Callable],
         thinking,
+        format,
     ):
         """Called when generation is done."""
         # Reconstruct the chat_response from chunks if streamed.
