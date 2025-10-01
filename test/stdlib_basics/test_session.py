@@ -31,9 +31,11 @@ def test_start_session_openai_with_kwargs(gh_run):
             base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
             api_key="ollama",
         )
+    initial_ctx = m.ctx
     response = m.instruct("testing")
     assert isinstance(response, ModelOutputThunk)
     assert response.value is not None
+    assert initial_ctx is not m.ctx
 
 
 if __name__ == "__main__":

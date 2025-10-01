@@ -462,7 +462,7 @@ class GuardianCheck(Requirement):
         """Enhanced validation using Granite Guardian 3.3 8B with thinking mode support.
 
         Args:
-            ctx: The context object containing the conversation to validate.
+            ctx (LegacyContext): The context object containing the last turn of the conversation.
 
         Returns:
             ValidationResult: Validation result with optional reasoning trace.

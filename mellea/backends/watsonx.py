@@ -92,14 +92,14 @@ class WatsonxAIBackend(FormatterBackend):
         if project_id is None:
             project_id = os.environ.get("WATSONX_PROJECT_ID")
 
-        _creds = Credentials(url=base_url, api_key=api_key)
-        _client = APIClient(credentials=_creds)
-        self._model = ModelInference(
+        self._creds = Credentials(url=base_url, api_key=api_key)
+        _client = APIClient(credentials=self._creds)
+        self._model_inference = ModelInference(
             model_id=self._get_watsonx_model_id(),
             api_client=_client,
-            credentials=_creds,
+            credentials=self._creds,
             project_id=project_id,
-            params=model_options,
+            params=self.model_options,
             **kwargs,
         )
 
@@ -131,6 +131,12 @@ class WatsonxAIBackend(FormatterBackend):
             ModelOption.SEED: "random_seed",
             ModelOption.MAX_NEW_TOKENS: "max_new_tokens",
         }
+
+    @property
+    def _model(self) -> ModelInference:
+        """Watsonx's client gets tied to a specific event loop. Reset it here."""
+        self._model_inference.set_api_client(APIClient(self._creds))
+        return self._model_inference
 
     def _get_watsonx_model_id(self) -> str:
         """Gets the watsonx model id from the model_id that was provided in the constructor. Raises AssertionError if the ModelIdentifier does not provide a watsonx_name."""
@@ -218,13 +224,14 @@ class WatsonxAIBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The watsonx.ai backend only supports chat-like contexts."
         )
-        return self.generate_from_chat_context(
+        mot = self.generate_from_chat_context(
             action,
             ctx,
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
+        return mot, ctx.add(action).add(mot)
 
     def generate_from_chat_context(
         self,
@@ -241,7 +248,7 @@ class WatsonxAIBackend(FormatterBackend):
             model_options, is_chat_context=ctx.is_chat_context
         )
 
-        linearized_context = ctx.render_for_generation()
+        linearized_context = ctx.view_for_generation()
         assert linearized_context is not None, (
             "Cannot generate from a non-linear context in a FormatterBackend."
         )
