@@ -3,6 +3,7 @@ import os
 
 import pytest
 
+from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.types import ModelOption
 from mellea.stdlib.base import ChatContext, ModelOutputThunk
 from mellea.stdlib.chat import Message
@@ -99,6 +100,55 @@ async def test_async_without_waiting_with_chat_context(m_session):
     ctx = m_session.ctx
     assert len(ctx.view_for_generation()) == 2
 
+def test_session_copy_with_context_ops(m_session):
+    out = m_session.instruct("What is 2x2?")
+    main_ctx = m_session.ctx
+
+    m1 = m_session.clone()
+    out1 = m1.instruct("Multiply by 3.")
+
+    m2 = m_session.clone()
+    out2 = m2.instruct("Multiply by 4.")
+
+    # Assert that each context is the correct one.
+    assert m_session.ctx is main_ctx
+    assert m_session.ctx is not m1.ctx
+    assert m_session.ctx is not m2.ctx
+    assert m1.ctx is not m2.ctx
+
+    # Assert that node data is correct.
+    assert m_session.ctx.node_data is out
+    assert m1.ctx.node_data is out1
+    assert m2.ctx.node_data is out2
+
+    # Assert that the new sessions still branch off the original one.
+    assert m1.ctx.previous_node.previous_node is m_session.ctx
+    assert m2.ctx.previous_node.previous_node is m_session.ctx
+
+def test_session_copy_with_backend_stack(m_session):
+    # Assert expected values from cloning.
+    m1 = m_session.clone()
+    assert m1.backend is m_session.backend
+    assert m1._session_logger is m_session._session_logger
+    assert m1._backend_stack is not m_session._backend_stack
+
+    # Assert that pushing to a backend stack doesn't change it for sessions previously cloned from it.
+    new_backend = OllamaModelBackend()
+    m_session._push_model_state(new_backend=new_backend)
+    assert len(m_session._backend_stack) == 1
+    assert len(m1._backend_stack) == 0
+    assert m1.backend is not m_session.backend
+
+    # Assert that newly cloned sessions don't cause errors with changes to the backend stack.
+    m2 = m_session.clone()
+    assert len(m2._backend_stack) == 1
+
+    # They should still be different lists.
+    assert m2._backend_stack is not m_session._backend_stack
+    assert m2._pop_model_state()
+    assert len(m2._backend_stack) == 0
+    assert len(m_session._backend_stack) == 1
+    assert m2.backend is m1.backend
 
 if __name__ == "__main__":
     pytest.main([__file__])
