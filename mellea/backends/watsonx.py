@@ -340,6 +340,7 @@ class WatsonxAIBackend(FormatterBackend):
             conversation=conversation,
             tools=tools,
             seed=model_opts.get(ModelOption.SEED, None),
+            format=format,
         )
 
         try:
@@ -406,6 +407,7 @@ class WatsonxAIBackend(FormatterBackend):
         conversation: list[dict],
         tools: dict[str, Callable],
         seed,
+        format,
     ):
         """Called when generation is done."""
         # Reconstruct the chat_response from chunks if streamed.
