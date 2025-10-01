@@ -133,8 +133,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # for the call to the model.
         self.from_mellea_model_opts_map = {
             ModelOption.MAX_NEW_TOKENS: "max_new_tokens",
-            "guardian_config": "guardian_config",  # Pass through for Granite Guardian models
-            "think": "think",  # Pass through for Granite Guardian thinking mode
         }
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
