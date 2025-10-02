@@ -5,8 +5,9 @@ from typing import Dict, List, Optional, Union, Literal
 
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import CBlock, Context, ChatContext
+from mellea.stdlib.base import CBlock, Context, ChatContext, ModelOutputThunk
 from mellea.stdlib.chat import Message
+from mellea.stdlib.instruction import Instruction
 from mellea.stdlib.requirement import Requirement, ValidationResult
 
 
@@ -192,43 +193,57 @@ class GuardianCheck(Requirement):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
     ) -> ValidationResult:
-        """Validate the last turn using Granite Guardian via selected backend."""
+        """Validate conversation using Granite Guardian via selected backend."""
         logger = self._logger
 
-        last_turn = ctx.last_turn()
-        if last_turn is None:
-            logger.warning("No last turn found in context")
-            return ValidationResult(False, reason="No content to validate")
-
-        # Build a fresh chat context for the guardian model.
+        # Build a fresh chat context for the guardian model (keep it minimal).
         gctx = ChatContext()
 
         effective_risk = self.get_effective_risk()
 
-        if (self._risk == "groundedness" or effective_risk == "groundedness") and self._context_text:
+        # For groundedness: add doc only for Ollama; HF receives context via guardian_config
+        if (
+            (self._risk == "groundedness" or effective_risk == "groundedness")
+            and self._context_text
+            and self._backend_type == "ollama"
+        ):
             gctx = gctx.add(Message("user", f"Document: {self._context_text}"))
 
-        # Add the last user message if present.
-        if last_turn.model_input is not None:
-            if isinstance(last_turn.model_input, CBlock) and last_turn.model_input.value is not None:
-                gctx = gctx.add(Message("user", last_turn.model_input.value))
-            elif isinstance(last_turn.model_input, Message):
-                gctx = gctx.add(Message(last_turn.model_input.role, last_turn.model_input.content))
-            else:
-                gctx = gctx.add(Message("user", str(last_turn.model_input)))
+        # Try to reuse chat history directly when available.
+        messages = None
+        try:
+            from mellea.stdlib.chat import as_chat_history
+            messages = as_chat_history(ctx)
+        except Exception:
+            messages = None
 
-        # Add the assistant response, optionally including tool call info for function_call risk.
-        if last_turn.output is not None:
-            assistant_text = last_turn.output.value or ""
-            if getattr(last_turn.output, "tool_calls", None) and (self._risk == "function_call" or effective_risk == "function_call"):
-                calls = []
-                for name, tc in last_turn.output.tool_calls.items():
-                    calls.append(f"{name}({getattr(tc, 'args', {})})")
-                if calls:
-                    suffix = f" [Function calls: {', '.join(calls)}]"
-                    assistant_text = (assistant_text + suffix) if assistant_text else suffix
-            if assistant_text:
-                gctx = gctx.add(Message("assistant", assistant_text))
+        if messages:
+            for m in messages:
+                gctx = gctx.add(m)
+        else:
+            # Fallback: build from the last turn only
+            last_turn = ctx.last_turn()
+            if last_turn is None:
+                logger.warning("No last turn found in context")
+                return ValidationResult(False, reason="No content to validate")
+
+            if last_turn.model_input is not None:
+                gctx = gctx.add(last_turn.model_input)
+
+            if last_turn.output is not None:
+                # For function call risk, append tool call info as text; otherwise add thunk directly.
+                if self._risk == "function_call" or effective_risk == "function_call":
+                    content = last_turn.output.value or ""
+                    tcalls = getattr(last_turn.output, "tool_calls", None)
+                    if tcalls:
+                        calls = [f"{name}({getattr(tc, 'args', {})})" for name, tc in tcalls.items()]
+                        if calls:
+                            suffix = f" [Tool calls: {', '.join(calls)}]"
+                            content = (content + suffix) if content else suffix
+                    if content:
+                        gctx = gctx.add(Message("assistant", content))
+                else:
+                    gctx = gctx.add(last_turn.output)
 
         # Ensure we have something to validate.
         history = gctx.view_for_generation() or []
@@ -248,20 +263,23 @@ class GuardianCheck(Requirement):
                 "think": True if self._thinking else None,
             })
         else:  # huggingface
-            # HF chat template for guardian expects guardian_config instead of a system message
-            guardian_cfg: Dict[str, object] = {"risk": effective_risk}
+            # HF chat template for Guardian expects guardian_config and (optionally) documents
+            guardian_cfg: Dict[str, object] = {"criteria_id": effective_risk}
             if self._custom_criteria:
-                guardian_cfg["custom_criteria"] = self._custom_criteria
-            if self._context_text and (self._risk == "groundedness" or effective_risk == "groundedness"):
-                guardian_cfg["context"] = self._context_text
+                # When using custom criteria, provide it as free-text criteria
+                guardian_cfg["criteria_text"] = self._custom_criteria
 
             guardian_options.update({
                 "guardian_config": guardian_cfg,
-                "think": self._thinking,  # Passed to apply_chat_template (not guardian_config)
-                "add_generation_prompt": True,  # Required for Guardian template
+                "think": self._thinking,  # Passed to apply_chat_template
+                "add_generation_prompt": True,  # Guardian template requires a generation prompt
                 "max_new_tokens": 4000 if self._thinking else 50,
                 "stream": False,
             })
+
+            # Provide documents parameter for groundedness
+            if self._context_text and (self._risk == "groundedness" or effective_risk == "groundedness"):
+                guardian_options["documents"] = [{"doc_id": "0", "text": self._context_text}]
 
         # Attach tools for function_call checks.
         # Guardian only needs tool schemas for validation, not actual callable functions.
