@@ -7,11 +7,10 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from mellea.stdlib.base import Context
 from mellea.stdlib.requirement import Requirement, ValidationResult
-
 
 # region code extraction
 
@@ -57,7 +56,7 @@ def _score_code_block(code: str, context_text: str = "") -> int:
     return score
 
 
-def extract_python_code(text: str) -> Optional[str]:
+def extract_python_code(text: str) -> str | None:
     """Extract Python code from markdown code blocks or plain text.
 
     Uses intelligent extraction strategy:
@@ -84,7 +83,7 @@ def extract_python_code(text: str) -> Optional[str]:
         for match in matches:
             # Get text before this code block for context
             match_pos = text.find(f"```python\n{match}")
-            context_before = text[max(0, match_pos - 200):match_pos]
+            context_before = text[max(0, match_pos - 200) : match_pos]
 
             score = _score_code_block(match, context_before)
 
@@ -101,12 +100,25 @@ def extract_python_code(text: str) -> Optional[str]:
         # Check if any look like Python
         for match in matches:
             candidate = match.strip()
-            if any(keyword in candidate for keyword in ["def ", "class ", "import ", "from ", "if ", "for ", "while "]):
+            if any(
+                keyword in candidate
+                for keyword in [
+                    "def ",
+                    "class ",
+                    "import ",
+                    "from ",
+                    "if ",
+                    "for ",
+                    "while ",
+                ]
+            ):
                 return candidate
 
     # If no code blocks, check if entire text looks like Python
     stripped_text = text.strip()
-    if any(keyword in stripped_text for keyword in ["def ", "class ", "import ", "from "]):
+    if any(
+        keyword in stripped_text for keyword in ["def ", "class ", "import ", "from "]
+    ):
         return stripped_text
 
     return None
@@ -116,21 +128,17 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
     """Validate that context contains extractable Python code."""
     last_output = ctx.last_output()
     if last_output is None or last_output.value is None:
-        return ValidationResult(
-            result=False,
-            reason="No output found in context"
-        )
+        return ValidationResult(result=False, reason="No output found in context")
 
     code = extract_python_code(last_output.value)
     if code is None:
         return ValidationResult(
-            result=False,
-            reason="No Python code block found in output"
+            result=False, reason="No Python code block found in output"
         )
 
     return ValidationResult(
         result=True,
-        reason=code  # Return extracted code for downstream use
+        reason=code,  # Return extracted code for downstream use
     )
 
 
@@ -141,7 +149,7 @@ class HasPythonCodeListing(Requirement):
         super().__init__(
             description="The result should contain a Python code listing in markdown format or as plain code.",
             validation_fn=_has_python_code_listing,
-            check_only=True
+            check_only=True,
         )
 
 
@@ -157,7 +165,7 @@ def _python_code_parses(ctx: Context) -> ValidationResult:
     if not extraction_result.as_bool():
         return ValidationResult(
             result=False,
-            reason=extraction_result.reason or "Could not extract Python code"
+            reason=extraction_result.reason or "Could not extract Python code",
         )
 
     code = extraction_result.reason  # Code is stored in reason field
@@ -165,20 +173,13 @@ def _python_code_parses(ctx: Context) -> ValidationResult:
 
     try:
         ast.parse(code)
-        return ValidationResult(
-            result=True,
-            reason="Python code parses successfully"
-        )
+        return ValidationResult(result=True, reason="Python code parses successfully")
     except SyntaxError as e:
         return ValidationResult(
-            result=False,
-            reason=f"Syntax error at line {e.lineno}: {e.msg}"
+            result=False, reason=f"Syntax error at line {e.lineno}: {e.msg}"
         )
     except Exception as e:
-        return ValidationResult(
-            result=False,
-            reason=f"Parse error: {str(e)}"
-        )
+        return ValidationResult(result=False, reason=f"Parse error: {e!s}")
 
 
 class PythonCodeParses(Requirement):
@@ -188,7 +189,7 @@ class PythonCodeParses(Requirement):
         super().__init__(
             description="The Python code should be syntactically valid and parseable.",
             validation_fn=_python_code_parses,
-            check_only=True
+            check_only=True,
         )
 
 
@@ -208,15 +209,15 @@ def get_imported_modules(code: str) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                modules.append(alias.name.split('.')[0])  # Get top-level module
+                modules.append(alias.name.split(".")[0])  # Get top-level module
         elif isinstance(node, ast.ImportFrom):
             if node.module:
-                modules.append(node.module.split('.')[0])
+                modules.append(node.module.split(".")[0])
 
     return list(set(modules))  # Remove duplicates
 
 
-def is_module_available(module_name: str, venv_path: Optional[str] = None) -> bool:
+def is_module_available(module_name: str, venv_path: str | None = None) -> bool:
     """Check if a module is available in the system or specified venv."""
     if venv_path:
         # Check in specified venv using pip list
@@ -225,9 +226,11 @@ def is_module_available(module_name: str, venv_path: Optional[str] = None) -> bo
                 [f"{venv_path}/bin/python", "-m", "pip", "list", "--format=freeze"],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
-            installed = [line.split("==")[0].lower() for line in result.stdout.split("\n")]
+            installed = [
+                line.split("==")[0].lower() for line in result.stdout.split("\n")
+            ]
             return module_name.lower() in installed
         except Exception:
             return False
@@ -236,14 +239,15 @@ def is_module_available(module_name: str, venv_path: Optional[str] = None) -> bo
         return importlib.util.find_spec(module_name) is not None
 
 
-def _python_valid_imports(ctx: Context, venv_path: Optional[str] = None) -> ValidationResult:
+def _python_valid_imports(
+    ctx: Context, venv_path: str | None = None
+) -> ValidationResult:
     """Validate that all imports in Python code are available."""
     # First extract and parse the code
     extraction_result = _has_python_code_listing(ctx)
     if not extraction_result.as_bool():
         return ValidationResult(
-            result=False,
-            reason="Could not extract Python code for import validation"
+            result=False, reason="Could not extract Python code for import validation"
         )
 
     code = extraction_result.reason
@@ -254,17 +258,13 @@ def _python_valid_imports(ctx: Context, venv_path: Optional[str] = None) -> Vali
         ast.parse(code)
     except SyntaxError:
         return ValidationResult(
-            result=False,
-            reason="Code has syntax errors, cannot validate imports"
+            result=False, reason="Code has syntax errors, cannot validate imports"
         )
 
     modules = get_imported_modules(code)
     if not modules:
         # No imports is valid
-        return ValidationResult(
-            result=True,
-            reason="No imports to validate"
-        )
+        return ValidationResult(result=True, reason="No imports to validate")
 
     unavailable_modules = []
     for module in modules:
@@ -274,19 +274,18 @@ def _python_valid_imports(ctx: Context, venv_path: Optional[str] = None) -> Vali
     if unavailable_modules:
         return ValidationResult(
             result=False,
-            reason=f"Unavailable modules: {', '.join(unavailable_modules)}"
+            reason=f"Unavailable modules: {', '.join(unavailable_modules)}",
         )
 
     return ValidationResult(
-        result=True,
-        reason=f"All imports valid: {', '.join(modules)}"
+        result=True, reason=f"All imports valid: {', '.join(modules)}"
     )
 
 
 class PythonValidImports(Requirement):
     """Verifies that all import statements reference available packages."""
 
-    def __init__(self, venv_path: Optional[str] = None):
+    def __init__(self, venv_path: str | None = None):
         """Initialize import validator.
 
         Args:
@@ -297,7 +296,7 @@ class PythonValidImports(Requirement):
         super().__init__(
             description=f"All import statements should use packages available in {'specified venv' if venv_path else 'current environment'}.",
             validation_fn=lambda ctx: _python_valid_imports(ctx, self._venv_path),
-            check_only=True
+            check_only=True,
         )
 
 
@@ -312,46 +311,35 @@ def _python_executes_without_error(ctx: Context, timeout: int = 5) -> Validation
     extraction_result = _has_python_code_listing(ctx)
     if not extraction_result.as_bool():
         return ValidationResult(
-            result=False,
-            reason="Could not extract Python code for execution"
+            result=False, reason="Could not extract Python code for execution"
         )
 
     code = extraction_result.reason
     assert code is not None
 
     # Create temporary file and execute
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         f.write(code)
         temp_file = f.name
 
     try:
         result = subprocess.run(
-            [sys.executable, temp_file],
-            capture_output=True,
-            text=True,
-            timeout=timeout
+            [sys.executable, temp_file], capture_output=True, text=True, timeout=timeout
         )
 
         if result.returncode == 0:
-            return ValidationResult(
-                result=True,
-                reason="Code executed successfully"
-            )
+            return ValidationResult(result=True, reason="Code executed successfully")
         else:
             return ValidationResult(
                 result=False,
-                reason=f"Execution failed with error: {result.stderr[:200]}"
+                reason=f"Execution failed with error: {result.stderr[:200]}",
             )
     except subprocess.TimeoutExpired:
         return ValidationResult(
-            result=False,
-            reason=f"Execution timed out after {timeout} seconds"
+            result=False, reason=f"Execution timed out after {timeout} seconds"
         )
     except Exception as e:
-        return ValidationResult(
-            result=False,
-            reason=f"Execution error: {str(e)}"
-        )
+        return ValidationResult(result=False, reason=f"Execution error: {e!s}")
     finally:
         # Clean up temp file
         try:
@@ -372,8 +360,10 @@ class PythonExecutesWithoutError(Requirement):
         self._timeout = timeout
         super().__init__(
             description=f"The Python code should execute without errors (timeout: {timeout}s).",
-            validation_fn=lambda ctx: _python_executes_without_error(ctx, self._timeout),
-            check_only=True
+            validation_fn=lambda ctx: _python_executes_without_error(
+                ctx, self._timeout
+            ),
+            check_only=True,
         )
 
 
@@ -386,10 +376,7 @@ def _python_has_function_def(ctx: Context) -> ValidationResult:
     """Validate that Python code contains at least one function definition."""
     extraction_result = _has_python_code_listing(ctx)
     if not extraction_result.as_bool():
-        return ValidationResult(
-            result=False,
-            reason="Could not extract Python code"
-        )
+        return ValidationResult(result=False, reason="Could not extract Python code")
 
     code = extraction_result.reason
     assert code is not None
@@ -397,10 +384,7 @@ def _python_has_function_def(ctx: Context) -> ValidationResult:
     try:
         tree = ast.parse(code)
     except SyntaxError:
-        return ValidationResult(
-            result=False,
-            reason="Code has syntax errors"
-        )
+        return ValidationResult(result=False, reason="Code has syntax errors")
 
     function_names = []
     for node in ast.walk(tree):
@@ -410,12 +394,11 @@ def _python_has_function_def(ctx: Context) -> ValidationResult:
     if function_names:
         return ValidationResult(
             result=True,
-            reason=f"Found {len(function_names)} function(s): {', '.join(function_names)}"
+            reason=f"Found {len(function_names)} function(s): {', '.join(function_names)}",
         )
     else:
         return ValidationResult(
-            result=False,
-            reason="No function definitions found in code"
+            result=False, reason="No function definitions found in code"
         )
 
 
@@ -426,7 +409,7 @@ class PythonHasFunctionDef(Requirement):
         super().__init__(
             description="The Python code should define at least one function.",
             validation_fn=_python_has_function_def,
-            check_only=True
+            check_only=True,
         )
 
 
@@ -439,10 +422,7 @@ def _python_has_class_def(ctx: Context) -> ValidationResult:
     """Validate that Python code contains at least one class definition."""
     extraction_result = _has_python_code_listing(ctx)
     if not extraction_result.as_bool():
-        return ValidationResult(
-            result=False,
-            reason="Could not extract Python code"
-        )
+        return ValidationResult(result=False, reason="Could not extract Python code")
 
     code = extraction_result.reason
     assert code is not None
@@ -450,10 +430,7 @@ def _python_has_class_def(ctx: Context) -> ValidationResult:
     try:
         tree = ast.parse(code)
     except SyntaxError:
-        return ValidationResult(
-            result=False,
-            reason="Code has syntax errors"
-        )
+        return ValidationResult(result=False, reason="Code has syntax errors")
 
     class_names = []
     for node in ast.walk(tree):
@@ -463,12 +440,11 @@ def _python_has_class_def(ctx: Context) -> ValidationResult:
     if class_names:
         return ValidationResult(
             result=True,
-            reason=f"Found {len(class_names)} class(es): {', '.join(class_names)}"
+            reason=f"Found {len(class_names)} class(es): {', '.join(class_names)}",
         )
     else:
         return ValidationResult(
-            result=False,
-            reason="No class definitions found in code"
+            result=False, reason="No class definitions found in code"
         )
 
 
@@ -479,7 +455,7 @@ class PythonHasClassDef(Requirement):
         super().__init__(
             description="The Python code should define at least one class.",
             validation_fn=_python_has_class_def,
-            check_only=True
+            check_only=True,
         )
 
 
@@ -489,9 +465,7 @@ class PythonHasClassDef(Requirement):
 
 
 def _python_matches_examples(
-    ctx: Context,
-    function_name: str,
-    examples: list[tuple[dict, any]]
+    ctx: Context, function_name: str, examples: list[tuple[dict, Any]]
 ) -> ValidationResult:
     """Validate that Python function produces correct outputs for given examples.
 
@@ -505,10 +479,7 @@ def _python_matches_examples(
     """
     extraction_result = _has_python_code_listing(ctx)
     if not extraction_result.as_bool():
-        return ValidationResult(
-            result=False,
-            reason="Could not extract Python code"
-        )
+        return ValidationResult(result=False, reason="Could not extract Python code")
 
     code = extraction_result.reason
     assert code is not None
@@ -517,33 +488,25 @@ def _python_matches_examples(
     try:
         ast.parse(code)
     except SyntaxError as e:
-        return ValidationResult(
-            result=False,
-            reason=f"Code has syntax errors: {e}"
-        )
+        return ValidationResult(result=False, reason=f"Code has syntax errors: {e}")
 
     # Execute code in isolated namespace
-    namespace = {}
+    namespace: dict[str, Any] = {}
     try:
         exec(code, namespace)
     except Exception as e:
-        return ValidationResult(
-            result=False,
-            reason=f"Code execution failed: {str(e)}"
-        )
+        return ValidationResult(result=False, reason=f"Code execution failed: {e!s}")
 
     # Check if function exists
     if function_name not in namespace:
         return ValidationResult(
-            result=False,
-            reason=f"Function '{function_name}' not found in code"
+            result=False, reason=f"Function '{function_name}' not found in code"
         )
 
     func = namespace[function_name]
     if not callable(func):
         return ValidationResult(
-            result=False,
-            reason=f"'{function_name}' is not callable"
+            result=False, reason=f"'{function_name}' is not callable"
         )
 
     # Test all examples
@@ -553,23 +516,22 @@ def _python_matches_examples(
             result = func(**inputs)
             if result != expected:
                 failed_examples.append(
-                    f"Example {i+1}: {function_name}({inputs}) = {result}, expected {expected}"
+                    f"Example {i + 1}: {function_name}({inputs}) = {result}, expected {expected}"
                 )
         except Exception as e:
             failed_examples.append(
-                f"Example {i+1}: {function_name}({inputs}) raised {type(e).__name__}: {str(e)}"
+                f"Example {i + 1}: {function_name}({inputs}) raised {type(e).__name__}: {e!s}"
             )
 
     if failed_examples:
         return ValidationResult(
             result=False,
-            reason=f"Failed {len(failed_examples)}/{len(examples)} examples:\n" + "\n".join(failed_examples)
+            reason=f"Failed {len(failed_examples)}/{len(examples)} examples:\n"
+            + "\n".join(failed_examples),
         )
 
     return ValidationResult(
-        result=True,
-        reason=f"All {len(examples)} examples passed",
-        score=1.0
+        result=True, reason=f"All {len(examples)} examples passed", score=1.0
     )
 
 
@@ -580,7 +542,7 @@ class PythonMatchesExamples(Requirement):
     function against specific input/output examples.
     """
 
-    def __init__(self, function_name: str, examples: list[tuple[dict, any]]):
+    def __init__(self, function_name: str, examples: list[tuple[dict, Any]]):
         """Initialize example-based correctness validator.
 
         Args:
@@ -595,8 +557,10 @@ class PythonMatchesExamples(Requirement):
         self._examples = examples
         super().__init__(
             description=f"The function '{function_name}' should produce correct outputs for {len(examples)} test examples.",
-            validation_fn=lambda ctx: _python_matches_examples(ctx, self._function_name, self._examples),
-            check_only=True
+            validation_fn=lambda ctx: _python_matches_examples(
+                ctx, self._function_name, self._examples
+            ),
+            check_only=True,
         )
 
 
