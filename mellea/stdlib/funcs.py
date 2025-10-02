@@ -395,12 +395,6 @@ async def _validate(
     reqs = [reqs] if not isinstance(reqs, list) else reqs
     reqs = [Requirement(req) if type(req) is str else req for req in reqs]
 
-    if len(reqs) == 0:
-        FancyLogger().get_logger().warning(
-            "Calling validate with no requirements. This is a no-op."
-        )
-        return []
-
     if output is None:
         validation_target_ctx = context
     else:
