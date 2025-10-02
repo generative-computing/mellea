@@ -539,6 +539,12 @@ class OllamaModelBackend(FormatterBackend):
 
 
 def chat_response_delta_merge(mot: ModelOutputThunk, delta: ollama.ChatResponse):
+    """Merges the individual ChatResponse chunks from a streaming response into a single ChatResponse.
+
+    Args:
+        mot: the ModelOutputThunk that the deltas are being used to populated.
+        delta: the most recent ollama ChatResponse.
+    """
     if mot._meta.get("chat_response", None) is None:
         mot._meta["chat_response"] = delta
         return  # Return early, no need to merge.

@@ -1,4 +1,4 @@
-"""Example of Using Best of N with PRMs"""
+"""Example of Using Best of N with PRMs."""
 
 from docs.examples.helper import w
 from mellea import start_session

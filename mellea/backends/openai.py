@@ -93,6 +93,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             model_options : Generation options to pass to the LLM. Defaults to None.
             default_to_constraint_checking_alora: If set to False then aloras will be deactivated. This is primarily for performance benchmarking and debugging.
             api_key : API key for generation. Defaults to None.
+            kwargs : additional kwargs to pass when creating the OpenAI client.
         """
         super().__init__(
             model_id=model_id,
@@ -220,6 +221,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
         Args:
             model_options: the model_options for this call
+            is_chat_context: set to True if using chat completion api
 
         Returns:
             a new dict
@@ -245,6 +247,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
         Args:
             model_options: the model_options for this call
+            is_chat_context: set to True if using chat completion api
 
         Returns:
             a new dict
@@ -372,6 +375,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
     @staticmethod
     def message_to_openai_message(msg: Message):
+        """Serializes a mellea Message object to the message format required by OpenAI compatible api providers."""
         if msg.images is not None:
             img_list = [
                 {
@@ -526,7 +530,8 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
     ):
         """Called during generation to add information from a single ChatCompletion or ChatCompletionChunk to the ModelOutputThunk.
 
-        For OpenAI, tool call parsing is handled in the post processing step."""
+        For OpenAI, tool call parsing is handled in the post processing step.
+        """
         if mot._thinking is None:
             mot._thinking = ""
         if mot._underlying_value is None:

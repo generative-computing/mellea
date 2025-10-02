@@ -1,3 +1,5 @@
+"""Base Sampling Strategies."""
+
 import abc
 from copy import deepcopy
 
@@ -47,8 +49,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
-        """
-        Repair function that is being invoked if not all requirements are fulfilled. It should return a next action component.
+        """Repair function that is being invoked if not all requirements are fulfilled. It should return a next action component.
 
         Args:
             old_ctx: The context WITHOUT the last action + output.
@@ -99,9 +100,13 @@ class BaseSamplingStrategy(SamplingStrategy):
         Args:
             action : The action object to be sampled.
             context: The context to be passed to the sampling strategy.
-            show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
+            backend: The backend used for generating samples.
             requirements: List of requirements to test against (merged with global requirements).
             validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
+            format: output format for structured outputs.
+            model_options: model options to pass to the backend during generation / validation.
+            tool_calls: True if tool calls should be used during this sampling strategy.
+            show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
 
         Returns:
             SamplingResult: A result object indicating the success or failure of the sampling process.
@@ -244,7 +249,16 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
         sampled_results: list[ModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
-        # simply returns the first attempt if all loops fail
+        """Always returns the 0th index.
+
+        Args:
+            sampled_actions: List of actions that have been executed (without success).
+            sampled_results: List of (unsuccessful) generation results for these actions.
+            sampled_val: List of validation results for the results.
+
+        Returns:
+            The index of the result that should be selected as `.value`.
+        """
         return 0
 
     @staticmethod
@@ -255,7 +269,18 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
-        # repeat the last action again.
+        """Always returns the unedited, last action.
+
+        Args:
+            old_ctx: The context WITHOUT the last action + output.
+            new_ctx: The context including the last action + output.
+            past_actions: List of actions that have been executed (without success).
+            past_results: List of (unsuccessful) generation results for these actions.
+            past_val: List of validation results for the results.
+
+        Returns:
+            The next action component and context to be used for the next generation attempt.
+        """
         return past_actions[-1], old_ctx
 
 
@@ -268,7 +293,16 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
         sampled_results: list[ModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
-        # simply returns the first attempt if all loops fail
+        """Always returns the 0th index.
+
+        Args:
+            sampled_actions: List of actions that have been executed (without success).
+            sampled_results: List of (unsuccessful) generation results for these actions.
+            sampled_val: List of validation results for the results.
+
+        Returns:
+            The index of the result that should be selected as `.value`.
+        """
         return 0
 
     @staticmethod
@@ -279,6 +313,18 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
+        """Adds a description of the requirements that failed to a copy of the original instruction.
+
+        Args:
+            old_ctx: The context WITHOUT the last action + output.
+            new_ctx: The context including the last action + output.
+            past_actions: List of actions that have been executed (without success).
+            past_results: List of (unsuccessful) generation results for these actions.
+            past_val: List of validation results for the results.
+
+        Returns:
+            The next action component and context to be used for the next generation attempt.
+        """
         pa = past_actions[-1]
         if isinstance(pa, Instruction):
             last_failed_reqs: list[Requirement] = [
@@ -302,7 +348,16 @@ class MultiTurnStrategy(BaseSamplingStrategy):
         sampled_results: list[ModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ):
-        # return the last assistant message even if all attempts of repair failed.
+        """Always returns the last index. The last message from the model will always be returned if all results are failures.
+
+        Args:
+            sampled_actions: List of actions that have been executed (without success).
+            sampled_results: List of (unsuccessful) generation results for these actions.
+            sampled_val: List of validation results for the results.
+
+        Returns:
+            The index of the result that should be selected as `.value`.
+        """
         return -1
 
     @staticmethod
@@ -313,6 +368,18 @@ class MultiTurnStrategy(BaseSamplingStrategy):
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
+        """Returns a Message with a description of the failed requirements.
+
+        Args:
+            old_ctx: The context WITHOUT the last action + output.
+            new_ctx: The context including the last action + output.
+            past_actions: List of actions that have been executed (without success).
+            past_results: List of (unsuccessful) generation results for these actions.
+            past_val: List of validation results for the results.
+
+        Returns:
+            The next action component and context to be used for the next generation attempt.
+        """
         assert isinstance(new_ctx, ChatContext), (
             " Need chat context to run agentic sampling."
         )

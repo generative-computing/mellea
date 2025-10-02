@@ -90,7 +90,6 @@ def act(
     Returns:
         A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
     """
-
     out = _run_async_in_thread(
         _act(
             action,
@@ -279,7 +278,6 @@ def instruct(
         tool_calls: If true, tool calling is enabled.
         images: A list of images to be used in the instruction or None if none.
     """
-
     requirements = [] if requirements is None else requirements
     icl_examples = [] if icl_examples is None else icl_examples
     grounding_context = dict() if grounding_context is None else grounding_context
@@ -493,6 +491,8 @@ def transform(
         transformation:  The string representing the query to be executed against the object.
         context: the context being used as a history from which to generate the response.
         backend: the backend used to generate the response.
+        format: format for output parsing; usually not needed with transform.
+        model_options: Model options to pass to the backend.
 
     Returns:
         ModelOutputThunk|Any: The result of the transformation as processed by the backend. If no tools were called,

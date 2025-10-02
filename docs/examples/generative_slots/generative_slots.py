@@ -9,8 +9,7 @@ def classify_sentiment(text: str) -> Literal["positive", "negative"]: ...
 
 @generative
 def generate_summary(text: str) -> str:
-    """
-    This is a function that takes in a string and generates a summary for the string.
+    """This is a function that takes in a string and generates a summary for the string.
     Keep your summary succinct and under 20 words.
     """
 

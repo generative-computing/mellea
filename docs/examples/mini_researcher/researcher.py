@@ -19,20 +19,20 @@ from mellea.stdlib.sampling import RejectionSamplingStrategy, SamplingResult
 
 @cache
 def get_session():
-    """get M session (change model here)"""
+    """Get M session (change model here)."""
     return MelleaSession(backend=OllamaModelBackend(model_ids.IBM_GRANITE_3_3_8B))
 
 
 @cache
 def get_guardian_session():
-    """get M session for the guardian model"""
+    """Get M session for the guardian model."""
     return MelleaSession(
         backend=OllamaModelBackend(model_ids.IBM_GRANITE_GUARDIAN_3_0_2B)
     )
 
 
 def is_a_true_subset_of_b(a: list[str], b: list[str]) -> bool:
-    """check if a is true subset of b."""
+    """Check if a is true subset of b."""
     all_in = True
     for e in a:
         if e not in b:
@@ -42,7 +42,7 @@ def is_a_true_subset_of_b(a: list[str], b: list[str]) -> bool:
 
 
 def create_check_word_count(max_words: int) -> Callable[[str], bool]:
-    """generate a maximum-word-count validation function."""
+    """Generate a maximum-word-count validation function."""
 
     def cc(s: str):
         return len(s.split()) <= max_words
@@ -56,7 +56,7 @@ def create_check_word_count(max_words: int) -> Callable[[str], bool]:
 
 
 def step_is_input_safe(guardian_session: MelleaSession, docs: list[str]) -> bool:
-    """check if the list of docs has no harm."""
+    """Check if the list of docs has no harm."""
     is_safe = True
     for i_doc, doc in enumerate(docs):
         print(f"\nChecking Doc {i_doc + 1}/{len(docs)}", end="...")
@@ -73,7 +73,7 @@ def step_is_input_safe(guardian_session: MelleaSession, docs: list[str]) -> bool
 def step_summarize_docs(
     s: MelleaSession, docs: list[str], user_args: dict
 ) -> list[str]:
-    """generate a task-specific document summary for each doc."""
+    """Generate a task-specific document summary for each doc."""
     summaries = []
     for i_doc, doc in enumerate(docs):  # type: ignore
         print(f"\nSummarizing doc {i_doc + 1}/{len(docs)}", end="...")
@@ -91,7 +91,6 @@ def step_generate_outline(
     s: MelleaSession, user_args: dict, context: list[RAGDocument]
 ) -> list[str]:
     """Generate a report outline using constraint decoding (formatted output)."""
-
     print("\n Generating outline", end="...")
 
     class SectionTitles(BaseModel):
@@ -165,7 +164,6 @@ def step_write_full_report(
     outline: list[str],
 ) -> str:
     """Merge summaries and outline into a single report."""
-
     print("\nWriting full report", end="...")
 
     ## Define Requirements

@@ -163,7 +163,9 @@ class GenerativeSlot(Component, Generic[P, R]):
 
         Args:
             m: MelleaSession: A mellea session (optional, uses context if None)
-            **kwargs: Additional Kwargs to be passed to the func
+            model_options: Model options to pass to the backend.
+            *args: Additional args to be passed to the func.
+            **kwargs: Additional Kwargs to be passed to the func.
 
         Returns:
             ModelOutputThunk: Output with generated Thunk.
