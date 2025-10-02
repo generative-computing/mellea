@@ -687,7 +687,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             a new dict without chat template-specific options
         """
         # Options that should only go to apply_chat_template, not generate()
-        chat_template_only = {"guardian_config", "think", "add_generation_prompt"}
+        chat_template_only = {"guardian_config", "think", "add_generation_prompt", "documents"}
         return {k: v for k, v in model_options.items() if k not in chat_template_only}
 
     def _extract_model_tool_requests(
