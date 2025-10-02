@@ -9,7 +9,11 @@ from PIL import Image as PILImage
 
 import mellea.stdlib.funcs as mfuncs
 from mellea.backends import Backend, BaseModelSubclass
-from mellea.backends.model_ids import IBM_GRANITE_3_3_8B, ModelIdentifier
+from mellea.backends.model_ids import (
+    IBM_GRANITE_3_3_8B,
+    IBM_GRANITE_4_MICRO_3B,
+    ModelIdentifier,
+)
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
 from mellea.helpers.fancy_logger import FancyLogger
@@ -70,7 +74,7 @@ def backend_name_to_class(name: str) -> Any:
 
 def start_session(
     backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
-    model_id: str | ModelIdentifier = IBM_GRANITE_3_3_8B,
+    model_id: str | ModelIdentifier = IBM_GRANITE_4_MICRO_3B,
     ctx: Context | None = None,
     *,
     model_options: dict | None = None,

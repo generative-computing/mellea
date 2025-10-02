@@ -75,7 +75,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
     def __init__(
         self,
-        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_3_3_8B,
+        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_MICRO_3B,
         formatter: Formatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,

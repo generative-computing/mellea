@@ -46,7 +46,7 @@ class LiteLLMBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str = "ollama/" + str(model_ids.IBM_GRANITE_3_3_8B.ollama_name),
+        model_id: str = "ollama/" + str(model_ids.IBM_GRANITE_4_MICRO_3B.ollama_name),
         formatter: Formatter | None = None,
         base_url: str | None = "http://localhost:11434",
         model_options: dict | None = None,

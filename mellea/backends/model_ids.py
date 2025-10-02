@@ -25,6 +25,12 @@ class ModelIdentifier:
 #### IBM models ####
 ####################
 
+IBM_GRANITE_4_MICRO_3B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.0-micro", ollama_name="ibm/granite4:micro"
+)
+# todo: watson tbd
+
+
 IBM_GRANITE_3_2_8B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-3.2-8b-instruct",
     ollama_name="granite3.2:8b",
