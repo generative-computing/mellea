@@ -318,7 +318,8 @@ class ModelOutputThunk(CBlock):
     def __repr__(self):
         """Provides a python-parsable representation (usually).
 
-        Differs from CBlock because `._meta` can be very large for ModelOutputThunks."""
+        Differs from CBlock because `._meta` can be very large for ModelOutputThunks.
+        """
         return f"ModelOutputThunk({self.value})"
 
 
@@ -371,7 +372,6 @@ class Context(abc.ABC):
         cls: type[ContextT], previous: Context, data: Component | CBlock
     ) -> ContextT:
         """Constructs a new context from an existing context."""
-
         assert isinstance(previous, Context), (
             "Cannot create a new context from a non-Context object."
         )
@@ -422,7 +422,8 @@ class Context(abc.ABC):
     def as_list(self, last_n_components: int | None = None) -> list[Component | CBlock]:
         """Returns a list of the last n components in the context sorted from FIRST TO LAST.
 
-        If `last_n_components` is `None`, then all components are returned."""
+        If `last_n_components` is `None`, then all components are returned.
+        """
         context_list: list[Component | CBlock] = []
         current_context: Context = self
 
@@ -455,7 +456,6 @@ class Context(abc.ABC):
 
     def last_output(self, check_last_n_components: int = 3) -> ModelOutputThunk | None:
         """The last output thunk of the context."""
-
         for c in self.as_list(last_n_components=check_last_n_components)[::-1]:
             if isinstance(c, ModelOutputThunk):
                 return c
@@ -466,7 +466,6 @@ class Context(abc.ABC):
 
         This can be partial. If the last event is an input, then the output is None.
         """
-
         history = self.as_list(last_n_components=2)
 
         if len(history) == 0:
@@ -506,11 +505,13 @@ class ChatContext(Context):
         self._window_size = window_size
 
     def add(self, c: Component | CBlock) -> ChatContext:
+        """Add a new component/cblock to the context. Returns the new context."""
         new = ChatContext.from_previous(self, c)
         new._window_size = self._window_size
         return new
 
     def view_for_generation(self) -> list[Component | CBlock] | None:
+        """Returns the context in a linearized form. Uses the window_size set during initialization."""
         return self.as_list(self._window_size)
 
 
@@ -518,9 +519,11 @@ class SimpleContext(Context):
     """A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved.."""
 
     def add(self, c: Component | CBlock) -> SimpleContext:
+        """Add a new component/cblock to the context. Returns the new context."""
         return SimpleContext.from_previous(self, c)
 
     def view_for_generation(self) -> list[Component | CBlock] | None:
+        """Returns an empty list."""
         return []
 
 

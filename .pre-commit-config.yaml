@@ -11,7 +11,7 @@ repos:
       - id: ruff
         name: "Ruff linter"
         args: [--exit-non-zero-on-fix, --fix, --config=pyproject.toml]
-        files: '^(mellea|tests|cli|docs).*\.(py|ipynb)$'
+        files: '^(mellea|tests).*\.(py|ipynb)$'
 
   - repo: local
     hooks:

@@ -321,7 +321,8 @@ class LiteLLMBackend(FormatterBackend):
     ):
         """Called during generation to add information from a single ModelResponse or a chunk / ModelResponseStream to the ModelOutputThunk.
 
-        For LiteLLM, tool call parsing is handled in the post processing step."""
+        For LiteLLM, tool call parsing is handled in the post processing step.
+        """
         if mot._thinking is None:
             mot._thinking = ""
         if mot._underlying_value is None:

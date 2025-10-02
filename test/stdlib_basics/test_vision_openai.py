@@ -65,7 +65,9 @@ def test_image_block_construction_from_pil(pil_image: Image.Image):
 
 def test_image_block_in_instruction(m_session: MelleaSession, pil_image: Image.Image, gh_run: int):
     image_block = ImageBlock.from_pil_image(pil_image)
-    instr = m_session.instruct("Is this image mainly blue? Answer yes or no.", images=[image_block])
+
+    # Set strategy=None here since we are directly comparing the object and sampling strategies tend to do a deepcopy.
+    instr = m_session.instruct("Is this image mainly blue? Answer yes or no.", images=[image_block], strategy=None)
     assert isinstance(instr, ModelOutputThunk)
 
     # if not on GH

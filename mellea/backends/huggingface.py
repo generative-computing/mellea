@@ -765,10 +765,12 @@ class HFAlora(Alora, abc.ABC):
 
 
 class HFProcessRewardModel(PRM, abc.ABC):
+    """A Process Reward Model that works with a huggingface backend."""
+
     def __init__(
         self, model_name_or_path: str, score_token: str, device: str | None = None
     ):
-        """Initialize an PRM that works with a huggingface backend. Currently supports and tested with IBM Process Reward Models
+        """Initialize an PRM that works with a huggingface backend. Currently supports and tested with IBM Process Reward Models.
 
         Args:
             model_name_or_path (str): A local path to PRM or a huggingface PRM
@@ -803,13 +805,12 @@ class HFProcessRewardModel(PRM, abc.ABC):
         )[0]
 
     def stepify(self, content: str, step_separator: str) -> list[str]:
-        """Splits the assistant response into steps to score
+        """Splits the assistant response into steps to score.
 
         Args:
             content: assistant response to score
             step_separator: string on which to separate the content into steps
         """
-
         # convert assistant message into a list of steps
         list_of_steps = [
             step.strip() for step in content.split(step_separator) if step.strip != ""

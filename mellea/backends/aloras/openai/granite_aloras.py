@@ -105,12 +105,14 @@ class OpenAIConstraintAlora(OpenAIAlora):
 
 
 async def processing(mot: ModelOutputThunk, chunk: Completion):
+    """Called to process the incoming chunks."""
     if mot._underlying_value is None:
         mot._underlying_value = ""
     mot._underlying_value += chunk.choices[0].text
 
 
 async def post_processing(backend: OpenAIBackend, mot: ModelOutputThunk):
+    """Called after all data has been received."""
     backend.formatter.parse(mot._action, mot)  # type: ignore
 
 
