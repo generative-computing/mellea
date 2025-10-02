@@ -502,6 +502,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             conversation=conversation,
             thinking=thinking,
             seed=model_opts.get(ModelOption.SEED, None),
+            format=format,
         )
 
         try:
@@ -569,6 +570,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         conversation: list[dict],
         thinking,
         seed,
+        format,
     ):
         """Called when generation is done."""
         # Reconstruct the chat_response from chunks if streamed.

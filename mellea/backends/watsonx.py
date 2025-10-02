@@ -90,7 +90,7 @@ class WatsonxAIBackend(FormatterBackend):
         if api_key is None:
             api_key = os.environ.get("WATSONX_API_KEY")
         if project_id is None:
-            project_id = os.environ.get("WATSONX_PROJECT_ID")
+            self._project_id = os.environ.get("WATSONX_PROJECT_ID")
 
         self._creds = Credentials(url=base_url, api_key=api_key)
         _client = APIClient(credentials=self._creds)
@@ -98,7 +98,7 @@ class WatsonxAIBackend(FormatterBackend):
             model_id=self._get_watsonx_model_id(),
             api_client=_client,
             credentials=self._creds,
-            project_id=project_id,
+            project_id=self._project_id,
             params=self.model_options,
             **kwargs,
         )
@@ -135,7 +135,14 @@ class WatsonxAIBackend(FormatterBackend):
     @property
     def _model(self) -> ModelInference:
         """Watsonx's client gets tied to a specific event loop. Reset it here."""
-        self._model_inference.set_api_client(APIClient(self._creds))
+        _client = APIClient(credentials=self._creds)
+        self._model_inference = ModelInference(
+            model_id=self._get_watsonx_model_id(),
+            api_client=_client,
+            credentials=self._creds,
+            project_id=self._project_id,
+            params=self.model_options,
+        )
         return self._model_inference
 
     def _get_watsonx_model_id(self) -> str:
@@ -340,6 +347,7 @@ class WatsonxAIBackend(FormatterBackend):
             conversation=conversation,
             tools=tools,
             seed=model_opts.get(ModelOption.SEED, None),
+            format=format,
         )
 
         try:
@@ -406,6 +414,7 @@ class WatsonxAIBackend(FormatterBackend):
         conversation: list[dict],
         tools: dict[str, Callable],
         seed,
+        format,
     ):
         """Called when generation is done."""
         # Reconstruct the chat_response from chunks if streamed.

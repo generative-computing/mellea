@@ -343,7 +343,7 @@ class OllamaModelBackend(FormatterBackend):
         # each processing step.
         output._process = functools.partial(self.processing, tools=tools)
         output._post_process = functools.partial(
-            self.post_processing, conversation=conversation, tools=tools
+            self.post_processing, conversation=conversation, tools=tools, format=format
         )
 
         try:
@@ -506,6 +506,7 @@ class OllamaModelBackend(FormatterBackend):
         mot: ModelOutputThunk,
         conversation: list[dict],
         tools: dict[str, Callable],
+        format,
     ):
         """Called when generation is done."""
         assert mot._action is not None, (

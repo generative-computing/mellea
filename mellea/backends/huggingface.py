@@ -334,6 +334,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             input_ids = self._tokenizer.apply_chat_template(  # type: ignore
                 ctx_as_conversation,
                 tools=convert_tools_to_json(tools),  # type: ignore
+                add_generation_prompt=True,
                 return_tensors="pt",
                 **self._make_backend_specific_and_remove(model_options),
             ).to(self._device)  # type: ignore
@@ -407,6 +408,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 self.post_processing,
                 conversation=ctx_as_conversation,
                 input_ids=input_ids,
+                format=format,
                 tool_calls=tool_calls,
                 tools=tools,
                 seed=seed,
@@ -463,6 +465,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         self,
         mot: ModelOutputThunk,
         conversation: list[dict],
+        format: type[BaseModelSubclass] | None,
         tool_calls: bool,
         tools: dict[str, Callable],
         seed,
