@@ -144,9 +144,9 @@ async def _act(
             "Must provide a SamplingStrategy when return_sampling_results==True"
         )
 
-    # if there is no reason to sample, just generate from the context.
-    if strategy is None or requirements is None or len(requirements) == 0:
-        if strategy is None and requirements is not None:
+    if strategy is None:
+        # Only use the strategy if one is provided. Add a warning if requirements were passed in though.
+        if requirements is not None and len(requirements) >= 0:
             FancyLogger.get_logger().warning(
                 "Calling the function with NO strategy BUT requirements. No requirement is being checked!"
             )
@@ -394,6 +394,13 @@ async def _validate(
     # Turn a solitary requirement in to a list of requirements, and then reqify if needed.
     reqs = [reqs] if not isinstance(reqs, list) else reqs
     reqs = [Requirement(req) if type(req) is str else req for req in reqs]
+
+    if len(reqs) == 0:
+        FancyLogger().get_logger().warning(
+            "Calling validate with no requirements. This is a no-op."
+        )
+        return []
+
     if output is None:
         validation_target_ctx = context
     else:

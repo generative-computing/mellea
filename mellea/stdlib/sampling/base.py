@@ -86,7 +86,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         action: Component,
         context: Context,
         backend: Backend,
-        requirements: list[Requirement],
+        requirements: list[Requirement] | None,
         *,
         validation_ctx: Context | None = None,
         format: type[BaseModelSubclass] | None = None,
@@ -123,7 +123,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         show_progress = show_progress and flog.getEffectiveLevel() <= FancyLogger.INFO
 
         reqs = []
-        # global requirements supersede local requirements (global requiremenst can be defined by user)
+        # global requirements supersede local requirements (global requirements can be defined by user)
         # Todo: re-evaluate if this makes sense
         if self.requirements is not None:
             reqs += self.requirements

@@ -81,7 +81,7 @@ class SamplingStrategy(abc.ABC):
         action: Component,
         context: Context,
         backend: Backend,
-        requirements: list[Requirement],
+        requirements: list[Requirement] | None,
         *,
         validation_ctx: Context | None = None,
         format: type[BaseModelSubclass] | None = None,
