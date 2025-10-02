@@ -109,7 +109,6 @@ class SamplingStrategy(abc.ABC):
             format: output format for structured outputs.
             model_options: model options to pass to the backend during generation / validation.
             tool_calls: True if tool calls should be used during this sampling strategy.
-            show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
 
         Returns:
             SamplingResult: A result object indicating the success or failure of the sampling process.

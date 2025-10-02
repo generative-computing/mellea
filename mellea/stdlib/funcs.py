@@ -487,7 +487,7 @@ def transform(
     """Transform method for creating a new object with the transformation applied.
 
     Args:
-        obj : The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
+        obj: The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
         transformation:  The string representing the query to be executed against the object.
         context: the context being used as a history from which to generate the response.
         backend: the backend used to generate the response.
