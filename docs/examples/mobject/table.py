@@ -3,6 +3,7 @@ from io import StringIO
 import pandas
 
 import mellea
+from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
 from mellea.stdlib.mify import mify
 
 
@@ -51,9 +52,10 @@ class MyCompanyDatabase:
 if __name__ == "__main__":
     m = mellea.start_session()
     db = MyCompanyDatabase()
-    print(m.query(db, "What were sales for the Northeast branch this month?"))
+    print(m.query(db, "What were sales for the Northeast branch this month?").value)
     result = m.transform(db, "Update the northeast sales to 1250.")
     print(type(result))
     print(db.table)
     print(m.query(db, "What were sales for the Northeast branch this month?"))
     result = m.transform(db, "Transpose the table.")
+    print(result)

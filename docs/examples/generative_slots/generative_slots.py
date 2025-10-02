@@ -16,8 +16,8 @@ def generate_summary(text: str) -> str:
 
 
 if __name__ == "__main__":
-    with start_session():
-        sentiment_component = classify_sentiment(text="I love this!")
+    with start_session() as m:
+        sentiment_component = classify_sentiment(m, text="I love this!")
         print("Output sentiment is : ", sentiment_component)
 
         summary = generate_summary(
