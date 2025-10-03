@@ -90,7 +90,6 @@ def act(
     Returns:
         A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
     """
-
     out = _run_async_in_thread(
         _act(
             action,
@@ -144,9 +143,9 @@ async def _act(
             "Must provide a SamplingStrategy when return_sampling_results==True"
         )
 
-    # if there is no reason to sample, just generate from the context.
     if strategy is None:
-        if strategy is None and requirements is not None:
+        # Only use the strategy if one is provided. Add a warning if requirements were passed in though.
+        if requirements is not None and len(requirements) >= 0:
             FancyLogger.get_logger().warning(
                 "Calling the function with NO strategy BUT requirements. No requirement is being checked!"
             )
@@ -279,7 +278,6 @@ def instruct(
         tool_calls: If true, tool calling is enabled.
         images: A list of images to be used in the instruction or None if none.
     """
-
     requirements = [] if requirements is None else requirements
     icl_examples = [] if icl_examples is None else icl_examples
     grounding_context = dict() if grounding_context is None else grounding_context
@@ -394,6 +392,7 @@ async def _validate(
     # Turn a solitary requirement in to a list of requirements, and then reqify if needed.
     reqs = [reqs] if not isinstance(reqs, list) else reqs
     reqs = [Requirement(req) if type(req) is str else req for req in reqs]
+
     if output is None:
         validation_target_ctx = context
     else:
@@ -488,10 +487,12 @@ def transform(
     """Transform method for creating a new object with the transformation applied.
 
     Args:
-        obj : The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
+        obj: The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
         transformation:  The string representing the query to be executed against the object.
         context: the context being used as a history from which to generate the response.
         backend: the backend used to generate the response.
+        format: format for output parsing; usually not needed with transform.
+        model_options: Model options to pass to the backend.
 
     Returns:
         ModelOutputThunk|Any: The result of the transformation as processed by the backend. If no tools were called,

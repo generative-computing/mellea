@@ -9,15 +9,14 @@ def classify_sentiment(text: str) -> Literal["positive", "negative"]: ...
 
 @generative
 def generate_summary(text: str) -> str:
-    """
-    This is a function that takes in a string and generates a summary for the string.
+    """This is a function that takes in a string and generates a summary for the string.
     Keep your summary succinct and under 20 words.
     """
 
 
 if __name__ == "__main__":
-    with start_session():
-        sentiment_component = classify_sentiment(text="I love this!")
+    with start_session() as m:
+        sentiment_component = classify_sentiment(m, text="I love this!")
         print("Output sentiment is : ", sentiment_component)
 
         summary = generate_summary(

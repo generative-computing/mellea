@@ -65,21 +65,25 @@ class ValidationResult:
 
     @property
     def reason(self) -> str | None:
+        """Reason for the validation result."""
         return self._reason
 
     @property
     def score(self) -> float | None:
+        """An optional score for the validation result."""
         return self._score
 
     @property
     def thunk(self) -> ModelOutputThunk | None:
+        """The ModelOutputThunk associated with the validation func if an llm was used to generate the final result."""
         return self._thunk
 
     def as_bool(self) -> bool:
-        """"""
+        """Return a boolean value based on the result."""
         return self._result
 
     def __bool__(self) -> bool:
+        """Return a boolean value based on the result."""
         return self.as_bool()
 
 

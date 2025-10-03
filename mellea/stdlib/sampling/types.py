@@ -1,3 +1,5 @@
+"""Base types for sampling."""
+
 import abc
 
 from mellea.backends import Backend, BaseModelSubclass
@@ -22,10 +24,12 @@ class SamplingResult(CBlock):
         """Initialize a new instance of sampling results.
 
         Args:
-            result: The final output or result from applying the sampling strategy.
+            result_index: The index of the final output or result from applying the sampling strategy.
             success: A boolean indicating whether the operation was successful.
             sample_generations: A list containing intermediate generations produced during the process.
             sample_validations: For each generation a list of tuples of a requirement and a validation result.
+            sample_actions: A list of intermediate actions used to produce sampling results.
+            sample_contexts: A list of contexts produced by the generation results.
         """
         if sample_generations is None:
             sample_generations = []
@@ -53,18 +57,22 @@ class SamplingResult(CBlock):
 
     @property
     def result(self) -> ModelOutputThunk:
+        """The final output or result from applying the sampling strategy."""
         return self.sample_generations[self.result_index]
 
     @property
     def result_ctx(self) -> Context:
+        """The context of the final output or result from applying the sampling strategy."""
         return self.sample_contexts[self.result_index]
 
     @property
     def result_action(self) -> Component:
+        """The action that generated the final output or result from applying the sampling strategy."""
         return self.sample_actions[self.result_index]
 
     @property
     def result_validations(self) -> list[tuple[Requirement, ValidationResult]]:
+        """The validation results associated with the final output or result from applying the sampling strategy."""
         return self.sample_validations[self.result_index]
 
 
@@ -88,13 +96,20 @@ class SamplingStrategy(abc.ABC):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> SamplingResult:
-        """This method is the abstract method for sampling a given instruction.
+        """This method is the abstract method for sampling a given component.
 
         It must be implemented by any concrete subclasses to provide specific sampling logic.
 
         Args:
             action : The action object to be sampled.
             context: The context to be passed to the sampling strategy.
-            requirements: The requirements to be used by the sampling strategy (merged with global requirements).
+            backend: The backend used for generating samples.
+            requirements: List of requirements to test against (merged with global requirements).
             validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
+            format: output format for structured outputs.
+            model_options: model options to pass to the backend during generation / validation.
+            tool_calls: True if tool calls should be used during this sampling strategy.
+
+        Returns:
+            SamplingResult: A result object indicating the success or failure of the sampling process.
         """
