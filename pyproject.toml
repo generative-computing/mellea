@@ -42,6 +42,8 @@ dependencies = [
     "mistletoe>=1.4.0",
     "huggingface-hub>=0.33.4",
     "pillow",
+    "math_verify", # Needed for Majority Voting Sampling Strategies.
+    "rouge_score" # Needed for Majority Voting Sampling Strategies.
 ]
 
 [project.scripts]

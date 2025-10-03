@@ -7,6 +7,8 @@ from mellea.stdlib.sampling.majority_voting import (
 )
 import pytest
 
+from mellea.stdlib.sampling.types import SamplingResult
+
 
 @pytest.fixture(scope="module")
 def m_session(gh_run):
@@ -35,10 +37,7 @@ def test_majority_voting_for_math(m_session: MelleaSession):
         strategy=MajorityVotingStrategyForMath(number_of_samples=8, loop_budget=1),
         return_sampling_results=True,
     )
-    if result.success:
-        output = str(result.result)
-    else:
-        output = result.sample_generations[0].value
+    output = str(result.result)
 
     print(output)
     assert output
@@ -56,18 +55,15 @@ def test_MBRDRougeL(m_session: MelleaSession):
 
     name = "Olivia"
     notes = "Olivia helped the lab over the last few weeks by organizing intern events, advertising the speaker series, and handling issues with snack delivery."
-    email_candidate = m_session.instruct(
+    email_candidate: SamplingResult = m_session.instruct(
         "Write an email to {{name}} using the notes following: {{notes}}.",
-        requirements=requirements,
+        requirements=requirements,  # type: ignore
         strategy=MBRDRougeLStrategy(number_of_samples=8, loop_budget=1),
         user_variables={"name": name, "notes": notes},
         return_sampling_results=True,
     )
 
-    if email_candidate.success:
-        output = str(email_candidate.result)
-    else:
-        output = email_candidate.sample_generations[0].value
+    output = str(email_candidate.result)
 
     print(output)
     assert output
