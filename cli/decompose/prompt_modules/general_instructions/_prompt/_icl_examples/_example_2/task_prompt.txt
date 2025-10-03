@@ -1,0 +1,22 @@
+Your task is to analyze the retrieved information about the tables in the tablespace MYTBSPC and identify trends, inefficiencies, and potential issues. You will also provide optimization suggestions based on this analysis.
+
+First, review the retrieved information about the tables in the tablespace MYTBSPC:
+<retrieved_tables>
+{{TABLESPACE_TABLES_RETRIEVAL}}
+</retrieved_tables>
+
+Next, analyze the retrieved information to identify any trends, such as table size distribution, data types used, or indexing strategies. Look for inefficiencies, such as unused tables, redundant indexes, or suboptimal data types. Also, identify potential issues, such as tables nearing storage limits or indexes that may be causing performance bottlenecks.
+
+Consider the following aspects during your analysis:
+- Table organization and structure
+- Indexing strategies and their effectiveness
+- Data distribution and potential hotspots
+- Storage usage and potential capacity issues
+
+Based on your analysis, provide optimization suggestions to improve the performance, efficiency, and maintainability of the tables in the tablespace MYTBSPC. These suggestions could include:
+- Reorganizing tables for better data locality
+- Adjusting indexing strategies for improved query performance
+- Implementing data compression or encryption
+- Recommending changes to data types for better storage efficiency
+
+Ensure your analysis and suggestions are concise, clear, and directly relevant to the information retrieved about the tables in the tablespace MYTBSPC.
