@@ -28,11 +28,16 @@ class MyCompanyDatabase:
             header=0,
             index_col=False,
         )
-        print(f"testing123 changes {store} to {amount}")
+        # Remove unnamed columns and columns that don't exist.
+        table_df.drop(table_df.filter(regex="Unname").columns, axis=1, inplace=True)
+
+        # Sometimes extra whitespace gets added to the column names and row values. Remove it.
+        table_df.columns = table_df.columns.str.strip()
+        table_df = table_df.map(lambda x: x.strip() if isinstance(x, str) else x)
+
         table_df.loc[table_df["Store"] == store, "Sales"] = amount
-        return MyCompanyDatabase(
-            table=table_df.to_csv(sep="|", index=False, header=True)
-        )
+        self.table = table_df.to_csv(sep="|", index=False, header=True)
+        return self
 
     def transpose(self):
         """Transpose the table."""
