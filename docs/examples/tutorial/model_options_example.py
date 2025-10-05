@@ -4,13 +4,12 @@ from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.types import ModelOption
 
 m = mellea.MelleaSession(
-    backend=OllamaModelBackend(
-        model_id=model_ids.IBM_GRANITE_3_2_8B, model_options={ModelOption.SEED: 42}
-    )
+    backend=OllamaModelBackend(model_options={ModelOption.SEED: 42})
 )
 
 answer = m.instruct(
-    "What is 2x2?", model_options={"temperature": 0.5, "num_predict": 5}
+    "What is 2x2?",
+    model_options={ModelOption.TEMPERATURE: 0.5, ModelOption.MAX_NEW_TOKENS: 15},
 )
 
 print(str(answer))

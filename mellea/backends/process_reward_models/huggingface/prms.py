@@ -1,3 +1,5 @@
+"""PRM Implementations for Local HuggingFace Backends."""
+
 import torch
 from transformers.tokenization_utils_base import BatchEncoding
 
@@ -5,6 +7,8 @@ from mellea.backends.huggingface import HFProcessRewardModel
 
 
 class HFGenerativePRM(HFProcessRewardModel):
+    """A Generative PRM that works with a huggingface backend."""
+
     def __init__(
         self,
         model_name_or_path: str = "ibm-granite/granite-3.3-8b-lora-math-prm",
@@ -13,7 +17,7 @@ class HFGenerativePRM(HFProcessRewardModel):
         generation_prompt: str = "Is this response correct so far (Y/N)?",
         step_separator: str = "\n\n",
     ):
-        """Initialize a Generative PRM that works with a huggingface backend. Currently supports and tested with IBM Process Reward Models
+        """Initialize a Generative PRM that works with a huggingface backend. Currently supports and tested with IBM Process Reward Models.
 
         Args:
             model_name_or_path (str): A local path to PRM or a huggingface PRM
@@ -30,13 +34,12 @@ class HFGenerativePRM(HFProcessRewardModel):
         self.softmax = torch.nn.Softmax(dim=-1)
 
     def score(self, query: str, response: str) -> tuple[list[float], list[list[float]]]:
-        """Returns a final and per-step score for a given input query and response
+        """Returns a final and per-step score for a given input query and response.
 
         Args:
             query (str): User query
             response (str): Assistant Response to score
         """
-
         list_of_steps = self.stepify(response, self.step_separator)
         # get tokenized batch
         batches = self.prepare_inputs(query, list_of_steps)
@@ -114,7 +117,7 @@ class HFGenerativePRM(HFProcessRewardModel):
         return all_rewards, all_rewards_per_step
 
     def prepare_inputs(self, user_content: str, steps: list[str]) -> BatchEncoding:
-        """Prepare the inputs for inference with the model
+        """Prepare the inputs for inference with the model.
 
         Args:
             user_content (str): the user query
@@ -153,6 +156,8 @@ class HFGenerativePRM(HFProcessRewardModel):
 
 
 class HFRegressionPRM(HFProcessRewardModel):
+    """A Regression PRM that works with a huggingface backend."""
+
     def __init__(
         self,
         model_name_or_path: str,
@@ -160,12 +165,12 @@ class HFRegressionPRM(HFProcessRewardModel):
         device: str | None = None,
         step_separator: str = "\n\n",
     ):
-        """Initialize a Regression PRM that works with a huggingface backend. Currently supports and tested with IBM Process Reward Models
+        """Initialize a Regression PRM that works with a huggingface backend. Currently supports and tested with IBM Process Reward Models.
 
         Args:
             model_name_or_path (str): A local path to PRM or a huggingface PRM
             score_token (str): token who's logits correspond to the PRM score. Usually is a step demarker (for non-generative PRMs)
-            backend (LocalHFBackend): Mained as a pointer to the backend to which this this PRM is attached.
+            device (str): pointer to the device on which to run the model
             step_separator (str): string on which to separate the input content into steps
         """
         super().__init__(model_name_or_path, score_token, device)
@@ -189,13 +194,12 @@ class HFRegressionPRM(HFProcessRewardModel):
         self.softmax = torch.nn.Softmax(dim=-1)
 
     def score(self, query: str, response: str) -> tuple[list[float], list[list[float]]]:
-        """Returns a final and per-step score for a given input query and response
+        """Returns a final and per-step score for a given input query and response.
 
         Args:
             query (str): User query
             response (str): Assistant Response to score
         """
-
         list_of_steps = self.stepify(response, self.step_separator)
         # tokenizes the batch and concatenates the list of steps into a single step-separated response
         batch = self.prepare_inputs(query, list_of_steps)
@@ -232,7 +236,7 @@ class HFRegressionPRM(HFProcessRewardModel):
         return rewards, prm_probs
 
     def prepare_inputs(self, user_content: str, steps: list[str]) -> BatchEncoding:
-        """Prepare the inputs for inference with the model
+        """Prepare the inputs for inference with the model.
 
         Args:
             user_content (str): the user query

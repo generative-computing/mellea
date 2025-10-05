@@ -229,7 +229,7 @@ def mify(
 ) -> T: ...  # Overloads for @mify and mify(obj|cls)
 
 
-def mify(*args, **kwargs):
+def mify(*args, **kwargs):  # noqa: D417
     """M-ify an object or class.
 
     Allows the object (or instances of the class) to be used in m sessions and with m functions.

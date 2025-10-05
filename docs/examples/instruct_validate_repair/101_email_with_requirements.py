@@ -8,7 +8,7 @@ m = start_session(model_options={ModelOption.MAX_NEW_TOKENS: 200})
 # write an email with automatic requirement checking.
 email_v1 = m.instruct(
     "Write an email to invite all interns to the office party.",
-    requirements=["be formal", "Use 'Dear interns' as greeting."],
+    requirements=["be formal", "Use 'Dear Interns' as greeting."],
 )
 
 # print result

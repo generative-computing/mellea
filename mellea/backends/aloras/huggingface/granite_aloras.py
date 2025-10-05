@@ -33,8 +33,12 @@ class HFConstraintAlora(HFAlora):
         """Initialize after checking that the backend is correct.
 
         Args:
+            name: name of the alora.
+            path_or_model_id: huggingface path or model id.
+            generation_prompt: the prompt required to activate the aLoRa.
+            backend: a LocalHFBackend that this alora is attached to.
             constraint_prompt: a template that the constraint can be interpolated into; can only have a single `{}` slot.
-            include_constraint_in_alora_offset: whether to include the constraint prompt in the alora offset
+            include_constraint_in_alora_offset: whether to include the constraint prompt in the alora offset.
         """
         super().__init__(name, path_or_model_id, generation_prompt, backend)
 
@@ -142,7 +146,6 @@ class HFConstraintAlora(HFAlora):
         self, cache_hit: HFAloraCacheInfo, constraint: str, force_yn: bool
     ) -> dict:
         """Returns the input object used for generation."""
-
         # Must tokenize the constraint here since the requirement isn't known at initialization.
         constraint_tokens = self._backend._tokenizer(
             self._constraint_prompt.format(constraint), return_tensors="pt"
@@ -177,7 +180,6 @@ class HFConstraintAlora(HFAlora):
         self, input: str, response: str, constraint: str, force_yn: bool
     ) -> dict:
         """Returns the input object used for generation."""
-
         # Params aren't needed when just getting the backend args.
         backend_model_opts = self._backend._simplify_and_merge(None)
         sys_prompt = backend_model_opts.get(ModelOption.SYSTEM_PROMPT, None)
@@ -226,6 +228,7 @@ async def processing(
     force_yn: bool,
     gen_prompt: str,
 ):
+    """Called to process the incoming chunks."""
     if mot._underlying_value is None:
         mot._underlying_value = ""
 
@@ -248,6 +251,7 @@ async def processing(
 
 
 async def post_processing(mot: ModelOutputThunk, backend: LocalHFBackend):
+    """Called after all data has been received."""
     backend.formatter.parse(mot._action, mot)  # type: ignore
 
 

@@ -99,7 +99,6 @@ class GuardianCheck(Requirement):
         Returns:
             bool: True if there is no identified risk, False otherwise.
         """
-
         messages: list[dict[str, str]] = []
 
         last_turn = ctx.last_turn()

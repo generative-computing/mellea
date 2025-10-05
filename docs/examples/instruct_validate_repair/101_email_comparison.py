@@ -11,7 +11,7 @@ email_v2 = m.instruct(
     "Write a very funny email to invite all interns to the office party."
 )
 print(
-    f"***** email 1 ****\n{w(email_v1)}\n*******email 2 ******\n{w(email_v2)}\n*******"
+    f"***** email 1 ****\n{w(email_v1)}\n*******email 2 ******\n{w(email_v2)}\n\n*******"
 )
 
 # Use the emails as grounding context to evaluate which one is quirkier

@@ -46,7 +46,6 @@ def chat_completion_delta_merge(
         chunks: the list of dicts that represent the message deltas
         force_all_tool_calls_separate: if `True`, tool calls in separate message deltas will not be merged (even if their index values are the same); use when providers do not return the correct index value for tool calls. If using this option, all tool calls must be fully populated in a single delta since they won't be merged.
     """
-
     merged: dict[str, Any] = dict()
 
     # `delta`s map to a single choice.

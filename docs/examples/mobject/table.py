@@ -3,6 +3,7 @@ from io import StringIO
 import pandas
 
 import mellea
+from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
 from mellea.stdlib.mify import mify
 
 
@@ -27,11 +28,16 @@ class MyCompanyDatabase:
             header=0,
             index_col=False,
         )
-        print(f"testing123 changes {store} to {amount}")
+        # Remove unnamed columns and columns that don't exist.
+        table_df.drop(table_df.filter(regex="Unname").columns, axis=1, inplace=True)
+
+        # Sometimes extra whitespace gets added to the column names and row values. Remove it.
+        table_df.columns = table_df.columns.str.strip()
+        table_df = table_df.map(lambda x: x.strip() if isinstance(x, str) else x)
+
         table_df.loc[table_df["Store"] == store, "Sales"] = amount
-        return MyCompanyDatabase(
-            table=table_df.to_csv(sep="|", index=False, header=True)
-        )
+        self.table = table_df.to_csv(sep="|", index=False, header=True)
+        return self
 
     def transpose(self):
         """Transpose the table."""
@@ -51,9 +57,10 @@ class MyCompanyDatabase:
 if __name__ == "__main__":
     m = mellea.start_session()
     db = MyCompanyDatabase()
-    print(m.query(db, "What were sales for the Northeast branch this month?"))
+    print(m.query(db, "What were sales for the Northeast branch this month?").value)
     result = m.transform(db, "Update the northeast sales to 1250.")
     print(type(result))
     print(db.table)
     print(m.query(db, "What were sales for the Northeast branch this month?"))
     result = m.transform(db, "Transpose the table.")
+    print(result)

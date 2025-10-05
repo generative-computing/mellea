@@ -37,7 +37,8 @@ class Formatter(abc.ABC):
     ) -> ModelOutputThunk:
         """Parses the output from a model and sets the parsed_repr of the result ModelOutputThunk.
 
-        Returns the ModelOutputThunk that was passed in."""
+        Returns the ModelOutputThunk that was passed in.
+        """
         ...
 
     def to_chat_messages(self, cs: list[Component | CBlock]) -> list[Message]:

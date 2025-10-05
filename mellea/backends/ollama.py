@@ -38,7 +38,7 @@ class OllamaModelBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_3_3_8B,
+        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_MICRO_3B,
         formatter: Formatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
@@ -539,6 +539,12 @@ class OllamaModelBackend(FormatterBackend):
 
 
 def chat_response_delta_merge(mot: ModelOutputThunk, delta: ollama.ChatResponse):
+    """Merges the individual ChatResponse chunks from a streaming response into a single ChatResponse.
+
+    Args:
+        mot: the ModelOutputThunk that the deltas are being used to populated.
+        delta: the most recent ollama ChatResponse.
+    """
     if mot._meta.get("chat_response", None) is None:
         mot._meta["chat_response"] = delta
         return  # Return early, no need to merge.

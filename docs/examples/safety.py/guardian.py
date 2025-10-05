@@ -1,4 +1,4 @@
-"""Example of using the Guardian Requirement"""
+"""Example of using the Guardian Requirement."""
 
 from mellea import MelleaSession
 from mellea.backends import model_ids

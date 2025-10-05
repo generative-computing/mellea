@@ -64,8 +64,8 @@ class WatsonxAIBackend(FormatterBackend):
             model_options : Global model options to pass to the model. Defaults to None.
             api_key : watsonx API key. Defaults to None.
             project_id : watsonx project ID. Defaults to None.
+            kwargs : extra kwargs passed to model inference creation.
         """
-
         # There are bugs with the Watsonx python sdk related to async event loops;
         # using the same watsonx backend across multiple event loops causes errors.
         warnings.warn(
@@ -176,6 +176,7 @@ class WatsonxAIBackend(FormatterBackend):
 
         Args:
             model_options: the model_options for this call
+            is_chat_context: set to True if used for chat completion apis
 
         Returns:
             a new dict
@@ -201,6 +202,7 @@ class WatsonxAIBackend(FormatterBackend):
 
         Args:
             model_options: the model_options for this call
+            is_chat_context: set to True if used for chat completion apis
 
         Returns:
             a new dict
@@ -369,7 +371,8 @@ class WatsonxAIBackend(FormatterBackend):
     async def processing(self, mot: ModelOutputThunk, chunk: dict):
         """Called during generation to add information from a single ChatCompletion or ChatCompletionChunk to the ModelOutputThunk.
 
-        For OpenAI-like APIs, tool call parsing is handled in the post processing step."""
+        For OpenAI-like APIs, tool call parsing is handled in the post processing step.
+        """
         if mot._thinking is None:
             mot._thinking = ""
         if mot._underlying_value is None:

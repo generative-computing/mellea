@@ -1,3 +1,5 @@
+"""PRM Requirements."""
+
 from mellea.backends.huggingface import HFProcessRewardModel
 from mellea.stdlib.base import CBlock, Context
 from mellea.stdlib.chat import Message
@@ -10,11 +12,11 @@ class PRMScorer(ScorerRequirement):
     def __init__(
         self, *, prm_model: HFProcessRewardModel, preference_ordering: str = "max"
     ):
-        """
+        """Instantiate a process reward model scorer based on local huggingface backend.
 
         Args:
             prm_model:  The PRM model
-            preference_ordering: indicates whether the goal is to maximize or minimize the score. must be either "max" or "min"
+            preference_ordering: indicates whether the goal is to maximize or minimize the score. must be either "max" or "min".
         """
         super().__init__(
             check_only=True,
@@ -25,9 +27,7 @@ class PRMScorer(ScorerRequirement):
         self.model: HFProcessRewardModel = prm_model
 
     def _prm_validate(self, ctx: Context):
-        """
-        Returns PRM score of last turn of context
-        """
+        """Returns PRM score of last turn of context."""
         last_turn = ctx.last_turn()
         assert last_turn is not None
 
