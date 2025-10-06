@@ -221,6 +221,8 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
 
         Args:
             m: MelleaSession: A mellea session (optional, uses context if None)
+            model_options: Model options to pass to the backend.
+            *args: Additional args to be passed to the func.
             **kwargs: Additional Kwargs to be passed to the func
 
         Returns:
@@ -239,7 +241,7 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
 
         # AsyncGenerativeSlots are used with async functions. In order to support that behavior,
         # they must return a coroutine object.
-        async def __async_call__():
+        async def __async_call__() -> R:
             # Use the async act func so that control flow doesn't get stuck here in async event loops.
             response = await m.aact(
                 slot_copy, format=response_model, model_options=model_options
@@ -360,38 +362,3 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
 
 # Export the decorator as the interface
 __all__ = ["generative"]
-
-
-if __name__ == "__main__":
-    from mellea import start_session
-
-    with start_session():
-
-        async def asyncly() -> int: ...
-
-        out = asyncly()
-
-        @generative
-        async def test_async(num: int) -> bool: ...
-
-        @generative
-        def test_sync(truthy: bool) -> int: ...
-
-        print("running sync")
-        print(test_sync(m=None, model_options=None, truthy=False))
-
-        async def runmany():
-            print(await test_async(m=None, model_options=None, num=6))
-            print(await test_async(m=None, model_options=None, num=4))
-            print(await test_async(m=None, model_options=None, num=5))
-
-            coros = [
-                test_async(m=None, model_options=None, num=1),
-                test_async(m=None, model_options=None, num=2),
-                test_async(m=None, model_options=None, num=3),
-            ]
-            results = await asyncio.gather(*coros)
-            print(results)
-
-        print("running async")
-        asyncio.run(runmany())
