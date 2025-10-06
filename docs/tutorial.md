@@ -50,7 +50,7 @@ Although good generative programs can be written in any language and framework, 
 
 ## Chapter 2: Getting Started with Generative Programming in Mellea
 
-Before we get started, you will need to download and install [ollama](https://ollama.com/). Mellea can work with many different types of backends, but everything in this tutorial will "just work" on a Macbook running IBM's Granite 3.3 8B model.
+Before we get started, you will need to download and install [ollama](https://ollama.com/). Mellea can work with many different types of backends, but everything in this tutorial will "just work" on a Macbook running IBM's Granite 4 Micro 3B model.
 
 We also recommend that you download and install [uv](https://docs.astral.sh/uv/#installation). You can run any of the examples in the tutorial with:
 ```bash
@@ -68,7 +68,7 @@ Once you have ollama installed and running, we can get started with our first ge
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/simple_email.py#L1-L8
 import mellea
 
-# INFO: this line will download IBM's Granite 3.3 8B model.
+# INFO: this line will download IBM's Granite 4 Micro 3B model.
 m = mellea.start_session()
 
 email = m.instruct("Write an email inviting interns to an office party at 3:30pm.")
