@@ -2,7 +2,8 @@
 
 import asyncio
 import datetime
-from collections.abc import Callable
+import functools
+from collections.abc import AsyncIterator, Callable, Coroutine
 from typing import Any
 
 import ollama
@@ -17,15 +18,16 @@ from mellea.backends.tools import (
     add_tools_from_model_options,
 )
 from mellea.backends.types import ModelOption
+from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
     GenerateLog,
+    GenerateType,
     ModelOutputThunk,
     ModelToolCall,
-    TemplateRepresentation,
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement
@@ -36,7 +38,7 @@ class OllamaModelBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_3_3_8B,
+        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_MICRO_3B,
         formatter: Formatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
@@ -64,8 +66,9 @@ class OllamaModelBackend(FormatterBackend):
         self._get_ollama_model_id()
 
         # Setup the client and ensure that we have the model available.
+        self._base_url = base_url
         self._client = ollama.Client(base_url)
-        self._async_client = ollama.AsyncClient(base_url)
+
         if not self._check_ollama_server():
             err = f"could not create OllamaModelBackend: ollama server not running at {base_url}"
             FancyLogger.get_logger().error(err)
@@ -84,6 +87,7 @@ class OllamaModelBackend(FormatterBackend):
             "num_predict": ModelOption.MAX_NEW_TOKENS,
             "seed": ModelOption.SEED,
             "tools": ModelOption.TOOLS,
+            "stream": ModelOption.STREAM,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -232,21 +236,21 @@ class OllamaModelBackend(FormatterBackend):
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
     ):
         """See `generate_from_chat_context`."""
         assert ctx.is_chat_context, (
             "The ollama backend only supports chat-like contexts."
         )
-        return self.generate_from_chat_context(
+        mot = self.generate_from_chat_context(
             action,
             ctx,
             format=format,
             model_options=model_options,
-            generate_logs=generate_logs,
             tool_calls=tool_calls,
         )
+
+        return mot, ctx.add(action).add(mot)
 
     def generate_from_chat_context(
         self,
@@ -255,17 +259,21 @@ class OllamaModelBackend(FormatterBackend):
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
-        """Generates a new completion from the provided Context using this backend's `Formatter`.
+        """Generates a ModelOutputThunk. The final value for this object can be awaited.
+
+        The new completion is generated from the provided Context using this backend's `Formatter`.
 
         This implementation treats the `Context` as a chat history, and uses the  `ollama.Client.chat()` interface to generate a completion.
         This will not always work, because sometimes we want to use non-chat models.
+
+        Raises:
+            RuntimeError: If not called from a thread with a running event loop.
         """
         model_opts = self._simplify_and_merge(model_options)
 
-        linearized_context = ctx.render_for_generation()
+        linearized_context = ctx.view_for_generation()
         assert linearized_context is not None, (
             "Cannot generate from a non-linear context in a FormatterBackend."
         )
@@ -310,46 +318,49 @@ class OllamaModelBackend(FormatterBackend):
                 add_tools_from_context_actions(tools, [action])
             FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
-        # Generate a chat response from ollama, using the chat messages.
-        chat_response: ollama.ChatResponse = self._client.chat(
+        # Ollama ties its async client to an event loop so we have to create it here.
+        async_client = ollama.AsyncClient(self._base_url)
+
+        # Generate a chat response from ollama, using the chat messages. Can be either type since stream is passed as a model option.
+        chat_response: Coroutine[
+            Any, Any, AsyncIterator[ollama.ChatResponse] | ollama.ChatResponse
+        ] = async_client.chat(
             model=self._get_ollama_model_id(),
             messages=conversation,
             tools=list(tools.values()),
             think=model_opts.get(ModelOption.THINKING, None),
+            stream=model_opts.get(ModelOption.STREAM, False),
             options=self._make_backend_specific_and_remove(model_opts),
-            stream=False,
             format=format.model_json_schema() if format is not None else None,
         )  # type: ignore
 
-        result = ModelOutputThunk(
-            value=chat_response.message.content,  # For an ollama tool call, content will be an empty string.
-            meta={"chat_response": chat_response},
-            tool_calls=self._extract_model_tool_requests(tools, chat_response),
+        output = ModelOutputThunk(None)
+        output._context = linearized_context
+        output._action = action
+        output._model_options = model_opts
+
+        # Processing functions only pass the ModelOutputThunk (and current chunk of response). Bind the other vars necessary for
+        # each processing step.
+        output._process = functools.partial(self.processing, tools=tools)
+        output._post_process = functools.partial(
+            self.post_processing, conversation=conversation, tools=tools, format=format
         )
 
-        formatted_result = self.formatter.parse(action, result)
+        try:
+            # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
+            # We can also support synchronous calls by adding a flag and changing this ._generate function.
 
-        if generate_logs is not None:
-            # noinspection DuplicatedCode
-            assert isinstance(generate_logs, list)
-            generate_log = GenerateLog()
-            generate_log.prompt = conversation
-            generate_log.backend = f"ollama::{self.model_id!s}"
-            generate_log.model_options = model_opts
-            generate_log.date = datetime.datetime.now()
-            generate_log.model_output = chat_response
-            generate_log.extra = {
-                "format": format,
-                "thinking": model_opts.get(ModelOption.THINKING, None),
-                "tools_available": tools,
-                "tools_called": result.tool_calls,
-                "seed": model_opts.get(ModelOption.SEED, None),
-            }
-            generate_log.action = action
-            generate_log.result = formatted_result
-            generate_logs.append(generate_log)
+            # This function should always be called from a running event loop so we don't have to worry about
+            # scheduling the task to a specific event loop here.
+            output._generate = asyncio.create_task(
+                send_to_queue(chat_response, output._async_queue)
+            )
+            output._generate_type = GenerateType.ASYNC
+        except RuntimeError as e:
+            # Most likely cause is running this function without an event loop present
+            raise e
 
-        return formatted_result
+        return output
 
     def _generate_from_raw(
         self,
@@ -375,10 +386,11 @@ class OllamaModelBackend(FormatterBackend):
             responses = await asyncio.gather(*coroutines, return_exceptions=True)
             return responses
 
+        async_client = ollama.AsyncClient(self._base_url)
         # Run async so that we can make use of Ollama's concurrency.
         coroutines = []
         for prompt in prompts:
-            co = self._async_client.generate(
+            co = async_client.generate(
                 model=self._get_ollama_model_id(),
                 prompt=prompt,
                 raw=True,
@@ -456,3 +468,120 @@ class OllamaModelBackend(FormatterBackend):
         if len(model_tool_calls) > 0:
             return model_tool_calls
         return None
+
+    async def processing(
+        self,
+        mot: ModelOutputThunk,
+        chunk: ollama.ChatResponse,
+        tools: dict[str, Callable],
+    ):
+        """Called during generation to add information from a single ChatResponse to the ModelOutputThunk."""
+        if mot._thinking is None:
+            mot._thinking = ""
+        thinking_chunk = chunk.message.thinking
+        if thinking_chunk is not None:
+            mot._thinking += thinking_chunk
+
+        if mot._underlying_value is None:
+            mot._underlying_value = ""
+        content_chunk = chunk.message.content
+        if content_chunk is not None:
+            mot._underlying_value += content_chunk
+
+        tool_chunk = self._extract_model_tool_requests(tools, chunk)
+        if tool_chunk is not None:
+            # Only set tool_calls if there is one.
+            if mot.tool_calls is None:
+                mot.tool_calls = {}
+
+            # Merge the tool_chunk dict.
+            for key, val in tool_chunk.items():
+                mot.tool_calls[key] = val
+
+        # Ollama responses are mostly self-contained. Merge chunks immediately.
+        chat_response_delta_merge(mot, chunk)
+
+    async def post_processing(
+        self,
+        mot: ModelOutputThunk,
+        conversation: list[dict],
+        tools: dict[str, Callable],
+        format,
+    ):
+        """Called when generation is done."""
+        assert mot._action is not None, (
+            "ModelOutputThunks should have their action assigned during generation"
+        )
+        assert mot._model_options is not None, (
+            "ModelOutputThunks should have their model_opts assigned during generation"
+        )
+        self.formatter.parse(mot._action, mot)
+
+        # Generate the log for this ModelOutputThunk.
+        generate_log = GenerateLog()
+        generate_log.prompt = conversation
+        generate_log.backend = f"ollama::{self._get_ollama_model_id()}"
+        generate_log.model_options = mot._model_options
+        generate_log.date = datetime.datetime.now()
+        generate_log.model_output = mot._meta["chat_response"]
+        generate_log.extra = {
+            "format": format,
+            "thinking": mot._model_options.get(ModelOption.THINKING, None),
+            "tools_available": tools,
+            "tools_called": mot.tool_calls,
+            "seed": mot._model_options.get(ModelOption.SEED, None),
+        }
+        generate_log.action = mot._action
+        generate_log.result = mot
+
+        mot._generate_log = generate_log
+        mot._generate = None
+
+
+def chat_response_delta_merge(mot: ModelOutputThunk, delta: ollama.ChatResponse):
+    """Merges the individual ChatResponse chunks from a streaming response into a single ChatResponse.
+
+    Args:
+        mot: the ModelOutputThunk that the deltas are being used to populated.
+        delta: the most recent ollama ChatResponse.
+    """
+    if mot._meta.get("chat_response", None) is None:
+        mot._meta["chat_response"] = delta
+        return  # Return early, no need to merge.
+
+    merged: ollama.ChatResponse = mot._meta["chat_response"]
+    if not merged.done:
+        merged.done = delta.done
+    if merged.done_reason is None:
+        merged.done_reason = delta.done_reason
+    if merged.total_duration is None:
+        merged.total_duration = delta.total_duration
+    if merged.load_duration is None:
+        merged.load_duration = delta.load_duration
+    if merged.prompt_eval_count is None:
+        merged.prompt_eval_count = delta.prompt_eval_count
+    if merged.prompt_eval_duration is None:
+        merged.prompt_eval_duration = delta.prompt_eval_duration
+    if merged.eval_count is None:
+        merged.eval_count = delta.eval_count
+
+    if merged.message.role == "":
+        merged.message.role = delta.message.role
+
+    if merged.message.content is None:
+        merged.message.content = delta.message.content
+    elif delta.message.content is not None:
+        merged.message.content += delta.message.content
+
+    if merged.message.thinking is None:
+        merged.message.thinking = delta.message.thinking
+    elif delta.message.thinking is not None:
+        merged.message.thinking += delta.message.thinking
+
+    if merged.message.tool_calls is None:
+        merged.message.tool_calls = delta.message.tool_calls
+    elif delta.message.tool_calls is not None:
+        merged.message.tool_calls = [
+            *merged.message.tool_calls,
+            *delta.message.tool_calls,
+        ]

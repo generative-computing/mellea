@@ -1,3 +1,30 @@
+## [v0.1.2](https://github.com/generative-computing/mellea/releases/tag/v0.1.2) - 2025-10-03
+
+### Feature
+
+* Making Granite 4 the default model ([#178](https://github.com/generative-computing/mellea/issues/178)) ([`545c1b3`](https://github.com/generative-computing/mellea/commit/545c1b3790fa96d7d1c76878227f60a2203862b4))
+
+### Fix
+
+* Default sampling strats to None for query, transform, chat ([#179](https://github.com/generative-computing/mellea/issues/179)) ([`c8d4601`](https://github.com/generative-computing/mellea/commit/c8d4601bad713638a2a8e1c1062e19548f182f3c))
+* Docstrings ([#177](https://github.com/generative-computing/mellea/issues/177)) ([`6126bd9`](https://github.com/generative-computing/mellea/commit/6126bd922121a080a88b69718603a15bc54f80f4))
+* Always call sample when a strategy is provided ([#176](https://github.com/generative-computing/mellea/issues/176)) ([`8fece40`](https://github.com/generative-computing/mellea/commit/8fece400f1483fa593c564ad70f5b7370d3dd249))
+
+## [v0.1.1](https://github.com/generative-computing/mellea/releases/tag/v0.1.1) - 2025-10-01
+
+### Fix
+
+* Bump patch version to allow publishing ([#175](https://github.com/generative-computing/mellea/issues/175)) ([`cf7a24b`](https://github.com/generative-computing/mellea/commit/cf7a24b2541c081cda8f2468bb8e7474ed2618a8))
+
+## [v0.1.0](https://github.com/generative-computing/mellea/releases/tag/v0.1.0) - 2025-10-01
+
+### Feature
+
+* Add fix to watsonx and note to litellm ([#173](https://github.com/generative-computing/mellea/issues/173)) ([`307dbe1`](https://github.com/generative-computing/mellea/commit/307dbe14d430b0128e56a2ed7b735dbe93adf2a7))
+* New context, new sampling,. ([#166](https://github.com/generative-computing/mellea/issues/166)) ([`4ae6d7c`](https://github.com/generative-computing/mellea/commit/4ae6d7c23e4aff63a0887dccaf7c96bc9e50121a))
+* Add async and streaming support ([#137](https://github.com/generative-computing/mellea/issues/137)) ([`4ee56a9`](https://github.com/generative-computing/mellea/commit/4ee56a9f9e74302cf677377d6eab19e11ab0a715))
+* Best-of-N Sampling with Process Reward Models ([#118](https://github.com/generative-computing/mellea/issues/118)) ([`b18e03d`](https://github.com/generative-computing/mellea/commit/b18e03d655f18f923202acf96a49d4acafa0701d))
+
 ## [v0.0.6](https://github.com/generative-computing/mellea/releases/tag/v0.0.6) - 2025-09-18
 
 ### Feature

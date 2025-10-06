@@ -6,17 +6,17 @@ from collections.abc import Callable
 from copy import copy
 from typing import Any, overload
 
-from mellea.backends import (
-    Backend,
-    BaseModelSubclass,
+from mellea.backends import Backend, BaseModelSubclass
+from mellea.backends.aloras import Alora
+from mellea.helpers.fancy_logger import FancyLogger
+from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
+    GenerateLog,
     ModelOutputThunk,
+    TemplateRepresentation,
 )
-from mellea.backends.aloras import Alora
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import GenerateLog, ModelOutputThunk, TemplateRepresentation
 
 
 def default_output_to_bool(x: CBlock | str) -> bool:
@@ -41,7 +41,12 @@ class ValidationResult:
     """ValidationResults store the output of a Requirement's validation. They can be used to return additional info from validation functions, which is useful for sampling/repairing."""
 
     def __init__(
-        self, result: bool, *, reason: str | None = None, score: float | None = None
+        self,
+        result: bool,
+        *,
+        reason: str | None = None,
+        score: float | None = None,
+        thunk: ModelOutputThunk | None = None,
     ):
         """The result of a requirement's validation.
 
@@ -51,24 +56,34 @@ class ValidationResult:
             result: a boolean that is true if the requirement passed
             reason: a reason for the result
             score: if your validator gives you a score back, you can add this as metadata
+            thunk: if your validator utilizes a backend to generate a response, the ModelOutputThunk returned from that request
         """
         self._result = result
         self._reason = reason
         self._score = score
+        self._thunk = thunk
 
     @property
     def reason(self) -> str | None:
+        """Reason for the validation result."""
         return self._reason
 
     @property
     def score(self) -> float | None:
+        """An optional score for the validation result."""
         return self._score
 
+    @property
+    def thunk(self) -> ModelOutputThunk | None:
+        """The ModelOutputThunk associated with the validation func if an llm was used to generate the final result."""
+        return self._thunk
+
     def as_bool(self) -> bool:
-        """"""
+        """Return a boolean value based on the result."""
         return self._result
 
     def __bool__(self) -> bool:
+        """Return a boolean value based on the result."""
         return self.as_bool()
 
 
@@ -101,14 +116,13 @@ class Requirement(Component):
         # Used for validation. Do not manually populate.
         self._output: str | None = None
 
-    def validate(
+    async def validate(
         self,
         backend: Backend,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
     ) -> ValidationResult:
         """Chooses the appropriate validation strategy and applies that strategy."""
         if self.validation_fn is not None:
@@ -126,16 +140,15 @@ class Requirement(Component):
             # and its template gets populated with the output correctly.
             req_copy = copy(self)
             req_copy._output = last_output.value
-            llm_as_a_judge_result = backend.generate_from_context(
-                req_copy,
-                ctx,
-                format=format,
-                model_options=model_options,
-                generate_logs=generate_logs,
+            llm_as_a_judge_result, _ = backend.generate_from_context(
+                req_copy, ctx, format=format, model_options=model_options
             )
+            await llm_as_a_judge_result.avalue()
+
             return ValidationResult(
                 result=self.output_to_bool(llm_as_a_judge_result),
                 reason=llm_as_a_judge_result.value,
+                thunk=llm_as_a_judge_result,
             )
 
     def parts(self):
@@ -210,14 +223,13 @@ class ScorerRequirement(Requirement):
             raise NotImplementedError
         self.preference_ordering: str = preference_ordering.lower()
 
-    def validate(
+    async def validate(
         self,
         backend: Backend,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
     ) -> ValidationResult:
         """Chooses the appropriate validation strategy and applies that strategy. Asserts that the returned ValidationResult has a valid score."""
         if self.validation_fn is not None:
@@ -240,19 +252,17 @@ class ScorerRequirement(Requirement):
             # and its template gets populated with the output correctly.
             req_copy = copy(self)
             req_copy._output = last_output.value
-            llm_as_a_judge_result = backend.generate_from_context(
-                req_copy,
-                ctx,
-                format=format,
-                model_options=model_options,
-                generate_logs=generate_logs,
+            llm_as_a_judge_result, _ = backend.generate_from_context(
+                req_copy, ctx, format=format, model_options=model_options
             )
+            await llm_as_a_judge_result.avalue()
             result = self.output_to_bool(llm_as_a_judge_result)
 
             return ValidationResult(
                 result=result,
                 reason=llm_as_a_judge_result.value,
                 score=1 if result else 0,
+                thunk=llm_as_a_judge_result,
             )
 
 

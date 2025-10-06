@@ -1,8 +1,11 @@
 """A generic LiteLLM compatible backend that wraps around the openai python sdk."""
 
+import asyncio
 import datetime
+import functools
 import json
-from collections.abc import Callable
+import os
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 import litellm  # type: ignore
@@ -19,12 +22,18 @@ from mellea.backends.tools import (
     convert_tools_to_json,
 )
 from mellea.backends.types import ModelOption
+from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
+from mellea.helpers.openai_compatible_helpers import (
+    chat_completion_delta_merge,
+    extract_model_tool_requests,
+)
 from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
     GenerateLog,
+    GenerateType,
     ModelOutputThunk,
     ModelToolCall,
 )
@@ -37,12 +46,14 @@ class LiteLLMBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str = "ollama/" + str(model_ids.IBM_GRANITE_3_3_8B.ollama_name),
+        model_id: str = "ollama/" + str(model_ids.IBM_GRANITE_4_MICRO_3B.ollama_name),
         formatter: Formatter | None = None,
         base_url: str | None = "http://localhost:11434",
         model_options: dict | None = None,
     ):
         """Initialize and OpenAI compatible backend. For any additional kwargs that you need to pass the the client, pass them as a part of **kwargs.
+
+        Note: If getting `Unclosed client session`, set `export DISABLE_AIOHTTP_TRANSPORT=True` in your environment. See: https://github.com/BerriAI/litellm/issues/13251.
 
         Args:
             model_id : The LiteLLM model identifier. Make sure that all necessary credentials are in OS environment variables.
@@ -74,12 +85,13 @@ class LiteLLMBackend(FormatterBackend):
         # users should only be specifying a single one in their request.
         self.to_mellea_model_opts_map = {
             "system": ModelOption.SYSTEM_PROMPT,
-            "reasoning_effort": ModelOption.THINKING,  # TODO: JAL; see which of these are actually extracted...
+            "reasoning_effort": ModelOption.THINKING,
             "seed": ModelOption.SEED,
             "max_completion_tokens": ModelOption.MAX_NEW_TOKENS,
             "max_tokens": ModelOption.MAX_NEW_TOKENS,
             "tools": ModelOption.TOOLS,
             "functions": ModelOption.TOOLS,
+            "stream": ModelOption.STREAM,
         }
 
         # A mapping of Mellea specific ModelOptions to the specific names for this backend.
@@ -90,6 +102,7 @@ class LiteLLMBackend(FormatterBackend):
         self.from_mellea_model_opts_map = {
             ModelOption.SEED: "seed",
             ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
+            ModelOption.STREAM: "stream",
         }
 
     def generate_from_context(
@@ -99,21 +112,20 @@ class LiteLLMBackend(FormatterBackend):
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
     ):
         """See `generate_from_chat_context`."""
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
-        return self._generate_from_chat_context_standard(
+        mot = self._generate_from_chat_context_standard(
             action,
             ctx,
             format=format,
             model_options=model_options,
-            generate_logs=generate_logs,
             tool_calls=tool_calls,
         )
+        return mot, ctx.add(action).add(mot)
 
     def _simplify_and_merge(
         self, model_options: dict[str, Any] | None
@@ -204,11 +216,10 @@ class LiteLLMBackend(FormatterBackend):
         format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
         model_opts = self._simplify_and_merge(model_options)
-        linearized_context = ctx.render_for_generation()
+        linearized_context = ctx.view_for_generation()
         assert linearized_context is not None, (
             "Cannot generate from a non-linear context in a FormatterBackend."
         )
@@ -259,7 +270,9 @@ class LiteLLMBackend(FormatterBackend):
 
         model_specific_options = self._make_backend_specific_and_remove(model_opts)
 
-        chat_response: litellm.ModelResponse = litellm.completion(
+        chat_response: Coroutine[
+            Any, Any, litellm.ModelResponse | litellm.ModelResponseStream  # type: ignore
+        ] = litellm.acompletion(
             model=self._model_id,
             messages=conversation,
             tools=formatted_tools,
@@ -269,39 +282,150 @@ class LiteLLMBackend(FormatterBackend):
             **model_specific_options,
         )
 
-        choice_0 = chat_response.choices[0]
-        assert isinstance(choice_0, litellm.utils.Choices), (
-            "Only works for non-streaming response for now"
+        output = ModelOutputThunk(None)
+        output._context = linearized_context
+        output._action = action
+        output._model_options = model_opts
+
+        # Processing functions only pass the ModelOutputThunk (and current chunk of response). Bind the other vars necessary for
+        # each processing step.
+        output._process = self.processing
+        output._post_process = functools.partial(
+            self.post_processing,
+            conversation=conversation,
+            tools=tools,
+            thinking=thinking,
+            format=format,
         )
-        result = ModelOutputThunk(
-            value=choice_0.message.content,
-            meta={
-                "litellm_chat_response": chat_response.choices[0].model_dump()
-            },  # NOTE: Using model dump here to comply with `TemplateFormatter`
-            tool_calls=self._extract_model_tool_requests(tools, chat_response),
+
+        try:
+            # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
+            # We can also support synchronous calls by adding a flag and changing this ._generate function.
+
+            # This function should always be called from a running event loop so we don't have to worry about
+            # scheduling the task to a specific event loop here.
+            output._generate = asyncio.create_task(
+                send_to_queue(chat_response, output._async_queue)
+            )
+            output._generate_type = GenerateType.ASYNC
+        except RuntimeError as e:
+            # Most likely cause is running this function without an event loop present
+            raise e
+
+        return output
+
+    async def processing(
+        self,
+        mot: ModelOutputThunk,
+        chunk: litellm.ModelResponse | litellm.ModelResponseStream,  # type: ignore
+    ):
+        """Called during generation to add information from a single ModelResponse or a chunk / ModelResponseStream to the ModelOutputThunk.
+
+        For LiteLLM, tool call parsing is handled in the post processing step.
+        """
+        if mot._thinking is None:
+            mot._thinking = ""
+        if mot._underlying_value is None:
+            mot._underlying_value = ""
+
+        if isinstance(chunk, litellm.ModelResponse):  # type: ignore
+            # choice should always be a `Choice`. There's some type weirdness going
+            # on with how litellm have defined the `.choices` list.
+            choice = chunk.choices[0]
+            assert isinstance(choice, litellm.Choices)
+
+            message = choice.message
+
+            # Sometimes a message doesn't actually have this field.
+            if hasattr(message, "reasoning_content"):
+                thinking_chunk = message.reasoning_content
+                if thinking_chunk is not None:
+                    mot._thinking += thinking_chunk
+
+            content_chunk = message.content
+            if content_chunk is not None:
+                mot._underlying_value += content_chunk
+
+            mot._meta["litellm_chat_response"] = chunk.choices[0].model_dump()
+
+        elif isinstance(chunk, litellm.ModelResponseStream):  # type: ignore
+            message_delta = chunk.choices[0].delta
+
+            # Sometimes a delta doesn't actually have this field.
+            if hasattr(message_delta, "reasoning_content"):
+                thinking_chunk = message_delta.reasoning_content
+                if thinking_chunk is not None:
+                    mot._thinking += thinking_chunk
+
+            content_chunk = message_delta.content
+            if content_chunk is not None:
+                mot._underlying_value += content_chunk
+
+            if mot._meta.get("litellm_chat_response_streamed", None) is None:
+                mot._meta["litellm_chat_response_streamed"] = []
+            mot._meta["litellm_chat_response_streamed"].append(
+                chunk.choices[0].model_dump()
+            )
+
+    async def post_processing(
+        self,
+        mot: ModelOutputThunk,
+        conversation: list[dict],
+        tools: dict[str, Callable],
+        thinking,
+        format,
+    ):
+        """Called when generation is done."""
+        # Reconstruct the chat_response from chunks if streamed.
+        streamed_chunks = mot._meta.get("litellm_chat_response_streamed", None)
+        if streamed_chunks is not None:
+            # Must handle ollama differently due to: https://github.com/BerriAI/litellm/issues/14579.
+            # Check that we are targeting ollama with the model_id prefix litellm uses.
+            separate_tools = False
+            if "ollama" in self._model_id.split("/")[0]:
+                separate_tools = True
+            mot._meta["litellm_chat_response"] = chat_completion_delta_merge(
+                streamed_chunks, force_all_tool_calls_separate=separate_tools
+            )
+
+        assert mot._action is not None, (
+            "ModelOutputThunks should have their action assigned during generation"
+        )
+        assert mot._model_options is not None, (
+            "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
-        parsed_result = self.formatter.parse(source_component=action, result=result)
+        # OpenAI-like streamed responses potentially give you chunks of tool calls.
+        # As a result, we have to store data between calls and only then
+        # check for complete tool calls in the post_processing step.
+        tool_chunk = extract_model_tool_requests(
+            tools, mot._meta["litellm_chat_response"]
+        )
+        if tool_chunk is not None:
+            if mot.tool_calls is None:
+                mot.tool_calls = {}
+            # Merge the tool_chunk dict.
+            for key, val in tool_chunk.items():
+                mot.tool_calls[key] = val
 
-        if generate_logs is not None:
-            assert isinstance(generate_logs, list)
-            generate_log = GenerateLog()
-            generate_log.prompt = conversation
-            generate_log.backend = f"litellm::{self.model_id!s}"
-            generate_log.model_options = model_specific_options
-            generate_log.date = datetime.datetime.now()
-            generate_log.model_output = chat_response
-            generate_log.extra = {
-                "format": format,
-                "tools_available": tools,
-                "tools_called": result.tool_calls,
-                "seed": model_opts.get("seed", None),
-            }
-            generate_log.action = action
-            generate_log.result = parsed_result
-            generate_logs.append(generate_log)
+        self.formatter.parse(mot._action, mot)
 
-        return parsed_result
+        # Generate the log for this ModelOutputThunk.
+        generate_log = GenerateLog()
+        generate_log.prompt = conversation
+        generate_log.backend = f"litellm::{self.model_id!s}"
+        generate_log.model_options = mot._model_options
+        generate_log.date = datetime.datetime.now()
+        generate_log.model_output = mot._meta["litellm_chat_response"]
+        generate_log.extra = {
+            "format": format,
+            "tools_available": tools,
+            "tools_called": mot.tool_calls,
+            "seed": thinking,
+        }
+        generate_log.action = mot._action
+        generate_log.result = mot
+        mot._generate_log = generate_log
 
     @staticmethod
     def _extract_tools(
@@ -335,11 +459,13 @@ class LiteLLMBackend(FormatterBackend):
         raise NotImplementedError("This method is not implemented yet.")
 
     def _extract_model_tool_requests(
-        self, tools: dict[str, Callable], chat_response: litellm.ModelResponse
+        self,
+        tools: dict[str, Callable],
+        chat_response: litellm.ModelResponse,  # type: ignore
     ) -> dict[str, ModelToolCall] | None:
         model_tool_calls: dict[str, ModelToolCall] = {}
         choice_0 = chat_response.choices[0]
-        assert isinstance(choice_0, litellm.utils.Choices), (
+        assert isinstance(choice_0, litellm.utils.Choices), (  # type: ignore
             "Only works for non-streaming response for now"
         )
         calls = choice_0.message.tool_calls

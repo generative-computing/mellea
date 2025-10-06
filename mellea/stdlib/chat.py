@@ -32,6 +32,7 @@ class Message(Component):
         Args:
             role (str): The role that this message came from (e.g., user, assistant).
             content (str): The content of the message.
+            images (list[ImageBlock]): The images associated with the message if any.
         """
         self.role = role
         self.content = content
@@ -129,7 +130,7 @@ def as_chat_history(ctx: Context) -> list[Message]:
             case _:
                 return None
 
-    all_ctx_events = ctx.full_event_log()
+    all_ctx_events = ctx.as_list()
     if all_ctx_events is None:
         raise Exception("Trying to cast a non-linear history into a chat history.")
     else:

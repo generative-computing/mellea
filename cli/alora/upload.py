@@ -5,8 +5,7 @@ from huggingface_hub import HfApi, HfFolder, create_repo, upload_folder
 
 
 def upload_model(weight_path: str, model_name: str, private: bool = True):
-    """
-    Upload a trained adapter (LoRA/aLoRA) to Hugging Face Hub.
+    """Upload a trained adapter (LoRA/aLoRA) to Hugging Face Hub.
 
     Args:
         weight_path (str): Directory containing adapter weights (from save_pretrained).

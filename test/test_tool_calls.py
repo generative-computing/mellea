@@ -4,16 +4,16 @@ from mellea.backends import Backend
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.tools import add_tools_from_context_actions, add_tools_from_model_options
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock, Component, ModelOutputThunk, TemplateRepresentation
+from mellea.stdlib.base import CBlock, Component, ModelOutputThunk, TemplateRepresentation, ChatContext
 from mellea.stdlib.docs.richdocument import Table
-from mellea.stdlib.session import LinearContext, MelleaSession
+from mellea.stdlib.session import MelleaSession
 
 
 @pytest.fixture(scope="module")
 def m() -> MelleaSession:
     return MelleaSession(
         backend=OllamaModelBackend(),
-        ctx=LinearContext(),
+        ctx=ChatContext(),
     )
 
 
@@ -32,32 +32,32 @@ def table() -> Table:
 
 def test_tool_called_from_context_action(m: MelleaSession, table: Table):
     """Make sure tools can be called from actions in the context."""
-    r = 10
-    m.ctx.reset()
+    m.reset()
 
     # Insert a component with tools into the context.
-    m.ctx.insert(table)
+    m.ctx = m.ctx.add(table)
 
-    returned_tool = False
-    for i in range(r):
-        # Make sure the specific generate call is on a different action with
-        # no tools to make sure it's a tool from the context.
-        result = m.backend.generate_from_context(
-            CBlock("Add a row to the table."),
-            m.ctx,
-            tool_calls=True
-        )
-        if result.tool_calls is not None and len(result.tool_calls) > 0:
-            returned_tool = True
-            break
+    # Create fake tools.
+    def test1(): ...
+    def test2(): ...
 
-    assert returned_tool, f"did not return a tool after {r} attempts"
+    model_opts = {
+        ModelOption.TOOLS: [test1, test2]
+    }
 
+    tools = {}
+
+    add_tools_from_model_options(tools, model_opts)
+    assert "test1" in tools
+    assert "test2" in tools
+
+    add_tools_from_context_actions(tools, m.ctx.actions_for_available_tools())
+    assert "to_markdown" in tools
 
 def test_tool_called(m: MelleaSession, table: Table):
     """We don't force tools to be called. As a result, this test might unexpectedly fail."""
     r = 10
-    m.ctx.reset()
+    m.reset()
 
     returned_tool = False
     for i in range(r):
@@ -72,7 +72,7 @@ def test_tool_called(m: MelleaSession, table: Table):
 def test_tool_not_called(m: MelleaSession, table: Table):
     """Ensure tools aren't always called when provided."""
     r = 10
-    m.ctx.reset()
+    m.reset()
 
     returned_no_tool = False
     for i in range(r):

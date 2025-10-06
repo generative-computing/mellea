@@ -130,11 +130,11 @@ def extract_final_short_answer(
 
 if __name__ == "__main__":
     scores = []
+    m = start_session()
+
     for question, target in (
         x.values() for x in load_dataset("gsm8k", "main", split="train[:100]")
     ):
-        m = start_session()
-
         target = int(target.split("####")[-1])
         response = compute_chain_of_thought_and_final_answer(m, question=question)
         for step in response.step_by_step_solution:
