@@ -1,0 +1,7483 @@
+[
+  {
+    "id": 6714653,
+    "name": "First Case of the Judges",
+    "name_abbreviation": "First Case of the Judges",
+    "decision_date": "1779-08",
+    "docket_number": "",
+    "first_page": "633",
+    "last_page": "634",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 1"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 1"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 239,
+      "char_count": 5289,
+      "ocr_confidence": 0.462,
+      "pagerank": {
+        "raw": 4.60167783687625e-08,
+        "percentile": 0.2883996325654507
+      },
+      "sha256": "ebf4c95cc22c7ca80dca0566569c8bb048e9445ca5f99f5ef4af76491b4f4dbf",
+      "simhash": "1:32be76354779e6f7",
+      "word_count": 910
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0633-01",
+    "first_page_order": 13,
+    "last_page_order": 14
+  },
+  {
+    "id": 6714673,
+    "name": "Commonwealth v. Beckley",
+    "name_abbreviation": "Commonwealth v. Beckley",
+    "decision_date": "1780-08",
+    "docket_number": "",
+    "first_page": "634",
+    "last_page": "634",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 4"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 4"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 112,
+      "char_count": 1585,
+      "ocr_confidence": 0.533,
+      "sha256": "94926f7b8d3a93807dd734af82d209209f3a662c0aed5e14264c70f7287ba75b",
+      "simhash": "1:5b956740efe8bff3",
+      "word_count": 282
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0634-01",
+    "first_page_order": 14,
+    "last_page_order": 14
+  },
+  {
+    "id": 6714705,
+    "name": "Commonwealth v. Caton & al.",
+    "name_abbreviation": "Commonwealth v. Caton",
+    "decision_date": "1782-11",
+    "docket_number": "",
+    "first_page": "634",
+    "last_page": "639",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 5"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 5"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "5 Call 139",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6714916
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/9/0907-01"
+        ]
+      },
+      {
+        "cite": "6 Call 185",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      },
+      {
+        "cite": "8 Gratt. 457",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6716085
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/49/0589-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 1182,
+      "char_count": 33998,
+      "ocr_confidence": 0.508,
+      "pagerank": {
+        "raw": 2.7660009516256685e-07,
+        "percentile": 0.8339547981368798
+      },
+      "sha256": "0ef7e8dbd3de730bb3cd724bb40b410c76dcfec19c51428a9f6693247b2725bb",
+      "simhash": "1:2eb1b7516e94a296",
+      "word_count": 5764
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0634-02",
+    "first_page_order": 14,
+    "last_page_order": 19
+  },
+  {
+    "id": 6714747,
+    "name": "Case of the Loyal and Greenbrier Companies",
+    "name_abbreviation": "Case of the Loyal & Greenbrier Companies",
+    "decision_date": "1783-05",
+    "docket_number": "",
+    "first_page": "639",
+    "last_page": "643",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 21"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 21"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 943,
+      "char_count": 25949,
+      "ocr_confidence": 0.498,
+      "pagerank": {
+        "raw": 1.7710994026850012e-07,
+        "percentile": 0.7115289346985094
+      },
+      "sha256": "ca31f6b9d59a09958df43fc95cb6cc16f8abadefdd8c051b23b16313030e1e8b",
+      "simhash": "1:f9aa74e68c774a98",
+      "word_count": 4406
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0639-01",
+    "first_page_order": 19,
+    "last_page_order": 23
+  },
+  {
+    "id": 6714762,
+    "name": "Maze v. Hamiltons",
+    "name_abbreviation": "Maze v. Hamiltons",
+    "decision_date": "1783-11",
+    "docket_number": "",
+    "first_page": "643",
+    "last_page": "644",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 33"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 33"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Call 202",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      },
+      {
+        "cite": "2 Wash. 47",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 321,
+      "char_count": 5534,
+      "ocr_confidence": 0.491,
+      "pagerank": {
+        "raw": 1.1850200046748689e-07,
+        "percentile": 0.589546726469381
+      },
+      "sha256": "dd0fe2bb76d9f35fd9f653eeec26c379b664460e848492739884501eace7706f",
+      "simhash": "1:7d896f211d0ca5ad",
+      "word_count": 942
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0643-01",
+    "first_page_order": 23,
+    "last_page_order": 24
+  },
+  {
+    "id": 6714782,
+    "name": "Commonwealth v. Fowler",
+    "name_abbreviation": "Commonwealth v. Fowler",
+    "decision_date": "1785-11",
+    "docket_number": "",
+    "first_page": "644",
+    "last_page": "645",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 35"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 35"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "9 Gratt. 537",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4451039
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/50/0251-01"
+        ]
+      },
+      {
+        "cite": "8 Leigh 730",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "opinion_index": -1
+      },
+      {
+        "cite": "22 Gratt. 795",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "pin_cites": [
+          {
+            "page": "806, 807, 812"
+          }
+        ],
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 262,
+      "char_count": 4473,
+      "ocr_confidence": 0.471,
+      "pagerank": {
+        "raw": 4.904670584045842e-07,
+        "percentile": 0.9338422819245447
+      },
+      "sha256": "ec11aa0c7a5f15762488cd4578cbc493fb32daf3ebda25bf429c9356063f41a7",
+      "simhash": "1:02b6e7b0818d8471",
+      "word_count": 761
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0644-01",
+    "first_page_order": 24,
+    "last_page_order": 25
+  },
+  {
+    "id": 6714805,
+    "name": "Johnson's Ex'rs v. Johnson",
+    "name_abbreviation": "Johnson's Ex'rs v. Johnson",
+    "decision_date": "1785-11",
+    "docket_number": "",
+    "first_page": "645",
+    "last_page": "646",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 38"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 38"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "3 Gratt. 237",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6715197
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/44/0624-01"
+        ]
+      },
+      {
+        "cite": "16 Am. Dec. 782",
+        "category": "reporters:federal",
+        "reporter": "Am. Dec.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "5 Rand. 697",
+        "category": "reporters:state",
+        "reporter": "Rand.",
+        "case_ids": [
+          6733820
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/26/0567-01"
+        ]
+      },
+      {
+        "cite": "3 Munf. 352",
+        "category": "reporters:state",
+        "reporter": "Munf.",
+        "case_ids": [
+          6720007
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/17/0726-01"
+        ]
+      },
+      {
+        "cite": "2 S. E. Rep. 731",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "83 Va. 432",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "case_ids": [
+          4371706
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/83/0432-01"
+        ]
+      },
+      {
+        "cite": "7 W. Va. 585",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "case_ids": [
+          8641634
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/w-va/7/0585-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 534,
+      "char_count": 8452,
+      "ocr_confidence": 0.512,
+      "pagerank": {
+        "raw": 4.525177238696695e-08,
+        "percentile": 0.2779079514258639
+      },
+      "sha256": "24d1009404dc5ccdf363a18331a71efb40bf6f40e2a1317d88911380b31d39e1",
+      "simhash": "1:b8afada3a9ae75d0",
+      "word_count": 1496
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0645-01",
+    "first_page_order": 25,
+    "last_page_order": 26
+  },
+  {
+    "id": 6714852,
+    "name": "Hite & al. v. Fairfax & al.",
+    "name_abbreviation": "Hite v. Fairfax",
+    "decision_date": "1786-05",
+    "docket_number": "",
+    "first_page": "646",
+    "last_page": "661",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 42"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 42"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Munf. 218",
+        "category": "reporters:state",
+        "reporter": "Munf.",
+        "case_ids": [
+          2094028
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/15/0090-01"
+        ]
+      },
+      {
+        "cite": "7 Cranch 603",
+        "category": "reporters:scotus_early",
+        "reporter": "Cranch",
+        "case_ids": [
+          572735
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/us/11/0603-01"
+        ]
+      },
+      {
+        "cite": "5 Call 364",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6715426
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/9/0983-01"
+        ]
+      },
+      {
+        "cite": "2 Wash. 121",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6714460
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/2/0658-01"
+        ]
+      },
+      {
+        "cite": "2 Wash. 116",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6714447
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/2/0655-01"
+        ]
+      },
+      {
+        "cite": "2 Wash. 106",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6714432
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/2/0651-01"
+        ]
+      },
+      {
+        "cite": "4 Gall 42",
+        "category": "reporters:federal",
+        "reporter": "Gall.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "9 Leigh 414",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 2113,
+      "char_count": 88663,
+      "ocr_confidence": 0.494,
+      "pagerank": {
+        "raw": 2.0446031217563963e-07,
+        "percentile": 0.7502925846255901
+      },
+      "sha256": "722e9033275ac267afb66b1d79638eea66815c4515dfa4b9cab36bbb5070188b",
+      "simhash": "1:32f801a5ae5aad59",
+      "word_count": 15163
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0646-01",
+    "first_page_order": 26,
+    "last_page_order": 41
+  },
+  {
+    "id": 6714874,
+    "name": "Hague v. Stratton",
+    "name_abbreviation": "Hague v. Stratton",
+    "decision_date": "1786-06",
+    "docket_number": "",
+    "first_page": "661",
+    "last_page": "662",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 84"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 84"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 514,
+      "char_count": 10288,
+      "ocr_confidence": 0.509,
+      "pagerank": {
+        "raw": 4.8172472706271035e-08,
+        "percentile": 0.30172666437309664
+      },
+      "sha256": "28445974dbe88b2a677c3dcfb8df98928efc72ba020a2b47da9c18fe2915cbd8",
+      "simhash": "1:3969a52efbac80ab",
+      "word_count": 1841
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0661-01",
+    "first_page_order": 41,
+    "last_page_order": 42
+  },
+  {
+    "id": 6714891,
+    "name": "Rice v. Jones",
+    "name_abbreviation": "Rice v. Jones",
+    "decision_date": "1786-11",
+    "docket_number": "",
+    "first_page": "662",
+    "last_page": "663",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 89"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 89"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Rand. 108",
+        "category": "reporters:state",
+        "reporter": "Rand.",
+        "case_ids": [
+          4443568
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/22/0048-01"
+        ]
+      },
+      {
+        "cite": "3 Leigh 816",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "case_ids": [
+          6728023
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/30/0814-01"
+        ]
+      },
+      {
+        "cite": "9 Wheat. 565",
+        "category": "reporters:scotus_early",
+        "reporter": "Wheat.",
+        "case_ids": [
+          1421278
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/us/22/0565-01"
+        ]
+      },
+      {
+        "cite": "12 Vt. 589",
+        "category": "reporters:state",
+        "reporter": "Vt.",
+        "case_ids": [
+          2349926
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/vt/12/0589-01"
+        ]
+      },
+      {
+        "cite": "5 R. I. 112",
+        "category": "reporters:state",
+        "reporter": "R.I.",
+        "case_ids": [
+          8518959
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/ri/5/0112-01"
+        ]
+      },
+      {
+        "cite": "5 J. J. Marsh. 460",
+        "category": "reporters:state",
+        "reporter": "J.J. Marsh.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Minor 942",
+        "category": "reporters:state",
+        "reporter": "Minor",
+        "opinion_index": -1
+      },
+      {
+        "cite": "10 S. E. Rep. 412",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "33 W. Va. 285",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "case_ids": [
+          8639998
+        ],
+        "pin_cites": [
+          {
+            "page": "288"
+          }
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/w-va/33/0285-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 405,
+      "char_count": 7127,
+      "ocr_confidence": 0.474,
+      "pagerank": {
+        "raw": 3.7508065842311334e-07,
+        "percentile": 0.8952158986875297
+      },
+      "sha256": "a95c9098d3bf56c06de6d8c82111733c39db33924e6716dbc1851642b6bbceb4",
+      "simhash": "1:eee7cf1305abfe74",
+      "word_count": 1267
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0662-01",
+    "first_page_order": 42,
+    "last_page_order": 43
+  },
+  {
+    "id": 6714928,
+    "name": "Taylor, Executor of Rowley v. Wallace & Wife",
+    "name_abbreviation": "Taylor v. Wallace",
+    "decision_date": "1786-11",
+    "docket_number": "",
+    "first_page": "663",
+    "last_page": "664",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 92"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 92"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "2 Gratt. 344",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6715813
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/43/0388-01"
+        ]
+      },
+      {
+        "cite": "11 Gratt. 348",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4450967
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/52/0149-01"
+        ]
+      },
+      {
+        "cite": "9 Leigh 251",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 102,
+      "char_count": 1214,
+      "ocr_confidence": 0.442,
+      "sha256": "cfbbd8c07f2a0642fc48e7a714caaf5d2d81b28f2da2af08acaff7dfb0e361b7",
+      "simhash": "1:eaf110e507121ec1",
+      "word_count": 202
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0663-01",
+    "first_page_order": 43,
+    "last_page_order": 44
+  },
+  {
+    "id": 6714949,
+    "name": "Noel & Wife v. Garnett",
+    "name_abbreviation": "Noel v. Garnett",
+    "decision_date": "1786-10",
+    "docket_number": "",
+    "first_page": "664",
+    "last_page": "664",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 92"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 92"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "25 Gratt. 587",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6724868
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/66/0487-01"
+        ]
+      },
+      {
+        "cite": "5 Call 511",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 104,
+      "char_count": 1132,
+      "ocr_confidence": 0.509,
+      "sha256": "e44605fac1d89ecbf846c9386c4515374acf8aa4609f184ed58059f93f366d71",
+      "simhash": "1:4f91769d82cc7cb7",
+      "word_count": 190
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0664-01",
+    "first_page_order": 44,
+    "last_page_order": 44
+  },
+  {
+    "id": 6714973,
+    "name": "Taliaferro & al. v. Taliaferro & al.",
+    "name_abbreviation": "Taliaferro v. Taliaferro",
+    "decision_date": "1786-11",
+    "docket_number": "",
+    "first_page": "664",
+    "last_page": "665",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 93"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 93"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "10 Gratt. 159",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6715134
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/51/0461-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 504,
+      "char_count": 9908,
+      "ocr_confidence": 0.494,
+      "pagerank": {
+        "raw": 1.114690476913653e-07,
+        "percentile": 0.5715304251328939
+      },
+      "sha256": "e2e792dbf2568c1b03290d13a7939ab50e5c5d6173fc85b755406dbc56c6aec2",
+      "simhash": "1:9a97c664af0bf8c3",
+      "word_count": 1657
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0664-02",
+    "first_page_order": 44,
+    "last_page_order": 45
+  },
+  {
+    "id": 6714988,
+    "name": "Commonwealth v. Ronald & al.",
+    "name_abbreviation": "Commonwealth v. Ronald",
+    "decision_date": "1786-11",
+    "docket_number": "",
+    "first_page": "665",
+    "last_page": "666",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 97"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 97"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "2 Va. Cas. 381",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "case_ids": [
+          6732598
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/4/0279-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 206,
+      "char_count": 2804,
+      "ocr_confidence": 0.523,
+      "pagerank": {
+        "raw": 1.5512318580865718e-07,
+        "percentile": 0.6746711873935507
+      },
+      "sha256": "c7b3221209a5dd0ca572ec186c8cc1f22591d1241e55aa966a68920a20475ea9",
+      "simhash": "1:1fc8394eb44d593f",
+      "word_count": 482
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0665-01",
+    "first_page_order": 45,
+    "last_page_order": 46
+  },
+  {
+    "id": 6715017,
+    "name": "Pickett v. Claiborne",
+    "name_abbreviation": "Pickett v. Claiborne",
+    "decision_date": "1787-10",
+    "docket_number": "",
+    "first_page": "666",
+    "last_page": "668",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 99"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 99"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "12 Gratt. 53",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6714993
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/53/0483-01"
+        ]
+      },
+      {
+        "cite": "1 Wash. 306",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          8530745,
+          6716934
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/wash/1/0306-01",
+          "/va/1/0529-01"
+        ]
+      },
+      {
+        "cite": "5 Call 561",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Wash. 83",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "2 Black. Rep. 780",
+        "category": "reporters:scotus_early",
+        "reporter": "Black. Rep.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 674,
+      "char_count": 14850,
+      "ocr_confidence": 0.502,
+      "pagerank": {
+        "raw": 1.0873401050065137e-07,
+        "percentile": 0.5645433382409554
+      },
+      "sha256": "f4280ead13950d81e85cebf18ed6717fcc397b3d76ec5b980981541899bc77c8",
+      "simhash": "1:9866441f9f5424f8",
+      "word_count": 2569
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0666-01",
+    "first_page_order": 46,
+    "last_page_order": 48
+  },
+  {
+    "id": 6715037,
+    "name": "Hill v. Pride",
+    "name_abbreviation": "Hill v. Pride",
+    "decision_date": "1787-10",
+    "docket_number": "",
+    "first_page": "668",
+    "last_page": "669",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 107"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 107"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "8 Gratt. 457",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6716085
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/49/0589-01"
+        ]
+      },
+      {
+        "cite": "1 Wash. 83",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 237,
+      "char_count": 3581,
+      "ocr_confidence": 0.513,
+      "pagerank": {
+        "raw": 2.5071491729692607e-07,
+        "percentile": 0.8101186594276346
+      },
+      "sha256": "1d4c8b05e8b8a20f36d03f3bfcaa76c7543436f5c08bbad9675b5a576ae59581",
+      "simhash": "1:ebe147a2ae1f831f",
+      "word_count": 616
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0668-01",
+    "first_page_order": 48,
+    "last_page_order": 49
+  },
+  {
+    "id": 6715080,
+    "name": "Commonwealth v. Posey",
+    "name_abbreviation": "Commonwealth v. Posey",
+    "decision_date": "1787-11",
+    "docket_number": "",
+    "first_page": "669",
+    "last_page": "675",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 109"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 109"
+      },
+      {
+        "type": "parallel",
+        "cite": "2 Am. Dec. 560"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Va. Cas. 114",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "case_ids": [
+          2095773
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/3/0032-02"
+        ]
+      },
+      {
+        "cite": "14 Gratt. 674",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732990
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/55/0611-01"
+        ]
+      },
+      {
+        "cite": "4 Leigh 683",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "case_ids": [
+          6728600
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/31/1077-01"
+        ]
+      },
+      {
+        "cite": "13 Gratt. 763",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4438147
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/54/0291-01"
+        ]
+      },
+      {
+        "cite": "2 Black. Rep. 682",
+        "category": "reporters:scotus_early",
+        "reporter": "Black. Rep.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "23 Hen. 8",
+        "category": "reporters:state",
+        "reporter": "Hen. & M.",
+        "weight": 6,
+        "opinion_index": -1
+      },
+      {
+        "cite": "23 H. 8",
+        "category": "reporters:state",
+        "reporter": "H.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "25 Hen. 8",
+        "category": "reporters:state",
+        "reporter": "Hen. & M.",
+        "weight": 17,
+        "opinion_index": -1
+      },
+      {
+        "cite": "23 Hen. 8",
+        "category": "reporters:state",
+        "reporter": "Hen. & M.",
+        "weight": 2,
+        "opinion_index": 0
+      },
+      {
+        "cite": "25 Hen. 8",
+        "category": "reporters:state",
+        "reporter": "Hen. & M.",
+        "weight": 4,
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 1178,
+      "char_count": 38555,
+      "ocr_confidence": 0.503,
+      "pagerank": {
+        "raw": 2.9541370581193107e-07,
+        "percentile": 0.8490786528481004
+      },
+      "sha256": "e173481901fd104efb5992744ec188261a39e3ebba4b11e0e0239c7ae628a1b2",
+      "simhash": "1:e9f7e6a0454ac5ee",
+      "word_count": 6886
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0669-01",
+    "first_page_order": 49,
+    "last_page_order": 55
+  },
+  {
+    "id": 6715102,
+    "name": "Dawson v. Graves & Hague",
+    "name_abbreviation": "Dawson v. Graves",
+    "decision_date": "1788-05",
+    "docket_number": "",
+    "first_page": "675",
+    "last_page": "676",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 127"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 127"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 343,
+      "char_count": 6125,
+      "ocr_confidence": 0.505,
+      "pagerank": {
+        "raw": 6.713702340472267e-08,
+        "percentile": 0.4077282111814241
+      },
+      "sha256": "b2087df635ff9bede025543c1b9c9523c756116eb394a281d830ca7b8fee3ca5",
+      "simhash": "1:0b8125b3c56cec2b",
+      "word_count": 1060
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0675-01",
+    "first_page_order": 55,
+    "last_page_order": 56
+  },
+  {
+    "id": 6715123,
+    "name": "Grymes v. Pendleton",
+    "name_abbreviation": "Grymes v. Pendleton",
+    "decision_date": "1788-05",
+    "docket_number": "",
+    "first_page": "676",
+    "last_page": "678",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 130"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 130"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "5 Gratt. 6",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4375072
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/46/0006-01"
+        ]
+      },
+      {
+        "cite": "7 Gratt. 425",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4449374
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/48/0172-01"
+        ]
+      },
+      {
+        "cite": "10 Gratt. 250",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6715501
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/51/0542-01"
+        ]
+      },
+      {
+        "cite": "20 W. Va. 777",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "23 W. Va. 111",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 490,
+      "char_count": 10062,
+      "ocr_confidence": 0.497,
+      "pagerank": {
+        "raw": 2.8397175050568086e-07,
+        "percentile": 0.8398159506596716
+      },
+      "sha256": "282c741012b15f921bb75b7887b09b5424fea0658a1f52ee0cf42e0fd1d9ea43",
+      "simhash": "1:5ba46620d736e6b5",
+      "word_count": 1705
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0676-01",
+    "first_page_order": 56,
+    "last_page_order": 58
+  },
+  {
+    "id": 6715159,
+    "name": "Cases of the Judges of the Court of Appeals",
+    "name_abbreviation": "Cases of the Judges of the Court of Appeals",
+    "decision_date": "1788-05",
+    "docket_number": "",
+    "first_page": "678",
+    "last_page": "683",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 135"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 135"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 1118,
+      "char_count": 35175,
+      "ocr_confidence": 0.514,
+      "pagerank": {
+        "raw": 7.477787796220105e-08,
+        "percentile": 0.4455226926357483
+      },
+      "sha256": "b9db641a1fc47ff18a6b99ba146d1e03d6e5c0f2c6ffe6aadd23069aa51cf2ec",
+      "simhash": "1:a783e2cdee77ee6e",
+      "word_count": 6021
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0678-01",
+    "first_page_order": 58,
+    "last_page_order": 63
+  },
+  {
+    "id": 6715176,
+    "name": "Hare v. Gay & al.",
+    "name_abbreviation": "Hare v. Gay",
+    "decision_date": "1788-05",
+    "docket_number": "",
+    "first_page": "683",
+    "last_page": "684",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 151"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 151"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "27 Gratt. 440",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6740164
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/68/0525-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 115,
+      "char_count": 1466,
+      "ocr_confidence": 0.496,
+      "sha256": "1e5c6535b8717d4b058f00dc3844ab0f2865c83bb2309034f031174a7fe16691",
+      "simhash": "1:d68242b0b050a5b6",
+      "word_count": 255
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0683-01",
+    "first_page_order": 63,
+    "last_page_order": 64
+  },
+  {
+    "id": 6715198,
+    "name": "Richardson v. Fontaine",
+    "name_abbreviation": "Richardson v. Fontaine",
+    "decision_date": "1788-05",
+    "docket_number": "",
+    "first_page": "684",
+    "last_page": "684",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 684"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 684"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 67,
+      "char_count": 817,
+      "ocr_confidence": 0.533,
+      "sha256": "5423db0a7c84fa1fc070de863b4b3d5de6b3725ec577be777f29ec2398e8124d",
+      "simhash": "1:c48a48b93ac0e52e",
+      "word_count": 139
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0684-01",
+    "first_page_order": 64,
+    "last_page_order": 64
+  },
+  {
+    "id": 6715225,
+    "name": "Bentley v. Roan",
+    "name_abbreviation": "Bentley v. Roan",
+    "decision_date": "1790-06",
+    "docket_number": "",
+    "first_page": "684",
+    "last_page": "685",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 153"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 153"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 459,
+      "char_count": 10345,
+      "ocr_confidence": 0.506,
+      "pagerank": {
+        "raw": 9.505882454708161e-08,
+        "percentile": 0.5224146272620527
+      },
+      "sha256": "ea49dd450db3850121eafc34640e0a2b53de4ba772118da6d436c1eeff96cfc2",
+      "simhash": "1:403116609a4239c8",
+      "word_count": 1808
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0684-02",
+    "first_page_order": 64,
+    "last_page_order": 65
+  },
+  {
+    "id": 6715251,
+    "name": "Fairclough v. Gatewood",
+    "name_abbreviation": "Fairclough v. Gatewood",
+    "decision_date": "1790-06",
+    "docket_number": "",
+    "first_page": "685",
+    "last_page": "687",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 158"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 158"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 422,
+      "char_count": 7955,
+      "ocr_confidence": 0.53,
+      "pagerank": {
+        "raw": 9.505882454708161e-08,
+        "percentile": 0.5224148203235015
+      },
+      "sha256": "6a2c5bc946beb7c32b40d8584507e47145da5c0d67a910168f45cd2ff370544b",
+      "simhash": "1:9db3e5c76903ac9b",
+      "word_count": 1428
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0685-01",
+    "first_page_order": 65,
+    "last_page_order": 67
+  },
+  {
+    "id": 6715305,
+    "name": "Beall v. Cockburn",
+    "name_abbreviation": "Beall v. Cockburn",
+    "decision_date": "1790-07",
+    "docket_number": "",
+    "first_page": "687",
+    "last_page": "698",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 162"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 162"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 1634,
+      "char_count": 65925,
+      "ocr_confidence": 0.493,
+      "sha256": "c2d3098f70a84015d967f489999e59a61eb3a5ccd40533c7c327f4e0c696560a",
+      "simhash": "1:a7b7c5571e91ccca",
+      "word_count": 11688
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0687-01",
+    "first_page_order": 67,
+    "last_page_order": 78
+  },
+  {
+    "id": 6715343,
+    "name": "Hamilton v. Maze",
+    "name_abbreviation": "Hamilton v. Maze.",
+    "decision_date": "1791-06",
+    "docket_number": "",
+    "first_page": "698",
+    "last_page": "704",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 196"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 196"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Call 202",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      },
+      {
+        "cite": "2 Wash. 48",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 1061,
+      "char_count": 37564,
+      "ocr_confidence": 0.497,
+      "pagerank": {
+        "raw": 4.3341757668126914e-08,
+        "percentile": 0.27269311840188365
+      },
+      "sha256": "95ec6364fff90542efed09042e0ba14f66f8d82ed7e04f053bcd09e1efd66f74",
+      "simhash": "1:11b7afa0ae25203c",
+      "word_count": 6525
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0698-01",
+    "first_page_order": 78,
+    "last_page_order": 84
+  },
+  {
+    "id": 6715369,
+    "name": "Hambleton v. Wells",
+    "name_abbreviation": "Hambleton v. Wells",
+    "decision_date": "1791-06",
+    "docket_number": "",
+    "first_page": "704",
+    "last_page": "706",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 213"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 213"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "11 Gratt. 172",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4451131
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/52/0077-01"
+        ]
+      },
+      {
+        "cite": "4 Call 257",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Hen. & M. 308",
+        "category": "reporters:state",
+        "reporter": "Hen. & M.",
+        "pin_cites": [
+          {
+            "page": "309"
+          }
+        ],
+        "opinion_index": -1
+      },
+      {
+        "cite": "3 Peters 340",
+        "category": "reporters:scotus_early",
+        "reporter": "Pet.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Wash. 116",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6714876
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/1/0436-02"
+        ]
+      },
+      {
+        "cite": "4 Munf. 173",
+        "category": "reporters:state",
+        "reporter": "Munf.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 551,
+      "char_count": 12291,
+      "ocr_confidence": 0.494,
+      "pagerank": {
+        "raw": 3.665050778584939e-07,
+        "percentile": 0.8906971024179402
+      },
+      "sha256": "a974bd0533aa7a88bfd09479ef8bc8107ef493a774b192f9c76f8e1ad5c58579",
+      "simhash": "1:fdc66c3733e63c43",
+      "word_count": 2121
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0704-01",
+    "first_page_order": 84,
+    "last_page_order": 86
+  },
+  {
+    "id": 6715395,
+    "name": "Calvert v. Bowdoin",
+    "name_abbreviation": "Calvert v. Bowdoin",
+    "decision_date": "1791-06",
+    "docket_number": "",
+    "first_page": "706",
+    "last_page": "707",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 217"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 217"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "7 Gratt. 425",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4449374
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/48/0172-01"
+        ]
+      },
+      {
+        "cite": "1 Gratt. 364",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4448923
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/42/0144-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 364,
+      "char_count": 6825,
+      "ocr_confidence": 0.518,
+      "pagerank": {
+        "raw": 4.8354426081999785e-08,
+        "percentile": 0.3038337370248227
+      },
+      "sha256": "fc792f02ca11832439027fbd88a46b21b56ae02bc3e57fc843f19ed9f66dc497",
+      "simhash": "1:7ff3896d198494de",
+      "word_count": 1189
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0706-01",
+    "first_page_order": 86,
+    "last_page_order": 87
+  },
+  {
+    "id": 6715414,
+    "name": "William Browne v. David Ross & Co.",
+    "name_abbreviation": "Browne v. David Ross & Co.",
+    "decision_date": "1791-11",
+    "docket_number": "",
+    "first_page": "707",
+    "last_page": "708",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 221"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 221"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "18 Gratt. 801",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6733925
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/59/0792-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 340,
+      "char_count": 5563,
+      "ocr_confidence": 0.484,
+      "pagerank": {
+        "raw": 4.106848000311792e-08,
+        "percentile": 0.26673717270775243
+      },
+      "sha256": "efe01f37b34b3f69de698bb56c5b857469f1d361f6e1dfb1ed079d08edbda562",
+      "simhash": "1:19a62935c0427068",
+      "word_count": 970
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0707-01",
+    "first_page_order": 87,
+    "last_page_order": 88
+  },
+  {
+    "id": 6715439,
+    "name": "Hubbard v. Blow",
+    "name_abbreviation": "Hubbard v. Blow",
+    "decision_date": "1792-04",
+    "docket_number": "",
+    "first_page": "708",
+    "last_page": "708",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 224"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 224"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "3 W. Va. 500",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 191,
+      "char_count": 3343,
+      "ocr_confidence": 0.494,
+      "pagerank": {
+        "raw": 1.2373254685652576e-07,
+        "percentile": 0.6070558553799855
+      },
+      "sha256": "eaa7088d54494124101b93f77b1249b86c19f6fa9eb4114b4d4f7bdfde595e2c",
+      "simhash": "1:b9a77abf58fb35d9",
+      "word_count": 567
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0708-01",
+    "first_page_order": 88,
+    "last_page_order": 88
+  },
+  {
+    "id": 6715462,
+    "name": "Tabb v. Gregory",
+    "name_abbreviation": "Tabb v. Gregory",
+    "decision_date": "1792-04",
+    "docket_number": "",
+    "first_page": "708",
+    "last_page": "710",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 225"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 225"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "7 Gratt. 300",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4449671
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/48/0119-01"
+        ]
+      },
+      {
+        "cite": "5 Call 529",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6715910
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/9/1038-01"
+        ]
+      },
+      {
+        "cite": "2 S. E. Rep. 894",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "29 W. Va. 538",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "4 Call 255",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      },
+      {
+        "cite": "28 W. Va. 594",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 499,
+      "char_count": 9765,
+      "ocr_confidence": 0.494,
+      "pagerank": {
+        "raw": 3.05915707813423e-07,
+        "percentile": 0.8564935639104828
+      },
+      "sha256": "e7af7ab13ffb96c53412c64a1585637d87d1e952f86d44c3fbe1468b7423707e",
+      "simhash": "1:8faf2ded781782d5",
+      "word_count": 1710
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0708-02",
+    "first_page_order": 88,
+    "last_page_order": 90
+  },
+  {
+    "id": 6715487,
+    "name": "Verell v. Coleman",
+    "name_abbreviation": "Verell v. Coleman",
+    "decision_date": "1793-04",
+    "docket_number": "",
+    "first_page": "710",
+    "last_page": "710",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 230"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 230"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 108,
+      "char_count": 1336,
+      "ocr_confidence": 0.497,
+      "sha256": "074fa1cd8c79243bad4b21078ea9ea01ab6801930d105d1a687d0e8df6526ef5",
+      "simhash": "1:c87ba081c5b78296",
+      "word_count": 226
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0710-01",
+    "first_page_order": 90,
+    "last_page_order": 90
+  },
+  {
+    "id": 6715518,
+    "name": "Foster, Executor of Foster v. Foster",
+    "name_abbreviation": "Foster v. Foster",
+    "decision_date": "1793-04",
+    "docket_number": "",
+    "first_page": "710",
+    "last_page": "711",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 231"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 231"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "3 Gratt. 243",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6715266
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/44/0626-01"
+        ]
+      },
+      {
+        "cite": "10 Gratt. 159",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6715134
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/51/0461-01"
+        ]
+      },
+      {
+        "cite": "1 Wash. 173",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6715576
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/1/0465-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 336,
+      "char_count": 6307,
+      "ocr_confidence": 0.462,
+      "pagerank": {
+        "raw": 5.676830387708631e-08,
+        "percentile": 0.35472048756510516
+      },
+      "sha256": "a79dbe601a33ba7629e07868109ffb8a5dfc8bbee8b2f7b2e8407df72754d273",
+      "simhash": "1:98b387aa845078f7",
+      "word_count": 1086
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0710-02",
+    "first_page_order": 90,
+    "last_page_order": 91
+  },
+  {
+    "id": 6715544,
+    "name": "Turner v. Turner's Ex'x",
+    "name_abbreviation": "Turner v. Turner's Ex'x",
+    "decision_date": "1792-10",
+    "docket_number": "",
+    "first_page": "711",
+    "last_page": "713",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 230"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 230"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 496,
+      "char_count": 9790,
+      "ocr_confidence": 0.503,
+      "sha256": "87624566ff86ce3179da79a5575ce7a1429658d76137518fc6dd7697db97dcfc",
+      "simhash": "1:07af4e22f058febf",
+      "word_count": 1692
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0711-01",
+    "first_page_order": 91,
+    "last_page_order": 93
+  },
+  {
+    "id": 6715570,
+    "name": "Pollard v. Rogers",
+    "name_abbreviation": "Pollard v. Rogers",
+    "decision_date": "1791-06",
+    "docket_number": "",
+    "first_page": "713",
+    "last_page": "715",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 239"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 239"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "14 Gratt. 104",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "18 W. Va. 521",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 598,
+      "char_count": 13347,
+      "ocr_confidence": 0.497,
+      "pagerank": {
+        "raw": 2.4453473218510496e-07,
+        "percentile": 0.8035178884946574
+      },
+      "sha256": "e2a55ea353735a79631380ee9227bb42bda4b2cc8ce3d9bc8b19ac8446c14d13",
+      "simhash": "1:036de9a11808f4cd",
+      "word_count": 2386
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0713-01",
+    "first_page_order": 93,
+    "last_page_order": 95
+  },
+  {
+    "id": 6715595,
+    "name": "Pollard v. Coleman and Wife",
+    "name_abbreviation": "Pollard v. Coleman",
+    "decision_date": "1799-04",
+    "docket_number": "",
+    "first_page": "715",
+    "last_page": "716",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 245"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 245"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 475,
+      "char_count": 9900,
+      "ocr_confidence": 0.49,
+      "pagerank": {
+        "raw": 2.8651142789705816e-07,
+        "percentile": 0.8418967669543669
+      },
+      "sha256": "8c7afe6ac49db8674c07b62e156dd2060ddcecd538a0d95022286687c461a071",
+      "simhash": "1:acc307d6e25ccfc0",
+      "word_count": 1767
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0715-01",
+    "first_page_order": 95,
+    "last_page_order": 96
+  },
+  {
+    "id": 6715619,
+    "name": "Ross v. Gill and Wife",
+    "name_abbreviation": "Ross v. Gill",
+    "decision_date": "1794-04",
+    "docket_number": "",
+    "first_page": "716",
+    "last_page": "717",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 250"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 250"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "17 Gratt. 398",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6733550
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/58/0391-01"
+        ]
+      },
+      {
+        "cite": "1 Wash. 114",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 372,
+      "char_count": 5820,
+      "ocr_confidence": 0.491,
+      "pagerank": {
+        "raw": 8.899479576246977e-08,
+        "percentile": 0.49993532441466665
+      },
+      "sha256": "7848faadb86a566e737ceb0d37f01980521419d52d5a59532c76ee677f8614f1",
+      "simhash": "1:f824ec70beb62703",
+      "word_count": 1045
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0716-01",
+    "first_page_order": 96,
+    "last_page_order": 97
+  },
+  {
+    "id": 6715645,
+    "name": "White v. Jones",
+    "name_abbreviation": "White v. Jones",
+    "decision_date": "1792-10",
+    "docket_number": "",
+    "first_page": "717",
+    "last_page": "719",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 253"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 253"
+      },
+      {
+        "type": "parallel",
+        "cite": "2 Am. Dec. 564"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "8 Gratt. 457",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6716085
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/49/0589-01"
+        ]
+      },
+      {
+        "cite": "4 Call 213",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6715369
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/8/0704-01"
+        ]
+      },
+      {
+        "cite": "1 Wash. 116",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6714876
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/1/0436-02"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 640,
+      "char_count": 13475,
+      "ocr_confidence": 0.506,
+      "pagerank": {
+        "raw": 1.8648609905885662e-07,
+        "percentile": 0.7253646834236281
+      },
+      "sha256": "59748f98742d10de2187a02b357f83a954008d2a54afff7152de80753c0ca12f",
+      "simhash": "1:5dffc31248ad2ee6",
+      "word_count": 2345
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0717-01",
+    "first_page_order": 97,
+    "last_page_order": 99
+  },
+  {
+    "id": 6715677,
+    "name": "King v. Hanson, et e Contra",
+    "name_abbreviation": "King v. Hanson",
+    "decision_date": "1790-07",
+    "docket_number": "",
+    "first_page": "719",
+    "last_page": "722",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 259"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 259"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "2 Wash. 142",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "29 Gratt. 361",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732597
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/70/0458-01"
+        ]
+      },
+      {
+        "cite": "27 Gratt. 119",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6739130
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/68/0409-01"
+        ]
+      },
+      {
+        "cite": "24 Gratt. 497",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4434951
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/65/0174-01"
+        ]
+      },
+      {
+        "cite": "20 Gratt. 614",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6734076
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/61/0549-01"
+        ]
+      },
+      {
+        "cite": "32 Gratt. 434",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "38 Gratt. 833",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 807,
+      "char_count": 19534,
+      "ocr_confidence": 0.501,
+      "pagerank": {
+        "raw": 6.509885154734867e-07,
+        "percentile": 0.9607067825189808
+      },
+      "sha256": "d578c5daa2e0ac2eb686b3e3ff11914204c018dc44fe9803c624876bbe6277fb",
+      "simhash": "1:0f0704155e4df078",
+      "word_count": 3435
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0719-01",
+    "first_page_order": 99,
+    "last_page_order": 102
+  },
+  {
+    "id": 6715709,
+    "name": "Marshall and Others v. Clark",
+    "name_abbreviation": "Marshall v. Clark",
+    "decision_date": "1791-11",
+    "docket_number": "",
+    "first_page": "722",
+    "last_page": "724",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 268"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 268"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 477,
+      "char_count": 12516,
+      "ocr_confidence": 0.5,
+      "pagerank": {
+        "raw": 5.298132930532853e-08,
+        "percentile": 0.3330873730476178
+      },
+      "sha256": "cedff65bace9a8ed5e27ae10acbb2028aadde08724eb12c1d94a0fcd4c9ebc76",
+      "simhash": "1:ef437f2da159863d",
+      "word_count": 2142
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0722-01",
+    "first_page_order": 102,
+    "last_page_order": 104
+  },
+  {
+    "id": 6715735,
+    "name": "Hoomes v. Kuhn",
+    "name_abbreviation": "Hoomes v. Kuhn",
+    "decision_date": "1792-04",
+    "docket_number": "",
+    "first_page": "724",
+    "last_page": "726",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 274"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 274"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "15 Gratt. 518",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732456
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/56/0900-01"
+        ]
+      },
+      {
+        "cite": "7 Gratt. 425",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4449374
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/48/0172-01"
+        ]
+      },
+      {
+        "cite": "4 Call 286",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 534,
+      "char_count": 11066,
+      "ocr_confidence": 0.504,
+      "pagerank": {
+        "raw": 5.892296653089989e-08,
+        "percentile": 0.36892826570197723
+      },
+      "sha256": "6a76844f9856db9f60de2a40c5ace9b6c31b24f52bbd378c2fd2985e0d5fb67a",
+      "simhash": "1:ad8ad27a560994fb",
+      "word_count": 1917
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0724-01",
+    "first_page_order": 104,
+    "last_page_order": 106
+  },
+  {
+    "id": 6715761,
+    "name": "Foushee v. Lea",
+    "name_abbreviation": "Foushee v. Lea",
+    "decision_date": "1785-04",
+    "docket_number": "",
+    "first_page": "726",
+    "last_page": "729",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 279"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 279"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "31 Gratt. 342",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 H. & M. 548",
+        "category": "reporters:state",
+        "reporter": "Hen. & M.",
+        "case_ids": [
+          8694844
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/11/0243-01"
+        ]
+      },
+      {
+        "cite": "28 S. E. Rep. 337",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "95 Va. 851",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Call 518",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      },
+      {
+        "cite": "7 Gratt. 425",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4449374
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/48/0172-01"
+        ]
+      },
+      {
+        "cite": "3 Call 568",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6717536
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/7/0605-01"
+        ]
+      },
+      {
+        "cite": "23 Gratt. 200",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6725900
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/64/0442-01"
+        ]
+      },
+      {
+        "cite": "9 Gratt. 385",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Call 553",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 719,
+      "char_count": 17824,
+      "ocr_confidence": 0.483,
+      "pagerank": {
+        "raw": 4.2213338674196114e-07,
+        "percentile": 0.9139770310933185
+      },
+      "sha256": "35e94b8547d00c041fc39699afbb413072da120b79fff93b45bf000ff5acb896",
+      "simhash": "1:a846b8f63baa2445",
+      "word_count": 3138
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0726-01",
+    "first_page_order": 106,
+    "last_page_order": 109
+  },
+  {
+    "id": 6715802,
+    "name": "Braxton v. Willing, Morris & Co.",
+    "name_abbreviation": "Braxton v. Willing, Morris & Co.",
+    "decision_date": "1795-11",
+    "docket_number": "",
+    "first_page": "729",
+    "last_page": "735",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 288"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 288"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Gratt. 364",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4448923
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/42/0144-01"
+        ]
+      },
+      {
+        "cite": "9 Gratt. 622",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4450541
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/50/0279-01"
+        ]
+      },
+      {
+        "cite": "80 Va. 377",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "26 Gratt. 698",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4433929
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/67/0227-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 1129,
+      "char_count": 35254,
+      "ocr_confidence": 0.515,
+      "pagerank": {
+        "raw": 7.71519508895056e-08,
+        "percentile": 0.45391719748912
+      },
+      "sha256": "fc693d86190675cbb59d1688074401d6b77eef3e17618da98fc6cd6a77dea715",
+      "simhash": "1:7fb1a3d61b2c1281",
+      "word_count": 6092
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0729-01",
+    "first_page_order": 109,
+    "last_page_order": 115
+  },
+  {
+    "id": 6715843,
+    "name": "Goodwyn v. Taylor, Ex'or of Williamson",
+    "name_abbreviation": "Goodwyn v. Taylor",
+    "decision_date": "1795-04",
+    "docket_number": "",
+    "first_page": "735",
+    "last_page": "736",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 305"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 305"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "4 Rand. 547",
+        "category": "reporters:state",
+        "reporter": "Rand.",
+        "case_ids": [
+          4444456
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/25/0224-01"
+        ]
+      },
+      {
+        "cite": "5 Call 157",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      },
+      {
+        "cite": "3 Hen. 6",
+        "category": "reporters:state",
+        "reporter": "Hen. & M.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "2 Wash. 74",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6714343
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/2/0637-01"
+        ]
+      },
+      {
+        "cite": "13 W. Va. 531",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "pin_cites": [
+          {
+            "page": "542"
+          }
+        ],
+        "opinion_index": -1
+      },
+      {
+        "cite": "3 Call 62",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      },
+      {
+        "cite": "12 Gratt. 151",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "5 Call 150",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6714983
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/9/0911-01"
+        ]
+      },
+      {
+        "cite": "13 W. Va. 560",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "13 W. Va. 541",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "20 Gratt. 692",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6734243
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/61/0575-01"
+        ]
+      },
+      {
+        "cite": "13 W. Va. 533",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "weight": 2,
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Wash. 266",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6716576
+        ],
+        "weight": 3,
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/1/0510-01"
+        ]
+      },
+      {
+        "cite": "1 Wash. 266",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6716576
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/1/0510-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 526,
+      "char_count": 11088,
+      "ocr_confidence": 0.501,
+      "pagerank": {
+        "raw": 2.670174608234595e-07,
+        "percentile": 0.8257305734813111
+      },
+      "sha256": "752427df83dc7a483273ad80bed0bc2188ffce123abd4681f6fd2508258f207f",
+      "simhash": "1:4304cedb874d35ae",
+      "word_count": 1966
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0735-01",
+    "first_page_order": 115,
+    "last_page_order": 116
+  },
+  {
+    "id": 6715876,
+    "name": "Braxton & al. Surviving Executor of Philip W. Claiborne Deceased, v. Winslow &. al. Surviving Justices of Spotsylvania County",
+    "name_abbreviation": "Braxton v. Winslow",
+    "decision_date": "1791-04",
+    "docket_number": "",
+    "first_page": "736",
+    "last_page": "740",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 308"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 308"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "17 Gratt. 124",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732911
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/58/0278-01"
+        ]
+      },
+      {
+        "cite": "5 Gratt. 6",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4375072
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/46/0006-01"
+        ]
+      },
+      {
+        "cite": "5 Call 524",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Call 333",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          2094915
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/5/0124-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 857,
+      "char_count": 26407,
+      "ocr_confidence": 0.517,
+      "pagerank": {
+        "raw": 1.9343193640663176e-07,
+        "percentile": 0.7346171533552729
+      },
+      "sha256": "2615a51033b5d5137b17bf8e87218027c59afe83d7e199646ab51225917272e2",
+      "simhash": "1:934a6745b87e6db9",
+      "word_count": 4656
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0736-01",
+    "first_page_order": 116,
+    "last_page_order": 120
+  },
+  {
+    "id": 6715902,
+    "name": "Taliaferro v. Burwell",
+    "name_abbreviation": "Taliaferro v. Burwell",
+    "decision_date": "1803-10",
+    "docket_number": "",
+    "first_page": "740",
+    "last_page": "743",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 321"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 321"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "8 Gratt. 486",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6716109
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/49/0639-01"
+        ]
+      },
+      {
+        "cite": "25 Gratt. 587",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6724868
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/66/0487-01"
+        ]
+      },
+      {
+        "cite": "27 W. Va. 705",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "pin_cites": [
+          {
+            "page": "707"
+          }
+        ],
+        "opinion_index": -1
+      },
+      {
+        "cite": "27 Gratt. 563",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Call, 165",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          2094905
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/5/0063-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 533,
+      "char_count": 13458,
+      "ocr_confidence": 0.487,
+      "pagerank": {
+        "raw": 2.2402154997333037e-07,
+        "percentile": 0.7800541653200631
+      },
+      "sha256": "926efe472b4c548e6c0b9509344fa823f0346d6152ca0a918e4f5ee14dedb8dd",
+      "simhash": "1:0bf0a09fc54e49f3",
+      "word_count": 2336
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0740-01",
+    "first_page_order": 120,
+    "last_page_order": 123
+  },
+  {
+    "id": 6715929,
+    "name": "Chapman v. Washington",
+    "name_abbreviation": "Chapman v. Washington",
+    "decision_date": "1802-04",
+    "docket_number": "",
+    "first_page": "743",
+    "last_page": "744",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 327"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 327"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "5 Gratt. 6",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4375072
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/46/0006-01"
+        ]
+      },
+      {
+        "cite": "1 Wash. 308",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6716985
+        ],
+        "weight": 2,
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/1/0534-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 409,
+      "char_count": 8063,
+      "ocr_confidence": 0.474,
+      "pagerank": {
+        "raw": 4.1150845135908093e-08,
+        "percentile": 0.2667794531650301
+      },
+      "sha256": "d7b28e3b8fa662301b59b2926b2492f9537297c43b090a04491af4b2c3c8e9ee",
+      "simhash": "1:bb7ee396d45fb3db",
+      "word_count": 1381
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0743-01",
+    "first_page_order": 123,
+    "last_page_order": 124
+  },
+  {
+    "id": 6715970,
+    "name": "Commonwealth v. Cunningham & Co.",
+    "name_abbreviation": "Commonwealth v. Cunningham & Co.",
+    "decision_date": "1793-10",
+    "docket_number": "",
+    "first_page": "744",
+    "last_page": "746",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 331"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 331"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "4 Call 341",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "pin_cites": [
+          {
+            "page": "342, 345"
+          }
+        ],
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 635,
+      "char_count": 14826,
+      "ocr_confidence": 0.499,
+      "sha256": "610591dbcde6ca31b2b08953ff25c1c507192b8fd5abe3c18e3679a7cbc6fe94",
+      "simhash": "1:b0d76720ea4a5ff6",
+      "word_count": 2548
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0744-01",
+    "first_page_order": 124,
+    "last_page_order": 126
+  },
+  {
+    "id": 6716004,
+    "name": "Commonwealth v. Banks; Commonwealth v. North & Co.",
+    "name_abbreviation": "Commonwealth v. Banks",
+    "decision_date": "1798-04",
+    "docket_number": "",
+    "first_page": "746",
+    "last_page": "749",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 338"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 338"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "3 Call 175",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 718,
+      "char_count": 17920,
+      "ocr_confidence": 0.515,
+      "sha256": "184fca88aeb178b4b1493bc392a9a810c7000e77b68c94713e921f4079f3944b",
+      "simhash": "1:7b7fecb0b9c95e7f",
+      "word_count": 3085
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0746-01",
+    "first_page_order": 126,
+    "last_page_order": 129
+  },
+  {
+    "id": 6716034,
+    "name": "Eppes v. Tucker",
+    "name_abbreviation": "Eppes v. Tucker",
+    "decision_date": "1790-06",
+    "docket_number": "",
+    "first_page": "749",
+    "last_page": "751",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 346"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 346"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "11 Gratt. 697",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4451009
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/52/0355-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 682,
+      "char_count": 14599,
+      "ocr_confidence": 0.5,
+      "pagerank": {
+        "raw": 1.5550544481244034e-07,
+        "percentile": 0.6758731879735074
+      },
+      "sha256": "0fbdbc315abfc72de32569159482cd8caeff509f8718cdcfd5871fd8dfc2c140",
+      "simhash": "1:39dbcbbbca9bf18f",
+      "word_count": 2558
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0749-01",
+    "first_page_order": 129,
+    "last_page_order": 131
+  },
+  {
+    "id": 6716110,
+    "name": "Douglass v. Roan",
+    "name_abbreviation": "Douglass v. Roan",
+    "decision_date": "1790-06",
+    "docket_number": "",
+    "first_page": "751",
+    "last_page": "753",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 751"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 751"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "3 Call 228",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6715793
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/7/0496-01"
+        ]
+      },
+      {
+        "cite": "4 Call 564",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6716967
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/8/0823-01"
+        ]
+      },
+      {
+        "cite": "4 Call 158",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6715251
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/8/0685-01"
+        ]
+      },
+      {
+        "cite": "4 Call 153",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6715225
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/8/0684-02"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 418,
+      "char_count": 8029,
+      "ocr_confidence": 0.525,
+      "pagerank": {
+        "raw": 4.03580807328026e-08,
+        "percentile": 0.1808190361677457
+      },
+      "sha256": "117cfddbc81485dab60400a4bc0802e8ee6d0e6b2c7c73cb4935f5db5353f7bc",
+      "simhash": "1:15437c048eb2b12b",
+      "word_count": 1423
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0751-01",
+    "first_page_order": 131,
+    "last_page_order": 133
+  },
+  {
+    "id": 6716134,
+    "name": "Winston v. Overseers of the Poor of Hanover",
+    "name_abbreviation": "Winston v. Overseers of the Poor",
+    "decision_date": "1797-10",
+    "docket_number": "",
+    "first_page": "753",
+    "last_page": "754",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 357"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 357"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 308,
+      "char_count": 5212,
+      "ocr_confidence": 0.46,
+      "pagerank": {
+        "raw": 4.3288477722853265e-08,
+        "percentile": 0.2724527568981821
+      },
+      "sha256": "2ac916d11a1c90376fe999e9920d3b01e53372cd93fba9b69250ec8b2dbef730",
+      "simhash": "1:7cc2ede4ae1ecce3",
+      "word_count": 912
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0753-01",
+    "first_page_order": 133,
+    "last_page_order": 134
+  },
+  {
+    "id": 6716151,
+    "name": "M'Connico v. Moseley",
+    "name_abbreviation": "M'Connico v. Moseley",
+    "decision_date": "1798-10",
+    "docket_number": "",
+    "first_page": "754",
+    "last_page": "754",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 360"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 360"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 164,
+      "char_count": 2656,
+      "ocr_confidence": 0.531,
+      "pagerank": {
+        "raw": 8.138363859351185e-08,
+        "percentile": 0.47249762437887305
+      },
+      "sha256": "d0a5701cbf45b3358c53cbc90005d9a9f51a53f0908ae2fcf4d65997eb960080",
+      "simhash": "1:fb89ae0d31822cce",
+      "word_count": 452
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0754-01",
+    "first_page_order": 134,
+    "last_page_order": 134
+  },
+  {
+    "id": 6716182,
+    "name": "Fowler and Wife v. Saunders",
+    "name_abbreviation": "Fowler v. Saunders",
+    "decision_date": "1798-10",
+    "docket_number": "",
+    "first_page": "754",
+    "last_page": "755",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 361"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 361"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 299,
+      "char_count": 4813,
+      "ocr_confidence": 0.497,
+      "pagerank": {
+        "raw": 1.3867502322508203e-07,
+        "percentile": 0.6415987959143564
+      },
+      "sha256": "2907c97ed46858b09b064987c62e6996f15f900741bbc2b2e80981015891fca7",
+      "simhash": "1:9380eb91d99a3cdb",
+      "word_count": 842
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0754-02",
+    "first_page_order": 134,
+    "last_page_order": 135
+  },
+  {
+    "id": 6716210,
+    "name": "Halcomb v. Innis, Attorney General, &c.",
+    "name_abbreviation": "Halcomb v. Innis",
+    "decision_date": "1799-11",
+    "docket_number": "",
+    "first_page": "755",
+    "last_page": "756",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 364"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 364"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 288,
+      "char_count": 5495,
+      "ocr_confidence": 0.476,
+      "pagerank": {
+        "raw": 4.0847938140094653e-08,
+        "percentile": 0.26665357710044096
+      },
+      "sha256": "11530625ebd5f3176c2afcfa92788fee9984b7d7337b29b5f84a4830f8bab55d",
+      "simhash": "1:b8020af1de7b26f9",
+      "word_count": 951
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0755-01",
+    "first_page_order": 135,
+    "last_page_order": 136
+  },
+  {
+    "id": 6716235,
+    "name": "William Johnston, Surviving Partner of Johnston & Tinsley, v. William Macon, Late High Sheriff of Hanover",
+    "name_abbreviation": "Johnston v. Macon",
+    "decision_date": "1790-12",
+    "docket_number": "",
+    "first_page": "756",
+    "last_page": "757",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 367"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 367"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Wash. 4",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6714194
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/1/0358-01"
+        ]
+      },
+      {
+        "cite": "1 Rob. 329",
+        "category": "reporters:state",
+        "reporter": "Rob.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "10 Gratt. 540",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "pin_cites": [
+          {
+            "page": "546"
+          }
+        ],
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Munf. 506",
+        "category": "reporters:state",
+        "reporter": "Munf.",
+        "pin_cites": [
+          {
+            "page": "509"
+          }
+        ],
+        "opinion_index": -1
+      },
+      {
+        "cite": "31 Gratt. 478",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "26 W. Va. 290",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 518,
+      "char_count": 10810,
+      "ocr_confidence": 0.469,
+      "pagerank": {
+        "raw": 5.82749496744523e-08,
+        "percentile": 0.36245433614083294
+      },
+      "sha256": "b3cd8536983571933ed30a5a834d2f55a10d10d80591fd4b3fdd0761779f5116",
+      "simhash": "1:deb51838bf492142",
+      "word_count": 1902
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0756-01",
+    "first_page_order": 136,
+    "last_page_order": 137
+  },
+  {
+    "id": 6716255,
+    "name": "Henderson, &c. v. Southall, &c.",
+    "name_abbreviation": "Henderson v. Southall",
+    "decision_date": "1790-12",
+    "docket_number": "",
+    "first_page": "757",
+    "last_page": "758",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 371"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 371"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "12 W. Va. 502",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "case_ids": [
+          8641221
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/w-va/12/0502-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 149,
+      "char_count": 1992,
+      "ocr_confidence": 0.462,
+      "pagerank": {
+        "raw": 1.0193148210323462e-07,
+        "percentile": 0.5448282892168617
+      },
+      "sha256": "d7da535f8121a7262f8201bf00d1ef887a58e2716dcd146fbd0e50e35a6032b4",
+      "simhash": "1:347aca881c5ec1e5",
+      "word_count": 338
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0757-01",
+    "first_page_order": 137,
+    "last_page_order": 138
+  },
+  {
+    "id": 6716276,
+    "name": "Scott v. Graves; Tabb v. Richards; Bentley v. Roan",
+    "name_abbreviation": "Scott v. Graves",
+    "decision_date": "1790-12",
+    "docket_number": "",
+    "first_page": "758",
+    "last_page": "758",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 372"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 372"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 176,
+      "char_count": 2840,
+      "ocr_confidence": 0.532,
+      "pagerank": {
+        "raw": 1.0077753867311987e-07,
+        "percentile": 0.5412344503482636
+      },
+      "sha256": "add1c3eb2a94d48a98d7b490102efb7ab812de4f7d24994910cca8f9711c0778",
+      "simhash": "1:1e88d3cb224165b3",
+      "word_count": 473
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0758-01",
+    "first_page_order": 138,
+    "last_page_order": 138
+  },
+  {
+    "id": 6716303,
+    "name": "Clarke v. Mayo",
+    "name_abbreviation": "Clarke v. Mayo",
+    "decision_date": "1803-10",
+    "docket_number": "",
+    "first_page": "758",
+    "last_page": "760",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 374"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 374"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "8 Gratt. 634",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "39 N. E. Rep. 333",
+        "category": "reporters:state_regional",
+        "reporter": "N.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "144 N. Y. 316",
+        "category": "reporters:state",
+        "reporter": "N.Y.",
+        "case_ids": [
+          1174969
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/ny-crim/11/0017-01"
+        ]
+      },
+      {
+        "cite": "11 S. E. Rep. 8",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "33 W. Va. 507",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "case_ids": [
+          8640354
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/w-va/33/0507-01"
+        ]
+      },
+      {
+        "cite": "9 S. E. Rep. 48",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "32 W. Va. 6",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "case_ids": [
+          8639566
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/w-va/32/0006-01"
+        ]
+      },
+      {
+        "cite": "1 S. E. Rep. 673",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "weight": 2,
+        "opinion_index": -1
+      },
+      {
+        "cite": "29 W. Va. 407",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "case_ids": [
+          8640124
+        ],
+        "weight": 2,
+        "opinion_index": -1,
+        "case_paths": [
+          "/w-va/29/0407-01"
+        ]
+      },
+      {
+        "cite": "8 Gratt. 632",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6716602
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/49/0700-01"
+        ]
+      },
+      {
+        "cite": "5 Call 548",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6716014
+        ],
+        "year": 1851,
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/9/1045-01"
+        ]
+      },
+      {
+        "cite": "21 S. E. Rep. 1021",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "40 W. Va. 287",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "13 W. Va. 505",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 581,
+      "char_count": 11961,
+      "ocr_confidence": 0.509,
+      "pagerank": {
+        "raw": 2.745365888285607e-07,
+        "percentile": 0.8322992962137947
+      },
+      "sha256": "890cd95adfff4de5bc25737b8829a91524fd0457f71d6c7a1becca7974b58839",
+      "simhash": "1:374f5c2de176fc53",
+      "word_count": 2106
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0758-02",
+    "first_page_order": 138,
+    "last_page_order": 140
+  },
+  {
+    "id": 6716344,
+    "name": "Innis, Attorney General, &c. v. Roane and Others",
+    "name_abbreviation": "Innis v. Roane",
+    "decision_date": "1797-10",
+    "docket_number": "",
+    "first_page": "760",
+    "last_page": "768",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 379"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 379"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "7 Gratt. 425",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4449374
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/48/0172-01"
+        ]
+      },
+      {
+        "cite": "1 Gratt. 364",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4448923
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/42/0144-01"
+        ]
+      },
+      {
+        "cite": "9 Leigh 58",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "pin_cites": [
+          {
+            "page": "61, 77"
+          }
+        ],
+        "opinion_index": -1
+      },
+      {
+        "cite": "9 Leigh 43",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "opinion_index": -1
+      },
+      {
+        "cite": "5 Leigh 319",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Leigh 549",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 1461,
+      "char_count": 50098,
+      "ocr_confidence": 0.508,
+      "pagerank": {
+        "raw": 4.451838967863895e-07,
+        "percentile": 0.9214602859085607
+      },
+      "sha256": "ac96d80410fd54ef3fce132ab8134be7c1bea32c000d815058803c9680b191b6",
+      "simhash": "1:17977b60a466ee3b",
+      "word_count": 8661
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0760-01",
+    "first_page_order": 140,
+    "last_page_order": 148
+  },
+  {
+    "id": 6716382,
+    "name": "Call v. Scott, &c.",
+    "name_abbreviation": "Call v. Scott",
+    "decision_date": "1803-10",
+    "docket_number": "",
+    "first_page": "768",
+    "last_page": "771",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 402"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 402"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "20 S. E. Rep. 853",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "40 W. Va. 47",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Call 62",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          2094950
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/5/0026-01"
+        ]
+      },
+      {
+        "cite": "9 Gratt. 622",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4450541
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/50/0279-01"
+        ]
+      },
+      {
+        "cite": "6 Call 5",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6714615
+        ],
+        "pin_cites": [
+          {
+            "page": "11"
+          }
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/10/1064-01"
+        ]
+      },
+      {
+        "cite": "1 Wash. 389",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6717609
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/1/0590-01"
+        ]
+      },
+      {
+        "cite": "1 Wash. 296",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6716809
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/1/0524-01"
+        ]
+      },
+      {
+        "cite": "2 Call, 110",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6715192
+        ],
+        "weight": 2,
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/6/0263-01"
+        ]
+      },
+      {
+        "cite": "1 Wash. 28",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "1 Call 62",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          2094950
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/5/0026-01"
+        ]
+      },
+      {
+        "cite": "2 Call, 110",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6715192
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/6/0263-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 729,
+      "char_count": 18192,
+      "ocr_confidence": 0.516,
+      "pagerank": {
+        "raw": 3.056413680638368e-07,
+        "percentile": 0.8562837061156847
+      },
+      "sha256": "9c7e35ebe8096b6dfe343ec7fa07b08d0c8073f16ad4cfd85fc8922c9e11eaf0",
+      "simhash": "1:d52eaac0f10fd359",
+      "word_count": 3200
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0768-01",
+    "first_page_order": 148,
+    "last_page_order": 151
+  },
+  {
+    "id": 6716399,
+    "name": "Power v. Finnie",
+    "name_abbreviation": "Power v. Finnie",
+    "decision_date": "1797-11",
+    "docket_number": "",
+    "first_page": "771",
+    "last_page": "773",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 411"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 411"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 S. E. Rep. 341",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "29 W. Va. 69",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "25 Gratt. 887",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6726004
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/66/0599-01"
+        ]
+      },
+      {
+        "cite": "26 W. Va. 392",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "15 S. E. Rep. 865",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "89 Va. 299",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "9 Gratt. 622",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4450541
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/50/0279-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 515,
+      "char_count": 10915,
+      "ocr_confidence": 0.499,
+      "pagerank": {
+        "raw": 1.530437368118447e-07,
+        "percentile": 0.6710057227274641
+      },
+      "sha256": "d5291fc41feb842388a531d5c920f7cc769aeb1be12007f7ec8f9f064a885674",
+      "simhash": "1:c9e7c5e814eefc01",
+      "word_count": 1932
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0771-01",
+    "first_page_order": 151,
+    "last_page_order": 153
+  },
+  {
+    "id": 6716445,
+    "name": "Hooe v. Marquess",
+    "name_abbreviation": "Hooe v. Marquess",
+    "decision_date": "1798-10",
+    "docket_number": "",
+    "first_page": "773",
+    "last_page": "775",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 416"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 416"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Pat. & H. 5",
+        "category": "reporters:state",
+        "reporter": "Patton & Heath",
+        "opinion_index": -1
+      },
+      {
+        "cite": "25 Gratt. 473",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6724275
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/66/0451-01"
+        ]
+      },
+      {
+        "cite": "20 Gratt. 527",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6733935
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/61/0521-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 690,
+      "char_count": 14947,
+      "ocr_confidence": 0.487,
+      "pagerank": {
+        "raw": 1.0702212886917544e-07,
+        "percentile": 0.5595766394102514
+      },
+      "sha256": "ffd24a1020d1a660c7170e4511dfb4e7397ed67566dcc17146fecda69cd6b518",
+      "simhash": "1:6e9729b79da898ad",
+      "word_count": 2609
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0773-01",
+    "first_page_order": 153,
+    "last_page_order": 155
+  },
+  {
+    "id": 6716476,
+    "name": "Spencer v. Moore",
+    "name_abbreviation": "Spencer v. Moore",
+    "decision_date": "1798-04",
+    "docket_number": "",
+    "first_page": "775",
+    "last_page": "777",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 423"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 423"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "19 Gratt. 720",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4436402
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/60/0260-01"
+        ]
+      },
+      {
+        "cite": "16 Gratt. 418",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4437330
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/57/0163-01"
+        ]
+      },
+      {
+        "cite": "1 Gratt. 94",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "20 Gratt. 860",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6734604
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/61/0657-01"
+        ]
+      },
+      {
+        "cite": "8 S. E. Rep. 493",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "31 W. Va. 659",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "case_ids": [
+          8640456
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/w-va/31/0659-01"
+        ]
+      },
+      {
+        "cite": "4 S. E. Rep. 580",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "84 Va. 108",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "11 W. Va. 584",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "case_ids": [
+          8641317
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/w-va/11/0584-01"
+        ]
+      },
+      {
+        "cite": "78 Va. 598",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Wash. 224",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6716088
+        ],
+        "weight": 2,
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/1/0490-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 723,
+      "char_count": 14498,
+      "ocr_confidence": 0.482,
+      "pagerank": {
+        "raw": 9.991882797619486e-08,
+        "percentile": 0.5384070654312278
+      },
+      "sha256": "8946491fa5de88296edc099eeebae269702f522c34334483728ef2fed252eb70",
+      "simhash": "1:9b3ae31212620bcb",
+      "word_count": 2535
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0775-01",
+    "first_page_order": 155,
+    "last_page_order": 157
+  },
+  {
+    "id": 6716514,
+    "name": "Chapman v. Chapman",
+    "name_abbreviation": "Chapman v. Chapman",
+    "decision_date": "1799-04",
+    "docket_number": "",
+    "first_page": "777",
+    "last_page": "781",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 430"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 430"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "25 Gratt. 473",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6724275
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/66/0451-01"
+        ]
+      },
+      {
+        "cite": "20 Gratt. 527",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6733935
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/61/0521-01"
+        ]
+      },
+      {
+        "cite": "1 Wash. 136",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6715064
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/1/0446-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 849,
+      "char_count": 22530,
+      "ocr_confidence": 0.497,
+      "pagerank": {
+        "raw": 4.313947448607103e-08,
+        "percentile": 0.27171854420856195
+      },
+      "sha256": "fadcc8e34cc45e22ffbd68afa893884d55cbba43b3ec48b90fb56ddc5558aca3",
+      "simhash": "1:5520a694ae349180",
+      "word_count": 3976
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0777-01",
+    "first_page_order": 157,
+    "last_page_order": 161
+  },
+  {
+    "id": 6716535,
+    "name": "Home v. Richards, and e Contra",
+    "name_abbreviation": "Home v. Richards",
+    "decision_date": "1798-04",
+    "docket_number": "",
+    "first_page": "781",
+    "last_page": "784",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 441"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 441"
+      },
+      {
+        "type": "parallel",
+        "cite": "2 Am. Dec. 574"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "3 Rand. 33",
+        "category": "reporters:state",
+        "reporter": "Rand.",
+        "case_ids": [
+          6714364
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/24/0465-01"
+        ]
+      },
+      {
+        "cite": "1 Rand. 417",
+        "category": "reporters:state",
+        "reporter": "Rand.",
+        "case_ids": [
+          4443417
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/22/0165-02"
+        ]
+      },
+      {
+        "cite": "14 S. E. Rep. 380",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "88 Va. 667",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "3 Rand. 563",
+        "category": "reporters:state",
+        "reporter": "Rand.",
+        "case_ids": [
+          6715947
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/24/0705-01"
+        ]
+      },
+      {
+        "cite": "11 S. E. Rep. 106",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "weight": 2,
+        "opinion_index": -1
+      },
+      {
+        "cite": "86 Va. 700",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "weight": 2,
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 S. E. Rep. 734",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "29 W. Va. 319",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "22 W. Va. 64",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "37 Gratt. 433",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "11 Gratt. 136",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4451307
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/52/0065-01"
+        ]
+      },
+      {
+        "cite": "3 Gratt. 695",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "pin_cites": [
+          {
+            "page": "707"
+          }
+        ],
+        "opinion_index": -1
+      },
+      {
+        "cite": "38 Gratt. 344",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 819,
+      "char_count": 21142,
+      "ocr_confidence": 0.517,
+      "pagerank": {
+        "raw": 4.072612544782058e-07,
+        "percentile": 0.9085751717571179
+      },
+      "sha256": "9684b4fe09440295a3edcadb47a14f7d99cad99547d68a63a7744102da5d992b",
+      "simhash": "1:7e088422236eba58",
+      "word_count": 3817
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0781-01",
+    "first_page_order": 161,
+    "last_page_order": 164
+  },
+  {
+    "id": 6716555,
+    "name": "Gordon v. Harvey",
+    "name_abbreviation": "Gordon v. Harvey",
+    "decision_date": "1799-04",
+    "docket_number": "",
+    "first_page": "784",
+    "last_page": "785",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 450"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 450"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 137,
+      "char_count": 1791,
+      "ocr_confidence": 0.519,
+      "pagerank": {
+        "raw": 1.2224831191359088e-07,
+        "percentile": 0.5984594082512147
+      },
+      "sha256": "600d564ea4ec747a62c5d189f7824c8c7da76ba622a662ee78c235ecf765b79d",
+      "simhash": "1:9cc6d7f17804b0d9",
+      "word_count": 306
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0784-01",
+    "first_page_order": 164,
+    "last_page_order": 165
+  },
+  {
+    "id": 6716580,
+    "name": "King v. M'Daniel",
+    "name_abbreviation": "King v. M'Daniel",
+    "decision_date": "1799-04",
+    "docket_number": "",
+    "first_page": "785",
+    "last_page": "785",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 451"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 451"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "7 Gratt. 300",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4449671
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/48/0119-01"
+        ]
+      },
+      {
+        "cite": "16 S. E. Rep. 225",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "88 Va. 203",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Hen. & M. 153",
+        "category": "reporters:state",
+        "reporter": "Hen. & M.",
+        "case_ids": [
+          8687475
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/11/0079-01"
+        ]
+      },
+      {
+        "cite": "9 Gratt. 183",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4450402
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/50/0084-01"
+        ]
+      },
+      {
+        "cite": "2 Wash. 187",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6714961
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/2/0703-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 184,
+      "char_count": 2485,
+      "ocr_confidence": 0.458,
+      "pagerank": {
+        "raw": 7.471219273578904e-08,
+        "percentile": 0.44517112773756307
+      },
+      "sha256": "fa09f81e8f9359092a4b2bfddefecf269d9593f39e2cc853fd1f093549c2c339",
+      "simhash": "1:55e5617eabda9ec6",
+      "word_count": 423
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0785-01",
+    "first_page_order": 165,
+    "last_page_order": 165
+  },
+  {
+    "id": 6716614,
+    "name": "Tabb v. Boyd",
+    "name_abbreviation": "Tabb v. Boyd",
+    "decision_date": "1800-11",
+    "docket_number": "",
+    "first_page": "785",
+    "last_page": "788",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 453"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 453"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "3 Munf. 288",
+        "category": "reporters:state",
+        "reporter": "Munf.",
+        "case_ids": [
+          6719582
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/17/0703-01"
+        ]
+      },
+      {
+        "cite": "14 W. Va. 143",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "10 Gratt. 159",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6715134
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/51/0461-01"
+        ]
+      },
+      {
+        "cite": "2 Wash. 151",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6714692
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/2/0688-02"
+        ]
+      },
+      {
+        "cite": "1 Wash. 246",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6716290
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/1/0501-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 708,
+      "char_count": 18885,
+      "ocr_confidence": 0.51,
+      "pagerank": {
+        "raw": 2.1741917886497478e-07,
+        "percentile": 0.7715654464796983
+      },
+      "sha256": "7d1203cc17d649360535c44e8942664287a788846cb03631c918c1b37e0afd01",
+      "simhash": "1:96bb6aa4621b6b31",
+      "word_count": 3305
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0785-02",
+    "first_page_order": 165,
+    "last_page_order": 168
+  },
+  {
+    "id": 6716644,
+    "name": "Walcott v. Swan",
+    "name_abbreviation": "Walcott v. Swan",
+    "decision_date": "1800-04",
+    "docket_number": "",
+    "first_page": "788",
+    "last_page": "791",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 462"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 462"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "2 Call, 298",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6715863
+        ],
+        "weight": 2,
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/6/0322-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 824,
+      "char_count": 21834,
+      "ocr_confidence": 0.498,
+      "pagerank": {
+        "raw": 4.03580807328026e-08,
+        "percentile": 0.18082444188831087
+      },
+      "sha256": "fd13aea59c6ea55ff556685634d1a1871dee1767d5d5baebcb94669201158430",
+      "simhash": "1:5f38c532441c1f67",
+      "word_count": 3849
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0788-01",
+    "first_page_order": 168,
+    "last_page_order": 171
+  },
+  {
+    "id": 6716670,
+    "name": "Mayo v. Carrington",
+    "name_abbreviation": "Mayo v. Carrington",
+    "decision_date": "1791-11",
+    "docket_number": "",
+    "first_page": "792",
+    "last_page": "793",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 472"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 472"
+      },
+      {
+        "type": "parallel",
+        "cite": "2 Am. Dec. 580"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "3 Call 225",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6715773,
+          6715750
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/7/0495-02",
+          "/va/7/0495-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 511,
+      "char_count": 9676,
+      "ocr_confidence": 0.488,
+      "pagerank": {
+        "raw": 2.4335861888801584e-07,
+        "percentile": 0.8023193630207784
+      },
+      "sha256": "0451a2fb5668383478baa9902a303619330f81d845e853ccc065393487aeff2d",
+      "simhash": "1:ccf1e4e81d019ded",
+      "word_count": 1681
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0792-01",
+    "first_page_order": 172,
+    "last_page_order": 173
+  },
+  {
+    "id": 6716700,
+    "name": "Cowles & al. v. Brown & al.",
+    "name_abbreviation": "Cowles v. Brown",
+    "decision_date": "1803-10",
+    "docket_number": "",
+    "first_page": "793",
+    "last_page": "796",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 477"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 477"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "14 Gratt. 96",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6731654
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/55/0416-01"
+        ]
+      },
+      {
+        "cite": "3 W. Va. 611",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "11 Gratt. 348",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4450967
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/52/0149-01"
+        ]
+      },
+      {
+        "cite": "34 S. E. Rep. 60",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "97 Va. 442",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "2 Call 520",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6716705
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/6/0391-01"
+        ]
+      },
+      {
+        "cite": "18 Gratt. 541",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6733415
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/59/0706-01"
+        ]
+      },
+      {
+        "cite": "13 S. E. Rep. 160",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "85 Va. 338",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 715,
+      "char_count": 16461,
+      "ocr_confidence": 0.495,
+      "pagerank": {
+        "raw": 2.5895065864322044e-07,
+        "percentile": 0.8179467219903555
+      },
+      "sha256": "4840cf8687602e01b0c494980838034cd49deaf452b9b1b54ca693d86f87faf0",
+      "simhash": "1:1b63c5135304aac2",
+      "word_count": 2940
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0793-01",
+    "first_page_order": 173,
+    "last_page_order": 176
+  },
+  {
+    "id": 6716727,
+    "name": "Porter v. Harris",
+    "name_abbreviation": "Porter v. Harris",
+    "decision_date": "1802-04",
+    "docket_number": "",
+    "first_page": "796",
+    "last_page": "797",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 485"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 485"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "25 Gratt. 887",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6726004
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/66/0599-01"
+        ]
+      },
+      {
+        "cite": "30 Gratt. 415",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4431614
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/71/0145-01"
+        ]
+      },
+      {
+        "cite": "5 W. Va. 546",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "4 Call 488",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      },
+      {
+        "cite": "9 W. Va. 382",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Wash. 26",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6714322
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/1/0369-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 430,
+      "char_count": 9719,
+      "ocr_confidence": 0.491,
+      "pagerank": {
+        "raw": 2.6362645677520566e-07,
+        "percentile": 0.8226695842112802
+      },
+      "sha256": "ba77e9f26cfa462b1db95c4563cdbc287f7ec34731f083cdb7726b5b2673564d",
+      "simhash": "1:9ff6ade1f01e0b37",
+      "word_count": 1692
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0796-01",
+    "first_page_order": 176,
+    "last_page_order": 177
+  },
+  {
+    "id": 6716753,
+    "name": "Anthony v. Oldacre",
+    "name_abbreviation": "Anthony v. Oldacre",
+    "decision_date": "1802-05",
+    "docket_number": "",
+    "first_page": "797",
+    "last_page": "798",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 489"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 489"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Rob. 287",
+        "category": "reporters:state",
+        "reporter": "Rob.",
+        "case_ids": [
+          4447612,
+          1399844
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/40/0251-01",
+          "/ny-super-ct/24/0287-01"
+        ]
+      },
+      {
+        "cite": "19 W. Va. 512",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "21 W. Va. 333",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 383,
+      "char_count": 6885,
+      "ocr_confidence": 0.527,
+      "pagerank": {
+        "raw": 1.4219082848291335e-07,
+        "percentile": 0.6491884275878632
+      },
+      "sha256": "3d72f4d5c8f2dd6ae7a9a30c2255bb37fd1123f3ce69e314b4638d0f6768a004",
+      "simhash": "1:e274664a604decfc",
+      "word_count": 1213
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0797-01",
+    "first_page_order": 177,
+    "last_page_order": 178
+  },
+  {
+    "id": 6716791,
+    "name": "Barksdale v. Fenwick",
+    "name_abbreviation": "Barksdale v. Fenwick",
+    "decision_date": "1803-10",
+    "docket_number": "",
+    "first_page": "798",
+    "last_page": "806",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 492"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 492"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "9 Gratt. 409",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4451111
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/50/0186-01"
+        ]
+      },
+      {
+        "cite": "18 Gratt. 801",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6733925
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/59/0792-01"
+        ]
+      },
+      {
+        "cite": "5 Rand. 31",
+        "category": "reporters:state",
+        "reporter": "Rand.",
+        "case_ids": [
+          6732299
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/26/0313-01"
+        ]
+      },
+      {
+        "cite": "6 Munf. 391",
+        "category": "reporters:state",
+        "reporter": "Munf.",
+        "case_ids": [
+          6727595
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/20/0782-01"
+        ]
+      },
+      {
+        "cite": "2 Hen. & M. 105",
+        "category": "reporters:state",
+        "reporter": "Hen. & M.",
+        "case_ids": [
+          6725592
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/12/0348-01"
+        ]
+      },
+      {
+        "cite": "5 Gratt. 133",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4375298
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/46/0133-01"
+        ]
+      },
+      {
+        "cite": "10 Gratt. 149",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6715110
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/51/0458-01"
+        ]
+      },
+      {
+        "cite": "4 Leigh 452",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "case_ids": [
+          6726744
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/31/0998-01"
+        ]
+      },
+      {
+        "cite": "6 Leigh 386",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "case_ids": [
+          6718073
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/33/0432-01"
+        ]
+      },
+      {
+        "cite": "14 S. E. Rep. 443",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "36 W. Va. 108",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "pin_cites": [
+          {
+            "page": "111"
+          }
+        ],
+        "opinion_index": -1
+      },
+      {
+        "cite": "6 W. Va. 134",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Call 497",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          2094943
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/5/0181-01"
+        ]
+      },
+      {
+        "cite": "9 Gratt. 699",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "5 Call 88",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "pin_cites": [
+          {
+            "page": "95"
+          }
+        ],
+        "opinion_index": -1
+      },
+      {
+        "cite": "5 Call 55",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      },
+      {
+        "cite": "10 Gratt. 259",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6715585
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/51/0545-01"
+        ]
+      },
+      {
+        "cite": "2 Wash. 172",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6714858
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/2/0697-01"
+        ]
+      },
+      {
+        "cite": "2 Wash. 203",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6715191
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/2/0709-03"
+        ]
+      },
+      {
+        "cite": "2 Wash. 230",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "2 Wash. 233",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6715342
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/2/0723-01"
+        ]
+      },
+      {
+        "cite": "2 Wash. 219",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Call, 226",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          2094948
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/5/0086-01"
+        ]
+      },
+      {
+        "cite": "1 Call, 62",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          2094950
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/5/0026-01"
+        ]
+      },
+      {
+        "cite": "2 Wash. 218",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6715255
+        ],
+        "weight": 2,
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/2/0716-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 1436,
+      "char_count": 46731,
+      "ocr_confidence": 0.497,
+      "pagerank": {
+        "raw": 2.2116203225717515e-07,
+        "percentile": 0.7765831135328739
+      },
+      "sha256": "4e71dd89aedf8b47aec1bf5bdd153124f7b7dd84aa0807fa80584471d3eeb430",
+      "simhash": "1:3746e382bc81fd42",
+      "word_count": 8167
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0798-01",
+    "first_page_order": 178,
+    "last_page_order": 186
+  },
+  {
+    "id": 6716820,
+    "name": "Spotswood v. Pendleton, &c.",
+    "name_abbreviation": "Spotswood v. Pendleton",
+    "decision_date": "1801-04",
+    "docket_number": "",
+    "first_page": "806",
+    "last_page": "808",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 514"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 514"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "11 Gratt. 505",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4450981
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/52/0241-01"
+        ]
+      },
+      {
+        "cite": "1 Call, 524",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          2094966
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/5/0190-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 752,
+      "char_count": 16850,
+      "ocr_confidence": 0.51,
+      "pagerank": {
+        "raw": 1.1658237809139575e-07,
+        "percentile": 0.5851478213594692
+      },
+      "sha256": "6fb74f61e17bb81a7f923d70bb4a9d18cba3b0723b3b24293d9524fa9bbd79c4",
+      "simhash": "1:323bb3a2fa56d395",
+      "word_count": 2942
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0806-01",
+    "first_page_order": 186,
+    "last_page_order": 188
+  },
+  {
+    "id": 6716850,
+    "name": "Richards v. Tabb",
+    "name_abbreviation": "Richards v. Tabb",
+    "decision_date": "1788-05",
+    "docket_number": "",
+    "first_page": "808",
+    "last_page": "810",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 522"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 522"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Va. Dec. 798",
+        "category": "reporters:state",
+        "reporter": "Va. Dec.",
+        "case_ids": [
+          4441574
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va-dec/1/0798-01"
+        ]
+      },
+      {
+        "cite": "4 Leigh 114",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "case_ids": [
+          6724890
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/31/0883-01"
+        ]
+      },
+      {
+        "cite": "4 Munf. 468",
+        "category": "reporters:state",
+        "reporter": "Munf.",
+        "case_ids": [
+          4441692
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/18/0226-02"
+        ]
+      },
+      {
+        "cite": "13 S. E. Rep. 457",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "88 Va. 252",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "32 S. E. Rep. 797",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "97 Va. 754",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "case_ids": [
+          2013105
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/97/0754-01"
+        ]
+      },
+      {
+        "cite": "2 Va. Cas. 327",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "case_ids": [
+          6731975
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/4/0257-01"
+        ]
+      },
+      {
+        "cite": "13 Gratt. 750",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4437992
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/54/0287-01"
+        ]
+      },
+      {
+        "cite": "2 Wash. 301",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6715535
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/2/0776-02"
+        ]
+      },
+      {
+        "cite": "3 Munf. 65",
+        "category": "reporters:state",
+        "reporter": "Munf.",
+        "case_ids": [
+          6717499
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/17/0626-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 539,
+      "char_count": 12005,
+      "ocr_confidence": 0.489,
+      "pagerank": {
+        "raw": 2.5294506237465965e-07,
+        "percentile": 0.8123297922002403
+      },
+      "sha256": "657b77c71844b652dd82218e3342cc8145da711a1fb84d8660fb4862ae36f2aa",
+      "simhash": "1:b58be4e08f88c0f9",
+      "word_count": 2160
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0808-01",
+    "first_page_order": 188,
+    "last_page_order": 190
+  },
+  {
+    "id": 6716904,
+    "name": "Mayo v. Bentley",
+    "name_abbreviation": "Mayo v. Bentley",
+    "decision_date": "1800-10",
+    "docket_number": "",
+    "first_page": "810",
+    "last_page": "822",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 528"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 528"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "5 Gratt. 6",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4375072
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/46/0006-01"
+        ]
+      },
+      {
+        "cite": "4 Hen. & M. 76",
+        "category": "reporters:state",
+        "reporter": "Hen. & M.",
+        "pin_cites": [
+          {
+            "page": "77"
+          }
+        ],
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Call, 500",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          2094970
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/5/0182-01"
+        ]
+      },
+      {
+        "cite": "2 Black. Rep. 1275",
+        "category": "reporters:scotus_early",
+        "reporter": "Black. Rep.",
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 1787,
+      "char_count": 75564,
+      "ocr_confidence": 0.497,
+      "pagerank": {
+        "raw": 1.1860002669829991e-07,
+        "percentile": 0.59020969948441
+      },
+      "sha256": "d902a395b56294d818ac3f5f17784fe10c938e83c113c6d7dc03b705d13887ee",
+      "simhash": "1:5af095219464af28",
+      "word_count": 13286
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0810-01",
+    "first_page_order": 190,
+    "last_page_order": 202
+  },
+  {
+    "id": 6716930,
+    "name": "Fleming v. Saunders",
+    "name_abbreviation": "Fleming v. Saunders",
+    "decision_date": "1803-04",
+    "docket_number": "",
+    "first_page": "822",
+    "last_page": "823",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 563"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 563"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "27 Gratt. 440",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6740164
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/68/0525-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 115,
+      "char_count": 1562,
+      "ocr_confidence": 0.473,
+      "pagerank": {
+        "raw": 4.1150845135908093e-08,
+        "percentile": 0.2667806115337226
+      },
+      "sha256": "f5640a7a4c8e340f75f11b913d4f9cc94cf6ce548bf6dad31423c4663fd298e9",
+      "simhash": "1:c2a69728140e2ef3",
+      "word_count": 256
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0822-01",
+    "first_page_order": 202,
+    "last_page_order": 203
+  },
+  {
+    "id": 6716967,
+    "name": "Stratton v. Hague",
+    "name_abbreviation": "Stratton v. Hague",
+    "decision_date": "1790-06",
+    "docket_number": "",
+    "first_page": "823",
+    "last_page": "824",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 564"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 564"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "4 Call 353",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 561,
+      "char_count": 10599,
+      "ocr_confidence": 0.51,
+      "pagerank": {
+        "raw": 9.505882454708161e-08,
+        "percentile": 0.5224150133849502
+      },
+      "sha256": "27b1d9d1943ecc7a4cf2dadf411e788a0a2b738fe6ca863c42013125debdc07c",
+      "simhash": "1:ab8ee7c09f90d10c",
+      "word_count": 1878
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0823-01",
+    "first_page_order": 203,
+    "last_page_order": 204
+  },
+  {
+    "id": 6717008,
+    "name": "Daniel v. Robinson's Ex'x",
+    "name_abbreviation": "Daniel v. Robinson's Ex'x",
+    "decision_date": "1793-04",
+    "docket_number": "",
+    "first_page": "824",
+    "last_page": "827",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 570"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 570"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 589,
+      "char_count": 14062,
+      "ocr_confidence": 0.492,
+      "sha256": "617376bf01627b245e18117906c24f5eaefeb199d7a338d49294c8d4771e45da",
+      "simhash": "1:964e5e79ceffc319",
+      "word_count": 2416
+    },
+    "last_updated": "2023-07-14T18:22:11.489742+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0824-01",
+    "first_page_order": 204,
+    "last_page_order": 207
+  },
+  {
+    "id": 6717029,
+    "name": "Moring v. Lucas, &c.",
+    "name_abbreviation": "Moring v. Lucas",
+    "decision_date": "1795-04",
+    "docket_number": "",
+    "first_page": "827",
+    "last_page": "828",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 577"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 577"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "5 Gratt. 6",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4375072
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/46/0006-01"
+        ]
+      },
+      {
+        "cite": "9 Leigh 95",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "case_ids": [
+          4446683
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/36/0095-01"
+        ]
+      },
+      {
+        "cite": "2 Leigh 643",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "opinion_index": -1
+      },
+      {
+        "cite": "3 Leigh 567",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "case_ids": [
+          6726702
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/30/0730-01"
+        ]
+      },
+      {
+        "cite": "7 S. E. Rep. 371",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "85 Va. 118",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 371,
+      "char_count": 6561,
+      "ocr_confidence": 0.484,
+      "pagerank": {
+        "raw": 2.2907564689206516e-07,
+        "percentile": 0.786231359434469
+      },
+      "sha256": "7f138d10430f068e26e7dea555e84a63fcc7d8f992a314ab135f87c2c6fee902",
+      "simhash": "1:8ece20daba41db17",
+      "word_count": 1097
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0827-01",
+    "first_page_order": 207,
+    "last_page_order": 208
+  },
+  {
+    "id": 6717069,
+    "name": "Turberville v. Self",
+    "name_abbreviation": "Turberville v. Self",
+    "decision_date": "1795-04",
+    "docket_number": "",
+    "first_page": "828",
+    "last_page": "831",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 580"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 580"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "4 H. & M. 491",
+        "category": "reporters:state",
+        "reporter": "Hen. & M.",
+        "case_ids": [
+          6729646
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/14/0960-01"
+        ]
+      },
+      {
+        "cite": "2 Wash. 71",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6714321
+        ],
+        "weight": 2,
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/2/0635-02"
+        ]
+      },
+      {
+        "cite": "22 Gratt. 605",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "13 W. Va. 846",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "8 Gratt. 578",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6716353
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/49/0674-01"
+        ]
+      },
+      {
+        "cite": "32 Gratt. 773",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "4 Hen. & M. 501",
+        "category": "reporters:state",
+        "reporter": "Hen. & M.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "3 Gratt. 91",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6714750
+        ],
+        "weight": 2,
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/44/0572-01"
+        ]
+      },
+      {
+        "cite": "18 Gratt. 722",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6733678
+        ],
+        "weight": 3,
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/59/0766-01"
+        ]
+      },
+      {
+        "cite": "13 W. Va. 840",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "4 Hen. & M. 498",
+        "category": "reporters:state",
+        "reporter": "Hen. & M.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "18 Gratt. 727",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Wash. 363",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6717399
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/1/0578-01"
+        ]
+      },
+      {
+        "cite": "1 Wash. 363",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6717399
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/1/0578-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 919,
+      "char_count": 23252,
+      "ocr_confidence": 0.51,
+      "pagerank": {
+        "raw": 3.729294050435146e-07,
+        "percentile": 0.8942185432432547
+      },
+      "sha256": "a630da00403ade7f747c54beef30eca11e34130dd2c67685f92e4234ea7efd26",
+      "simhash": "1:96b7ae75bd1edf49",
+      "word_count": 4049
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0828-01",
+    "first_page_order": 208,
+    "last_page_order": 211
+  },
+  {
+    "id": 6717109,
+    "name": "Love v. Ross, Shore & Co.",
+    "name_abbreviation": "Love v. Ross, Shore & Co.",
+    "decision_date": "1795-04",
+    "docket_number": "",
+    "first_page": "831",
+    "last_page": "836",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 590"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 590"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "11 Gratt. 697",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4451009
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/52/0355-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 985,
+      "char_count": 30129,
+      "ocr_confidence": 0.524,
+      "sha256": "874e8a9399433cc8531389031d4f9726133a6ab497bcf706739042ddff0cd6f8",
+      "simhash": "1:9d73c597086ea48d",
+      "word_count": 5205
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0831-01",
+    "first_page_order": 211,
+    "last_page_order": 216
+  },
+  {
+    "id": 6717161,
+    "name": "Cary, &c. Executors of Ambler, &c. v. Macon & al.",
+    "name_abbreviation": "Cary v. Macon",
+    "decision_date": "1803-10",
+    "docket_number": "",
+    "first_page": "836",
+    "last_page": "843",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "4 Call 605"
+      },
+      {
+        "type": "official",
+        "cite": "8 Va. 605"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Ct. App.",
+      "id": 8988,
+      "name": "Court of Appeals of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "28 Gratt. 220",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "6 Am. Law Reg. 220",
+        "category": "reporters:state",
+        "reporter": "Am. Law Reg.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "3 Call 22",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          6715005
+        ],
+        "weight": 2,
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/7/0430-01"
+        ]
+      },
+      {
+        "cite": "1 Call 133",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          2094935
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/5/0052-01"
+        ]
+      },
+      {
+        "cite": "11 W. Va. 411",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "5 Gratt. 6",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4375072
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/46/0006-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 1413,
+      "char_count": 49657,
+      "ocr_confidence": 0.503,
+      "pagerank": {
+        "raw": 1.197155992209422e-07,
+        "percentile": 0.5927820502276387
+      },
+      "sha256": "a4ece1d9dbc2e4ddf5d246239ec7bf1d4bff9dffb080a7d632b1dd794ff53cae",
+      "simhash": "1:bf6e6f210808f091",
+      "word_count": 8686
+    },
+    "last_updated": "2024-02-27T16:47:20.130393+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0836-01",
+    "first_page_order": 216,
+    "last_page_order": 223
+  }
+]

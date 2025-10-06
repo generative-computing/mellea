@@ -1,0 +1,4760 @@
+[
+  {
+    "id": 2095793,
+    "name": "The Commonwealth v. Preeson Richards",
+    "name_abbreviation": "Commonwealth v. Richards",
+    "decision_date": "1789-11-26",
+    "docket_number": "",
+    "first_page": "7",
+    "last_page": "7",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 1"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 1"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "14 Gratt. 674",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732990
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/55/0611-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 228,
+      "char_count": 3405,
+      "ocr_confidence": 0.456,
+      "pagerank": {
+        "raw": 2.2559469046752014e-07,
+        "percentile": 0.7820795729789651
+      },
+      "sha256": "cf151c092cc2be93f04b7e4efb4dc6564814cf23e7095dde9f0331a9b7c962cf",
+      "simhash": "1:90f943b6e0967dba",
+      "word_count": 578
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0007-01",
+    "first_page_order": 7,
+    "last_page_order": 7
+  },
+  {
+    "id": 2095829,
+    "name": "Denny Fairfax v. Robert Stephen; The Same v. David Hunter",
+    "name_abbreviation": "Fairfax v. Stephen",
+    "decision_date": "1791-06-20",
+    "docket_number": "",
+    "first_page": "7",
+    "last_page": "7",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 3"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 3"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 81,
+      "char_count": 824,
+      "ocr_confidence": 0.454,
+      "pagerank": {
+        "raw": 4.719567370958748e-08,
+        "percentile": 0.2963670854941736
+      },
+      "sha256": "4e4392da266948ee8ce259c86083b383d163c30ad767ada07d2ce7f02b492714",
+      "simhash": "1:380bf8ce5b133181",
+      "word_count": 139
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0007-02",
+    "first_page_order": 7,
+    "last_page_order": 7
+  },
+  {
+    "id": 2095760,
+    "name": "The Commonwealth v. John Proctor",
+    "name_abbreviation": "Commonwealth v. Proctor",
+    "decision_date": "1789-11-25",
+    "docket_number": "",
+    "first_page": "7",
+    "last_page": "8",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 4"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 4"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 176,
+      "char_count": 2295,
+      "ocr_confidence": 0.496,
+      "pagerank": {
+        "raw": 4.5828155114230504e-08,
+        "percentile": 0.28746733882940667
+      },
+      "sha256": "f22bc5e925df7cd38938ae2de2eb3561248cb92bcefecaa81f8519f64673de7d",
+      "simhash": "1:59671c324979e9b1",
+      "word_count": 397
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0007-03",
+    "first_page_order": 7,
+    "last_page_order": 8
+  },
+  {
+    "id": 2095818,
+    "name": "E. Conway, Appellant, v. Elisha Hall, Appellee",
+    "name_abbreviation": "Conway v. Hall",
+    "decision_date": "1791-11-16",
+    "docket_number": "",
+    "first_page": "8",
+    "last_page": "8",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 6"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 6"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 105,
+      "char_count": 1354,
+      "ocr_confidence": 0.514,
+      "pagerank": {
+        "raw": 6.754390714158479e-08,
+        "percentile": 0.40903292045211903
+      },
+      "sha256": "4152fc23777a7e192f3a6fb7b26b8f1ac0636bb5123e22115ae6ac44fe7aa522",
+      "simhash": "1:07ebc6c6e4d2f648",
+      "word_count": 220
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0008-01",
+    "first_page_order": 8,
+    "last_page_order": 8
+  },
+  {
+    "id": 2095761,
+    "name": "The Commonwealth v. Hugh Dowdall",
+    "name_abbreviation": "Commonwealth v. Dowdall",
+    "decision_date": "1791-11-19",
+    "docket_number": "",
+    "first_page": "8",
+    "last_page": "8",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 7"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 7"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 158,
+      "char_count": 2304,
+      "ocr_confidence": 0.489,
+      "pagerank": {
+        "raw": 5.876955060199895e-08,
+        "percentile": 0.3683909756900885
+      },
+      "sha256": "9780098db71f7a30818ae164797fb09c547996d9d6a8bd8ed376dad6bc6e57f3",
+      "simhash": "1:f45f5560e03be7be",
+      "word_count": 387
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0008-02",
+    "first_page_order": 8,
+    "last_page_order": 8
+  },
+  {
+    "id": 2095778,
+    "name": "The Commonwealth v. John Whealand",
+    "name_abbreviation": "Commonwealth v. Whealand",
+    "decision_date": "1789-06-23",
+    "docket_number": "",
+    "first_page": "9",
+    "last_page": "9",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 9"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 9"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 107,
+      "char_count": 1298,
+      "ocr_confidence": 0.439,
+      "sha256": "77bfa0742d67552cb3258eb8997c30a5b1db314eb5f020f031e2d2717aacd700",
+      "simhash": "1:dbc3e5e8696bfbbd",
+      "word_count": 220
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0009-01",
+    "first_page_order": 9,
+    "last_page_order": 9
+  },
+  {
+    "id": 2095784,
+    "name": "The Commonwealth v. John Crane, The Younger",
+    "name_abbreviation": "Commonwealth v. Crane",
+    "decision_date": "1791-11-21",
+    "docket_number": "",
+    "first_page": "9",
+    "last_page": "10",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 10"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 10"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 312,
+      "char_count": 6014,
+      "ocr_confidence": 0.459,
+      "sha256": "4b85056a14131d49bd27532b713bd7de44a02dd4bbc967fecc297e4a705fc246",
+      "simhash": "1:050647206fd7cfbf",
+      "word_count": 1075
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0009-02",
+    "first_page_order": 9,
+    "last_page_order": 10
+  },
+  {
+    "id": 2095794,
+    "name": "The Commonwealth v. William Williams",
+    "name_abbreviation": "Commonwealth v. Williams",
+    "decision_date": "1791-10",
+    "docket_number": "",
+    "first_page": "10",
+    "last_page": "10",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 14"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 14"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "14 Gratt. 674",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732990
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/55/0611-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 119,
+      "char_count": 1663,
+      "ocr_confidence": 0.512,
+      "pagerank": {
+        "raw": 4.364012536165934e-08,
+        "percentile": 0.2741628952112652
+      },
+      "sha256": "34f76d5af4524633016bc74c9bd716fdc9382bf81555715f01919d664fc08cc4",
+      "simhash": "1:5dcc6fdac5616cd3",
+      "word_count": 291
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0010-01",
+    "first_page_order": 10,
+    "last_page_order": 10
+  },
+  {
+    "id": 2095757,
+    "name": "William Edmiston, who as well for the Commonwealth, as for himself, prosecutes against Arthur Campbell",
+    "name_abbreviation": "Edmiston v. Campbell",
+    "decision_date": "1792-11-19",
+    "docket_number": "",
+    "first_page": "10",
+    "last_page": "11",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 16"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 16"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 253,
+      "char_count": 3855,
+      "ocr_confidence": 0.508,
+      "pagerank": {
+        "raw": 2.092868483945466e-07,
+        "percentile": 0.7606240749943336
+      },
+      "sha256": "d749878d2357e096e4e3725f5034019ba8af1a41b4e97e1ac24d330921238bc1",
+      "simhash": "1:decb1755ff0e3d29",
+      "word_count": 666
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0010-02",
+    "first_page_order": 10,
+    "last_page_order": 11
+  },
+  {
+    "id": 2095744,
+    "name": "The Commonwealth v. Philip Frye",
+    "name_abbreviation": "Commonwealth v. Frye",
+    "decision_date": "1793-06-19",
+    "docket_number": "",
+    "first_page": "11",
+    "last_page": "11",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 19"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 19"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 141,
+      "char_count": 1694,
+      "ocr_confidence": 0.461,
+      "sha256": "de66fe07850799010208f7ac38f638a82fa1ca7a3397af38fed5acac0df9a88e",
+      "simhash": "1:71ffd75ae61cb021",
+      "word_count": 280
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0011-01",
+    "first_page_order": 11,
+    "last_page_order": 11
+  },
+  {
+    "id": 2095745,
+    "name": "Peter Kamper v. Mary Hawkins",
+    "name_abbreviation": "Kamper v. Hawkins",
+    "decision_date": "1792-12-12",
+    "docket_number": "",
+    "first_page": "11",
+    "last_page": "12",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 20"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 20"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Va. Dec. 571",
+        "category": "reporters:state",
+        "reporter": "Va. Dec.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "5 Gratt. 590",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "pin_cites": [
+          {
+            "page": "591, 600, 613"
+          }
+        ],
+        "opinion_index": -1
+      },
+      {
+        "cite": "79 Va. 273",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 267,
+      "char_count": 4543,
+      "ocr_confidence": 0.44,
+      "pagerank": {
+        "raw": 2.150501503238151e-07,
+        "percentile": 0.7684484693895282
+      },
+      "sha256": "21eaadaeca1e85db855ba5b7f4e7d1f6b3d0559fe6cc9f095e81698d40514012",
+      "simhash": "1:07b5d615e54ceabc",
+      "word_count": 740
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0011-02",
+    "first_page_order": 11,
+    "last_page_order": 12
+  },
+  {
+    "id": 2095832,
+    "name": "Peter Kamper v. Mary Hawkins",
+    "name_abbreviation": "Kamper v. Hawkins",
+    "decision_date": "1793-11-16",
+    "docket_number": "",
+    "first_page": "12",
+    "last_page": "31",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 21"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 21"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 2369,
+      "char_count": 112449,
+      "ocr_confidence": 0.501,
+      "sha256": "ec1c698c6b7ef70cb0acb315ff849876bea775c34c5d41900978c1778a6e45e6",
+      "simhash": "1:3fa6f4adef65e7be",
+      "word_count": 19065
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0012-01",
+    "first_page_order": 12,
+    "last_page_order": 31
+  },
+  {
+    "id": 2095814,
+    "name": "The Commonwealth v. Christian Kearns",
+    "name_abbreviation": "Commonwealth v. Kearns",
+    "decision_date": "1794-06-19",
+    "docket_number": "",
+    "first_page": "31",
+    "last_page": "32",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 109"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 109"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "14 Gratt. 674",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732990
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/55/0611-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 288,
+      "char_count": 5869,
+      "ocr_confidence": 0.494,
+      "pagerank": {
+        "raw": 1.4702453117064665e-07,
+        "percentile": 0.6590287696309708
+      },
+      "sha256": "d6bf8d4c0413f0ba0584751aad90326ee7886bc51040543d3faa24af926f07c3",
+      "simhash": "1:fdccc2ab5646db11",
+      "word_count": 993
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0031-01",
+    "first_page_order": 31,
+    "last_page_order": 32
+  },
+  {
+    "id": 2095799,
+    "name": "Abner Osborne v. Benjamin Crawley, and Alexander Jones",
+    "name_abbreviation": "Osborne v. Crawley",
+    "decision_date": "1795-06-16",
+    "docket_number": "",
+    "first_page": "32",
+    "last_page": "32",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 113"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 113"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "21 Gratt. 107",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6733444
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/62/0745-01"
+        ]
+      },
+      {
+        "cite": "2 Cranch 97",
+        "category": "reporters:scotus_early",
+        "reporter": "Cranch",
+        "case_ids": [
+          6758531
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/dc/2/0097-01"
+        ]
+      },
+      {
+        "cite": "1 Call 49",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          2094973
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/5/0021-01"
+        ]
+      },
+      {
+        "cite": "1 Call 48",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          2094957
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/5/0020-02"
+        ]
+      },
+      {
+        "cite": "1 Call 41",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          2094956
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/5/0018-01"
+        ]
+      },
+      {
+        "cite": "1 Call 47",
+        "category": "reporters:state",
+        "reporter": "Call",
+        "case_ids": [
+          2094913
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/5/0020-01"
+        ]
+      },
+      {
+        "cite": "18 W. Va. 570",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 226,
+      "char_count": 3218,
+      "ocr_confidence": 0.518,
+      "pagerank": {
+        "raw": 1.114690476913653e-07,
+        "percentile": 0.5715742500817615
+      },
+      "sha256": "e58804b32aa7f459aa508bd05b9c789852e7746d8f952a5c6e750e602c5ce181",
+      "simhash": "1:69c648ae8e4ec9cf",
+      "word_count": 566
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0032-01",
+    "first_page_order": 32,
+    "last_page_order": 32
+  },
+  {
+    "id": 2095773,
+    "name": "The Commonwealth v. Stephen Stewart and Ephraim Potter",
+    "name_abbreviation": "Commonwealth v. Stewart",
+    "decision_date": "1795-11-14",
+    "docket_number": "",
+    "first_page": "32",
+    "last_page": "33",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 114"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 114"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 132,
+      "char_count": 1742,
+      "ocr_confidence": 0.507,
+      "pagerank": {
+        "raw": 1.7710994026850012e-07,
+        "percentile": 0.7117638904816458
+      },
+      "sha256": "cd764e7ecc303d792268d8a0e836e61506ee6c1df52b0595f4b373321d0fda6e",
+      "simhash": "1:d1c1d04f4410272e",
+      "word_count": 294
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0032-02",
+    "first_page_order": 32,
+    "last_page_order": 33
+  },
+  {
+    "id": 2095771,
+    "name": "The Commonwealth v. Robert Mitchell",
+    "name_abbreviation": "Commonwealth v. Mitchell",
+    "decision_date": "1796-11-16",
+    "docket_number": "",
+    "first_page": "33",
+    "last_page": "33",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 116"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 116"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 254,
+      "char_count": 5190,
+      "ocr_confidence": 0.426,
+      "sha256": "774bb3c1852a57d4959aff50a0165e22c3d4a3719f2e8c5da21b3d7a9bc8e99e",
+      "simhash": "1:da1d0df0644959fd",
+      "word_count": 903
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0033-01",
+    "first_page_order": 33,
+    "last_page_order": 33
+  },
+  {
+    "id": 2095747,
+    "name": "The Commonwealth v. Edward M'Guire and James Tidball",
+    "name_abbreviation": "Commonwealth v. M'Guire",
+    "decision_date": "1798-06-16",
+    "docket_number": "",
+    "first_page": "34",
+    "last_page": "34",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 119"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 119"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "14 Gratt. 674",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732990
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/55/0611-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 231,
+      "char_count": 3469,
+      "ocr_confidence": 0.498,
+      "sha256": "46993ca725afc8580d5849da3e458b492e3684498f76d29de6d68ca81941ef31",
+      "simhash": "1:c38ef25d900ddce4",
+      "word_count": 582
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0034-01",
+    "first_page_order": 34,
+    "last_page_order": 34
+  },
+  {
+    "id": 2095764,
+    "name": "The Commonwealth v. David Hays",
+    "name_abbreviation": "Commonwealth v. Hays",
+    "decision_date": "1798-11-17",
+    "docket_number": "",
+    "first_page": "34",
+    "last_page": "34",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 122"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 122"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "14 Gratt. 674",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732990
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/55/0611-01"
+        ]
+      },
+      {
+        "cite": "2 Gratt. 637",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 153,
+      "char_count": 2317,
+      "ocr_confidence": 0.501,
+      "pagerank": {
+        "raw": 2.0774235680449636e-07,
+        "percentile": 0.7585971228438415
+      },
+      "sha256": "302c75525c4af0db50d1005e23ded1216e9ecd5fb23067620b7b4fb63c781f5c",
+      "simhash": "1:ce43674bdebb7818",
+      "word_count": 392
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0034-02",
+    "first_page_order": 34,
+    "last_page_order": 34
+  },
+  {
+    "id": 2095762,
+    "name": "Goodtitle, Lessee of George Reed and Uxor, v. George See",
+    "name_abbreviation": "Goodtitle v. See",
+    "decision_date": "1799-06-14",
+    "docket_number": "",
+    "first_page": "35",
+    "last_page": "35",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 123"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 123"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "19 Gratt. 720",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4436402
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/60/0260-01"
+        ]
+      },
+      {
+        "cite": "16 S. E. Rep. 445",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "87 W. Va. 125",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "case_ids": [
+          8633277
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/w-va/87/0125-01"
+        ]
+      },
+      {
+        "cite": "1 Va. Cas. 12",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "18 W. Va. 481",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "11 Gratt. 172",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4451131
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/52/0077-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 208,
+      "char_count": 3409,
+      "ocr_confidence": 0.478,
+      "pagerank": {
+        "raw": 8.431403558356252e-08,
+        "percentile": 0.4843147225957961
+      },
+      "sha256": "57090abe5338cb90dfdd7a4021dd0f5cc5576826a9c081b629efc385e8d678ab",
+      "simhash": "1:2963a4254266f919",
+      "word_count": 583
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0035-01",
+    "first_page_order": 35,
+    "last_page_order": 35
+  },
+  {
+    "id": 2095834,
+    "name": "The Commonwealth v. Henry Bedinger",
+    "name_abbreviation": "Commonwealth v. Bedinger",
+    "decision_date": "1799",
+    "docket_number": "",
+    "first_page": "35",
+    "last_page": "35",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 125"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 125"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 66,
+      "char_count": 815,
+      "ocr_confidence": 0.46,
+      "pagerank": {
+        "raw": 2.1995933875888662e-07,
+        "percentile": 0.7637974106712533
+      },
+      "sha256": "44e267b3195db7583cbfed09609e64cfd074c5ad96757bd8cc195601dd7b4e62",
+      "simhash": "1:8f73bbf48453e5ca",
+      "word_count": 130
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0035-02",
+    "first_page_order": 35,
+    "last_page_order": 35
+  },
+  {
+    "id": 2095770,
+    "name": "The Commonwealth v. Highland Crowe",
+    "name_abbreviation": "Commonwealth v. Crowe",
+    "decision_date": "1800-11-13",
+    "docket_number": "",
+    "first_page": "35",
+    "last_page": "36",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 125"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 125"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "2 W. Va. 59",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "case_ids": [
+          8641569
+        ],
+        "weight": 2,
+        "pin_cites": [
+          {
+            "page": "73"
+          }
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/w-va/2/0059-01"
+        ]
+      },
+      {
+        "cite": "21 W. Va. 172",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "case_ids": [
+          8640454
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/w-va/21/0172-01"
+        ]
+      },
+      {
+        "cite": "10 Gratt. 658",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6716782
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/51/0712-01"
+        ]
+      },
+      {
+        "cite": "4 W. Va. 176",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "case_ids": [
+          8641600
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/w-va/4/0176-01"
+        ]
+      },
+      {
+        "cite": "22 W. Va. 806",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 190,
+      "char_count": 2289,
+      "ocr_confidence": 0.474,
+      "pagerank": {
+        "raw": 4.688403287882615e-08,
+        "percentile": 0.07238925572935258
+      },
+      "sha256": "70f706135627ed858fa67e22e44c2c26a4bd158a9eb7d405240ca6585a81fc83",
+      "simhash": "1:431189680fd4f3be",
+      "word_count": 405
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0035-03",
+    "first_page_order": 35,
+    "last_page_order": 36
+  },
+  {
+    "id": 2095776,
+    "name": "The Commonwealth v. Benjamin Vawter",
+    "name_abbreviation": "Commonwealth v. Vawter",
+    "decision_date": "1800-11-13",
+    "docket_number": "",
+    "first_page": "36",
+    "last_page": "36",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 127"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 127"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 127,
+      "char_count": 1703,
+      "ocr_confidence": 0.495,
+      "sha256": "43be2889455406496a6573557c3dc8784f1ae58204321db6706c1414a117eba9",
+      "simhash": "1:1565c230e1b8ef0e",
+      "word_count": 280
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0036-01",
+    "first_page_order": 36,
+    "last_page_order": 36
+  },
+  {
+    "id": 2095804,
+    "name": "Miller Woodson v. John Randolph, Jr.",
+    "name_abbreviation": "Woodson v. Randolph",
+    "decision_date": "1800-11-14",
+    "docket_number": "",
+    "first_page": "36",
+    "last_page": "36",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 128"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 128"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "18 Gratt. 801",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6733925
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/59/0792-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 147,
+      "char_count": 1916,
+      "ocr_confidence": 0.51,
+      "pagerank": {
+        "raw": 4.860341344010201e-08,
+        "percentile": 0.3062398618606722
+      },
+      "sha256": "84ecd6d02198e379c711d1c90df051ea5c5bb2170f3680a6c609bdbedf4bea65",
+      "simhash": "1:948708ad7f4998f1",
+      "word_count": 329
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0036-02",
+    "first_page_order": 36,
+    "last_page_order": 36
+  },
+  {
+    "id": 2095769,
+    "name": "The Commonwealth v. John Blakeley",
+    "name_abbreviation": "Commonwealth v. Blakeley",
+    "decision_date": "1800-11-15",
+    "docket_number": "",
+    "first_page": "36",
+    "last_page": "37",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 129"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 129"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "20 Gratt. 768",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "pin_cites": [
+          {
+            "page": "782, 783"
+          }
+        ],
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 175,
+      "char_count": 2423,
+      "ocr_confidence": 0.477,
+      "pagerank": {
+        "raw": 7.069212957526642e-08,
+        "percentile": 0.42584625590140585
+      },
+      "sha256": "adfd661058dc47e5396e4d97958f304779611a79be45b5ef6ec9b4e82eaaa28c",
+      "simhash": "1:4a4904f69c5a775a",
+      "word_count": 406
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0036-03",
+    "first_page_order": 36,
+    "last_page_order": 37
+  },
+  {
+    "id": 2095806,
+    "name": "William Maitland, Surviving Partner, &c. v. Thomas McDearman",
+    "name_abbreviation": "Maitland v. McDearman",
+    "decision_date": "1802-11-15",
+    "docket_number": "",
+    "first_page": "37",
+    "last_page": "37",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 131"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 131"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 165,
+      "char_count": 2201,
+      "ocr_confidence": 0.444,
+      "pagerank": {
+        "raw": 9.804250148240593e-08,
+        "percentile": 0.5328858941196958
+      },
+      "sha256": "16f5d0ef84041306a9b32ac74fee6957c7f47e7934f78cc8ebbb95dafd964853",
+      "simhash": "1:ffe1ac446637ab6c",
+      "word_count": 376
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0037-01",
+    "first_page_order": 37,
+    "last_page_order": 37
+  },
+  {
+    "id": 2095775,
+    "name": "The Commonwealth v. John Richards",
+    "name_abbreviation": "Commonwealth v. Richards",
+    "decision_date": "1803-11-12",
+    "docket_number": "",
+    "first_page": "37",
+    "last_page": "38",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 133"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 133"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "2 Va. Cas. 494",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "case_ids": [
+          6733482
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/4/0324-01"
+        ]
+      },
+      {
+        "cite": "14 Gratt. 674",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732990
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/55/0611-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 343,
+      "char_count": 5989,
+      "ocr_confidence": 0.474,
+      "pagerank": {
+        "raw": 3.6856254361847664e-07,
+        "percentile": 0.8920338598891286
+      },
+      "sha256": "bc2a6df198d961b5a8a1b224d15e00c9840b40da65c3accde46b43d334925f1e",
+      "simhash": "1:9f327a7bfef214bf",
+      "word_count": 1054
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0037-02",
+    "first_page_order": 37,
+    "last_page_order": 38
+  },
+  {
+    "id": 2095765,
+    "name": "The Commonwealth v. Moses M'Cue and Others",
+    "name_abbreviation": "Commonwealth v. M'Cue",
+    "decision_date": "1803-06-14",
+    "docket_number": "",
+    "first_page": "38",
+    "last_page": "38",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 137"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 137"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 87,
+      "char_count": 1118,
+      "ocr_confidence": 0.508,
+      "pagerank": {
+        "raw": 4.313947448607103e-08,
+        "percentile": 0.2717368850461938
+      },
+      "sha256": "ae9ff1c0ce26b2ab30a650787d8981e0da55a41ac1573ff9581f4920b1657a7c",
+      "simhash": "1:a11fd1790feb5dd4",
+      "word_count": 181
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0038-01",
+    "first_page_order": 38,
+    "last_page_order": 38
+  },
+  {
+    "id": 2095826,
+    "name": "The Commonwealth v. Peyton Chapman",
+    "name_abbreviation": "Commonwealth v. Chapman",
+    "decision_date": "1803-11-14",
+    "docket_number": "",
+    "first_page": "38",
+    "last_page": "39",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 138"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 138"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Va. Cas. 125",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "case_ids": [
+          2095834,
+          2095770
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/3/0035-02",
+          "/va/3/0035-03"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 183,
+      "char_count": 2581,
+      "ocr_confidence": 0.47,
+      "pagerank": {
+        "raw": 4.318742955078255e-08,
+        "percentile": 0.27181430268714507
+      },
+      "sha256": "eb1cab6f7f97240f979f5c3595dd1ce8b39b10401e54aba2622dee2f7abd5ed7",
+      "simhash": "1:c64f135c66fee5b5",
+      "word_count": 444
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0038-02",
+    "first_page_order": 38,
+    "last_page_order": 39
+  },
+  {
+    "id": 2095748,
+    "name": "Anonymous",
+    "name_abbreviation": "Anonymous",
+    "decision_date": "1803",
+    "docket_number": "",
+    "first_page": "39",
+    "last_page": "39",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 139"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 139"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 59,
+      "char_count": 751,
+      "ocr_confidence": 0.451,
+      "pagerank": {
+        "raw": 5.0865852292714654e-08,
+        "percentile": 0.32028025572147256
+      },
+      "sha256": "7348bbc39e031f4863666231774f62df03c47a7a4fd3e675d525ab60dc6ac675",
+      "simhash": "1:3d80d0b771d7ad37",
+      "word_count": 123
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0039-01",
+    "first_page_order": 39,
+    "last_page_order": 39
+  },
+  {
+    "id": 2095767,
+    "name": "Francis Neff v. Presly Talbot",
+    "name_abbreviation": "Neff v. Talbot",
+    "decision_date": "1803-11-14",
+    "docket_number": "",
+    "first_page": "39",
+    "last_page": "39",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 140"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 140"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 181,
+      "char_count": 2809,
+      "ocr_confidence": 0.441,
+      "pagerank": {
+        "raw": 7.069212957526642e-08,
+        "percentile": 0.4258460628399571
+      },
+      "sha256": "fd37fa53f23cc1e21c91dce247b2b5e62843e4814f279196db76fe6864508668",
+      "simhash": "1:0ac8ec5cd645c380",
+      "word_count": 484
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0039-02",
+    "first_page_order": 39,
+    "last_page_order": 39
+  },
+  {
+    "id": 2095772,
+    "name": "The Commonwealth v. Martin Walton",
+    "name_abbreviation": "Commonwealth v. Walton",
+    "decision_date": "1803-11-15",
+    "docket_number": "",
+    "first_page": "39",
+    "last_page": "40",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 142"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 142"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 182,
+      "char_count": 2758,
+      "ocr_confidence": 0.5,
+      "sha256": "5fec2b9823abf5e4aeb11b244c276859d58d84bc8cd59eaf5c7028d30a7b3c3c",
+      "simhash": "1:198feaf8521f57bb",
+      "word_count": 462
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0039-03",
+    "first_page_order": 39,
+    "last_page_order": 40
+  },
+  {
+    "id": 2095753,
+    "name": "Anonymous",
+    "name_abbreviation": "Anonymous",
+    "decision_date": "1804-11-15",
+    "docket_number": "",
+    "first_page": "40",
+    "last_page": "40",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 144"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 144"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 99,
+      "char_count": 1698,
+      "ocr_confidence": 0.486,
+      "sha256": "dc98389bf937de1c6b16e9b0efcddc0e9ac0f0337ee7378802a71a0c6dd9e054",
+      "simhash": "1:7e5add68ba53f937",
+      "word_count": 281
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0040-01",
+    "first_page_order": 40,
+    "last_page_order": 40
+  },
+  {
+    "id": 2095801,
+    "name": "Turner R. Henley's Case",
+    "name_abbreviation": "Henley's Case",
+    "decision_date": "1805-11-18",
+    "docket_number": "",
+    "first_page": "40",
+    "last_page": "40",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 145"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 145"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 88,
+      "char_count": 1116,
+      "ocr_confidence": 0.517,
+      "sha256": "2fd4eccf67e2ce35a619047dc609378ed6387aacb0c8505b81de7039f7ee01e7",
+      "simhash": "1:2b2ba13d4a51bea9",
+      "word_count": 189
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0040-02",
+    "first_page_order": 40,
+    "last_page_order": 40
+  },
+  {
+    "id": 2095837,
+    "name": "The Commonwealth v. George Wythe Swinney",
+    "name_abbreviation": "Commonwealth v. Swinney",
+    "decision_date": "1806-09",
+    "docket_number": "",
+    "first_page": "40",
+    "last_page": "41",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 146"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 146"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 313,
+      "char_count": 5031,
+      "ocr_confidence": 0.46,
+      "sha256": "5bd1798e080a13de9a9d68e7ddb661fa08be68ced4136efeff4e4fe64748bbba",
+      "simhash": "1:1c1e4cebfc4a5d2e",
+      "word_count": 898
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0040-03",
+    "first_page_order": 40,
+    "last_page_order": 41
+  },
+  {
+    "id": 2095774,
+    "name": "Second Case v. Swinney",
+    "name_abbreviation": "Second Case v. Swinney",
+    "decision_date": "1806-04-11",
+    "docket_number": "",
+    "first_page": "41",
+    "last_page": "42",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 150"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 150"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 138,
+      "char_count": 1950,
+      "ocr_confidence": 0.453,
+      "sha256": "7c348670d4f50d37c86d3afb20c8cdd7d5664ef6650646a5c89007c878ba85ca",
+      "simhash": "1:8a7716c4907efdf9",
+      "word_count": 339
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0041-01",
+    "first_page_order": 41,
+    "last_page_order": 42
+  },
+  {
+    "id": 2095740,
+    "name": "The Commonwealth v. Heartwell Leath and Peter Leath",
+    "name_abbreviation": "Commonwealth v. Leath",
+    "decision_date": "1805-11-18",
+    "docket_number": "",
+    "first_page": "42",
+    "last_page": "43",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 151"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 151"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 311,
+      "char_count": 6125,
+      "ocr_confidence": 0.51,
+      "pagerank": {
+        "raw": 2.028389283125734e-07,
+        "percentile": 0.7462716938323432
+      },
+      "sha256": "2c48648054fb71c71ee77af21fafefd8dae5dda545e85990c6115083ecfed008",
+      "simhash": "1:19232d8652578f73",
+      "word_count": 1033
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0042-01",
+    "first_page_order": 42,
+    "last_page_order": 43
+  },
+  {
+    "id": 2095758,
+    "name": "The Commonwealth v. Josiah M'Clenegan",
+    "name_abbreviation": "Commonwealth v. M'Clenegan",
+    "decision_date": "1808-06-11",
+    "docket_number": "",
+    "first_page": "43",
+    "last_page": "43",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 155"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 155"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 85,
+      "char_count": 1097,
+      "ocr_confidence": 0.455,
+      "pagerank": {
+        "raw": 4.456583025697791e-08,
+        "percentile": 0.27949061895114347
+      },
+      "sha256": "e3bb29995f47a830452bc6b2ced3db8d8d094ba4192b885e96f3edb32b958f4c",
+      "simhash": "1:f82e43ea8486b00b",
+      "word_count": 178
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0043-01",
+    "first_page_order": 43,
+    "last_page_order": 43
+  },
+  {
+    "id": 2095752,
+    "name": "The Commonwealth v. John Alexander",
+    "name_abbreviation": "Commonwealth v. Alexander",
+    "decision_date": "1808-06-13",
+    "docket_number": "",
+    "first_page": "43",
+    "last_page": "43",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 156"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 156"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Va. Cas. 16",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "case_ids": [
+          2095757
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/3/0010-02"
+        ]
+      },
+      {
+        "cite": "2 Va. Cas. 131",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "case_ids": [
+          6729062
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/4/0172-01"
+        ]
+      },
+      {
+        "cite": "3 Va. Cas. 52",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 190,
+      "char_count": 3105,
+      "ocr_confidence": 0.486,
+      "pagerank": {
+        "raw": 2.0446031217563963e-07,
+        "percentile": 0.7502933568713852
+      },
+      "sha256": "07bd255348f679c37ff88aae572f4faae93ec103805f339828d6fb55f0f88035",
+      "simhash": "1:1c8a96fc570d1d2b",
+      "word_count": 538
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0043-02",
+    "first_page_order": 43,
+    "last_page_order": 43
+  },
+  {
+    "id": 2095763,
+    "name": "John Miller v. James Marshall and J. S. Woodcock",
+    "name_abbreviation": "Miller v. Marshall",
+    "decision_date": "1808-06-13",
+    "docket_number": "",
+    "first_page": "43",
+    "last_page": "45",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 158"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 158"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "15 Gratt. 542",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "19 S. E. Rep. 521",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "39 W. Va. 406",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "case_ids": [
+          8639289
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/w-va/39/0406-01"
+        ]
+      },
+      {
+        "cite": "77 Va. 233",
+        "category": "reporters:state",
+        "reporter": "Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "29 Gratt. 705",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6733655
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/70/0580-01"
+        ]
+      },
+      {
+        "cite": "20 Gratt. 496",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "5 Rand. 637",
+        "category": "reporters:state",
+        "reporter": "Rand.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "13 Gratt. 18",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 416,
+      "char_count": 8029,
+      "ocr_confidence": 0.525,
+      "pagerank": {
+        "raw": 3.077174836537768e-07,
+        "percentile": 0.8577509731262325
+      },
+      "sha256": "e44a5e6148bc915ed72810e9b1cc3c3c4878f424f012461039f111a9a0132e5e",
+      "simhash": "1:43bbd53b26abe920",
+      "word_count": 1413
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0043-03",
+    "first_page_order": 43,
+    "last_page_order": 45
+  },
+  {
+    "id": 2095782,
+    "name": "Emanuel Temple v. The Commonwealth",
+    "name_abbreviation": "Temple v. Commonwealth",
+    "decision_date": "1810-06-25",
+    "docket_number": "",
+    "first_page": "45",
+    "last_page": "45",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 163"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 163"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 106,
+      "char_count": 1600,
+      "ocr_confidence": 0.466,
+      "sha256": "b9ad90d64c34ca8f4a2245996a81b51a569c30e15cb6e690ef5bc8f6f2888a63",
+      "simhash": "1:3d61cf35b01ad299",
+      "word_count": 276
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0045-01",
+    "first_page_order": 45,
+    "last_page_order": 45
+  },
+  {
+    "id": 2095809,
+    "name": "The Commonwealth v. John Somerville",
+    "name_abbreviation": "Commonwealth v. Somerville",
+    "decision_date": "1810-11-13",
+    "docket_number": "",
+    "first_page": "45",
+    "last_page": "46",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 164"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 164"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "8 Gratt. 692",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "26 Gratt. 943",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4433570
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/67/0307-01"
+        ]
+      },
+      {
+        "cite": "14 Gratt. 674",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732990
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/55/0611-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 383,
+      "char_count": 8851,
+      "ocr_confidence": 0.482,
+      "pagerank": {
+        "raw": 5.430140758742274e-08,
+        "percentile": 0.3420071981030554
+      },
+      "sha256": "59432f6f9d6710332b40ea974fed9c1928024dd2dd93ddcecf1a7e637b93324f",
+      "simhash": "1:01f441e851497a9a",
+      "word_count": 1537
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0045-02",
+    "first_page_order": 45,
+    "last_page_order": 46
+  },
+  {
+    "id": 2095759,
+    "name": "The Mutual Assurance Society v. Anna Byrd",
+    "name_abbreviation": "Mutual Assurance Society v. Byrd",
+    "decision_date": "1810-11-16",
+    "docket_number": "",
+    "first_page": "46",
+    "last_page": "47",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 170"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 170"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 189,
+      "char_count": 2943,
+      "ocr_confidence": 0.429,
+      "sha256": "9a9276dbde6b27627bd5a844d2f22b67567e7fb5e33cd69d15df8d4fb9532979",
+      "simhash": "1:8dc52c5b3a0460d1",
+      "word_count": 502
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0046-01",
+    "first_page_order": 46,
+    "last_page_order": 47
+  },
+  {
+    "id": 2095820,
+    "name": "The Commonwealth v. William Crump",
+    "name_abbreviation": "Commonwealth v. Crump",
+    "decision_date": "1810-11-21",
+    "docket_number": "",
+    "first_page": "47",
+    "last_page": "48",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 172"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 172"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Chit. Cr. Law, 695",
+        "category": "reporters:state",
+        "reporter": "Chit. Cr. Law",
+        "pin_cites": [
+          {
+            "page": "709, 712"
+          }
+        ],
+        "opinion_index": -1
+      },
+      {
+        "cite": "33 Fed. 29",
+        "category": "reporters:federal",
+        "reporter": "F.",
+        "case_ids": [
+          3758533
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/f/33/0029-01"
+        ]
+      },
+      {
+        "cite": "68 Am. Dec. 226",
+        "category": "reporters:federal",
+        "reporter": "Am. Dec.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "24 S. E. Rep. 877",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "42 W. Va. 251",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "2 W. Va. 582",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 402,
+      "char_count": 6809,
+      "ocr_confidence": 0.48,
+      "pagerank": {
+        "raw": 8.135062124375563e-08,
+        "percentile": 0.4685394785564718
+      },
+      "sha256": "39419d19e74e79a59d4eaf408187167cbe4b5f69c31dcd63cb84206ba74e992c",
+      "simhash": "1:36b5c2b87738a81e",
+      "word_count": 1195
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0047-01",
+    "first_page_order": 47,
+    "last_page_order": 48
+  },
+  {
+    "id": 2095802,
+    "name": "The Commonwealth v. John Morris, Jr.",
+    "name_abbreviation": "Commonwealth v. Morris",
+    "decision_date": "1811-06-12",
+    "docket_number": "",
+    "first_page": "48",
+    "last_page": "49",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 176"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 176"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 419,
+      "char_count": 7739,
+      "ocr_confidence": 0.474,
+      "pagerank": {
+        "raw": 1.3397094457860282e-07,
+        "percentile": 0.630879058972164
+      },
+      "sha256": "b3469a386f7fcd68fa33fc7b67644edb2aa712217bf389ec27e976362f879f81",
+      "simhash": "1:613504b9ff899772",
+      "word_count": 1362
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0048-01",
+    "first_page_order": 48,
+    "last_page_order": 49
+  },
+  {
+    "id": 2095746,
+    "name": "The Commonwealth v. Jesse Calvert",
+    "name_abbreviation": "Commonwealth v. Calvert",
+    "decision_date": "1811-06-12",
+    "docket_number": "",
+    "first_page": "49",
+    "last_page": "50",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 181"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 181"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 109,
+      "char_count": 1344,
+      "ocr_confidence": 0.519,
+      "sha256": "313e665752c9e2e764ec46d95009b94d8bbb1ec2fdfe622aaf5264eb5c8e45e4",
+      "simhash": "1:e625e0a4ea3b91fe",
+      "word_count": 225
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0049-01",
+    "first_page_order": 49,
+    "last_page_order": 50
+  },
+  {
+    "id": 2095835,
+    "name": "Samuel Clapham, Executor of Josiah Clapham v. Lewis and Stover",
+    "name_abbreviation": "Clapham v. Lewis & Stover",
+    "decision_date": "1811-06-12",
+    "docket_number": "",
+    "first_page": "50",
+    "last_page": "50",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 182"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 182"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 133,
+      "char_count": 1770,
+      "ocr_confidence": 0.546,
+      "sha256": "6cacadef0030f1b7e3128dc6bb77ad5e090da2b91c61cc01033d73a8f5647e23",
+      "simhash": "1:9b6341646a565511",
+      "word_count": 290
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0050-01",
+    "first_page_order": 50,
+    "last_page_order": 50
+  },
+  {
+    "id": 2095755,
+    "name": "The Commonwealth v. Dolly Chapple",
+    "name_abbreviation": "Commonwealth v. Chapple",
+    "decision_date": "1811-06-13",
+    "docket_number": "",
+    "first_page": "50",
+    "last_page": "51",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 184"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 184"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 239,
+      "char_count": 3741,
+      "ocr_confidence": 0.518,
+      "pagerank": {
+        "raw": 1.2240919645422112e-07,
+        "percentile": 0.6027083046154428
+      },
+      "sha256": "765a00f4832d67e4bc26b45c23211c7d8a9956bdcf09252b81d33bd26130606d",
+      "simhash": "1:9907e170c64a463a",
+      "word_count": 667
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0050-02",
+    "first_page_order": 50,
+    "last_page_order": 51
+  },
+  {
+    "id": 2095750,
+    "name": "The Commonwealth v. William Strother",
+    "name_abbreviation": "Commonwealth v. Strother",
+    "decision_date": "1811-11-15",
+    "docket_number": "",
+    "first_page": "51",
+    "last_page": "51",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 186"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 186"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 149,
+      "char_count": 2166,
+      "ocr_confidence": 0.475,
+      "pagerank": {
+        "raw": 6.6164480032281e-08,
+        "percentile": 0.4039982639914528
+      },
+      "sha256": "6bc3a45e184f7168364f110f387d4fda5357b9306566f8563ac9b02c33d3cb8f",
+      "simhash": "1:8ae5aeabad581998",
+      "word_count": 379
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0051-01",
+    "first_page_order": 51,
+    "last_page_order": 51
+  },
+  {
+    "id": 2095812,
+    "name": "The Commonwealth v. Samuel Myers",
+    "name_abbreviation": "Commonwealth v. Myers",
+    "decision_date": "1811-11-19",
+    "docket_number": "",
+    "first_page": "51",
+    "last_page": "66",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 188"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 188"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "29 S. E. Rep. 528",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "44 W. Va. 317",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "4 Black. 335",
+        "category": "reporters:scotus_early",
+        "reporter": "Black",
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 1800,
+      "char_count": 90937,
+      "ocr_confidence": 0.491,
+      "pagerank": {
+        "raw": 3.0629486357655567e-07,
+        "percentile": 0.8567437715480709
+      },
+      "sha256": "11a1a0c4e12309596022fd90fe335ae7d9ac089f911d356bd675ced9d9635dc9",
+      "simhash": "1:16b903219a63828e",
+      "word_count": 16204
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0051-02",
+    "first_page_order": 51,
+    "last_page_order": 66
+  },
+  {
+    "id": 2095749,
+    "name": "Thomas Sorrell's Case",
+    "name_abbreviation": "Sorrell's Case",
+    "decision_date": "1786-04-06",
+    "docket_number": "",
+    "first_page": "66",
+    "last_page": "67",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 253"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 253"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 354,
+      "char_count": 7094,
+      "ocr_confidence": 0.515,
+      "pagerank": {
+        "raw": 4.284447817890619e-08,
+        "percentile": 0.27052754813118446
+      },
+      "sha256": "3e4b4f15792f90cbc6e336bb3ffeb0ad6df8b084b8711db06f680aa22b0cffc5",
+      "simhash": "1:774d42e29a7cf0cb",
+      "word_count": 1248
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0066-01",
+    "first_page_order": 66,
+    "last_page_order": 67
+  },
+  {
+    "id": 2095798,
+    "name": "John Bailey's Case",
+    "name_abbreviation": "Bailey's Case",
+    "decision_date": "1798-09-01",
+    "docket_number": "",
+    "first_page": "67",
+    "last_page": "68",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 258"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 258"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 347,
+      "char_count": 6205,
+      "ocr_confidence": 0.545,
+      "pagerank": {
+        "raw": 4.284447817890619e-08,
+        "percentile": 0.27052774119263323
+      },
+      "sha256": "65f1d226c7a941c46302b8d40dde84fde16f010b7d43fec2ed08016c0acd931a",
+      "simhash": "1:9f5842a0dc43b6b5",
+      "word_count": 1117
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0067-01",
+    "first_page_order": 67,
+    "last_page_order": 68
+  },
+  {
+    "id": 2095741,
+    "name": "The Commonwealth v. Luke Ray and Sarah His Wife",
+    "name_abbreviation": "Commonwealth v. Ray",
+    "decision_date": "1812-06-13",
+    "docket_number": "",
+    "first_page": "68",
+    "last_page": "69",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 262"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 262"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "7 Gratt. 600",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4449266
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/48/0313-01"
+        ]
+      },
+      {
+        "cite": "8 Gratt. 698",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6716814
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/49/0747-03"
+        ]
+      },
+      {
+        "cite": "20 S. E. Rep. 572",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "39 W. Va. 488",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 152,
+      "char_count": 1910,
+      "ocr_confidence": 0.515,
+      "pagerank": {
+        "raw": 2.1227470414910805e-07,
+        "percentile": 0.76477701981853
+      },
+      "sha256": "c1a288425293c1a40c9cdab7c46555674c3ccc237c4775bde21c4f6bf305eef0",
+      "simhash": "1:2f328b1f93b45b91",
+      "word_count": 323
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0068-01",
+    "first_page_order": 68,
+    "last_page_order": 69
+  },
+  {
+    "id": 2095766,
+    "name": "Peter Case v. The Commonwealth",
+    "name_abbreviation": "Case v. Commonwealth",
+    "decision_date": "1812-06-13",
+    "docket_number": "",
+    "first_page": "69",
+    "last_page": "69",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 264"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 264"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "25 Gratt 887",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6726004
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/66/0599-01"
+        ]
+      },
+      {
+        "cite": "1 Va. Cas. 265",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "case_ids": [
+          2095796
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/3/0069-02"
+        ]
+      },
+      {
+        "cite": "20 W. Va. 109",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 255,
+      "char_count": 4425,
+      "ocr_confidence": 0.467,
+      "pagerank": {
+        "raw": 2.0446031217563963e-07,
+        "percentile": 0.7502935499328339
+      },
+      "sha256": "34259cc3eeb71c1817f8d872ea4d1040e094141b48a07a47d726c80d58ee9979",
+      "simhash": "1:b74704c6f172b38a",
+      "word_count": 798
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0069-01",
+    "first_page_order": 69,
+    "last_page_order": 69
+  },
+  {
+    "id": 2095796,
+    "name": "The Commonwealth v. Jesse Calvert",
+    "name_abbreviation": "Commonwealth v. Calvert",
+    "decision_date": "1812-06-13",
+    "docket_number": "",
+    "first_page": "69",
+    "last_page": "70",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 265"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 265"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 144,
+      "char_count": 2173,
+      "ocr_confidence": 0.51,
+      "pagerank": {
+        "raw": 2.0877879195045112e-07,
+        "percentile": 0.759941795834429
+      },
+      "sha256": "3c781eb33a021eb91848ed5f3f0922ae8c420360b2ab8e6948ebc016074b8273",
+      "simhash": "1:8f44864c833c9586",
+      "word_count": 384
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0069-02",
+    "first_page_order": 69,
+    "last_page_order": 70
+  },
+  {
+    "id": 2095756,
+    "name": "Barnet Hendrick, who, as well for the Commonwealth as for himself, sues v. Jacob Andrick and Robert Renick",
+    "name_abbreviation": "Hendrick v. Andrick",
+    "decision_date": "1812-06-13",
+    "docket_number": "",
+    "first_page": "70",
+    "last_page": "70",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 267"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 267"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "14 Gratt. 674",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732990
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/55/0611-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 177,
+      "char_count": 2300,
+      "ocr_confidence": 0.537,
+      "sha256": "b14855b8c881df430594def4f6f9bd0514a45d3e080c826e36e73b8e598f668a",
+      "simhash": "1:2ed722a4ad4e8df1",
+      "word_count": 394
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0070-01",
+    "first_page_order": 70,
+    "last_page_order": 70
+  },
+  {
+    "id": 2095754,
+    "name": "Matthias Hite v. Jesse Fitz-Randolph",
+    "name_abbreviation": "Hite v. Fitz-Randolph",
+    "decision_date": "1812-06-15",
+    "docket_number": "",
+    "first_page": "70",
+    "last_page": "70",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 269"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 269"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 108,
+      "char_count": 1496,
+      "ocr_confidence": 0.525,
+      "pagerank": {
+        "raw": 4.3341757668126914e-08,
+        "percentile": 0.27269273227898616
+      },
+      "sha256": "a96d7c7d148ccea59cbf47ef01f7ab303c7c63a0390eba767032b8503367c61d",
+      "simhash": "1:2e07c2bac07c604e",
+      "word_count": 247
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0070-02",
+    "first_page_order": 70,
+    "last_page_order": 70
+  },
+  {
+    "id": 2095807,
+    "name": "The Commonwealth v. Benjamin B. Jones",
+    "name_abbreviation": "Commonwealth v. Jones",
+    "decision_date": "1812-06-17",
+    "docket_number": "",
+    "first_page": "70",
+    "last_page": "72",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 270"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 270"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "15 Gratt. 518",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732456
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/56/0900-01"
+        ]
+      },
+      {
+        "cite": "22 Gratt. 924",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4435220
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/63/0330-01"
+        ]
+      },
+      {
+        "cite": "1 Rob. 756",
+        "category": "reporters:state",
+        "reporter": "Rob.",
+        "case_ids": [
+          4447732
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/40/0455-01"
+        ]
+      },
+      {
+        "cite": "2 Va. Cas. 510",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "case_ids": [
+          6733618
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/4/0344-01"
+        ]
+      },
+      {
+        "cite": "2 Pat. & H. 107",
+        "category": "reporters:state",
+        "reporter": "Patton & Heath",
+        "opinion_index": 0
+      },
+      {
+        "cite": "6 Gratt. 287",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          954899
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/47/0287-01"
+        ]
+      },
+      {
+        "cite": "1 Rand. 39",
+        "category": "reporters:state",
+        "reporter": "Rand.",
+        "case_ids": [
+          4443244
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/22/0025-01"
+        ]
+      },
+      {
+        "cite": "1 H. & M 385",
+        "category": "reporters:state",
+        "reporter": "Hen. & M.",
+        "case_ids": [
+          8692028
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/11/0176-01"
+        ]
+      },
+      {
+        "cite": "6 Gratt. 219",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          954909
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/47/0219-01"
+        ]
+      },
+      {
+        "cite": "1 Wash. 79",
+        "category": "reporters:state",
+        "reporter": "Wash.",
+        "case_ids": [
+          6714696
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/1/0419-01"
+        ]
+      },
+      {
+        "cite": "14 Gratt. 632",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "20 W. Va. 43",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "20 Gratt. 733",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6734381
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/61/0593-01"
+        ]
+      },
+      {
+        "cite": "2 W. Va. 582",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "2 Va. Cas. 479",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "case_ids": [
+          6733362
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/4/0318-01"
+        ]
+      },
+      {
+        "cite": "11 Leigh 633",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "case_ids": [
+          6722242
+        ],
+        "weight": 2,
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/38/0738-02"
+        ]
+      },
+      {
+        "cite": "19 Gratt. 485",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4436446
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/60/0176-01"
+        ]
+      },
+      {
+        "cite": "8 Gratt. 637",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6716643
+        ],
+        "weight": 2,
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/49/0702-01"
+        ]
+      },
+      {
+        "cite": "20 W. Va. 32",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "case_ids": [
+          8640382
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/w-va/20/0032-01"
+        ]
+      },
+      {
+        "cite": "19 Gratt. 641",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "8 Gratt. 712",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6716924
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/49/0752-01"
+        ]
+      },
+      {
+        "cite": "1 Va. Cas. 271",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "case_ids": [
+          2095787
+        ],
+        "weight": 2,
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/3/0071-01"
+        ]
+      },
+      {
+        "cite": "15 S. E. Rep. 983",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "weight": 2,
+        "opinion_index": 0
+      },
+      {
+        "cite": "36 W. Va. 732",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "weight": 2,
+        "opinion_index": 0
+      },
+      {
+        "cite": "9 Leigh 683",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "opinion_index": 0
+      },
+      {
+        "cite": "5 Leigh 715",
+        "category": "reporters:state",
+        "reporter": "Leigh",
+        "case_ids": [
+          4446097
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/32/0267-01"
+        ]
+      },
+      {
+        "cite": "2 Va. Cas. 231",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "case_ids": [
+          6730841
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/4/0212-01"
+        ]
+      },
+      {
+        "cite": "2 Va. Cas. 158",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "case_ids": [
+          6729640
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/4/0183-01"
+        ]
+      },
+      {
+        "cite": "1 Va. Cas. 300",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "7 W. Va. 103",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 472,
+      "char_count": 8084,
+      "ocr_confidence": 0.491,
+      "pagerank": {
+        "raw": 4.03580807328026e-08,
+        "percentile": 0.07502001081916358
+      },
+      "sha256": "c6c34ec295fddb96320b8bf60f571bff05fb176cb91cd5a6c1617aec19c55dd6",
+      "simhash": "1:cf443da7d9d6469e",
+      "word_count": 1463
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0070-03",
+    "first_page_order": 70,
+    "last_page_order": 72
+  },
+  {
+    "id": 2095787,
+    "name": "The Commonwealth v. John M'Caul",
+    "name_abbreviation": "Commonwealth v. M'Caul",
+    "decision_date": "1812-04-25",
+    "docket_number": "",
+    "first_page": "71",
+    "last_page": "80",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 271"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 271"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "3 Black. 25",
+        "category": "reporters:scotus_early",
+        "reporter": "Black",
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 1363,
+      "char_count": 48250,
+      "ocr_confidence": 0.51,
+      "pagerank": {
+        "raw": 9.712718656811884e-07,
+        "percentile": 0.9817464261429913
+      },
+      "sha256": "d5daca8daceb21b2d53a9a1e21600e53f0f5b35143f11fea551775e25ae2a012",
+      "simhash": "1:3e1ba0b2b76a2d36",
+      "word_count": 8656
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0071-01",
+    "first_page_order": 71,
+    "last_page_order": 80
+  },
+  {
+    "id": 2095839,
+    "name": "The Commonwealth v. John Thomas",
+    "name_abbreviation": "Commonwealth v. Thomas",
+    "decision_date": "1812-06-16",
+    "docket_number": "",
+    "first_page": "80",
+    "last_page": "80",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 307"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 307"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 170,
+      "char_count": 1975,
+      "ocr_confidence": 0.505,
+      "pagerank": {
+        "raw": 2.021087827503995e-07,
+        "percentile": 0.7454085160949538
+      },
+      "sha256": "7014236a64872b270cf2c93c346905b305a1bd0ee80b56ea2e4b3fb9b970e31f",
+      "simhash": "1:94b4c00117a7a6bd",
+      "word_count": 341
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0080-01",
+    "first_page_order": 80,
+    "last_page_order": 80
+  },
+  {
+    "id": 2095823,
+    "name": "The Commonwealth v. Moses Mann",
+    "name_abbreviation": "Commonwealth v. Mann",
+    "decision_date": "1812-11-11",
+    "docket_number": "",
+    "first_page": "80",
+    "last_page": "80",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 308"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 308"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 131,
+      "char_count": 1944,
+      "ocr_confidence": 0.489,
+      "sha256": "a10740e2ef104dfbd314660928d87dac8a5b69096dbfa056e2a2b41106a9a1ed",
+      "simhash": "1:ac3057b52f879daa",
+      "word_count": 332
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0080-02",
+    "first_page_order": 80,
+    "last_page_order": 80
+  },
+  {
+    "id": 2095789,
+    "name": "The Commonwealth v. Benjamin Miller",
+    "name_abbreviation": "Commonwealth v. Miller",
+    "decision_date": "1812-11-17",
+    "docket_number": "",
+    "first_page": "80",
+    "last_page": "81",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 310"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 310"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "14 Gratt. 674",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732990
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/55/0611-01"
+        ]
+      },
+      {
+        "cite": "8 W. Va. 747",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "20 Gratt. 724",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6734319
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/61/0589-01"
+        ]
+      },
+      {
+        "cite": "14 Gratt. 592",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732744
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/55/0582-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 194,
+      "char_count": 3432,
+      "ocr_confidence": 0.48,
+      "pagerank": {
+        "raw": 4.3029624020887727e-07,
+        "percentile": 0.9167936045692239
+      },
+      "sha256": "b3ef1fd6b3a30fb8934321f8822d209f4ddacbc4ed24e23c368166fae4f2dd36",
+      "simhash": "1:9ed280af76328f56",
+      "word_count": 590
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0080-03",
+    "first_page_order": 80,
+    "last_page_order": 81
+  },
+  {
+    "id": 2095768,
+    "name": "The Commonwealth v. Richard M. B. Chichester",
+    "name_abbreviation": "Commonwealth v. Chichester",
+    "decision_date": "1812-06-11",
+    "docket_number": "",
+    "first_page": "81",
+    "last_page": "81",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 312"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 312"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "14 Gratt. 674",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732990
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/55/0611-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 157,
+      "char_count": 2189,
+      "ocr_confidence": 0.497,
+      "pagerank": {
+        "raw": 1.0287321652055004e-07,
+        "percentile": 0.5474575930874734
+      },
+      "sha256": "0d0b5233cb83517745a8d8417c3594b658852b19950c0caf0f8ce4523b003bd9",
+      "simhash": "1:bd3274ea971bb3b4",
+      "word_count": 370
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0081-01",
+    "first_page_order": 81,
+    "last_page_order": 81
+  },
+  {
+    "id": 2095780,
+    "name": "John G. Jackson v. The Justices of Harrison County",
+    "name_abbreviation": "Jackson v. Justices of Harrison County",
+    "decision_date": "1812-10-02",
+    "docket_number": "",
+    "first_page": "81",
+    "last_page": "82",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 314"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 314"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "27 Gratt. 624",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6740690
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/68/0626-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 241,
+      "char_count": 4493,
+      "ocr_confidence": 0.515,
+      "sha256": "4647f2a1918fdc578a16c4c1b954d1758e197db0216e4ee530cdd39cd8ef75b1",
+      "simhash": "1:6e6700f1b673f51e",
+      "word_count": 780
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0081-02",
+    "first_page_order": 81,
+    "last_page_order": 82
+  },
+  {
+    "id": 2095751,
+    "name": "The Commonwealth v. Jacob Israel",
+    "name_abbreviation": "Commonwealth v. Israel",
+    "decision_date": "1813-06-12",
+    "docket_number": "",
+    "first_page": "82",
+    "last_page": "82",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 317"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 317"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 138,
+      "char_count": 2178,
+      "ocr_confidence": 0.529,
+      "sha256": "4ee370455aac5674b8e38ad4b679d24ea360c2ce62bd52338073a11e4f523710",
+      "simhash": "1:dda8663155ae7d0f",
+      "word_count": 367
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0082-01",
+    "first_page_order": 82,
+    "last_page_order": 82
+  },
+  {
+    "id": 2095805,
+    "name": "The Commonwealth v. John Edloe Thompson",
+    "name_abbreviation": "Commonwealth v. Thompson",
+    "decision_date": "1813-11-11",
+    "docket_number": "",
+    "first_page": "83",
+    "last_page": "83",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 319"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 319"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "20 Gratt. 733",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6734381
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/61/0593-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 175,
+      "char_count": 3447,
+      "ocr_confidence": 0.491,
+      "pagerank": {
+        "raw": 2.42107294683114e-07,
+        "percentile": 0.8010272027442527
+      },
+      "sha256": "cc7b92539b1601426fd726ee131ce0facf4b521be8cec1cda7c5581b7978225c",
+      "simhash": "1:990852f055598f30",
+      "word_count": 606
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0083-01",
+    "first_page_order": 83,
+    "last_page_order": 83
+  },
+  {
+    "id": 2095743,
+    "name": "The Commonwealth v. John Feely",
+    "name_abbreviation": "Commonwealth v. Feely",
+    "decision_date": "1813-11-11",
+    "docket_number": "",
+    "first_page": "83",
+    "last_page": "84",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 321"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 321"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "14 Johns. 95",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "case_ids": [
+          376268
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/johns/14/0095-01"
+        ]
+      },
+      {
+        "cite": "17 Johns. 4",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "case_ids": [
+          6064614
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/johns/17/0009-01"
+        ]
+      },
+      {
+        "cite": "7 Conn. 239",
+        "category": "reporters:state",
+        "reporter": "Conn.",
+        "case_ids": [
+          6753437
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/conn/7/0239-01"
+        ]
+      },
+      {
+        "cite": "1 Dana 442",
+        "category": "reporters:state",
+        "reporter": "Dana",
+        "case_ids": [
+          8520446
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/ky/31/0442-01"
+        ]
+      },
+      {
+        "cite": "2 Va. Cas. 34",
+        "category": "reporters:state",
+        "reporter": "Va. Cas.",
+        "case_ids": [
+          6727643
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/4/0124-01"
+        ]
+      },
+      {
+        "cite": "17 Sup. Ct. Rep. 326",
+        "category": "reporters:federal",
+        "reporter": "S. Ct.",
+        "case_ids": [
+          8298391
+        ],
+        "weight": 2,
+        "opinion_index": -1,
+        "case_paths": [
+          "/us/165/0275-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 361,
+      "char_count": 5639,
+      "ocr_confidence": 0.506,
+      "pagerank": {
+        "raw": 3.147423824291214e-07,
+        "percentile": 0.8624327132585722
+      },
+      "sha256": "5cf6603f79c6ebcfbf668a4df5ff0088abfaf75e5a82aaf88e40219dbd0e9acd",
+      "simhash": "1:85f34311e35cd6f2",
+      "word_count": 976
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0083-02",
+    "first_page_order": 83,
+    "last_page_order": 84
+  },
+  {
+    "id": 2095822,
+    "name": "The Commonwealth v. William Waller Hening",
+    "name_abbreviation": "Commonwealth v. Hening",
+    "decision_date": "1814-11-12",
+    "docket_number": "",
+    "first_page": "84",
+    "last_page": "84",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 324"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 324"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 125,
+      "char_count": 1395,
+      "ocr_confidence": 0.553,
+      "pagerank": {
+        "raw": 4.3341757668126914e-08,
+        "percentile": 0.27269292534043493
+      },
+      "sha256": "6accddaa38a22d261e84fd61e3a1db13c4435e7d3ea6b923286d4c35aec1fa08",
+      "simhash": "1:6d15e3bad47bb72d",
+      "word_count": 236
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0084-01",
+    "first_page_order": 84,
+    "last_page_order": 84
+  },
+  {
+    "id": 2095742,
+    "name": "The Commonwealth v. William Waller Hening",
+    "name_abbreviation": "Commonwealth v. Hening",
+    "decision_date": "1814-11-12",
+    "docket_number": "",
+    "first_page": "84",
+    "last_page": "85",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 325"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 325"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 326,
+      "char_count": 6439,
+      "ocr_confidence": 0.484,
+      "pagerank": {
+        "raw": 4.3341757668126914e-08,
+        "percentile": 0.2726925392175374
+      },
+      "sha256": "43e2e9517130ba0a4820c122772dc7c0ebd33535acab32e7392b7a449bb9f794",
+      "simhash": "1:9dc056f9bb3967ae",
+      "word_count": 1144
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0084-02",
+    "first_page_order": 84,
+    "last_page_order": 85
+  },
+  {
+    "id": 2095816,
+    "name": "John Stokeley v. The Commonwealth",
+    "name_abbreviation": "Stokeley v. Commonwealth",
+    "decision_date": "1814-11-12",
+    "docket_number": "",
+    "first_page": "85",
+    "last_page": "86",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 330"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 330"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 261,
+      "char_count": 4208,
+      "ocr_confidence": 0.527,
+      "pagerank": {
+        "raw": 6.380125665320789e-08,
+        "percentile": 0.39134965011473644
+      },
+      "sha256": "c87a33eb0c193972f284a203947c54b6c7541be25927a6fe4ca9861ebaf255c1",
+      "simhash": "1:8963f221c8d241d8",
+      "word_count": 747
+    },
+    "last_updated": "2023-07-14T21:10:20.069025+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0085-01",
+    "first_page_order": 85,
+    "last_page_order": 86
+  },
+  {
+    "id": 2095841,
+    "name": "Isaac Morris v. George Creel and Others",
+    "name_abbreviation": "Morris v. Creel",
+    "decision_date": "1814-11-12",
+    "docket_number": "",
+    "first_page": "86",
+    "last_page": "86",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 333"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 333"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "27 Gratt. 624",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6740690
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/68/0626-01"
+        ]
+      },
+      {
+        "cite": "4 S. E. Rep. 422",
+        "category": "reporters:state_regional",
+        "reporter": "S.E.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "30 W. Va. 421",
+        "category": "reporters:state",
+        "reporter": "W. Va.",
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 158,
+      "char_count": 2040,
+      "ocr_confidence": 0.536,
+      "pagerank": {
+        "raw": 5.298132930532853e-08,
+        "percentile": 0.33428435402990675
+      },
+      "sha256": "939d4f76635982f8226c32182804548b1e6df0cc0e3d6622fc03696366bf36ca",
+      "simhash": "1:3a20418c3e396f1a",
+      "word_count": 366
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0086-01",
+    "first_page_order": 86,
+    "last_page_order": 86
+  },
+  {
+    "id": 2095791,
+    "name": "The Commonwealth v. Thomas Lewis",
+    "name_abbreviation": "Commonwealth v. Lewis",
+    "decision_date": "1814-11-12",
+    "docket_number": "",
+    "first_page": "86",
+    "last_page": "87",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 334"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 334"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "22 Gratt. 917",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4435185
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/63/0324-01"
+        ]
+      },
+      {
+        "cite": "14 Gratt. 674",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732990
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/55/0611-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 109,
+      "char_count": 1480,
+      "ocr_confidence": 0.491,
+      "sha256": "0713a0d80352116ca6e8364588f150d93518c8ce30898fc04cf6f1230afab84e",
+      "simhash": "1:99bed2de0753fda2",
+      "word_count": 234
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0086-02",
+    "first_page_order": 86,
+    "last_page_order": 87
+  },
+  {
+    "id": 2095825,
+    "name": "The Commonwealth v. William Horton",
+    "name_abbreviation": "Commonwealth v. Horton",
+    "decision_date": "1814-11-12",
+    "docket_number": "",
+    "first_page": "87",
+    "last_page": "87",
+    "citations": [
+      {
+        "type": "nominative",
+        "cite": "1 Va. Cas. 335"
+      },
+      {
+        "type": "official",
+        "cite": "3 Va. 335"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "Va. Gen. Ct.",
+      "id": 9757,
+      "name": "General Court of Virginia"
+    },
+    "jurisdiction": {
+      "id": 7,
+      "name_long": "Virginia",
+      "name": "Va."
+    },
+    "cites_to": [
+      {
+        "cite": "22 Gratt. 917",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          4435185
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/63/0324-01"
+        ]
+      },
+      {
+        "cite": "14 Gratt. 674",
+        "category": "reporters:state",
+        "reporter": "Gratt.",
+        "case_ids": [
+          6732990
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/va/55/0611-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 99,
+      "char_count": 1196,
+      "ocr_confidence": 0.479,
+      "pagerank": {
+        "raw": 2.0446031217563963e-07,
+        "percentile": 0.7516727809227488
+      },
+      "sha256": "888c47dd285dd3ceaac8e882feaafaf063e4caa555284fc1e5cfa56ecfe46f32",
+      "simhash": "1:e8046ae4c6ec2d12",
+      "word_count": 199
+    },
+    "last_updated": "2024-02-27T22:30:09.339284+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0087-01",
+    "first_page_order": 87,
+    "last_page_order": 87
+  }
+]
