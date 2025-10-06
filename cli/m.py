@@ -12,7 +12,7 @@ cli = typer.Typer(name="m", no_args_is_help=True)
 # Add a default callback for handling the default cli description.
 @cli.callback()
 def callback() -> None:
-    """Perform M Tasks"""
+    """Perform M Tasks."""
 
 
 # Typer assumes that all commands are in the same file/module.

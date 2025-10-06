@@ -131,9 +131,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # Usually, values that are intentionally extracted while prepping for the backend generate call
         # will be omitted here so that they will be removed when model_options are processed
         # for the call to the model.
-        self.from_mellea_model_opts_map = {
-            ModelOption.MAX_NEW_TOKENS: "max_new_tokens",
-        }
+        self.from_mellea_model_opts_map = {ModelOption.MAX_NEW_TOKENS: "max_new_tokens"}
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
 
@@ -690,7 +688,12 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             a new dict without chat template-specific options
         """
         # Options that should only go to apply_chat_template, not generate()
-        chat_template_only = {"guardian_config", "think", "add_generation_prompt", "documents"}
+        chat_template_only = {
+            "guardian_config",
+            "think",
+            "add_generation_prompt",
+            "documents",
+        }
         return {k: v for k, v in model_options.items() if k not in chat_template_only}
 
     def _extract_model_tool_requests(
@@ -786,10 +789,12 @@ class HFAlora(Alora, abc.ABC):
 
 
 class HFProcessRewardModel(PRM, abc.ABC):
+    """A Process Reward Model that works with a huggingface backend."""
+
     def __init__(
         self, model_name_or_path: str, score_token: str, device: str | None = None
     ):
-        """Initialize an PRM that works with a huggingface backend. Currently supports and tested with IBM Process Reward Models
+        """Initialize an PRM that works with a huggingface backend. Currently supports and tested with IBM Process Reward Models.
 
         Args:
             model_name_or_path (str): A local path to PRM or a huggingface PRM
@@ -824,13 +829,12 @@ class HFProcessRewardModel(PRM, abc.ABC):
         )[0]
 
     def stepify(self, content: str, step_separator: str) -> list[str]:
-        """Splits the assistant response into steps to score
+        """Splits the assistant response into steps to score.
 
         Args:
             content: assistant response to score
             step_separator: string on which to separate the content into steps
         """
-
         # convert assistant message into a list of steps
         list_of_steps = [
             step.strip() for step in content.split(step_separator) if step.strip != ""

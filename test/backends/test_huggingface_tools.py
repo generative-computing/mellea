@@ -2,6 +2,7 @@ import pydantic
 import pytest
 from typing_extensions import Annotated
 
+import mellea.backends.model_ids as model_ids
 from mellea import MelleaSession
 from mellea.backends.aloras.huggingface.granite_aloras import add_granite_aloras
 from mellea.backends.cache import SimpleLRUCache
@@ -16,14 +17,13 @@ from mellea.stdlib.requirement import (
     ValidationResult,
     default_output_to_bool,
 )
-import mellea.backends.model_ids as model_ids
 
 
 @pytest.fixture(scope="module")
 def backend():
     """Shared HuggingFace backend for all tests in this module."""
     backend = LocalHFBackend(
-        model_id=model_ids.MISTRALAI_MISTRAL_0_3_7B,
+        model_id=model_ids.IBM_GRANITE_4_MICRO_3B,
         cache=SimpleLRUCache(5),
     )
     # add_granite_aloras(backend)

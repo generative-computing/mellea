@@ -9,7 +9,11 @@ from PIL import Image as PILImage
 
 import mellea.stdlib.funcs as mfuncs
 from mellea.backends import Backend, BaseModelSubclass
-from mellea.backends.model_ids import IBM_GRANITE_3_3_8B, ModelIdentifier
+from mellea.backends.model_ids import (
+    IBM_GRANITE_3_3_8B,
+    IBM_GRANITE_4_MICRO_3B,
+    ModelIdentifier,
+)
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
 from mellea.helpers.fancy_logger import FancyLogger
@@ -70,7 +74,7 @@ def backend_name_to_class(name: str) -> Any:
 
 def start_session(
     backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
-    model_id: str | ModelIdentifier = IBM_GRANITE_3_3_8B,
+    model_id: str | ModelIdentifier = IBM_GRANITE_4_MICRO_3B,
     ctx: Context | None = None,
     *,
     model_options: dict | None = None,
@@ -251,7 +255,7 @@ class MelleaSession:
         tool_calls: bool = False,
     ) -> SamplingResult: ...
 
-    def act(self, action: Component, **kwargs) -> ModelOutputThunk | SamplingResult:
+    def act(self, action: Component, **kwargs) -> ModelOutputThunk | SamplingResult:  # noqa: D417
         """Runs a generic action, and adds both the action and the result to the context.
 
         Args:
@@ -266,7 +270,6 @@ class MelleaSession:
         Returns:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
         """
-
         result, context = mfuncs.act(
             action, context=self.ctx, backend=self.backend, **kwargs
         )
@@ -311,7 +314,7 @@ class MelleaSession:
         tool_calls: bool = False,
     ) -> SamplingResult: ...
 
-    def instruct(self, description: str, **kwargs) -> ModelOutputThunk | SamplingResult:
+    def instruct(self, description: str, **kwargs) -> ModelOutputThunk | SamplingResult:  # noqa: D417
         """Generates from an instruction.
 
         Args:
@@ -329,7 +332,6 @@ class MelleaSession:
             tool_calls: If true, tool calling is enabled.
             images: A list of images to be used in the instruction or None if none.
         """
-
         r = mfuncs.instruct(
             description, context=self.ctx, backend=self.backend, **kwargs
         )
@@ -354,7 +356,6 @@ class MelleaSession:
         tool_calls: bool = False,
     ) -> Message:
         """Sends a simple chat message and returns the response. Adds both messages to the Context."""
-
         result, context = mfuncs.chat(
             content=content,
             context=self.ctx,
@@ -381,7 +382,6 @@ class MelleaSession:
         input: CBlock | None = None,
     ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
-
         return mfuncs.validate(
             reqs=reqs,
             context=self.ctx,
@@ -439,6 +439,8 @@ class MelleaSession:
         Args:
             obj : The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
             transformation:  The string representing the query to be executed against the object.
+            format: format for output parsing; usually not needed with transform.
+            model_options: Model options to pass to the backend.
 
         Returns:
             ModelOutputThunk|Any: The result of the transformation as processed by the backend. If no tools were called,
@@ -465,7 +467,6 @@ class MelleaSession:
         Returns:
             A string if the last prompt was a raw call to the model OR a list of messages (as role-msg-dicts). Is None if none could be found.
         """
-
         op = self.ctx.last_output()
         if op is None:
             return None

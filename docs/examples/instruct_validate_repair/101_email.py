@@ -17,10 +17,11 @@ print(f"***** email ****\n{w(email_v1)}\n*******")
 # # start_session() is equivalent to:
 # from mellea.backends import model_ids
 # from mellea.backends.ollama import OllamaModelBackend
-# from mellea import MelleaSession, SimpleContext
+# from mellea import MelleaSession
+# from mellea.stdlib.base import SimpleContext
 # m = MelleaSession(
 #     backend=OllamaModelBackend(
-#         model_id=model_ids.IBM_GRANITE_3_3_8B,
+#         model_id=model_ids.IBM_GRANITE_4_MICRO_3B,
 #         model_options={ModelOption.MAX_NEW_TOKENS: 200},
 #     ),
 #     ctx=SimpleContext()

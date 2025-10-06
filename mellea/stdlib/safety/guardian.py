@@ -1,11 +1,11 @@
 """Risk checking with Granite Guardian models via existing backends."""
 
 from enum import Enum
-from typing import Dict, List, Optional, Union, Literal
+from typing import Literal
 
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import CBlock, Context, ChatContext, ModelOutputThunk
+from mellea.stdlib.base import CBlock, ChatContext, Context, ModelOutputThunk
 from mellea.stdlib.chat import Message
 from mellea.stdlib.instruction import Instruction
 from mellea.stdlib.requirement import Requirement, ValidationResult
@@ -29,7 +29,7 @@ class GuardianRisk(Enum):
     UNETHICAL_BEHAVIOR = "unethical_behavior"
 
     @classmethod
-    def get_available_risks(cls) -> List[str]:
+    def get_available_risks(cls) -> list[str]:
         """Get list of all available risk types."""
         return [risk.value for risk in cls]
 
@@ -37,7 +37,7 @@ class GuardianRisk(Enum):
 BackendType = Literal["huggingface", "ollama"]
 
 
-def _parse_safety_result(result: Optional[str], logger) -> str:
+def _parse_safety_result(result: str | None, logger) -> str:
     """Parse the model output to a Guardian label: Yes/No/Failed.
 
     Guardian returns yes/no between <score> and </score> tags.
@@ -66,17 +66,17 @@ class GuardianCheck(Requirement):
 
     def __init__(
         self,
-        risk: Union[str, GuardianRisk, None] = None,
+        risk: str | GuardianRisk | None = None,
         *,
         backend_type: BackendType = "ollama",
-        model_version: Optional[str] = None,
-        device: Optional[str] = None,
+        model_version: str | None = None,
+        device: str | None = None,
         ollama_url: str = "http://localhost:11434",
         thinking: bool = False,
-        custom_criteria: Optional[str] = None,
-        context_text: Optional[str] = None,
-        tools: Optional[List[Dict]] = None,
-        backend: Optional[Backend] = None,
+        custom_criteria: str | None = None,
+        context_text: str | None = None,
+        tools: list[dict] | None = None,
+        backend: Backend | None = None,
     ):
         """Initialize GuardianCheck using existing backends with minimal glue.
 
@@ -123,6 +123,7 @@ class GuardianCheck(Requirement):
             # Infer backend_type from the provided backend
             from mellea.backends.huggingface import LocalHFBackend
             from mellea.backends.ollama import OllamaModelBackend
+
             if isinstance(backend, LocalHFBackend):
                 self._backend_type = "huggingface"
             elif isinstance(backend, OllamaModelBackend):
@@ -142,10 +143,14 @@ class GuardianCheck(Requirement):
 
             if backend_type == "huggingface":
                 from mellea.backends.huggingface import LocalHFBackend
+
                 self._backend = LocalHFBackend(model_id=model_version)
             elif backend_type == "ollama":
                 from mellea.backends.ollama import OllamaModelBackend
-                self._backend = OllamaModelBackend(model_id=model_version, base_url=ollama_url)
+
+                self._backend = OllamaModelBackend(
+                    model_id=model_version, base_url=ollama_url
+                )
             else:
                 raise ValueError(f"Unsupported backend type: {backend_type}")
 
@@ -162,23 +167,24 @@ class GuardianCheck(Requirement):
         return self._custom_criteria if self._custom_criteria else self._risk
 
     @classmethod
-    def get_available_risks(cls) -> List[str]:
+    def get_available_risks(cls) -> list[str]:
         """Get list of all available standard risk types."""
         return GuardianRisk.get_available_risks()
 
     def __deepcopy__(self, memo):
         """Custom deepcopy to handle unpicklable backend objects."""
         from copy import deepcopy
+
         # Create a new instance without calling __init__
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
         # Copy all attributes except the backend (which contains locks)
         for k, v in self.__dict__.items():
-            if k == '_backend':
+            if k == "_backend":
                 # Share the backend reference instead of copying it
                 setattr(result, k, v)
-            elif k == '_logger':
+            elif k == "_logger":
                 # Share the logger reference
                 setattr(result, k, v)
             else:
@@ -213,6 +219,7 @@ class GuardianCheck(Requirement):
         messages = None
         try:
             from mellea.stdlib.chat import as_chat_history
+
             messages = as_chat_history(ctx)
         except Exception:
             messages = None
@@ -236,7 +243,10 @@ class GuardianCheck(Requirement):
                     content = last_turn.output.value or ""
                     tcalls = getattr(last_turn.output, "tool_calls", None)
                     if tcalls:
-                        calls = [f"{name}({getattr(tc, 'args', {})})" for name, tc in tcalls.items()]
+                        calls = [
+                            f"{name}({getattr(tc, 'args', {})})"
+                            for name, tc in tcalls.items()
+                        ]
                         if calls:
                             suffix = f" [Tool calls: {', '.join(calls)}]"
                             content = (content + suffix) if content else suffix
@@ -252,38 +262,48 @@ class GuardianCheck(Requirement):
             return ValidationResult(False, reason="No messages to validate")
 
         # Backend options (mapped by backends internally to their specific keys).
-        guardian_options: Dict[str, object] = {}
+        guardian_options: dict[str, object] = {}
         if self._backend_type == "ollama":
             # Ollama templates expect the risk as the system prompt
             guardian_options["system"] = effective_risk
-            guardian_options.update({
-                "temperature": 0.0,
-                "num_predict": 4000 if self._thinking else 50,
-                "stream": False,
-                "think": True if self._thinking else None,
-            })
+            guardian_options.update(
+                {
+                    "temperature": 0.0,
+                    "num_predict": 4000 if self._thinking else 50,
+                    "stream": False,
+                    "think": True if self._thinking else None,
+                }
+            )
         else:  # huggingface
             # HF chat template for Guardian expects guardian_config and (optionally) documents
-            guardian_cfg: Dict[str, object] = {"criteria_id": effective_risk}
+            guardian_cfg: dict[str, object] = {"criteria_id": effective_risk}
             if self._custom_criteria:
                 # When using custom criteria, provide it as free-text criteria
                 guardian_cfg["criteria_text"] = self._custom_criteria
 
-            guardian_options.update({
-                "guardian_config": guardian_cfg,
-                "think": self._thinking,  # Passed to apply_chat_template
-                "add_generation_prompt": True,  # Guardian template requires a generation prompt
-                "max_new_tokens": 4000 if self._thinking else 50,
-                "stream": False,
-            })
+            guardian_options.update(
+                {
+                    "guardian_config": guardian_cfg,
+                    "think": self._thinking,  # Passed to apply_chat_template
+                    "add_generation_prompt": True,  # Guardian template requires a generation prompt
+                    "max_new_tokens": 4000 if self._thinking else 50,
+                    "stream": False,
+                }
+            )
 
             # Provide documents parameter for groundedness
-            if self._context_text and (self._risk == "groundedness" or effective_risk == "groundedness"):
-                guardian_options["documents"] = [{"doc_id": "0", "text": self._context_text}]
+            if self._context_text and (
+                self._risk == "groundedness" or effective_risk == "groundedness"
+            ):
+                guardian_options["documents"] = [
+                    {"doc_id": "0", "text": self._context_text}
+                ]
 
         # Attach tools for function_call checks.
         # Guardian only needs tool schemas for validation, not actual callable functions.
-        if (self._risk == "function_call" or effective_risk == "function_call") and self._tools:
+        if (
+            self._risk == "function_call" or effective_risk == "function_call"
+        ) and self._tools:
             guardian_options["tools"] = self._tools
 
         # Generate the guardian decision.
@@ -293,7 +313,7 @@ class GuardianCheck(Requirement):
             action = Message("assistant", "")
         else:
             # Use a CBlock for HuggingFace - it won't be added as a message
-            action = CBlock("")
+            action = CBlock("")  # type: ignore
 
         mot, _ = self._backend.generate_from_context(
             action, gctx, model_options=guardian_options
@@ -316,4 +336,6 @@ class GuardianCheck(Requirement):
         if trace:
             reason_parts.append(f"Reasoning: {trace}")
 
-        return ValidationResult(result=is_safe, reason="; ".join(reason_parts), thunk=mot)
+        return ValidationResult(
+            result=is_safe, reason="; ".join(reason_parts), thunk=mot
+        )

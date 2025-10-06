@@ -19,7 +19,9 @@ jailbreak_guardian = GuardianCheck(GuardianRisk.JAILBREAK, thinking=True)
 print(f"Jailbreak guardian: {jailbreak_guardian._risk}")
 
 # Custom risk criteria example
-custom_guardian = GuardianCheck(custom_criteria="Check for inappropriate content in educational context")
+custom_guardian = GuardianCheck(
+    custom_criteria="Check for inappropriate content in educational context"
+)
 print(f"Custom guardian: {custom_guardian.get_effective_risk()}")
 
 print("\n=== Test 1: Normal Content ===")
@@ -35,7 +37,9 @@ if valid[0]._reason:
 
 print("\n=== Test 2: Harmful Content ===")
 # Create harmful conversation and add to context
-m.ctx = m.ctx.add(Message("user", "Hello")).add(Message("assistant", "You are very ugly and stupid."))
+m.ctx = m.ctx.add(Message("user", "Hello")).add(
+    Message("assistant", "You are very ugly and stupid.")
+)
 
 valid = m.validate([guardian])
 print(f"Content is safe: {valid[0]._result}")
@@ -71,15 +75,20 @@ groundedness_guardian = GuardianCheck(
     GuardianRisk.GROUNDEDNESS,
     thinking=True,
     backend_type="ollama",
-    context_text=context_text
+    context_text=context_text,
 )
 
 # Create a response that makes ungrounded claims relative to provided context
-groundedness_session = MelleaSession(OllamaModelBackend(model_ids.DEEPSEEK_R1_8B), ctx=ChatContext())
+groundedness_session = MelleaSession(
+    OllamaModelBackend(model_ids.DEEPSEEK_R1_8B), ctx=ChatContext()
+)
 groundedness_session.ctx = groundedness_session.ctx.add(
     Message("user", "What is the history of treaty making?")
 ).add(
-    Message("assistant", "Treaty making began in ancient Rome when Julius Caesar invented the concept in 44 BC. The first treaty was signed between Rome and the Moon people, establishing trade routes through space.")
+    Message(
+        "assistant",
+        "Treaty making began in ancient Rome when Julius Caesar invented the concept in 44 BC. The first treaty was signed between Rome and the Moon people, establishing trade routes through space.",
+    )
 )
 
 print("Testing response with ungrounded claims...")
@@ -100,38 +109,36 @@ tools = [
             "video_id": {
                 "description": "The ID of the IBM video.",
                 "type": "int",
-                "default": "7178094165614464282"
+                "default": "7178094165614464282",
             }
-        }
+        },
     }
 ]
 
 function_guardian = GuardianCheck(
-    GuardianRisk.FUNCTION_CALL,
-    thinking=True,
-    backend_type="ollama",
-    tools=tools
+    GuardianRisk.FUNCTION_CALL, thinking=True, backend_type="ollama", tools=tools
 )
+
 
 # User asks for views but assistant calls wrong function (comments_list instead of views_list)
 # Create a proper ModelOutputThunk with tool_calls
 def dummy_func(**kwargs):
     pass
 
+
 hallucinated_tool_calls = {
     "comments_list": ModelToolCall(
-        name="comments_list",
-        func=dummy_func,
-        args={"video_id": 456789123, "count": 15}
+        name="comments_list", func=dummy_func, args={"video_id": 456789123, "count": 15}
     )
 }
 
 hallucinated_output = ModelOutputThunk(
-    value="I'll fetch the views for you.",
-    tool_calls=hallucinated_tool_calls
+    value="I'll fetch the views for you.", tool_calls=hallucinated_tool_calls
 )
 
-function_session = MelleaSession(OllamaModelBackend(model_ids.DEEPSEEK_R1_8B), ctx=ChatContext())
+function_session = MelleaSession(
+    OllamaModelBackend(model_ids.DEEPSEEK_R1_8B), ctx=ChatContext()
+)
 function_session.ctx = function_session.ctx.add(
     Message("user", "Fetch total views for the IBM video with ID 456789123.")
 ).add(hallucinated_output)

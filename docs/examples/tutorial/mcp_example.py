@@ -1,4 +1,4 @@
-"""Example of an MCP server
+"""Example of an MCP server.
 
 You need to install the mcp package:
 uv pip install "mcp[cli]"
@@ -50,5 +50,5 @@ def write_a_poem(word_limit: int) -> str:
 
 @mcp.resource("greeting://{name}")
 def get_greeting(name: str) -> str:
-    """Get a personalized greeting"""
+    """Get a personalized greeting."""
     return f"Hello, {name}!"
