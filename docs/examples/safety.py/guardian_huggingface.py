@@ -26,9 +26,7 @@ print(f"Loaded backend: {shared_guardian_backend.model_id}\n")
 # Create Guardian validators that share the backend (no model reloading!)
 print("Creating harm guardian...")
 harm_guardian = GuardianCheck(
-    GuardianRisk.HARM,
-    thinking=True,
-    backend=shared_guardian_backend
+    GuardianRisk.HARM, thinking=True, backend=shared_guardian_backend
 )
 
 # Test 1: Harmful content detection
@@ -36,10 +34,10 @@ print("\n=== Test 1: Harmful Content Detection ===")
 print("Testing content: 'You are very ugly and stupid.'")
 
 # Reset context for this test
-session.ctx = ChatContext().add(
-    Message("user", "Hello")
-).add(
-    Message("assistant", "You are very ugly and stupid.")
+session.ctx = (
+    ChatContext()
+    .add(Message("user", "Hello"))
+    .add(Message("assistant", "You are very ugly and stupid."))
 )
 
 validation_result = session.validate([harm_guardian])
@@ -52,7 +50,9 @@ if validation_result[0]._reason:
 
 # Test 2: Groundedness detection
 print("\n=== Test 2: Groundedness Detection ===")
-context_text = "Python is a high-level programming language created by Guido van Rossum in 1991."
+context_text = (
+    "Python is a high-level programming language created by Guido van Rossum in 1991."
+)
 
 # Create groundedness guardian with context (reuse shared backend)
 print("Creating groundedness guardian...")
@@ -60,14 +60,19 @@ groundedness_guardian = GuardianCheck(
     GuardianRisk.GROUNDEDNESS,
     thinking=False,
     context_text=context_text,
-    backend=shared_guardian_backend
+    backend=shared_guardian_backend,
 )
 
 # Reset context with ungrounded response
-session.ctx = ChatContext().add(
-    Message("user", "Who created Python?")
-).add(
-    Message("assistant", "Python was created by Dennis Ritchie in 1972 for use in Unix systems.")
+session.ctx = (
+    ChatContext()
+    .add(Message("user", "Who created Python?"))
+    .add(
+        Message(
+            "assistant",
+            "Python was created by Dennis Ritchie in 1972 for use in Unix systems.",
+        )
+    )
 )
 
 groundedness_valid = session.validate([groundedness_guardian])
@@ -82,12 +87,7 @@ tools = [
     {
         "name": "get_weather",
         "description": "Gets weather for a location",
-        "parameters": {
-            "location": {
-                "description": "City name",
-                "type": "string"
-            }
-        }
+        "parameters": {"location": {"description": "City name", "type": "string"}},
     }
 ]
 
@@ -97,30 +97,31 @@ function_guardian = GuardianCheck(
     GuardianRisk.FUNCTION_CALL,
     thinking=False,
     tools=tools,
-    backend=shared_guardian_backend
+    backend=shared_guardian_backend,
 )
+
 
 # User asks for weather but model calls wrong function
 def dummy_func(**kwargs):
     pass
 
+
 hallucinated_tool_calls = {
     "get_stock_price": ModelToolCall(
-        name="get_stock_price",
-        func=dummy_func,
-        args={"symbol": "AAPL"}
+        name="get_stock_price", func=dummy_func, args={"symbol": "AAPL"}
     )
 }
 
 hallucinated_output = ModelOutputThunk(
-    value="Let me get the weather for you.",
-    tool_calls=hallucinated_tool_calls
+    value="Let me get the weather for you.", tool_calls=hallucinated_tool_calls
 )
 
 # Reset context with hallucinated function call
-session.ctx = ChatContext().add(
-    Message("user", "What's the weather in Boston?")
-).add(hallucinated_output)
+session.ctx = (
+    ChatContext()
+    .add(Message("user", "What's the weather in Boston?"))
+    .add(hallucinated_output)
+)
 
 function_valid = session.validate([function_guardian])
 print(f"Function calls are valid: {function_valid[0]._result}")

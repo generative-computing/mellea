@@ -33,17 +33,15 @@ def demo_repair_with_actual_function_calling():
             "parameters": {
                 "symbol": {
                     "description": "The stock symbol to get price for (must be 3-5 uppercase letters like TSLA, AAPL)",
-                    "type": "string"
+                    "type": "string",
                 }
-            }
+            },
         }
     ]
 
     # Guardian validates function calls against tool schema
     guardian = GuardianCheck(
-        GuardianRisk.FUNCTION_CALL,
-        thinking=True,
-        tools=tool_schemas
+        GuardianRisk.FUNCTION_CALL, thinking=True, tools=tool_schemas
     )
 
     test_prompt = "What's the price of Tesla stock?"
@@ -59,19 +57,25 @@ def demo_repair_with_actual_function_calling():
             "seed": 789,
             "tools": [get_stock_price],
             # Intentionally misconfigured to demonstrate repair
-            "system": "When users ask about stock prices, use the full company name as the symbol parameter. For example, use 'Tesla Motors' instead of 'TSLA'."
+            "system": "When users ask about stock prices, use the full company name as the symbol parameter. For example, use 'Tesla Motors' instead of 'TSLA'.",
         },
-        tool_calls=True
+        tool_calls=True,
     )
 
     # Show repair process
-    for attempt_num, (generation, validations) in enumerate(zip(result.sample_generations, result.sample_validations), 1):
+    for attempt_num, (generation, validations) in enumerate(
+        zip(result.sample_generations, result.sample_validations), 1
+    ):
         print(f"\nAttempt {attempt_num}:")
 
         # Show what was sent to the model
-        if hasattr(result, 'sample_actions') and result.sample_actions and attempt_num <= len(result.sample_actions):
+        if (
+            hasattr(result, "sample_actions")
+            and result.sample_actions
+            and attempt_num <= len(result.sample_actions)
+        ):
             action = result.sample_actions[attempt_num - 1]
-            if hasattr(m.backend, 'formatter'):
+            if hasattr(m.backend, "formatter"):
                 try:
                     rendered = m.backend.formatter.print(action)
                     print(f"  Instruction sent to model:")
@@ -82,7 +86,7 @@ def demo_repair_with_actual_function_calling():
                     pass
 
         # Show function calls made
-        if hasattr(generation, 'tool_calls') and generation.tool_calls:
+        if hasattr(generation, "tool_calls") and generation.tool_calls:
             for name, tool_call in generation.tool_calls.items():
                 print(f"  Function: {name}({tool_call.args})")
 
@@ -91,9 +95,11 @@ def demo_repair_with_actual_function_calling():
             status = "PASS" if validation.as_bool() else "FAIL"
             print(f"  Status: {status}")
 
-    print(f"\n{'='*60}")
-    print(f"Result: {'SUCCESS' if result.success else 'FAILED'} after {len(result.sample_generations)} attempt(s)")
-    print(f"{'='*60}")
+    print(f"\n{'=' * 60}")
+    print(
+        f"Result: {'SUCCESS' if result.success else 'FAILED'} after {len(result.sample_generations)} attempt(s)"
+    )
+    print(f"{'=' * 60}")
     return result
 
 

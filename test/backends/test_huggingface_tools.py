@@ -23,7 +23,7 @@ from mellea.stdlib.requirement import (
 def backend():
     """Shared HuggingFace backend for all tests in this module."""
     backend = LocalHFBackend(
-        model_id=model_ids.IBM_GRANITE_4_MICRO_3B,
+        model_id=model_ids.MISTRALAI_MISTRAL_0_3_7B,
         cache=SimpleLRUCache(5),
     )
     # add_granite_aloras(backend)
