@@ -196,6 +196,7 @@ class MelleaSession:
             self._context_token = None
 
     def __copy__(self):
+        """Use self.clone. Copies the current session but keeps references to the backend and context."""
         new = MelleaSession(backend=self.backend, ctx=self.ctx)
         new._session_logger = self._session_logger
         # Explicitly don't copy over the _context_token.
@@ -206,7 +207,7 @@ class MelleaSession:
         """Useful for running multiple generation requests while keeping the context at a given point in time.
 
         Returns:
-            a copy of the current session. Keeps the context, backend, backend stack, and session logger.
+            a copy of the current session. Keeps the context, backend, and session logger.
 
         Examples:
             >>> from mellea import start_session
@@ -286,7 +287,6 @@ class MelleaSession:
         Returns:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
         """
-
         r = mfuncs.act(
             action,
             context=self.ctx,
@@ -571,7 +571,6 @@ class MelleaSession:
         Returns:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
         """
-
         r = await mfuncs.aact(
             action,
             context=self.ctx,
@@ -664,7 +663,6 @@ class MelleaSession:
             tool_calls: If true, tool calling is enabled.
             images: A list of images to be used in the instruction or None if none.
         """
-
         r = await mfuncs.ainstruct(
             description,
             context=self.ctx,
@@ -704,7 +702,6 @@ class MelleaSession:
         tool_calls: bool = False,
     ) -> Message:
         """Sends a simple chat message and returns the response. Adds both messages to the Context."""
-
         result, context = await mfuncs.achat(
             content=content,
             context=self.ctx,
@@ -731,7 +728,6 @@ class MelleaSession:
         input: CBlock | None = None,
     ) -> list[ValidationResult]:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
-
         return await mfuncs.avalidate(
             reqs=reqs,
             context=self.ctx,
@@ -787,8 +783,10 @@ class MelleaSession:
         """Transform method for creating a new object with the transformation applied.
 
         Args:
-            obj : The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
+            obj: The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
             transformation:  The string representing the query to be executed against the object.
+            format: format for output parsing; usually not needed with transform.
+            model_options: Model options to pass to the backend.
 
         Returns:
             ModelOutputThunk|Any: The result of the transformation as processed by the backend. If no tools were called,

@@ -347,10 +347,12 @@ def transform(
     """Transform method for creating a new object with the transformation applied.
 
     Args:
-        obj : The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
+        obj: The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
         transformation:  The string representing the query to be executed against the object.
         context: the context being used as a history from which to generate the response.
         backend: the backend used to generate the response.
+        format: format for output parsing; usually not needed with transform.
+        model_options: Model options to pass to the backend.
 
     Returns:
         (ModelOutputThunk | Any, Context): The result of the transformation as processed by the backend. If no tools were called,
@@ -476,7 +478,6 @@ async def aact(
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
     """
-
     if not silence_context_type_warning and not isinstance(context, SimpleContext):
         FancyLogger().get_logger().warning(
             "Not using a SimpleContext with asynchronous requests could cause unexpected results due to stale contexts. Ensure you await between requests."
@@ -630,7 +631,6 @@ async def ainstruct(
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
     """
-
     requirements = [] if requirements is None else requirements
     icl_examples = [] if icl_examples is None else icl_examples
     grounding_context = dict() if grounding_context is None else grounding_context
