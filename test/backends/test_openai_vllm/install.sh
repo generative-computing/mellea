@@ -15,8 +15,20 @@ in-conda uv pip install pre-commit
 
 install-vllm-fork (){
 
-    # first, install vllm
-    uv pip install vllm==0.9.1
+    # find the most recent commit between the two code bases
+    dir=$(readlink -ef $(dirname $0))
+    branch="alora"  # Allow targeting other branches.
+
+    git clone --bare https://github.com/vllm-project/vllm.git $dir/vllm-commits
+    pushd $dir/vllm-commits
+    git remote add alora https://github.com/tdoublep/vllm.git
+    git fetch alora $branch
+    common_commit=$(git merge-base main alora/$branch)
+    popd
+    rm -rf $dir/vllm-commits
+
+    # install vllm from the most recent common commit
+    uv pip install "vllm @ git+https://github.com/vllm-project/vllm.git@$common_commit"
 
     # copying the shared objects that are missing in the custom build
     rsync -av --prune-empty-dirs --include="*/" --include="*.so" --exclude="*" ${CONDA_PREFIX}/lib/python3.12/site-packages/vllm/ vllm_backup/
