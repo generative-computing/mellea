@@ -15,7 +15,7 @@ from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext, SimpleCont
 @pytest.fixture(scope="module")
 def backend():
     """Shared Watson backend for all tests in this module."""
-    if os.environ.get("CICD") == 1:
+    if int(os.environ.get("CICD", 0)) == 1:
         pytest.skip("Skipping watsonx tests.")
     else:
         return WatsonxAIBackend(
@@ -26,7 +26,7 @@ def backend():
 
 @pytest.fixture(scope="function")
 def session(backend: WatsonxAIBackend):
-    if os.environ.get("CICD") == 1:
+    if int(os.environ.get("CICD", 0)) == 1:
         pytest.skip("Skipping watsonx tests.")
     else:
         """Fresh Watson session for each test."""
