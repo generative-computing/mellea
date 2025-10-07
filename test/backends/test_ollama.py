@@ -6,6 +6,7 @@ import pytest
 from typing_extensions import Annotated
 
 from mellea import start_session
+from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.types import ModelOption
 from mellea.stdlib.base import CBlock, SimpleContext
 from mellea.stdlib.requirement import Requirement, simple_validate
@@ -165,6 +166,27 @@ async def test_async_avalue(session):
     m1_final_val = await mot1.avalue()
     assert m1_final_val is not None
     assert m1_final_val == mot1.value
+
+def test_multiple_asyncio_runs(session):
+    async def test():
+        session.achat("hello")
+    
+    asyncio.run(test())
+    asyncio.run(test())
+
+def test_client_cache(session):
+    backend: OllamaModelBackend = session.backend
+    first_client = backend._async_client
+
+    async def get_second_client():
+        return backend._async_client
+    
+    second_client = asyncio.run(get_second_client())
+
+    items_in_cache = backend._client_cache.cache.values()
+    assert len(items_in_cache) == 2, "should be two clients in the cache since _async_client was called from two event loops"
+    assert first_client in items_in_cache
+    assert second_client in items_in_cache
 
 
 if __name__ == "__main__":

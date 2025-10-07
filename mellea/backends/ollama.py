@@ -18,7 +18,11 @@ from mellea.backends.tools import (
     add_tools_from_model_options,
 )
 from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import send_to_queue
+from mellea.helpers.async_helpers import (
+    ClientCache,
+    get_current_event_loop,
+    send_to_queue,
+)
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -68,6 +72,10 @@ class OllamaModelBackend(FormatterBackend):
         # Setup the client and ensure that we have the model available.
         self._base_url = base_url
         self._client = ollama.Client(base_url)
+
+        _async_client = ollama.AsyncClient(self._base_url)
+        self._client_cache = ClientCache(2)
+        self._client_cache.put(id(get_current_event_loop()), _async_client)
 
         if not self._check_ollama_server():
             err = f"could not create OllamaModelBackend: ollama server not running at {base_url}"
@@ -180,6 +188,17 @@ class OllamaModelBackend(FormatterBackend):
             return True
         except ollama.ResponseError:
             return False
+
+    @property
+    def _async_client(self) -> ollama.AsyncClient:
+        """Ollama's client gets tied to a specific event loop. Reset it if needed here."""
+        key = id(get_current_event_loop())
+
+        _async_client = self._client_cache.get(key)
+        if _async_client is None:
+            _async_client = ollama.AsyncClient(self._base_url)
+            self._client_cache.put(key, _async_client)
+        return _async_client
 
     def _simplify_and_merge(
         self, model_options: dict[str, Any] | None
@@ -318,13 +337,10 @@ class OllamaModelBackend(FormatterBackend):
                 add_tools_from_context_actions(tools, [action])
             FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
-        # Ollama ties its async client to an event loop so we have to create it here.
-        async_client = ollama.AsyncClient(self._base_url)
-
         # Generate a chat response from ollama, using the chat messages. Can be either type since stream is passed as a model option.
         chat_response: Coroutine[
             Any, Any, AsyncIterator[ollama.ChatResponse] | ollama.ChatResponse
-        ] = async_client.chat(
+        ] = self._async_client.chat(
             model=self._get_ollama_model_id(),
             messages=conversation,
             tools=list(tools.values()),
