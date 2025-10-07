@@ -7,6 +7,7 @@ import json
 import os
 import warnings
 from collections.abc import AsyncGenerator, Callable, Coroutine
+from dataclasses import fields
 from typing import Any
 
 from ibm_watsonx_ai import APIClient, Credentials
@@ -107,7 +108,8 @@ class WatsonxAIBackend(FormatterBackend):
         # These are usually values that must be extracted before hand or that are common among backend providers.
         self.to_mellea_model_opts_map_chats = {
             "system": ModelOption.SYSTEM_PROMPT,
-            "max_tokens": ModelOption.MAX_NEW_TOKENS,
+            "max_tokens": ModelOption.MAX_NEW_TOKENS,  # Is being deprecated in favor of `max_completion_tokens.`
+            "max_completion_tokens": ModelOption.MAX_NEW_TOKENS,
             "tools": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
         }
@@ -117,7 +119,7 @@ class WatsonxAIBackend(FormatterBackend):
         # will be omitted here so that they will be removed when model_options are processed
         # for the call to the model.
         self.from_mellea_model_opts_map_chats = {
-            ModelOption.MAX_NEW_TOKENS: "max_tokens"
+            ModelOption.MAX_NEW_TOKENS: "max_completion_tokens"
         }
 
         # See notes above.
@@ -159,7 +161,11 @@ class WatsonxAIBackend(FormatterBackend):
 
     def filter_chat_completions_kwargs(self, model_options: dict) -> dict:
         """Filter kwargs to only include valid watsonx chat.completions.create parameters."""
-        chat_params = TextChatParameters.get_sample_params().keys()
+        # TextChatParameters.get_sample_params().keys() can't be completely trusted. It doesn't always contain all
+        # all of the accepted keys. In version 1.3.39, max_tokens was removed even though it's still accepted.
+        # It's a dataclass so use the fields function to get the names.
+        # TODO: Look at litellm error: litellm will automatically drop the following openai keys that aren't supported by the current model/provider: max_completion_tokens
+        chat_params = {field.name for field in fields(TextChatParameters)}
         return {k: v for k, v in model_options.items() if k in chat_params}
 
     def _simplify_and_merge(
