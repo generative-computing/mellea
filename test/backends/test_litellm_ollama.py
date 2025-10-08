@@ -1,4 +1,5 @@
 import asyncio
+import os
 import pytest
 
 from mellea import MelleaSession, generative
@@ -14,6 +15,7 @@ def backend(gh_run: int):
     if gh_run == 1:
         return LiteLLMBackend(
             model_id="ollama_chat/llama3.2:1b",
+            base_url=os.environ.get("OLLAMA_HOST", "http://localhost:11434")
         )
     else:
         return LiteLLMBackend()
@@ -25,8 +27,8 @@ def session(backend):
     yield session
     session.reset()
 
-# Use capfd to check that the logging is working.
-def test_make_backend_specific_and_remove(capfd):
+# Use capsys to check that the logging is working.
+def test_make_backend_specific_and_remove(capsys):
     # Doesn't need to be a real model here; just a provider that LiteLLM knows about.
     backend = LiteLLMBackend(model_id="ollama_chat/")
     
@@ -41,7 +43,7 @@ def test_make_backend_specific_and_remove(capfd):
     mellea = backend._simplify_and_merge(params)
     backend_specific = backend._make_backend_specific_and_remove(mellea)
 
-    out = capfd.readouterr()
+    out = capsys.readouterr()
 
     # All of these options should be in the model options that get passed to LiteLLM since it handles the dropping.
     assert "max_completion_tokens" in backend_specific, "max_tokens should get remapped to max_completion_tokens for ollama_chat/"

@@ -34,6 +34,7 @@ def session(backend: WatsonxAIBackend):
         yield session
         session.reset()
 
+@pytest.mark.qualitative
 def test_filter_chat_completions_kwargs(backend: WatsonxAIBackend):
     """Detect changes to the WatsonxAI TextChatParameters."""
     
