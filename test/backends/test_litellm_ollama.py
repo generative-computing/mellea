@@ -13,10 +13,17 @@ from mellea.stdlib.sampling import RejectionSamplingStrategy
 def backend(gh_run: int):
     """Shared OpenAI backend configured for Ollama."""
     if gh_run == 1:
+        # LiteLLM prepends 127.0.0.1 with a `/` which causes issues.
+        url = os.environ.get("OLLAMA_HOST", None)
+        if url is None:
+            url = "http://localhost:11434"
+        else:
+            url = url.replace("127.0.0.1", "http://localhost")
+
         return LiteLLMBackend(
             model_id="ollama_chat/llama3.2:1b",
-            base_url=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
-            model_options={"api_base": os.environ.get("OLLAMA_HOST", "http://localhost:11434")}
+            base_url=url,
+            model_options={"api_base": url}
         )
     else:
         return LiteLLMBackend()
