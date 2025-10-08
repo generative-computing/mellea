@@ -73,9 +73,10 @@ class OllamaModelBackend(FormatterBackend):
         self._base_url = base_url
         self._client = ollama.Client(base_url)
 
-        _async_client = ollama.AsyncClient(self._base_url)
         self._client_cache = ClientCache(2)
-        self._client_cache.put(id(get_current_event_loop()), _async_client)
+
+        # Call once to set up an async client and prepopulate the cache.
+        _ = self._async_client
 
         if not self._check_ollama_server():
             err = f"could not create OllamaModelBackend: ollama server not running at {base_url}"

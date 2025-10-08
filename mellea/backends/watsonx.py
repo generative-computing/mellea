@@ -97,19 +97,12 @@ class WatsonxAIBackend(FormatterBackend):
             self._project_id = os.environ.get("WATSONX_PROJECT_ID")
 
         self._creds = Credentials(url=base_url, api_key=api_key)
-        _client = APIClient(credentials=self._creds)
         self._kwargs = kwargs
-        _model_inference = ModelInference(
-            model_id=self._get_watsonx_model_id(),
-            api_client=_client,
-            credentials=self._creds,
-            project_id=self._project_id,
-            params=self.model_options,
-            **self._kwargs,
-        )
 
         self._client_cache = ClientCache(2)
-        self._client_cache.put(id(get_current_event_loop()), _model_inference)
+
+        # Call once to set up the model inference and prepopulate the cache.
+        _ = self._model
 
         # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
         # These are usually values that must be extracted before hand or that are common among backend providers.
