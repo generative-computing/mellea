@@ -46,7 +46,8 @@ class LiteLLMBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str = "ollama/" + str(model_ids.IBM_GRANITE_4_MICRO_3B.ollama_name),
+        model_id: str = "ollama_chat/"
+        + str(model_ids.IBM_GRANITE_4_MICRO_3B.ollama_name),
         formatter: Formatter | None = None,
         base_url: str | None = "http://localhost:11434",
         model_options: dict | None = None,
@@ -98,7 +99,7 @@ class LiteLLMBackend(FormatterBackend):
         # These options should almost always be a subset of those specified in the `to_mellea_model_opts_map`.
         # Usually, values that are intentionally extracted while prepping for the backend generate call
         # will be omitted here so that they will be removed when model_options are processed
-        # for the call to the model.
+        # for the call to the model. For LiteLLM, this dict might change slightly depending on the provider.
         self.from_mellea_model_opts_map = {
             ModelOption.SEED: "seed",
             ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
@@ -172,15 +173,9 @@ class LiteLLMBackend(FormatterBackend):
         Returns:
             a new dict
         """
-        backend_specific = ModelOption.replace_keys(
-            model_options, self.from_mellea_model_opts_map
-        )
-        backend_specific = ModelOption.remove_special_keys(backend_specific)
-
         # We set `drop_params=True` which will drop non-supported openai params; check for non-openai
         # params that might cause errors and log which openai params aren't supported here.
         # See https://docs.litellm.ai/docs/completion/input.
-        # standard_openai_subset = litellm.get_standard_openai_params(backend_specific)
         supported_params_list = litellm.litellm_core_utils.get_supported_openai_params.get_supported_openai_params(
             self._model_id
         )
@@ -188,23 +183,47 @@ class LiteLLMBackend(FormatterBackend):
             set(supported_params_list) if supported_params_list is not None else set()
         )
 
-        # unknown_keys = []  # keys that are unknown to litellm
-        unsupported_openai_params = []  # openai params that are known to litellm but not supported for this model/provider
+        # LiteLLM specific remappings (typically based on provider). There's a few cases where the provider accepts
+        # different parameters than LiteLLM says it does. Here's a few rules that help in those scenarios.
+        model_opts_remapping = self.from_mellea_model_opts_map.copy()
+        if (
+            "max_completion_tokens" not in supported_params
+            and "max_tokens" in supported_params
+        ):
+            # Scenario hit by Watsonx. LiteLLM believes Watsonx doesn't accept "max_completion_tokens" even though
+            # OpenAI compatible endpoints should accept both (and Watsonx does accept both).
+            model_opts_remapping[ModelOption.MAX_NEW_TOKENS] = "max_tokens"
+
+        backend_specific = ModelOption.replace_keys(model_options, model_opts_remapping)
+        backend_specific = ModelOption.remove_special_keys(backend_specific)
+
+        # Since LiteLLM has many different providers, we add some additional parameter logging here.
+        # There's two sets of parameters we have to look at:
+        #   - unsupported_openai_params: standard OpenAI parameters that LiteLLM will automatically drop for us when `drop_params=True` if the provider doesn't support them.
+        #   - unknown_keys: parameters that LiteLLM doesn't know about, aren't standard OpenAI parameters, and might be used by the provider. We don't drop these.
+        # We want to flag both for the end user.
+        standard_openai_subset = litellm.get_standard_openai_params(backend_specific)
+        unknown_keys = []  # Keys that are unknown to litellm.
+        unsupported_openai_params = []  # OpenAI params that are known to litellm but not supported for this model/provider.
         for key in backend_specific.keys():
             if key not in supported_params:
-                unsupported_openai_params.append(key)
+                if key in standard_openai_subset:
+                    # LiteLLM is pretty confident that this standard OpenAI parameter won't work.
+                    unsupported_openai_params.append(key)
+                else:
+                    # LiteLLM doesn't make any claims about this parameter; we won't drop it but we will keep track of it..
+                    unknown_keys.append(key)
 
-        # if len(unknown_keys) > 0:
-        #     FancyLogger.get_logger().warning(
-        #         f"litellm allows for unknown / non-openai input params; mellea won't validate the following params that may cause issues: {', '.join(unknown_keys)}"
-        #     )
+        if len(unknown_keys) > 0:
+            FancyLogger.get_logger().warning(
+                f"litellm allows for unknown / non-openai input params; mellea won't validate the following params that may cause issues: {', '.join(unknown_keys)}"
+            )
 
         if len(unsupported_openai_params) > 0:
             FancyLogger.get_logger().warning(
-                f"litellm will automatically drop the following openai keys that aren't supported by the current model/provider: {', '.join(unsupported_openai_params)}"
+                f"litellm may drop the following openai keys that it doesn't seem to recognize as being supported by the current model/provider: {', '.join(unsupported_openai_params)}"
+                "\nThere are sometimes false positives here."
             )
-            for key in unsupported_openai_params:
-                del backend_specific[key]
 
         return backend_specific
 
