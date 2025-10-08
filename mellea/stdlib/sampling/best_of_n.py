@@ -1,3 +1,5 @@
+"""Best of N Sampling Strategy."""
+
 from copy import deepcopy
 
 import tqdm
@@ -13,16 +15,14 @@ from mellea.stdlib.sampling import BaseSamplingStrategy, SamplingResult
 
 
 class BestofNSamplingStrategy(BaseSamplingStrategy):
-    """
-    Sampling strategy that selects the best response from a set of samples as given by a Requirement Scorer
-    """
+    """Sampling strategy that selects the best response from a set of samples as given by a Requirement Scorer."""
 
     async def sample(
         self,
         action: Component,
         context: Context,
         backend: Backend,
-        requirements: list[Requirement],
+        requirements: list[Requirement] | None,
         *,
         validation_ctx: Context | None = None,
         format: type[BaseModelSubclass] | None = None,
@@ -35,9 +35,13 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
         Args:
             action : The action object to be sampled.
             context: The context to be passed to the sampling strategy.
-            show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
+            backend: The backend used for generating samples.
             requirements: List of requirements to test against (merged with global requirements).
             validation_ctx: Optional context to use for validation. If None, validation_ctx = ctx.
+            format: output format for structured outputs.
+            model_options: model options to pass to the backend during generation / validation.
+            tool_calls: True if tool calls should be used during this sampling strategy.
+            show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
 
         Returns:
             SamplingResult: A result object indicating the success or failure of the sampling process.
@@ -123,7 +127,7 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
             result = sampled_results[i]
             next_action = sampled_actions[i]
 
-            val_scores_co = mfuncs._validate(
+            val_scores_co = mfuncs.avalidate(
                 reqs=reqs,
                 context=result_ctx,
                 backend=backend,
@@ -236,8 +240,16 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
         sampled_results: list[ModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
-        # select attempt with highest ScoreRequirementScore if all loops fail
+        """Selects the attempt with the highest score.
 
+        Args:
+            sampled_actions: List of actions that have been executed (without success).
+            sampled_results: List of (unsuccessful) generation results for these actions.
+            sampled_val: List of validation results for the results.
+
+        Returns:
+            The index of the result that should be selected as `.value`.
+        """
         scores: list[float | None] = []
 
         for sample in sampled_val:
@@ -258,6 +270,18 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
+        """Adds a description of the requirements that failed to a copy of the original instruction.
+
+        Args:
+            old_ctx: The context WITHOUT the last action + output.
+            new_ctx: The context including the last action + output.
+            past_actions: List of actions that have been executed (without success).
+            past_results: List of (unsuccessful) generation results for these actions.
+            past_val: List of validation results for the results.
+
+        Returns:
+            The next action component and context to be used for the next generation attempt.
+        """
         pa = past_actions[-1]
         if isinstance(pa, Instruction):
             last_failed_reqs: list[Requirement] = [

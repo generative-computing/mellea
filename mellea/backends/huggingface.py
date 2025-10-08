@@ -332,6 +332,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             input_ids = self._tokenizer.apply_chat_template(  # type: ignore
                 ctx_as_conversation,
                 tools=convert_tools_to_json(tools),  # type: ignore
+                add_generation_prompt=True,
                 return_tensors="pt",
                 **self._make_backend_specific_and_remove(model_options),
             ).to(self._device)  # type: ignore
@@ -379,12 +380,16 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             # Create a separate thread to handle the processing. Make it awaitable
             # for non-streaming cases and to get the final output.
             # Details: https://huggingface.co/docs/transformers/en/internal/generation_utils#transformers.AsyncTextIteratorStreamer
+
+            # Filter out chat template-only options before passing to generate()
+            generate_options = self._filter_chat_template_only_options(model_options)
+
             chat_response = asyncio.to_thread(
                 self._model.generate,  # type: ignore
                 input_ids,
                 return_dict_in_generate=True,
                 output_scores=True,
-                **self._make_backend_specific_and_remove(model_options),
+                **self._make_backend_specific_and_remove(generate_options),
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
             )
@@ -401,6 +406,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 self.post_processing,
                 conversation=ctx_as_conversation,
                 input_ids=input_ids,
+                format=format,
                 tool_calls=tool_calls,
                 tools=tools,
                 seed=seed,
@@ -457,6 +463,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         self,
         mot: ModelOutputThunk,
         conversation: list[dict],
+        format: type[BaseModelSubclass] | None,
         tool_calls: bool,
         tools: dict[str, Callable],
         seed,
@@ -669,6 +676,26 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         )
         return ModelOption.remove_special_keys(backend_specific)
 
+    def _filter_chat_template_only_options(
+        self, model_options: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Remove options that are only for apply_chat_template, not for generate().
+
+        Args:
+            model_options: the model_options for this call
+
+        Returns:
+            a new dict without chat template-specific options
+        """
+        # Options that should only go to apply_chat_template, not generate()
+        chat_template_only = {
+            "guardian_config",
+            "think",
+            "add_generation_prompt",
+            "documents",
+        }
+        return {k: v for k, v in model_options.items() if k not in chat_template_only}
+
     def _extract_model_tool_requests(
         self, tools: dict[str, Callable], decoded_result: str
     ) -> dict[str, ModelToolCall] | None:
@@ -762,10 +789,12 @@ class HFAlora(Alora, abc.ABC):
 
 
 class HFProcessRewardModel(PRM, abc.ABC):
+    """A Process Reward Model that works with a huggingface backend."""
+
     def __init__(
         self, model_name_or_path: str, score_token: str, device: str | None = None
     ):
-        """Initialize an PRM that works with a huggingface backend. Currently supports and tested with IBM Process Reward Models
+        """Initialize an PRM that works with a huggingface backend. Currently supports and tested with IBM Process Reward Models.
 
         Args:
             model_name_or_path (str): A local path to PRM or a huggingface PRM
@@ -800,13 +829,12 @@ class HFProcessRewardModel(PRM, abc.ABC):
         )[0]
 
     def stepify(self, content: str, step_separator: str) -> list[str]:
-        """Splits the assistant response into steps to score
+        """Splits the assistant response into steps to score.
 
         Args:
             content: assistant response to score
             step_separator: string on which to separate the content into steps
         """
-
         # convert assistant message into a list of steps
         list_of_steps = [
             step.strip() for step in content.split(step_separator) if step.strip != ""

@@ -46,12 +46,14 @@ class LiteLLMBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str = "ollama/" + str(model_ids.IBM_GRANITE_3_3_8B.ollama_name),
+        model_id: str = "ollama/" + str(model_ids.IBM_GRANITE_4_MICRO_3B.ollama_name),
         formatter: Formatter | None = None,
         base_url: str | None = "http://localhost:11434",
         model_options: dict | None = None,
     ):
         """Initialize and OpenAI compatible backend. For any additional kwargs that you need to pass the the client, pass them as a part of **kwargs.
+
+        Note: If getting `Unclosed client session`, set `export DISABLE_AIOHTTP_TRANSPORT=True` in your environment. See: https://github.com/BerriAI/litellm/issues/13251.
 
         Args:
             model_id : The LiteLLM model identifier. Make sure that all necessary credentials are in OS environment variables.
@@ -293,6 +295,7 @@ class LiteLLMBackend(FormatterBackend):
             conversation=conversation,
             tools=tools,
             thinking=thinking,
+            format=format,
         )
 
         try:
@@ -318,7 +321,8 @@ class LiteLLMBackend(FormatterBackend):
     ):
         """Called during generation to add information from a single ModelResponse or a chunk / ModelResponseStream to the ModelOutputThunk.
 
-        For LiteLLM, tool call parsing is handled in the post processing step."""
+        For LiteLLM, tool call parsing is handled in the post processing step.
+        """
         if mot._thinking is None:
             mot._thinking = ""
         if mot._underlying_value is None:
@@ -369,6 +373,7 @@ class LiteLLMBackend(FormatterBackend):
         conversation: list[dict],
         tools: dict[str, Callable],
         thinking,
+        format,
     ):
         """Called when generation is done."""
         # Reconstruct the chat_response from chunks if streamed.

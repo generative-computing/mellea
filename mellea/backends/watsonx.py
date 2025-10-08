@@ -64,8 +64,8 @@ class WatsonxAIBackend(FormatterBackend):
             model_options : Global model options to pass to the model. Defaults to None.
             api_key : watsonx API key. Defaults to None.
             project_id : watsonx project ID. Defaults to None.
+            kwargs : extra kwargs passed to model inference creation.
         """
-
         # There are bugs with the Watsonx python sdk related to async event loops;
         # using the same watsonx backend across multiple event loops causes errors.
         warnings.warn(
@@ -90,7 +90,7 @@ class WatsonxAIBackend(FormatterBackend):
         if api_key is None:
             api_key = os.environ.get("WATSONX_API_KEY")
         if project_id is None:
-            project_id = os.environ.get("WATSONX_PROJECT_ID")
+            self._project_id = os.environ.get("WATSONX_PROJECT_ID")
 
         self._creds = Credentials(url=base_url, api_key=api_key)
         _client = APIClient(credentials=self._creds)
@@ -98,7 +98,7 @@ class WatsonxAIBackend(FormatterBackend):
             model_id=self._get_watsonx_model_id(),
             api_client=_client,
             credentials=self._creds,
-            project_id=project_id,
+            project_id=self._project_id,
             params=self.model_options,
             **kwargs,
         )
@@ -135,7 +135,14 @@ class WatsonxAIBackend(FormatterBackend):
     @property
     def _model(self) -> ModelInference:
         """Watsonx's client gets tied to a specific event loop. Reset it here."""
-        self._model_inference.set_api_client(APIClient(self._creds))
+        _client = APIClient(credentials=self._creds)
+        self._model_inference = ModelInference(
+            model_id=self._get_watsonx_model_id(),
+            api_client=_client,
+            credentials=self._creds,
+            project_id=self._project_id,
+            params=self.model_options,
+        )
         return self._model_inference
 
     def _get_watsonx_model_id(self) -> str:
@@ -169,6 +176,7 @@ class WatsonxAIBackend(FormatterBackend):
 
         Args:
             model_options: the model_options for this call
+            is_chat_context: set to True if used for chat completion apis
 
         Returns:
             a new dict
@@ -194,6 +202,7 @@ class WatsonxAIBackend(FormatterBackend):
 
         Args:
             model_options: the model_options for this call
+            is_chat_context: set to True if used for chat completion apis
 
         Returns:
             a new dict
@@ -340,6 +349,7 @@ class WatsonxAIBackend(FormatterBackend):
             conversation=conversation,
             tools=tools,
             seed=model_opts.get(ModelOption.SEED, None),
+            format=format,
         )
 
         try:
@@ -361,7 +371,8 @@ class WatsonxAIBackend(FormatterBackend):
     async def processing(self, mot: ModelOutputThunk, chunk: dict):
         """Called during generation to add information from a single ChatCompletion or ChatCompletionChunk to the ModelOutputThunk.
 
-        For OpenAI-like APIs, tool call parsing is handled in the post processing step."""
+        For OpenAI-like APIs, tool call parsing is handled in the post processing step.
+        """
         if mot._thinking is None:
             mot._thinking = ""
         if mot._underlying_value is None:
@@ -406,6 +417,7 @@ class WatsonxAIBackend(FormatterBackend):
         conversation: list[dict],
         tools: dict[str, Callable],
         seed,
+        format,
     ):
         """Called when generation is done."""
         # Reconstruct the chat_response from chunks if streamed.

@@ -32,6 +32,7 @@ class Message(Component):
         Args:
             role (str): The role that this message came from (e.g., user, assistant).
             content (str): The content of the message.
+            images (list[ImageBlock]): The images associated with the message if any.
         """
         self.role = role
         self.content = content
