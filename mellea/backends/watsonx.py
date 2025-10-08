@@ -164,7 +164,6 @@ class WatsonxAIBackend(FormatterBackend):
         # TextChatParameters.get_sample_params().keys() can't be completely trusted. It doesn't always contain all
         # all of the accepted keys. In version 1.3.39, max_tokens was removed even though it's still accepted.
         # It's a dataclass so use the fields function to get the names.
-        # TODO: Look at litellm error: litellm will automatically drop the following openai keys that aren't supported by the current model/provider: max_completion_tokens
         chat_params = {field.name for field in fields(TextChatParameters)}
         return {k: v for k, v in model_options.items() if k in chat_params}
 
