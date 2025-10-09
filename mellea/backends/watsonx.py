@@ -40,6 +40,8 @@ from mellea.stdlib.base import (
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement  # type: ignore
 
+format: int = 1  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
+
 
 class WatsonxAIBackend(FormatterBackend):
     """A generic backend class for watsonx SDK."""
@@ -236,7 +238,7 @@ class WatsonxAIBackend(FormatterBackend):
         mot = self.generate_from_chat_context(
             action,
             ctx,
-            format=format,
+            _format=format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
@@ -247,7 +249,7 @@ class WatsonxAIBackend(FormatterBackend):
         action: Component | CBlock,
         ctx: Context,
         *,
-        format: type[BaseModelSubclass]
+        _format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
@@ -278,12 +280,12 @@ class WatsonxAIBackend(FormatterBackend):
             conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([{"role": m.role, "content": m.content} for m in messages])
 
-        if format is not None:
+        if _format is not None:
             model_opts["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
-                    "name": format.__name__,
-                    "schema": format.model_json_schema(),
+                    "name": _format.__name__,
+                    "schema": _format.model_json_schema(),
                     "strict": True,
                 },
             }
@@ -293,7 +295,7 @@ class WatsonxAIBackend(FormatterBackend):
         # Append tool call information if applicable.
         tools: dict[str, Callable] = {}
         if tool_calls:
-            if format:
+            if _format:
                 FancyLogger.get_logger().warning(
                     f"tool calling is superseded by format; will not call tools for request: {action}"
                 )
@@ -349,7 +351,7 @@ class WatsonxAIBackend(FormatterBackend):
             conversation=conversation,
             tools=tools,
             seed=model_opts.get(ModelOption.SEED, None),
-            format=format,
+            _format=_format,
         )
 
         try:
@@ -417,7 +419,7 @@ class WatsonxAIBackend(FormatterBackend):
         conversation: list[dict],
         tools: dict[str, Callable],
         seed,
-        format,
+        _format,
     ):
         """Called when generation is done."""
         # Reconstruct the chat_response from chunks if streamed.
@@ -455,7 +457,7 @@ class WatsonxAIBackend(FormatterBackend):
         generate_log.date = datetime.datetime.now()
         generate_log.model_output = mot._meta["oai_chat_response"]
         generate_log.extra = {
-            "format": format,
+            "format": _format,
             "tools_available": tools,
             "tools_called": mot.tool_calls,
             "seed": seed,

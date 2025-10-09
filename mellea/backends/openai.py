@@ -51,6 +51,8 @@ if TYPE_CHECKING:
 
 openai_ollama_batching_error = "json: cannot unmarshal array into Go struct field CompletionRequest.prompt of type string"
 
+format: int = 1  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
+
 
 class _ServerType(Enum):
     LOCALHOST = 1
@@ -282,7 +284,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         mot = self.generate_from_chat_context(
             action,
             ctx,
-            format=format,
+            _format=format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
@@ -293,7 +295,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         action: Component | CBlock,
         ctx: Context,
         *,
-        format: type[BaseModelSubclass]
+        _format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
@@ -311,13 +313,13 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                 reroute_to_alora = True
             if reroute_to_alora:
                 return self._generate_from_chat_context_alora(
-                    action, ctx, format=format, model_options=model_options
+                    action, ctx, _format=_format, model_options=model_options
                 )
 
         return self._generate_from_chat_context_standard(
             action,
             ctx,
-            format=format,
+            _format=_format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
@@ -327,7 +329,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         action: Component | CBlock,
         ctx: Context,
         *,
-        format: type[BaseModelSubclass]
+        _format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
     ) -> ModelOutputThunk:
@@ -352,7 +354,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         assert alora_for_this_request is not None
         assert type(user_message) is str
         assert type(assistant_message) is str
-        assert format is None, "Structured outputs are not supported by ALoRAs."
+        assert _format is None, "Structured outputs are not supported by ALoRAs."
 
         model_opts = self._simplify_and_merge(model_options, is_chat_context=True)
 
@@ -413,7 +415,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         action: Component | CBlock,
         ctx: Context,
         *,
-        format: type[BaseModelSubclass]
+        _format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
@@ -442,12 +444,12 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([self.message_to_openai_message(m) for m in messages])
 
-        if format is not None:
+        if _format is not None:
             response_format = {
                 "type": "json_schema",
                 "json_schema": {
-                    "name": format.__name__,
-                    "schema": format.model_json_schema(),
+                    "name": _format.__name__,
+                    "schema": _format.model_json_schema(),
                     "strict": True,
                 },
             }
@@ -457,7 +459,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         # Append tool call information if applicable.
         tools: dict[str, Callable] = dict()
         if tool_calls:
-            if format:
+            if _format:
                 FancyLogger.get_logger().warning(
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
@@ -506,7 +508,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             conversation=conversation,
             thinking=thinking,
             seed=model_opts.get(ModelOption.SEED, None),
-            format=format,
+            _format=_format,
         )
 
         try:
@@ -575,7 +577,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         conversation: list[dict],
         thinking,
         seed,
-        format,
+        _format,
     ):
         """Called when generation is done."""
         # Reconstruct the chat_response from chunks if streamed.
@@ -613,7 +615,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         generate_log.date = datetime.datetime.now()
         generate_log.model_output = mot._meta["oai_chat_response"]
         generate_log.extra = {
-            "format": format,
+            "format": _format,
             "thinking": thinking,
             "tools_available": tools,
             "tools_called": mot.tool_calls,
