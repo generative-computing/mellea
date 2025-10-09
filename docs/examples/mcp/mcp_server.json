@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "mellea_mcp_server": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "<ABSOLUTE PATH>/mellea/docs/examples/mcp",
+        "run",
+        "mcp",
+        "run",
+        "mcp_example.py"
+      ]
+    }
+  }
+}
