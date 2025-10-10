@@ -22,6 +22,9 @@ from pydantic import BaseModel, Field, create_model
 import mellea.stdlib.funcs as mfuncs
 from mellea.backends import Backend
 from mellea.stdlib.base import Component, Context, TemplateRepresentation
+from mellea.stdlib.requirement import Requirement, reqify
+from mellea.stdlib.sampling.base import RejectionSamplingStrategy
+from mellea.stdlib.sampling.types import SamplingStrategy
 from mellea.stdlib.session import MelleaSession
 
 P = ParamSpec("P")
@@ -330,7 +333,8 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
         if extracted.session is not None:
             response = extracted.session.act(
                 slot_copy,
-                strategy=None,
+                requirements=self._requirements,
+                strategy=self._strategy,
                 format=response_model,
                 model_options=extracted.model_options,
             )
@@ -425,7 +429,8 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                     slot_copy,
                     extracted.context,
                     extracted.backend,
-                    strategy=None,
+                    requirements=self._requirements,
+                    strategy=self._strategy,                    
                     format=response_model,
                     model_options=extracted.model_options,
                 )
@@ -445,10 +450,14 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
 @overload
 def generative(func: Callable[P, Awaitable[R]]) -> AsyncGenerativeSlot[P, R]: ...  # type: ignore
 
-
 @overload
 def generative(func: Callable[P, R]) -> SyncGenerativeSlot[P, R]: ...
 
+# @overload
+# # def generative(*, requirements: list[Requirement | str] | None = None, strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2)
+# #         ) -> Callable[[Callable[P, R]], GenerativeSlot[P, R]]:...
+# def generative(*, requirements: list[Requirement | str] | None = None, strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2)
+#         ) -> Callable[[Callable[P, R]], SyncGenerativeSlot[P, R]] | Callable[[Callable[P, Awaitable[R]]], AsyncGenerativeSlot[P, R]]:...
 
 def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
     """Convert a function into an AI-powered function.
@@ -552,10 +561,21 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         >>>
         >>> reasoning = generate_chain_of_thought(session, "How to optimize a slow database query?")
     """
-    if inspect.iscoroutinefunction(func):
-        return AsyncGenerativeSlot(func)
-    else:
-        return SyncGenerativeSlot(func)
+    # Grab and remove the func if it exists in kwargs. Otherwise, it's the only arg.
+    def _generative(func) -> GenerativeSlot[P, R]:
+        if inspect.iscoroutinefunction(func):
+            return AsyncGenerativeSlot(func)
+        else:
+            return SyncGenerativeSlot(func)
+
+    if func is not None:
+        # If there is a function passed in, we can apply the decorator immediately.
+        return _generative(func)
+
+    # If no function is passed in, the decorator is being called as @generative(...);
+    # need to return the _generative function with parameters in its closure. This will then
+    # be used as the decorator.
+    return _generative
 
 
 # Export the decorator as the interface
