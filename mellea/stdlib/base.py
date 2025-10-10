@@ -22,11 +22,23 @@ from mellea.helpers.fancy_logger import FancyLogger
 class CBlock:
     """A `CBlock` is a block of content that can serve as input to or output from an LLM."""
 
-    def __init__(self, value: str | None, meta: dict[str, Any] | None = None):
-        """Initializes the CBlock with a string and some metadata."""
+    def __init__(
+        self,
+        value: str | None,
+        meta: dict[str, Any] | None = None,
+        *,
+        cache: bool = False,
+    ):
+        """Initializes the CBlock with a string and some metadata.
+
+        Args:
+            value: the underlying value stored in this CBlock
+            meta: Any meta-information about this CBlock (e.g., the inference engine's Completion object).
+            cache: If set to `True` then this CBlock's KV cache might be stored by the inference engine. Experimental."""
         if value is not None and not isinstance(value, str):
             raise TypeError("value to a Cblock should always be a string or None")
         self._underlying_value = value
+        self.cache = cache
         if meta is None:
             meta = {}
         self._meta = meta
