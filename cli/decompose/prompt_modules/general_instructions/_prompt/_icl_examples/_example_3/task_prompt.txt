@@ -1,0 +1,13 @@
+Your task is to condense the summary to fit within the 600 character limit and format it into 3 paragraphs or less. 
+
+First, review the news article understanding and celebrity inclusion from the previous steps:
+<news_article_understanding>
+{{ARTICLE_UNDERSTANDING}}
+</news_article_understanding>
+<celebrity_inclusion>
+{{CELEBRITY_INCLUSION}}
+</celebrity_inclusion>
+
+Next, condense the summary while maintaining the essential information and the inclusion of the celebrity name. Ensure the summary is concise and clear.
+
+Finally, format the condensed summary into 3 paragraphs or less, ensuring it does not exceed the 600 character limit.
