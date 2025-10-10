@@ -6,7 +6,13 @@ from copy import deepcopy
 
 import jinja2
 
-from mellea.stdlib.base import CBlock, Component, TemplateRepresentation, blockify
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    ImageBlock,
+    TemplateRepresentation,
+    blockify,
+)
 from mellea.stdlib.requirement import Requirement, reqify
 
 
@@ -22,6 +28,7 @@ class Instruction(Component):
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
+        images: list[ImageBlock] | None = None,
     ):
         """Initializes an instruction. All strings will be converted into CBlocks.
 
@@ -33,6 +40,7 @@ class Instruction(Component):
             user_variables (Dict[str, str]): A dict of user-defined variables used to fill in Jinja placeholders in other parameters. This requires that all other provided parameters are provided as strings.
             prefix (Optional[str | CBlock]): A prefix string or ContentBlock to use when generating the instruction.
             output_prefix (Optional[str | CBlock]): A string or ContentBlock that defines a prefix for the output generation. Usually you do not need this.
+            images (Optional[List[ImageCBlock]]): A list of images to use in the instruction.
         """
         requirements = [] if requirements is None else requirements
         icl_examples = [] if icl_examples is None else icl_examples
@@ -108,6 +116,7 @@ class Instruction(Component):
         self._output_prefix = (
             blockify(output_prefix) if output_prefix is not None else None
         )
+        self._images = images
         self._repair_string: str | None = None
 
     def parts(self):
@@ -138,6 +147,7 @@ class Instruction(Component):
                 "repair": self._repair_string,
             },
             tools=None,
+            images=self._images,
             template_order=["*", "Instruction"],
         )
 

@@ -1,6 +1,6 @@
-from mellea import LinearContext, generative, start_session
+from mellea import generative, start_session
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock
+from mellea.stdlib.base import CBlock, ChatContext
 
 # Generative slots can be used with sessions that have context.
 # By utilizing context, you can change the results of several
@@ -34,7 +34,7 @@ def give_feedback(essay: str) -> list[str]:
 
 if __name__ == "__main__":
     m = start_session(
-        ctx=LinearContext(), model_options={ModelOption.MAX_NEW_TOKENS: 100}
+        ctx=ChatContext(), model_options={ModelOption.MAX_NEW_TOKENS: 100}
     )
 
     text = """
@@ -55,7 +55,7 @@ or literally.
 
     # If you have a set of generative functions, you can tweak them all by
     # adding context to the session they are running in.
-    m.ctx.insert(
+    m.ctx = m.ctx.add(
         CBlock(
             "You are an elementary school teacher. "
             "Any grades and feedback that you give should keep that in mind. Remember to be "
@@ -74,7 +74,7 @@ or literally.
 
     # And, let's reset the context and try a different grading style.
     m.reset()
-    m.ctx.insert(
+    m.ctx = m.ctx.add(
         CBlock(
             "You are a grammarian that is focused solely on spelling and syntax, "
             "not on the content of essays. When giving grades and feedback, focus "

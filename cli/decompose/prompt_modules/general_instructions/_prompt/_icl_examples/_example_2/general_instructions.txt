@@ -1,0 +1,15 @@
+Analyze the retrieved information to identify any trends, such as table size distribution, data types used, or indexing strategies. Look for inefficiencies, such as unused tables, redundant indexes, or suboptimal data types. Also, identify potential issues, such as tables nearing storage limits or indexes that may be causing performance bottlenecks.
+
+Consider the following aspects during your analysis:
+- Table organization and structure
+- Indexing strategies and their effectiveness
+- Data distribution and potential hotspots
+- Storage usage and potential capacity issues
+
+Provide optimization suggestions to improve the performance, efficiency, and maintainability of the tables in the provided tablespace. These suggestions could include:
+- Reorganizing tables for better data locality
+- Adjusting indexing strategies for improved query performance
+- Implementing data compression or encryption
+- Recommending changes to data types for better storage efficiency
+
+Your analysis and suggestions should be concise, clear, and directly relevant to the information retrieved about the tables in the provided tablespace.

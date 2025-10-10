@@ -17,14 +17,10 @@ from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
     Component,
-    Context,
-    LinearContext,
     ModelOutputThunk,
-    SimpleContext,
     TemplateRepresentation,
 )
 from mellea.stdlib.chat import Message, ToolMessage
-from mellea.stdlib.mobject import Query, Transform
 
 
 class Formatter(abc.ABC):
@@ -36,15 +32,13 @@ class Formatter(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def print_context(self, ctx: Context) -> str:
-        """Renders a Context for input to a model."""
-        ...
-
-    @abc.abstractmethod
     def parse(
         self, source_component: Component | CBlock, result: ModelOutputThunk
     ) -> ModelOutputThunk:
-        """Parses the output from a model."""
+        """Parses the output from a model and sets the parsed_repr of the result ModelOutputThunk.
+
+        Returns the ModelOutputThunk that was passed in.
+        """
         ...
 
     def to_chat_messages(self, cs: list[Component | CBlock]) -> list[Message]:
@@ -71,6 +65,14 @@ class Formatter(abc.ABC):
             match c:
                 case Message():
                     return c
+                case Component():
+                    images = None
+                    tr = c.format_for_llm()
+                    if isinstance(tr, TemplateRepresentation):
+                        images = tr.images
+
+                    # components can have images
+                    return Message(role=role, content=self.print(c), images=images)
                 case _:
                     return Message(role=role, content=self.print(c))
 
@@ -159,23 +161,6 @@ class TemplateFormatter(Formatter, abc.ABC):
                 return Message(role="assistant", content=result.value)
         else:
             return result
-
-    def print_context(self, ctx: Context) -> str:
-        """Renders a Context for input to a model."""
-        assert not ctx.is_chat_context, (
-            "Chat contexts should be handled in a backend by first using `Formatter.to_chat_messages` and then passing the dict to an API endpoint or using hf.apply_chat_template."
-        )
-        match ctx:
-            case LinearContext():
-                linearized_ctx = ctx.render_for_generation()
-                assert linearized_ctx is not None
-                return "".join([self.print(x) for x in linearized_ctx])
-            case SimpleContext():
-                raise Exception("Do not know how to handle a SimpleContext yet.")
-            case _:
-                raise Exception(
-                    f"TemplateFormatter does not know how to print a {ctx.__class__.__name__} context."
-                )
 
     def _stringify(
         self,

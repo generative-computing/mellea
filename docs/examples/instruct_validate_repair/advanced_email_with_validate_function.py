@@ -4,7 +4,7 @@ from mellea.backends.types import ModelOption
 from mellea.stdlib.requirement import Requirement, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
-# create a session using Granite 3.3 8B on Ollama and a simple context [see below]
+# create a session using Granite 4 Micro 3B on Ollama and a simple context [see below]
 m = start_session(model_options={ModelOption.MAX_NEW_TOKENS: 200})
 
 # Define a requirement which checks that the output is less than 100 words

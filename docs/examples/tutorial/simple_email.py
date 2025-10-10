@@ -1,6 +1,6 @@
 import mellea
 
-# INFO: this line will download IBM's Granite 3.3 8B model.
+# INFO: this line will download IBM's Granite 4 Micro 3B model.
 m = mellea.start_session()
 
 print("Basic email:")
@@ -15,7 +15,7 @@ def write_email(m: mellea.MelleaSession, name: str, notes: str) -> str:
         "Write an email to {{name}} using the notes following: {{notes}}.",
         user_variables={"name": name, "notes": notes},
     )
-    return email.value  # str(email) also works.
+    return str(email.value)  # str(email) also works.
 
 
 print(
@@ -25,7 +25,6 @@ print(
         "Olivia helped the lab over the last few weeks by organizing intern events, advertising the speaker series, and handling issues with snack delivery.",
     )
 )
-
 
 print("Email with requirements:")
 
@@ -52,7 +51,6 @@ print(
     )
 )
 
-
 print("Email with rejection sampling:")
 from mellea.stdlib.sampling import RejectionSamplingStrategy  # noqa: E402
 
@@ -72,7 +70,7 @@ def write_email_with_strategy(m: mellea.MelleaSession, name: str, notes: str) ->
         return str(email_candidate.result)
     else:
         print("Expect sub-par result.")
-        return email_candidate.sample_generations[0].value
+        return str(email_candidate.sample_generations[0].value)
 
 
 print(

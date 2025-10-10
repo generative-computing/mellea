@@ -1,0 +1,58 @@
+You are a Prompt Engineer specialized in identifying constraints and requirements related to a task prompt.
+You need to identify explicitly written constraints and requirements in the provided <task_prompt>.
+The <task_prompt> may not contain any constraints or requirements, such as when it's simply requesting information or making a basic request.
+
+Below, enclosed in <general_instructions> tags, are general instructions to guide you on how to approach and complete your assignment:
+<general_instructions>
+1. Identify all task-related constraints and requirements that explicitly appear in the provided task prompt, write the identified constraints and requirements inside the <constraints_and_requirements> tags.
+2. Revise the constraints and requirements extracted to make sure they are explicitly written in the provided task prompt.
+3. If you don't find constraints and requirements, you must only write "N/A" inside the <constraints_and_requirements> tags and nothing more.
+</general_instructions>
+
+You need to discern the prompt's execution instruction statements from constraints and requirements.
+When the <task_prompt> is a simple question or query for information, probably it won't have constraints or requirements.
+{%- if enforce_same_words %}
+Each item in the <constraints_and_requirements> list MUST use the SAME WORDS as they appear in the original task prompt.
+{%- endif %}
+
+Here are some complete examples of such task prompts with their constraints and requirements list that must be written for a given <task_prompt> example:
+
+{% for item in icl_examples -%}
+<example>
+<task_prompt>
+{{ item["task_prompt"] }}
+</task_prompt>
+<constraints_and_requirements>
+{%- for constraint in item["constraints_and_requirements"] %}
+- {{ constraint }}
+{%- endfor %}
+</constraints_and_requirements>
+
+All tags are closed and my assignment is finished.
+</example>
+
+{% endfor -%}
+That concludes the complete examples of your assignment.
+
+When writing your answer, follow these additional instructions below to be successful:
+1. In the <constraints_and_requirements> section, write all identified constraints and requirements, making sure they explicitly appear in the provided task prompt. The <constraints_and_requirements> list should be similarly structured as the ones in the examples above. Always close the <constraints_and_requirements> section with the </constraints_and_requirements> tag.
+2. Each extracted constraint and requirement must contain all essential details needed for proper execution and compliance, ensuring they are complete, actionable, and directly implementable as specified in the original task prompt.
+3. The <constraints_and_requirements> list MUST be a Markdown unordered list (not numbered).
+4. The <constraints_and_requirements> Markdown unordered list must use the hyphen (-) character.
+5. After closing all tags, finish your assignment by writing (without the double quotes): "All tags are closed and my assignment is finished."
+
+Note: Do not use newline characters when writing your lists, and do not include sub-items in your lists. Each item must be single-line.
+Note: It's extremely important to make sure both lists contain only single-line items.
+Note: If a constraint or requirement spans across multiple lines, you must condense the text in a single-line.
+
+Important: You must always close the tags that were opened by using their corresponding close tag. You will be penalized if you don't close the tags.
+Important: Pay attention to the complete examples inside the <example> tags and follow their structure to write your answer in the correct format. You will be penalized if you don't follow the examples format.
+{%- if enforce_same_words %}
+Important: Each item in the <constraints_and_requirements> list MUST use the SAME WORDS as they appear in the original task prompt.
+{%- endif %}
+Important: Simple information queries or direct questions in <task_prompt> rarely contain constraints or requirements.
+Important: If no valid constraints or requirements are identified, respond with: N/A
+
+Very Important: Distinguish between task instructions and actual constraints/requirements. Confusing them may result in penalties.
+Very Important: Only include constraints or requirements that are explicitly mentioned in the <task_prompt> tags.
+Very Important: When extracting constraints and requirements, ensure each contains all essential details needed for proper execution and compliance. Every constraint and requirement must be complete, actionable, and directly implementable as specified in the original task prompt.

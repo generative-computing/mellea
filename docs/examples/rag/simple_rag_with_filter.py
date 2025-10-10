@@ -68,7 +68,7 @@ if __name__ == "__main__":
     print(f"results:\n {results_str}\n ====")
     del embedding_model  # help GC
 
-    # Create Mellea session
+    # Create Mellea session with Mistral. Also work with other models.
     m = start_session(model_id=model_ids.MISTRALAI_MISTRAL_0_3_7B)
 
     # Check for each document from retrieval if it is actually relevant

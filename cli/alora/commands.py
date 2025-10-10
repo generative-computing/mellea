@@ -1,7 +1,7 @@
 import typer
 
 alora_app = typer.Typer(
-    name="alora", help="Train or upload aLoRA models for requirement validator"
+    name="alora", help="Train or upload aLoRAs for requirement validation."
 )
 
 

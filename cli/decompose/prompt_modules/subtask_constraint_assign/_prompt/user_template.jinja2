@@ -1,0 +1,18 @@
+Here are the 4 parameters inside their respective tags, now I need you to write only the <assigned_constraints> for this target task:
+
+<execution_plan>
+{%- for step in execution_plan %}
+{{ step }}
+{%- endfor %}
+</execution_plan>
+<target_task_title>
+{{ subtask_title }}
+</target_task_title>
+<target_task_prompt>
+{{ subtask_prompt }}
+</target_task_prompt>
+<all_constraints>
+{%- for constraint in constraint_list %}
+- {{ constraint }}
+{%- endfor %}
+</all_constraints>

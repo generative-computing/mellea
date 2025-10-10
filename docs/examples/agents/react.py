@@ -2,7 +2,7 @@ import datetime
 import inspect
 import json
 from collections.abc import Callable
-from typing import Literal, Unpack
+from typing import Literal
 
 import pydantic
 from jinja2 import Template
@@ -13,6 +13,7 @@ import mellea.backends.types
 import mellea.stdlib
 import mellea.stdlib.base
 import mellea.stdlib.chat
+from mellea.stdlib.base import ChatContext
 
 react_system_template: Template = Template(
     """Answer the user's question as best you can.
@@ -83,7 +84,7 @@ class ReactToolbox(pydantic.BaseModel):
     def tool_name_schema(self):
         names = self.tool_names()
         fields = dict()
-        fields["tool"] = Literal[Unpack[names]]
+        fields["tool"] = Literal[*names]
         return pydantic.create_model("ToolSelectionSchema", **fields)
 
     def get_tool_from_schema(self, content: str):
@@ -103,7 +104,7 @@ def react(
     react_toolbox: ReactToolbox,
 ):
     assert m.ctx.is_chat_context, "ReACT requires a chat context."
-    test_ctx_lin = m.ctx.render_for_generation()
+    test_ctx_lin = m.ctx.view_for_generation()
     assert test_ctx_lin is not None and len(test_ctx_lin) == 0, (
         "ReACT expects a fresh context."
     )
@@ -114,8 +115,9 @@ def react(
     )
 
     # Add the system prompt and the goal to the chat history.
-    m.ctx.insert(mellea.stdlib.chat.Message(role="system", content=_sys_prompt))
-    m.ctx.insert(mellea.stdlib.chat.Message(role="user", content=f"{goal}"))
+    m.ctx = m.ctx.add(
+        mellea.stdlib.chat.Message(role="system", content=_sys_prompt)
+    ).add(mellea.stdlib.chat.Message(role="user", content=f"{goal}"))
 
     # The main ReACT loop as a dynamic program:
     # (  ?(not done) ;
@@ -156,7 +158,7 @@ def react(
 
         print("### Observation")
         tool_output = react_toolbox.call_tool(selected_tool, act_args.content)
-        m.ctx.insert(mellea.stdlib.chat.Message(role="tool", content=tool_output))
+        m.ctx = m.ctx.add(mellea.stdlib.chat.Message(role="tool", content=tool_output))
         print(tool_output)
 
         print("### Done Check")
@@ -178,7 +180,7 @@ def react(
 
 
 if __name__ == "__main__":
-    m = mellea.start_session(ctx=mellea.stdlib.base.LinearContext())
+    m = mellea.start_session(ctx=ChatContext())
 
     def zip_lookup_tool_fn(city: str):
         """Returns the ZIP code for the `city`."""

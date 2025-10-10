@@ -9,15 +9,9 @@ import pytest
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier, IBM_GRANITE_3_2_8B
 from mellea.stdlib.base import (
-    BasicContext,
     CBlock,
     Component,
-    Context,
-    ContextTurn,
-    GenerateLog,
-    LinearContext,
     ModelOutputThunk,
-    SimpleContext,
     TemplateRepresentation,
 )
 from mellea.stdlib.chat import Message
@@ -116,52 +110,6 @@ def test_parse(tf: TemplateFormatter):
         result.parsed_repr is result
     ), "parse should set the result object to result.parsed_repr if it's not parsing a message"
 
-
-def test_print_context(tf: TemplateFormatter):
-    ctx = LinearContext()
-    with pytest.raises(AssertionError):
-        tf.print_context(ctx)
-
-    ctx = LinearContext(is_chat_context=False)
-    ctx._ctx = [CBlock("1"), CBlock("2")]
-    output = tf.print_context(ctx)
-    assert type(output) == str
-    assert output == "12"
-
-    with pytest.raises(
-        Exception, match="Do not know how to handle a SimpleContext yet."
-    ):
-        st_ctx = SimpleContext()
-        st_ctx.is_chat_context = False
-        tf.print_context(st_ctx)
-
-    class _TestContext(BasicContext):
-        def reset(self):
-            pass
-
-        def insert(self, value, *, key=None, generate_logs: list[GenerateLog] | None = None):
-            pass
-
-        def insert_turn(self, turn, *, generate_logs: list[GenerateLog] | None = None,):
-            pass
-
-        def copy(self) -> Context:
-            return self
-
-        def _hash_for_kv_cache(self):
-            pass
-
-        def render_for_generation(self) -> Optional[List[Component | CBlock]]:
-            pass
-
-        def last_output(self) -> ModelOutputThunk | None:
-            pass
-
-        def last_turn(self) -> ContextTurn | None:
-            pass
-
-    with pytest.raises(Exception):
-        tf.print_context(_TestContext())
 
 
 def test_custom_template_string(tf: TemplateFormatter):

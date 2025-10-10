@@ -1,0 +1,9 @@
+name: "Run CI"
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  code-checks:
+    uses: ./.github/workflows/quality.yml

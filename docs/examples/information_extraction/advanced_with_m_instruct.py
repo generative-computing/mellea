@@ -35,11 +35,11 @@ def at_least_n(n: int) -> Callable[[str], bool]:
 
 
 # start session
-m = start_session(model_id=model_ids.MISTRALAI_MISTRAL_0_3_7B)
+m = start_session()
 
 # run extraction using grounding context and sampling strategy
 sampled_p_names = m.instruct(
-    "Extract the person names from the document (doc1).",
+    "Extract ALL person names from the document (doc1).",
     grounding_context={"doc1": NYTimes_text},
     requirements=[check(None, validation_fn=simple_validate(at_least_n(2)))],
     strategy=RejectionSamplingStrategy(loop_budget=5),
