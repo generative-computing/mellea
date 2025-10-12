@@ -4,13 +4,6 @@ from mellea.stdlib.requirement import Requirement, ValidationResult
 import json
 import os
 import re
-# push all my changes to branch --> push to mellea --> make PR
-# create a seperate folder called legal
-# branch name anooshka/legal
-
-# TO-DO:
-# 1. run tests
-# 2. make more compatible with Mellea
 
 def normalize_case_name(name) -> str:
     """
@@ -48,6 +41,7 @@ def citation_exists(ctx: Context, folder_path: str) -> ValidationResult:
     Returns:
         A validation result  indicating if a match was found between given case name and database
     """
+    # not sure about this line
     case_name = ctx.last_output().value
 
     if not case_name or not isinstance(case_name, str):
@@ -83,14 +77,16 @@ def citation_exists(ctx: Context, folder_path: str) -> ValidationResult:
             return ValidationResult(False, reason=f"Error loading '{file}': {e!s}")
 
         # Check both name and name_abbreviation
-        if normalized_input in case_names or normalized_input in case_name_abb:
-            return ValidationResult(True, reason=f"'{case_name}' found in database")
-        else:
-            ValidationResult(False, reason=f"'{case_name}' not found in database")
+    if normalized_input in case_names or normalized_input in case_name_abb:
+        return ValidationResult(True, reason=f"'{case_name}' found in database")
+    else:
+        return ValidationResult(False, reason=f"'{case_name}' not found in database")
 
 
 class CaseNameExistsInDatabase(Requirement):
-    """Checks if the output case name exists in the provided case metadata database."""
+    """
+    Checks if the output case name exists in the provided case metadata database.
+    """
 
     def __init__(self, folder_path: str):
         self._folder_path = folder_path
@@ -98,13 +94,3 @@ class CaseNameExistsInDatabase(Requirement):
             description="The case name should exist in the provided case metadata database.",
             validation_fn=lambda ctx: citation_exists(ctx, self._folder_path),
         )
-
-# citation_exists_req = Requirement(
-#     description="Check whether a given case name can be found in the Caselaw database.",
-#     validation_fn=citation_exists
-# )
-
-# add list of case names to chat context
-
-# my_ctx = ChatContext()
-
