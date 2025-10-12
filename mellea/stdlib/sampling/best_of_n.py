@@ -127,7 +127,7 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
             result = sampled_results[i]
             next_action = sampled_actions[i]
 
-            val_scores_co = mfuncs._validate(
+            val_scores_co = mfuncs.avalidate(
                 reqs=reqs,
                 context=result_ctx,
                 backend=backend,
