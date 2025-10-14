@@ -22,7 +22,11 @@ from mellea.backends.tools import (
     convert_tools_to_json,
 )
 from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import send_to_queue
+from mellea.helpers.async_helpers import (
+    ClientCache,
+    get_current_event_loop,
+    send_to_queue,
+)
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.helpers.openai_compatible_helpers import (
     chat_completion_delta_merge,
@@ -93,15 +97,12 @@ class WatsonxAIBackend(FormatterBackend):
             self._project_id = os.environ.get("WATSONX_PROJECT_ID")
 
         self._creds = Credentials(url=base_url, api_key=api_key)
-        _client = APIClient(credentials=self._creds)
-        self._model_inference = ModelInference(
-            model_id=self._get_watsonx_model_id(),
-            api_client=_client,
-            credentials=self._creds,
-            project_id=self._project_id,
-            params=self.model_options,
-            **kwargs,
-        )
+        self._kwargs = kwargs
+
+        self._client_cache = ClientCache(2)
+
+        # Call once to set up the model inference and prepopulate the cache.
+        _ = self._model
 
         # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
         # These are usually values that must be extracted before hand or that are common among backend providers.
@@ -134,16 +135,22 @@ class WatsonxAIBackend(FormatterBackend):
 
     @property
     def _model(self) -> ModelInference:
-        """Watsonx's client gets tied to a specific event loop. Reset it here."""
-        _client = APIClient(credentials=self._creds)
-        self._model_inference = ModelInference(
-            model_id=self._get_watsonx_model_id(),
-            api_client=_client,
-            credentials=self._creds,
-            project_id=self._project_id,
-            params=self.model_options,
-        )
-        return self._model_inference
+        """Watsonx's client gets tied to a specific event loop. Reset it if needed here."""
+        key = id(get_current_event_loop())
+
+        _model_inference = self._client_cache.get(key)
+        if _model_inference is None:
+            _client = APIClient(credentials=self._creds)
+            _model_inference = ModelInference(
+                model_id=self._get_watsonx_model_id(),
+                api_client=_client,
+                credentials=self._creds,
+                project_id=self._project_id,
+                params=self.model_options,
+                **self._kwargs,
+            )
+            self._client_cache.put(key, _model_inference)
+        return _model_inference
 
     def _get_watsonx_model_id(self) -> str:
         """Gets the watsonx model id from the model_id that was provided in the constructor. Raises AssertionError if the ModelIdentifier does not provide a watsonx_name."""
