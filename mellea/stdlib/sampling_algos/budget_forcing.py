@@ -1,11 +1,10 @@
-from mellea.stdlib.session import MelleaSession
-from mellea.stdlib.base import (
-    CBlock,
-    Component,
-    GenerateLog,
-    ModelOutputThunk,
-)
+"""Budget forcing implementation."""
+
 import re
+
+from mellea.stdlib.base import CBlock, Component, GenerateLog
+from mellea.stdlib.session import MelleaSession
+
 
 def think_budget_forcing(
     session: MelleaSession,
@@ -23,13 +22,16 @@ def think_budget_forcing(
     model_options: dict | None = None,
     generate_logs: list[GenerateLog] | None = None,
 ):
+    r"""Generate with budget forcing using the completions APIs.
 
-    """Generate with budget forcing using the completions APIs. This relies on raw autocompletion and assumes the model's output is structured in the following form: '<think> ... </think> summary answer'
+    This relies on raw autocompletion and assumes the model's output is structured in the following form: '<think> ... </think> summary answer'
     The budget forcing method is proposed in the paper: https://arxiv.org/abs/2501.19393
     This implementation tries to follow the key outlines in the paper while ensuring stable and fail-safe operation.
     This is performed via multi-step generation. The model will be called multiple times until requirements are met, in other words, the response will be assembled conditionally.
 
     Args:
+        session: Mellea session
+        action: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
         think_max_tokens: Budget in number of tokens allocated for the think block
         answer_max_tokens: Budget in number of tokens allocated for the summary and answer block, None indicates generating till EoS
         start_think_token: String indicating start of think block, default <think>
@@ -39,6 +41,8 @@ def think_budget_forcing(
         think_wait_suffix: String to append to force continued thinking, e.g. "\nWait" if set to None we will not force additional thinking. Use None for upper-bound budget case
         answer_suffix: String to append to force a final answer
         answer_regex: Answer regex which indicates an answer is generated
+        model_options: Any model options to upsert into the defaults for this call.
+        generate_logs: a `GenerateLog` instance to add log information to.
 
     Assumptions:
         -  The chat template is applied on prompt, with think mode enabled
@@ -48,9 +52,7 @@ def think_budget_forcing(
     Limitations:
         -  Does not support batching
     """
-
-    backend = session.backend
-    model_options = backend._simplify_and_merge(model_options, is_chat_context=False)
+    model_options = backend._simplify_and_merge(model_options)
 
     responses = []
     prompt = backend.formatter.print(action)
@@ -78,9 +80,12 @@ def think_budget_forcing(
         model_options["max_tokens"] = rem_toks
         # TODO workaround to obtain generated token counts
         # The token count should be relayed by openai's CompletionUsage
-        model_options["logprobs"] = 1  # To get number of generated tokens
-        result = backend._generate_from_raw([prompt], model_options=model_options, generate_logs=generate_logs)
-        gen_tok_count += len(result[0]._meta['oai_completion_response']['logprobs']['token_logprobs'])
+        # model_options["logprobs"] = 1  # To get number of generated tokens
+        result = backend._generate_from_raw(
+            [prompt], model_options=model_options, generate_logs=generate_logs
+        )
+        # gen_tok_count += len(result[0]._meta['oai_completion_response']['logprobs']['token_logprobs'])
+        gen_tok_count += result[0]._meta["generate_response"]["eval_count"]
         rem_toks = think_max_tokens - gen_tok_count
         response = result[0].value
 
@@ -140,9 +145,11 @@ def think_budget_forcing(
     else:
         model_options.pop("max_tokens", None)  # generate unconditionally
 
-    model_options["logprobs"] = 1  # To get number of generated tokens
-    result = backend._generate_from_raw([prompt], model_options=model_options, generate_logs=generate_logs)
+    # model_options["logprobs"] = 1  # To get number of generated tokens
+    result = backend._generate_from_raw(
+        [prompt], model_options=model_options, generate_logs=generate_logs
+    )
     response += result[0].value
-    gen_tok_count += len(result[0]._meta['oai_completion_response']['logprobs']['token_logprobs'])
+    gen_tok_count += result[0]._meta["generate_response"]["eval_count"]
+    # gen_tok_count += len(result[0]._meta['oai_completion_response']['logprobs']['token_logprobs'])
     return response, gen_tok_count
-

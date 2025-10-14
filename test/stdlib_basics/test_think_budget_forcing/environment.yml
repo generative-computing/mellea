@@ -1,7 +1,0 @@
-
-name: mellea_tbf
-channels:
-  - conda-forge
-dependencies:
-  - python=3.12                 # note: at the time of writing, xformer (< vllm) has a broken wheel for 3.13. https://github.com/facebookresearch/xformers/issues/740#issuecomment-2753869337
-  - uv
