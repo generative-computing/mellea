@@ -30,8 +30,8 @@ output = ModelOutputThunk.from_generation(
 ```
 
 This method automatically sets the security level:
-- If taint sources are found → `SecLevel.tainted_by(first_source)`
-- If no taint sources → `SecLevel.none()`
+- If taint sources are found -> `SecLevel.tainted_by(first_source)`
+- If no taint sources -> `SecLevel.none()`
 
 ## Taint Source Analysis
 
@@ -85,10 +85,10 @@ if component._meta["_security"].is_tainted():
 
 ## Key Features
 
-- **Immutable security**: Security levels set at construction time
-- **Recursive taint analysis**: Deep analysis of Component parts, shallow analysis of context
-- **Taint source tracking**: Know exactly which CBlock/Component tainted content
-- **Capability integration**: Fine-grained access control for classified content
-- **Non-mutating operations**: Sanitize/declassify create new objects
+- **Immutable security**: security levels set at construction time
+- **Recursive taint analysis**: deep analysis of Component parts, shallow analysis of context
+- **Taint source tracking**: know exactly which CBlock/Component tainted content
+- **Capability integration**: fine-grained access control for classified content
+- **Non-mutating operations**: sanitize/declassify create new objects
 
 This creates a security model that addresses both data exfiltration and injection vulnerabilities while enabling future IAM integration.
