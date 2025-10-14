@@ -9,11 +9,10 @@ with open(this_file_dir / "task_prompt.txt") as f:
 
 example: ICLExample = {
     "task_prompt": task_prompt.strip(),
-    "constraints_and_conditions": [],
+    "constraints_and_requirements": [],
 }
 
-example["constraints_and_conditions"] = [
-    "Emphasize the responsibilities and support offered to survivors of crime",
+example["constraints_and_requirements"] = [
     "Ensure the word 'assistance' appears less than 4 times",
     "Wrap the entire response with double quotation marks",
 ]

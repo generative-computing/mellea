@@ -89,7 +89,7 @@ print(m.chat("What is the etymology of mellea?").content)
 
 Then run it:
 > [!NOTE]
-> Before we get started, you will need to download and install [ollama](https://ollama.com/). Mellea can work with many different types of backends, but everything in this tutorial will "just work" on a Macbook running IBM's Granite 3.3 8B model.
+> Before we get started, you will need to download and install [ollama](https://ollama.com/). Mellea can work with many different types of backends, but everything in this tutorial will "just work" on a Macbook running IBM's Granite 4 Micro 3B model.
 ```shell
 uv run --with mellea docs/examples/tutorial/example.py
 ```
@@ -128,13 +128,13 @@ uv venv .venv && source .venv/bin/activate
 Use `uv pip` to install from source with the editable flag:
 
 ```bash
-uv pip install -e .[all]
+uv pip install -e '.[all]'
 ```
 
 If you are planning to contribute to the repo, it would be good to have all the development requirements installed:
 
 ```bash
-uv pip install .[all] --group dev --group notebook --group docs
+uv pip install '.[all]' --group dev --group notebook --group docs
 ```
 
 or 
@@ -143,7 +143,7 @@ or
 uv sync --all-extras --all-groups
 ```
 
-Ensure that you install the precommit hooks:
+If you want to contribute, ensure that you install the precommit hooks:
 
 ```bash
 pre-commit install

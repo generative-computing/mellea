@@ -7,15 +7,12 @@ from mellea.stdlib.session import start_session
 ctx = ChatContext()
 ctx = ctx.add(ModelOutputThunk("test"))
 
-def test_llmaj_validation_req_output_field():
+async def test_llmaj_validation_req_output_field():
     m = start_session(ctx=ctx)
     req = Requirement("Must output test.")
     assert req._output is None
 
-    async def val():
-        _ = await req.validate(m.backend,ctx=ctx)
-    asyncio.run(val())
-
+    _ = await req.validate(m.backend,ctx=ctx)
     assert req._output is None, "requirement's output shouldn't be updated during/after validation"
 
 def test_simple_validate_bool():

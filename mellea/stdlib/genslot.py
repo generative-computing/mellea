@@ -1,8 +1,9 @@
 """A method to generate outputs based on python functions and a Generative Slot function."""
 
+import asyncio
 import functools
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from copy import deepcopy
 from typing import Any, Generic, ParamSpec, TypedDict, TypeVar, get_type_hints
 
@@ -168,14 +169,13 @@ class GenerativeSlot(Component, Generic[P, R]):
             **kwargs: Additional Kwargs to be passed to the func.
 
         Returns:
-            ModelOutputThunk: Output with generated Thunk.
+            R: an object with the original return type of the function
         """
         if m is None:
             m = get_session()
         slot_copy = deepcopy(self)
         arguments = bind_function_arguments(self._function._func, *args, **kwargs)
         if arguments:
-            # slot_copy._arguments = []
             for key, val in arguments.items():
                 annotation = get_annotation(slot_copy._function._func, key, val)
                 slot_copy._arguments.append(Argument(annotation, key, val))
@@ -207,6 +207,54 @@ class GenerativeSlot(Component, Generic[P, R]):
         )
 
 
+class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
+    """A generative slot component that generates asynchronously and returns a coroutine."""
+
+    def __call__(
+        self,
+        m: MelleaSession | None = None,
+        model_options: dict | None = None,
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> Coroutine[Any, Any, R]:
+        """Call the async generative slot.
+
+        Args:
+            m: MelleaSession: A mellea session (optional, uses context if None)
+            model_options: Model options to pass to the backend.
+            *args: Additional args to be passed to the func.
+            **kwargs: Additional Kwargs to be passed to the func
+
+        Returns:
+            Coroutine[Any, Any, R]: a coroutine that returns an object with the original return type of the function
+        """
+        if m is None:
+            m = get_session()
+        slot_copy = deepcopy(self)
+        arguments = bind_function_arguments(self._function._func, *args, **kwargs)
+        if arguments:
+            for key, val in arguments.items():
+                annotation = get_annotation(slot_copy._function._func, key, val)
+                slot_copy._arguments.append(Argument(annotation, key, val))
+
+        response_model = create_response_format(self._function._func)
+
+        # AsyncGenerativeSlots are used with async functions. In order to support that behavior,
+        # they must return a coroutine object.
+        async def __async_call__() -> R:
+            # Use the async act func so that control flow doesn't get stuck here in async event loops.
+            response = await m.aact(
+                slot_copy, format=response_model, model_options=model_options
+            )
+
+            function_response: FunctionResponse[R] = response_model.model_validate_json(
+                response.value  # type: ignore
+            )
+            return function_response.result
+
+        return __async_call__()
+
+
 def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
     """Convert a function into an AI-powered function.
 
@@ -215,6 +263,8 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
     parameters, docstring, and type hints - is used to instruct the LLM to imitate
     that function's behavior. The output is guaranteed to match the return type
     annotation using structured outputs and automatic validation.
+
+    Note: Works with async functions as well.
 
     Tip: Write the function and docstring in the most Pythonic way possible, not
     like a prompt. This ensures the function is well-documented, easily understood,
@@ -248,7 +298,7 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         ...     estimated_hours: float
         >>>
         >>> @generative
-        ... def create_project_tasks(project_desc: str, count: int) -> List[Task]:
+        ... async def create_project_tasks(project_desc: str, count: int) -> List[Task]:
         ...     '''Generate a list of realistic tasks for a project.
         ...
         ...     Args:
@@ -260,7 +310,7 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         ...     '''
         ...     ...
         >>>
-        >>> tasks = create_project_tasks(session, "Build a web app", 5)
+        >>> tasks = await create_project_tasks(session, "Build a web app", 5)
 
         >>> @generative
         ... def analyze_code_quality(code: str) -> Dict[str, Any]:
@@ -304,7 +354,10 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         >>>
         >>> reasoning = generate_chain_of_thought(session, "How to optimize a slow database query?")
     """
-    return GenerativeSlot(func)
+    if inspect.iscoroutinefunction(func):
+        return AsyncGenerativeSlot(func)
+    else:
+        return GenerativeSlot(func)
 
 
 # Export the decorator as the interface
