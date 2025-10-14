@@ -172,37 +172,7 @@ Backends ensure security metadata flows through the generation pipeline:
 
 1. **Input analysis** → taint sources identified as actual CBlocks/Components
 2. **MOT creation** → security metadata set using `SecLevel.tainted_by(source)` or `SecLevel.none()`
-3. **Formatter parsing** → security metadata preserved on parsed output
-4. **Context addition** → tainted outputs propagate to future generations
-
-### Formatter Security Preservation
-
-The `TemplateFormatter` has been enhanced to preserve security metadata during parsing:
-
-```python
-def _parse(self, source_component: Component | CBlock, result: ModelOutputThunk) -> CBlock | Component:
-    """Parses the output from a model."""
-    # Helper function to preserve security metadata
-    def preserve_security_metadata(parsed_obj):
-        """Preserve security metadata from result to parsed object."""
-        if hasattr(result, '_meta') and '_security' in result._meta:
-            if hasattr(parsed_obj, '_meta'):
-                if parsed_obj._meta is None:
-                    parsed_obj._meta = {}
-                parsed_obj._meta['_security'] = result._meta['_security']
-            elif isinstance(parsed_obj, CBlock):
-                # For CBlocks, we can directly set the meta
-                if parsed_obj._meta is None:
-                    parsed_obj._meta = {}
-                parsed_obj._meta['_security'] = result._meta['_security']
-        return parsed_obj
-    
-    # Parse the output and preserve security metadata
-    parsed = self._parse_content(result)
-    return preserve_security_metadata(parsed)
-```
-
-This ensures that when model outputs are parsed into `CBlock`s or `Component`s, the security metadata (including taint sources) is preserved on the parsed objects, maintaining the security chain through the entire pipeline.
+3. **Context addition** → tainted outputs propagate to future generations
 
 ## Capability-Based Access Control
 
