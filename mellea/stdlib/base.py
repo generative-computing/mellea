@@ -12,7 +12,7 @@ from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, Protocol, TypeVar, runtime_checkable
+from typing import Any, Protocol, TypeVar, Union, runtime_checkable
 
 from PIL import Image as PILImage
 
@@ -48,6 +48,43 @@ class CBlock:
     def __repr__(self):
         """Provides a python-parsable representation of the block (usually)."""
         return f"CBlock({self.value}, {self._meta.__repr__()})"
+    
+    def mark_tainted(self, source: Union[CBlock, Component, None] = None):
+        """Mark this CBlock as tainted by a specific source.
+        
+        Args:
+            source: The CBlock or Component that tainted this content. If None,
+                   this CBlock is marked as tainted by itself.
+        """
+        from mellea.security import SecLevel, SecurityMetadata
+        
+        if self._meta is None:
+            self._meta = {}
+        
+        # If no source provided, taint by self
+        taint_source = source if source is not None else self
+        self._meta["_security"] = SecurityMetadata(SecLevel.tainted_by(taint_source))
+    
+    def is_safe(self, entitlement: Any = None) -> bool:
+        """Check if this CBlock is considered safe for the given entitlement.
+        
+        Args:
+            entitlement: The entitlement to check access for (for classified content)
+            
+        Returns:
+            True if the block has no security metadata or is marked as safe,
+            False if it's marked as tainted or classified without proper entitlement
+        """
+        from mellea.security import SecurityMetadata
+        
+        if self._meta is None or "_security" not in self._meta:
+            return True  # Default to safe if no security metadata
+        
+        security_meta = self._meta["_security"]
+        if isinstance(security_meta, SecurityMetadata):
+            return security_meta.is_safe(entitlement)
+        
+        return True  # Default to safe if security metadata is not the expected type
 
 
 class ImageBlock:
@@ -321,6 +358,42 @@ class ModelOutputThunk(CBlock):
         Differs from CBlock because `._meta` can be very large for ModelOutputThunks.
         """
         return f"ModelOutputThunk({self.value})"
+    
+    @classmethod
+    def from_generation(
+        cls,
+        value: str | None,
+        taint_sources: list[Union[CBlock, Component]] | None = None,
+        meta: dict[str, Any] | None = None,
+        parsed_repr: CBlock | Component | Any | None = None,
+        tool_calls: dict[str, ModelToolCall] | None = None,
+    ) -> "ModelOutputThunk":
+        """Create a ModelOutputThunk from generation with security metadata.
+        
+        Args:
+            value: The generated content
+            taint_sources: List of tainted CBlocks or Components from the generation context
+            meta: Additional metadata for the thunk
+            parsed_repr: Parsed representation of the output
+            tool_calls: Tool calls made during generation
+            
+        Returns:
+            A new ModelOutputThunk with appropriate security metadata
+        """
+        if meta is None:
+            meta = {}
+        
+        # Add security metadata based on taint sources
+        from mellea.security import SecLevel, SecurityMetadata
+        
+        if taint_sources:
+            # If there are taint sources, mark as tainted by the first source
+            meta["_security"] = SecurityMetadata(SecLevel.tainted_by(taint_sources[0]))
+        else:
+            # If no taint sources, mark as safe
+            meta["_security"] = SecurityMetadata(SecLevel.none())
+        
+        return cls(value, meta, parsed_repr, tool_calls)
 
     def __copy__(self):
         """Returns a shallow copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generating."""

@@ -119,11 +119,31 @@ class Instruction(Component):
         self._images = images
         self._repair_string: str | None = None
 
-    def parts(self):
+    def parts(self) -> list[Component | CBlock]:
         """Returns all of the constituent parts of an Instruction."""
-        raise Exception(
-            "Disallowing use of `parts` until we figure out exactly what it's supposed to be for"
-        )
+        parts = []
+        
+        # Add description if it exists
+        if self._description is not None:
+            parts.append(self._description)
+        
+        # Add prefix if it exists
+        if self._prefix is not None:
+            parts.append(self._prefix)
+        
+        # Add output_prefix if it exists
+        if self._output_prefix is not None:
+            parts.append(self._output_prefix)
+        
+        # Add icl_examples
+        parts.extend(self._icl_examples)
+        
+        # Add grounding_context values
+        for value in self._grounding_context.values():
+            if isinstance(value, (CBlock, Component)):
+                parts.append(value)
+        
+        return parts
 
     def format_for_llm(self) -> TemplateRepresentation:
         """Formats the instruction for Formatter use."""

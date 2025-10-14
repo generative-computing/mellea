@@ -116,6 +116,16 @@ class TemplateFormatter(Formatter, abc.ABC):
         self, source_component: Component | CBlock, result: ModelOutputThunk
     ) -> CBlock | Component:
         """Parses the output from a model."""
+        # Helper function to preserve security metadata
+        def preserve_security_metadata(parsed_obj):
+            """Preserve security metadata from result to parsed object."""
+            if hasattr(result, '_meta') and '_security' in result._meta:
+                if hasattr(parsed_obj, '_meta'):
+                    if parsed_obj._meta is None:
+                        parsed_obj._meta = {}
+                    parsed_obj._meta['_security'] = result._meta['_security']
+            return parsed_obj
+        
         if result.tool_calls is not None:
             # A tool was successfully requested.
             # Assistant responses for tool calling differ by backend. For the default formatter,
@@ -124,13 +134,14 @@ class TemplateFormatter(Formatter, abc.ABC):
             # Chat backends should provide an openai-like object in the _meta chat response, which we can use to properly format this output.
             if "chat_response" in result._meta:
                 # Ollama.
-                return Message(
+                parsed = Message(
                     role=result._meta["chat_response"].message.role,
                     content=str(result._meta["chat_response"].message.tool_calls),
                 )
+                return preserve_security_metadata(parsed)
             elif "oai_chat_response" in result._meta:
                 # OpenAI and Watsonx.
-                return Message(
+                parsed = Message(
                     role=result._meta["oai_chat_response"]["message"]["role"],
                     content=str(
                         result._meta["oai_chat_response"]["message"].get(
@@ -138,27 +149,32 @@ class TemplateFormatter(Formatter, abc.ABC):
                         )
                     ),
                 )
+                return preserve_security_metadata(parsed)
             else:
                 # HuggingFace (or others). There are no guarantees on how the model represented the function calls.
                 # Output it in the same format we received the tool call request.
                 assert result.value is not None
-                return Message(role="assistant", content=result.value)
+                parsed = Message(role="assistant", content=result.value)
+                return preserve_security_metadata(parsed)
 
         if type(source_component) is Message:
             if "chat_response" in result._meta:
                 # chat backends should provide an openai-like object in the _meta chat response, which we can use to properly format this output.
-                return Message(
+                parsed = Message(
                     role=result._meta["chat_response"].message.role,
                     content=result._meta["chat_response"].message.content,
                 )
+                return preserve_security_metadata(parsed)
             elif "oai_chat_response" in result._meta:
-                return Message(
+                parsed = Message(
                     role=result._meta["oai_chat_response"]["message"]["role"],
                     content=result._meta["oai_chat_response"]["message"]["content"],
                 )
+                return preserve_security_metadata(parsed)
             else:
                 assert result.value is not None
-                return Message(role="assistant", content=result.value)
+                parsed = Message(role="assistant", content=result.value)
+                return preserve_security_metadata(parsed)
         else:
             return result
 
