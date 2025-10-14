@@ -43,6 +43,7 @@ from mellea.stdlib.base import (
     GenerateType,
     ModelOutputThunk,
 )
+from mellea.security import taint_sources
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
 
@@ -492,7 +493,14 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             ),
         )  # type: ignore
 
-        output = ModelOutputThunk(None)
+        # Compute taint sources from action and context
+        sources = taint_sources(action, ctx)
+        
+        output = ModelOutputThunk.from_generation(
+            value=None,
+            taint_sources=sources,
+            meta={}
+        )
         output._context = linearized_context
         output._action = action
         output._model_options = model_opts
@@ -667,11 +675,12 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         assert isinstance(completion_response, Completion)
 
         results = [
-            ModelOutputThunk(
+            ModelOutputThunk.from_generation(
                 value=response.text,
+                taint_sources=taint_sources(actions[i], None),
                 meta={"oai_completion_response": response.model_dump()},
             )
-            for response in completion_response.choices
+            for i, response in enumerate(completion_response.choices)
         ]
 
         for i, result in enumerate(results):
