@@ -8,7 +8,6 @@ from mellea.security import (
     SecurityMetadata, 
     SecurityError, 
     privileged, 
-    sanitize, 
     declassify,
     taint_sources
 )
@@ -115,30 +114,8 @@ class TestCBlockSecurity:
         assert not cblock.is_safe(None)
 
 
-class TestSanitizeDeclassify:
-    """Test sanitize and declassify functions."""
-    
-    def test_sanitize_creates_new_object(self):
-        """Test that sanitize creates a new object without mutating original."""
-        original = CBlock("test content")
-        original.mark_tainted()
-        
-        sanitized = sanitize(original)
-        
-        # Objects are different
-        assert original is not sanitized
-        assert id(original) != id(sanitized)
-        
-        # Content is preserved
-        assert original.value == sanitized.value
-        
-        # Security levels are different
-        assert not original.is_safe()
-        assert sanitized.is_safe()
-        assert sanitized._meta["_security"].sec_level.level_type == "none"
-        
-        # Original is unchanged
-        assert original._meta["_security"].is_tainted()
+class TestDeclassify:
+    """Test declassify function."""
     
     def test_declassify_creates_new_object(self):
         """Test that declassify creates a new object without mutating original."""
@@ -162,16 +139,16 @@ class TestSanitizeDeclassify:
         # Original is unchanged
         assert original._meta["_security"].is_tainted()
     
-    def test_sanitize_preserves_other_metadata(self):
-        """Test that sanitize preserves other metadata."""
+    def test_declassify_preserves_other_metadata(self):
+        """Test that declassify preserves other metadata."""
         original = CBlock("test content", meta={"custom": "value", "other": 123})
         original.mark_tainted()
         
-        sanitized = sanitize(original)
+        declassified = declassify(original)
         
-        assert sanitized._meta["custom"] == "value"
-        assert sanitized._meta["other"] == 123
-        assert sanitized._meta["_security"].sec_level.level_type == "none"
+        assert declassified._meta["custom"] == "value"
+        assert declassified._meta["other"] == 123
+        assert declassified._meta["_security"].sec_level.level_type == "none"
 
 
 class TestPrivilegedDecorator:
@@ -189,17 +166,17 @@ class TestPrivilegedDecorator:
         result = safe_function(safe_cblock)
         assert result == "Processed: safe content"
     
-    def test_privileged_accepts_sanitized_input(self):
-        """Test that privileged functions accept sanitized input."""
+    def test_privileged_accepts_declassified_input(self):
+        """Test that privileged functions accept declassified input."""
         @privileged
         def safe_function(cblock: CBlock) -> str:
             return f"Processed: {cblock.value}"
         
         tainted_cblock = CBlock("tainted content")
         tainted_cblock.mark_tainted()
-        sanitized_cblock = sanitize(tainted_cblock)
+        declassified_cblock = declassify(tainted_cblock)
         
-        result = safe_function(sanitized_cblock)
+        result = safe_function(declassified_cblock)
         assert result == "Processed: tainted content"
     
     def test_privileged_rejects_tainted_input(self):
@@ -371,8 +348,8 @@ class TestSecurityIntegration:
         assert not mot.is_safe()
         assert mot._meta["_security"].is_tainted()
         
-        # Sanitize the output
-        safe_mot = sanitize(mot)
+        # Declassify the output
+        safe_mot = declassify(mot)
         assert safe_mot.is_safe()
         assert safe_mot._meta["_security"].sec_level.level_type == "none"
         
@@ -398,7 +375,7 @@ class TestSecurityIntegration:
         with pytest.raises(SecurityError):
             process_response(mot)
         
-        # Sanitize and try again
-        safe_mot = sanitize(mot)
+        # Declassify and try again
+        safe_mot = declassify(mot)
         result = process_response(safe_mot)
         assert result == "Processed: tainted response"
