@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextvars
+from copy import copy
 from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
@@ -29,6 +30,7 @@ from mellea.stdlib.base import (
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import Requirement, ValidationResult
 from mellea.stdlib.sampling import SamplingResult, SamplingStrategy
+from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 
 # Global context variable for the context session
 _context_session: contextvars.ContextVar[MelleaSession | None] = contextvars.ContextVar(
@@ -175,11 +177,9 @@ class MelleaSession:
         Args:
             backend (Backend): This is always required.
             ctx (Context): The way in which the model's context will be managed. By default, each interaction with the model is a stand-alone interaction, so we use SimpleContext as the default.
-            model_options (Optional[dict]): model options, which will upsert into the model/backend's defaults.
         """
         self.backend = backend
         self.ctx: Context = ctx if ctx is not None else SimpleContext()
-        self._backend_stack: list[tuple[Backend, dict | None]] = []
         self._session_logger = FancyLogger.get_logger()
         self._context_token = None
 
@@ -195,30 +195,36 @@ class MelleaSession:
             _context_session.reset(self._context_token)
             self._context_token = None
 
-    def _push_model_state(self, new_backend: Backend, new_model_opts: dict):
-        """The backend and model options used within a `Context` can be temporarily changed. This method changes the model's backend and model_opts, while saving the current settings in the `self._backend_stack`.
+    def __copy__(self):
+        """Use self.clone. Copies the current session but keeps references to the backend and context."""
+        new = MelleaSession(backend=self.backend, ctx=self.ctx)
+        new._session_logger = self._session_logger
+        # Explicitly don't copy over the _context_token.
 
-        Question: should this logic be moved into context? I really want to keep `Session` as simple as possible... see true motivation in the docstring for the class.
+        return new
+
+    def clone(self):
+        """Useful for running multiple generation requests while keeping the context at a given point in time.
+
+        Returns:
+            a copy of the current session. Keeps the context, backend, and session logger.
+
+        Examples:
+            >>> from mellea import start_session
+            >>> m = start_session()
+            >>> m.instruct("What is 2x2?")
+            >>>
+            >>> m1 = m.clone()
+            >>> out = m1.instruct("Multiply that by 2")
+            >>> print(out)
+            ... 8
+            >>>
+            >>> m2 = m.clone()
+            >>> out = m2.instruct("Multiply that by 3")
+            >>> print(out)
+            ... 12
         """
-        self._backend_stack.append((self.backend, self.model_options))
-        self.backend = new_backend
-        self.opts = new_model_opts
-
-    def _pop_model_state(self) -> bool:
-        """Pops the model state.
-
-        The backend and model options used within a `Context` can be temporarily changed by pushing and popping from the model state.
-        This function restores the model's previous backend and model_opts from the `self._backend_stack`.
-
-        Question: should this logic be moved into context? I really want to keep `Session` as simple as possible... see true motivation in the docstring for the class.
-        """
-        try:
-            b, b_model_opts = self._backend_stack.pop()
-            self.backend = b
-            self.model_options = b_model_opts
-            return True
-        except Exception:
-            return False
+        return copy(self)
 
     def reset(self):
         """Reset the context state."""
@@ -227,7 +233,6 @@ class MelleaSession:
     def cleanup(self) -> None:
         """Clean up session resources."""
         self.reset()
-        self._backend_stack.clear()
         if hasattr(self.backend, "close"):
             self.backend.close()  # type: ignore
 
@@ -236,7 +241,8 @@ class MelleaSession:
         self,
         action: Component,
         *,
-        strategy: SamplingStrategy | None = None,
+        requirements: list[Requirement] | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: Literal[False] = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -248,14 +254,25 @@ class MelleaSession:
         self,
         action: Component,
         *,
-        strategy: SamplingStrategy | None = None,
+        requirements: list[Requirement] | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: Literal[True],
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> SamplingResult: ...
 
-    def act(self, action: Component, **kwargs) -> ModelOutputThunk | SamplingResult:  # noqa: D417
+    def act(
+        self,
+        action: Component,
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        return_sampling_results: bool = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
         Args:
@@ -270,11 +287,25 @@ class MelleaSession:
         Returns:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
         """
-        result, context = mfuncs.act(
-            action, context=self.ctx, backend=self.backend, **kwargs
-        )
-        self.ctx = context
-        return result
+        r = mfuncs.act(
+            action,
+            context=self.ctx,
+            backend=self.backend,
+            requirements=requirements,
+            strategy=strategy,
+            return_sampling_results=return_sampling_results,
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )  # type: ignore
+
+        if isinstance(r, SamplingResult):
+            self.ctx = r.result_ctx
+            return r
+        else:
+            result, context = r
+            self.ctx = context
+            return result
 
     @overload
     def instruct(
@@ -288,7 +319,7 @@ class MelleaSession:
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
-        strategy: SamplingStrategy | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: Literal[False] = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -307,14 +338,30 @@ class MelleaSession:
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
-        strategy: SamplingStrategy | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results: Literal[True],
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> SamplingResult: ...
 
-    def instruct(self, description: str, **kwargs) -> ModelOutputThunk | SamplingResult:  # noqa: D417
+    def instruct(
+        self,
+        description: str,
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        return_sampling_results: bool = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk | SamplingResult:
         """Generates from an instruction.
 
         Args:
@@ -333,13 +380,28 @@ class MelleaSession:
             images: A list of images to be used in the instruction or None if none.
         """
         r = mfuncs.instruct(
-            description, context=self.ctx, backend=self.backend, **kwargs
+            description,
+            context=self.ctx,
+            backend=self.backend,
+            images=images,
+            requirements=requirements,
+            icl_examples=icl_examples,
+            grounding_context=grounding_context,
+            user_variables=user_variables,
+            prefix=prefix,
+            output_prefix=output_prefix,
+            strategy=strategy,
+            return_sampling_results=return_sampling_results,  # type: ignore
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
         )
 
         if isinstance(r, SamplingResult):
             self.ctx = r.result_ctx
             return r
         else:
+            # It's a tuple[ModelOutputThunk, Context].
             result, context = r
             self.ctx = context
             return result
@@ -448,6 +510,290 @@ class MelleaSession:
             of the function called, usually the type of the object passed in.
         """
         result, context = mfuncs.transform(
+            obj=obj,
+            transformation=transformation,
+            context=self.ctx,
+            backend=self.backend,
+            format=format,
+            model_options=model_options,
+        )
+        self.ctx = context
+        return result
+
+    @overload
+    async def aact(
+        self,
+        action: Component,
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk: ...
+
+    @overload
+    async def aact(
+        self,
+        action: Component,
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        return_sampling_results: Literal[True],
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> SamplingResult: ...
+
+    async def aact(
+        self,
+        action: Component,
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        return_sampling_results: bool = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk | SamplingResult:
+        """Runs a generic action, and adds both the action and the result to the context.
+
+        Args:
+            action: the Component from which to generate.
+            requirements: used as additional requirements when a sampling strategy is provided
+            strategy: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
+            return_sampling_results: attach the (successful and failed) sampling attempts to the results.
+            format: if set, the BaseModel to use for constrained decoding.
+            model_options: additional model options, which will upsert into the model/backend's defaults.
+            tool_calls: if true, tool calling is enabled.
+
+        Returns:
+            A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+        """
+        r = await mfuncs.aact(
+            action,
+            context=self.ctx,
+            backend=self.backend,
+            requirements=requirements,
+            strategy=strategy,
+            return_sampling_results=return_sampling_results,
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )  # type: ignore
+
+        if isinstance(r, SamplingResult):
+            self.ctx = r.result_ctx
+            return r
+        else:
+            result, context = r
+            self.ctx = context
+            return result
+
+    @overload
+    async def ainstruct(
+        self,
+        description: str,
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk: ...
+
+    @overload
+    async def ainstruct(
+        self,
+        description: str,
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        return_sampling_results: Literal[True],
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> SamplingResult: ...
+
+    async def ainstruct(
+        self,
+        description: str,
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        return_sampling_results: bool = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk | SamplingResult:
+        """Generates from an instruction.
+
+        Args:
+            description: The description of the instruction.
+            requirements: A list of requirements that the instruction can be validated against.
+            icl_examples: A list of in-context-learning examples that the instruction can be validated against.
+            grounding_context: A list of grounding contexts that the instruction can use. They can bind as variables using a (key: str, value: str | ContentBlock) tuple.
+            user_variables: A dict of user-defined variables used to fill in Jinja placeholders in other parameters. This requires that all other provided parameters are provided as strings.
+            prefix: A prefix string or ContentBlock to use when generating the instruction.
+            output_prefix: A string or ContentBlock that defines a prefix for the output generation. Usually you do not need this.
+            strategy: A SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
+            return_sampling_results: attach the (successful and failed) sampling attempts to the results.
+            format: If set, the BaseModel to use for constrained decoding.
+            model_options: Additional model options, which will upsert into the model/backend's defaults.
+            tool_calls: If true, tool calling is enabled.
+            images: A list of images to be used in the instruction or None if none.
+        """
+        r = await mfuncs.ainstruct(
+            description,
+            context=self.ctx,
+            backend=self.backend,
+            images=images,
+            requirements=requirements,
+            icl_examples=icl_examples,
+            grounding_context=grounding_context,
+            user_variables=user_variables,
+            prefix=prefix,
+            output_prefix=output_prefix,
+            strategy=strategy,
+            return_sampling_results=return_sampling_results,  # type: ignore
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )
+
+        if isinstance(r, SamplingResult):
+            self.ctx = r.result_ctx
+            return r
+        else:
+            # It's a tuple[ModelOutputThunk, Context].
+            result, context = r
+            self.ctx = context
+            return result
+
+    async def achat(
+        self,
+        content: str,
+        role: Message.Role = "user",
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        user_variables: dict[str, str] | None = None,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> Message:
+        """Sends a simple chat message and returns the response. Adds both messages to the Context."""
+        result, context = await mfuncs.achat(
+            content=content,
+            context=self.ctx,
+            backend=self.backend,
+            role=role,
+            images=images,
+            user_variables=user_variables,
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )
+
+        self.ctx = context
+        return result
+
+    async def avalidate(
+        self,
+        reqs: Requirement | list[Requirement],
+        *,
+        output: CBlock | None = None,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        generate_logs: list[GenerateLog] | None = None,
+        input: CBlock | None = None,
+    ) -> list[ValidationResult]:
+        """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
+        return await mfuncs.avalidate(
+            reqs=reqs,
+            context=self.ctx,
+            backend=self.backend,
+            output=output,
+            format=format,
+            model_options=model_options,
+            generate_logs=generate_logs,
+            input=input,
+        )
+
+    async def aquery(
+        self,
+        obj: Any,
+        query: str,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk:
+        """Query method for retrieving information from an object.
+
+        Args:
+            obj : The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
+            query:  The string representing the query to be executed against the object.
+            format:  format for output parsing.
+            model_options: Model options to pass to the backend.
+            tool_calls: If true, the model may make tool calls. Defaults to False.
+
+        Returns:
+            ModelOutputThunk: The result of the query as processed by the backend.
+        """
+        result, context = await mfuncs.aquery(
+            obj=obj,
+            query=query,
+            context=self.ctx,
+            backend=self.backend,
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )
+        self.ctx = context
+        return result
+
+    async def atransform(
+        self,
+        obj: Any,
+        transformation: str,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+    ) -> ModelOutputThunk | Any:
+        """Transform method for creating a new object with the transformation applied.
+
+        Args:
+            obj: The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
+            transformation:  The string representing the query to be executed against the object.
+            format: format for output parsing; usually not needed with transform.
+            model_options: Model options to pass to the backend.
+
+        Returns:
+            ModelOutputThunk|Any: The result of the transformation as processed by the backend. If no tools were called,
+            the return type will be always be ModelOutputThunk. If a tool was called, the return type will be the return type
+            of the function called, usually the type of the object passed in.
+        """
+        result, context = await mfuncs.atransform(
             obj=obj,
             transformation=transformation,
             context=self.ctx,
