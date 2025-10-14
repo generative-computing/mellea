@@ -165,12 +165,12 @@ class SecurityError(Exception):
 
 
 def taint_sources(action: Union[Component, CBlock], ctx: Any) -> list[Union[CBlock, Component]]:
-    """Compute taint sources from action and context (shallow).
+    """Compute taint sources from action and context.
     
     This function examines the action and context to determine what
-    security sources might be present. It performs a shallow analysis
-    to identify potential taint sources and returns the actual objects
-    that are tainted.
+    security sources might be present. It performs recursive analysis
+    of Component parts and shallow analysis of context to identify 
+    potential taint sources and returns the actual objects that are tainted.
     
     Args:
         action: The action component or content block
