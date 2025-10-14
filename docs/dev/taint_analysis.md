@@ -225,4 +225,4 @@ This enables integration with IAM systems and cloud-based access control.
 - **Non-mutating operations**: Sanitize/declassify create new objects
 
 
-This creates a sophisticated security model that addresses both data exfiltration and injection vulnerabilities while enabling future IAM integration.
+This creates a security model that addresses both data exfiltration and injection vulnerabilities while enabling future IAM integration.
