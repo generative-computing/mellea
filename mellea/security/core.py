@@ -277,26 +277,6 @@ def privileged(func: F) -> F:
     return wrapper  # type: ignore
 
 
-def sanitize(cblock: CBlock) -> CBlock:
-    """Create a sanitized version of a CBlock (non-mutating).
-    
-    This function creates a new CBlock with the same content but marked
-    as safe (SecLevel.none()). The original CBlock is not modified.
-    
-    Args:
-        cblock: The CBlock to sanitize
-        
-    Returns:
-        A new CBlock with safe security level
-    """
-    # Create new meta dict with safe security
-    new_meta = cblock._meta.copy() if cblock._meta else {}
-    new_meta['_security'] = SecurityMetadata(SecLevel.none())
-    
-    # Return new CBlock with same content but new security metadata
-    return CBlock(cblock.value, new_meta)
-
-
 def declassify(cblock: CBlock) -> CBlock:
     """Create a declassified version of a CBlock (non-mutating).
     

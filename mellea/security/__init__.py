@@ -10,7 +10,6 @@ from .core import (
     SecurityMetadata,
     SecurityError,
     privileged,
-    sanitize,
     declassify,
     taint_sources,
 )
@@ -21,7 +20,6 @@ __all__ = [
     "SecurityMetadata", 
     "SecurityError",
     "privileged",
-    "sanitize",
     "declassify",
     "taint_sources",
 ]
