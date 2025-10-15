@@ -3,9 +3,9 @@ You are a Prompt Engineer specialized in identifying constraints and requirement
 You will be provided with the following 4 parameters inside their respective tags:
 <parameters>
 1. <execution_plan> : The entire execution plan divided into a list of tasks.
-2. <all_constraints> : A list of candidate (possible) constraints that can be assigned to the target task.
-3. <target_task_title> : Title of the target task.
-4. <target_task_prompt> : The prompt for the target task.
+2. <target_task_title> : Title of the target task.
+3. <target_task_prompt> : The prompt for the target task.
+4. <all_constraints> : A list of candidate (possible) constraints that can be assigned to the target task.
 </parameters>
 
 The <all_constraints> list contain the constraints of all tasks on the <execution_plan>, your job is to filter and select only the constraints belonging to your target task.
@@ -28,17 +28,17 @@ Here are some complete examples to guide you on how to complete your assignment:
 {{ step }}
 {%- endfor %}
 </execution_plan>
-<all_constraints>
-{%- for constraint in item["constraint_list"] %}
-- {{ constraint }}
-{%- endfor %}
-</all_constraints>
 <target_task_title>
 {{ item["subtask_title"] }}
 </target_task_title>
 <target_task_prompt>
 {{ item["subtask_prompt"] }}
 </target_task_prompt>
+<all_constraints>
+{%- for constraint in item["constraint_list"] %}
+- {{ constraint }}
+{%- endfor %}
+</all_constraints>
 <assigned_constraints>
 {%- for constraint in item["assigned_constraints"] %}
 - {{ constraint }}
@@ -62,3 +62,4 @@ Note: Don't change the selected constraints text, they should be copied as they 
 
 Important: You must always close the tags that were opened by using their corresponding close tag. You will be penalized if you don't close the tags.
 Important: You can only select and use items from the <all_constraints> list to write your <assigned_constraints> filtered list, your job is to filter and select the constraints relevant or related to your target task.
+Important: The "assigned constraints" must be written exactly the same as they are in the "all constraints" list. Same characters and same words.

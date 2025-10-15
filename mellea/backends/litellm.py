@@ -22,7 +22,7 @@ from mellea.backends.tools import (
     convert_tools_to_json,
 )
 from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import send_to_queue
+from mellea.helpers.async_helpers import get_current_event_loop, send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.helpers.openai_compatible_helpers import (
     chat_completion_delta_merge,
@@ -105,6 +105,8 @@ class LiteLLMBackend(FormatterBackend):
             ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
             ModelOption.STREAM: "stream",
         }
+
+        self._past_event_loops: set[int] = set()
 
     def generate_from_context(
         self,
@@ -288,6 +290,11 @@ class LiteLLMBackend(FormatterBackend):
         formatted_tools = convert_tools_to_json(tools) if len(tools) > 0 else None
 
         model_specific_options = self._make_backend_specific_and_remove(model_opts)
+
+        if self._has_potential_event_loop_errors():
+            FancyLogger().get_logger().warning(
+                "There is a known bug with litellm. This generation call may fail. If it does, you should ensure that you are either running only synchronous Mellea functions or running async Mellea functions from one asyncio.run() call."
+            )
 
         chat_response: Coroutine[
             Any, Any, litellm.ModelResponse | litellm.ModelResponseStream  # type: ignore
@@ -507,3 +514,24 @@ class LiteLLMBackend(FormatterBackend):
         if len(model_tool_calls) > 0:
             return model_tool_calls
         return None
+
+    def _has_potential_event_loop_errors(self) -> bool:
+        """In some cases litellm doesn't create a new async client. There doesn't appear to be any way for us to force that behavior. As a result, log a warning for known cases.
+
+        This whole function can be removed once the bug is fixed: https://github.com/BerriAI/litellm/issues/15294.
+        """
+        # Async clients are tied to event loops.
+        key = id(get_current_event_loop())
+
+        has_potential_issue = False
+        if (
+            len(self._past_event_loops) > 0
+            and key not in self._past_event_loops
+            and "watsonx/" in str(self.model_id)
+        ):
+            has_potential_issue = True
+
+        # Add this loop to the known set.
+        self._past_event_loops.add(key)
+
+        return has_potential_issue

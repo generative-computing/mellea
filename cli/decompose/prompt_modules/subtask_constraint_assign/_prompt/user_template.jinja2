@@ -5,14 +5,14 @@ Here are the 4 parameters inside their respective tags, now I need you to write 
 {{ step }}
 {%- endfor %}
 </execution_plan>
-<all_constraints>
-{%- for constraint in constraint_list %}
-- {{ constraint }}
-{%- endfor %}
-</all_constraints>
 <target_task_title>
 {{ subtask_title }}
 </target_task_title>
 <target_task_prompt>
 {{ subtask_prompt }}
 </target_task_prompt>
+<all_constraints>
+{%- for constraint in constraint_list %}
+- {{ constraint }}
+{%- endfor %}
+</all_constraints>

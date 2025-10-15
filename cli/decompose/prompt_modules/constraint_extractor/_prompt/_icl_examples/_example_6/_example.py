@@ -9,7 +9,7 @@ with open(this_file_dir / "task_prompt.txt") as f:
 
 example: ICLExample = {
     "task_prompt": task_prompt.strip(),
-    "constraints_and_conditions": [],
+    "constraints_and_requirements": [],
 }
 
-example["constraints_and_conditions"] = ["N/A"]
+example["constraints_and_requirements"] = ["N/A"]

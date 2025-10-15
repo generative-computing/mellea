@@ -15,7 +15,7 @@ from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext, SimpleCont
 @pytest.fixture(scope="module")
 def backend():
     """Shared Watson backend for all tests in this module."""
-    if os.environ.get("CICD") == 1:
+    if int(os.environ.get("CICD", 0)) == 1:
         pytest.skip("Skipping watsonx tests.")
     else:
         return WatsonxAIBackend(
@@ -26,7 +26,7 @@ def backend():
 
 @pytest.fixture(scope="function")
 def session(backend: WatsonxAIBackend):
-    if os.environ.get("CICD") == 1:
+    if int(os.environ.get("CICD", 0)) == 1:
         pytest.skip("Skipping watsonx tests.")
     else:
         """Fresh Watson session for each test."""
@@ -148,6 +148,26 @@ async def test_async_avalue(session):
     m1_final_val = await mot1.avalue()
     assert m1_final_val is not None
     assert m1_final_val == mot1.value
+
+def test_client_cache(backend):
+    first_client = backend._model
+
+    async def get_client_async():
+        return backend._model
+    
+    second_client = asyncio.run(get_client_async())
+
+    items_in_cache = backend._client_cache.cache.values()
+    assert len(items_in_cache) == 2, "should be two clients in the cache since _async_client was called from two event loops"
+    assert first_client in items_in_cache
+    assert second_client in items_in_cache
+
+    third_client = backend._model
+    assert third_client == first_client, "clients in sync code should be the same if haven't been pushed out of the cache"
+
+    fourth_client = asyncio.run(get_client_async())
+    assert fourth_client in backend._client_cache.cache.values()
+    assert second_client not in backend._client_cache.cache.values()
 
 if __name__ == "__main__":
     import pytest

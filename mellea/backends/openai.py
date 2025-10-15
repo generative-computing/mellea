@@ -29,7 +29,11 @@ from mellea.backends.tools import (
     convert_tools_to_json,
 )
 from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import send_to_queue
+from mellea.helpers.async_helpers import (
+    ClientCache,
+    get_current_event_loop,
+    send_to_queue,
+)
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.helpers.openai_compatible_helpers import (
     chat_completion_delta_merge,
@@ -164,17 +168,34 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         else:
             self._api_key = api_key
 
-        openai_client_kwargs = self.filter_openai_client_kwargs(**kwargs)
+        self._openai_client_kwargs = self.filter_openai_client_kwargs(**kwargs)
 
         self._client = openai.OpenAI(  # type: ignore
-            api_key=self._api_key, base_url=self._base_url, **openai_client_kwargs
+            api_key=self._api_key, base_url=self._base_url, **self._openai_client_kwargs
         )
-        self._async_client = openai.AsyncOpenAI(
-            api_key=self._api_key, base_url=self._base_url, **openai_client_kwargs
-        )
+
+        self._client_cache = ClientCache(2)
+
+        # Call once to create an async_client and populate the cache.
+        _ = self._async_client
 
         # ALoras that have been loaded for this model.
         self._aloras: dict[str, OpenAIAlora] = {}
+
+    @property
+    def _async_client(self) -> openai.AsyncOpenAI:
+        """OpenAI's client usually handles changing event loops but explicitly handle it here for edge cases."""
+        key = id(get_current_event_loop())
+
+        _async_client = self._client_cache.get(key)
+        if _async_client is None:
+            _async_client = openai.AsyncOpenAI(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                **self._openai_client_kwargs,
+            )
+            self._client_cache.put(key, _async_client)
+        return _async_client
 
     @staticmethod
     def filter_openai_client_kwargs(**kwargs) -> dict:

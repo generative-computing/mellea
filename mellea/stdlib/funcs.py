@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
-from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Literal, TypeVar, overload
+from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
 
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.formatter import FormatterBackend
+from mellea.helpers.event_loop_helper import _run_async_in_thread
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -936,37 +936,3 @@ def _call_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]
                 )
             )
     return outputs
-
-
-R = TypeVar("R")
-
-
-def _run_async_in_thread(co: Coroutine[Any, Any, R]) -> R:
-    """Runs the provided coroutine.
-
-    Checks if an event loop is running in this thread. If one is running in this thread,
-    we use a separate thread to run the async code. Otherwise, run the code using asyncio.run.
-    """
-
-    def run_async(co: Coroutine):
-        """Helper function to run the coroutine."""
-        return asyncio.run(co)
-
-    # Check for a running loop.
-    loop = None
-    try:
-        loop = asyncio.get_running_loop()
-    except Exception:
-        pass
-
-    if loop is None:
-        # We can run it here since there's no currently running event loop.
-        out = run_async(co)
-    else:
-        # We have to run it in a new thread since there's a running event loop.
-        # Use a ThreadPoolExecutor to more easily extract the result.
-        with ThreadPoolExecutor(max_workers=1) as exec:
-            future = exec.submit(run_async, co)
-            out = future.result()
-
-    return out
