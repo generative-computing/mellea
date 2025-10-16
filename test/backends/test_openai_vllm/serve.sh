@@ -27,6 +27,7 @@
 export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
 
 echo "launching a vllm server. Logs are found in $(readlink -ef $(dirname $0))/vllm.log"
+echo "serve process id: $$"
 vllm serve ibm-granite/granite-3.2-8b-instruct \
       --enable-activated-lora \
       --enable-lora \
@@ -35,5 +36,6 @@ vllm serve ibm-granite/granite-3.2-8b-instruct \
       --enable-prefix-caching \
       > $(readlink -ef $(dirname $0))/vllm.log \
       2> $(readlink -ef $(dirname $0))/vllm.err
-
+serve_pid=$!
+echo "serve pid ${serve_pid}"
 
