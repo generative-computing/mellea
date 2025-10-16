@@ -10,7 +10,6 @@ in-conda (){
 
 in-conda pip install -e . --group dev
 in-conda uv pip install pre-commit
-# in-conda pre-commit install
 
 
 install-vllm-fork (){
