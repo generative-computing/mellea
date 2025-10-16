@@ -37,7 +37,7 @@ install-vllm-fork (){
     # it seems they are manually copying this directory, so I should follow this too...
     rsync -av --prune-empty-dirs --include="*/" --include="*.py" --exclude="*" ${CONDA_PREFIX}/lib/python3.12/site-packages/vllm/vllm_flash_attn/ vllm_backup/vllm_flash_attn/
 
-    uv pip install "vllm @ git+https://github.com/tdoublep/vllm@alora"
+    uv pip install "vllm @ git+https://github.com/tdoublep/vllm@$branch"
 
     rsync -av vllm_backup/ ${CONDA_PREFIX}/lib/python3.12/site-packages/vllm/
 }
