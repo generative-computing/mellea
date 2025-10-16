@@ -1,0 +1,1292 @@
+[
+  {
+    "id": 6675896,
+    "name": "The King against Esther Barber and others",
+    "name_abbreviation": "The King v. Barber",
+    "decision_date": "1775-11",
+    "docket_number": "",
+    "first_page": "7",
+    "last_page": "8",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 7"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 135,
+      "char_count": 1549,
+      "ocr_confidence": 0.386,
+      "sha256": "45000d041eabe0c8ba4711f261896191f3ef535fcb863a814f9bab7563702934",
+      "simhash": "1:4c37acd185612392",
+      "word_count": 282
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0007-01",
+    "first_page_order": 7,
+    "last_page_order": 8
+  },
+  {
+    "id": 6675935,
+    "name": "The State against Jacobus Vanhuys",
+    "name_abbreviation": "State v. Vanhuys",
+    "decision_date": "1782-04",
+    "docket_number": "",
+    "first_page": "8",
+    "last_page": "8",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 8"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 57,
+      "char_count": 529,
+      "ocr_confidence": 0.506,
+      "sha256": "c16c8f316eed151d93b6dbfcdc322937966ef7b3207a860d4fe33b17ec94202f",
+      "simhash": "1:8ac4e394842f4642",
+      "word_count": 91
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0008-01",
+    "first_page_order": 8,
+    "last_page_order": 8
+  },
+  {
+    "id": 6675980,
+    "name": "The State against Edmund Bainbridge",
+    "name_abbreviation": "State v. Bainbridge",
+    "decision_date": "1782-09",
+    "docket_number": "",
+    "first_page": "8",
+    "last_page": "9",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 8"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 192,
+      "char_count": 2496,
+      "ocr_confidence": 0.39,
+      "sha256": "19cda4df7ee51195ced546531ce572efd9815e13c21211ec91bce5dc6c455263",
+      "simhash": "1:2a4886b868abde42",
+      "word_count": 441
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0008-02",
+    "first_page_order": 8,
+    "last_page_order": 9
+  },
+  {
+    "id": 6676027,
+    "name": "The State against Lewis Mc. Knight",
+    "name_abbreviation": "State v. Mc. Knight",
+    "decision_date": "1782-09",
+    "docket_number": "",
+    "first_page": "10",
+    "last_page": "10",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 10"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 64,
+      "char_count": 638,
+      "ocr_confidence": 0.395,
+      "sha256": "2e789e24fc84d0b4d62e39942953e8057fe7b687a1ce232135f0929c2cedc061",
+      "simhash": "1:12f5b5b0464a8a89",
+      "word_count": 114
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0010-01",
+    "first_page_order": 10,
+    "last_page_order": 10
+  },
+  {
+    "id": 6676077,
+    "name": "The State against Enloes Philpot",
+    "name_abbreviation": "State v. Philpot",
+    "decision_date": "1782-09",
+    "docket_number": "",
+    "first_page": "10",
+    "last_page": "10",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 10"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 58,
+      "char_count": 462,
+      "ocr_confidence": 0.376,
+      "sha256": "fd8a0e4a5e00e9bfde80feeda535fc18ff923159e43eab7bee49d4f640087372",
+      "simhash": "1:020945498dc88208",
+      "word_count": 78
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0010-02",
+    "first_page_order": 10,
+    "last_page_order": 10
+  },
+  {
+    "id": 6676112,
+    "name": "The State against Lewis Mc. Knight",
+    "name_abbreviation": "State v. Mc. Knight",
+    "decision_date": "1782-11",
+    "docket_number": "",
+    "first_page": "11",
+    "last_page": "11",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 11"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 71,
+      "char_count": 572,
+      "ocr_confidence": 0.384,
+      "sha256": "e07ef7e3ab6bb23b3324e48154f57ae484e36884d303496d4cf01f2b62ca5315",
+      "simhash": "1:ff11e01366a74f68",
+      "word_count": 105
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0011-01",
+    "first_page_order": 11,
+    "last_page_order": 11
+  },
+  {
+    "id": 6676158,
+    "name": "IN THE SAME CAUSE OF The State against Lewis Mc. Knight",
+    "name_abbreviation": "State v. Mc. Knight",
+    "decision_date": "1782-11",
+    "docket_number": "",
+    "first_page": "11",
+    "last_page": "12",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 11"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 161,
+      "char_count": 1567,
+      "ocr_confidence": 0.336,
+      "sha256": "f69b7edb3ba241ae4daa0773a06d54a3657775006b7ac88cb271bef89a3379d2",
+      "simhash": "1:4835f3bad6874da4",
+      "word_count": 277
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0011-02",
+    "first_page_order": 11,
+    "last_page_order": 12
+  },
+  {
+    "id": 6676219,
+    "name": "Mercy Hill against William Leddell",
+    "name_abbreviation": "Hill v. Leddell",
+    "decision_date": "1783-09",
+    "docket_number": "",
+    "first_page": "12",
+    "last_page": "13",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 12"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 183,
+      "char_count": 1309,
+      "ocr_confidence": 0.306,
+      "sha256": "658fbbfafdb0d14507dd339183ac4671dc4a2b0c9a60d4256ccda819071043ed",
+      "simhash": "1:654df88cc3f014cb",
+      "word_count": 260
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0012-01",
+    "first_page_order": 12,
+    "last_page_order": 13
+  },
+  {
+    "id": 6676289,
+    "name": "The State against Tierck Tenbroeck",
+    "name_abbreviation": "State v. Tenbroeck",
+    "decision_date": "1783-09",
+    "docket_number": "",
+    "first_page": "13",
+    "last_page": "13",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 13"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 51,
+      "char_count": 481,
+      "ocr_confidence": 0.456,
+      "sha256": "6ae07600702e5742c20a92d5dd0a7066a049e98dcad8e2629255cce4bed033a0",
+      "simhash": "1:326c3a9cc6fc741a",
+      "word_count": 80
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0013-01",
+    "first_page_order": 13,
+    "last_page_order": 13
+  },
+  {
+    "id": 6676338,
+    "name": "The State against Adrian Post",
+    "name_abbreviation": "State v. Post",
+    "decision_date": "1784-05",
+    "docket_number": "",
+    "first_page": "13",
+    "last_page": "14",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 13"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 65,
+      "char_count": 619,
+      "ocr_confidence": 0.744,
+      "sha256": "2fe8b569d333e28388d5cdbc988db60f20ab57f2a84c384b37d5c9d822c8f140",
+      "simhash": "1:49d7e5542ac79850",
+      "word_count": 114
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0013-02",
+    "first_page_order": 13,
+    "last_page_order": 14
+  },
+  {
+    "id": 6676370,
+    "name": "The State against Benjamin Applegate",
+    "name_abbreviation": "State v. Applegate",
+    "decision_date": "1785-04",
+    "docket_number": "",
+    "first_page": "14",
+    "last_page": "14",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 14"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 78,
+      "char_count": 775,
+      "ocr_confidence": 1.0,
+      "sha256": "2dbd00069521b940b2cb4d97e171d485d8ff5e62cf25da8191547c4dfaeefc43",
+      "simhash": "1:fe9763fcf04dacdf",
+      "word_count": 142
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0014-01",
+    "first_page_order": 14,
+    "last_page_order": 14
+  },
+  {
+    "id": 6676406,
+    "name": "The State against John Vanhorne",
+    "name_abbreviation": "State v. Vanhorne",
+    "decision_date": "1785-05",
+    "docket_number": "",
+    "first_page": "15",
+    "last_page": "15",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 15"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 86,
+      "char_count": 906,
+      "ocr_confidence": 0.436,
+      "sha256": "b5af8f3a6537fb9238dafbcd43b9e958a30d6413727ba296b5afa8bcfef42944",
+      "simhash": "1:ceedaf5660cd4edb",
+      "word_count": 154
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0015-01",
+    "first_page_order": 15,
+    "last_page_order": 15
+  },
+  {
+    "id": 6676449,
+    "name": "Moore Furman, Esq. Agent of Forfeitures for the County of Hunterdon-against John Eauhouse, In Detinue",
+    "name_abbreviation": "Furman v. Eauhouse",
+    "decision_date": "1786-05",
+    "docket_number": "",
+    "first_page": "15",
+    "last_page": "16",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 15"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 62,
+      "char_count": 606,
+      "ocr_confidence": 0.684,
+      "sha256": "c118acb372de126492fada18f3ee87f5831ecf5a2337e1071cdd592dc3eaec8f",
+      "simhash": "1:5a15342c7fccae32",
+      "word_count": 107
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0015-02",
+    "first_page_order": 15,
+    "last_page_order": 16
+  },
+  {
+    "id": 6676485,
+    "name": "Negro George against Barnt De Klyn",
+    "name_abbreviation": "George v. De Klyn",
+    "decision_date": "1785-11",
+    "docket_number": "",
+    "first_page": "16",
+    "last_page": "16",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 16"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 63,
+      "char_count": 450,
+      "ocr_confidence": 1.0,
+      "sha256": "038ae0c634a6fca3eefcb16ba4bc8fdad9a797e5dc51343f5d707ea9eb07983e",
+      "simhash": "1:b0a5279b7ad8bb18",
+      "word_count": 84
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0016-01",
+    "first_page_order": 16,
+    "last_page_order": 16
+  },
+  {
+    "id": 6676521,
+    "name": "Negro Quamini against William Leddel, Esquire",
+    "name_abbreviation": "Quamini v. Leddel",
+    "decision_date": "1785-11",
+    "docket_number": "",
+    "first_page": "16",
+    "last_page": "17",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 16"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 149,
+      "char_count": 1213,
+      "ocr_confidence": 0.468,
+      "sha256": "826dc28b5bd9491ae091d392a6e40fdef8bf2ea89c6aa938b6382ae2a946f7b1",
+      "simhash": "1:ec9cad804a8ea608",
+      "word_count": 214
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0016-02",
+    "first_page_order": 16,
+    "last_page_order": 17
+  },
+  {
+    "id": 6676564,
+    "name": "The State against Jacob Phillips",
+    "name_abbreviation": "State v. Phillips",
+    "decision_date": "1787-05",
+    "docket_number": "",
+    "first_page": "17",
+    "last_page": "18",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 17"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 82,
+      "char_count": 841,
+      "ocr_confidence": 0.383,
+      "sha256": "f9fe19da66ed56bad3769801127f6dc55a3b1dd92352da082c858c778ea2b059",
+      "simhash": "1:a7a4ac73d633065a",
+      "word_count": 150
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0017-01",
+    "first_page_order": 17,
+    "last_page_order": 18
+  },
+  {
+    "id": 6676604,
+    "name": "The State against John B. Oliver and his Wife",
+    "name_abbreviation": "State v. Oliver",
+    "decision_date": "1787-09",
+    "docket_number": "",
+    "first_page": "18",
+    "last_page": "18",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 18"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 134,
+      "char_count": 1333,
+      "ocr_confidence": 0.432,
+      "sha256": "da8544c98e8b45d693d3f41271eee9b4c21b860776c267448e6bcc3eb4b049b3",
+      "simhash": "1:b972ec118a5a2cd3",
+      "word_count": 236
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0018-01",
+    "first_page_order": 18,
+    "last_page_order": 18
+  },
+  {
+    "id": 6676640,
+    "name": "The State against Daniel Taylor, Junior",
+    "name_abbreviation": "State v.Taylor",
+    "decision_date": "1788-09",
+    "docket_number": "",
+    "first_page": "19",
+    "last_page": "19",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 19"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 71,
+      "char_count": 613,
+      "ocr_confidence": 0.346,
+      "sha256": "bebb22c4b66b62fd40e547eab63b5865342bf5371fac09223ed47e8bc93f26f1",
+      "simhash": "1:15e3235928c4af58",
+      "word_count": 111
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0019-01",
+    "first_page_order": 19,
+    "last_page_order": 19
+  },
+  {
+    "id": 6676687,
+    "name": "The State against David Lyon",
+    "name_abbreviation": "State v. Lyon",
+    "decision_date": "1789-04",
+    "docket_number": "",
+    "first_page": "19",
+    "last_page": "21",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 19"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 359,
+      "char_count": 4410,
+      "ocr_confidence": 0.377,
+      "sha256": "c36941cfad1da5f1b4abd6be2e36b5fbed606eacee3bdef5fe4a9d6c7fdc29f9",
+      "simhash": "1:ba8ef3fafc211091",
+      "word_count": 815
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0019-02",
+    "first_page_order": 19,
+    "last_page_order": 21
+  },
+  {
+    "id": 6676727,
+    "name": "The State against John Leighton",
+    "name_abbreviation": "State v. Leighton",
+    "decision_date": "1789-04",
+    "docket_number": "",
+    "first_page": "21",
+    "last_page": "23",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 21"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 311,
+      "char_count": 4014,
+      "ocr_confidence": 0.386,
+      "sha256": "51a0b0aa83a495af1465a9ea4c290ee3980e1689d06e78c4fb280afde8733b1d",
+      "simhash": "1:48d32bb397edfc0b",
+      "word_count": 706
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0021-01",
+    "first_page_order": 21,
+    "last_page_order": 23
+  },
+  {
+    "id": 6676764,
+    "name": "The State against Tobias Hendrickson",
+    "name_abbreviation": "State v. Hendrickson",
+    "decision_date": "1790-05",
+    "docket_number": "",
+    "first_page": "24",
+    "last_page": "24",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 24"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 85,
+      "char_count": 815,
+      "ocr_confidence": 0.453,
+      "sha256": "458deed4bb161c5120149c7ff65911ba07958796e1f4126ef79058f476d78c5f",
+      "simhash": "1:3beab3f6cc0008fb",
+      "word_count": 141
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0024-01",
+    "first_page_order": 24,
+    "last_page_order": 24
+  },
+  {
+    "id": 6676811,
+    "name": "The State against John Ware",
+    "name_abbreviation": "State v. Ware",
+    "decision_date": "1790-09",
+    "docket_number": "",
+    "first_page": "24",
+    "last_page": "25",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 24"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 147,
+      "char_count": 1752,
+      "ocr_confidence": 0.367,
+      "sha256": "874c2ff019268b770ebd496e01c923d40d4f776bcaecc8f3c83e0e6fb2c25132",
+      "simhash": "1:1a9a39e36ec8b093",
+      "word_count": 320
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0024-02",
+    "first_page_order": 24,
+    "last_page_order": 25
+  },
+  {
+    "id": 6676868,
+    "name": "The State against James Anderson",
+    "name_abbreviation": "State v. Anderson",
+    "decision_date": "1790-09",
+    "docket_number": "",
+    "first_page": "25",
+    "last_page": "27",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 25"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 359,
+      "char_count": 4906,
+      "ocr_confidence": 0.435,
+      "sha256": "1370707bca55d00802339db558b1cf36118d96ad1ed4d227ae9a461a7acf0aa5",
+      "simhash": "1:295728b68b8574b1",
+      "word_count": 873
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0025-01",
+    "first_page_order": 25,
+    "last_page_order": 27
+  },
+  {
+    "id": 6676924,
+    "name": "The State against Joshua Farley",
+    "name_abbreviation": "State v. Farley",
+    "decision_date": "1790-09",
+    "docket_number": "",
+    "first_page": "27",
+    "last_page": "28",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 27"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 30,
+      "char_count": 190,
+      "ocr_confidence": 0.448,
+      "sha256": "9608755ba74cc90a4190e617021d7bf248f5fbb6ef65d17d677f2481915b860a",
+      "simhash": "1:048a6b51a3dc1a3a",
+      "word_count": 36
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0027-01",
+    "first_page_order": 27,
+    "last_page_order": 28
+  },
+  {
+    "id": 6676974,
+    "name": "The State against Joshua Farley",
+    "name_abbreviation": "State v. Farley",
+    "decision_date": "1790-11",
+    "docket_number": "",
+    "first_page": "28",
+    "last_page": "28",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 28"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 116,
+      "char_count": 1118,
+      "ocr_confidence": 0.358,
+      "sha256": "064aa98c2f803f8cc6a4dbf346729cfd73d33f44ab129f1925f53df899bc6202",
+      "simhash": "1:dbeffbb48e07ea98",
+      "word_count": 208
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0028-01",
+    "first_page_order": 28,
+    "last_page_order": 28
+  },
+  {
+    "id": 6677014,
+    "name": "The State against Joseph Beavers, John Clifford, and John Martin, Administrators of Edward Clifford, deceased",
+    "name_abbreviation": "State v. Beavers",
+    "decision_date": "1791-05",
+    "docket_number": "",
+    "first_page": "28",
+    "last_page": "29",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 28"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 133,
+      "char_count": 1266,
+      "ocr_confidence": 0.386,
+      "sha256": "42d25827ca604afa71c7a37b63c1f4d95c24f75c963ce1afc7693a666cfa3c9b",
+      "simhash": "1:9477d893cfb40b72",
+      "word_count": 213
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0028-02",
+    "first_page_order": 28,
+    "last_page_order": 29
+  },
+  {
+    "id": 6677057,
+    "name": "The State against Abraham Probasco",
+    "name_abbreviation": "State v. Probasco",
+    "decision_date": "1791-05",
+    "docket_number": "",
+    "first_page": "29",
+    "last_page": "30",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 29"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 242,
+      "char_count": 3499,
+      "ocr_confidence": 0.426,
+      "sha256": "71c3ff61b6d3a70260a8a9fe35a6e92a7a7ccd14cf350fde8a252ff1aa8eb2d6",
+      "simhash": "1:031da783ecb48990",
+      "word_count": 618
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0029-01",
+    "first_page_order": 29,
+    "last_page_order": 30
+  },
+  {
+    "id": 6677101,
+    "name": "The State against William Laird",
+    "name_abbreviation": "State v. Laird",
+    "decision_date": "1792-09",
+    "docket_number": "",
+    "first_page": "31",
+    "last_page": "31",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 31"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 50,
+      "char_count": 477,
+      "ocr_confidence": 0.348,
+      "sha256": "6710d8cf2e90d31191eda36cf0f9da8a2d623e2921394b713327e9a7a14a4988",
+      "simhash": "1:e24d93b1e4a8c11d",
+      "word_count": 79
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0031-01",
+    "first_page_order": 31,
+    "last_page_order": 31
+  },
+  {
+    "id": 6677146,
+    "name": "The State against Benjamin Covenhoven",
+    "name_abbreviation": "State v. Covenhoven",
+    "decision_date": "1793-04",
+    "docket_number": "",
+    "first_page": "31",
+    "last_page": "31",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 31"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 52,
+      "char_count": 503,
+      "ocr_confidence": 0.436,
+      "sha256": "99f7abd6203b919955edc863df77139594428d590b09210ca48269ce28e534e7",
+      "simhash": "1:36cd57d260542244",
+      "word_count": 78
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0031-02",
+    "first_page_order": 31,
+    "last_page_order": 31
+  },
+  {
+    "id": 6677197,
+    "name": "The State against James Pitney of the County of Morris",
+    "name_abbreviation": "State v. Pitney",
+    "decision_date": "1793-05",
+    "docket_number": "",
+    "first_page": "31",
+    "last_page": "32",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. (Manumission) 31"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J.",
+      "id": 8996,
+      "name": "Supreme Court of New Jersey"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 202,
+      "char_count": 2337,
+      "ocr_confidence": 0.399,
+      "sha256": "1322be34b5f49316cfef60a568da4780e74e36dd0d96778343d971392e71c66a",
+      "simhash": "1:a3fce2fc51c40b54",
+      "word_count": 425
+    },
+    "last_updated": "2023-07-14T20:57:27.673392+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0031-03",
+    "first_page_order": 31,
+    "last_page_order": 32
+  }
+]
