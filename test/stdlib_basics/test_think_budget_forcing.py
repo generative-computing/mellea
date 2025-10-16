@@ -7,7 +7,7 @@ from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
 from mellea.backends.model_ids import OPENAI_GPT_OSS_20B
 from mellea.stdlib.base import CBlock
-from mellea.stdlib.sampling_algos.budget_forcing import think_budget_forcing
+from mellea.stdlib.sampling_algos.budget_forcing_alg import think_budget_forcing
 
 MODEL_ID = OPENAI_GPT_OSS_20B
 
@@ -74,7 +74,7 @@ def test_think_big(m_session: MelleaSession, gh_run: int):
     ANSWER_MAX_TOKENS = 512
 
     result, gen_tok_cnt = think_budget_forcing(
-        m_session,
+        m_session.backend,
         action,
         think_max_tokens=THINK_MAX_TOKENS,
         answer_max_tokens=ANSWER_MAX_TOKENS,
@@ -102,7 +102,7 @@ def test_think_little(m_session: MelleaSession, gh_run: int):
         ANSWER_MAX_TOKENS = 5
 
     result, gen_tok_cnt = think_budget_forcing(
-        m_session,
+        m_session.backend,
         action,
         think_max_tokens=THINK_MAX_TOKENS,
         answer_max_tokens=ANSWER_MAX_TOKENS,
@@ -129,7 +129,7 @@ def test_dont_think(m_session: MelleaSession, gh_run: int):
         ANSWER_MAX_TOKENS = 5
 
     result, gen_tok_cnt = think_budget_forcing(
-        m_session,
+        m_session.backend,
         action,
         think_max_tokens=THINK_MAX_TOKENS,
         answer_max_tokens=ANSWER_MAX_TOKENS,
