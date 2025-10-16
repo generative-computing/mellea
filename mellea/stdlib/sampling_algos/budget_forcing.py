@@ -2,6 +2,7 @@
 
 import re
 
+from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.base import CBlock, Component, GenerateLog
 from mellea.stdlib.session import MelleaSession
 
@@ -52,6 +53,9 @@ def think_budget_forcing(
     Limitations:
         -  Does not support batching
     """
+    backend = session.backend
+    # TODO should expand backend support
+    assert isinstance(backend, OllamaModelBackend)
     model_options = backend._simplify_and_merge(model_options)
 
     responses = []
@@ -82,12 +86,14 @@ def think_budget_forcing(
         # The token count should be relayed by openai's CompletionUsage
         # model_options["logprobs"] = 1  # To get number of generated tokens
         result = backend._generate_from_raw(
-            [prompt], model_options=model_options, generate_logs=generate_logs
+            [CBlock(value=curr_prompt)],
+            model_options=model_options,
+            generate_logs=generate_logs,
         )
         # gen_tok_count += len(result[0]._meta['oai_completion_response']['logprobs']['token_logprobs'])
         gen_tok_count += result[0]._meta["generate_response"]["eval_count"]
         rem_toks = think_max_tokens - gen_tok_count
-        response = result[0].value
+        response = result[0].value if result[0].value else ""
 
         if think_wait_suffix == "":
             # non-strict budget form
@@ -137,8 +143,8 @@ def think_budget_forcing(
     if answer_suffix:
         response += f" {answer_suffix}"
 
-    # update original prompt with assembled response
-    prompt += response
+    # update original curr_prompt with assembled response
+    curr_prompt += response
     if answer_max_tokens is not None:
         model_options["max_tokens"] = answer_max_tokens
 
@@ -147,9 +153,9 @@ def think_budget_forcing(
 
     # model_options["logprobs"] = 1  # To get number of generated tokens
     result = backend._generate_from_raw(
-        [prompt], model_options=model_options, generate_logs=generate_logs
+        [CBlock(curr_prompt)], model_options=model_options, generate_logs=generate_logs
     )
-    response += result[0].value
+    response += result[0].value if result[0].value else ""
     gen_tok_count += result[0]._meta["generate_response"]["eval_count"]
     # gen_tok_count += len(result[0]._meta['oai_completion_response']['logprobs']['token_logprobs'])
     return response, gen_tok_count
