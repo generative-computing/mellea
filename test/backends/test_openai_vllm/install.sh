@@ -8,7 +8,7 @@ in-conda (){
 }
 
 
-in-conda uv pip install -e .[dev]
+in-conda pip install -e . --group dev
 in-conda uv pip install pre-commit
 # in-conda pre-commit install
 
