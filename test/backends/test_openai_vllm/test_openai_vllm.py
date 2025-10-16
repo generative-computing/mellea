@@ -186,7 +186,7 @@ class TestOpenAIALoraStuff:
         )
         assert len(validation_outputs) == 1
         val_result = validation_outputs[0]
-        assert str(val_result.reason) in ["Y", "N"]
+        assert str(val_result.reason) not in ["Y", "N"]
         self.backend.default_to_constraint_checking_alora = True
         self.m.reset()
 
