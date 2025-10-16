@@ -82,6 +82,7 @@ def think_budget_forcing(
         result = backend._generate_from_raw(
             [CBlock(value=curr_prompt)], model_options=model_options
         )
+        # await result.value()
         # gen_tok_count += len(result[0]._meta['oai_completion_response']['logprobs']['token_logprobs'])
         gen_tok_count += result[0]._meta["generate_response"]["eval_count"]
         rem_toks = think_max_tokens - gen_tok_count
@@ -147,6 +148,7 @@ def think_budget_forcing(
     result = backend._generate_from_raw(
         [CBlock(curr_prompt)], model_options=model_options
     )
+    # await result.value()
     response += result[0].value if result[0].value else ""
     gen_tok_count += result[0]._meta["generate_response"]["eval_count"]
     return response, gen_tok_count
