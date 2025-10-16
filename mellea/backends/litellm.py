@@ -40,6 +40,8 @@ from mellea.stdlib.base import (
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement
 
+format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
+
 
 class LiteLLMBackend(FormatterBackend):
     """A generic LiteLLM compatible backend."""
@@ -124,7 +126,7 @@ class LiteLLMBackend(FormatterBackend):
         mot = self._generate_from_chat_context_standard(
             action,
             ctx,
-            format=format,
+            _format=format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
@@ -234,7 +236,7 @@ class LiteLLMBackend(FormatterBackend):
         action: Component | CBlock,
         ctx: Context,
         *,
-        format: type[BaseModelSubclass]
+        _format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
@@ -268,12 +270,12 @@ class LiteLLMBackend(FormatterBackend):
             [OpenAIBackend.message_to_openai_message(m) for m in messages]
         )
 
-        if format is not None:
+        if _format is not None:
             response_format = {
                 "type": "json_schema",
                 "json_schema": {
-                    "name": format.__name__,
-                    "schema": format.model_json_schema(),
+                    "name": _format.__name__,
+                    "schema": _format.model_json_schema(),
                     "strict": True,
                 },
             }
@@ -286,7 +288,7 @@ class LiteLLMBackend(FormatterBackend):
             thinking = "medium"
 
         # Append tool call information if applicable.
-        tools = self._extract_tools(action, format, model_opts, tool_calls, ctx)
+        tools = self._extract_tools(action, _format, model_opts, tool_calls, ctx)
         formatted_tools = convert_tools_to_json(tools) if len(tools) > 0 else None
 
         model_specific_options = self._make_backend_specific_and_remove(model_opts)
@@ -321,7 +323,7 @@ class LiteLLMBackend(FormatterBackend):
             conversation=conversation,
             tools=tools,
             thinking=thinking,
-            format=format,
+            _format=_format,
         )
 
         try:
@@ -399,7 +401,7 @@ class LiteLLMBackend(FormatterBackend):
         conversation: list[dict],
         tools: dict[str, Callable],
         thinking,
-        format,
+        _format,
     ):
         """Called when generation is done."""
         # Reconstruct the chat_response from chunks if streamed.
@@ -444,7 +446,7 @@ class LiteLLMBackend(FormatterBackend):
         generate_log.date = datetime.datetime.now()
         generate_log.model_output = mot._meta["litellm_chat_response"]
         generate_log.extra = {
-            "format": format,
+            "format": _format,
             "tools_available": tools,
             "tools_called": mot.tool_calls,
             "seed": thinking,
@@ -455,11 +457,11 @@ class LiteLLMBackend(FormatterBackend):
 
     @staticmethod
     def _extract_tools(
-        action, format, model_opts, tool_calls, ctx
+        action, _format, model_opts, tool_calls, ctx
     ) -> dict[str, Callable]:
         tools: dict[str, Callable] = dict()
         if tool_calls:
-            if format:
+            if _format:
                 FancyLogger.get_logger().warning(
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
