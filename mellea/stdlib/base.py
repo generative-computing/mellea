@@ -322,6 +322,55 @@ class ModelOutputThunk(CBlock):
         """
         return f"ModelOutputThunk({self.value})"
 
+    def __copy__(self):
+        """Returns a shallow copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generating."""
+        copied = ModelOutputThunk(
+            self._underlying_value, self._meta, self.parsed_repr, self.tool_calls
+        )
+
+        # Check if the parsed_repr needs to be changed. A ModelOutputThunk's parsed_repr can point to
+        # itself if the parsing didn't result in a new representation. It makes sense to update the
+        # parsed_repr to the copied ModelOutputThunk in that case.
+        if self.parsed_repr is self:
+            copied.parsed_repr = copied
+
+        copied._computed = self._computed
+        copied._thinking = self._thinking
+        copied._action = self._action
+        copied._context = self._context
+        copied._generate_log = self._generate_log
+        copied._model_options = self._model_options
+        return copied
+
+    def __deepcopy__(self, memo):
+        """Returns a deep copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generation. Similar to __copy__ but creates deepcopies of _meta, parsed_repr, and most other fields that are objects."""
+        # Use __init__ to initialize all fields. Modify the fields that need to be copied/deepcopied below.
+        deepcopied = ModelOutputThunk(self._underlying_value)
+        memo[id(self)] = deepcopied
+
+        # TODO: We can tweak what gets deepcopied here. ModelOutputThunks should be immutable (unless generating),
+        # so this __deepcopy__ operation should be okay if it needs to be changed to be a shallow copy.
+
+        # Check if the parsed_repr needs to be changed. A ModelOutputThunk's parsed_repr can point to
+        # itself if the parsing didn't result in a new representation. It makes sense to update the
+        # parsed_repr to the deepcopied ModelOutputThunk in that case.
+        if self.parsed_repr is self:
+            deepcopied.parsed_repr = deepcopied
+        else:
+            deepcopied.parsed_repr = deepcopy(self.parsed_repr)
+
+        deepcopied._meta = deepcopy(self._meta)
+        deepcopied.tool_calls = deepcopy(self.tool_calls)
+        deepcopied._computed = self._computed
+        deepcopied._thinking = self._thinking
+        deepcopied._action = deepcopy(self._action)
+        deepcopied._context = copy(
+            self._context
+        )  # The items in a context should be immutable.
+        deepcopied._generate_log = copy(self._generate_log)
+        deepcopied._model_options = copy(self._model_options)
+        return deepcopied
+
 
 def blockify(s: str | CBlock | Component) -> CBlock | Component:
     """`blockify` is a helper function that turns raw strings into CBlocks."""
