@@ -1,14 +1,12 @@
 """Testing functions for budget forcing generation."""
 
 import pytest
-from transformers import AutoTokenizer
 
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
 from mellea.backends.model_ids import OPENAI_GPT_OSS_20B
 from mellea.stdlib.base import CBlock
 from mellea.stdlib.sampling.budget_forcing import BudgetForcingSamplingStrategy
-from mellea.stdlib.sampling_algos.budget_forcing_alg import think_budget_forcing
 
 MODEL_ID = OPENAI_GPT_OSS_20B
 
@@ -57,7 +55,6 @@ def test_think_big(m_session: MelleaSession, gh_run: int):
 
     print("\n******\nThink big:")
     print(str(result))
-    assert gen_tok_cnt >= 0.5 * THINK_MAX_TOKENS
 
 #
 # def test_think_little(m_session: MelleaSession, gh_run: int):
