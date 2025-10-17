@@ -36,6 +36,8 @@ from mellea.stdlib.base import (
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement
 
+format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
+
 
 class OllamaModelBackend(FormatterBackend):
     """A model that uses the Ollama Python SDK for local inference."""
@@ -265,7 +267,7 @@ class OllamaModelBackend(FormatterBackend):
         mot = self.generate_from_chat_context(
             action,
             ctx,
-            format=format,
+            _format=format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
@@ -277,7 +279,7 @@ class OllamaModelBackend(FormatterBackend):
         action: Component | CBlock,
         ctx: Context,
         *,
-        format: type[BaseModelSubclass] | None = None,
+        _format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
@@ -325,7 +327,7 @@ class OllamaModelBackend(FormatterBackend):
         # Append tool call information if applicable.
         tools: dict[str, Callable] = dict()
         if tool_calls:
-            if format:
+            if _format:
                 FancyLogger.get_logger().warning(
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
@@ -348,7 +350,7 @@ class OllamaModelBackend(FormatterBackend):
             think=model_opts.get(ModelOption.THINKING, None),
             stream=model_opts.get(ModelOption.STREAM, False),
             options=self._make_backend_specific_and_remove(model_opts),
-            format=format.model_json_schema() if format is not None else None,
+            format=_format.model_json_schema() if _format is not None else None,
         )  # type: ignore
 
         output = ModelOutputThunk(None)
@@ -360,7 +362,10 @@ class OllamaModelBackend(FormatterBackend):
         # each processing step.
         output._process = functools.partial(self.processing, tools=tools)
         output._post_process = functools.partial(
-            self.post_processing, conversation=conversation, tools=tools, format=format
+            self.post_processing,
+            conversation=conversation,
+            tools=tools,
+            _format=_format,
         )
 
         try:
@@ -523,7 +528,7 @@ class OllamaModelBackend(FormatterBackend):
         mot: ModelOutputThunk,
         conversation: list[dict],
         tools: dict[str, Callable],
-        format,
+        _format,
     ):
         """Called when generation is done."""
         assert mot._action is not None, (
@@ -542,7 +547,7 @@ class OllamaModelBackend(FormatterBackend):
         generate_log.date = datetime.datetime.now()
         generate_log.model_output = mot._meta["chat_response"]
         generate_log.extra = {
-            "format": format,
+            "format": _format,
             "thinking": mot._model_options.get(ModelOption.THINKING, None),
             "tools_available": tools,
             "tools_called": mot.tool_calls,
