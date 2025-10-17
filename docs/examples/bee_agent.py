@@ -72,13 +72,11 @@ def bee_app(func: Callable, **inputs):
             prompt,
         )
         yield AgentMessage(text=m.ctx.last_output().value)
+    return wrapper
 
 @bee_app
 def new_func(name: str, age: int) -> Tuple[ str, Callable[ [str], str] ]:
-
-    
     prompt = f"Write a birthday card for {name}. Include their age: {age}"
-    
     return (prompt, generate_response)
 
 
