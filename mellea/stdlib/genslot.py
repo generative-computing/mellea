@@ -435,6 +435,9 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
         slot_copy = deepcopy(self)
         # TODO: JAL; need to figure out where / how reqs work; if we want to keep as a part of the object,
         # apply them here after the copy has happened...
+        # need to change the template; add to docstring using postconditions:
+        #     Postconditions:
+        # - The input 'data' list will be sorted in ascending order.
         arguments = bind_function_arguments(self._function._func, **extracted.f_kwargs)
         if arguments:
             for key, val in arguments.items():
