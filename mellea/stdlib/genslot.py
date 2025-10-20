@@ -164,6 +164,7 @@ class ExtractedKwargs:
     context: Context | None = None
     backend: Backend | None = None
     model_options: dict | None = None
+    precondition_requirements: list[Requirement | str] | None = None
     requirements: list[Requirement | str] | None = None
     strategy: SamplingStrategy | None = None
 
@@ -185,6 +186,10 @@ class GenerativeSlot(Component, Generic[P, R]):
         self._arguments: list[Argument] = []
         functools.update_wrapper(self, func)
 
+        # Set when calling the decorated func.
+        self.precondition_requiremetns: list[Requirement] = []
+        self.requirements: list[Requirement] = []
+
     @abc.abstractmethod
     def __call__(self, *args, **kwargs) -> tuple[R, Context] | R:
         """Call the generative slot.
@@ -203,6 +208,37 @@ class GenerativeSlot(Component, Generic[P, R]):
         ...
 
     @staticmethod
+    def test_extract_args_and_kwargs(*args, **kwargs) -> ExtractedKwargs:
+        def _session_extract_args_and_kwargs(
+            session: MelleaSession | None = None,
+            context: Context | None = None,
+            backend: Backend | None = None,
+            precondition_requirements: list[Requirement | str] | None = None,
+            requirements: list[Requirement | str] | None = None,
+            strategy: SamplingStrategy | None = None,
+            model_options: dict | None = None,
+            **kwargs,
+        ):
+            extracted = ExtractedKwargs()
+            extracted.session = session
+            extracted.context = context
+            extracted.backend = backend
+            extracted.precondition_requirements = precondition_requirements
+            extracted.requirements = requirements
+            extracted.strategy = strategy
+            extracted.model_options = model_options
+            extracted.f_kwargs = kwargs
+            return extracted
+
+        # Determine which overload was used if args are passed in.
+        if len(args) > 0:
+            # TODO: JAL. go back to two funcs to do this. Makes arg parsing easier here? or only check if there's a session, else everything else is good?
+            # need to make first arg of the array session if there's args and no session kwarg?...
+            # need two funcs, but otherwise all the other args will be offset incorrectly? maybe we can handle that here as well.
+            if isinstance(args[0], MelleaSession):
+                ...
+
+    @staticmethod
     def extract_args_and_kwargs(*args, **kwargs) -> ExtractedKwargs:
         """Takes a mix of args and kwargs for both the generative slot and the original function and extracts them.
 
@@ -213,12 +249,37 @@ class GenerativeSlot(Component, Generic[P, R]):
         Raises:
             TODO: JAL
         """
+        # TODO: JAL write tests for this function...
         # Possible args for the generative slot.
         extracted = ExtractedKwargs()
 
         # Args can only have Mellea args. If the Mellea args get more complicated /
         # have duplicate types, use list indices rather than a match statement.
-        for arg in args:
+        num_args = len(args)
+        cur_arg = 0
+
+        # First and second args will differ depending on the overload. Check for session vs (backend, context).
+        # context: Context,
+        # backend: Backend,
+        # precondition_requirements: list[Requirement | str] | None = None,
+        # requirements: list[Requirement | str] | None = None,
+        # strategy: SamplingStrategy | None = None,
+        # model_options: dict | None = None,
+        if num_args > 0:
+            if isinstance(args[cur_arg], MelleaSession):
+                extracted.session = args[cur_arg]
+            elif isinstance(args[cur_arg], Context):
+                extracted.session = args[cur_arg]
+
+                if num_args > 1:
+                    if ...:
+                        ...
+            else:
+                raise ValueError(
+                    f"incorrect arg passed to generative slot function: {args[cur_arg]}"
+                )
+
+        for i, arg in enumerate(args):
             match arg:
                 case MelleaSession():
                     extracted.session = arg
@@ -273,6 +334,12 @@ class GenerativeSlot(Component, Generic[P, R]):
                     extracted.requirements = _get_val_or_err(
                         "requirements", extracted.requirements, val
                     )
+                case "precondition_requirements":
+                    extracted.precondition_requirements = _get_val_or_err(
+                        "precondition_requirements",
+                        extracted.precondition_requirements,
+                        val,
+                    )
                 case _:
                     extracted.f_kwargs[key] = val
 
@@ -310,6 +377,7 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
         self,
         context: Context,
         backend: Backend,
+        precondition_requirements: list[Requirement | str] | None = None,
         requirements: list[Requirement | str] | None = None,
         strategy: SamplingStrategy | None = None,
         model_options: dict | None = None,
@@ -321,6 +389,7 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
     def __call__(
         self,
         m: MelleaSession,
+        precondition_requirements: list[Requirement | str] | None = None,
         requirements: list[Requirement | str] | None = None,
         strategy: SamplingStrategy | None = None,
         model_options: dict | None = None,
@@ -335,6 +404,7 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
             m: MelleaSession: A mellea session (optional; must set context and backend if None)
             context: the Context object (optional; session must be set if None)
             backend: the backend used for generation (optional: session must be set if None)
+            precondition_requirements: A list of requirements that the genslot inputs are validated against; raises an err if not met.
             requirements: A list of requirements that the genslot output can be validated against.
             strategy: A SamplingStrategy that describes the strategy for validating and repairing/retrying. None means that no particular sampling strategy is used.
             model_options: Model options to pass to the backend.
@@ -396,6 +466,7 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
         self,
         context: Context,
         backend: Backend,
+        precondition_requirements: list[Requirement | str] | None = None,
         requirements: list[Requirement | str] | None = None,
         strategy: SamplingStrategy | None = None,
         model_options: dict | None = None,
@@ -407,6 +478,7 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
     def __call__(
         self,
         m: MelleaSession,
+        precondition_requirements: list[Requirement | str] | None = None,
         requirements: list[Requirement | str] | None = None,
         strategy: SamplingStrategy | None = None,
         model_options: dict | None = None,
@@ -421,6 +493,7 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
             m: MelleaSession: A mellea session (optional; must set context and backend if None)
             context: the Context object (optional; session must be set if None)
             backend: the backend used for generation (optional: session must be set if None)
+            precondition_requirements: A list of requirements that the genslot inputs are validated against; raises an err if not met.
             requirements: A list of requirements that the genslot output can be validated against.
             strategy: A SamplingStrategy that describes the strategy for validating and repairing/retrying. None means that no particular sampling strategy is used.
             model_options: Model options to pass to the backend.
@@ -429,10 +502,15 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
 
         Returns:
             Coroutine[Any, Any, R]: a coroutine that returns an object with the original return type of the function
+
+        Raises:
+            # TODO: JAL. Change here and for all other defs; should be precondition requirements err and pydantic model validation fails
         """
         extracted = self.extract_args_and_kwargs(*args, **kwargs)
 
         slot_copy = deepcopy(self)
+        slot_copy.requirements = extracted.requirements
+        slot_copy.precondition_requiremetns = extracted.precondition_requirements
         # TODO: JAL; need to figure out where / how reqs work; if we want to keep as a part of the object,
         # apply them here after the copy has happened...
         # need to change the template; add to docstring using postconditions:
