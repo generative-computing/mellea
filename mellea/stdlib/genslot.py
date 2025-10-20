@@ -164,6 +164,8 @@ class ExtractedKwargs:
     context: Context | None = None
     backend: Backend | None = None
     model_options: dict | None = None
+    requirements: list[Requirement | str] | None = None
+    strategy: SamplingStrategy | None = None
 
     def __init__(self):
         """Used to extract the mellea args and original function args."""
@@ -207,11 +209,15 @@ class GenerativeSlot(Component, Generic[P, R]):
         Returns:
             ExtractedKwargs: a dataclass of the required args for mellea and the original function.
             Either session or (backend, context) will be non-None.
+
+        Raises:
+            TODO: JAL
         """
         # Possible args for the generative slot.
         extracted = ExtractedKwargs()
 
-        # Args can only have mellea args.
+        # Args can only have Mellea args. If the Mellea args get more complicated /
+        # have duplicate types, use list indices rather than a match statement.
         for arg in args:
             match arg:
                 case MelleaSession():
@@ -222,6 +228,12 @@ class GenerativeSlot(Component, Generic[P, R]):
                     extracted.backend = arg
                 case dict():
                     extracted.model_options = arg
+                case SamplingStrategy():
+                    extracted.strategy = arg
+                case list():
+                    extracted.requirements = arg
+
+        # TODO: JAL; make sure model opts doesn't conflict with f_kwargs here...
 
         T = TypeVar("T")
 
@@ -234,9 +246,9 @@ class GenerativeSlot(Component, Generic[P, R]):
                     f"passed in multiple values of {name} to generative slot: {var}, {new_val}"
                 )
 
-        # Kwargs:
-        #   - some / all of the mellea args
-        #   - all of the function args (P.args and P.kwargs)
+        # Kwargs can contain
+        #   - some / all of the Mellea args
+        #   - all of the function args (P.kwargs); the syntax prevents passing a P.arg to the genslot
         for key, val in kwargs.items():
             match key:
                 case "m":
@@ -252,6 +264,14 @@ class GenerativeSlot(Component, Generic[P, R]):
                 case "model_options":
                     extracted.model_options = _get_val_or_err(
                         "model_options", extracted.model_options, val
+                    )
+                case "strategy":
+                    extracted.strategy = _get_val_or_err(
+                        "strategy", extracted.strategy, val
+                    )
+                case "requirements":
+                    extracted.requirements = _get_val_or_err(
+                        "requirements", extracted.requirements, val
                     )
                 case _:
                     extracted.f_kwargs[key] = val
@@ -290,6 +310,8 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
         self,
         context: Context,
         backend: Backend,
+        requirements: list[Requirement | str] | None = None,
+        strategy: SamplingStrategy | None = None,
         model_options: dict | None = None,
         *args: P.args,
         **kwargs: P.kwargs,
@@ -299,6 +321,8 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
     def __call__(
         self,
         m: MelleaSession,
+        requirements: list[Requirement | str] | None = None,
+        strategy: SamplingStrategy | None = None,
         model_options: dict | None = None,
         *args: P.args,
         **kwargs: P.kwargs,
@@ -311,6 +335,8 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
             m: MelleaSession: A mellea session (optional; must set context and backend if None)
             context: the Context object (optional; session must be set if None)
             backend: the backend used for generation (optional: session must be set if None)
+            requirements: A list of requirements that the genslot output can be validated against.
+            strategy: A SamplingStrategy that describes the strategy for validating and repairing/retrying. None means that no particular sampling strategy is used.
             model_options: Model options to pass to the backend.
             *args: Additional args to be passed to the func.
             **kwargs: Additional Kwargs to be passed to the func.
@@ -333,8 +359,8 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
         if extracted.session is not None:
             response = extracted.session.act(
                 slot_copy,
-                requirements=self._requirements,
-                strategy=self._strategy,
+                requirements=extracted.requirements,
+                strategy=extracted.strategy,
                 format=response_model,
                 model_options=extracted.model_options,
             )
@@ -346,7 +372,8 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                 slot_copy,
                 extracted.context,
                 extracted.backend,
-                strategy=None,
+                requirements=extracted.requirements,
+                strategy=extracted.strategy,
                 format=response_model,
                 model_options=extracted.model_options,
             )
@@ -369,6 +396,8 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
         self,
         context: Context,
         backend: Backend,
+        requirements: list[Requirement | str] | None = None,
+        strategy: SamplingStrategy | None = None,
         model_options: dict | None = None,
         *args: P.args,
         **kwargs: P.kwargs,
@@ -378,6 +407,8 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
     def __call__(
         self,
         m: MelleaSession,
+        requirements: list[Requirement | str] | None = None,
+        strategy: SamplingStrategy | None = None,
         model_options: dict | None = None,
         *args: P.args,
         **kwargs: P.kwargs,
@@ -390,6 +421,8 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
             m: MelleaSession: A mellea session (optional; must set context and backend if None)
             context: the Context object (optional; session must be set if None)
             backend: the backend used for generation (optional: session must be set if None)
+            requirements: A list of requirements that the genslot output can be validated against.
+            strategy: A SamplingStrategy that describes the strategy for validating and repairing/retrying. None means that no particular sampling strategy is used.
             model_options: Model options to pass to the backend.
             *args: Additional args to be passed to the func.
             **kwargs: Additional Kwargs to be passed to the func.
@@ -400,6 +433,8 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
         extracted = self.extract_args_and_kwargs(*args, **kwargs)
 
         slot_copy = deepcopy(self)
+        # TODO: JAL; need to figure out where / how reqs work; if we want to keep as a part of the object,
+        # apply them here after the copy has happened...
         arguments = bind_function_arguments(self._function._func, **extracted.f_kwargs)
         if arguments:
             for key, val in arguments.items():
@@ -417,7 +452,8 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
             if extracted.session is not None:
                 response = await extracted.session.aact(
                     slot_copy,
-                    strategy=None,
+                    requirements=extracted.requirements,
+                    strategy=extracted.strategy,
                     format=response_model,
                     model_options=extracted.model_options,
                 )
@@ -429,8 +465,8 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                     slot_copy,
                     extracted.context,
                     extracted.backend,
-                    requirements=self._requirements,
-                    strategy=self._strategy,                    
+                    requirements=extracted.requirements,
+                    strategy=extracted.strategy,
                     format=response_model,
                     model_options=extracted.model_options,
                 )
@@ -450,15 +486,12 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
 @overload
 def generative(func: Callable[P, Awaitable[R]]) -> AsyncGenerativeSlot[P, R]: ...  # type: ignore
 
+
 @overload
 def generative(func: Callable[P, R]) -> SyncGenerativeSlot[P, R]: ...
 
-# @overload
-# # def generative(*, requirements: list[Requirement | str] | None = None, strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2)
-# #         ) -> Callable[[Callable[P, R]], GenerativeSlot[P, R]]:...
-# def generative(*, requirements: list[Requirement | str] | None = None, strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2)
-#         ) -> Callable[[Callable[P, R]], SyncGenerativeSlot[P, R]] | Callable[[Callable[P, Awaitable[R]]], AsyncGenerativeSlot[P, R]]:...
 
+# TODO: JAL Investigate changing genslots to functions and see if it fixes the defaults being populated.
 def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
     """Convert a function into an AI-powered function.
 
@@ -562,20 +595,10 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         >>> reasoning = generate_chain_of_thought(session, "How to optimize a slow database query?")
     """
     # Grab and remove the func if it exists in kwargs. Otherwise, it's the only arg.
-    def _generative(func) -> GenerativeSlot[P, R]:
-        if inspect.iscoroutinefunction(func):
-            return AsyncGenerativeSlot(func)
-        else:
-            return SyncGenerativeSlot(func)
-
-    if func is not None:
-        # If there is a function passed in, we can apply the decorator immediately.
-        return _generative(func)
-
-    # If no function is passed in, the decorator is being called as @generative(...);
-    # need to return the _generative function with parameters in its closure. This will then
-    # be used as the decorator.
-    return _generative
+    if inspect.iscoroutinefunction(func):
+        return AsyncGenerativeSlot(func)
+    else:
+        return SyncGenerativeSlot(func)
 
 
 # Export the decorator as the interface
