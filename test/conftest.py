@@ -15,6 +15,6 @@ def pytest_runtest_setup(item):
     gh_run = int(os.environ.get("CICD", 0))
 
     if gh_run == 1:
-        pytest.xfail(
+        pytest.skip(
             reason="Skipping qualitative test: got env variable CICD == 1. Used only in gh workflows."
         )
