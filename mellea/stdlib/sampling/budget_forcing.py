@@ -162,7 +162,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                 "Only ollama backend supported with budget forcing"
             )
             # run a generation pass with budget forcing
-            result, result_ctx = think_budget_forcing(
+            result = think_budget_forcing(
                 backend,
                 next_action,
                 think_max_tokens=self.think_max_tokens,
@@ -174,6 +174,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                 answer_regex=self.answer_regex,
                 model_options=model_options,
             )
+            result_ctx = next_context
 
             # validation pass
             val_scores_co = mfuncs.avalidate(

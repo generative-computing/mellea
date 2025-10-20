@@ -3,7 +3,7 @@
 import re
 
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.stdlib.base import CBlock, Component, GenerateLog
+from mellea.stdlib.base import CBlock, Component, ModelOutputThunk
 
 
 def think_budget_forcing(
@@ -20,7 +20,7 @@ def think_budget_forcing(
     answer_suffix: str = "The final answer is:",
     answer_regex: str = r"\\boxed{.*?}",
     model_options: dict | None = None,
-):
+) -> ModelOutputThunk:
     r"""Generate with budget forcing using the completions APIs.
 
     This relies on raw autocompletion and assumes the model's output is structured in the following form: '<think> ... </think> summary answer'
@@ -82,7 +82,7 @@ def think_budget_forcing(
         result = backend._generate_from_raw(
             [CBlock(value=curr_prompt)], model_options=model_options
         )
-        # await result.value()
+        # await result[0].avalue()
         # gen_tok_count += len(result[0]._meta['oai_completion_response']['logprobs']['token_logprobs'])
         gen_tok_count += result[0]._meta["generate_response"]["eval_count"]
         rem_toks = think_max_tokens - gen_tok_count
@@ -112,7 +112,8 @@ def think_budget_forcing(
 
     response = "".join(responses)
     if answer_regex is None or answer_suffix is None:
-        return response, gen_tok_count
+        # return response, gen_tok_count
+        return ModelOutputThunk(response)
 
     # Now get a final answer if we need to
     # TODO: Here we check if a final answer exists, technically we should check for an answer outside
@@ -124,7 +125,8 @@ def think_budget_forcing(
     # Check if answer in response
     matches = re.findall(answer_regex, response, re.DOTALL)
     if len(matches) > 0:
-        return response, gen_tok_count
+        # return response, gen_tok_count
+        return ModelOutputThunk(response)
 
     # Answer is not in response, let's force an answer
     if end_think_token and end_think_token not in response:
@@ -148,7 +150,8 @@ def think_budget_forcing(
     result = backend._generate_from_raw(
         [CBlock(curr_prompt)], model_options=model_options
     )
-    # await result.value()
+    # await result[0].value()
     response += result[0].value if result[0].value else ""
     gen_tok_count += result[0]._meta["generate_response"]["eval_count"]
-    return response, gen_tok_count
+    # return response, gen_tok_count
+    return ModelOutputThunk(response)
