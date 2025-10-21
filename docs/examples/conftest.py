@@ -43,9 +43,10 @@ def pytest_collect_file(parent: pytest.Dir, file_path: pathlib.PosixPath):
         return ExampleFile.from_parent(parent, path=file_path)
 
     # TODO: Support running jupyter notebooks:
+    #       - use nbmake or directly use nbclient as documented below
     #       - install the nbclient package
-    #       - run either using python api or jupyter execute
-    #       - must replace background processes
+    #           - run either using python api or jupyter execute
+    #           - must replace background processes
     # if file_path.suffix == ".ipynb":
     #     return ExampleFile.from_parent(parent, path=file_path)
 
