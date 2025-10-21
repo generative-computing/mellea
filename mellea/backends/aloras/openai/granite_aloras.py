@@ -85,7 +85,7 @@ class OpenAIConstraintAlora(OpenAIAlora):
         output._meta["alora_name"] = self.name
 
         output._process = processing
-        output._post_process = functools.partial(post_processing, backend=self._backend)
+        output._post_process = functools.partial(post_processing, self._backend)
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
