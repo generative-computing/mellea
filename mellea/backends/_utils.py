@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 
 from mellea.backends.aloras import Alora
 from mellea.backends.formatter import Formatter
@@ -13,6 +13,7 @@ from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
 
 # Chat = dict[Literal["role", "content"], str] # external apply_chat_template type hint is weaker
+# Chat = dict[str, str | list[dict[str, Any]] ] # for multi-modal models
 Chat = dict[str, str]
 
 
@@ -22,6 +23,10 @@ def to_chat(
     formatter: Formatter,
     system_prompt: str | None,
 ) -> list[Chat]:
+    """Converts a context and an action into a series of dicts to be passed to apply_chat_template .
+
+    This function is used by local inference backends.
+    """
     assert ctx.is_chat_context
 
     linearized_ctx = ctx.view_for_generation()
@@ -46,7 +51,7 @@ def to_chat(
 
     # handle custom system prompts. It's important that we do this before the _parse_and_**clean**_model_options step.
     if system_prompt is not None:
-        system_msg: dict[str, str] = {"role": "system", "content": system_prompt}
+        system_msg: Chat = {"role": "system", "content": system_prompt}
         ctx_as_conversation.insert(0, system_msg)
 
     return ctx_as_conversation
@@ -59,7 +64,8 @@ def use_alora(
 ) -> bool:
     """Returns True when the condition for using alora is met.
 
-    See `docs/dev/requirement_aLoRA_rerouting.md` for an explanation of the following code block."""
+    See `docs/dev/requirement_aLoRA_rerouting.md` for an explanation of the following code block.
+    """
     if issubclass(type(action), Requirement):
         # The general rule is that we reroute to the alora if it exists.
         reroute_to_alora = alora is not None
@@ -75,9 +81,10 @@ def use_alora(
         return False
 
 
-def extract_model_tool_requests(
+def to_tool_calls(
     tools: dict[str, Callable], decoded_result: str
 ) -> dict[str, ModelToolCall] | None:
+    """Parse a tool call string."""
     model_tool_calls: dict[str, ModelToolCall] = dict()
     for tool_name, tool_args in parse_tools(decoded_result):
         func = tools.get(tool_name)

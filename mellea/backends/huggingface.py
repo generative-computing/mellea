@@ -30,6 +30,7 @@ from transformers import (
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 from mellea.backends import BaseModelSubclass
+from mellea.backends._utils import to_chat, to_tool_calls, use_alora
 from mellea.backends.aloras import Alora, AloraBackendMixin
 from mellea.backends.cache import Cache, SimpleLRUCache
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
@@ -41,7 +42,6 @@ from mellea.backends.tools import (
     convert_tools_to_json,
 )
 from mellea.backends.types import ModelOption
-from mellea.backends.utils import extract_model_tool_requests, to_chat, use_alora
 from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
@@ -468,7 +468,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
-            mot.tool_calls = extract_model_tool_requests(tools, mot.value)
+            mot.tool_calls = to_tool_calls(tools, mot.value)
 
         assert mot._action is not None, (
             "ModelOutputThunks should have their action assigned during generation"

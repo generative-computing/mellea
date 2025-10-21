@@ -26,6 +26,7 @@ import vllm  # type:ignore
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from mellea.backends import BaseModelSubclass
+from mellea.backends._utils import to_chat, to_tool_calls
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.tools import (
@@ -34,7 +35,6 @@ from mellea.backends.tools import (
     convert_tools_to_json,
 )
 from mellea.backends.types import ModelOption
-from mellea.backends.utils import extract_model_tool_requests, to_chat
 from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
@@ -359,13 +359,12 @@ class LocalVLLMBackend(FormatterBackend):
         seed,
     ):
         """Called when generation is done."""
-
         # The ModelOutputThunk must be computed by this point.
         assert mot.value is not None
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if format is None and tool_calls:
-            mot.tool_calls = extract_model_tool_requests(tools, mot.value)
+            mot.tool_calls = to_tool_calls(tools, mot.value)
 
         assert mot._action is not None, (
             "ModelOutputThunks should have their action assigned during generation"
@@ -511,6 +510,7 @@ class LocalVLLMBackend(FormatterBackend):
 
         Args:
             model_options: the model_options for this call
+            cls: the target class. the returned dict contains the keys of this class
 
         Returns:
             a new dict
