@@ -5,6 +5,8 @@ import json
 import os
 import re
 
+# region: citation_exists function and helpers
+
 def normalize_case_name(name) -> str:
     """
     Converts a case name to a standard format.
@@ -39,10 +41,16 @@ def citation_exists(ctx: Context, folder_path: str) -> ValidationResult:
         folder_path: a string representing the path to the database directory 
 
     Returns:
-        A validation result  indicating if a match was found between given case name and database
+        A validation result indicating if a match was found between given case name and database
     """
-    # not sure about this line
-    case_name = ctx.last_output().value
+    if ctx is None:
+        return ValidationResult(False, reason="No context provided in output")
+    
+    last_output = ctx.last_output()
+    if last_output is None:
+        return ValidationResult(False, reason="No last output found in context")
+    
+    case_name = last_output.value
 
     if not case_name or not isinstance(case_name, str):
         return ValidationResult(False, reason="No case name provided in output")
@@ -76,7 +84,7 @@ def citation_exists(ctx: Context, folder_path: str) -> ValidationResult:
         except Exception as e:
             return ValidationResult(False, reason=f"Error loading '{file}': {e!s}")
 
-        # Check both name and name_abbreviation
+    # Check both name and name_abbreviation
     if normalized_input in case_names or normalized_input in case_name_abb:
         return ValidationResult(True, reason=f"'{case_name}' found in database")
     else:
@@ -87,10 +95,10 @@ class CaseNameExistsInDatabase(Requirement):
     """
     Checks if the output case name exists in the provided case metadata database.
     """
-
     def __init__(self, folder_path: str):
         self._folder_path = folder_path
         super().__init__(
             description="The case name should exist in the provided case metadata database.",
             validation_fn=lambda ctx: citation_exists(ctx, self._folder_path),
         )
+# endregion
