@@ -41,6 +41,7 @@ def session(backend):
     session.reset()
 
 
+@pytest.mark.qualitative
 def test_v0_api(session):
     assert os.environ["VLLM_USE_V1"] == "0"
 
