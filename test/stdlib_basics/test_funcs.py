@@ -62,12 +62,10 @@ async def test_ainstruct(m_session):
     assert ctx._data is out
 
 async def test_avalidate(m_session):
-    initial_ctx = m_session.ctx
     backend = m_session.backend
 
     val_result = await avalidate(
         reqs=[req("Be formal."), req("Avoid telling jokes.")],
-        context=initial_ctx,
         backend=backend,
         output=ModelOutputThunk("Here is an output.")
     )
