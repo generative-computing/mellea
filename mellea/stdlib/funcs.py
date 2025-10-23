@@ -715,6 +715,10 @@ async def avalidate(
     reqs = [reqs] if not isinstance(reqs, list) else reqs
     reqs = [Requirement(req) if type(req) is str else req for req in reqs]
 
+    assert (context is not None) != (output is not None), (
+        "Either context or output must be provided. Not both."
+    )
+
     if output is None:
         validation_target_ctx = context
     else:
