@@ -6,17 +6,117 @@ import re
 import subprocess
 import sys
 import tempfile
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
+from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import Context
 from mellea.stdlib.requirement import Requirement, ValidationResult
+
+logger = FancyLogger.get_logger()
+
+# region execution backends
+
+
+@dataclass
+class ExecutionResult:
+    """Result of code execution."""
+    success: bool
+    message: str | None = None
+    error: str | None = None
+    skipped: bool = False
+
+
+class ExecutionBackend(ABC):
+    """Abstract backend for executing Python code."""
+    @abstractmethod
+    def execute(self, code: str, timeout: int) -> ExecutionResult:
+        """Execute code and return result."""
+
+
+class SafeBackend(ExecutionBackend):
+    """Safe backend that validates but does not execute code."""
+    def execute(self, code: str, timeout: int) -> ExecutionResult:
+        """Validate code syntax without executing."""
+        try:
+            ast.parse(code)
+            return ExecutionResult(
+                success=True,
+                skipped=True,
+                message="Code validated but not executed (safe mode)"
+            )
+        except SyntaxError as e:
+            return ExecutionResult(success=False, error=str(e))
+
+
+class UnsafeBackend(ExecutionBackend):
+    """Unsafe backend that executes code directly with subprocess."""
+    def __init__(self, allowed_imports: list[str] | None = None):
+        """Initialize with optional import restrictions."""
+        self.allowed_imports = allowed_imports
+
+    def execute(self, code: str, timeout: int) -> ExecutionResult:
+        """Execute code with subprocess after checking imports."""
+        if self.allowed_imports and not _check_allowed_imports(code, self.allowed_imports):
+            return ExecutionResult(success=False, error="Unauthorized imports detected")
+
+        return self._execute_subprocess(code, timeout)
+
+    def _execute_subprocess(self, code: str, timeout: int) -> ExecutionResult:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(code)
+            temp_file = f.name
+
+        try:
+            result = subprocess.run(
+                [sys.executable, temp_file], capture_output=True, text=True, timeout=timeout
+            )
+
+            if result.returncode == 0:
+                return ExecutionResult(success=True, message="Code executed successfully")
+            else:
+                return ExecutionResult(
+                    success=False,
+                    error=f"Execution failed with error: {result.stderr[:200]}",
+                )
+        except subprocess.TimeoutExpired:
+            return ExecutionResult(
+                success=False, error=f"Execution timed out after {timeout} seconds"
+            )
+        except Exception as e:
+            return ExecutionResult(success=False, error=f"Execution error: {e!s}")
+        finally:
+            try:
+                Path(temp_file).unlink()
+            except Exception:
+                pass
+
+
+def _check_allowed_imports(code: str, allowed_imports: list[str]) -> bool:
+    tree = ast.parse(code)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                base_module = alias.name.split(".")[0]
+                if base_module not in allowed_imports:
+                    return False
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                base_module = node.module.split(".")[0]
+                if base_module not in allowed_imports:
+                    return False
+    return True
+
+
+# endregion
 
 # region code extraction
 
 
 def _score_code_block(code: str, context_text: str = "") -> int:
-    """Score a code block to determine if it's likely the main answer.
+    """Score a code block to determine if it's likely the mainI like i answer.
 
     Returns higher score for blocks that:
     - Are longer (more substantial)
@@ -307,9 +407,13 @@ class PythonValidImports(Requirement):
 # region execution validation
 
 
-def _python_executes_without_error(ctx: Context, timeout: int = 5) -> ValidationResult:
+def _python_executes_without_error(
+    ctx: Context,
+    timeout: int = 5,
+    allow_unsafe: bool = False,
+    allowed_imports: list[str] | None = None,
+) -> ValidationResult:
     """Validate that Python code executes without raising exceptions."""
-    # First extract the code
     extraction_result = _has_python_code_listing(ctx)
     if not extraction_result.as_bool():
         return ValidationResult(
@@ -319,51 +423,47 @@ def _python_executes_without_error(ctx: Context, timeout: int = 5) -> Validation
     code = extraction_result.reason
     assert code is not None
 
-    # Create temporary file and execute
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-        f.write(code)
-        temp_file = f.name
+    backend: ExecutionBackend
+    if allow_unsafe:
+        backend = UnsafeBackend(allowed_imports=allowed_imports)
+    else:
+        backend = SafeBackend()
 
-    try:
-        result = subprocess.run(
-            [sys.executable, temp_file], capture_output=True, text=True, timeout=timeout
-        )
-
-        if result.returncode == 0:
-            return ValidationResult(result=True, reason="Code executed successfully")
-        else:
-            return ValidationResult(
-                result=False,
-                reason=f"Execution failed with error: {result.stderr[:200]}",
-            )
-    except subprocess.TimeoutExpired:
-        return ValidationResult(
-            result=False, reason=f"Execution timed out after {timeout} seconds"
-        )
-    except Exception as e:
-        return ValidationResult(result=False, reason=f"Execution error: {e!s}")
-    finally:
-        # Clean up temp file
-        try:
-            Path(temp_file).unlink()
-        except Exception:
-            pass
+    result = backend.execute(code, timeout)
+    return ValidationResult(
+        result=result.success,
+        reason=result.message or result.error
+    )
 
 
 class PythonExecutesWithoutError(Requirement):
     """Verifies that Python code runs without raising exceptions."""
 
-    def __init__(self, timeout: int = 5):
+    def __init__(
+        self,
+        timeout: int = 5,
+        allow_unsafe_execution: bool = False,
+        allowed_imports: list[str] | None = None,
+    ):
         """Initialize execution validator.
 
         Args:
             timeout: Maximum seconds to allow code to run before timing out.
+            allow_unsafe_execution: If True, execute code directly with subprocess (unsafe).
+            allowed_imports: List of allowed import modules when using unsafe execution.
         """
         self._timeout = timeout
+        self._allow_unsafe = allow_unsafe_execution
+        self._allowed_imports = allowed_imports
+
+        if allow_unsafe_execution:
+            logger.warning("⚠️ UNSAFE: Executing untrusted code directly. Only use with trusted sources!")
+
+        execution_mode = "validation only" if not allow_unsafe_execution else f"timeout: {timeout}s"
         super().__init__(
-            description=f"The Python code should execute without errors (timeout: {timeout}s).",
+            description=f"The Python code should execute without errors ({execution_mode}).",
             validation_fn=lambda ctx: _python_executes_without_error(
-                ctx, self._timeout
+                ctx, self._timeout, self._allow_unsafe, self._allowed_imports
             ),
             check_only=True,
         )

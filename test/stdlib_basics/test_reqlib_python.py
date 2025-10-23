@@ -653,13 +653,13 @@ def test_python_valid_imports_invalid():
 
 
 def test_python_executes_without_error_valid():
-    requirement = PythonExecutesWithoutError(timeout=2)
+    requirement = PythonExecutesWithoutError(timeout=2, allow_unsafe_execution=True)
     result = requirement.validation_fn(PYTHON_EXECUTABLE_CTX)
     assert result.as_bool() is True
 
 
 def test_python_executes_without_error_timeout():
-    requirement = PythonExecutesWithoutError(timeout=1)
+    requirement = PythonExecutesWithoutError(timeout=1, allow_unsafe_execution=True)
     result = requirement.validation_fn(PYTHON_INFINITE_LOOP_CTX)
     assert result.as_bool() is False
     assert "timed out" in result.reason.lower()
@@ -673,9 +673,52 @@ def test_python_executes_without_error_syntax():
 
 def test_runtime_error_code_fails_execution():
     """Code with runtime errors should fail execution test."""
-    req = PythonExecutesWithoutError(timeout=2)
+    req = PythonExecutesWithoutError(timeout=2, allow_unsafe_execution=True)
     result = req.validation_fn(RUNTIME_ERROR_CTX)
     assert result.as_bool() is False
+
+
+def test_safe_mode_default():
+    """Safe mode should be default and not execute code."""
+    req = PythonExecutesWithoutError()
+    result = req.validation_fn(PYTHON_EXECUTABLE_CTX)
+    assert result.as_bool() is True
+    assert "safe mode" in result.reason
+
+
+def test_safe_mode_syntax_error():
+    """Safe mode should catch syntax errors."""
+    req = PythonExecutesWithoutError()
+    result = req.validation_fn(INVALID_SYNTAX_CTX)
+    assert result.as_bool() is False
+
+
+def test_unsafe_execution_with_flag():
+    """Unsafe execution should work when explicitly enabled."""
+    req = PythonExecutesWithoutError(allow_unsafe_execution=True, timeout=2)
+    result = req.validation_fn(PYTHON_EXECUTABLE_CTX)
+    assert result.as_bool() is True
+
+
+def test_unsafe_execution_with_import_restrictions():
+    """Import restrictions should block unauthorized imports."""
+    req = PythonExecutesWithoutError(
+        allow_unsafe_execution=True,
+        allowed_imports=["math", "json"]
+    )
+    result = req.validation_fn(PYTHON_WITH_INVALID_IMPORTS_CTX)
+    assert result.as_bool() is False
+    assert "Unauthorized imports" in result.reason
+
+
+def test_unsafe_execution_with_allowed_imports():
+    """Allowed imports should pass validation."""
+    req = PythonExecutesWithoutError(
+        allow_unsafe_execution=True,
+        allowed_imports=["os", "sys", "pathlib"]
+    )
+    result = req.validation_fn(PYTHON_WITH_IMPORTS_CTX)
+    assert result.as_bool() is True
 
 
 # endregion
