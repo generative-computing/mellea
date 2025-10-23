@@ -34,6 +34,23 @@ def session(backend: WatsonxAIBackend):
         yield session
         session.reset()
 
+@pytest.mark.qualitative
+def test_filter_chat_completions_kwargs(backend: WatsonxAIBackend):
+    """Detect changes to the WatsonxAI TextChatParameters."""
+    
+    known_keys = ['frequency_penalty', 'logprobs', 'top_logprobs', 'presence_penalty', 'response_format', 'temperature', 'max_tokens', 'max_completion_tokens', 'time_limit', 'top_p', 'n', 'logit_bias', 'seed', 'stop', 'guided_choice', 'guided_regex', 'guided_grammar', 'guided_json']
+    test_dict = {key: 1 for key in known_keys}
+
+    # Make sure keys that we think should be in the TextChatParameters are there.
+    filtered_dict = backend.filter_chat_completions_kwargs(test_dict)
+
+    for key in known_keys:
+        assert key in filtered_dict
+
+    # Make sure unsupported keys still get filtered out.
+    incorrect_dict = {"random": 1}
+    filtered_incorrect_dict = backend.filter_chat_completions_kwargs(incorrect_dict)
+    assert "random" not in filtered_incorrect_dict
 
 @pytest.mark.qualitative
 def test_instruct(session: MelleaSession):
