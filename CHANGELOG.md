@@ -1,3 +1,33 @@
+## [v0.1.3](https://github.com/generative-computing/mellea/releases/tag/v0.1.3) - 2025-10-22
+
+### Feature
+
+* Decompose cli tool enhancements & new prompt_modules ([#170](https://github.com/generative-computing/mellea/issues/170)) ([`b8fc8e1`](https://github.com/generative-computing/mellea/commit/b8fc8e1bd9478d87c6a9c5cf5c0cca751f13bd11))
+* Add async functions ([#169](https://github.com/generative-computing/mellea/issues/169)) ([`689e1a9`](https://github.com/generative-computing/mellea/commit/689e1a942efab6cb1d7840f6bdbd96d579bdd684))
+* Add Granite Guardian 3.3 8B with updated examples function call validation and repair with reason. ([#167](https://github.com/generative-computing/mellea/issues/167)) ([`517e9c5`](https://github.com/generative-computing/mellea/commit/517e9c5fb93cba0b5f5a69278806fc0eda897785))
+* Majority voting sampling strategy ([#142](https://github.com/generative-computing/mellea/issues/142)) ([`36eaca4`](https://github.com/generative-computing/mellea/commit/36eaca482957353ba505d494f7be32c5226de651))
+
+### Fix
+
+* Fix vllm install script ([#185](https://github.com/generative-computing/mellea/issues/185)) ([`abcf622`](https://github.com/generative-computing/mellea/commit/abcf622347bfbb3c5d97c74a2624bf8f051f4136))
+* Watsonx and litellm parameter filtering ([#187](https://github.com/generative-computing/mellea/issues/187)) ([`793844c`](https://github.com/generative-computing/mellea/commit/793844c44ed091f4c6abae1cc711e3746a960ef4))
+* Pin trl to version 0.19.1 to avoid deprecation ([#202](https://github.com/generative-computing/mellea/issues/202)) ([`9948907`](https://github.com/generative-computing/mellea/commit/9948907303774494fee6286d482dd10525121ba2))
+* Rename format argument in internal methods for better mypiability ([#172](https://github.com/generative-computing/mellea/issues/172)) ([`7a6f780`](https://github.com/generative-computing/mellea/commit/7a6f780bdd71db0a7e0a1e78dfc78dcc4e4e5d93))
+* Async overhaul; create global event loop; add client cache ([#186](https://github.com/generative-computing/mellea/issues/186)) ([`1e236dd`](https://github.com/generative-computing/mellea/commit/1e236dd15bd426ed31f148ccdca4c63e43468fd0))
+* Update readme and other places with granite model and tweaks ([#184](https://github.com/generative-computing/mellea/issues/184)) ([`519a35a`](https://github.com/generative-computing/mellea/commit/519a35a7bb8a2547e90cf04fd5e70a3f74d9fc22))
+
+## [v0.1.2](https://github.com/generative-computing/mellea/releases/tag/v0.1.2) - 2025-10-03
+
+### Feature
+
+* Making Granite 4 the default model ([#178](https://github.com/generative-computing/mellea/issues/178)) ([`545c1b3`](https://github.com/generative-computing/mellea/commit/545c1b3790fa96d7d1c76878227f60a2203862b4))
+
+### Fix
+
+* Default sampling strats to None for query, transform, chat ([#179](https://github.com/generative-computing/mellea/issues/179)) ([`c8d4601`](https://github.com/generative-computing/mellea/commit/c8d4601bad713638a2a8e1c1062e19548f182f3c))
+* Docstrings ([#177](https://github.com/generative-computing/mellea/issues/177)) ([`6126bd9`](https://github.com/generative-computing/mellea/commit/6126bd922121a080a88b69718603a15bc54f80f4))
+* Always call sample when a strategy is provided ([#176](https://github.com/generative-computing/mellea/issues/176)) ([`8fece40`](https://github.com/generative-computing/mellea/commit/8fece400f1483fa593c564ad70f5b7370d3dd249))
+
 ## [v0.1.1](https://github.com/generative-computing/mellea/releases/tag/v0.1.1) - 2025-10-01
 
 ### Fix

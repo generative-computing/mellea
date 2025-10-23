@@ -1,0 +1,45 @@
+Your task is to generate positive test cases for the given user story. These test cases should cover the happy path scenarios, including preconditions, test steps, and expected outcomes.
+
+First, review the user story analysis from the previous step:
+<user_story_analysis>
+{{USER_STORY_ANALYSIS}}
+</user_story_analysis>
+
+Next, identify the key features and functionalities of the user story that need to be tested. Consider the different scenarios that could occur when a user interacts with the application.
+
+Then, generate positive test cases that cover these happy path scenarios. For each test case, include:
+
+1. **Test Case**: A brief description of the test case.
+2. **Precondition**: The conditions that must be met before the test case can be executed.
+3. **Test Steps**: The steps that the user must take to execute the test case. These steps should start from launching the application onwards.
+4. **Expected Outcome**: The expected outcome of the test case.
+
+Ensure that the test cases are comprehensive and cover all the key features and functionalities of the user story.
+
+If the user story is not provided, please wait for further instructions.
+
+Finally, compile the positive test cases into a single output, using the following format:
+
+```
+POSITIVE TEST CASES:
+
+1. **Test Case** [Test Case description]
+**Precondition** [Precondition]
+**Test Steps**
+1. [Test Step 1]
+2. [Test Step 2]
+...
+**Expected Outcome** [Expected Outcome]
+
+2. **Test Case** [Test Case description]
+**Precondition** [Precondition]
+**Test Steps**
+1. [Test Step 1]
+2. [Test Step 2]
+...
+**Expected Outcome** [Expected Outcome]
+
+...
+```
+
+Provide the positive test cases as your output.
