@@ -23,6 +23,7 @@ from mellea.helpers.async_helpers import (
     get_current_event_loop,
     send_to_queue,
 )
+from mellea.helpers.event_loop_helper import _run_async_in_thread
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -404,28 +405,26 @@ class OllamaModelBackend(FormatterBackend):
         # See https://github.com/ollama/ollama/blob/main/docs/faq.md#how-does-ollama-handle-concurrent-requests.
         prompts = [self.formatter.print(action) for action in actions]
 
-        async def get_response(coroutines):
+        async def get_response():
+            # Run async so that we can make use of Ollama's concurrency.
+            coroutines: list[Coroutine[Any, Any, ollama.GenerateResponse]] = []
+            for prompt in prompts:
+                co = self._async_client.generate(
+                    model=self._get_ollama_model_id(),
+                    prompt=prompt,
+                    raw=True,
+                    think=model_opts.get(ModelOption.THINKING, None),
+                    format=format.model_json_schema() if format is not None else None,
+                    options=self._make_backend_specific_and_remove(model_opts),
+                )
+                coroutines.append(co)
+
             responses = await asyncio.gather(*coroutines, return_exceptions=True)
             return responses
 
-        async_client = ollama.AsyncClient(self._base_url)
-        # Run async so that we can make use of Ollama's concurrency.
-        coroutines = []
-        for prompt in prompts:
-            co = async_client.generate(
-                model=self._get_ollama_model_id(),
-                prompt=prompt,
-                raw=True,
-                think=model_opts.get(ModelOption.THINKING, None),
-                format=format.model_json_schema() if format is not None else None,
-                options=self._make_backend_specific_and_remove(model_opts),
-            )
-            coroutines.append(co)
-
-        # Revisit this once we start using async elsewhere. Only one asyncio event
-        # loop can be running in a given thread.
-        responses: list[ollama.GenerateResponse | BaseException] = asyncio.run(
-            get_response(coroutines)
+        # Run in the same event_loop like other Mellea async code called from a sync function.
+        responses: list[ollama.GenerateResponse | BaseException] = _run_async_in_thread(
+            get_response()
         )
 
         results = []

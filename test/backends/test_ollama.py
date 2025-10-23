@@ -193,8 +193,7 @@ def test_client_cache(session):
 
     fourth_client = asyncio.run(get_client_async())
     assert fourth_client in backend._client_cache.cache.values()
-    assert second_client not in backend._client_cache.cache.values()
-
+    assert len(backend._client_cache.cache.values()) == 2
 
 if __name__ == "__main__":
     pytest.main([__file__])
