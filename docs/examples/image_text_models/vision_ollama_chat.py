@@ -1,5 +1,6 @@
 """Example of using Ollama with vision models with linear context."""
 
+import pathlib
 from PIL import Image
 
 from mellea import start_session
@@ -9,10 +10,11 @@ m = start_session(model_id="granite3.2-vision", ctx=ChatContext())
 # m = start_session(model_id="llava", ctx=ChatContext())
 
 # load image
-test_img = Image.open("pointing_up.jpg")
+image_path = pathlib.Path(__file__).parent.joinpath("pointing_up.jpg")
+test_pil = Image.open(image_path)
 
 # ask a question about the image
-res = m.instruct("Is the subject in the image smiling?", images=[test_img])
+res = m.instruct("Is the subject in the image smiling?", images=[test_pil])
 print(f"Result:{res!s}")
 
 # This instruction should refer to the first image.
