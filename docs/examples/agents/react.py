@@ -13,7 +13,11 @@ import mellea.backends.types
 import mellea.stdlib
 import mellea.stdlib.base
 import mellea.stdlib.chat
+from mellea.backends import model_ids
+from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import ChatContext
+
+FancyLogger.get_logger().setLevel("ERROR")
 
 react_system_template: Template = Template(
     """Answer the user's question as best you can.
