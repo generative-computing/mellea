@@ -3,7 +3,7 @@
 import mistletoe
 
 from mellea.stdlib.base import Context
-from mellea.stdlib.requirement import Requirement
+from mellea.stdlib.requirement import Requirement, ValidationResult, simple_validate
 
 # region lists
 
@@ -25,8 +25,9 @@ def as_markdown_list(ctx: Context) -> list[str] | None:
         return None
 
 
-def _md_list(ctx: Context):
-    return as_markdown_list(ctx) is not None
+async def _md_list(ctx: Context) -> ValidationResult:
+    re = as_markdown_list(ctx) is not None
+    return ValidationResult(re)
 
 
 is_markdown_list = Requirement(
@@ -40,11 +41,10 @@ is_markdown_list = Requirement(
 # region tables
 
 
-def _md_table(ctx: Context):
-    raw_output = ctx.last_output()
+def _md_table(raw_output: str) -> bool:
     assert raw_output is not None
     try:
-        parsed = mistletoe.Document(raw_output.value)
+        parsed = mistletoe.Document(raw_output)
         if len(parsed.children) != 1:
             return False
         return type(parsed.children[0]) is mistletoe.block_token.Table
@@ -54,8 +54,7 @@ def _md_table(ctx: Context):
 
 is_markdown_table = Requirement(
     description="The output should be formatted as a Markdown table.",
-    validation_fn=_md_table,
+    validation_fn=simple_validate(_md_table),
 )
-
 
 # endregion
