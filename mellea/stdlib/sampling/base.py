@@ -165,7 +165,6 @@ class BaseSamplingStrategy(SamplingStrategy):
                 reqs=reqs,
                 context=result_ctx,
                 backend=backend,
-                output=result,
                 format=format,
                 model_options=model_options,
                 # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.

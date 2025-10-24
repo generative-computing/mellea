@@ -263,9 +263,9 @@ def chat(
 
 def validate(
     reqs: Requirement | list[Requirement],
-    context: Context,
     backend: Backend,
     *,
+    context: Context | None = None,
     output: CBlock | None = None,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -701,9 +701,9 @@ async def achat(
 
 async def avalidate(
     reqs: Requirement | list[Requirement],
-    context: Context,
     backend: Backend,
     *,
+    context: Context | None = None,
     output: CBlock | None = None,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
@@ -715,7 +715,12 @@ async def avalidate(
     reqs = [reqs] if not isinstance(reqs, list) else reqs
     reqs = [Requirement(req) if type(req) is str else req for req in reqs]
 
+    assert (context is not None) != (output is not None), (
+        "Either context or output must be provided. Not both."
+    )
+
     if output is None:
+        assert context is not None
         validation_target_ctx = context
     else:
         validation_target_ctx = SimpleContext()

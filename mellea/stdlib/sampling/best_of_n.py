@@ -131,7 +131,6 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
                 reqs=reqs,
                 context=result_ctx,
                 backend=backend,
-                output=result,
                 format=format,
                 model_options=model_options,
                 input=next_action._description,  # type: ignore
