@@ -5,6 +5,8 @@ import threading
 from collections.abc import Coroutine
 from typing import Any, TypeVar
 
+from mellea.helpers.async_helpers import get_current_event_loop
+
 R = TypeVar("R")
 
 
@@ -52,6 +54,9 @@ class _EventLoopHandler:
 
     def __call__(self, co: Coroutine[Any, Any, R]) -> R:
         """Runs the coroutine in the event loop."""
+        if self._event_loop == get_current_event_loop():
+            # If this gets called from the same event loop, launch in a separate thread to prevent blocking.
+            return _EventLoopHandler()(co)
         return asyncio.run_coroutine_threadsafe(co, self._event_loop).result()
 
 

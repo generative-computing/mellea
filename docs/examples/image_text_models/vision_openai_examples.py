@@ -1,27 +1,36 @@
 """Examples using vision models with OpenAI backend."""
 
-import os
+import pathlib
 
 from PIL import Image
 
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
-from mellea.stdlib.base import ImageBlock
+from mellea.stdlib.base import ChatContext, ImageBlock
 
 # # using anthropic AI model ...
 # anth_key = os.environ.get("ANTHROPIC_API_KEY")
 # m = MelleaSession(OpenAIBackend(model_id="claude-3-haiku-20240307",
 #                                 api_key=anth_key,  # Your Anthropic API key
 #                                 base_url="https://api.anthropic.com/v1/"  # Anthropic's API endpoint
-#                                 ))
+#                                 ),
+#                 ctx=ChatContext())
 
 # using LM Studio model locally
+# m = MelleaSession(
+#     OpenAIBackend(model_id="qwen/qwen2.5-vl-7b", base_url="http://127.0.0.1:1234/v1"), ctx=ChatContext()
+# )
+
 m = MelleaSession(
-    OpenAIBackend(model_id="qwen/qwen2.5-vl-7b", base_url="http://127.0.0.1:1234/v1")
+    OpenAIBackend(
+        model_id="qwen2.5vl:7b", base_url="http://localhost:11434/v1", api_key="ollama"
+    ),
+    ctx=ChatContext(),
 )
 
 # load PIL image and convert to mellea ImageBlock
-test_pil = Image.open("pointing_up.jpg")
+image_path = pathlib.Path(__file__).parent.joinpath("pointing_up.jpg")
+test_pil = Image.open(image_path)
 test_img = ImageBlock.from_pil_image(test_pil)
 
 # check if model is able to do text chat

@@ -334,7 +334,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             input_ids = self._tokenizer.apply_chat_template(  # type: ignore
                 ctx_as_conversation,
                 tools=convert_tools_to_json(tools),  # type: ignore
-                add_generation_prompt=True,
+                add_generation_prompt=True,  # If we change this, must modify huggingface granite guardian.
                 return_tensors="pt",
                 **self._make_backend_specific_and_remove(model_options),
             ).to(self._device)  # type: ignore
