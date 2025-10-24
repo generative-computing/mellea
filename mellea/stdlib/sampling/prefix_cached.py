@@ -1,7 +1,8 @@
 """Sampling Strategy that uses prefix caching idea based on two turn chats."""
 
+from collections.abc import Awaitable, Callable
+
 from mellea.backends import Backend, BaseModelSubclass, ModelOption
-from mellea.helpers.event_loop_helper import _run_async_in_thread
 from mellea.stdlib.base import ChatContext, Component, Context, ContextTurn
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import Requirement, ValidationResult
@@ -32,8 +33,10 @@ class RejectionSamplingStrategyWithPrefix(RejectionSamplingStrategy):
             reqs += requirements
         reqs = list(set(reqs))
 
-        def make_val(req_string: str):
-            def validate_agentic(ctx: Context) -> ValidationResult:
+        def make_val(
+            req_string: str,
+        ) -> Callable[[Context], Awaitable[ValidationResult]]:
+            async def validate_agentic(ctx: Context) -> ValidationResult:
                 lt = ctx.last_turn()
                 assert isinstance(lt, ContextTurn)
                 assert lt.model_input is not None
@@ -48,20 +51,17 @@ class RejectionSamplingStrategyWithPrefix(RejectionSamplingStrategy):
                     content=f"Does the output fulfill the requirement? Answer only with yes or no.  Requirement: '{req_string}'",
                 )
 
-                async def sync_callback():
-                    r, _ = backend.generate_from_context(
-                        action,
-                        chat_ctx,
-                        format=format,
-                        model_options={ModelOption.MAX_NEW_TOKENS: 10},
-                    )
-                    await r.avalue()
-                    return r
+                llm_as_a_judge_result, _ = backend.generate_from_context(
+                    action,
+                    chat_ctx,
+                    format=format,
+                    model_options={ModelOption.MAX_NEW_TOKENS: 10},
+                )
+                value = await llm_as_a_judge_result.avalue()
 
-                llm_as_a_judge_result = _run_async_in_thread(sync_callback())
                 return ValidationResult(
-                    result=llm_as_a_judge_result.value.lower().startswith("yes"),
-                    reason=llm_as_a_judge_result.value,
+                    result=value.lower().startswith("yes"),
+                    reason=value,
                     thunk=llm_as_a_judge_result,
                 )
 
