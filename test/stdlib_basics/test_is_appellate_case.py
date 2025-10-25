@@ -5,7 +5,7 @@ import os
 from mellea.stdlib.reqlib.is_appellate_case import load_jsons_from_folder, get_court_from_case, is_appellate_court
 
 from mellea import start_session
-from mellea.stdlib.requirement import req, simple_validate
+from mellea.stdlib.requirement import req
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 
@@ -27,15 +27,8 @@ def test_appellate_case_session():
     case_metadata = load_jsons_from_folder(folder_path)
     appellate_case = m.instruct(
         f"Return the following string (only return the characters after the colon, no other words): {case_name}",
-        requirements=[
-            req(
-                "The result should be an appellate court case",
-                validation_fn=simple_validate(
-                    lambda x: is_appellate_court(get_court_from_case(x, case_metadata))
-                ),
-            )
-        ],
+        requirements=[req("The result should be an appellate court case", validation_fn=lambda ctx: is_appellate_court(get_court_from_case(ctx, case_metadata)))],
         strategy=RejectionSamplingStrategy(loop_budget=5),
         return_sampling_results=True,
     )
-    assert "SUCCESS" in appellate_case
+    assert appellate_case.success
