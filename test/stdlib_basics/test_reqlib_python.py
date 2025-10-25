@@ -12,7 +12,7 @@ from mellea.stdlib.reqlib.python import (
 
 def from_model(content: str) -> Context:
     """Helper to create context from model output."""
-    from mellea.stdlib.base import ModelOutputThunk, ChatContext
+    from mellea.stdlib.base import ChatContext, ModelOutputThunk
     ctx = ChatContext()
     ctx = ctx.add(ModelOutputThunk(value=content))
     return ctx

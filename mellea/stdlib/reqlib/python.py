@@ -21,6 +21,7 @@ logger = FancyLogger.get_logger()
 @dataclass
 class ExecutionResult:
     """Result of code execution."""
+
     success: bool
     message: str | None = None
     error: str | None = None
@@ -29,6 +30,7 @@ class ExecutionResult:
 
 class ExecutionBackend(ABC):
     """Abstract backend for executing Python code."""
+
     @abstractmethod
     def execute(self, code: str, timeout: int) -> ExecutionResult:
         """Execute code and return result."""
@@ -36,6 +38,7 @@ class ExecutionBackend(ABC):
 
 class SafeBackend(ExecutionBackend):
     """Safe backend that validates but does not execute code."""
+
     def __init__(self, allowed_imports: list[str] | None = None):
         """Initialize with optional import restrictions."""
         self.allowed_imports = allowed_imports
@@ -47,25 +50,30 @@ class SafeBackend(ExecutionBackend):
         except SyntaxError as e:
             return ExecutionResult(success=False, error=str(e))
 
-        if self.allowed_imports and not _check_allowed_imports(code, self.allowed_imports):
+        if self.allowed_imports and not _check_allowed_imports(
+            code, self.allowed_imports
+        ):
             return ExecutionResult(success=False, error="Unauthorized imports detected")
 
         return ExecutionResult(
             success=True,
             skipped=True,
-            message="Code validated but not executed (safe mode)"
+            message="Code validated but not executed (safe mode)",
         )
 
 
 class UnsafeBackend(ExecutionBackend):
     """Unsafe backend that executes code directly with subprocess."""
+
     def __init__(self, allowed_imports: list[str] | None = None):
         """Initialize with optional import restrictions."""
         self.allowed_imports = allowed_imports
 
     def execute(self, code: str, timeout: int) -> ExecutionResult:
         """Execute code with subprocess after checking imports."""
-        if self.allowed_imports and not _check_allowed_imports(code, self.allowed_imports):
+        if self.allowed_imports and not _check_allowed_imports(
+            code, self.allowed_imports
+        ):
             return ExecutionResult(success=False, error="Unauthorized imports detected")
 
         return self._execute_subprocess(code, timeout)
@@ -77,11 +85,16 @@ class UnsafeBackend(ExecutionBackend):
 
         try:
             result = subprocess.run(
-                [sys.executable, temp_file], capture_output=True, text=True, timeout=timeout
+                [sys.executable, temp_file],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
             )
 
             if result.returncode == 0:
-                return ExecutionResult(success=True, message="Code executed successfully")
+                return ExecutionResult(
+                    success=True, message="Code executed successfully"
+                )
             else:
                 return ExecutionResult(
                     success=False,
@@ -102,13 +115,16 @@ class UnsafeBackend(ExecutionBackend):
 
 class LLMSandboxBackend(ExecutionBackend):
     """Backend using llm-sandbox for secure Docker-based execution."""
+
     def __init__(self, allowed_imports: list[str] | None = None):
         """Initialize with optional import restrictions."""
         self.allowed_imports = allowed_imports
 
     def execute(self, code: str, timeout: int) -> ExecutionResult:
         """Execute code using llm-sandbox."""
-        if self.allowed_imports and not _check_allowed_imports(code, self.allowed_imports):
+        if self.allowed_imports and not _check_allowed_imports(
+            code, self.allowed_imports
+        ):
             return ExecutionResult(success=False, error="Unauthorized imports detected")
 
         try:
@@ -116,39 +132,28 @@ class LLMSandboxBackend(ExecutionBackend):
         except ImportError:
             return ExecutionResult(
                 success=False,
-                error="llm-sandbox not installed. Install with: uv add 'llm-sandbox[docker]'"
+                error="llm-sandbox not installed. Install with: uv add 'llm-sandbox[docker]'",
             )
 
         try:
             with SandboxSession(
-                lang="python",
-                runtime_configs={
-                    "mem_limit": "512m",
-                    "cpu_count": 1,
-                    "timeout": timeout,
-                    "privileged": False,
-                    "user": "1000:1000",
-                    "cap_drop": ["ALL"],
-                    "security_opt": ["no-new-privileges:true"],
-                }
+                lang="python", verbose=False, keep_template=False
             ) as session:
-                result = session.run(code)
+                result = session.run(code, timeout=timeout)
 
                 if result.exit_code == 0:
                     return ExecutionResult(
-                        success=True,
-                        message="Code executed successfully in sandbox"
+                        success=True, message="Code executed successfully in sandbox"
                     )
                 else:
                     return ExecutionResult(
                         success=False,
-                        error=f"Sandbox execution failed: {result.stderr[:200] if result.stderr else 'Unknown error'}"
+                        error=f"Sandbox execution failed: {result.stderr[:200] if result.stderr else 'Unknown error'}",
                     )
 
         except Exception as e:
             return ExecutionResult(
-                success=False,
-                error=f"Sandbox execution error: {e!s}"
+                success=False, error=f"Sandbox execution error: {e!s}"
             )
 
 
@@ -195,8 +200,11 @@ def _score_code_block(code: str, context_text: str = "") -> int:
         score += 3
 
     # Avoid pure imports or comments
-    non_trivial_lines = [line.strip() for line in lines
-                        if line.strip() and not line.strip().startswith(("#", "import ", "from "))]
+    non_trivial_lines = [
+        line.strip()
+        for line in lines
+        if line.strip() and not line.strip().startswith(("#", "import ", "from "))
+    ]
     if len(non_trivial_lines) < 2:
         score -= 5
 
@@ -224,12 +232,17 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
 
     # Add python blocks with high priority
     for block in python_blocks:
-        all_blocks.append((block.strip(), _score_code_block(block.strip(), content) + 10))
+        all_blocks.append(
+            (block.strip(), _score_code_block(block.strip(), content) + 10)
+        )
 
     # Add generic blocks if they look like Python
     for block in generic_blocks:
         block = block.strip()
-        if block and any(keyword in block for keyword in ["def ", "class ", "import ", "print(", "if __name__"]):
+        if block and any(
+            keyword in block
+            for keyword in ["def ", "class ", "import ", "print(", "if __name__"]
+        ):
             all_blocks.append((block, _score_code_block(block, content)))
 
     if not all_blocks:
@@ -272,8 +285,7 @@ def _python_executes_without_error(
 
     result = backend.execute(code, timeout)
     return ValidationResult(
-        result=result.success,
-        reason=result.message or result.error
+        result=result.success, reason=result.message or result.error
     )
 
 
@@ -301,7 +313,9 @@ class PythonExecutesWithoutError(Requirement):
         self._use_sandbox = use_sandbox
 
         if allow_unsafe_execution and not use_sandbox:
-            logger.warning("⚠️ UNSAFE: Executing untrusted code directly. Only use with trusted sources!")
+            logger.warning(
+                "⚠️ UNSAFE: Executing untrusted code directly. Only use with trusted sources!"
+            )
 
         if use_sandbox and allow_unsafe_execution:
             execution_mode = f"sandbox execution (timeout: {timeout}s)"
@@ -315,7 +329,11 @@ class PythonExecutesWithoutError(Requirement):
         super().__init__(
             description=f"The Python code should execute without errors ({execution_mode}).",
             validation_fn=lambda ctx: _python_executes_without_error(
-                ctx, self._timeout, self._allow_unsafe, self._allowed_imports, self._use_sandbox
+                ctx,
+                self._timeout,
+                self._allow_unsafe,
+                self._allowed_imports,
+                self._use_sandbox,
             ),
             check_only=True,
         )
