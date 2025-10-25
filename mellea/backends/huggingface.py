@@ -56,9 +56,6 @@ from mellea.stdlib.base import (
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
 
-if TYPE_CHECKING:
-    from alora.peft_model_alora import aLoRAPeftModelForCausalLM  # type: ignore
-
 assert outlines, "outlines needs to be present to make outlines_core work"
 
 """A configuration type for the unhappy path: Tokenizer * Model * torch device string
@@ -161,21 +158,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         self._use_caches = use_caches
         self._cache = cache if cache is not None else SimpleLRUCache(3)
 
-        # Used when running aLoRAs with this backend.
-        self._alora_model: "aLoRAPeftModelForCausalLM | None" = None  # noqa: UP037
-        # ALoras that have been loaded for this model.
         self._aloras: dict[str, HFAlora] = {}
-
-    @property
-    def alora_model(self) -> "aLoRAPeftModelForCausalLM | None":  # noqa: UP037
-        """The ALora model."""
-        return self._alora_model
-
-    @alora_model.setter
-    def alora_model(self, model: "aLoRAPeftModelForCausalLM | None"):  # noqa: UP037
-        """Sets the ALora model. This should only happen once in a backend's lifetime."""
-        assert self._alora_model is None
-        self._alora_model = model
 
     def generate_from_context(
         self,
@@ -719,8 +702,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         Args:
             alora (str): identifier for the ALora adapter
         """
-        from alora.peft_model_alora import aLoRAPeftModelForCausalLM  # type: ignore
-
         assert issubclass(alora.__class__, HFAlora), (
             f"cannot add an ALora of type {alora.__class__} to model; must inherit from {HFAlora.__class__}"
         )
@@ -732,14 +713,8 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             )
             return None
 
-        if self.alora_model is None:
-            base_model = self._model
-            self.alora_model = aLoRAPeftModelForCausalLM.from_pretrained(
-                base_model, alora.path_or_model_id, alora.name
-            )
-        else:
-            self.alora_model.load_adapter(alora.path_or_model_id, alora.name)
-
+        self._model.load_adapter(alora.path_or_model_id, alora.name)
+        self._model.disable_adapters()
         self._aloras[alora.name] = alora
 
     def get_alora(self, alora_name: str) -> Alora | None:

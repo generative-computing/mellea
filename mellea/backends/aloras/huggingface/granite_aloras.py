@@ -61,12 +61,11 @@ class HFConstraintAlora(HFAlora):
         stream: bool = False,
     ) -> ModelOutputThunk:
         """Generates a constraint response from the ALora. Must be run in a running event loop."""
-        assert self._backend.alora_model is not None
         # Go ahead and do runtime type-checking because passing CBlocks into this function is a common error.
         assert type(input) is str
         assert type(response) is str
         assert type(constraint) is str
-        self._backend.alora_model.set_adapter(self.name)
+        self._backend._model.set_adapter(self.name)
         cache_hit = self._backend.cache_get(response)
 
         if stream:
@@ -105,7 +104,7 @@ class HFConstraintAlora(HFAlora):
             ]
 
         chat_response = asyncio.to_thread(
-            self._backend.alora_model.generate,
+            self._backend._model.generate,  # type: ignore
             input_combined["input_ids"],
             attention_mask=input_combined["attention_mask"],
             max_new_tokens=1,
