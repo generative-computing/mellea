@@ -96,7 +96,7 @@ class HFConstraintAlora(HFAlora):
             # Get the constraint tokens separately so that we can calculate the alora offsets.
             constraint_tokens = self._backend._tokenizer(
                 self._constraint_prompt.format(constraint), return_tensors="pt"
-            ).to(self._backend._device)
+            )
 
             alora_offsets = [
                 constraint_tokens["input_ids"].shape[1]
@@ -106,8 +106,8 @@ class HFConstraintAlora(HFAlora):
 
         chat_response = asyncio.to_thread(
             self._backend.alora_model.generate,
-            input_combined["input_ids"].to(self._backend._device),
-            attention_mask=input_combined["attention_mask"].to(self._backend._device),
+            input_combined["input_ids"],
+            attention_mask=input_combined["attention_mask"],
             max_new_tokens=1,
             return_dict_in_generate=True,
             alora_offsets=alora_offsets,
@@ -149,7 +149,7 @@ class HFConstraintAlora(HFAlora):
         # Must tokenize the constraint here since the requirement isn't known at initialization.
         constraint_tokens = self._backend._tokenizer(
             self._constraint_prompt.format(constraint), return_tensors="pt"
-        ).to(self._backend._device)
+        )
 
         input_combined = {
             "input_ids": torch.cat(
@@ -196,10 +196,7 @@ class HFConstraintAlora(HFAlora):
         # Must tokenize the constraint here since the requirement isn't known at initialization.
         templatized = templatized + self._constraint_prompt.format(constraint)
 
-        tokenized = self._backend._tokenizer(templatized, return_tensors="pt").to(
-            self._backend._device
-        )
-
+        tokenized = self._backend._tokenizer(templatized, return_tensors="pt")
         input_combined = {
             "input_ids": torch.cat(
                 [tokenized["input_ids"], self._generation_prompt_tokens["input_ids"]],

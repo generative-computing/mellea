@@ -148,23 +148,15 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 self._hf_model_id = model_id.hf_model_name
         match custom_config:
             case None:
-                # Choose a device.
-                self._device = torch.device(
-                    "cuda"
-                    if torch.cuda.is_available()
-                    else "mps"
-                    if torch.backends.mps.is_available()
-                    else "cpu"
-                )
                 # Get the model and tokenizer.
                 self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
                     self._hf_model_id
-                ).to(self._device)  # type: ignore
+                )
                 self._tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
                     self._hf_model_id
                 )
             case _:
-                self._tokenizer, self._model, self._device = custom_config
+                self._tokenizer, self._model, _ = custom_config
 
         self._use_caches = use_caches
         self._cache = cache if cache is not None else SimpleLRUCache(3)
@@ -337,7 +329,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 add_generation_prompt=True,  # If we change this, must modify huggingface granite guardian.
                 return_tensors="pt",
                 **self._make_backend_specific_and_remove(model_options),
-            ).to(self._device)  # type: ignore
+            )
 
             format_kwargs = {}
             if _format:
@@ -489,7 +481,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             cache_info = HFAloraCacheInfo(
                 kv_cache=cache,
                 merged_token_ids=output_complete,
-                merged_attention=torch.ones_like(output_complete).to(self._device),
+                merged_attention=torch.ones_like(output_complete),
                 q_end=len(input_ids[0]),  # type: ignore
             )
 
@@ -543,9 +535,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         prompts = [self.formatter.print(action) for action in actions]
 
         # batch-encoding call is deprecated in favor of this
-        inputs = self._tokenizer(prompts, return_tensors="pt", padding=True).to(
-            self._device
-        )
+        inputs = self._tokenizer(prompts, return_tensors="pt", padding=True)
 
         if format is None:
             outputs = self._model.generate(  # type: ignore
@@ -787,7 +777,7 @@ class HFAlora(Alora, abc.ABC):
         self._generation_prompt = generation_prompt
         self._generation_prompt_tokens = self._backend._tokenizer(
             self._generation_prompt, return_tensors="pt"
-        ).to(self._backend._device)
+        )
 
 
 class HFProcessRewardModel(PRM, abc.ABC):
@@ -805,23 +795,9 @@ class HFProcessRewardModel(PRM, abc.ABC):
         """
         super().__init__(model_name_or_path)
 
-        # auto-device if not more specific
-        self._device = device
-        if device is None:
-            device_name: str = (
-                "cuda"
-                if torch.cuda.is_available()
-                else "mps"
-                if torch.backends.mps.is_available()
-                else "cpu"
-            )
-            assert device_name is not None
-            self._device = torch.device(device_name)  # type: ignore
-
         self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
             self.model_name_or_path, torch_dtype=torch.bfloat16
         )
-        self.model.to(self._device)  # type: ignore
         self.model.eval()
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path)
 
