@@ -38,12 +38,14 @@ def get_court_from_case(ctx: Context, case_metadata: list[dict]) -> str:
 
 def is_appellate_court(court_name: str) -> ValidationResult:
     """Determine if a court is an appellate court based on its name."""
-    lowered_name = court_name.lower()
-    exceptions = ["pennsylvania superior court", "pennsylvania commonwealth court"]
+    # rule exceptions: the 2 appellate courts whose names do not include the below keywords
+    rule_exceptions = ["pennsylvania superior court", "pennsylvania commonwealth court"]
     keywords = ["supreme", "appeal", "appellate"]
+
+    lowered_name = court_name.lower()
     return ValidationResult(
         any(keyword in lowered_name for keyword in keywords)
-        or lowered_name in exceptions
+        or lowered_name in rule_exceptions
     )
 
 
