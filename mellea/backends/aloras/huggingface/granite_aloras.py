@@ -4,6 +4,7 @@ import asyncio
 import functools
 from copy import deepcopy
 
+import granite_common
 import torch
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 
@@ -279,3 +280,30 @@ def add_granite_aloras(backend: LocalHFBackend):
         raise ValueError(
             f"cannot add_granite_aloras to unknown huggingface model_id / backend: {backend._hf_model_id}"
         )
+
+
+class HFIntrinsicAlora(HFAlora):
+    def __init__(
+        self, name: str, backend: LocalHFBackend, base_model_name: str | None = None
+    ):
+        # TODO: JAL. May need to change HFAlora to not need a generation prompt by default...
+
+        if base_model_name is None:
+            # TODO: JAL. Make sure all hf model ids fit this way.
+            base_model_name = backend._hf_model_id.split("/")[1]
+
+        # TODO: JAL. figure out if we want to download files here or when adding the alora...
+        # Need to do all the path determination at init?
+        path = str(
+            granite_common.intrinsics.util.obtain_lora(
+                name, base_model_name, alora=True
+            )
+        )
+
+        super().__init__(name, path, "", backend)
+
+        # We do a lot of logging for ALoras because this is an experimental feature. Maybe we should tag these log messages?
+        self._logger = FancyLogger.get_logger()
+
+    def generate_using_strings(self, *args, **kwargs) -> ModelOutputThunk:
+        raise NotImplementedError()

@@ -43,7 +43,8 @@ dependencies = [
     "huggingface-hub>=0.33.4",
     "pillow",
     "math_verify", # Needed for Majority Voting Sampling Strategies.
-    "rouge_score" # Needed for Majority Voting Sampling Strategies.
+    "rouge_score", # Needed for Majority Voting Sampling Strategies.
+    "granite_common", # Needed for Intrinsics.
 ]
 
 [project.scripts]
@@ -60,7 +61,8 @@ hf = [
     "alora==0.2.0",
     "datasets>=4.0.0",
     "outlines<1.0.0",
-    "peft>=0.16.0",
+    # "peft>=0.17.2", # This package can be re-enabled once peft 0.17.2 has been released and below commit is confirmed to be a part of it.
+    "peft @ git+https://github.com/huggingface/peft.git@293aea5df6db240856a77f89955d1a89ce38b50d",
     "transformers>=4.53.2",
     "trl==0.19.1",
 ]

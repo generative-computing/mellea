@@ -16,17 +16,18 @@ from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import GenerateType, ModelOutputThunk
 
 
-class OpenAIConstraintAlora(OpenAIAlora):
+# TODO: JAL. this should be made into a generic adapter interface...?
+class OpenAIIntrinsicAlora(OpenAIAlora):
     """The [Requirement Checking ALora for Granite 3.2 8B](https://huggingface.co/ibm-granite/granite-3.2-8b-alora-requirement-check) checks if the specified requirement was satisfied by the most recent model generation. Only one requirement is checked at a time."""
 
     def __init__(
         self, name: str, path: str, generation_prompt: str, backend: OpenAIBackend
     ):
         """Initialize after checking that the backend is correct."""
-        assert backend._hf_model_id == "ibm-granite/granite-3.2-8b-instruct"
         super().__init__(name, path, generation_prompt, backend)
         # We do a lot of logging for ALoras because this is an experimental feature. Maybe we should tag these log messages?
         self._logger = FancyLogger.get_logger()
+        # TODO: JAL. Move the adapter loading logic to the init?... or see where we want to make sure they are downloaded...
 
     def generate_using_strings(
         self,
@@ -118,11 +119,25 @@ async def post_processing(backend: OpenAIBackend, mot: ModelOutputThunk):
 
 def add_granite_aloras(backend: OpenAIBackend):
     """Adds the IBM Granite "starter pack" ALoras to a backend."""
-    backend.add_alora(
-        OpenAIConstraintAlora(
-            name="constraint",
-            path="ibm-granite/granite-3.2-8b-alora-requirement-check",
-            generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>",
-            backend=backend,
+    if backend._hf_model_id == "ibm-granite/granite-3.2-8b-instruct":
+        backend.add_alora(
+            OpenAIIntrinsicAlora(
+                name="constraint",
+                path="ibm-granite/granite-3.2-8b-alora-requirement-check",
+                generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>",
+                backend=backend,
+            )
         )
-    )
+    elif backend._hf_model_id == "ibm-granite/granite-3.3-8b-instruct":
+        backend.add_alora(
+            OpenAIIntrinsicAlora(
+                name="constraint",
+                path="ibm-granite/granite-3.3-8b-alora-requirement-check",
+                generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>",
+                backend=backend,
+            )
+        )
+    else:
+        raise ValueError(
+            f"cannot add_granite_aloras to unknown huggingface model_id / backend: {backend._hf_model_id}"
+        )

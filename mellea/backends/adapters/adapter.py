@@ -1,0 +1,134 @@
+import abc
+from enum import Enum
+
+import granite_common
+
+from mellea.backends.types import _ServerType
+
+
+class AdapterType(Enum):
+    LORA = "lora"
+    ALORA = "alora"
+
+
+class Adapter(abc.ABC):
+    def __init__(self, name: str, adapter_type: AdapterType):
+        """An adapter that can be added to a backend.
+
+        Args:
+            name: name of the adapter; when referencing this adapter, use adapter.qualified_name
+            adapter_type: enum describing what type of adapter it is (ie LORA / ALORA)
+        """
+        self.name = name
+        self.adapter_type = adapter_type
+        self.qualified_name = name + "_" + adapter_type.value
+        """the name of the adapter to use when loading / looking it up"""
+
+    # @abc.abstractmethod
+    # def add_adapter(self, backend: Backend, *args, **kwargs):
+    #     """Adds an adapter."""
+
+    # def already_added(self, backend: Backend) -> bool:
+    #     """Checks if a this adapter has already been loaded to a backend and if so, if it's the current backend.
+
+    #     Args:
+    #         backend: the Backend to add the adapter to.
+
+    #     Returns:
+    #         True if already added; False if not already added.
+
+    #     Raises:
+    #         ValueError: if the adapter has already been added to a different backend.
+    #     """
+    #     if self.backend is not None:
+    #         if self.backend is not backend:
+    #             raise ValueError(f"adapter ({self.name}, {self}) has already been added to a different backend ({self.backend})")
+    #         else:
+    #             # It's already been added to this backend. Do nothing.
+    #             return True
+    #     return False
+
+
+class OpenAIAdapter(Adapter):
+    @abc.abstractmethod
+    def get_open_ai_path(
+        self,
+        base_model_name: str,
+        server_type: _ServerType = _ServerType.LOCALHOST,
+        remote_path: str | None = None,
+    ) -> str:
+        """Returns the path needed to load the adapter.
+
+        Args:
+            base_model_name: the base model; typically the last part of the huggingface model id like "granite-3.3-8b-instruct"
+            server_type: the server type (ie LOCALHOST / OPENAI); usually the backend has information on this
+            remote_path: optional; used only if the server_type is REMOTE_VLLM; base path at which to find the adapter
+        """
+        ...
+
+
+class LocalHFAdapter(Adapter):
+    @abc.abstractmethod
+    def get_local_hf_path(self, base_model_name: str) -> str:
+        """Returns the path needed to load the adapter.
+
+        Args:
+            base_model_name: the base model; typically the last part of the huggingface model id like "granite-3.3-8b-instruct"
+        """
+        ...
+
+
+class RagIntrinsicAdapter(OpenAIAdapter, LocalHFAdapter):
+    def __init__(self, name: str, adapter_type: AdapterType = AdapterType.ALORA):
+        """An adapter that can be added to either an `OpenAIBackend` or a `LocalHFBackend`. Most rag-lib-intrinsics support lora or alora adapter types.
+
+        Args:
+            name: name of the adapter; when referencing this adapter, use adapter.qualified_name
+            adapter_type: enum describing what type of adapter it is (ie LORA / ALORA)
+        """
+        assert adapter_type == AdapterType.ALORA or adapter_type == AdapterType.LORA, (
+            f"{adapter_type} not supported"
+        )
+        super().__init__(name, adapter_type)
+
+    def get_open_ai_path(
+        self,
+        base_model_name: str,
+        server_type: _ServerType = _ServerType.LOCALHOST,
+        remote_path: str | None = None,
+    ) -> str:
+        if server_type == _ServerType.LOCALHOST:
+            path = self.download_and_get_path(base_model_name)
+        elif server_type == _ServerType.REMOTE_VLLM:
+            if remote_path is None:
+                remote_path = "rag-intrinsics-lib"
+            path = self.get_path_on_remote(base_model_name, remote_path)
+        else:
+            raise ValueError(
+                f"{self} not supported for OpenAIBackend with server_type: {server_type}"
+            )
+
+        return path
+
+    def get_local_hf_path(self, base_model_name: str) -> str:
+        return self.download_and_get_path(base_model_name)
+
+    def download_and_get_path(self, base_model_name: str) -> str:
+        """Downloads the required rag intrinsics files if necessary and returns the path to the them.
+
+        Args:
+            base_model_name: the base model; typically the last part of the huggingface model id like "granite-3.3-8b-instruct"
+
+        Returns:
+            a path to the files
+        """
+        is_alora = self.adapter_type == AdapterType.ALORA
+        return str(
+            granite_common.intrinsics.util.obtain_lora(
+                self.name, base_model_name, alora=is_alora
+            )
+        )
+
+    def get_path_on_remote(self, base_model_name: str, base_path: str) -> str:
+        """Assumes the files have already been downloaded on the remote server."""
+        return f"./{base_path}/{self.name}/{self.adapter_type.value}/{base_model_name}"
