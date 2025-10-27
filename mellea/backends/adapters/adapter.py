@@ -50,6 +50,7 @@ class Adapter(abc.ABC):
 
 
 class OpenAIAdapter(Adapter):
+    # TODO: JAL. May need to add plain path here as well.
     @abc.abstractmethod
     def get_open_ai_path(
         self,
@@ -68,6 +69,7 @@ class OpenAIAdapter(Adapter):
 
 
 class LocalHFAdapter(Adapter):
+    # TODO: JAL. May need to add plain path here as well.
     @abc.abstractmethod
     def get_local_hf_path(self, base_model_name: str) -> str:
         """Returns the path needed to load the adapter.

@@ -43,6 +43,7 @@ from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
+    Document,
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
@@ -415,6 +416,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([self.message_to_openai_message(m) for m in messages])
+        docs = self.messages_to_docs(messages)
 
         # TODO: Check that the base_model_name matches the backend's model?
         intrinsic_config = action.config
@@ -450,9 +452,12 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         # TODO: JAL. This will have to have some sort of intrinsic compat field?
         adapter = self.get_alora(action.intrinsic_name + "_" + "alora")
         if adapter is None:
-            raise ValueError(
-                f"no alora / lora for processing intrinsic: {action.intrinsic_name}"
-            )
+            # TODO: JAL. Remove this nesting.
+            adapter = self.get_alora(action.intrinsic_name + "_" + "lora")
+            if adapter is None:
+                raise ValueError(
+                    f"no alora / lora for processing intrinsic: {action.intrinsic_name}"
+                )
 
         def adapter_intrinsic_match(
             intrinsic_name: str,
@@ -497,7 +502,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         # TODO: JAL. The name passed to the intrinsics rewriter should be the alora's or the intrinsics? theoretically
         #            the alora's should always be the intrinsic's given the matching func.
         rewriter = granite_common.IntrinsicsRewriter(
-            config_dict=rewriter_config, model_name=adapter.name
+            config_dict=rewriter_config, model_name=adapter.qualified_name
         )
         result_processor = granite_common.IntrinsicsResultProcessor(
             config_dict=result_processor_config
@@ -505,7 +510,10 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
         # Convert our conversation into a proper chat completions dict.
         # [{role: user, content: Hello}, {...}] -> {messages: [{role:user,...}, ...], model:..., ...}
-        request_json: dict = {"messages": conversation}
+        request_json: dict = {
+            "messages": conversation,
+            "extra_body": {"documents": docs},
+        }
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
 
         # TODO: JAL.
@@ -591,6 +599,22 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             #       }
             #     ]
             #   }
+
+    @staticmethod
+    def messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]:
+        docs: list[Document] = []
+        for message in msgs:
+            if message._docs is not None:
+                docs.extend(message._docs)
+
+        # TODO: We can add doc_ids here for vllm.
+        json_docs: list[dict[str, str]] = []
+        for doc in docs:
+            json_doc = {"text": doc.text}
+            if doc.title is not None:
+                json_doc["title"] = doc.title
+            json_docs.append(json_doc)
+        return json_docs
 
     def _generate_from_chat_context_standard(
         self,
