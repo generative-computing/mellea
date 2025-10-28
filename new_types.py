@@ -1,3 +1,5 @@
+import random
+
 class RangeType:
     """A custom range class that mimics the built-in range() behavior."""
     
@@ -32,6 +34,7 @@ class RangeType:
         return value
 
     def __repr__(self):
-        """Official string representation of the object."""
-        return f"RangeType({self.start}, {self.stop}, {self.step})"
+        """Official string representation of the object. Randomly selected age from a given interval."""
+    
+        return str(random.choice(list(self)))
 

@@ -22,7 +22,6 @@ from mellea.stdlib.base import ChatContext
 from beeai_framework.backend.chat import ChatModel
 from beeai_framework.adapters.beeai_platform.serve.server import BeeAIPlatformMemoryManager, BeeAIPlatformServer
 from bee_platform import bee_app
-
 server = Server()
 
 from typing import Callable, Tuple

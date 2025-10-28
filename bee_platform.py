@@ -21,7 +21,7 @@ from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.stdlib.base import ChatContext
 from beeai_framework.backend.chat import ChatModel
 from beeai_framework.adapters.beeai_platform.serve.server import BeeAIPlatformMemoryManager, BeeAIPlatformServer
-#from cli.serve.bee_playform.types import RangeType
+from new_types import RangeType
 
 
 def bee_app(func: Callable) -> Callable:
@@ -37,7 +37,8 @@ def bee_app(func: Callable) -> Callable:
 ]))]):
         form_data = form.parse_form_response(message=input)
         name = form_data.values['name'].value if 'name' in form_data.values else get_message_text(input)
-        age = "2"
+        age = RangeType(0, 5)
+        print(age)
         for i in range(2):
             yield trajectory.trajectory_metadata(title=f"Attempt {i + 1}/2", content=f"Generating invitation for {name}...")
             llm_config = llm.data.llm_fulfillments.get("default")
