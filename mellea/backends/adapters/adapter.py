@@ -173,3 +173,28 @@ class RagIntrinsicAdapter(OpenAIAdapter, LocalHFAdapter):
     def get_path_on_remote(self, base_model_name: str, base_path: str) -> str:
         """Assumes the files have already been downloaded on the remote server."""
         return f"./{base_path}/{self.name}/{self.adapter_type.value}/{base_model_name}"
+
+
+def get_adapter_for_intrinsic(
+    intrinsic_name: str,
+    intrinsic_adapter_types: list[AdapterType],
+    available_adapters: dict[str, Adapter],
+) -> Adapter | None:
+    """Finds an adapter from a dict of available adapters based on the intrinsic name and its allowed adapter types.
+
+    Args:
+        intrinsic_name: the name of the intrinsic, like "answerability"
+        intrinsic_adapter_types: the adapter types allowed for this intrinsic, like ALORA / LORA
+        available_adapters: the available adapters to choose from; maps adapter.qualified_name to the Adapter
+
+    Returns:
+        an Adapter if found; else None
+    """
+    adapter = None
+    for adapter_type in intrinsic_adapter_types:
+        qualified_name = intrinsic_name + "_" + adapter_type.value
+        adapter = available_adapters.get(qualified_name, None)
+        if adapter is not None:
+            break
+
+    return adapter
