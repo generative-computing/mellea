@@ -19,7 +19,7 @@ from openai.types.completion import Completion
 
 import mellea.backends.model_ids as model_ids
 from mellea.backends import BaseModelSubclass
-from mellea.backends.adapters.adapter import OpenAIAdapter
+from mellea.backends.adapters.adapter import OpenAIAdapter, RagIntrinsicAdapter
 from mellea.backends.aloras import Alora, AloraBackendMixin
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
@@ -387,7 +387,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
         return alora_output
 
-    # TODO: JAL. Do we need a mixin that radios something like this is supported? yes, we need to signal that you can add these adapters?
     def _generate_from_intrinsic(
         self,
         action: Intrinsic,
@@ -404,7 +403,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         linearized_context = ctx.view_for_generation()
         assert linearized_context is not None, (
             "Cannot generate from a non-linear context in a FormatterBackend."
-        )  # TODO: JAL. Need to handle simple contexts...
+        )  # TODO: JAL. Need to handle simple contexts... test what happens if there's no messages in the context...
 
         # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
@@ -417,34 +416,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([self.message_to_openai_message(m) for m in messages])
         docs = self.messages_to_docs(messages)
-
-        # TODO: Check that the base_model_name matches the backend's model?
-        intrinsic_config = action.config
-        if intrinsic_config is None:
-            # If the intrinsic wasn't initialized with a config, grab one here based
-            # off the backend's model.
-            intrinsic_config_file = granite_common.intrinsics.util.obtain_io_yaml(
-                action.intrinsic_name,
-                self.model_id,  # TODO: JAL. We need to a specific string here if model id isn't one...; probably the huggingface id
-            )
-            intrinsic_config = granite_common.intrinsics.util.make_config_dict(
-                config_file=intrinsic_config_file
-            )
-            intrinsic_config = cast(
-                dict, intrinsic_config
-            )  # Can remove if util function gets exported properly.
-
-        # Check if there's a model name associated with this intrinsic (either user specified
-        # or specified in the config).
-        model_name = action.model_name
-        if model_name is None:
-            model_name = intrinsic_config["model"]
-            # TODO: JAL. model_name is only really used for routing the request. See what we do with
-            #            vllm / openai with aloras. If the model name is the same and we just activate
-            #            the adapters, that's fine; we can leave the model name alone...
-            #           - with openai / vllm, you actually do use the lora adapter name...
-            #           - with openai / vllm, you use the alora name...
-            #           I think this also means no generation lock is required for OpenAI; only huggingface
 
         # TODO: JAL. Use the better matching function. Going by name alone right now.
         #            Also move this to be an early exit.
@@ -489,6 +460,35 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         #               - if model_name, see if we have a matching lora / alora model
         #                   - model_name might be stored as a part of the alora's path? need to investigate further.
         #               Both of these checks need to also check if the Intrinsic is alora / lora compatible
+
+        # TODO: JAL. Fix this once get_alora is changed.
+        assert isinstance(adapter, RagIntrinsicAdapter)
+        # TODO: Check that the base_model_name matches the backend's model?
+        intrinsic_config = adapter.config
+        if intrinsic_config is None:
+            # If the adapter wasn't initialized with a config, grab one here based off the backend's model.
+            intrinsic_config_file = granite_common.intrinsics.util.obtain_io_yaml(
+                action.intrinsic_name,
+                self.model_id,  # TODO: JAL. We need to a specific string here if model id isn't one...; probably the huggingface id
+            )
+            intrinsic_config = granite_common.intrinsics.util.make_config_dict(
+                config_file=intrinsic_config_file
+            )
+            intrinsic_config = cast(
+                dict, intrinsic_config
+            )  # TODO: Can remove if util function gets exported properly.
+
+        # Check if there's a model name associated with this intrinsic (either user specified
+        # or specified in the config).
+        model_name = adapter.base_model_name
+        if model_name is None:
+            model_name = intrinsic_config["model"]
+            # TODO: JAL. model_name is only really used for routing the request. See what we do with
+            #            vllm / openai with aloras. If the model name is the same and we just activate
+            #            the adapters, that's fine; we can leave the model name alone...
+            #           - with openai / vllm, you actually do use the lora adapter name...
+            #           - with openai / vllm, you use the alora name...
+            #           I think this also means no generation lock is required for OpenAI; only huggingface
 
         # Necessary for the rewriter and result processor. Response format must be a string, even though we are using
         # granite_common to parse the dict from a provided file. The rewriter also modifies the dict passed in,

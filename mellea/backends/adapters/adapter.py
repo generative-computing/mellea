@@ -1,7 +1,9 @@
 import abc
+import pathlib
 from enum import Enum
 
 import granite_common
+from litellm import cast
 
 from mellea.backends.types import _ServerType
 
@@ -81,17 +83,54 @@ class LocalHFAdapter(Adapter):
 
 
 class RagIntrinsicAdapter(OpenAIAdapter, LocalHFAdapter):
-    def __init__(self, name: str, adapter_type: AdapterType = AdapterType.ALORA):
+    def __init__(
+        self,
+        name: str,
+        adapter_type: AdapterType = AdapterType.ALORA,
+        config_file: str | pathlib.Path | None = None,
+        config_dict: dict | None = None,
+        base_model_name: str | None = None,
+    ):
         """An adapter that can be added to either an `OpenAIBackend` or a `LocalHFBackend`. Most rag-lib-intrinsics support lora or alora adapter types.
 
         Args:
             name: name of the adapter; when referencing this adapter, use adapter.qualified_name
             adapter_type: enum describing what type of adapter it is (ie LORA / ALORA)
+            config_file: optional; file for defining the intrinsic / transformations
+            config_dict: optional; dict for defining the intrinsic / transformations
+            base_model_name: optional; if provided with no config_file/config_dict, will be used to lookup the granite_common config for this adapter
         """
         assert adapter_type == AdapterType.ALORA or adapter_type == AdapterType.LORA, (
             f"{adapter_type} not supported"
         )
         super().__init__(name, adapter_type)
+
+        self.base_model_name = base_model_name
+
+        # If any of the optional params are specified, attempt to set up the
+        # config for the intrinsic here.
+        config: dict | None = None
+        if config_file is not None or config_dict is not None:
+            config = granite_common.intrinsics.util.make_config_dict(
+                config_file=config_file, config_dict=config_dict
+            )
+            config = cast(
+                dict, config
+            )  # Can remove if util function gets exported properly.
+
+        if config is None and self.base_model_name is not None:
+            is_alora = True if self.adapter_type == AdapterType.ALORA else False
+            io_yaml_file = granite_common.intrinsics.util.obtain_io_yaml(
+                self.name, self.base_model_name, alora=is_alora
+            )
+            config = granite_common.intrinsics.util.make_config_dict(
+                config_file=io_yaml_file
+            )
+            config = cast(
+                dict, config
+            )  # Can remove if util function gets exported properly.
+
+        self.config: dict | None = config
 
     def get_open_ai_path(
         self,

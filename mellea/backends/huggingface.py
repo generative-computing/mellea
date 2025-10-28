@@ -33,7 +33,7 @@ from transformers import (
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 from mellea.backends import BaseModelSubclass
-from mellea.backends.adapters.adapter import LocalHFAdapter
+from mellea.backends.adapters.adapter import LocalHFAdapter, RagIntrinsicAdapter
 from mellea.backends.aloras import Alora, AloraBackendMixin
 from mellea.backends.cache import Cache, SimpleLRUCache
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
@@ -311,12 +311,23 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         if seed is not None:
             set_seed(seed)
 
-        # TODO: JAL. Operates over ChatCompletion Requests...
+        # TODO: JAL. Use the better matching function. Going by name alone right now.
+        #            Also move this to be an early exit.
+        # TODO: JAL. Check for LORAs as well once that interface is done.
+        adapter = self.get_alora(action.intrinsic_name + "_" + "alora")
+        if adapter is None:
+            adapter = self.get_alora(action.intrinsic_name + "_" + "lora")
+            if adapter is None:
+                raise ValueError(
+                    f"no alora / lora for processing intrinsic: {action.intrinsic_name}"
+                )
+
+        # TODO: JAL. Fix this once get_alora is changed.
+        assert isinstance(adapter, RagIntrinsicAdapter)
         # TODO: Check that the base_model_name matches the backend's model?
-        intrinsic_config = action.config
+        intrinsic_config = adapter.config
         if intrinsic_config is None:
-            # If the intrinsic wasn't initialized with a config, grab one here based
-            # off the backend's model.
+            # If the adapter wasn't initialized with a config, grab one here based off the backend's model.
             intrinsic_config_file = granite_common.intrinsics.util.obtain_io_yaml(
                 action.intrinsic_name,
                 self.model_id,  # TODO: JAL. We need to a specific string here if model id isn't one...; probably the huggingface id
@@ -326,11 +337,11 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             )
             intrinsic_config = cast(
                 dict, intrinsic_config
-            )  # Can remove if util function gets exported properly.
+            )  # TODO: Can remove if util function gets exported properly.
 
         # Check if there's a model name associated with this intrinsic (either user specified
         # or specified in the config).
-        model_name = action.model_name
+        model_name = adapter.base_model_name
         if model_name is None:
             model_name = intrinsic_config["model"]
             # TODO: JAL. model_name is only really used for routing the request. See what we do with
@@ -339,15 +350,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             #           - with openai / vllm, you actually do use the lora adapter name...
             #           - with openai / vllm, you use the alora name...
             #           I think this also means no generation lock is required for OpenAI; only huggingface
-
-        # TODO: JAL. Use the better matching function. Going by name alone right now.
-        #            Also move this to be an early exit.
-        # TODO: JAL. Check for LORAs as well once that interface is done.
-        adapter = self.get_alora(action.intrinsic_name + "_" + "alora")
-        if adapter is None:
-            raise ValueError(
-                f"no alora / lora for processing intrinsic: {action.intrinsic_name}"
-            )
 
         intrinsic_config["response_format"] = json.dumps(
             intrinsic_config["response_format"]
