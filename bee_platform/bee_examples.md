@@ -36,7 +36,10 @@ beeai ui
 # Creating your own examples
 
 To create your own BeeAI agent with Mellea, write a traditional program with Mellea. 
+
 Ensure that the first parameter is an **m** object.
+
+Wrap your Mellea program with ```@bee_app```.
 
 Place your example in the ```docs/examples/``` folder.
 
