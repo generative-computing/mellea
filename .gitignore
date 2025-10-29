@@ -1,3 +1,8 @@
+# KR files
+kr_results/
+kr_data/
+xet/
+
 # Python-generated files
 __pycache__/
 *.py[oc]
