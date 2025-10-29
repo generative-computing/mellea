@@ -5,7 +5,7 @@ BeeAI Framework is an open-source framework for building production-grade multi-
 This example serves to merge both libraries with a simple module that will allow users to transform
 their Mellea programs into BeeAI agents.
 
-We include the example of an email writer.
+We provide the example of an email writer.
 
 # Initialization
 
@@ -27,10 +27,18 @@ In a separate terminal, either run
 beeai run mellea_agent
 ```
 
-OR open the UI and select the Mellea Agent.
+OR open the UI and select the **mellea-agent**.
 
 ```bash
 beeai ui
 ```
+
+# Creating your own examples
+
+To create your own BeeAI agent with Mellea, write a traditional program with Mellea. 
+Ensure that the first parameter is an **m** object.
+
+Place your example in the ```docs/examples/``` folder.
+
 
 
