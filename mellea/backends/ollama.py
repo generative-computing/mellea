@@ -399,6 +399,10 @@ class OllamaModelBackend(FormatterBackend):
             FancyLogger.get_logger().info(
                 "Ollama doesn't support batching; will attempt to process concurrently."
             )
+        if tool_calls:
+            FancyLogger.get_logger().warning(
+                "The completion endpoint does not support tool calling at the moment."
+            )
 
         model_opts = self._simplify_and_merge(model_options)
 
@@ -441,7 +445,10 @@ class OllamaModelBackend(FormatterBackend):
                     value=response.response,
                     meta={
                         "generate_response": response.model_dump(),
-                        "usage": response.eval_count,
+                        "usage": {
+                            "completion_tokens": response.eval_count,
+                            "prompt_tokens": response.prompt_eval_count,
+                        },
                     },
                 )
 

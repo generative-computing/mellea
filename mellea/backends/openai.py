@@ -705,7 +705,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             output._model_options = model_opts
             output._meta = {
                 "oai_completion_response": response.model_dump(),
-                "oai_usage": completion_response.usage.model_dump()
+                "usage": completion_response.usage.model_dump()
                 if completion_response.usage
                 else None,
             }
