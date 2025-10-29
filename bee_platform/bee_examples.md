@@ -3,9 +3,10 @@
 Mellea is a library for writing generative programs. 
 BeeAI Framework is an open-source framework for building production-grade multi-agent systems.
 This example serves to merge both libraries with a simple module that will allow users to transform
-their Mellea programs into BeeAI agents.
+their Mellea programs into BeeAI agentic interfaces with structured (form) inputs. 
 
 We provide the example of an email writer. Only text inputs are currently supported.
+
 
 # Initialization
 
