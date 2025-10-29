@@ -1,42 +1,45 @@
+"""
+Example use case for BeeAI integration: utilizing a Mellea program to write an email with an IVF loop.
+Also demo of RangeType to demonstrate random selection of a integer from a given range
+"""
 import os
 import asyncio
+import sys
 from typing import Annotated
 
-from mellea.stdlib.chat import Message
-from a2a.utils.message import get_message_text
-from beeai_sdk.server import Server
-from beeai_sdk.a2a.types import AgentMessage
-from beeai_sdk.a2a.extensions import (
-    LLMServiceExtensionServer, LLMServiceExtensionSpec,
-    TrajectoryExtensionServer, TrajectoryExtensionSpec, 
-    AgentDetail
-)
-from beeai_sdk.a2a.extensions.ui.form import (
-    FormExtensionServer, FormExtensionSpec, FormRender, TextField
-)
 from mellea import MelleaSession, start_session
-from mellea.backends.openai import OpenAIBackend
-from mellea.stdlib.requirement import req, Requirement, simple_validate
-from mellea.stdlib.sampling import RejectionSamplingStrategy
-from mellea.stdlib.base import ChatContext
-from beeai_framework.backend.chat import ChatModel
-from beeai_framework.adapters.beeai_platform.serve.server import BeeAIPlatformMemoryManager, BeeAIPlatformServer
-from bee_platform import bee_app
-server = Server()
+from mellea.stdlib.base import ChatContext, ModelOutputThunk
 
-from typing import Callable, Tuple
+from mellea.stdlib.sampling import RejectionSamplingStrategy
+from mellea.stdlib.sampling.types import SamplingResult
+from mellea.stdlib.sampling.base import Context
+from mellea.stdlib.requirement import req, Requirement, simple_validate
+#from cli.serve.bee_playform.types import RangeType
+from bee_platform.bee_platform import bee_app
 
 
 @bee_app
-def mellea_func(m: MelleaSession, name: str, age: int) -> str:
+def mellea_func(m: MelleaSession, sender: str, recipient, subject: str, topic: str, sampling_iters : int = 3) -> tuple[ModelOutputThunk, Context] | SamplingResult:
     """
-    Example email writing module that starts a Mellea session and adds any calls to an internal ChatContext
+    Example email writing module that utilizes an IVR loop in Mellea to generate an email with a specific list of requirements.
     Inputs:
-        name: str
-        age: str
+        sender: str
+        recipient: str
+        subject: str
+	topic: str
+    Output:
+	sampling: tuple[ModelOutputThunk, Context] | SamplingResult
     """
-    response = m.chat(f"Write an email for {name}, {name} is {age}")
-    return response.content
+    requirements = [
+        req("Be formal."),
+        req("Be funny."),
+	req(f"Make sure that the email is from {sender}, is towards {recipient}, has {subject} as the subject, and is focused on {topic} as a topic"),
+        Requirement("Use less than 100 words.", 
+                   validation_fn=simple_validate(lambda o: len(o.split()) < 100))
+    ]
+    sampling = m.instruct(f"Write an email from {sender}. Subject of email is {subject}. Name of recipient is {recipient}. Topic of email should be {topic}.", requirements=requirements, strategy=RejectionSamplingStrategy(loop_budget=1), return_sampling_results=True)
+    
+    return sampling
 
 
 
