@@ -385,13 +385,14 @@ class OllamaModelBackend(FormatterBackend):
 
         return output
 
-    def _generate_from_raw(
+    def generate_from_raw(
         self,
         actions: list[Component | CBlock],
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
+        tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the generate api. Gives the input provided to the model without templating."""
         if len(actions) > 1:
@@ -438,32 +439,32 @@ class OllamaModelBackend(FormatterBackend):
             else:
                 result = ModelOutputThunk(
                     value=response.response,
-                    meta={"generate_response": response.model_dump()},
+                    meta={
+                        "generate_response": response.model_dump(),
+                        "usage": response.eval_count,
+                    },
                 )
 
             self.formatter.parse(actions[i], result)
             results.append(result)
 
-            if generate_logs is not None:
-                # noinspection DuplicatedCode
-                assert isinstance(generate_logs, list)
-                generate_log = GenerateLog()
-                generate_log.prompt = prompts[i]
-                generate_log.backend = f"ollama::{self.model_id!s}"
-                generate_log.date = date
-                generate_log.model_options = model_opts
-                generate_log.model_output = result.value
-                generate_log.extra = {
-                    "format": format,
-                    "thinking": model_opts.get(ModelOption.THINKING, None),
-                    "seed": model_opts.get(ModelOption.SEED, None),
-                }
-                generate_log.action = actions[i]
-                generate_log.result = result
+            generate_log = GenerateLog()
+            generate_log.prompt = prompts[i]
+            generate_log.backend = f"ollama::{self.model_id!s}"
+            generate_log.date = date
+            generate_log.model_options = model_opts
+            generate_log.model_output = result.value
+            generate_log.extra = {
+                "format": format,
+                "thinking": model_opts.get(ModelOption.THINKING, None),
+                "seed": model_opts.get(ModelOption.SEED, None),
+            }
+            generate_log.action = actions[i]
+            generate_log.result = result
 
-                if error:
-                    generate_log.extra["error"] = error
-                generate_logs.append(generate_log)
+            if error:
+                generate_log.extra["error"] = error
+            result._generate_log = generate_log
 
         return results
 
