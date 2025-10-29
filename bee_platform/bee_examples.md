@@ -5,7 +5,7 @@ BeeAI Framework is an open-source framework for building production-grade multi-
 This example serves to merge both libraries with a simple module that will allow users to transform
 their Mellea programs into BeeAI agents.
 
-We provide the example of an email writer.
+We provide the example of an email writer. Only text inputs are currently supported.
 
 # Initialization
 
