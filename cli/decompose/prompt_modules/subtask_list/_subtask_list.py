@@ -20,7 +20,7 @@ from ._types import SubtaskItem
 T = TypeVar("T")
 
 RE_SUBTASK_AND_TAG = re.compile(
-    r"(.*\S)\s*-\s*Variable\s*:\s*(\w+)", flags=re.IGNORECASE
+    r"(.*\S)\s*.\s*Variable\s*:\s*(\w+)", flags=re.IGNORECASE
 )
 RE_FINAL_SUBTASK_LIST = re.compile(
     r"<subtask_list>(.+?)</subtask_list>", flags=re.IGNORECASE | re.DOTALL
