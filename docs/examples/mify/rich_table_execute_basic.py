@@ -4,7 +4,10 @@ import os
 from mellea import start_session
 from mellea.backends import model_ids
 from mellea.backends.types import ModelOption
+from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.docs.richdocument import RichDocument, Table
+
+FancyLogger.get_logger().setLevel("ERROR")
 
 """
 Here we demonstrate the use of the (internally m-ified) class
@@ -42,7 +45,7 @@ m = start_session(
     model_id=model_ids.META_LLAMA_3_2_3B,
     model_options={ModelOption.MAX_NEW_TOKENS: 500},
 )
-
+print("==> Outputs:")
 # apply transform on the Table and make sure that the returned object is a Table. Try up to 5 times.
 for seed in [x * 12 for x in range(5)]:
     table_transformed = m.transform(
