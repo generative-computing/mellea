@@ -26,6 +26,9 @@ class Adapter(abc.ABC):
         self.qualified_name = name + "_" + adapter_type.value
         """the name of the adapter to use when loading / looking it up"""
 
+        self.path: str | None = None
+        """set when the adapter is added to a backend"""
+
     # @abc.abstractmethod
     # def add_adapter(self, backend: Backend, *args, **kwargs):
     #     """Adds an adapter."""
@@ -82,7 +85,7 @@ class LocalHFAdapter(Adapter):
         ...
 
 
-class RagIntrinsicAdapter(OpenAIAdapter, LocalHFAdapter):
+class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
     def __init__(
         self,
         name: str,

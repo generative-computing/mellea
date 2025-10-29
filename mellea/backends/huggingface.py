@@ -33,7 +33,7 @@ from transformers import (
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 from mellea.backends import BaseModelSubclass
-from mellea.backends.adapters.adapter import LocalHFAdapter, RagIntrinsicAdapter
+from mellea.backends.adapters.adapter import GraniteCommonAdapter, LocalHFAdapter
 from mellea.backends.aloras import Alora, AloraBackendMixin
 from mellea.backends.cache import Cache, SimpleLRUCache
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
@@ -323,7 +323,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 )
 
         # TODO: JAL. Fix this once get_alora is changed.
-        assert isinstance(adapter, RagIntrinsicAdapter)
+        assert isinstance(adapter, GraniteCommonAdapter)
         # TODO: Check that the base_model_name matches the backend's model?
         intrinsic_config = adapter.config
         if intrinsic_config is None:
