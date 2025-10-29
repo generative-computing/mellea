@@ -9,13 +9,15 @@ from mellea import MelleaSession, start_session
 from mellea.backends.litellm import LiteLLMBackend
 from mellea.backends.openai import OpenAIBackend
 from mellea.stdlib.base import ImageBlock
+import pathlib
 
 # use LiteLLM to talk to Ollama or anthropic or.....
 m = MelleaSession(LiteLLMBackend("ollama/granite3.2-vision"))
 # m = MelleaSession(LiteLLMBackend("ollama/llava"))
 # m = MelleaSession(LiteLLMBackend("anthropic/claude-3-haiku-20240307"))
 
-test_pil = Image.open("pointing_up.jpg")
+image_path = pathlib.Path(__file__).parent.joinpath("pointing_up.jpg")
+test_pil = Image.open(image_path)
 
 # check if model is able to do text chat
 ch = m.chat("What's 1+1?")

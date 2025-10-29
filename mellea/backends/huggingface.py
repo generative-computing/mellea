@@ -30,6 +30,7 @@ from transformers import (
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 from mellea.backends import BaseModelSubclass
+from mellea.backends._utils import to_chat, to_tool_calls, use_alora
 from mellea.backends.aloras import Alora, AloraBackendMixin
 from mellea.backends.cache import Cache, SimpleLRUCache
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
@@ -39,7 +40,6 @@ from mellea.backends.tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
-    parse_tools,
 )
 from mellea.backends.types import ModelOption
 from mellea.helpers.async_helpers import send_to_queue
@@ -66,6 +66,8 @@ assert outlines, "outlines needs to be present to make outlines_core work"
 Huggingface backends can initialize themselves from a model string if the transformers `Auto*` classes can be used. Therefore, a TransformersTorchConfig usually isn't required. However, sometimes a model needs special care to instantiate properly, or a custom device type needs to bse used. Instead of trying to do a lot of partial magic, we basically have two modaliites: either the constructor can figure out everything from the model_id, or the user has to provide an entire config.
 """
 TransformersTorchConfig = tuple[PreTrainedTokenizer, PreTrainedModel, torch.device]
+
+format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
 @dataclasses.dataclass
@@ -196,33 +198,31 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # Upsert model options.
         model_opts = self._simplify_and_merge(model_options)
 
-        # See `docs/dev/requirement_aLoRA_rerouting.md` for an explanation of the following code block.
-        if issubclass(type(action), Requirement):
-            # The general rule is that we reroute to the alora if it exists.
-            reroute_to_alora = self.get_alora("constraint") is not None
-            # However, there are some exceptions:
-            if not self.default_to_constraint_checking_alora:
-                reroute_to_alora = False
-            if issubclass(type(action), LLMaJRequirement):
-                reroute_to_alora = False
-            if issubclass(type(action), ALoraRequirement):
-                reroute_to_alora = True
-            if reroute_to_alora:
-                mot = self._generate_from_context_alora(
-                    action, ctx, format=format, model_options=model_opts
-                )
-                return mot, ctx.add(mot)
-        mot = self._generate_from_context_standard(
-            action, ctx, format=format, model_options=model_opts, tool_calls=tool_calls
-        )
-        return mot, ctx.add(action).add(mot)
+        if use_alora(
+            action,
+            self.get_alora("constraint"),
+            self.default_to_constraint_checking_alora,
+        ):
+            mot = self._generate_from_context_alora(
+                action, ctx, _format=format, model_options=model_opts
+            )
+            return mot, ctx.add(mot)
+        else:
+            mot = self._generate_from_context_standard(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_opts,
+                tool_calls=tool_calls,
+            )
+            return mot, ctx.add(action).add(mot)
 
     def _generate_from_context_alora(
         self,
         action: Component | CBlock,
         ctx: Context,
         *,
-        format: type[BaseModelSubclass] | None = None,
+        _format: type[BaseModelSubclass] | None = None,
         model_options: dict[str, Any],
     ) -> ModelOutputThunk:
         match action:
@@ -245,7 +245,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         assert alora_for_this_request is not None
         assert type(user_message) is str
         assert type(assistant_message) is str
-        assert format is None, "Structured outputs are not supported by ALoRAs."
+        assert _format is None, "Structured outputs are not supported by ALoRAs."
 
         alora_output = alora_for_this_request.generate_using_strings(
             input=user_message,
@@ -269,7 +269,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         action: Component | CBlock,
         ctx: Context,
         *,
-        format: type[BaseModelSubclass] | None = None,
+        _format: type[BaseModelSubclass] | None = None,
         model_options: dict[str, Any],
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
@@ -277,40 +277,13 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
         # Otherwise, we will linearize the context and treat it as a raw input.
         if ctx.is_chat_context:
-            linearized_ctx = ctx.view_for_generation()
-            assert linearized_ctx is not None, (
-                "If ctx.is_chat_context, then the context should be linearizable."
-            )
-            ctx_as_message_list: list[Message] = self.formatter.to_chat_messages(
-                linearized_ctx
-            )
-            # add action
-            ctx_as_message_list.extend(self.formatter.to_chat_messages([action]))
-            ctx_as_conversation = [
-                {"role": m.role, "content": m.content} for m in ctx_as_message_list
-            ]
-
-            # Check that we ddin't accidentally end up with CBlocks.
-            for msg in ctx_as_conversation:
-                for v in msg.values():
-                    if "CBlock" in v:
-                        FancyLogger.get_logger().error(
-                            f"Found the string `CBlock` in what should've been a stringified context: {ctx_as_conversation}"
-                        )
-
-            # handle custom system prompts. It's important that we do this before the _parse_and_**clean**_model_options step.
             system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, None)
-            if system_prompt is not None:
-                system_msg: dict[str, str] = {
-                    "role": "system",
-                    "content": system_prompt,
-                }
-                ctx_as_conversation.insert(0, system_msg)
+            ctx_as_chat = to_chat(action, ctx, self.formatter, system_prompt)
 
             # Append tool call information if applicable.
             tools: dict[str, Callable] = dict()
             if tool_calls:
-                if format:
+                if _format:
                     FancyLogger.get_logger().warning(
                         f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                     )
@@ -330,18 +303,18 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 set_seed(seed)
 
             input_ids = self._tokenizer.apply_chat_template(  # type: ignore
-                ctx_as_conversation,
+                ctx_as_chat,
                 tools=convert_tools_to_json(tools),  # type: ignore
-                add_generation_prompt=True,
+                add_generation_prompt=True,  # If we change this, must modify huggingface granite guardian.
                 return_tensors="pt",
                 **self._make_backend_specific_and_remove(model_options),
             ).to(self._device)  # type: ignore
 
             format_kwargs = {}
-            if format:
+            if _format:
                 # outlines.generate.json always parses the resulting json into a python dict.
                 # We however want to keep it as a json string for later storing it in ModelOutputThunk
-                schema: dict[str, Any] = format.model_json_schema()
+                schema: dict[str, Any] = _format.model_json_schema()
                 schema_json: str = json.dumps(schema)
                 regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
                     schema_json
@@ -395,7 +368,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             )
 
             output = ModelOutputThunk(None)
-            output._context = linearized_ctx
+            output._context = ctx.view_for_generation()
             output._action = action
             output._model_options = model_options
 
@@ -404,9 +377,9 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             output._process = functools.partial(self.processing, input_ids=input_ids)
             output._post_process = functools.partial(
                 self.post_processing,
-                conversation=ctx_as_conversation,
+                conversation=ctx_as_chat,
                 input_ids=input_ids,
-                format=format,
+                _format=_format,
                 tool_calls=tool_calls,
                 tools=tools,
                 seed=seed,
@@ -463,7 +436,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         self,
         mot: ModelOutputThunk,
         conversation: list[dict],
-        format: type[BaseModelSubclass] | None,
+        _format: type[BaseModelSubclass] | None,
         tool_calls: bool,
         tools: dict[str, Callable],
         seed,
@@ -494,8 +467,8 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             self.cache_put(mot.value, cache_info)
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
-        if format is None and tool_calls:
-            mot.tool_calls = self._extract_model_tool_requests(tools, mot.value)
+        if _format is None and tool_calls:
+            mot.tool_calls = to_tool_calls(tools, mot.value)
 
         assert mot._action is not None, (
             "ModelOutputThunks should have their action assigned during generation"
@@ -514,7 +487,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         generate_log.date = datetime.datetime.now()
         generate_log.model_output = mot.value
         generate_log.extra = {
-            "format": format,
+            "format": _format,
             "tools_available": tools,
             "tools_called": mot.tool_calls,
             "seed": seed,
@@ -695,30 +668,6 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             "documents",
         }
         return {k: v for k, v in model_options.items() if k not in chat_template_only}
-
-    def _extract_model_tool_requests(
-        self, tools: dict[str, Callable], decoded_result: str
-    ) -> dict[str, ModelToolCall] | None:
-        model_tool_calls: dict[str, ModelToolCall] = dict()
-        for tool_name, tool_args in parse_tools(decoded_result):
-            func = tools.get(tool_name)
-            if func is None:
-                FancyLogger.get_logger().warning(
-                    f"model attempted to call a non-existing function: {tool_name}"
-                )
-                continue
-
-            # Clean up the function args slightly. Some models seem to
-            # hallucinate parameters when none are required.
-            sig = inspect.signature(func)
-            if len(sig.parameters) == 0:
-                tool_args = {}
-
-            model_tool_calls[tool_name] = ModelToolCall(tool_name, func, tool_args)
-
-        if len(model_tool_calls) > 0:
-            return model_tool_calls
-        return None
 
     # region ALora loading, unloading, and utility functions.
     def add_alora(self, alora: HFAlora):

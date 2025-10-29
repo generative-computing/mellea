@@ -35,5 +35,3 @@ vllm serve ibm-granite/granite-3.2-8b-instruct \
       --enable-prefix-caching \
       > $(readlink -ef $(dirname $0))/vllm.log \
       2> $(readlink -ef $(dirname $0))/vllm.err
-
-
