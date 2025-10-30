@@ -14,7 +14,7 @@ uv pip install "mcp[cli]"
 
 and run the example in MCP debug UI:
 ```bash
-uv run mcp dev docs/examples/tutorial/mcp_example.py
+uv run mcp dev docs/examples/mcp/mcp_example.py
 ```
 
 
