@@ -453,7 +453,6 @@ class OllamaModelBackend(FormatterBackend):
                 )
 
             self.formatter.parse(actions[i], result)
-            results.append(result)
 
             generate_log = GenerateLog()
             generate_log.prompt = prompts[i]
@@ -467,11 +466,12 @@ class OllamaModelBackend(FormatterBackend):
                 "seed": model_opts.get(ModelOption.SEED, None),
             }
             generate_log.action = actions[i]
-            generate_log.result = result
 
             if error:
                 generate_log.extra["error"] = error
             result._generate_log = generate_log
+
+            results.append(result)
 
         return results
 
