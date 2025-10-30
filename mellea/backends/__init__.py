@@ -58,19 +58,21 @@ class Backend(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def _generate_from_raw(
+    def generate_from_raw(
         self,
         actions: list[Component | CBlock],
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
+        tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generates a model output from the provided input. Does not use context or templates.
 
         Args:
             actions: list of actions to generate responses for. Each action is separate.
+            ctx: context passed to generation. Currently not used in generate_from_raw
             format: A response format to used for structured outputs / constrained decoding. Note: some backends do not support this parameter. They will log warnings and continue to generate.
             model_options: Any model options to upsert into the defaults for this call.
-            generate_logs: a `GenerateLog` instance to add log information to.
+            tool_calls: Always set to false unless supported by backend.
         """

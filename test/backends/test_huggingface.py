@@ -38,6 +38,7 @@ def session(backend):
     yield session
     session.reset()
 
+
 @pytest.mark.qualitative
 def test_system_prompt(session):
     result = session.chat(
@@ -45,6 +46,7 @@ def test_system_prompt(session):
         model_options={ModelOption.SYSTEM_PROMPT: "Talk like a pirate."},
     )
     print(result)
+
 
 @pytest.mark.qualitative
 async def test_constraint_alora(session, backend):
@@ -65,6 +67,7 @@ async def test_constraint_alora(session, backend):
     )
     await alora_output.avalue()
     assert alora_output.value in ["Y", "N"], alora_output
+
 
 @pytest.mark.qualitative
 def test_constraint_lora_with_requirement(session, backend):
@@ -133,6 +136,7 @@ def test_llmaj_req_does_not_use_alora(session, backend):
     assert isinstance(val_result, ValidationResult)
     assert str(val_result.reason) not in ["Y", "N"]
 
+
 @pytest.mark.qualitative
 def test_instruct(session):
     result = session.instruct("Compute 1+1.")
@@ -149,6 +153,7 @@ def test_multiturn(session):
     assert "β" in str(beta).lower()
     words = session.instruct("Now list five English words that start with that letter.")
     print(words)
+
 
 @pytest.mark.qualitative
 def test_chat(session):
@@ -188,12 +193,19 @@ def test_format(session):
         "The email address should be at example.com"
     )
 
+
 @pytest.mark.qualitative
 def test_generate_from_raw(session):
-    prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?", "what is 4+2+2?"]
+    prompts = [
+        "what is 1+1?",
+        "what is 2+2?",
+        "what is 3+3?",
+        "what is 4+4?",
+        "what is 4+2+2?",
+    ]
 
-    results = session.backend._generate_from_raw(
-        actions=[CBlock(value=prompt) for prompt in prompts], generate_logs=None
+    results = session.backend.generate_from_raw(
+        actions=[CBlock(value=prompt) for prompt in prompts], ctx=session.ctx
     )
 
     assert len(results) == len(prompts)
@@ -207,10 +219,10 @@ def test_generate_from_raw_with_format(session):
         name: str
         value: int
 
-    results = session.backend._generate_from_raw(
+    results = session.backend.generate_from_raw(
         actions=[CBlock(value=prompt) for prompt in prompts],
         format=Answer,
-        generate_logs=None,
+        ctx=session.ctx,
     )
 
     assert len(results) == len(prompts)
@@ -223,11 +235,16 @@ def test_generate_from_raw_with_format(session):
             f"formatting directive failed for {random_result.value}: {e.json()}"
         )
 
+
 @pytest.mark.qualitative
 async def test_async_parallel_requests(session):
     model_opts = {ModelOption.STREAM: True}
-    mot1, _ = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext(), model_options=model_opts)
-    mot2, _ = session.backend.generate_from_context(CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts)
+    mot1, _ = session.backend.generate_from_context(
+        CBlock("Say Hello."), SimpleContext(), model_options=model_opts
+    )
+    mot2, _ = session.backend.generate_from_context(
+        CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts
+    )
 
     m1_val = None
     m2_val = None
@@ -244,18 +261,26 @@ async def test_async_parallel_requests(session):
 
     # Ideally, we would be able to assert that m1_final_val != m1_val, but sometimes the first streaming response
     # contains the full response.
-    assert m1_final_val.startswith(m1_val), "final val should contain the first streamed chunk"
-    assert m2_final_val.startswith(m2_val), "final val should contain the first streamed chunk"
+    assert m1_final_val.startswith(m1_val), (
+        "final val should contain the first streamed chunk"
+    )
+    assert m2_final_val.startswith(m2_val), (
+        "final val should contain the first streamed chunk"
+    )
 
     assert m1_final_val == mot1.value
     assert m2_final_val == mot2.value
 
+
 @pytest.mark.qualitative
 async def test_async_avalue(session):
-    mot1, _ = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext())
+    mot1, _ = session.backend.generate_from_context(
+        CBlock("Say Hello."), SimpleContext()
+    )
     m1_final_val = await mot1.avalue()
     assert m1_final_val is not None
     assert m1_final_val == mot1.value
+
 
 if __name__ == "__main__":
     import pytest

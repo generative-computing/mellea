@@ -11,7 +11,7 @@ from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.model_ids import META_LLAMA_3_2_1B
 from mellea.backends.openai import OpenAIBackend
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext, SimpleContext
+from mellea.stdlib.base import CBlock, ChatContext, ModelOutputThunk, SimpleContext
 
 
 @pytest.fixture(scope="module")
@@ -111,15 +111,15 @@ def test_format(m_session):
     # assert email.to.email_address.endswith("example.com")
     pass
 
-    # Ollama doesn't support batch requests. Cannot run this test unless we switch backend providers.
-    # def test_generate_from_raw(self):
-    #     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
+# @pytest.mark.qualitative
+# def test_generate_from_raw(m_session):
+#     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
-    #     results = self.m.backend._generate_from_raw(
-    #         actions=[CBlock(value=prompt) for prompt in prompts], generate_logs=None
-    #     )
+#     results = m_session.backend.generate_from_raw(
+#         actions=[CBlock(value=prompt) for prompt in prompts], ctx=m_session.ctx
+#     )
 
-    #     assert len(results) == len(prompts)
+#     assert len(results) == len(prompts)
 
     # Default OpenAI implementation doesn't support structured outputs for the completions API.
     # def test_generate_from_raw_with_format(self):
