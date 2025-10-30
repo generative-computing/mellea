@@ -112,6 +112,7 @@ dev = [
     "pytest-asyncio",
     "mypy>=1.17.0",
     "python-semantic-release~=7.32",
+    "pytest-xdist>=3.8.0",
 ]
 
 notebook = [
