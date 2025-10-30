@@ -111,7 +111,7 @@ uv run --with mellea docs/examples/tutorial/example.py
 | MCP | <a target="_blank" rel="noopener noreferrer" href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/mcp_example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Mellea + MCP |
 
 
-### Installing from source
+### `uv`-based installation from source
 
 Fork and clone the repositoy:
 
@@ -137,7 +137,7 @@ If you are planning to contribute to the repo, it would be good to have all the 
 uv pip install '.[all]' --group dev --group notebook --group docs
 ```
 
-or 
+or
 
 ```bash
 uv sync --all-extras --all-groups
@@ -147,6 +147,20 @@ If you want to contribute, ensure that you install the precommit hooks:
 
 ```bash
 pre-commit install
+```
+
+### `conda`/`mamba`-based installation from source
+
+Fork and clone the repositoy:
+
+```bash
+git clone ssh://git@github.com/<my-username>/mellea.git && cd mellea/
+```
+
+It comes with an installation script, which does all the commands listed above:
+
+```bash
+conda/install.sh
 ```
 
 ## Getting started with validation
