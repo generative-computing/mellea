@@ -56,15 +56,35 @@ m = "cli.m:cli"
 # uv pip install -e .[hf, watsonx]
 # if you want to install all dependencies, use uv sync --all-extras
 
+
+# note on outlines versions:
+# outlines>=1.2.0 requires outlines-core==0.2.11
+# outlines<=1.1.* requires outlines-core==0.1.26
+# vllm==0.10.0    requires outlines-core==0.2.10
+# vllm==0.9.*     requires outlines-core==0.1.26
+#
+# thus the following version combination allows installing vllm and outlines
+# (main library) at the same time.
+
 hf = [
     "accelerate>=1.9.0",
     "alora==0.2.0",
     "datasets>=4.0.0",
-    "outlines<1.0.0",
+    "outlines-core==0.1.26",
+    "outlines",                 # intentionally un-versioned, expecting a minor update. coutlines-core version should be enough to specify it
     # "peft>=0.17.2", # This package can be re-enabled once peft 0.17.2 has been released and below commit is confirmed to be a part of it.
     "peft @ git+https://github.com/huggingface/peft.git@293aea5df6db240856a77f89955d1a89ce38b50d",
     "transformers>=4.53.2",
     "trl==0.19.1",
+]
+
+vllm = [
+    "transformers<4.54.0",
+    # see https://github.com/vllm-project/vllm-ascend/issues/2046
+    "numpy<2.0.0",              # patching incorrect dependencies in vllm and outlines.
+    # see https://github.com/vllm-project/vllm/issues/5587
+    "outlines-core==0.1.26",
+    "vllm",                     # intentionally un-versioned, expecting a minor update. coutlines-core version should be enough to specify it
 ]
 
 litellm = [
@@ -78,7 +98,7 @@ docling = [
     "docling>=2.45.0",
 ]
 
-all = ["mellea[watsonx,docling,hf,litellm]"]
+all = ["mellea[watsonx,docling,hf,vllm,litellm]"]
 
 [dependency-groups]
 # Use these like:
@@ -94,6 +114,7 @@ dev = [
     "pytest-asyncio",
     "mypy>=1.17.0",
     "python-semantic-release~=7.32",
+    "pytest-xdist>=3.8.0",
 ]
 
 notebook = [
