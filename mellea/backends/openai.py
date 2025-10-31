@@ -7,20 +7,24 @@ import functools
 import inspect
 import json
 from collections.abc import Callable, Coroutine
-from enum import Enum
-from typing import TYPE_CHECKING, Any
-from urllib.parse import urlparse
+from copy import deepcopy
+from typing import TYPE_CHECKING, Any, cast
 
+import granite_common
 import openai
 import requests
-from huggingface_hub import snapshot_download
 from openai.types.chat import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.completion import Completion
 
 import mellea.backends.model_ids as model_ids
 from mellea.backends import BaseModelSubclass
-from mellea.backends.aloras import Alora, AloraBackendMixin
+from mellea.backends.adapters.adapter import (
+    GraniteCommonAdapter,
+    OpenAIAdapter,
+    get_adapter_for_intrinsic,
+)
+from mellea.backends.aloras import AdapterMixin, Alora, AloraBackendMixin
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.tools import (
@@ -28,7 +32,7 @@ from mellea.backends.tools import (
     add_tools_from_model_options,
     convert_tools_to_json,
 )
-from mellea.backends.types import ModelOption
+from mellea.backends.types import ModelOption, _server_type, _ServerType
 from mellea.helpers.async_helpers import (
     ClientCache,
     get_current_event_loop,
@@ -43,11 +47,13 @@ from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
+    Document,
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
 )
 from mellea.stdlib.chat import Message
+from mellea.stdlib.intrinsics.intrinsic import Intrinsic
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
 
 if TYPE_CHECKING:
@@ -58,25 +64,7 @@ openai_ollama_batching_error = "json: cannot unmarshal array into Go struct fiel
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
-class _ServerType(Enum):
-    LOCALHOST = 1
-    OPENAI = 2
-
-
-def _server_type(url: str) -> _ServerType | None:
-    try:
-        parsed = urlparse(url)
-        hostname = parsed.hostname
-        if hostname in ("localhost", "127.0.0.1", "::1"):
-            return _ServerType.LOCALHOST
-        elif hostname == "api.openai.com":
-            return _ServerType.OPENAI
-    except Exception as e:
-        print(f"Error parsing URL: {e}")
-    return None
-
-
-class OpenAIBackend(FormatterBackend, AloraBackendMixin):
+class OpenAIBackend(FormatterBackend, AdapterMixin):
     """A generic OpenAI compatible backend."""
 
     def __init__(
@@ -170,6 +158,8 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         else:
             self._api_key = api_key
 
+        self._server_type = _server_type(self._base_url)
+
         self._openai_client_kwargs = self.filter_openai_client_kwargs(**kwargs)
 
         self._client = openai.OpenAI(  # type: ignore
@@ -182,7 +172,8 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         _ = self._async_client
 
         # ALoras that have been loaded for this model.
-        self._aloras: dict[str, OpenAIAlora] = {}
+        self._added_adapters: dict[str, OpenAIAdapter] = {}
+        self._loaded_adapters: dict[str, OpenAIAdapter] = {}
 
     @property
     def _async_client(self) -> openai.AsyncOpenAI:
@@ -337,6 +328,11 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                     action, ctx, _format=_format, model_options=model_options
                 )
 
+        elif isinstance(action, Intrinsic):
+            return self._generate_from_intrinsic(
+                action, ctx, model_options=model_options
+            )
+
         return self._generate_from_chat_context_standard(
             action,
             ctx,
@@ -396,6 +392,95 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
         return alora_output
 
+    def _generate_from_intrinsic(
+        self, action: Intrinsic, ctx: Context, *, model_options: dict | None = None
+    ) -> ModelOutputThunk:
+        model_opts = self._simplify_and_merge(
+            model_options, is_chat_context=ctx.is_chat_context
+        )
+        if len(model_opts.items()) > 0:
+            FancyLogger.get_logger().info(
+                "passing in model options when generating with an adapter; some model options may be overwritten / ignored"
+            )
+
+        linearized_context = ctx.view_for_generation()
+        assert linearized_context is not None, (
+            "Cannot generate from a non-linear context in a FormatterBackend."
+        )  # TODO: JAL. Log a warning if this is empty?...
+
+        # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
+        messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
+
+        conversation: list[dict] = []
+
+        # TODO: JAL. Need to handle system prompts? Confirm what granite common does.
+        system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
+        if system_prompt != "":
+            conversation.append({"role": "system", "content": system_prompt})
+        conversation.extend([self.message_to_openai_message(m) for m in messages])
+        docs = self.messages_to_docs(messages)  # TODO: JAL. Improve docs interface.
+
+        adapter = get_adapter_for_intrinsic(
+            action.intrinsic_name, action.adapter_types, self._added_adapters
+        )
+        if adapter is None:
+            raise ValueError(
+                f"backend ({self}) has no adapter for processing intrinsic: {action.intrinsic_name}"
+            )
+
+        # TODO: Code below this point is mostly specific to RagIntrinsics (and granite_common).
+        #       It should be refactored into a specific adapter.transform() function.
+        assert isinstance(adapter, GraniteCommonAdapter)
+
+        intrinsic_config = adapter.config
+        if intrinsic_config is None:
+            # If the adapter wasn't initialized with a config, grab one here based off the backend's model.
+            intrinsic_config_file = granite_common.intrinsics.util.obtain_io_yaml(
+                action.intrinsic_name, self._hf_model_id.split("/")[-1]
+            )
+            intrinsic_config = granite_common.intrinsics.util.make_config_dict(
+                config_file=intrinsic_config_file
+            )
+            intrinsic_config = cast(
+                dict, intrinsic_config
+            )  # TODO: Can remove if util function gets exported properly.
+
+        rewriter = granite_common.IntrinsicsRewriter(
+            config_dict=intrinsic_config, model_name=adapter.qualified_name
+        )
+        result_processor = granite_common.IntrinsicsResultProcessor(
+            config_dict=intrinsic_config
+        )
+
+        # Convert our conversation into a proper chat completions dict.
+        # [{role: user, content: Hello}, {...}] -> {messages: [{role:user,...}, ...], model:..., ...}
+        request_json: dict = {
+            "messages": conversation,
+            "extra_body": {"documents": docs},
+        }
+
+        rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
+        # TODO: JAL. Move this comment to hugging face.
+        # TODO: Handle caching here. Need to see if granite_common gives us any indication
+        #       of what messages have changed. We will also have to support caching at a
+        #       Component / message level.
+
+        # TODO: JAL. This needs to be made async with processing and post_processing.
+        # chat_response: Coroutine[
+        #     Any, Any, openai.AsyncStream[Completion] | Completion
+        # ] = self._async_client.chat.completions.create(
+        #     **rewritten.model_dump()
+        # )
+        self.load_adapter(adapter.qualified_name)
+        chat_response = self._client.chat.completions.create(**rewritten.model_dump())
+
+        processed_chat_completion = result_processor.transform(chat_response, rewritten)
+
+        # TODO: JAL. Put into ModelOutputThunk, parse, etc...
+        mot = ModelOutputThunk(processed_chat_completion.choices[0].message.content)
+        mot._generate_log = GenerateLog()
+        return mot
+
     @staticmethod
     def message_to_openai_message(msg: Message):
         """Serializes a mellea Message object to the message format required by OpenAI compatible api providers."""
@@ -430,6 +515,22 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             #       }
             #     ]
             #   }
+
+    @staticmethod
+    def messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]:
+        docs: list[Document] = []
+        for message in msgs:
+            if message._docs is not None:
+                docs.extend(message._docs)
+
+        # TODO: We can add doc_ids here for vllm.
+        json_docs: list[dict[str, str]] = []
+        for doc in docs:
+            json_doc = {"text": doc.text}
+            if doc.title is not None:
+                json_doc["title"] = doc.title
+            json_docs.append(json_doc)
+        return json_docs
 
     def _generate_from_chat_context_standard(
         self,
@@ -718,41 +819,85 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
         return results
 
-    def add_alora(self, alora: "OpenAIAlora"):
-        """Loads an ALora for this backend.
+    def add_adapter(self, adapter: OpenAIAdapter):
+        # Gets the path / downloads files... ie does setup.
+        if adapter.backend is not None:
+            if adapter.backend is self:
+                FancyLogger.get_logger().warning(
+                    f"attempted to add adapter {adapter.name} with type {adapter.adapter_type} to the same backend {adapter.backend}"
+                )
+                return
+            else:
+                raise Exception(
+                    f"adapter {adapter.name} with type {adapter.adapter_type} has already been added to backend {adapter.backend}"
+                )
 
-        Args:
-            alora (str): identifier for the ALora adapter
-        """
-        assert issubclass(alora.__class__, OpenAIAlora), (
-            f"cannot add an ALora of type {alora.__class__} to model; must inherit from {OpenAIAlora.__class__}"
+        base_model_name = self._hf_model_id.split("/")[-1]
+        adapter.path = adapter.get_open_ai_path(
+            base_model_name, server_type=self._server_type
         )
-        assert alora._backend == self, "Cannot load an ALora into the wrong backend."
 
-        if self.get_alora(alora.name) is not None:
+        if self._added_adapters.get(adapter.qualified_name, None) is not None:
             FancyLogger.get_logger().warning(
-                f"Client code attempted to add {alora.name} but {alora.name} was already added to {self.__class__}. The backend is refusing to do this, because ALora loading is not idempotent."
+                f"Client code attempted to add {adapter.name} with type {adapter.adapter_type} but it was already added to {self.__class__}. This attempt to add the adapter will be ignored."
             )
             return None
 
-        assert _server_type(self._base_url) == _ServerType.LOCALHOST, (
-            "alora is supported only for locally running vllm instances"
-        )
+        self._added_adapters[adapter.qualified_name] = adapter
 
-        snapshot_path = snapshot_download(alora.path)
+    def load_adapter(self, adapter_qualified_name: str):
+        # Actually loads the adapter...
 
-        # https://docs.vllm.ai/en/stable/features/lora.html#using-api-endpoints
-        # curl -X POST http://localhost:8000/v1/load_lora_adapter \
-        #     -H "Content-Type: application/json" \
-        #     -d '{
-        #     "lora_name": "sql_adapter",
-        #     "lora_path": "/path/to/sql-lora-adapter"
-        #     }'
+        adapter = self._added_adapters.get(adapter_qualified_name, None)
+        if adapter is None:
+            raise ValueError(
+                f"could not load adapter {adapter_qualified_name} for backend {self}: adapter was not previously added"
+            )
 
         url = f"{self._base_url}/load_lora_adapter"
         response = requests.post(
             url,
-            json={"lora_name": alora.name, "lora_path": snapshot_path},
+            json={"lora_name": adapter_qualified_name, "lora_path": adapter.path},
+            headers={"Content-Type": "application/json"},
+        )
+
+        err: str | None = None
+        match response.status_code:
+            case 200:
+                FancyLogger.get_logger().info(
+                    f"{url}: status {response.status_code} {response.text}"
+                )
+            case 400:
+                if "has already been loaded." in str(response.content):
+                    FancyLogger.get_logger().warning(
+                        f"{url}: status {response.status_code} {response.text}"
+                    )
+                else:
+                    err = f"{url}: status {response.status_code} {response.text}"
+            case _:
+                err = f"{url}: status {response.status_code} {response.text}"
+
+        if err is not None:
+            FancyLogger.get_logger().error(err)
+            raise Exception(f"error loading adapter {adapter_qualified_name}: {err}")
+
+        self._loaded_adapters[adapter.qualified_name] = adapter
+
+    def unload_adapter(self, adapter_qualified_name: str):
+        # Unloads the adapter...
+
+        # Check if the backend knows about this adapter.
+        adapter = self._added_adapters.get(adapter_qualified_name, None)
+        if adapter is None:
+            FancyLogger.get_logger().info(
+                f"could not unload adapter {adapter_qualified_name} for backend {self}: adapter is not loaded"
+            )
+            return
+
+        url = f"{self._base_url}/unload_lora_adapter"
+        response = requests.post(
+            url,
+            json={"lora_name": adapter_qualified_name},
             headers={"Content-Type": "application/json"},
         )
 
@@ -761,23 +906,95 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                 FancyLogger.get_logger().info(
                     f"{url}: status {response.status_code} {response.text}"
                 )
-                self._aloras[alora.name] = alora
+            case 404:
+                # This response code indicates that the adapter isn't currently loaded;
+                # which is the goal of this function. Log it but proceed as if successful.
+                FancyLogger.get_logger().info(
+                    f"{url}: status {response.status_code} {response.text}"
+                )
             case _:
+                # Unknown err.
                 FancyLogger.get_logger().error(
                     f"{url}: status {response.status_code} {response.text}"
                 )
+                raise Exception(
+                    f"error unloading adapter {adapter_qualified_name}: {url}: status {response.status_code} {response.text}"
+                )
 
-        self._aloras[alora.name] = alora
+        # Remove the alora from the list of loaded adapters.
+        del self._loaded_adapters[adapter.qualified_name]
 
-        return None
+    # TODO: JAL. Remove these functions.
+    # def add_alora(self, alora: "OpenAIAlora"):
+    #     """Loads an ALora for this backend.
 
-    def get_alora(self, alora_name: str) -> Alora | None:
-        """Returns the ALora by name, or None if that ALora isn't loaded."""
-        return self._aloras.get(alora_name)
+    #     Args:
+    #         alora (str): identifier for the ALora adapter
+    #     """
+    #     assert issubclass(alora.__class__, OpenAIAlora), (
+    #         f"cannot add an ALora of type {alora.__class__} to model; must inherit from {OpenAIAlora.__class__}"
+    #     )
+    #     assert alora._backend == self, "Cannot load an ALora into the wrong backend."
 
-    def get_aloras(self) -> list[Alora]:
-        """Returns a list of all loaded ALora adapters."""
-        return list(self._aloras.values())
+    #     if self.get_alora(alora.name) is not None:
+    #         FancyLogger.get_logger().warning(
+    #             f"Client code attempted to add {alora.name} but {alora.name} was already added to {self.__class__}. The backend is refusing to do this, because ALora loading is not idempotent."
+    #         )
+    #         return None
+
+    #     assert _server_type(self._base_url) == _ServerType.LOCALHOST, (
+    #         "alora is supported only for locally running vllm instances"
+    #     )
+
+    #     # TODO: JAL. Make sure all hf model ids fit this way.
+    #     # base_model_name = self._hf_model_id.split("/")[1]
+    #     # TODO: JAL. change snapshot path to this...?
+    #     # snapshot_path = granite_common.intrinsics.util.obtain_lora(
+    #     #     alora.name, base_model_name, alora=True
+    #     # )
+    #     snapshot_path = f"/u/jakelorocco/eiger-user-folder/mellea-public/test/backends/test_openai_vllm/rag-intrinsics-lib/{alora.name}/alora/granite-3.3-8b-instruct"
+
+    #     # https://docs.vllm.ai/en/stable/features/lora.html#using-api-endpoints
+    #     # curl -X POST http://localhost:8000/v1/load_lora_adapter \
+    #     #     -H "Content-Type: application/json" \
+    #     #     -d '{
+    #     #     "lora_name": "sql_adapter",
+    #     #     "lora_path": "/path/to/sql-lora-adapter"
+    #     #     }'
+
+    #     url = f"{self._base_url}/load_lora_adapter"
+    #     response = requests.post(
+    #         url,
+    #         json={"lora_name": alora.name, "lora_path": snapshot_path},
+    #         headers={"Content-Type": "application/json"},
+    #     )
+
+    #     # TODO: Add a check here for the lora/alora already being loaded.
+    #     # TODO: See what happens if you try load the lora with the same name...
+    #     # TODO: If the alora isn't loaded, we should raise an error or at least not
+    #     #       add it to the list of aloras.
+    #     match response.status_code:
+    #         case 200:
+    #             FancyLogger.get_logger().info(
+    #                 f"{url}: status {response.status_code} {response.text}"
+    #             )
+    #             self._aloras[alora.name] = alora
+    #         case _:
+    #             FancyLogger.get_logger().error(
+    #                 f"{url}: status {response.status_code} {response.text}"
+    #             )
+
+    #     self._aloras[alora.name] = alora
+
+    #     return None
+
+    # def get_alora(self, alora_name: str) -> Alora | None:
+    #     """Returns the ALora by name, or None if that ALora isn't loaded."""
+    #     return self._aloras.get(alora_name)
+
+    # def get_aloras(self) -> list[Alora]:
+    #     """Returns a list of all loaded ALora adapters."""
+    #     return list(self._aloras.values())
 
     def apply_chat_template(self, chat: list[dict[str, str]]):
         """Apply the chat template for the model, if such a model is available (e.g., when it can deduce the huggingface model id)."""

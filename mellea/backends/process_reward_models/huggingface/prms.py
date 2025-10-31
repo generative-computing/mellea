@@ -71,7 +71,7 @@ class HFGenerativePRM(HFProcessRewardModel):
 
         # move each item of the batch to the device
         for i in batches:
-            batches[i] = batches[i].to(self.model.device)
+            batches[i] = batches[i]
 
         with torch.no_grad():
             model_outputs = self.model(**batches)
@@ -178,7 +178,7 @@ class HFRegressionPRM(HFProcessRewardModel):
         # initialize PRM head
         self.prm_head = torch.nn.Linear(
             self.model.config.hidden_size, 2, bias=False, dtype=self.model.dtype
-        ).to(self.model.device)
+        )
 
         state = torch.load(model_name_or_path + "/added_params.bin")
         # need to do this-- we save model dict as `prm_head.weight` during training
@@ -205,7 +205,7 @@ class HFRegressionPRM(HFProcessRewardModel):
         batch = self.prepare_inputs(query, list_of_steps)
         # move each item of the batch to the device
         for i in batch:
-            batch[i] = batch[i].to(self.model.device)
+            batch[i] = batch[i]
 
         with torch.no_grad():
             model_outputs = self.model(**batch, output_hidden_states=True)

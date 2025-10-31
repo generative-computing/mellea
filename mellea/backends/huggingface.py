@@ -13,10 +13,13 @@ import functools
 import inspect
 import json
 from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING, Any
+from copy import deepcopy
+from typing import TYPE_CHECKING, Any, cast
 
+import granite_common
 import outlines
 import outlines_core
+import peft
 import torch
 from transformers import (
     AsyncTextIteratorStreamer,
@@ -31,10 +34,12 @@ from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 from mellea.backends import BaseModelSubclass
 from mellea.backends._utils import to_chat, to_tool_calls, use_alora
+from mellea.backends.adapters.adapter import GraniteCommonAdapter, LocalHFAdapter
 from mellea.backends.aloras import Alora, AloraBackendMixin
 from mellea.backends.cache import Cache, SimpleLRUCache
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
+from mellea.backends.openai import OpenAIBackend
 from mellea.backends.process_reward_models import PRM
 from mellea.backends.tools import (
     add_tools_from_context_actions,
@@ -54,10 +59,8 @@ from mellea.stdlib.base import (
     ModelToolCall,
 )
 from mellea.stdlib.chat import Message
+from mellea.stdlib.intrinsics.intrinsic import Intrinsic
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
-
-if TYPE_CHECKING:
-    from alora.peft_model_alora import aLoRAPeftModelForCausalLM  # type: ignore
 
 assert outlines, "outlines needs to be present to make outlines_core work"
 
@@ -148,42 +151,20 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 self._hf_model_id = model_id.hf_model_name
         match custom_config:
             case None:
-                # Choose a device.
-                self._device = torch.device(
-                    "cuda"
-                    if torch.cuda.is_available()
-                    else "mps"
-                    if torch.backends.mps.is_available()
-                    else "cpu"
-                )
                 # Get the model and tokenizer.
                 self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
                     self._hf_model_id
-                ).to(self._device)  # type: ignore
+                )
                 self._tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
                     self._hf_model_id
                 )
             case _:
-                self._tokenizer, self._model, self._device = custom_config
+                self._tokenizer, self._model, _ = custom_config
 
         self._use_caches = use_caches
         self._cache = cache if cache is not None else SimpleLRUCache(3)
 
-        # Used when running aLoRAs with this backend.
-        self._alora_model: "aLoRAPeftModelForCausalLM | None" = None  # noqa: UP037
-        # ALoras that have been loaded for this model.
         self._aloras: dict[str, HFAlora] = {}
-
-    @property
-    def alora_model(self) -> "aLoRAPeftModelForCausalLM | None":  # noqa: UP037
-        """The ALora model."""
-        return self._alora_model
-
-    @alora_model.setter
-    def alora_model(self, model: "aLoRAPeftModelForCausalLM | None"):  # noqa: UP037
-        """Sets the ALora model. This should only happen once in a backend's lifetime."""
-        assert self._alora_model is None
-        self._alora_model = model
 
     def generate_from_context(
         self,
@@ -204,6 +185,11 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             self.default_to_constraint_checking_alora,
         ):
             mot = self._generate_from_context_alora(
+                action, ctx, _format=format, model_options=model_opts
+            )
+            return mot, ctx.add(mot)
+        elif isinstance(action, Intrinsic):
+            mot = self._generate_from_intrinsic(
                 action, ctx, _format=format, model_options=model_opts
             )
             return mot, ctx.add(mot)
@@ -264,6 +250,146 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
         return alora_output
 
+    def _generate_from_intrinsic(
+        self,
+        action: Intrinsic,
+        ctx: Context,
+        *,
+        _format: type[BaseModelSubclass] | None = None,  # TODO: JAL. Remove this param?
+        model_options: dict[str, Any],
+        tool_calls: bool = False,  # TODO: JAL. Remove this param?
+    ) -> ModelOutputThunk:  # TODO: JAL. Return context here as well? Else treat like Aloras and add the context higher up.
+        if not ctx.is_chat_context:
+            raise Exception("Does not yet support non-chat contexts.")
+
+        linearized_ctx = ctx.view_for_generation()
+        assert linearized_ctx is not None, (
+            "If ctx.is_chat_context, then the context should be linearizable."
+        )
+        ctx_as_message_list: list[Message] = self.formatter.to_chat_messages(
+            linearized_ctx
+        )
+
+        # TODO: JAL. Fix where this happens.
+        # add action
+        # ctx_as_message_list.extend(self.formatter.to_chat_messages([action]))
+        # ctx_as_conversation = [
+        #     {"role": m.role, "content": m.content} for m in ctx_as_message_list
+        # ]
+
+        # Check that we ddin't accidentally end up with CBlocks.
+        # for msg in ctx_as_conversation:
+        #     for v in msg.values():
+        #         if "CBlock" in v:
+        #             FancyLogger.get_logger().error(
+        #                 f"Found the string `CBlock` in what should've been a stringified context: {ctx_as_conversation}"
+        #             )
+
+        conversation: list[dict] = []
+        system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
+        if system_prompt != "":
+            conversation.append({"role": "system", "content": system_prompt})
+
+        # TODO: JAL. Fix where this function lives.
+        conversation.extend(
+            [OpenAIBackend.message_to_openai_message(m) for m in ctx_as_message_list]
+        )
+
+        # handle custom system prompts. It's important that we do this before the _parse_and_**clean**_model_options step.
+        # system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, None)
+        # if system_prompt is not None:
+        #     system_msg: dict[str, str] = {
+        #         "role": "system",
+        #         "content": system_prompt,
+        #     }
+        #     ctx_as_conversation.insert(0, system_msg)
+
+        seed = model_options.get(ModelOption.SEED, None)
+        if seed is not None:
+            set_seed(seed)
+
+        # TODO: JAL. Use the better matching function. Going by name alone right now.
+        #            Also move this to be an early exit.
+        # TODO: JAL. Check for LORAs as well once that interface is done.
+        adapter = self.get_alora(action.intrinsic_name + "_" + "alora")
+        if adapter is None:
+            adapter = self.get_alora(action.intrinsic_name + "_" + "lora")
+            if adapter is None:
+                raise ValueError(
+                    f"no alora / lora for processing intrinsic: {action.intrinsic_name}"
+                )
+
+        # TODO: JAL. Fix this once get_alora is changed.
+        assert isinstance(adapter, GraniteCommonAdapter)
+        # TODO: Check that the base_model_name matches the backend's model?
+        intrinsic_config = adapter.config
+        if intrinsic_config is None:
+            # If the adapter wasn't initialized with a config, grab one here based off the backend's model.
+            intrinsic_config_file = granite_common.intrinsics.util.obtain_io_yaml(
+                action.intrinsic_name,
+                self.model_id,  # TODO: JAL. We need to a specific string here if model id isn't one...; probably the huggingface id
+            )
+            intrinsic_config = granite_common.intrinsics.util.make_config_dict(
+                config_file=intrinsic_config_file
+            )
+            intrinsic_config = cast(
+                dict, intrinsic_config
+            )  # TODO: Can remove if util function gets exported properly.
+
+        # Check if there's a model name associated with this intrinsic (either user specified
+        # or specified in the config).
+        model_name = adapter.base_model_name
+        if model_name is None:
+            model_name = intrinsic_config["model"]
+            # TODO: JAL. model_name is only really used for routing the request. See what we do with
+            #            vllm / openai with aloras. If the model name is the same and we just activate
+            #            the adapters, that's fine; we can leave the model name alone...
+            #           - with openai / vllm, you actually do use the lora adapter name...
+            #           - with openai / vllm, you use the alora name...
+            #           I think this also means no generation lock is required for OpenAI; only huggingface
+
+        intrinsic_config["response_format"] = json.dumps(
+            intrinsic_config["response_format"]
+        )
+        rewriter_config = deepcopy(intrinsic_config)
+        result_processor_config = deepcopy(intrinsic_config)
+
+        # TODO: JAL. The name passed to the intrinsics rewriter should be the alora's or the intrinsics? theoretically
+        #            the alora's should always be the intrinsic's given the matching func.
+        rewriter = granite_common.IntrinsicsRewriter(
+            config_dict=rewriter_config, model_name=adapter.name
+        )
+        result_processor = granite_common.IntrinsicsResultProcessor(
+            config_dict=result_processor_config
+        )
+
+        # Convert our conversation into a proper chat completions dict.
+        # [{role: user, content: Hello}, {...}] -> {messages: [{role:user,...}, ...], model:..., ...}
+        request_json: dict = {"messages": conversation}
+        rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
+
+        # TODO: JAL. Will need a lock here...
+        self._model.set_adapter(adapter.qualified_name)
+        generate_input, other_input = (
+            granite_common.util.chat_completion_request_to_transformers_inputs(
+                rewritten, self._tokenizer, self._model
+            )
+        )
+
+        # TODO: Will need to break this piece out to support caching...
+        chat_response = granite_common.util.generate_with_transformers(
+            self._tokenizer, self._model, generate_input, other_input
+        )
+        processed_chat_completion = result_processor.transform(chat_response, rewritten)
+
+        # TODO: JAL. Put into ModelOutputThunk, parse, etc...
+        mot = ModelOutputThunk(processed_chat_completion.choices[0].message.content)
+        mot._generate_log = GenerateLog()
+
+        # TODO: JAL. Move this deactivation elsewhere.
+        self._model.disable_adapters()
+        return mot
+
     def _generate_from_context_standard(
         self,
         action: Component | CBlock,
@@ -308,7 +434,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 add_generation_prompt=True,  # If we change this, must modify huggingface granite guardian.
                 return_tensors="pt",
                 **self._make_backend_specific_and_remove(model_options),
-            ).to(self._device)  # type: ignore
+            )
 
             format_kwargs = {}
             if _format:
@@ -460,7 +586,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             cache_info = HFAloraCacheInfo(
                 kv_cache=cache,
                 merged_token_ids=output_complete,
-                merged_attention=torch.ones_like(output_complete).to(self._device),
+                merged_attention=torch.ones_like(output_complete),
                 q_end=len(input_ids[0]),  # type: ignore
             )
 
@@ -514,9 +640,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         prompts = [self.formatter.print(action) for action in actions]
 
         # batch-encoding call is deprecated in favor of this
-        inputs = self._tokenizer(prompts, return_tensors="pt", padding=True).to(
-            self._device
-        )
+        inputs = self._tokenizer(prompts, return_tensors="pt", padding=True)
 
         if format is None:
             outputs = self._model.generate(  # type: ignore
@@ -670,14 +794,26 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         return {k: v for k, v in model_options.items() if k not in chat_template_only}
 
     # region ALora loading, unloading, and utility functions.
+    def add_adapter(self, adapter: LocalHFAdapter):
+        base_model_name = self._hf_model_id.split("/")[1]
+        path = adapter.get_local_hf_path(base_model_name)
+
+        if self.get_alora(adapter.qualified_name) is not None:
+            FancyLogger.get_logger().warning(
+                f"Client code attempted to add {adapter.name} but {adapter.name} was already added to {self.__class__}. The backend is refusing to do this, because adapter loading is not idempotent."
+            )
+            return None
+
+        self._model.load_adapter(path, adapter.qualified_name)
+        self._model.disable_adapters()
+        self._aloras[adapter.qualified_name] = adapter
+
     def add_alora(self, alora: HFAlora):
         """Loads an ALora for this backend.
 
         Args:
             alora (str): identifier for the ALora adapter
         """
-        from alora.peft_model_alora import aLoRAPeftModelForCausalLM  # type: ignore
-
         assert issubclass(alora.__class__, HFAlora), (
             f"cannot add an ALora of type {alora.__class__} to model; must inherit from {HFAlora.__class__}"
         )
@@ -689,14 +825,8 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             )
             return None
 
-        if self.alora_model is None:
-            base_model = self._model
-            self.alora_model = aLoRAPeftModelForCausalLM.from_pretrained(
-                base_model, alora.path_or_model_id, alora.name
-            )
-        else:
-            self.alora_model.load_adapter(alora.path_or_model_id, alora.name)
-
+        self._model.load_adapter(alora.path_or_model_id, alora.name)
+        self._model.disable_adapters()
         self._aloras[alora.name] = alora
 
     def get_alora(self, alora_name: str) -> Alora | None:
@@ -734,7 +864,7 @@ class HFAlora(Alora, abc.ABC):
         self._generation_prompt = generation_prompt
         self._generation_prompt_tokens = self._backend._tokenizer(
             self._generation_prompt, return_tensors="pt"
-        ).to(self._backend._device)
+        )
 
 
 class HFProcessRewardModel(PRM, abc.ABC):
@@ -752,23 +882,9 @@ class HFProcessRewardModel(PRM, abc.ABC):
         """
         super().__init__(model_name_or_path)
 
-        # auto-device if not more specific
-        self._device = device
-        if device is None:
-            device_name: str = (
-                "cuda"
-                if torch.cuda.is_available()
-                else "mps"
-                if torch.backends.mps.is_available()
-                else "cpu"
-            )
-            assert device_name is not None
-            self._device = torch.device(device_name)  # type: ignore
-
         self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
             self.model_name_or_path, torch_dtype=torch.bfloat16
         )
-        self.model.to(self._device)  # type: ignore
         self.model.eval()
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path)
 

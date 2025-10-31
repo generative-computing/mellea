@@ -1,6 +1,8 @@
 """Useful type definitions for models, formatters, and backends."""
 
+from enum import Enum
 from typing import Any
+from urllib.parse import urlparse
 
 from mellea.helpers.fancy_logger import FancyLogger
 
@@ -109,3 +111,24 @@ class ModelOption:
             for k, v in overwrite_opts.items():
                 new_options[k] = v
         return new_options
+
+
+class _ServerType(Enum):
+    UNKNOWN = 0
+    LOCALHOST = 1
+    OPENAI = 2
+    REMOTE_VLLM = 3
+    """Must be set manually for now."""
+
+
+def _server_type(url: str) -> _ServerType:
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+            return _ServerType.LOCALHOST
+        elif hostname == "api.openai.com":
+            return _ServerType.OPENAI
+    except Exception as e:
+        print(f"Error parsing URL: {e}")
+    return _ServerType.UNKNOWN

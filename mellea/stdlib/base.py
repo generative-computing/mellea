@@ -114,6 +114,14 @@ class ImageBlock:
         return f"ImageBlock({self._value}, {self._meta.__repr__()})"
 
 
+# TODO: JAL. Make this a CBlock? it should be a CBlock with two fields...
+# TODO: JAL. Add support for passing in docs as model options?
+class Document:
+    def __init__(self, text: str, title: str | None = None):
+        self.text = text
+        self.title = title
+
+
 @runtime_checkable
 class Component(Protocol):
     """A `Component` is a composite data structure that is intended to be represented to an LLM."""

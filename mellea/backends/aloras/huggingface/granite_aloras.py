@@ -4,6 +4,7 @@ import asyncio
 import functools
 from copy import deepcopy
 
+import granite_common
 import torch
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 
@@ -61,12 +62,11 @@ class HFConstraintAlora(HFAlora):
         stream: bool = False,
     ) -> ModelOutputThunk:
         """Generates a constraint response from the ALora. Must be run in a running event loop."""
-        assert self._backend.alora_model is not None
         # Go ahead and do runtime type-checking because passing CBlocks into this function is a common error.
         assert type(input) is str
         assert type(response) is str
         assert type(constraint) is str
-        self._backend.alora_model.set_adapter(self.name)
+        self._backend._model.set_adapter(self.name)
         cache_hit = self._backend.cache_get(response)
 
         if stream:
@@ -96,7 +96,7 @@ class HFConstraintAlora(HFAlora):
             # Get the constraint tokens separately so that we can calculate the alora offsets.
             constraint_tokens = self._backend._tokenizer(
                 self._constraint_prompt.format(constraint), return_tensors="pt"
-            ).to(self._backend._device)
+            )
 
             alora_offsets = [
                 constraint_tokens["input_ids"].shape[1]
@@ -105,9 +105,9 @@ class HFConstraintAlora(HFAlora):
             ]
 
         chat_response = asyncio.to_thread(
-            self._backend.alora_model.generate,
-            input_combined["input_ids"].to(self._backend._device),
-            attention_mask=input_combined["attention_mask"].to(self._backend._device),
+            self._backend._model.generate,  # type: ignore
+            input_combined["input_ids"],
+            attention_mask=input_combined["attention_mask"],
             max_new_tokens=1,
             return_dict_in_generate=True,
             alora_offsets=alora_offsets,
@@ -149,7 +149,7 @@ class HFConstraintAlora(HFAlora):
         # Must tokenize the constraint here since the requirement isn't known at initialization.
         constraint_tokens = self._backend._tokenizer(
             self._constraint_prompt.format(constraint), return_tensors="pt"
-        ).to(self._backend._device)
+        )
 
         input_combined = {
             "input_ids": torch.cat(
@@ -196,10 +196,7 @@ class HFConstraintAlora(HFAlora):
         # Must tokenize the constraint here since the requirement isn't known at initialization.
         templatized = templatized + self._constraint_prompt.format(constraint)
 
-        tokenized = self._backend._tokenizer(templatized, return_tensors="pt").to(
-            self._backend._device
-        )
-
+        tokenized = self._backend._tokenizer(templatized, return_tensors="pt")
         input_combined = {
             "input_ids": torch.cat(
                 [tokenized["input_ids"], self._generation_prompt_tokens["input_ids"]],
@@ -283,3 +280,30 @@ def add_granite_aloras(backend: LocalHFBackend):
         raise ValueError(
             f"cannot add_granite_aloras to unknown huggingface model_id / backend: {backend._hf_model_id}"
         )
+
+
+class HFIntrinsicAlora(HFAlora):
+    def __init__(
+        self, name: str, backend: LocalHFBackend, base_model_name: str | None = None
+    ):
+        # TODO: JAL. May need to change HFAlora to not need a generation prompt by default...
+
+        if base_model_name is None:
+            # TODO: JAL. Make sure all hf model ids fit this way.
+            base_model_name = backend._hf_model_id.split("/")[1]
+
+        # TODO: JAL. figure out if we want to download files here or when adding the alora...
+        # Need to do all the path determination at init?
+        path = str(
+            granite_common.intrinsics.util.obtain_lora(
+                name, base_model_name, alora=True
+            )
+        )
+
+        super().__init__(name, path, "", backend)
+
+        # We do a lot of logging for ALoras because this is an experimental feature. Maybe we should tag these log messages?
+        self._logger = FancyLogger.get_logger()
+
+    def generate_using_strings(self, *args, **kwargs) -> ModelOutputThunk:
+        raise NotImplementedError()

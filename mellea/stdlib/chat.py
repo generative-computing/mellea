@@ -8,6 +8,7 @@ from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
+    Document,
     ImageBlock,
     ModelOutputThunk,
     ModelToolCall,
@@ -26,6 +27,7 @@ class Message(Component):
         content: str,
         *,
         images: None | list[ImageBlock] = None,
+        documents: None | list[Document] = None,
     ):
         """Initializer for Chat messages.
 
@@ -33,10 +35,12 @@ class Message(Component):
             role (str): The role that this message came from (e.g., user, assistant).
             content (str): The content of the message.
             images (list[ImageBlock]): The images associated with the message if any.
+            documents (list[Document]): documents associated with the message if any.
         """
         self.role = role
         self.content = content
         self._images = images
+        self._docs = documents
 
     @property
     def images(self) -> None | list[str]:
