@@ -2,9 +2,11 @@
 
 import abc
 
+from mellea.backends.adapters.adapter import Adapter
 from mellea.stdlib.base import CBlock, ModelOutputThunk
 
 
+# TODO: JAL. Remove this.
 class Alora(abc.ABC):
     """Activated LoRAs (Aloras)](https://arxiv.org/pdf/2504.12397) are are [low-rank adapters](https://arxiv.org/abs/2106.09685) that can reuse KV cache from their underlying model.
 
@@ -55,3 +57,16 @@ class AloraBackendMixin(abc.ABC):
     def get_aloras(self) -> list[Alora]:
         """Returns a list of all loaded aLoRA adapters."""
         ...
+
+
+class AdapterMixin(abc.ABC):
+    """Mixin class for backends capable of utilizing adapters."""
+
+    def add_adapter(self, *args, **kwargs):
+        """Adds the given adapter to the backend. Must not have been added to a different backend."""
+
+    def load_adapter(self, adapter_qualified_name: str):
+        """Loads the given adapter for the backend. Must have previously been added."""
+
+    def unload_adapter(self, adapter_qualified_name: str):
+        """Unloads the given adapter from the backend."""

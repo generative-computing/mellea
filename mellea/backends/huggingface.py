@@ -261,7 +261,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         _format: type[BaseModelSubclass] | None = None,  # TODO: JAL. Remove this param?
         model_options: dict[str, Any],
         tool_calls: bool = False,  # TODO: JAL. Remove this param?
-    ) -> ModelOutputThunk:
+    ) -> ModelOutputThunk:  # TODO: JAL. Return context here as well? Else treat like Aloras and add the context higher up.
         if not ctx.is_chat_context:
             raise Exception("Does not yet support non-chat contexts.")
 

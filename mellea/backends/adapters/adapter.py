@@ -1,10 +1,12 @@
 import abc
 import pathlib
 from enum import Enum
+from typing import TypeVar
 
 import granite_common
 from litellm import cast
 
+from mellea.backends import Backend
 from mellea.backends.types import _ServerType
 
 
@@ -17,6 +19,8 @@ class Adapter(abc.ABC):
     def __init__(self, name: str, adapter_type: AdapterType):
         """An adapter that can be added to a backend.
 
+        Note: An adapter can only be added to a single backend.
+
         Args:
             name: name of the adapter; when referencing this adapter, use adapter.qualified_name
             adapter_type: enum describing what type of adapter it is (ie LORA / ALORA)
@@ -26,36 +30,14 @@ class Adapter(abc.ABC):
         self.qualified_name = name + "_" + adapter_type.value
         """the name of the adapter to use when loading / looking it up"""
 
+        self.backend: Backend | None = None
+        """set when the adapter is added to a backend"""
+
         self.path: str | None = None
         """set when the adapter is added to a backend"""
 
-    # @abc.abstractmethod
-    # def add_adapter(self, backend: Backend, *args, **kwargs):
-    #     """Adds an adapter."""
-
-    # def already_added(self, backend: Backend) -> bool:
-    #     """Checks if a this adapter has already been loaded to a backend and if so, if it's the current backend.
-
-    #     Args:
-    #         backend: the Backend to add the adapter to.
-
-    #     Returns:
-    #         True if already added; False if not already added.
-
-    #     Raises:
-    #         ValueError: if the adapter has already been added to a different backend.
-    #     """
-    #     if self.backend is not None:
-    #         if self.backend is not backend:
-    #             raise ValueError(f"adapter ({self.name}, {self}) has already been added to a different backend ({self.backend})")
-    #         else:
-    #             # It's already been added to this backend. Do nothing.
-    #             return True
-    #     return False
-
 
 class OpenAIAdapter(Adapter):
-    # TODO: JAL. May need to add plain path here as well.
     @abc.abstractmethod
     def get_open_ai_path(
         self,
@@ -74,7 +56,6 @@ class OpenAIAdapter(Adapter):
 
 
 class LocalHFAdapter(Adapter):
-    # TODO: JAL. May need to add plain path here as well.
     @abc.abstractmethod
     def get_local_hf_path(self, base_model_name: str) -> str:
         """Returns the path needed to load the adapter.
@@ -178,11 +159,14 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
         return f"./{base_path}/{self.name}/{self.adapter_type.value}/{base_model_name}"
 
 
+T = TypeVar("T")
+
+
 def get_adapter_for_intrinsic(
     intrinsic_name: str,
     intrinsic_adapter_types: list[AdapterType],
-    available_adapters: dict[str, Adapter],
-) -> Adapter | None:
+    available_adapters: dict[str, T],
+) -> T | None:
     """Finds an adapter from a dict of available adapters based on the intrinsic name and its allowed adapter types.
 
     Args:

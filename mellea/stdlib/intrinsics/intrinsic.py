@@ -45,7 +45,7 @@ class Intrinsic(Component):
         """The set of all the constituent parts of the `Intrinsic`.
 
         Will need to be implemented by subclasses since not all intrinsics are output
-        as text / messages. TODO: JAL.
+        as text / messages.
         """
         raise NotImplementedError("parts isn't implemented by default")
 
