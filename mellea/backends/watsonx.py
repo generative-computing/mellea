@@ -509,9 +509,18 @@ class WatsonxAIBackend(FormatterBackend):
         date = datetime.datetime.now()
 
         for i, response in enumerate(responses):
+            output = response["results"][0]
             result = ModelOutputThunk(
-                value=response["results"][0]["generated_text"],
-                meta={"oai_completion_response": response["results"][0]},
+                value=output["generated_text"],
+                meta={
+                    "oai_completion_response": response["results"][0],
+                    "usage": {
+                        "prompt_tokens": output.get("input_token_count", 0),
+                        "completion_tokens": output.get("generated_token_count", 0),
+                        "total_tokens": output.get("input_token_count", 0)
+                        + output.get("generated_token_count", 0),
+                    },
+                },
             )
 
             self.formatter.parse(actions[i], result)

@@ -569,12 +569,15 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
         results = []
         for i, decoded_result in enumerate(decoded_results):
+            n_prompt_tokens = inputs["input_ids"][i].size(0)  # type: ignore
+            n_completion_tokens = len(sequences_to_decode[i])
             result = ModelOutputThunk(
                 value=decoded_result,
                 meta={
                     "usage": {
-                        "prompt_tokens": inputs["input_ids"][i].size(0),  # type: ignore
-                        "completion_tokens": len(sequences_to_decode[i]),
+                        "prompt_tokens": n_prompt_tokens,  # type: ignore
+                        "completion_tokens": n_completion_tokens,
+                        "total_tokens": n_prompt_tokens + n_completion_tokens,
                     }
                 },
             )

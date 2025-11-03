@@ -448,6 +448,12 @@ class OllamaModelBackend(FormatterBackend):
                         "usage": {
                             "completion_tokens": response.eval_count,
                             "prompt_tokens": response.prompt_eval_count,
+                            "total_tokens": (
+                                response.prompt_eval_count + response.eval_count
+                                if response.prompt_eval_count is not None
+                                and response.eval_count is not None
+                                else None
+                            ),
                         },
                     },
                 )
