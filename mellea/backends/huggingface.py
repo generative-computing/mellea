@@ -507,6 +507,11 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
+        if tool_calls:
+            FancyLogger.get_logger().warning(
+                "The raw endpoint does not support tool calling at the moment."
+            )
+
         model_opts = self._simplify_and_merge(model_options)
         seed = model_opts.get(ModelOption.SEED, None)
         if seed is not None:
