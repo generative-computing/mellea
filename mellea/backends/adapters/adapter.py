@@ -1,7 +1,9 @@
+"""Module for adapters to backends."""
+
 import abc
 import pathlib
 from enum import Enum
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import granite_common
 from litellm import cast
@@ -11,11 +13,15 @@ from mellea.backends.types import _ServerType
 
 
 class AdapterType(Enum):
+    """Possible types of adapters for a backend."""
+
     LORA = "lora"
     ALORA = "alora"
 
 
 class Adapter(abc.ABC):
+    """An adapter that can be added to a single backend."""
+
     def __init__(self, name: str, adapter_type: AdapterType):
         """An adapter that can be added to a backend.
 
@@ -38,6 +44,8 @@ class Adapter(abc.ABC):
 
 
 class OpenAIAdapter(Adapter):
+    """Adapter for OpenAIBackends."""
+
     @abc.abstractmethod
     def get_open_ai_path(
         self,
@@ -56,6 +64,8 @@ class OpenAIAdapter(Adapter):
 
 
 class LocalHFAdapter(Adapter):
+    """Adapter for LocalHFBackends."""
+
     @abc.abstractmethod
     def get_local_hf_path(self, base_model_name: str) -> str:
         """Returns the path needed to load the adapter.
@@ -67,6 +77,8 @@ class LocalHFAdapter(Adapter):
 
 
 class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
+    """Adapter for intrinsics that utilize the GraniteCommon library."""
+
     def __init__(
         self,
         name: str,
@@ -122,6 +134,13 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
         server_type: _ServerType = _ServerType.LOCALHOST,
         remote_path: str | None = None,
     ) -> str:
+        """Returns the path needed to load the adapter.
+
+        Args:
+            base_model_name: the base model; typically the last part of the huggingface model id like "granite-3.3-8b-instruct"
+            server_type: the server type (ie LOCALHOST / OPENAI); usually the backend has information on this
+            remote_path: optional; used only if the server_type is REMOTE_VLLM; base path at which to find the adapter
+        """
         if server_type == _ServerType.LOCALHOST:
             path = self.download_and_get_path(base_model_name)
         elif server_type == _ServerType.REMOTE_VLLM:
@@ -136,6 +155,11 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
         return path
 
     def get_local_hf_path(self, base_model_name: str) -> str:
+        """Returns the path needed to load the adapter.
+
+        Args:
+            base_model_name: the base model; typically the last part of the huggingface model id like "granite-3.3-8b-instruct"
+        """
         return self.download_and_get_path(base_model_name)
 
     def download_and_get_path(self, base_model_name: str) -> str:
@@ -185,3 +209,16 @@ def get_adapter_for_intrinsic(
             break
 
     return adapter
+
+
+class AdapterMixin(abc.ABC):
+    """Mixin class for backends capable of utilizing adapters."""
+
+    def add_adapter(self, *args, **kwargs):
+        """Adds the given adapter to the backend. Must not have been added to a different backend."""
+
+    def load_adapter(self, adapter_qualified_name: str):
+        """Loads the given adapter for the backend. Must have previously been added."""
+
+    def unload_adapter(self, adapter_qualified_name: str):
+        """Unloads the given adapter from the backend."""

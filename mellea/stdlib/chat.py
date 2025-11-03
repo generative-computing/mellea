@@ -63,7 +63,12 @@ class Message(Component):
         """
         return TemplateRepresentation(
             obj=self,
-            args={"role": self.role, "content": self.content, "images": self.images},
+            args={
+                "role": self.role,
+                "content": self.content,
+                "images": self.images,
+                "documents": self._docs,
+            },
             template_order=["*", "Message"],
         )
 
@@ -72,7 +77,11 @@ class Message(Component):
         images = []
         if self.images is not None:
             images = [f"{i[:20]}..." for i in self.images]
-        return f'mellea.Message(role="{self.role}", content="{self.content}", images="{images}")'
+
+        docs = []
+        if self._docs is not None:
+            docs = [f"{doc.format_for_llm()[:10]}..." for doc in self._docs]
+        return f'mellea.Message(role="{self.role}", content="{self.content}", images="{images}", documents="{docs}")'
 
 
 class ToolMessage(Message):

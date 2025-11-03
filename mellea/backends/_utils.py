@@ -4,7 +4,6 @@ import inspect
 from collections.abc import Callable
 from typing import Any, Literal
 
-from mellea.backends.aloras import Alora
 from mellea.backends.formatter import Formatter
 from mellea.backends.tools import parse_tools
 from mellea.helpers.fancy_logger import FancyLogger
@@ -55,30 +54,6 @@ def to_chat(
         ctx_as_conversation.insert(0, system_msg)
 
     return ctx_as_conversation
-
-
-def use_alora(
-    action: Component | CBlock,
-    alora: Alora | None,
-    default_to_constraint_checking_alora: bool,
-) -> bool:
-    """Returns True when the condition for using alora is met.
-
-    See `docs/dev/requirement_aLoRA_rerouting.md` for an explanation of the following code block.
-    """
-    if issubclass(type(action), Requirement):
-        # The general rule is that we reroute to the alora if it exists.
-        reroute_to_alora = alora is not None
-        # However, there are some exceptions:
-        if not default_to_constraint_checking_alora:
-            reroute_to_alora = False
-        if issubclass(type(action), LLMaJRequirement):
-            reroute_to_alora = False
-        if issubclass(type(action), ALoraRequirement):
-            reroute_to_alora = True
-        return reroute_to_alora
-    else:
-        return False
 
 
 def to_tool_calls(

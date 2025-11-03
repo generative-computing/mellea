@@ -1,17 +1,16 @@
 # test/rits_backend_tests/test_openai_integration.py
 from mellea import MelleaSession
+from mellea.backends.adapters.adapter import GraniteCommonAdapter
 from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext
 from mellea.backends.openai import OpenAIBackend
-from mellea.backends.aloras.openai.granite_aloras import add_granite_aloras
 from mellea.stdlib.requirement import Requirement, ALoraRequirement, LLMaJRequirement, req
 from mellea.backends.formatter import TemplateFormatter
-from mellea.backends.types import ModelOption
+from mellea.backends.types import _ServerType, ModelOption
 
 import pydantic
 from typing_extensions import Annotated
 import pytest
 import os
-
 
 # The vllm tests are disabled by default, because we need a test environment with the vLLM server running.
 # We use an env var VLLM_TESTS_ENABLED to enable these tests.
@@ -131,14 +130,14 @@ class TestOpenAIBackend:
 
 class TestOpenAIALoraStuff:
     backend = OpenAIBackend(
-        model_id="ibm-granite/granite-3.2-8b-instruct",
+        model_id="ibm-granite/granite-3.3-8b-instruct",
         formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
         base_url="http://localhost:8000/v1",
         api_key="EMPTY",
     )
-    m = MelleaSession(backend, ctx=ChatContext())
-    add_granite_aloras(backend)
+    backend.add_adapter(GraniteCommonAdapter("requirement_check"))
 
+    m = MelleaSession(backend, ctx=ChatContext())
     def test_system_prompt(self):
         self.m.reset()
         result = self.m.chat(
@@ -146,21 +145,6 @@ class TestOpenAIALoraStuff:
             model_options={ModelOption.SYSTEM_PROMPT: "Talk like a pirate."},
         )
         print(result)
-
-    @pytest.mark.xfail
-    def test_constraint_alora(self):
-        self.m.reset()
-        answer = self.m.instruct(
-            "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
-        )
-        alora_output = self.backend.get_aloras()[0].generate_using_strings(
-            input="Find the difference between these two strings: aaaaaaaaaa aaaaabaaaa",
-            response=str(answer),
-            constraint="The answer mention that there is a b in the middle of one of the strings but not the other.",
-            force_yn=False,  # make sure that the alora naturally output Y and N without constrained generation
-        )
-        assert alora_output in ["Y", "N"], alora_output
-        self.m.reset()
 
     def test_constraint_lora_with_requirement(self):
         self.m.reset()
@@ -172,7 +156,7 @@ class TestOpenAIALoraStuff:
         )
         assert len(validation_outputs) == 1
         val_result = validation_outputs[0]
-        assert str(val_result.reason) in ["Y", "N"]
+        assert "requirement_likelihood" in str(val_result.reason)
         self.m.reset()
 
     def test_constraint_lora_override(self):
@@ -203,7 +187,7 @@ class TestOpenAIALoraStuff:
         )
         assert len(validation_outputs) == 1
         non_alora_output = validation_outputs[0]
-        assert str(non_alora_output.reason) in ["Y", "N"]
+        assert "requirement_likelihood" in str(non_alora_output.reason)
         self.backend.default_to_constraint_checking_alora = True
         self.m.reset()
 

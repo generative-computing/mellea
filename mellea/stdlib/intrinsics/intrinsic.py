@@ -1,3 +1,5 @@
+"""Module for Intrinsics."""
+
 import pathlib
 from copy import copy
 from typing import cast
@@ -50,11 +52,10 @@ class Intrinsic(Component):
         raise NotImplementedError("parts isn't implemented by default")
 
     def format_for_llm(self) -> TemplateRepresentation | str:
-        """Formats the `Intrinsic` into a `TemplateRepresentation` or string.
+        """`Intrinsic` doesn't implement `format_for_default`. Formats the `Intrinsic` into a `TemplateRepresentation` or string.
 
         Returns: a `TemplateRepresentation` or string
-        TODO: JAL. see if the base intrinsic should implement this.
-                   ideally, this would be the intrinsic's instruction directive with the args populated
-                   however, the rewriter's transform function handles that...
         """
-        raise NotImplementedError("format_for_llm isn't implemented by default")
+        raise NotImplementedError(
+            "`Intrinsic` doesn't implement format_for_llm by default. You should only use an `Intrinsic` as the action and not as a part of the context."
+        )
