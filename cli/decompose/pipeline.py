@@ -11,10 +11,11 @@ from mellea.backends.openai import OpenAIBackend
 
 from .prompt_modules import (
     constraint_extractor,
-    # general_instructions,
+    general_instructions,
     subtask_constraint_assign,
     subtask_list,
     subtask_prompt_generator,
+    validation_code_generator,
     validation_decision,
 )
 from .prompt_modules.subtask_constraint_assign import SubtaskPromptConstraintsItem
@@ -22,9 +23,16 @@ from .prompt_modules.subtask_list import SubtaskItem
 from .prompt_modules.subtask_prompt_generator import SubtaskPromptItem
 
 
+class ConstraintValData(TypedDict):
+    val_strategy: Literal["code", "llm"]
+    val_fn: str | None
+
+
 class ConstraintResult(TypedDict):
     constraint: str
-    validation_strategy: str
+    val_strategy: Literal["code", "llm"]
+    val_fn: str | None
+    val_fn_name: str
 
 
 class DecompSubtasksResult(TypedDict):
@@ -32,7 +40,7 @@ class DecompSubtasksResult(TypedDict):
     tag: str
     constraints: list[ConstraintResult]
     prompt_template: str
-    # general_instructions: str
+    general_instructions: str
     input_vars_required: list[str]
     depends_on: list[str]
     generated_response: NotRequired[str]
@@ -72,7 +80,9 @@ def decompose(
         case DecompBackend.ollama:
             m_session = MelleaSession(
                 OllamaModelBackend(
-                    model_id=model_id, model_options={ModelOption.CONTEXT_WINDOW: 16384}
+                    model_id=model_id,
+                    base_url=backend_endpoint,
+                    model_options={ModelOption.CONTEXT_WINDOW: 16384},
                 )
             )
         case DecompBackend.openai:
@@ -115,10 +125,26 @@ def decompose(
         m_session, task_prompt, enforce_same_words=False
     ).parse()
 
-    constraint_validation_strategies: dict[str, Literal["code", "llm"]] = {
-        cons_key: validation_decision.generate(m_session, cons_key).parse()
+    constraint_val_strategy: dict[
+        str, dict[Literal["val_strategy"], Literal["code", "llm"]]
+    ] = {
+        cons_key: {
+            "val_strategy": validation_decision.generate(m_session, cons_key).parse()
+        }
         for cons_key in task_prompt_constraints
     }
+
+    constraint_val_data: dict[str, ConstraintValData] = {}
+
+    for cons_key in constraint_val_strategy:
+        constraint_val_data[cons_key] = {
+            "val_strategy": constraint_val_strategy[cons_key]["val_strategy"],
+            "val_fn": None,
+        }
+        if constraint_val_data[cons_key]["val_strategy"] == "code":
+            constraint_val_data[cons_key]["val_fn"] = (
+                validation_code_generator.generate(m_session, cons_key).parse()
+            )
 
     subtask_prompts: list[SubtaskPromptItem] = subtask_prompt_generator.generate(
         m_session,
@@ -142,14 +168,21 @@ def decompose(
             constraints=[
                 {
                     "constraint": cons_str,
-                    "validation_strategy": constraint_validation_strategies[cons_str],
+                    "val_strategy": constraint_val_data[cons_str]["val_strategy"],
+                    "val_fn_name": f"val_fn_{task_prompt_constraints.index(cons_str) + 1}",
+                    # >> Always include generated "val_fn" code (experimental)
+                    "val_fn": constraint_val_data[cons_str]["val_fn"],
+                    # >> Include generated "val_fn" code only for the last subtask (experimental)
+                    # "val_fn": constraint_val_data[cons_str]["val_fn"]
+                    # if subtask_i + 1 == len(subtask_prompts_with_constraints)
+                    # else None,
                 }
                 for cons_str in subtask_data.constraints
             ],
             prompt_template=subtask_data.prompt_template,
-            # general_instructions=general_instructions.generate(
-            #     m_session, input_str=subtask_data.prompt_template
-            # ).parse(),
+            general_instructions=general_instructions.generate(
+                m_session, input_str=subtask_data.prompt_template
+            ).parse(),
             input_vars_required=list(
                 dict.fromkeys(  # Remove duplicates while preserving the original order.
                     [
@@ -173,7 +206,7 @@ def decompose(
                 )
             ),
         )
-        for subtask_data in subtask_prompts_with_constraints
+        for subtask_i, subtask_data in enumerate(subtask_prompts_with_constraints)
     ]
 
     return DecompPipelineResult(
@@ -182,9 +215,11 @@ def decompose(
         identified_constraints=[
             {
                 "constraint": cons_str,
-                "validation_strategy": constraint_validation_strategies[cons_str],
+                "val_strategy": constraint_val_data[cons_str]["val_strategy"],
+                "val_fn": constraint_val_data[cons_str]["val_fn"],
+                "val_fn_name": f"val_fn_{cons_i + 1}",
             }
-            for cons_str in task_prompt_constraints
+            for cons_i, cons_str in enumerate(task_prompt_constraints)
         ],
         subtasks=decomp_subtask_result,
     )
