@@ -114,6 +114,8 @@ class ModelOption:
 
 
 class _ServerType(Enum):
+    """Different types of servers that might be relevant for a backend."""
+
     UNKNOWN = 0
     LOCALHOST = 1
     OPENAI = 2
@@ -122,6 +124,7 @@ class _ServerType(Enum):
 
 
 def _server_type(url: str) -> _ServerType:
+    """Find a server type based on the url."""
     try:
         parsed = urlparse(url)
         hostname = parsed.hostname
