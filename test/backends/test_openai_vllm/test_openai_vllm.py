@@ -28,8 +28,8 @@ if not _vllm_tests_enabled:
 
 class TestOpenAIBackend:
     backend = OpenAIBackend(
-        model_id="ibm-granite/granite-3.2-8b-instruct",
-        formatter=TemplateFormatter(model_id="ibm-granite/granite-3.2-8b-instruct"),
+        model_id="ibm-granite/granite-3.3-8b-instruct",
+        formatter=TemplateFormatter(model_id="ibm-granite/granite-3.3-8b-instruct"),
         base_url="http://0.0.0.0:8000/v1",
         api_key="EMPTY",
     )
