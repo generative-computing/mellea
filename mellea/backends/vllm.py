@@ -393,15 +393,21 @@ class LocalVLLMBackend(FormatterBackend):
 
         mot._generate_log = generate_log
 
-    def _generate_from_raw(
+    def generate_from_raw(
         self,
         actions: list[Component | CBlock],
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
+        tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
+        if tool_calls:
+            FancyLogger.get_logger().warning(
+                "The completion endpoint does not support tool calling at the moment."
+            )
+
         model_options = self._simplify_and_merge(model_options)
 
         prompts = [self.formatter.print(action) for action in actions]
@@ -447,25 +453,21 @@ class LocalVLLMBackend(FormatterBackend):
 
         for i, result in enumerate(results):
             self.formatter.parse(actions[i], result)
-
-        if generate_logs is not None:
-            assert isinstance(generate_logs, list)
             date = datetime.datetime.now()
 
-            for i in range(len(prompts)):
-                generate_log = GenerateLog()
-                generate_log.prompt = prompts[i]
-                generate_log.backend = f"vllm::{self.model_id!s}"
-                generate_log.model_options = model_options
-                generate_log.date = date
-                generate_log.model_output = decoded_results
-                generate_log.extra = {
-                    "format": format,
-                    "seed": model_options.get(ModelOption.SEED, None),
-                }
-                generate_log.action = actions[i]
-                generate_log.result = results[i]
-                generate_logs.append(generate_log)
+            generate_log = GenerateLog()
+            generate_log.prompt = prompts[i]
+            generate_log.backend = f"vllm::{self.model_id!s}"
+            generate_log.model_options = model_options
+            generate_log.date = date
+            generate_log.model_output = decoded_results
+            generate_log.extra = {
+                "format": format,
+                "seed": model_options.get(ModelOption.SEED, None),
+            }
+            generate_log.action = actions[i]
+            generate_log.result = results[i]
+            result._generate_log = generate_log
 
         return results
 
