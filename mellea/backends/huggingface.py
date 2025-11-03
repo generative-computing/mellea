@@ -278,7 +278,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         # TODO: Code below this point is mostly specific to RagIntrinsics (and granite_common).
         #       It should be refactored into a specific adapter.transform() function.
-        assert isinstance(adapter, GraniteCommonAdapter)
+        assert isinstance(adapter, GraniteCommonAdapter), (
+            "currently Mellea only supports GraniteCommonAdapters and Intrinsics"
+        )
 
         intrinsic_config = adapter.config
         if intrinsic_config is None:

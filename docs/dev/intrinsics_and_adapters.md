@@ -1,4 +1,5 @@
 # Intrinsics and Adapters
+Note: Mellea currently only supports GraniteCommonAdapters and Intrinsics.
 
 ## Basics
 In Mellea, intrinsics are a type of Component that signals one or more of the following to a backend:
