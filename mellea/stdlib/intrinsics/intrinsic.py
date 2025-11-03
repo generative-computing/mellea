@@ -4,8 +4,6 @@ import pathlib
 from copy import copy
 from typing import cast
 
-import granite_common
-
 from mellea.backends.adapters.adapter import AdapterType
 from mellea.stdlib.base import CBlock, Component, TemplateRepresentation
 

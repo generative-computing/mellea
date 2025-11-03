@@ -916,7 +916,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     def unload_adapter(self, adapter_qualified_name: str):
         """Unloads the given adapter from the backend."""
         # Check if the backend knows about this adapter.
-        adapter = self._added_adapters.get(adapter_qualified_name, None)
+        adapter = self._loaded_adapters.get(adapter_qualified_name, None)
         if adapter is None:
             FancyLogger.get_logger().info(
                 f"could not unload adapter {adapter_qualified_name} for backend {self}: adapter is not loaded"

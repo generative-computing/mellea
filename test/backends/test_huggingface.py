@@ -38,6 +38,21 @@ def session(backend):
     yield session
     session.reset()
 
+def test_adapters(backend):
+    assert len(backend._added_adapters.items()) > 0
+
+    adapter = backend._added_adapters["requirement_check_alora"]
+    backend.load_adapter(adapter.qualified_name)
+    assert adapter.qualified_name in backend._loaded_adapters
+
+    # Ensure you can load the same adapter twice.
+    backend.load_adapter(adapter.qualified_name)
+
+    # Ensure you can unload an adapter.
+    backend.unload_adapter(adapter.qualified_name)
+    backend.unload_adapter(adapter.qualified_name)
+    assert adapter.qualified_name not in backend._loaded_adapters
+
 @pytest.mark.qualitative
 def test_system_prompt(session):
     result = session.chat(

@@ -138,6 +138,22 @@ class TestOpenAIALoraStuff:
     backend.add_adapter(GraniteCommonAdapter("requirement_check"))
 
     m = MelleaSession(backend, ctx=ChatContext())
+
+    def test_adapters(self):
+        assert len(self.backend._added_adapters.items()) > 0
+
+        adapter = self.backend._added_adapters["requirement_check_alora"]
+        self.backend.load_adapter(adapter.qualified_name)
+        assert adapter.qualified_name in self.backend._loaded_adapters
+
+        # Ensure you can load the same adapter twice.
+        self.backend.load_adapter(adapter.qualified_name)
+
+        # Ensure you can unload an adapter.
+        self.backend.unload_adapter(adapter.qualified_name)
+        self.backend.unload_adapter(adapter.qualified_name)
+        assert adapter.qualified_name not in self.backend._loaded_adapters
+
     def test_system_prompt(self):
         self.m.reset()
         result = self.m.chat(
