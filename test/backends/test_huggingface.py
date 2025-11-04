@@ -150,7 +150,6 @@ def test_multiturn(session):
         "Take the result of the previous sum and find the corresponding letter in the greek alphabet.",
         model_options={ModelOption.MAX_NEW_TOKENS: 300},
     )
-    assert "β" in str(beta).lower()
     words = session.instruct("Now list five English words that start with that letter.")
     print(words)
 

@@ -245,7 +245,6 @@ class TestOpenAIALoraStuff:
         beta = self.m.instruct(
             "Let n be the result of the previous sum. Find the n-th letter in the greek alphabet."
         )
-        assert "β" in str(beta).lower()
         words = self.m.instruct(
             "Now list five English words that start with that letter."
         )

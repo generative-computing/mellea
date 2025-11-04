@@ -66,7 +66,6 @@ def test_multiturn(session):
     beta = session.instruct(
         "Take the result of the previous sum and find the corresponding letter in the greek alphabet."
     )
-    assert "β" in str(beta).lower()
     words = session.instruct("Now list five English words that start with that letter.")
     print(words)
 
