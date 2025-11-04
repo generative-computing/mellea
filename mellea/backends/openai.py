@@ -465,8 +465,9 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([self.message_to_openai_message(m) for m in messages])
 
+        extra_params: dict[str, Any] = {}
         if _format is not None:
-            response_format = {
+            extra_params["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
                     "name": _format.__name__,
@@ -474,8 +475,6 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                     "strict": True,
                 },
             }
-        else:
-            response_format = {"type": "text"}
 
         # Append tool call information if applicable.
         tools: dict[str, Callable] = dict()
@@ -507,9 +506,9 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             model=self._hf_model_id,
             messages=conversation,  # type: ignore
             reasoning_effort=thinking,  # type: ignore
-            response_format=response_format,  # type: ignore
             tools=formatted_tools if use_tools else None,  # type: ignore
             # parallel_tool_calls=False, # We only support calling one tool per turn. But we do the choosing on our side so we leave this False.
+            **extra_params,
             **self._make_backend_specific_and_remove(
                 model_opts, is_chat_context=ctx.is_chat_context
             ),
