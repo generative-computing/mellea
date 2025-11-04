@@ -26,6 +26,5 @@ def test_component():
     c = _ClosuredComponent()
     assert len(c.parts()) == 0
 
-
 if __name__ == "__main__":
     pytest.main([__file__])

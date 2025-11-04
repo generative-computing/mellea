@@ -14,14 +14,14 @@ The actual rule is slightly more complicated.
 
 ## The Actual Rule
 
-If a `Requirement` is validated using a backend that could either use a `constraint` aLoRA or perform an LLMaJ prompt on the underlying model, then the aLoRA is used for validation, even if the `backend.generate_from_context` method is called instead of the `alora.generate_from_strings` method.
+If a `Requirement` is validated using a backend that could either use a `requirement_check` aLoRA or perform an LLMaJ prompt on the underlying model, then the aLoRA is used for validation, even if the `backend.generate_from_context` method is called instead of the `backend._generate_from_intrinsic` method.
 
 There are three exceptions to this rule:
 1. `Backend.default_to_constraint_checking_alora` is set to `False` (this parameter defaults to `True`).
 2. The `Requirement` has a more specific subtype that indicates a more specific intent (`LLMaJRequirement`). 
 3. The `ALoRA` requirement checker throws an exception.
 
-There is an exception (or disambiguation) to the first exception: If the user provides an `ALoRARequirement`, then the `backend.generate_from_context` call is rerouted to the constraint checking LoRA, regardless of the value of `deault_to_constraint_checking_alora`.
+There is an exception (or disambiguation) to the first exception: If the user provides an `ALoRARequirement`, then the `backend.generate_from_context` call is rerouted to the constraint checking LoRA, regardless of the value of `default_to_constraint_checking_alora`.
 
 ## Decision Rationale
 
@@ -33,12 +33,13 @@ Suppose that the user creates a backend and then adds a generic constraint check
 
 ```python
 from mellea import start_session
-from mellea.backends.aloras.granite_aloras import add_granite_aloras
 from mellea.stdlib.requirement import Requirement
 
 m = start_session(
     "huggingface.LocalHFBackend:ibm-granite/granite-3.2-8b-instruct")
-add_granite_aloras(m)  # This will load the Constraint checint aLoRA.
+
+# By default, the AloraRequirement uses a GraniteCommonAdapter with "requirement_check".
+m.backend.add_adapter(GraniteCommonAdapter("requirement_check"))
 
 m.instruct(
     "Corporate wants you to find the difference between these two strings:\n\naaa\naba")
