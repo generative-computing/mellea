@@ -216,7 +216,6 @@ def test_generate_from_raw(session):
 
     assert len(results) == len(prompts)
 
-# TODO: JAL. add a note here about MPS... if we can't fix the torch version... this will fail for mac computers...
 @pytest.mark.qualitative
 def test_generate_from_raw_with_format(session):
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]

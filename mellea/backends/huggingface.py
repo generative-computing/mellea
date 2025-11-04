@@ -512,6 +512,14 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 "The raw endpoint does not support tool calling at the moment."
             )
 
+        if self._model.device.type == "mps":
+            # TODO: Remove this when we are able to update the torch package.
+            #       Test this by ensuring all outputs from this call are populated when running on mps.
+            #       https://github.com/pytorch/pytorch/pull/157727
+            FancyLogger.get_logger().warning(
+                "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a huggingface backend; ensure all ModelOutputThunks have non-empty values."
+            )
+
         model_opts = self._simplify_and_merge(model_options)
         seed = model_opts.get(ModelOption.SEED, None)
         if seed is not None:
