@@ -100,8 +100,8 @@ def test_format(session):
 def test_generate_from_raw(session):
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
-    results = session.backend._generate_from_raw(
-        actions=[CBlock(value=prompt) for prompt in prompts], generate_logs=None
+    results = session.backend.generate_from_raw(
+        actions=[CBlock(value=prompt) for prompt in prompts], ctx=session.ctx
     )
 
     assert len(results) == len(prompts)
@@ -115,10 +115,10 @@ def test_generate_from_raw_with_format(session):
         name: str
         value: int
 
-    results = session.backend._generate_from_raw(
+    results = session.backend.generate_from_raw(
         actions=[CBlock(value=prompt) for prompt in prompts],
+        ctx=session.ctx,
         format=Answer,
-        generate_logs=None,
     )
 
     assert len(results) == len(prompts)
@@ -193,8 +193,7 @@ def test_client_cache(session):
 
     fourth_client = asyncio.run(get_client_async())
     assert fourth_client in backend._client_cache.cache.values()
-    assert second_client not in backend._client_cache.cache.values()
-
+    assert len(backend._client_cache.cache.values()) == 2
 
 if __name__ == "__main__":
     pytest.main([__file__])

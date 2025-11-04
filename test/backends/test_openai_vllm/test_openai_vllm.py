@@ -3,7 +3,12 @@ from mellea import MelleaSession
 from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext
 from mellea.backends.openai import OpenAIBackend
 from mellea.backends.aloras.openai.granite_aloras import add_granite_aloras
-from mellea.stdlib.requirement import Requirement, ALoraRequirement, LLMaJRequirement
+from mellea.stdlib.requirement import (
+    Requirement,
+    ALoraRequirement,
+    LLMaJRequirement,
+    req,
+)
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.types import ModelOption
 
@@ -99,8 +104,8 @@ class TestOpenAIBackend:
     def test_generate_from_raw(self):
         prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
-        results = self.m.backend._generate_from_raw(
-            actions=[CBlock(value=prompt) for prompt in prompts], generate_logs=None
+        results = self.m.backend.generate_from_raw(
+            actions=[CBlock(value=prompt) for prompt in prompts], ctx=self.m.ctx
         )
 
         assert len(results) == len(prompts)
@@ -112,10 +117,10 @@ class TestOpenAIBackend:
             name: str
             value: int
 
-        results = self.m.backend._generate_from_raw(
+        results = self.m.backend.generate_from_raw(
             actions=[CBlock(value=prompt) for prompt in prompts],
             format=Answer,
-            generate_logs=None,
+            ctx=self.m.ctx,
         )
 
         assert len(results) == len(prompts)
@@ -124,9 +129,9 @@ class TestOpenAIBackend:
         try:
             answer = Answer.model_validate_json(random_result.value)
         except pydantic.ValidationError as e:
-            assert (
-                False
-            ), f"formatting directive failed for {random_result.value}: {e.json()}"
+            assert False, (
+                f"formatting directive failed for {random_result.value}: {e.json()}"
+            )
 
 
 class TestOpenAIALoraStuff:
@@ -153,7 +158,9 @@ class TestOpenAIALoraStuff:
         answer = self.m.instruct(
             "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
         )
-        alora_output = self.backend.get_aloras()[0].generate_using_strings(
+        alora_output = self.backend.get_aloras()[
+            0
+        ].generate_using_strings(
             input="Find the difference between these two strings: aaaaaaaaaa aaaaabaaaa",
             response=str(answer),
             constraint="The answer mention that there is a b in the middle of one of the strings but not the other.",
@@ -168,12 +175,13 @@ class TestOpenAIALoraStuff:
             "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
         )
         validation_outputs = self.m.validate(
-            "The answer should mention that there is a b in the middle of one of the strings but not the other.",
-            return_full_validation_results=True,
+            ALoraRequirement(
+                "The answer should mention that there is a b in the middle of one of the strings but not the other."
+            )
         )
         assert len(validation_outputs) == 1
-        alora_output, valuation_boolean = validation_outputs[0]
-        assert str(alora_output) in ["Y", "N"]
+        val_result = validation_outputs[0]
+        assert str(val_result.reason) in ["Y", "N"]
         self.m.reset()
 
     def test_constraint_lora_override(self):
@@ -183,12 +191,13 @@ class TestOpenAIALoraStuff:
             "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
         )
         validation_outputs = self.m.validate(
-            "The answer should mention that there is a b in the middle of one of the strings but not the other.",
-            return_full_validation_results=True,
+            LLMaJRequirement(
+                "The answer should mention that there is a b in the middle of one of the strings but not the other."
+            )
         )
         assert len(validation_outputs) == 1
-        non_alora_output, _ = validation_outputs[0]
-        assert str(non_alora_output) not in ["Y", "N"]
+        val_result = validation_outputs[0]
+        assert str(val_result.reason) not in ["Y", "N"]
         self.backend.default_to_constraint_checking_alora = True
         self.m.reset()
 
@@ -201,12 +210,11 @@ class TestOpenAIALoraStuff:
         validation_outputs = self.m.validate(
             ALoraRequirement(
                 "The answer should mention that there is a b in the middle of one of the strings but not the other."
-            ),
-            return_full_validation_results=True,
+            )
         )
         assert len(validation_outputs) == 1
-        non_alora_output, _ = validation_outputs[0]
-        assert str(non_alora_output) in ["Y", "N"]
+        non_alora_output = validation_outputs[0]
+        assert str(non_alora_output.reason) in ["Y", "N"]
         self.backend.default_to_constraint_checking_alora = True
         self.m.reset()
 
@@ -219,12 +227,11 @@ class TestOpenAIALoraStuff:
         validation_outputs = self.m.validate(
             LLMaJRequirement(
                 "The answer should mention that there is a b in the middle of one of the strings but not the other."
-            ),
-            return_full_validation_results=True,
+            )
         )
         assert len(validation_outputs) == 1
-        non_alora_output, _ = validation_outputs[0]
-        assert str(non_alora_output) not in ["Y", "N"]
+        non_alora_output = validation_outputs[0]
+        assert str(non_alora_output.reason) not in ["Y", "N"]
         self.m.reset()
 
     def test_instruct(self):
@@ -249,8 +256,7 @@ class TestOpenAIALoraStuff:
         class Person(pydantic.BaseModel):
             name: str
             email_address: Annotated[
-                str,
-                pydantic.StringConstraints(pattern=r"[a-zA-Z]{5,10}@example\.com"),
+                str, pydantic.StringConstraints(pattern=r"[a-zA-Z]{5,10}@example\.com")
             ]
 
         class Email(pydantic.BaseModel):

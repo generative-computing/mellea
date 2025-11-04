@@ -278,6 +278,9 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         An AI-powered function that generates responses using an LLM based on the
         original function's signature and docstring.
 
+    Raises:
+        ValidationError: if the generated output cannot be parsed into the expected return type. Typically happens when the token limit for the generated output results in invalid json.
+
     Examples:
         >>> from mellea import generative, start_session
         >>> session = start_session()
