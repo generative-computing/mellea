@@ -98,8 +98,8 @@ class TestOpenAIBackend:
     def test_generate_from_raw(self):
         prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
-        results = self.m.backend._generate_from_raw(
-            actions=[CBlock(value=prompt) for prompt in prompts], generate_logs=None
+        results = self.m.backend.generate_from_raw(
+            actions=[CBlock(value=prompt) for prompt in prompts], ctx=self.m.ctx
         )
 
         assert len(results) == len(prompts)
@@ -111,10 +111,10 @@ class TestOpenAIBackend:
             name: str
             value: int
 
-        results = self.m.backend._generate_from_raw(
+        results = self.m.backend.generate_from_raw(
             actions=[CBlock(value=prompt) for prompt in prompts],
             format=Answer,
-            generate_logs=None,
+            ctx=self.m.ctx,
         )
 
         assert len(results) == len(prompts)
@@ -123,9 +123,9 @@ class TestOpenAIBackend:
         try:
             answer = Answer.model_validate_json(random_result.value)
         except pydantic.ValidationError as e:
-            assert (
-                False
-            ), f"formatting directive failed for {random_result.value}: {e.json()}"
+            assert False, (
+                f"formatting directive failed for {random_result.value}: {e.json()}"
+            )
 
 
 class TestOpenAIALoraStuff:
@@ -168,7 +168,9 @@ class TestOpenAIALoraStuff:
             "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
         )
         validation_outputs = self.m.validate(
-            ALoraRequirement("The answer should mention that there is a b in the middle of one of the strings but not the other."),
+            ALoraRequirement(
+                "The answer should mention that there is a b in the middle of one of the strings but not the other."
+            )
         )
         assert len(validation_outputs) == 1
         val_result = validation_outputs[0]
@@ -182,7 +184,9 @@ class TestOpenAIALoraStuff:
             "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
         )
         validation_outputs = self.m.validate(
-            LLMaJRequirement("The answer should mention that there is a b in the middle of one of the strings but not the other."),
+            LLMaJRequirement(
+                "The answer should mention that there is a b in the middle of one of the strings but not the other."
+            )
         )
         assert len(validation_outputs) == 1
         val_result = validation_outputs[0]
@@ -199,7 +203,7 @@ class TestOpenAIALoraStuff:
         validation_outputs = self.m.validate(
             ALoraRequirement(
                 "The answer should mention that there is a b in the middle of one of the strings but not the other."
-            ),
+            )
         )
         assert len(validation_outputs) == 1
         non_alora_output = validation_outputs[0]
@@ -216,7 +220,7 @@ class TestOpenAIALoraStuff:
         validation_outputs = self.m.validate(
             LLMaJRequirement(
                 "The answer should mention that there is a b in the middle of one of the strings but not the other."
-            ),
+            )
         )
         assert len(validation_outputs) == 1
         non_alora_output = validation_outputs[0]
@@ -245,8 +249,7 @@ class TestOpenAIALoraStuff:
         class Person(pydantic.BaseModel):
             name: str
             email_address: Annotated[
-                str,
-                pydantic.StringConstraints(pattern=r"[a-zA-Z]{5,10}@example\.com"),
+                str, pydantic.StringConstraints(pattern=r"[a-zA-Z]{5,10}@example\.com")
             ]
 
         class Email(pydantic.BaseModel):

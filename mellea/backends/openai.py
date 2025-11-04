@@ -5,9 +5,7 @@ import asyncio
 import datetime
 import functools
 import inspect
-import json
 from collections.abc import Callable, Coroutine
-from copy import deepcopy
 from typing import TYPE_CHECKING, Any, cast
 
 import granite_common
@@ -780,13 +778,14 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         generate_log.result = mot
         mot._generate_log = generate_log
 
-    def _generate_from_raw(
+    def generate_from_raw(
         self,
         actions: list[Component | CBlock],
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
+        tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
         extra_body = {}
@@ -798,6 +797,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
             # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
             extra_body["guided_json"] = format.model_json_schema()
+        if tool_calls:
+            FancyLogger.get_logger().warning(
+                "The completion endpoint does not support tool calling at the moment."
+            )
 
         model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
 
@@ -823,32 +826,35 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # Necessary for type checker.
         assert isinstance(completion_response, Completion)
 
-        results = [
-            ModelOutputThunk(
-                value=response.text,
-                meta={"oai_completion_response": response.model_dump()},
-            )
-            for response in completion_response.choices
-        ]
+        results = []
+        for response, action, prompt in zip(
+            completion_response.choices, actions, prompts
+        ):
+            output = ModelOutputThunk(None)
+            output.value = response.text
+            output._context = None  # There is no context for generate_from_raw for now
+            output._action = action
+            output._model_options = model_opts
+            output._meta = {
+                "oai_completion_response": response.model_dump(),
+                "usage": completion_response.usage.model_dump()
+                if completion_response.usage
+                else None,
+            }
 
-        for i, result in enumerate(results):
-            self.formatter.parse(actions[i], result)
+            self.formatter.parse(action, output)
 
-        if generate_logs is not None:
-            assert isinstance(generate_logs, list)
-            date = datetime.datetime.now()
+            generate_log = GenerateLog()
+            generate_log.prompt = prompt
+            generate_log.backend = f"openai::{self.model_id!s}"
+            generate_log.model_options = model_opts
+            generate_log.date = datetime.datetime.now()
+            generate_log.model_output = completion_response
+            generate_log.extra = {"seed": model_opts.get("seed", None)}
+            generate_log.action = action
+            output._generate_log = generate_log
 
-            for i in range(len(prompts)):
-                generate_log = GenerateLog()
-                generate_log.prompt = prompts[i]
-                generate_log.backend = f"openai::{self.model_id!s}"
-                generate_log.model_options = model_opts
-                generate_log.date = date
-                generate_log.model_output = completion_response
-                generate_log.extra = {"seed": model_opts.get("seed", None)}
-                generate_log.action = actions[i]
-                generate_log.result = results[i]
-                generate_logs.append(generate_log)
+            results.append(output)
 
         return results
 

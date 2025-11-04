@@ -475,13 +475,14 @@ class LiteLLMBackend(FormatterBackend):
             FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
         return tools
 
-    def _generate_from_raw(
+    def generate_from_raw(
         self,
         actions: list[Component | CBlock],
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
+        tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
         raise NotImplementedError("This method is not implemented yet.")
