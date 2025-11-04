@@ -47,6 +47,7 @@ class ValidationResult:
         reason: str | None = None,
         score: float | None = None,
         thunk: ModelOutputThunk | None = None,
+        context: Context | None = None,
     ):
         """The result of a requirement's validation.
 
@@ -57,11 +58,13 @@ class ValidationResult:
             reason: a reason for the result
             score: if your validator gives you a score back, you can add this as metadata
             thunk: if your validator utilizes a backend to generate a response, the ModelOutputThunk returned from that request
+            context: if your validator utilizes a backend to generate a response, the context associated with that response
         """
         self._result = result
         self._reason = reason
         self._score = score
         self._thunk = thunk
+        self._context = context
 
     @property
     def reason(self) -> str | None:
@@ -77,6 +80,11 @@ class ValidationResult:
     def thunk(self) -> ModelOutputThunk | None:
         """The ModelOutputThunk associated with the validation func if an llm was used to generate the final result."""
         return self._thunk
+
+    @property
+    def context(self) -> Context | None:
+        """The context associated with validation if a backend was used to generate the final result."""
+        return self._context
 
     def as_bool(self) -> bool:
         """Return a boolean value based on the result."""
@@ -140,7 +148,7 @@ class Requirement(Component):
             # and its template gets populated with the output correctly.
             req_copy = copy(self)
             req_copy._output = last_output.value
-            llm_as_a_judge_result, _ = backend.generate_from_context(
+            llm_as_a_judge_result, val_ctx = backend.generate_from_context(
                 req_copy, ctx, format=format, model_options=model_options
             )
             await llm_as_a_judge_result.avalue()
@@ -149,6 +157,7 @@ class Requirement(Component):
                 result=self.output_to_bool(llm_as_a_judge_result),
                 reason=llm_as_a_judge_result.value,
                 thunk=llm_as_a_judge_result,
+                context=val_ctx,
             )
 
     def parts(self):
@@ -252,7 +261,7 @@ class ScorerRequirement(Requirement):
             # and its template gets populated with the output correctly.
             req_copy = copy(self)
             req_copy._output = last_output.value
-            llm_as_a_judge_result, _ = backend.generate_from_context(
+            llm_as_a_judge_result, val_ctx = backend.generate_from_context(
                 req_copy, ctx, format=format, model_options=model_options
             )
             await llm_as_a_judge_result.avalue()
@@ -263,6 +272,7 @@ class ScorerRequirement(Requirement):
                 reason=llm_as_a_judge_result.value,
                 score=1 if result else 0,
                 thunk=llm_as_a_judge_result,
+                context=val_ctx,
             )
 
 

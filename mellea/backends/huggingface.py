@@ -206,7 +206,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             mot = self._generate_from_context_alora(
                 action, ctx, _format=format, model_options=model_opts
             )
-            return mot, ctx.add(mot)
+            return mot, ctx.add(action).add(mot)
         else:
             mot = self._generate_from_context_standard(
                 action,
