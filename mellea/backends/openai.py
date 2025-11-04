@@ -20,11 +20,12 @@ from openai.types.completion import Completion
 import mellea.backends.model_ids as model_ids
 from mellea.backends import BaseModelSubclass
 from mellea.backends.adapters.adapter import (
+    AdapterMixin,
+    AdapterType,
     GraniteCommonAdapter,
     OpenAIAdapter,
     get_adapter_for_intrinsic,
 )
-from mellea.backends.aloras import AdapterMixin, Alora, AloraBackendMixin
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.tools import (
@@ -171,7 +172,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # Call once to create an async_client and populate the cache.
         _ = self._async_client
 
-        # ALoras that have been loaded for this model.
+        # Adapters can be made know to the backend (added) and
+        # loaded / active.
         self._added_adapters: dict[str, OpenAIAdapter] = {}
         self._loaded_adapters: dict[str, OpenAIAdapter] = {}
 
@@ -293,14 +295,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
-        mot = self.generate_from_chat_context(
+        return self.generate_from_chat_context(
             action,
             ctx,
             _format=format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
-        return mot, ctx.add(action).add(mot)
 
     def generate_from_chat_context(
         self,
@@ -311,86 +312,59 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk:
+    ) -> tuple[ModelOutputThunk, Context]:
         """Generates a new completion from the provided Context using this backend's `Formatter`."""
-        if issubclass(type(action), Requirement):
-            # The general rule is that we reroute to the alora if it exists.
-            reroute_to_alora = self.get_alora("constraint") is not None
-            # However, there are some exceptions:
-            if not self.default_to_constraint_checking_alora:
-                reroute_to_alora = False
+        # Requirements can be automatically rerouted to a requirement adapter.
+        if isinstance(action, Requirement):
+            # See docs/dev/requirement_aLoRA_rerouting.md
+            reroute_to_alora = self.default_to_constraint_checking_alora
+            adapter_name = "requirement_check"
+
+            if isinstance(action, ALoraRequirement):
+                reroute_to_alora = True
+                adapter_name = action.intrinsic_name
+                alora_action = action
+            else:
+                assert action.description is not None, (
+                    "must have a description when generating from a requirement"
+                )
+                alora_action = ALoraRequirement(action.description, adapter_name)
+
+            # Check if a requirement_check (or AloraRequirement specified) adapter exists.
+            alora_req_adapter = get_adapter_for_intrinsic(
+                adapter_name, [AdapterType.ALORA], self._added_adapters
+            )
+            if alora_req_adapter is None:
+                # Log a warning if using an AloraRequirement but no adapter fit.
+                if reroute_to_alora:
+                    FancyLogger.get_logger().warning(
+                        f"attempted to use an AloraRequirement but backend {self} doesn't have the specified adapter added {adapter_name}; defaulting to regular generation"
+                    )
+
             if issubclass(type(action), LLMaJRequirement):
                 reroute_to_alora = False
-            if issubclass(type(action), ALoraRequirement):
-                reroute_to_alora = True
+
             if reroute_to_alora:
-                return self._generate_from_chat_context_alora(
-                    action, ctx, _format=_format, model_options=model_options
+                # Keep the alora requirement handling separate for now.
+                mot = self._generate_from_intrinsic(
+                    alora_action, ctx, model_options=model_options
                 )
+                return mot, ctx.add(alora_action).add(mot)
 
         elif isinstance(action, Intrinsic):
-            return self._generate_from_intrinsic(
+            mot = self._generate_from_intrinsic(
                 action, ctx, model_options=model_options
             )
+            return mot, ctx.add(action).add(mot)
 
-        return self._generate_from_chat_context_standard(
+        mot = self._generate_from_chat_context_standard(
             action,
             ctx,
             _format=_format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
-
-    def _generate_from_chat_context_alora(
-        self,
-        action: Component | CBlock,
-        ctx: Context,
-        *,
-        _format: type[BaseModelSubclass]
-        | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
-        model_options: dict | None = None,
-    ) -> ModelOutputThunk:
-        match action:
-            case ALoraRequirement():
-                alora_for_this_request = (
-                    self.get_alora("constraint")
-                    if action.alora is None
-                    else action.alora
-                )
-            case _:
-                alora_for_this_request = self.get_alora("constraint")
-                assert alora_for_this_request is not None, (
-                    "This code block should not execute unless there is a 'constraint' alora loaded."
-                )
-
-        # Construct the linearized context. This is very similar to normal generation.
-        linearized_ctx = ctx.view_for_generation()
-        assert linearized_ctx is not None and len(linearized_ctx) > 1
-        msgs = self.formatter.to_chat_messages(linearized_ctx)
-        user_message, assistant_message = msgs[-2].content, msgs[-1].content
-        assert alora_for_this_request is not None
-        assert type(user_message) is str
-        assert type(assistant_message) is str
-        assert _format is None, "Structured outputs are not supported by ALoRAs."
-
-        model_opts = self._simplify_and_merge(model_options, is_chat_context=True)
-
-        alora_output = alora_for_this_request.generate_using_strings(
-            input=user_message,
-            response=assistant_message,
-            constraint=action.description,  # type: ignore
-            stream=model_opts.get(ModelOption.STREAM, False),
-        )
-
-        # The alora function doesn't set up all the fields.
-        alora_output._context = linearized_ctx
-        alora_output._action = action
-        alora_output._model_options = model_options
-
-        # TODO: Figure out what info we want to populate for aloras here.
-        alora_output._generate_log = GenerateLog()
-
-        return alora_output
+        return mot, ctx.add(action).add(mot)
 
     def _generate_from_intrinsic(
         self, action: Intrinsic, ctx: Context, *, model_options: dict | None = None
@@ -406,19 +380,29 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         linearized_context = ctx.view_for_generation()
         assert linearized_context is not None, (
             "Cannot generate from a non-linear context in a FormatterBackend."
-        )  # TODO: JAL. Log a warning if this is empty?...
+        )
+        if len(linearized_context) == 0:
+            FancyLogger.get_logger().warning(
+                f"generating with an intrinsic when the context is empty; this is typically incorrect: {action}"
+            )
 
         # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
 
         conversation: list[dict] = []
 
-        # TODO: JAL. Need to handle system prompts? Confirm what granite common does.
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([self.message_to_openai_message(m) for m in messages])
-        docs = self.messages_to_docs(messages)  # TODO: JAL. Improve docs interface.
+        docs = self.messages_to_docs(messages)
+
+        if model_opts.get(ModelOption.STREAM, None) is not None:
+            # Intrinsics don't support streaming because of their post-processing step.
+            FancyLogger.get_logger().warning(
+                "intrinsics cannot use streaming; removing model option"
+            )
+            del model_opts[ModelOption.STREAM]
 
         adapter = get_adapter_for_intrinsic(
             action.intrinsic_name, action.adapter_types, self._added_adapters
@@ -430,7 +414,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # TODO: Code below this point is mostly specific to RagIntrinsics (and granite_common).
         #       It should be refactored into a specific adapter.transform() function.
-        assert isinstance(adapter, GraniteCommonAdapter)
+        assert isinstance(adapter, GraniteCommonAdapter), (
+            "currently Mellea only supports GraniteCommonAdapters and Intrinsics"
+        )
 
         intrinsic_config = adapter.config
         if intrinsic_config is None:
@@ -460,26 +446,72 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         }
 
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
-        # TODO: JAL. Move this comment to hugging face.
-        # TODO: Handle caching here. Need to see if granite_common gives us any indication
-        #       of what messages have changed. We will also have to support caching at a
-        #       Component / message level.
 
-        # TODO: JAL. This needs to be made async with processing and post_processing.
-        # chat_response: Coroutine[
-        #     Any, Any, openai.AsyncStream[Completion] | Completion
-        # ] = self._async_client.chat.completions.create(
-        #     **rewritten.model_dump()
-        # )
         self.load_adapter(adapter.qualified_name)
-        chat_response = self._client.chat.completions.create(**rewritten.model_dump())
+        chat_response: Coroutine[Any, Any, ChatCompletion] = (
+            self._async_client.chat.completions.create(**rewritten.model_dump())
+        )
 
-        processed_chat_completion = result_processor.transform(chat_response, rewritten)
+        output = ModelOutputThunk(None)
+        output._context = linearized_context
+        output._action = action
+        output._model_options = model_opts
+        output._meta["granite_common_chat_response"] = rewritten
 
-        # TODO: JAL. Put into ModelOutputThunk, parse, etc...
-        mot = ModelOutputThunk(processed_chat_completion.choices[0].message.content)
-        mot._generate_log = GenerateLog()
-        return mot
+        # Add another step to the processing function.
+        async def granite_common_processing(
+            mot: ModelOutputThunk,
+            chunk: ChatCompletion,
+            rewritten: ChatCompletion,
+            result_processor: granite_common.IntrinsicsResultProcessor,
+        ):
+            res = result_processor.transform(chunk, rewritten)  # type: ignore
+
+            # processing expects a ChatCompletion object. Granite common differs slightly from this. Re-create the necessary object.
+            full_res = ChatCompletion(
+                id=chunk.id,
+                choices=[],
+                created=chunk.created,
+                model=chunk.model,
+                usage=chunk.usage,
+                object="chat.completion",
+            )
+
+            # Set the choices here so that pydantic validation doesn't error out.
+            full_res.choices = res.choices  # type: ignore
+
+            return await self.processing(mot, full_res)
+
+        output._process = functools.partial(
+            granite_common_processing,
+            rewritten=rewritten,  # type: ignore
+            result_processor=result_processor,
+        )
+
+        output._post_process = functools.partial(
+            self.post_processing,
+            tools={},
+            conversation=conversation,
+            thinking=None,
+            seed=model_opts.get(ModelOption.SEED, None),
+            _format=None,
+        )
+
+        try:
+            # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
+            # We can also support synchronous calls by adding a flag and changing this ._generate function.
+
+            # This function should always be called from a running event loop so we don't have to worry about
+            # scheduling the task to a specific event loop here.
+            output._generate = asyncio.create_task(
+                send_to_queue(chat_response, output._async_queue)
+            )
+            output._generate_type = GenerateType.ASYNC
+        except RuntimeError as e:
+            # Most likely cause is running this function without an event loop present
+            raise e
+
+        return output
 
     @staticmethod
     def message_to_openai_message(msg: Message):
@@ -518,12 +550,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     @staticmethod
     def messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]:
+        """Extracts the docs from a list of messages."""
         docs: list[Document] = []
         for message in msgs:
             if message._docs is not None:
                 docs.extend(message._docs)
 
-        # TODO: We can add doc_ids here for vllm.
+        # TODO: We can add doc_ids here for vllm if needed.
         json_docs: list[dict[str, str]] = []
         for doc in docs:
             json_doc = {"text": doc.text}
@@ -820,7 +853,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         return results
 
     def add_adapter(self, adapter: OpenAIAdapter):
-        # Gets the path / downloads files... ie does setup.
+        """Adds the given adapter to the backend. Must not have been added to a different backend."""
         if adapter.backend is not None:
             if adapter.backend is self:
                 FancyLogger.get_logger().warning(
@@ -832,22 +865,21 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     f"adapter {adapter.name} with type {adapter.adapter_type} has already been added to backend {adapter.backend}"
                 )
 
-        base_model_name = self._hf_model_id.split("/")[-1]
-        adapter.path = adapter.get_open_ai_path(
-            base_model_name, server_type=self._server_type
-        )
-
         if self._added_adapters.get(adapter.qualified_name, None) is not None:
             FancyLogger.get_logger().warning(
                 f"Client code attempted to add {adapter.name} with type {adapter.adapter_type} but it was already added to {self.__class__}. This attempt to add the adapter will be ignored."
             )
             return None
 
+        base_model_name = self._hf_model_id.split("/")[-1]
+        adapter.path = adapter.get_open_ai_path(
+            base_model_name, server_type=self._server_type
+        )
+        adapter.backend = self
         self._added_adapters[adapter.qualified_name] = adapter
 
     def load_adapter(self, adapter_qualified_name: str):
-        # Actually loads the adapter...
-
+        """Loads the given adapter for the backend. Must have previously been added."""
         adapter = self._added_adapters.get(adapter_qualified_name, None)
         if adapter is None:
             raise ValueError(
@@ -884,10 +916,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         self._loaded_adapters[adapter.qualified_name] = adapter
 
     def unload_adapter(self, adapter_qualified_name: str):
-        # Unloads the adapter...
-
+        """Unloads the given adapter from the backend."""
         # Check if the backend knows about this adapter.
-        adapter = self._added_adapters.get(adapter_qualified_name, None)
+        adapter = self._loaded_adapters.get(adapter_qualified_name, None)
         if adapter is None:
             FancyLogger.get_logger().info(
                 f"could not unload adapter {adapter_qualified_name} for backend {self}: adapter is not loaded"
@@ -921,80 +952,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     f"error unloading adapter {adapter_qualified_name}: {url}: status {response.status_code} {response.text}"
                 )
 
-        # Remove the alora from the list of loaded adapters.
+        # Remove the adapter from the list of loaded adapters.
         del self._loaded_adapters[adapter.qualified_name]
-
-    # TODO: JAL. Remove these functions.
-    # def add_alora(self, alora: "OpenAIAlora"):
-    #     """Loads an ALora for this backend.
-
-    #     Args:
-    #         alora (str): identifier for the ALora adapter
-    #     """
-    #     assert issubclass(alora.__class__, OpenAIAlora), (
-    #         f"cannot add an ALora of type {alora.__class__} to model; must inherit from {OpenAIAlora.__class__}"
-    #     )
-    #     assert alora._backend == self, "Cannot load an ALora into the wrong backend."
-
-    #     if self.get_alora(alora.name) is not None:
-    #         FancyLogger.get_logger().warning(
-    #             f"Client code attempted to add {alora.name} but {alora.name} was already added to {self.__class__}. The backend is refusing to do this, because ALora loading is not idempotent."
-    #         )
-    #         return None
-
-    #     assert _server_type(self._base_url) == _ServerType.LOCALHOST, (
-    #         "alora is supported only for locally running vllm instances"
-    #     )
-
-    #     # TODO: JAL. Make sure all hf model ids fit this way.
-    #     # base_model_name = self._hf_model_id.split("/")[1]
-    #     # TODO: JAL. change snapshot path to this...?
-    #     # snapshot_path = granite_common.intrinsics.util.obtain_lora(
-    #     #     alora.name, base_model_name, alora=True
-    #     # )
-    #     snapshot_path = f"/u/jakelorocco/eiger-user-folder/mellea-public/test/backends/test_openai_vllm/rag-intrinsics-lib/{alora.name}/alora/granite-3.3-8b-instruct"
-
-    #     # https://docs.vllm.ai/en/stable/features/lora.html#using-api-endpoints
-    #     # curl -X POST http://localhost:8000/v1/load_lora_adapter \
-    #     #     -H "Content-Type: application/json" \
-    #     #     -d '{
-    #     #     "lora_name": "sql_adapter",
-    #     #     "lora_path": "/path/to/sql-lora-adapter"
-    #     #     }'
-
-    #     url = f"{self._base_url}/load_lora_adapter"
-    #     response = requests.post(
-    #         url,
-    #         json={"lora_name": alora.name, "lora_path": snapshot_path},
-    #         headers={"Content-Type": "application/json"},
-    #     )
-
-    #     # TODO: Add a check here for the lora/alora already being loaded.
-    #     # TODO: See what happens if you try load the lora with the same name...
-    #     # TODO: If the alora isn't loaded, we should raise an error or at least not
-    #     #       add it to the list of aloras.
-    #     match response.status_code:
-    #         case 200:
-    #             FancyLogger.get_logger().info(
-    #                 f"{url}: status {response.status_code} {response.text}"
-    #             )
-    #             self._aloras[alora.name] = alora
-    #         case _:
-    #             FancyLogger.get_logger().error(
-    #                 f"{url}: status {response.status_code} {response.text}"
-    #             )
-
-    #     self._aloras[alora.name] = alora
-
-    #     return None
-
-    # def get_alora(self, alora_name: str) -> Alora | None:
-    #     """Returns the ALora by name, or None if that ALora isn't loaded."""
-    #     return self._aloras.get(alora_name)
-
-    # def get_aloras(self) -> list[Alora]:
-    #     """Returns a list of all loaded ALora adapters."""
-    #     return list(self._aloras.values())
 
     def apply_chat_template(self, chat: list[dict[str, str]]):
         """Apply the chat template for the model, if such a model is available (e.g., when it can deduce the huggingface model id)."""
@@ -1014,23 +973,3 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     )
 
         return self._tokenizer.apply_chat_template(chat, tokenize=False)
-
-
-class OpenAIAlora(Alora, abc.ABC):
-    """ALoras that work with OpenAI backend."""
-
-    def __init__(
-        self, name: str, path: str, generation_prompt: str, backend: OpenAIBackend
-    ):
-        """Initialize an ALora that should work with OpenAI backends that support ALoras.
-
-        Args:
-            name (str): An arbitrary name/label to assign to an ALora. This is irrelevant from the alora's (huggingface) model id.
-            path (str): A local path to ALora's weights or a Huggingface model_id to an ALora.
-            generation_prompt (str): A prompt used to "activate" the Lora. This string goes between the pre-activation context and the aLora generate call. This needs to be provided by the entity that trained the ALora.
-            backend (OpenAIBackend): Mained as a pointer to the backend to which this this ALora is attached.
-        """
-        super().__init__(name)
-        self.path = path
-        self._backend = backend
-        self._generation_prompt = generation_prompt

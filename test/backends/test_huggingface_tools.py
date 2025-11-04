@@ -4,7 +4,6 @@ from typing_extensions import Annotated
 
 import mellea.backends.model_ids as model_ids
 from mellea import MelleaSession
-from mellea.backends.aloras.huggingface.granite_aloras import add_granite_aloras
 from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.huggingface import LocalHFBackend

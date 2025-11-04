@@ -9,3 +9,4 @@ dependencies:
 variables:
   VLLM_USE_PRECOMPILED: 1 # need this flag for alora fork, installation fails otherwise
   VLLM_ALLOW_RUNTIME_LORA_UPDATING: True # allow loading (a)lora through POST http://localhost:8000/v1/load_lora_adapter
+  VLLM_DOWNLOAD_RAG_INTRINSICS: False # if True, download the rag-intrinsics-lib (https://huggingface.co/ibm-granite/rag-intrinsics-lib/tree/main); only required for remote vllm servers
