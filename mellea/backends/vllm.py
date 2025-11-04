@@ -81,6 +81,14 @@ class LocalVLLMBackend(FormatterBackend):
             formatter (Formatter): A mechanism for turning `stdlib` stuff into strings. Experimental Span-based models should use `mellea.backends.span.*` backends.
             model_options (Optional[dict]): Default model options.
         """
+        if os.environ.get("VLLM_USE_V1", -1) != "0":
+            FancyLogger.get_logger().error(
+                "Mellea LocalVLLMBackend doesn't support VLLM V1. Must `export VLLM_USE_V1=0`."
+            )
+            raise ValueError(
+                "Mellea LocalVLLMBackend doesn't support VLLM V1. Must `export VLLM_USE_V1=0`."
+            )
+
         formatter = (
             formatter if formatter is not None else TemplateFormatter(model_id=model_id)
         )
