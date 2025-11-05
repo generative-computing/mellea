@@ -2,7 +2,7 @@
 
 import inspect
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from copy import copy
 from typing import Any, overload
 
@@ -101,7 +101,7 @@ class Requirement(Component):
     def __init__(
         self,
         description: str | None = None,
-        validation_fn: Callable[[Context], ValidationResult] | None = None,
+        validation_fn: Callable[[Context], Awaitable[ValidationResult]] | None = None,
         *,
         output_to_bool: Callable[[CBlock | str], bool] | None = default_output_to_bool,
         check_only: bool = False,
@@ -135,7 +135,7 @@ class Requirement(Component):
         """Chooses the appropriate validation strategy and applies that strategy."""
         if self.validation_fn is not None:
             # Python validation strategy
-            return self.validation_fn(ctx)
+            return await self.validation_fn(ctx)
         else:
             # LLMaJ validation strategy. This includes ALora because the backend generate call will appropriately dispatch.
             assert self.output_to_bool is not None
@@ -206,7 +206,7 @@ class ScorerRequirement(Requirement):
     def __init__(
         self,
         description: str | None = None,
-        validation_fn: Callable[[Context], ValidationResult] | None = None,
+        validation_fn: Callable[[Context], Awaitable[ValidationResult]] | None = None,
         preference_ordering: str = "max",
         *,
         output_to_bool: Callable[[CBlock | str], bool] | None = default_output_to_bool,
@@ -243,7 +243,7 @@ class ScorerRequirement(Requirement):
         """Chooses the appropriate validation strategy and applies that strategy. Asserts that the returned ValidationResult has a valid score."""
         if self.validation_fn is not None:
             # Python validation strategy
-            validation_result = self.validation_fn(ctx)
+            validation_result = await self.validation_fn(ctx)
             assert validation_result._score is not None, (
                 "ScorerRequirement must have a score that is not None"
             )
@@ -302,18 +302,18 @@ def check(*args, **kwargs) -> Requirement:
 @overload
 def simple_validate(
     fn: Callable[[str], tuple[bool, str]],
-) -> Callable[[Context], ValidationResult]: ...
+) -> Callable[[Context], Awaitable[ValidationResult]]: ...
 
 
 @overload
 def simple_validate(
     fn: Callable[[str], bool], *, reason: str | None = None
-) -> Callable[[Context], ValidationResult]: ...
+) -> Callable[[Context], Awaitable[ValidationResult]]: ...
 
 
 def simple_validate(
     fn: Callable[[str], Any], *, reason: str | None = None
-) -> Callable[[Context], ValidationResult]:
+) -> Callable[[Context], Awaitable[ValidationResult]]:
     """Syntactic sugar for writing validation functions that only operate over the last output from the model (interpreted as a string).
 
     This is useful when your validation logic only depends upon the most recent model output. For example:
@@ -331,7 +331,7 @@ def simple_validate(
         reason: only used if the provided function returns a bool; if the validation function fails, a static reason for that failure to give to the llm when repairing
     """
 
-    def validate(ctx: Context) -> ValidationResult:
+    async def validate(ctx: Context) -> ValidationResult:
         o = ctx.last_output()
         if o is None or o.value is None:
             FancyLogger.get_logger().warn(

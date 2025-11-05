@@ -446,8 +446,8 @@ class MelleaSession:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
         return mfuncs.validate(
             reqs=reqs,
-            context=self.ctx,
             backend=self.backend,
+            context=self.ctx if output is None else None,
             output=output,
             format=format,
             model_options=model_options,
@@ -730,7 +730,7 @@ class MelleaSession:
         """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
         return await mfuncs.avalidate(
             reqs=reqs,
-            context=self.ctx,
+            context=self.ctx if output is None else None,
             backend=self.backend,
             output=output,
             format=format,
