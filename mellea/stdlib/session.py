@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextvars
+import inspect
 from copy import copy
 from typing import Any, Literal, overload
 
@@ -803,6 +804,12 @@ class MelleaSession:
         )
         self.ctx = context
         return result
+
+    @classmethod
+    def powerup(cls, powerup_cls: type):
+        """Appends methods in a class object `powerup_cls` to MelleaSession."""
+        for name, fn in inspect.getmembers(powerup_cls, predicate=inspect.isfunction):
+            setattr(cls, name, fn)
 
     # ###############################
     #  Convenience functions
