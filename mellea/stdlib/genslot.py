@@ -187,7 +187,7 @@ class GenerativeSlot(Component, Generic[P, R]):
         functools.update_wrapper(self, func)
 
         # Set when calling the decorated func.
-        self.precondition_requiremetns: list[Requirement] = []
+        self.precondition_requirements: list[Requirement] = []
         self.requirements: list[Requirement] = []
 
     @abc.abstractmethod
@@ -510,7 +510,7 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
 
         slot_copy = deepcopy(self)
         slot_copy.requirements = extracted.requirements
-        slot_copy.precondition_requiremetns = extracted.precondition_requirements
+        slot_copy.precondition_requirements = extracted.precondition_requirements
         # TODO: JAL; need to figure out where / how reqs work; if we want to keep as a part of the object,
         # apply them here after the copy has happened...
         # need to change the template; add to docstring using postconditions:
