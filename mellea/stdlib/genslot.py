@@ -5,7 +5,7 @@ import functools
 import inspect
 from collections.abc import Awaitable, Callable, Coroutine
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import (
     Any,
     Generic,
@@ -156,21 +156,38 @@ class Function:
 
 
 @dataclass
-class ExtractedKwargs:
-    """Used to extract the mellea args and original function args."""
+class ExtractedArgs:
+    """Used to extract the mellea args and original function args. See @generative decorator for additional notes on these fields.
 
-    f_kwargs: dict
-    session: MelleaSession | None = None
+    These args must match those allowed by any overload of GenerativeSlot.__call__.
+    """
+
+    f_args: tuple[Any, ...]
+    """*args from the original function, used to detect incorrectly passed args to generative slots"""
+
+    f_kwargs: dict[str, Any]
+    """**kwargs from the original function"""
+
+    m: MelleaSession | None = None
     context: Context | None = None
     backend: Backend | None = None
     model_options: dict | None = None
-    precondition_requirements: list[Requirement | str] | None = None
-    requirements: list[Requirement | str] | None = None
     strategy: SamplingStrategy | None = None
+
+    precondition_requirements: list[Requirement | str] | None = None
+    """requirements used to check the input"""
+
+    requirements: list[Requirement | str] | None = None
+    """requirements used to check the output"""
 
     def __init__(self):
         """Used to extract the mellea args and original function args."""
+        self.f_args = tuple()
         self.f_kwargs = {}
+
+
+_disallowed_param_names = [field.name for field in fields(ExtractedArgs())]
+"""A list of parameter names used by Mellea. Cannot use these in functions decorated with @generative."""
 
 
 class GenerativeSlot(Component, Generic[P, R]):
@@ -181,7 +198,21 @@ class GenerativeSlot(Component, Generic[P, R]):
 
         Args:
             func: A callable function
+
+        Raises:
+            ValueError: if the decorated function has a parameter name used by generative slots
         """
+        sig = inspect.signature(func)
+        problematic_param_names: list[str] = []
+        for param in sig.parameters.keys():
+            if param in _disallowed_param_names:
+                problematic_param_names.append(param)
+
+        if len(problematic_param_names):
+            raise ValueError(
+                f"cannot create a generative slot with disallowed parameter names: {problematic_param_names}"
+            )
+
         self._function = Function(func)
         self._arguments: list[Argument] = []
         functools.update_wrapper(self, func)
@@ -192,164 +223,83 @@ class GenerativeSlot(Component, Generic[P, R]):
 
     @abc.abstractmethod
     def __call__(self, *args, **kwargs) -> tuple[R, Context] | R:
-        """Call the generative slot.
-
-        Args:
-            m: MelleaSession: A mellea session (optional; must set context and backend if None)
-            context: the Context object (optional; session must be set if None)
-            backend: the backend used for generation (optional: session must be set if None)
-            model_options: Model options to pass to the backend.
-            *args: Additional args to be passed to the func.
-            **kwargs: Additional Kwargs to be passed to the func.
-
-        Returns:
-            R: an object with the original return type of the function
-        """
+        """Call the generative slot. See subclasses for more information."""
         ...
 
     @staticmethod
-    def test_extract_args_and_kwargs(*args, **kwargs) -> ExtractedKwargs:
+    def extract_args_and_kwargs(*args, **kwargs) -> ExtractedArgs:
+        """Takes a mix of args and kwargs for both the generative slot and the original function and extracts them. Ensures the original function's args are all kwargs.
+
+        Returns:
+            ExtractedArgs: a dataclass of the required args for mellea and the original function.
+            Either session or (backend, context) will be non-None.
+
+        Raises:
+            TypeError: if any of the original function's parameters were passed as positional args
+        """
+
         def _session_extract_args_and_kwargs(
-            session: MelleaSession | None = None,
-            context: Context | None = None,
-            backend: Backend | None = None,
+            m: MelleaSession,
             precondition_requirements: list[Requirement | str] | None = None,
             requirements: list[Requirement | str] | None = None,
             strategy: SamplingStrategy | None = None,
             model_options: dict | None = None,
+            *args,
             **kwargs,
         ):
-            extracted = ExtractedKwargs()
-            extracted.session = session
+            """Helper function for extracting args. Used when a session is passed."""
+            extracted = ExtractedArgs()
+            extracted.m = m
+            extracted.precondition_requirements = precondition_requirements
+            extracted.requirements = requirements
+            extracted.strategy = strategy
+            extracted.model_options = model_options
+            extracted.f_args = args
+            extracted.f_kwargs = kwargs
+            return extracted
+
+        def _context_backend_extract_args_and_kwargs(
+            context: Context,
+            backend: Backend,
+            precondition_requirements: list[Requirement | str] | None = None,
+            requirements: list[Requirement | str] | None = None,
+            strategy: SamplingStrategy | None = None,
+            model_options: dict | None = None,
+            *args,
+            **kwargs,
+        ):
+            """Helper function for extracting args. Used when a context and a backend are passed."""
+            extracted = ExtractedArgs()
             extracted.context = context
             extracted.backend = backend
             extracted.precondition_requirements = precondition_requirements
             extracted.requirements = requirements
             extracted.strategy = strategy
             extracted.model_options = model_options
+            extracted.f_args = args
             extracted.f_kwargs = kwargs
             return extracted
 
-        # Determine which overload was used if args are passed in.
+        # Determine which overload was used:
+        # - if there's args, the first arg must either be a `MelleaSession` or a `Context`
+        # - otherwise, just check the kwargs for a "m" that is type `MelleaSession`
+        using_session_overload = False
         if len(args) > 0:
-            # TODO: JAL. go back to two funcs to do this. Makes arg parsing easier here? or only check if there's a session, else everything else is good?
-            # need to make first arg of the array session if there's args and no session kwarg?...
-            # need two funcs, but otherwise all the other args will be offset incorrectly? maybe we can handle that here as well.
-            if isinstance(args[0], MelleaSession):
-                ...
+            possible_session = args[0]
+        else:
+            possible_session = kwargs.get("m", None)
+        if isinstance(possible_session, MelleaSession):
+            using_session_overload = True
 
-    @staticmethod
-    def extract_args_and_kwargs(*args, **kwargs) -> ExtractedKwargs:
-        """Takes a mix of args and kwargs for both the generative slot and the original function and extracts them.
+        # Call the appropriate function and let python handle the arg/kwarg extraction.
+        if using_session_overload:
+            extracted = _session_extract_args_and_kwargs(*args, **kwargs)
+        else:
+            extracted = _context_backend_extract_args_and_kwargs(*args, **kwargs)
 
-        Returns:
-            ExtractedKwargs: a dataclass of the required args for mellea and the original function.
-            Either session or (backend, context) will be non-None.
-
-        Raises:
-            TODO: JAL
-        """
-        # TODO: JAL write tests for this function...
-        # Possible args for the generative slot.
-        extracted = ExtractedKwargs()
-
-        # Args can only have Mellea args. If the Mellea args get more complicated /
-        # have duplicate types, use list indices rather than a match statement.
-        num_args = len(args)
-        cur_arg = 0
-
-        # First and second args will differ depending on the overload. Check for session vs (backend, context).
-        # context: Context,
-        # backend: Backend,
-        # precondition_requirements: list[Requirement | str] | None = None,
-        # requirements: list[Requirement | str] | None = None,
-        # strategy: SamplingStrategy | None = None,
-        # model_options: dict | None = None,
-        if num_args > 0:
-            if isinstance(args[cur_arg], MelleaSession):
-                extracted.session = args[cur_arg]
-            elif isinstance(args[cur_arg], Context):
-                extracted.session = args[cur_arg]
-
-                if num_args > 1:
-                    if ...:
-                        ...
-            else:
-                raise ValueError(
-                    f"incorrect arg passed to generative slot function: {args[cur_arg]}"
-                )
-
-        for i, arg in enumerate(args):
-            match arg:
-                case MelleaSession():
-                    extracted.session = arg
-                case Context():
-                    extracted.context = arg
-                case Backend():
-                    extracted.backend = arg
-                case dict():
-                    extracted.model_options = arg
-                case SamplingStrategy():
-                    extracted.strategy = arg
-                case list():
-                    extracted.requirements = arg
-
-        # TODO: JAL; make sure model opts doesn't conflict with f_kwargs here...
-
-        T = TypeVar("T")
-
-        def _get_val_or_err(name: str, var: T | None, new_val: T) -> T:
-            """Returns the new_value if the original var is None, else raises a ValueError."""
-            if var is None:
-                return new_val
-            else:
-                raise ValueError(
-                    f"passed in multiple values of {name} to generative slot: {var}, {new_val}"
-                )
-
-        # Kwargs can contain
-        #   - some / all of the Mellea args
-        #   - all of the function args (P.kwargs); the syntax prevents passing a P.arg to the genslot
-        for key, val in kwargs.items():
-            match key:
-                case "m":
-                    extracted.session = _get_val_or_err("m", extracted.session, val)
-                case "context":
-                    extracted.context = _get_val_or_err(
-                        "context", extracted.context, val
-                    )
-                case "backend":
-                    extracted.backend = _get_val_or_err(
-                        "backend", extracted.backend, val
-                    )
-                case "model_options":
-                    extracted.model_options = _get_val_or_err(
-                        "model_options", extracted.model_options, val
-                    )
-                case "strategy":
-                    extracted.strategy = _get_val_or_err(
-                        "strategy", extracted.strategy, val
-                    )
-                case "requirements":
-                    extracted.requirements = _get_val_or_err(
-                        "requirements", extracted.requirements, val
-                    )
-                case "precondition_requirements":
-                    extracted.precondition_requirements = _get_val_or_err(
-                        "precondition_requirements",
-                        extracted.precondition_requirements,
-                        val,
-                    )
-                case _:
-                    extracted.f_kwargs[key] = val
-
-        # Need to check that either session is set or both backend and context are set;
-        # model_options can be None.
-        if extracted.session is None and (
-            extracted.backend is None or extracted.context is None
-        ):
-            raise ValueError(
-                f"need to pass in a session or a (backend and context) to generative slot; got session({extracted.session}), backend({extracted.backend}), context({extracted.context})"
+        if len(extracted.f_args) > 0:
+            raise TypeError(
+                "generative slots do not accept positional args from the decorated function; use keyword args instead"
             )
 
         return extracted
@@ -401,8 +351,8 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
         """Call the generative slot.
 
         Args:
-            m: MelleaSession: A mellea session (optional; must set context and backend if None)
-            context: the Context object (optional; session must be set if None)
+            m: MelleaSession: A mellea session (optional: must set context and backend if None)
+            context: the Context object (optional: session must be set if None)
             backend: the backend used for generation (optional: session must be set if None)
             precondition_requirements: A list of requirements that the genslot inputs are validated against; raises an err if not met.
             requirements: A list of requirements that the genslot output can be validated against.
@@ -413,6 +363,9 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
 
         Returns:
             R: an object with the original return type of the function
+
+        Raises:
+            TypeError: if any of the original function's parameters were passed as positional args
         """
         extracted = self.extract_args_and_kwargs(*args, **kwargs)
 
@@ -426,8 +379,8 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
         response_model = create_response_format(self._function._func)
 
         response, context = None, None
-        if extracted.session is not None:
-            response = extracted.session.act(
+        if extracted.m is not None:
+            response = extracted.m.act(
                 slot_copy,
                 requirements=extracted.requirements,
                 strategy=extracted.strategy,
@@ -490,8 +443,8 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
         """Call the async generative slot.
 
         Args:
-            m: MelleaSession: A mellea session (optional; must set context and backend if None)
-            context: the Context object (optional; session must be set if None)
+            m: MelleaSession: A mellea session (optional: must set context and backend if None)
+            context: the Context object (optional: session must be set if None)
             backend: the backend used for generation (optional: session must be set if None)
             precondition_requirements: A list of requirements that the genslot inputs are validated against; raises an err if not met.
             requirements: A list of requirements that the genslot output can be validated against.
@@ -504,7 +457,7 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
             Coroutine[Any, Any, R]: a coroutine that returns an object with the original return type of the function
 
         Raises:
-            # TODO: JAL. Change here and for all other defs; should be precondition requirements err and pydantic model validation fails
+            TypeError: if any of the original function's parameters were passed as positional args
         """
         extracted = self.extract_args_and_kwargs(*args, **kwargs)
 
@@ -530,8 +483,8 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
             response, context = None, None
 
             # Use the async act func so that control flow doesn't get stuck here in async event loops.
-            if extracted.session is not None:
-                response = await extracted.session.aact(
+            if extracted.m is not None:
+                response = await extracted.m.aact(
                     slot_copy,
                     requirements=extracted.requirements,
                     strategy=extracted.strategy,
@@ -582,7 +535,11 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
     that function's behavior. The output is guaranteed to match the return type
     annotation using structured outputs and automatic validation.
 
-    Note: Works with async functions as well.
+    Notes:
+    - Works with async functions as well.
+    - Must pass all parameters for the original function as keyword args.
+    - Most python type-hinters will not show the default values but will correctly infer them;
+    this means that you can set default values in the decorated function and the only necessary values will be a session or a (context, backend).
 
     Tip: Write the function and docstring in the most Pythonic way possible, not
     like a prompt. This ensures the function is well-documented, easily understood,
@@ -597,7 +554,9 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         original function's signature and docstring.
 
     Raises:
-        ValidationError: if the generated output cannot be parsed into the expected return type. Typically happens when the token limit for the generated output results in invalid json.
+        ValueError: (raised by @generative) if the decorated function has a parameter name used by generative slots
+        ValidationError: (raised when calling the generative slot) if the generated output cannot be parsed into the expected return type. Typically happens when the token limit for the generated output results in invalid json.
+        TypeError: (raised when calling the generative slot) if any of the original function's parameters were passed as positional args
 
     Examples:
         >>> from mellea import generative, start_session
@@ -607,7 +566,7 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         ...     '''Generate a concise summary of the input text.'''
         ...     ...
         >>>
-        >>> summary = summarize_text(session, "Long text...", max_words=30)
+        >>> summary = summarize_text(session, text="Long text...", max_words=30)
 
         >>> from typing import List
         >>> from dataclasses import dataclass
@@ -631,7 +590,7 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         ...     '''
         ...     ...
         >>>
-        >>> tasks = await create_project_tasks(session, "Build a web app", 5)
+        >>> tasks = await create_project_tasks(session, project_desc="Build a web app", count=5)
 
         >>> @generative
         ... def analyze_code_quality(code: str) -> Dict[str, Any]:
@@ -651,7 +610,7 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         >>>
         >>> analysis = analyze_code_quality(
         ...     session,
-        ...     "def factorial(n): return n * factorial(n-1)",
+        ...     code="def factorial(n): return n * factorial(n-1)",
         ...     model_options={"temperature": 0.3}
         ... )
 
@@ -673,7 +632,7 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         ...     '''
         ...     ...
         >>>
-        >>> reasoning = generate_chain_of_thought(session, "How to optimize a slow database query?")
+        >>> reasoning = generate_chain_of_thought(session, problem="How to optimize a slow database query?")
     """
     # Grab and remove the func if it exists in kwargs. Otherwise, it's the only arg.
     if inspect.iscoroutinefunction(func):

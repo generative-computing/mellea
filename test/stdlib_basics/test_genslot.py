@@ -2,9 +2,24 @@ import asyncio
 import pytest
 from typing import Literal
 from mellea import generative, start_session
-from mellea.stdlib.base import Context
+from mellea.backends.model_ids import META_LLAMA_3_2_1B
+from mellea.backends.ollama import OllamaModelBackend
+from mellea.stdlib.base import ChatContext, Context
 from mellea.stdlib.genslot import AsyncGenerativeSlot, GenerativeSlot, SyncGenerativeSlot
+from mellea.stdlib.sampling.base import RejectionSamplingStrategy
+from mellea.stdlib.session import MelleaSession
 
+@pytest.fixture(scope="module")
+def backend(gh_run: int):
+    """Shared backend."""
+    if gh_run == 1:
+        return OllamaModelBackend(
+            model_id=META_LLAMA_3_2_1B.ollama_name,  # type: ignore
+        )
+    else:
+        return OllamaModelBackend(
+            model_id="granite3.3:8b",
+        )
 
 @generative
 def classify_sentiment(text: str) -> Literal["positive", "negative"]: ...
@@ -72,18 +87,85 @@ async def test_async_gen_slot(session):
     assert isinstance(c3, Context)
     assert len(results) == 2
 
-def test_duplicate_args(session):
-    with pytest.raises(ValueError, match="passed in multiple values"):
-        _ = write_me_an_email(session.ctx, backend=session.backend, context=session.ctx)  # type: ignore
+@pytest.mark.parametrize(
+    "arg_choices,kwarg_choices,errs",
+    [
+        pytest.param(["m"], ["func1", "func2", "func3"], False, id="session"),
+        pytest.param(["context"], ["backend"], False, id="context and backend"),
+        pytest.param(["backend"], ["func1", "func2", "func3"], True, id="backend without context"),
+        pytest.param(["m"], ["m"], True, id="duplicate arg and kwarg"),
+        pytest.param(["m", "precondition_requirements", "requirements", "strategy", "model_options", "func1", "func2", "func3"], [], True, id="original func args as positional args"),
+        pytest.param([], ["m", "func1", "func2", "func3"], False, id="session and func as kwargs"),
+        pytest.param([], ["m", "precondition_requirements", "requirements", "strategy", "model_options", "func1", "func2", "func3"], False, id="all kwargs"),
+        pytest.param([], ["func1", "m", "func2", "requirements", "func3"], False, id="interspersed kwargs"),
+        pytest.param([], [], True, id="missing required args")
+    ]
+)
+def test_arg_extraction(backend, arg_choices, kwarg_choices, errs):
+    """Tests the internal extract_args_and_kwargs function.
 
-def test_extra_args(session):
-    with pytest.raises(TypeError, match="got an unexpected keyword argument"):
-        _ = write_me_an_email(m=session, random_param="random_param")  # type: ignore
+    This function has to test a large number of input combinations; as a result,
+    it uses a parameterization scheme. It takes a list and a dict. Each contains
+    strings corresponding to the possible args/kwargs below. Order matters in the list.
+    See the param id for an idea of what the test does.
 
-def test_without_required_args():
-    with pytest.raises(ValueError, match="need to pass in a session or a"):
-        _ = write_me_an_email()  # type: ignore
+    Python should catch most of these issues itself. We have to manually raise an exception for
+    the arguments of the original function being positional.
+    """
 
+    # List of all needed values.
+    backend = backend
+    ctx = ChatContext()
+    session = MelleaSession(backend, ctx)
+    precondition_requirements = ["precondition"]
+    requirements = None
+    strategy = RejectionSamplingStrategy()
+    model_options = {"test": 1}
+    func1 = 1
+    func2 = True
+    func3 = "func3"
+
+    # Lookup table by name.
+    vals = {
+        "m": session,
+        "backend": backend,
+        "context": ctx,
+        "precondition_requirements": precondition_requirements,
+        "requirements": requirements,
+        "strategy": strategy,
+        "model_options": model_options,
+        "func1": func1,
+        "func2": func2,
+        "func3": func3,
+    }
+
+    args = []
+    for arg in arg_choices:
+        args.append(vals[arg])
+
+    kwargs = {}
+    for kwarg in kwarg_choices:
+        kwargs[kwarg] = vals[kwarg]
+
+    # Run the extraction and check for the (un-)expected exception.
+    found_err = False
+    err = None
+    try:
+        GenerativeSlot.extract_args_and_kwargs(*args, **kwargs)
+    except Exception as e:
+        found_err = True
+        err = e
+    
+    if errs:
+        assert found_err, "expected an exception and got none"
+    else:
+        assert not found_err, f"got unexpected err: {err}"
+
+def test_disallowed_parameter_names():
+    with pytest.raises(ValueError):
+        @generative
+        def test(backend):
+            ...
 
 if __name__ == "__main__":
     pytest.main([__file__])
