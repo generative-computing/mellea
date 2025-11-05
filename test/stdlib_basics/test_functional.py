@@ -3,7 +3,7 @@ import pytest
 from mellea.backends.types import ModelOption
 from mellea.stdlib.base import ModelOutputThunk
 from mellea.stdlib.chat import Message
-from mellea.stdlib.funcs import instruct, aact, avalidate, ainstruct
+from mellea.stdlib.functional import instruct, aact, avalidate, ainstruct
 from mellea.stdlib.requirement import req
 from mellea.stdlib.session import start_session
 

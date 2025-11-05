@@ -8,7 +8,7 @@ from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
 
-import mellea.stdlib.funcs as mfuncs
+import mellea.stdlib.functional as mfuncs
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.model_ids import (
     IBM_GRANITE_3_3_8B,
