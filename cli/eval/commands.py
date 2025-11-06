@@ -9,10 +9,12 @@ def eval_run(
     ),
     backend: str = typer.Option("ollama", "--backend", "-b", help="Generation backend"),
     model: str = typer.Option(None, "--model", help="Generation model name"),
+    max_gen_tokens: int = typer.Option(256, "--max-gen-tokens", help="Max tokens to generate for responses"),
     judge_backend: str = typer.Option(
         None, "--judge-backend", "-jb", help="Judge backend"
     ),
     judge_model: str = typer.Option(None, "--judge-model", help="Judge model name"),
+    max_judge_tokens: int = typer.Option(256, "--max-judge-tokens", help="Max tokens for the judge model's judgement."),
     output_path: str = typer.Option(
         "eval_results", "--output-path", "-o", help="Output path for results"
     ),
@@ -28,8 +30,10 @@ def eval_run(
         test_files=test_files,
         backend=backend,
         model=model,
+        max_gen_tokens=max_gen_tokens,
         judge_backend=judge_backend,
         judge_model=judge_model,
+        max_judge_tokens=max_judge_tokens,
         output_path=output_path,
         output_format=output_format,
         verbose=verbose,

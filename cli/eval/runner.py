@@ -5,13 +5,11 @@ from typing import List
 
 import mellea
 from mellea.stdlib.base import ModelOutputThunk
-from mellea.stdlib.requirement import Requirement
 from mellea.stdlib.test_based_eval import TestBasedEval
 from mellea.backends.types import ModelOption
 
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
-from rich.table import Table
 
 console = Console()
 
@@ -25,7 +23,7 @@ class InputEvalResult:
         model_output: str,
         validation_passed: bool,
         score: int,
-        validation_reason: str,
+        validation_reason: str, # add input_id
     ):
         self.input_text = input_text
         self.model_output = model_output
@@ -52,15 +50,15 @@ class TestEvalResult:
 
     def to_dict(self):
         return {
-            "conversation_id": self.test_eval.conversation_id,
-            "category": self.test_eval.category,
+            "test_id": self.test_eval.test_id,
+            "source": self.test_eval.source,
+            "name": self.test_eval.name,
+            "instructions": self.test_eval.instructions,
             "input_results": [r.to_dict() for r in self.input_results],
             "expected_targets": self.test_eval.targets,
-            "unit_test_instructions": self.test_eval.unit_test_instructions,
             "passed": self.passed_count,
             "total_count": self.total_count,
             "pass_rate": self.pass_rate,
-            "metadata": self.test_eval.metadata,
         }
 
     @property
@@ -76,7 +74,7 @@ class TestEvalResult:
         return self.passed_count / self.total_count if self.total_count > 0 else 0.0
 
 
-def create_session(backend: str, model: str | None) -> mellea.MelleaSession:
+def create_session(backend: str, model: str | None, max_tokens: int | None) -> mellea.MelleaSession:
     """Create a mellea session with the specified backend and  model."""
 
     model_id = None
@@ -98,35 +96,35 @@ def create_session(backend: str, model: str | None) -> mellea.MelleaSession:
             from mellea.backends.ollama import OllamaModelBackend
 
             backend_instance = OllamaModelBackend(
-                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: 256}
+                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
             )
 
         elif backend_lower == "openai":
             from mellea.backends.openai import OpenAIBackend
 
             backend_instance = OpenAIBackend(
-                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: 256}
+                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
             )
 
         elif backend_lower in ["hf", "huggingface"]:
             from mellea.backends.huggingface import LocalHFBackend
 
             backend_instance = LocalHFBackend(
-                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: 256}
+                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
             )
 
         elif backend_lower == "watsonx":
             from mellea.backends.watsonx import WatsonxAIBackend
 
             backend_instance = WatsonxAIBackend(
-                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: 256}
+                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
             )
 
         elif backend_lower == "litellm":
             from mellea.backends.litellm import LiteLLMBackend
 
             backend_instance = LiteLLMBackend(
-                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: 256}
+                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
             )
 
         else:
@@ -139,7 +137,7 @@ def create_session(backend: str, model: str | None) -> mellea.MelleaSession:
 
         session = mellea.MelleaSession(
             backend=backend_instance, ctx=SimpleContext()
-        )  # need to reset to SimpleContext? print what is being judged by the judge (input)
+        ) 
         return session
 
     except Exception as e:
@@ -153,8 +151,10 @@ def run_evaluations(
     test_files: List[str],
     backend: str,
     model: str | None,
+    max_gen_tokens: int | None,
     judge_backend: str | None,
     judge_model: str | None,
+    max_judge_tokens: int | None,
     output_path: str,
     output_format: str,
     verbose: bool,
@@ -176,16 +176,17 @@ def run_evaluations(
         return
 
     console.print(f"Total test evals to run: {len(all_test_evals)}")
+    total_inputs = sum(len(te.inputs) for te in all_test_evals)
+    console.print(f"Total inputs to run: {total_inputs}")
 
     console.print(f"Generation model: {model}")
     console.print(f"Judge model: {judge_model}")
 
-    m = create_session(backend=backend, model=model)
-    judge_session = create_session(backend=judge_backend, model=judge_model)
+    m = create_session(backend=backend, model=model, max_tokens=max_gen_tokens)
+    judge_session = create_session(backend=judge_backend, model=judge_model, max_tokens=max_judge_tokens)
 
     all_results = []
 
-    # some visuals on progress with rich, we can take out / modify
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -203,7 +204,7 @@ def run_evaluations(
                 )
                 all_results.append(result)
             except Exception as e:
-                console.print(f"Error {e} on test {test_eval.conversation_id}")
+                console.print(f"Error {e} on test {test_eval.test_id}")
                 if not continue_on_error:
                     raise
 
@@ -229,23 +230,20 @@ def execute_test_eval(
     input_results = []
 
     # for all inputs, generate responses with generator
-    for input_text in test_eval.inputs:
+    for idx, input_text in enumerate(test_eval.inputs):
         result: ModelOutputThunk = generation_session.act(input_text)
         model_output = str(result)
-        console.print(model_output)
 
         judge_session.ctx = judge_session.ctx.add(result)
 
-        requirement = Requirement(
-            description=create_judge_requirement(test_eval, input_text, model_output)
-        )
-        validation_results = judge_session.validate(requirement)
-        validation_result = validation_results[0]
+        targets_for_input = (test_eval.targets[idx] if idx < len(test_eval.targets) else [])
 
-        judge_output = validation_result.reason or ""
+        # query the judge
+        judge_prompt = create_judge_requirement(test_eval, input_text, model_output, targets_for_input)
+        judge_output_thunk = judge_session.act(judge_prompt)
+        judge_output = str(judge_output_thunk)
         score, justification = parse_judge_output(judge_output)
-
-        passed = score == 1 if score is not None else validation_result.as_bool()
+        passed = score == 1 if score is not None else False
 
         input_result = InputEvalResult(
             input_text=input_text,
@@ -256,7 +254,7 @@ def execute_test_eval(
         )
         input_results.append(input_result)
 
-        # reset both generator and judge -- might not be necessary since SimpleContext doesn't retain history
+        # reset both generator and judge
         generation_session.reset()
         judge_session.reset()
 
@@ -265,24 +263,24 @@ def execute_test_eval(
 
 
 def create_judge_requirement(
-    test_eval: TestBasedEval, input_text: str, model_output: str
+    test_eval: TestBasedEval, input_text: str, model_output: str, targets_for_input: list[str]
 ):
     """Create judge requirement description"""
 
-    if len(test_eval.targets) == 0:  # no reference
-        target_text = "N/A"  # another way to handle this?
-    elif len(test_eval.targets) == 1:
-        target_text = test_eval.targets[0]
-    else:  # enumerate the multiple targets
+    if len(targets_for_input) == 0:  # no reference
+        target_text = "N/A"
+    elif len(targets_for_input) == 1:
+        target_text = targets_for_input[0]
+    else:  # enumerate when there are multiple targets
         target_text = "\n".join(
-            [f"{i}. {target}" for i, target in enumerate(test_eval.targets, 1)]
+            [f"{i}. {target}" for i, target in enumerate(targets_for_input, 1)]
         )
 
     judge_prompt = test_eval.judge_prompt.format(
         input=input_text,
         prediction=model_output,
         target=target_text,
-        guidelines=test_eval.unit_test_instructions,
+        guidelines=test_eval.instructions,
     )
 
     return judge_prompt
@@ -324,7 +322,7 @@ def save_results(results: List[TestEvalResult], output_path: str, output_format:
                 f.write(json.dumps(result.to_dict()) + "\n")
     else:  # json
         summary = {
-            "total_unit_tests": len(results),
+            "total_tests": len(results),
             "total_inputs": total_inputs,
             "passed_inputs": passed_inputs,
             "failed_inputs": total_inputs - passed_inputs,
@@ -348,11 +346,11 @@ def summary_stats(results: List[TestEvalResult]):
 
     console.print(f"Total number of inputs across tests: {total_inputs}")
     console.print(f"Number of inputs passed across tests: {passed_inputs}")
-    console.print(f"Cumulative Pass Rate: {overall_pass_rate}")
+    console.print(f"Cumulative Pass Rate: {overall_pass_rate * 100:.1f}%")
 
     if len(results) > 1:
         console.print("Per-Test Breakdown:")
         for result in results:
             console.print(
-                f"{result.test_eval.conversation_id}:\n\t{result.passed_count}/{result.total_count} ({result.pass_rate * 100:.1f}%)\n\n"
+                f"{result.test_eval.name}:\n\t{result.passed_count}/{result.total_count} ({result.pass_rate * 100:.1f}%)\n\n"
             )
