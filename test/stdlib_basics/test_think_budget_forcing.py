@@ -71,8 +71,6 @@ def test_think_little(m_session: MelleaSession, gh_run: int):
     if gh_run == 1:  # on github
         THINK_MAX_TOKENS = 5
         ANSWER_MAX_TOKENS = 5
-    THINK_MAX_TOKENS = 5
-    ANSWER_MAX_TOKENS = 5
 
     strategy = BudgetForcingSamplingStrategy(
         think_max_tokens=THINK_MAX_TOKENS,
