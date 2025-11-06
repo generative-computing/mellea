@@ -2,6 +2,8 @@
 kr_results/
 kr_data/
 xet/
+job.sh
+hub/
 
 # Python-generated files
 __pycache__/
