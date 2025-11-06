@@ -27,7 +27,8 @@ def backend():
         formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
         cache=SimpleLRUCache(5),
     )
-    backend.add_adapter(GraniteCommonAdapter("requirement_check"))
+    backend.add_adapter(GraniteCommonAdapter("ibm-granite/rag-intrinsics-lib", 
+                                             "requirement_check"))
     return backend
 
 

@@ -55,7 +55,12 @@ from mellea.stdlib.base import (
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.intrinsics.intrinsic import Intrinsic
-from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
+from mellea.stdlib.requirement import (
+    REQUIREMENT_REPO_ID,
+    ALoraRequirement,
+    LLMaJRequirement,
+    Requirement,
+)
 
 if TYPE_CHECKING:
     from transformers.tokenization_utils import PreTrainedTokenizer
@@ -332,7 +337,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
             # Check if a requirement_check (or AloraRequirement specified) adapter exists.
             alora_req_adapter = get_adapter_for_intrinsic(
-                adapter_name, [AdapterType.ALORA], self._added_adapters
+                REQUIREMENT_REPO_ID,
+                adapter_name,
+                [AdapterType.ALORA],
+                self._added_adapters,
             )
             if alora_req_adapter is None:
                 # Log a warning if using an AloraRequirement but no adapter fit.
@@ -405,7 +413,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             del model_opts[ModelOption.STREAM]
 
         adapter = get_adapter_for_intrinsic(
-            action.intrinsic_name, action.adapter_types, self._added_adapters
+            action.repo_id,
+            action.intrinsic_name,
+            action.adapter_types,
+            self._added_adapters,
         )
         if adapter is None:
             raise ValueError(
@@ -417,25 +428,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         assert isinstance(adapter, GraniteCommonAdapter), (
             "currently Mellea only supports GraniteCommonAdapters and Intrinsics"
         )
-
-        intrinsic_config = adapter.config
-        if intrinsic_config is None:
-            # If the adapter wasn't initialized with a config, grab one here based off the backend's model.
-            intrinsic_config_file = granite_common.intrinsics.util.obtain_io_yaml(
-                action.intrinsic_name, self._hf_model_id.split("/")[-1]
-            )
-            intrinsic_config = granite_common.intrinsics.util.make_config_dict(
-                config_file=intrinsic_config_file
-            )
-            intrinsic_config = cast(
-                dict, intrinsic_config
-            )  # TODO: Can remove if util function gets exported properly.
-
+        assert adapter.config is not None
         rewriter = granite_common.IntrinsicsRewriter(
-            config_dict=intrinsic_config, model_name=adapter.qualified_name
+            config_dict=adapter.config, model_name=adapter.qualified_name
         )
         result_processor = granite_common.IntrinsicsResultProcessor(
-            config_dict=intrinsic_config
+            config_dict=adapter.config
         )
 
         # Convert our conversation into a proper chat completions dict.
@@ -954,6 +952,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Remove the adapter from the list of loaded adapters.
         del self._loaded_adapters[adapter.qualified_name]
+
+    def list_adapters(self) -> list[str]:
+        """Lists the adapters added via add_adapter().
+
+        :returns: list of adapter names that are currently registered with this backend
+        """
+        return list(self._loaded_adapters.keys())
 
     def apply_chat_template(self, chat: list[dict[str, str]]):
         """Apply the chat template for the model, if such a model is available (e.g., when it can deduce the huggingface model id)."""

@@ -9,7 +9,9 @@ def test_adapter_init():
     dir_file = pathlib.Path(__file__).parent.joinpath("intrinsics-data")
     answerability_file = f"{dir_file}/answerability.yaml"
 
-    adapter = GraniteCommonAdapter("answerability", config_file=answerability_file)
+    adapter = GraniteCommonAdapter(
+        "ibm-granite/rag-intrinsics-lib",
+        "answerability", config_file=answerability_file)
     
     assert adapter.config is not None
     assert adapter.config["parameters"]["max_completion_tokens"] == 6

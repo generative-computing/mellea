@@ -20,6 +20,10 @@ from mellea.stdlib.base import (
 )
 from mellea.stdlib.intrinsics.intrinsic import Intrinsic
 
+REQUIREMENT_REPO_ID = "ibm-granite/rag-intrinsics-lib"
+"""Hard-coded repository on Hugging Face Hub where Mellea keeps its requirement
+intrinsic's aLoRA adapter."""
+
 
 def default_output_to_bool(x: CBlock | str) -> bool:
     """Checks if a given output should be marked converted to `True`.

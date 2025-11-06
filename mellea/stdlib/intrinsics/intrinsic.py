@@ -13,6 +13,7 @@ class Intrinsic(Component):
 
     def __init__(
         self,
+        repo_id: str,
         intrinsic_name: str,
         intrinsic_kwargs: dict | None = None,
         adapter_types: list[AdapterType] = [AdapterType.ALORA, AdapterType.LORA],
@@ -28,10 +29,14 @@ class Intrinsic(Component):
         An intrinsic component should correspond to a loaded adapter.
 
         Args:
-            intrinsic_name: the name of the intrinsic; must match the adapter
+            repo_id: name of Hugging Face Hub repository containing adapters that
+                implement the intrinsic
+            intrinsic_name: the name of the intrinsic; must match the name of the
+                associated adapters within the target repository
             intrinsic_kwargs: some intrinsics require kwargs when utilizing them; provide them here
             adapter_types: list of adapter types that can be used for this intrinsic
         """
+        self.repo_id = repo_id
         self.intrinsic_name = intrinsic_name
 
         # Copy the list so that this intrinsic has its own list that can be modified independently.

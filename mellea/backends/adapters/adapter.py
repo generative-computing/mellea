@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Any, TypeVar
 
 import granite_common
+import yaml
 from litellm import cast
 
 from mellea.backends import Backend
@@ -81,52 +82,70 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
 
     def __init__(
         self,
-        name: str,
+        repo_id: str,
+        intrinsic_name: str,
         adapter_type: AdapterType = AdapterType.ALORA,
         config_file: str | pathlib.Path | None = None,
         config_dict: dict | None = None,
         base_model_name: str | None = None,
     ):
-        """An adapter that can be added to either an `OpenAIBackend` or a `LocalHFBackend`. Most rag-lib-intrinsics support lora or alora adapter types.
+        """Entry point for creating GraniteCommonAdapter objects.
+
+        An adapter that can be added to either an `OpenAIBackend` or a `LocalHFBackend`.
+        Most intrinsics support LoRA or aLoRA adapter types.
 
         Args:
-            name: name of the adapter; when referencing this adapter, use adapter.qualified_name
+            repo_id: Name of Hugging Face Hub repository containing the adapters that
+                implement the intrinsic; for example,
+                "generative-computing/rag-intrinsics-lib"
+            intrinsic_name: name of the intrinsic; the local name of the loaded adapter
+                that implements this intrinsic will be adapter.qualified_name
             adapter_type: enum describing what type of adapter it is (ie LORA / ALORA)
             config_file: optional; file for defining the intrinsic / transformations
             config_dict: optional; dict for defining the intrinsic / transformations
-            base_model_name: optional; if provided with no config_file/config_dict, will be used to lookup the granite_common config for this adapter
+            base_model_name: optional; if provided with no config_file/config_dict,
+                will be used to look up the granite_common config for this adapter
         """
-        assert adapter_type == AdapterType.ALORA or adapter_type == AdapterType.LORA, (
+        assert adapter_type in (AdapterType.ALORA, AdapterType.LORA), (
             f"{adapter_type} not supported"
         )
-        super().__init__(name, adapter_type)
+        super().__init__(f"{repo_id}_{intrinsic_name}", adapter_type)
 
+        self.repo_id = repo_id
+        self.intrinsic_name = intrinsic_name
         self.base_model_name = base_model_name
 
         # If any of the optional params are specified, attempt to set up the
         # config for the intrinsic here.
-        config: dict | None = None
-        if config_file is not None or config_dict is not None:
-            config = granite_common.intrinsics.util.make_config_dict(
-                config_file=config_file, config_dict=config_dict
+        if config_file and config_dict:
+            raise ValueError(
+                f"Conflicting values for config_file and config_dict "
+                f"parameters provided. Values were {config_file=} "
+                f"and {config_dict=}"
             )
-            config = cast(
-                dict, config
-            )  # Can remove if util function gets exported properly.
-
-        if config is None and self.base_model_name is not None:
-            is_alora = True if self.adapter_type == AdapterType.ALORA else False
-            io_yaml_file = granite_common.intrinsics.util.obtain_io_yaml(
-                self.name, self.base_model_name, alora=is_alora
+        if config_file is None and config_dict is None and base_model_name is None:
+            raise ValueError(
+                "At least one of [config_file, config_dict, base_model_name] "
+                "must be provided."
             )
-            config = granite_common.intrinsics.util.make_config_dict(
-                config_file=io_yaml_file
+        if config_file is None and config_dict is None:
+            is_alora = self.adapter_type == AdapterType.ALORA
+            config_file = granite_common.intrinsics.util.obtain_io_yaml(
+                self.intrinsic_name,
+                self.base_model_name,
+                alora=is_alora,
+                repo_id=repo_id,
             )
-            config = cast(
-                dict, config
-            )  # Can remove if util function gets exported properly.
-
-        self.config: dict | None = config
+        if config_file:
+            with open(config_file, encoding="utf-8") as f:
+                config_dict = yaml.safe_load(f)
+                if not isinstance(config_dict, dict):
+                    raise ValueError(
+                        f"YAML file {config_file} does not evaluate to a "
+                        f"dictionary when parsed."
+                    )
+        assert config_dict is not None  # Code above should initialize this variable
+        self.config: dict = config_dict
 
     def get_open_ai_path(
         self,
@@ -137,9 +156,12 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
         """Returns the path needed to load the adapter.
 
         Args:
-            base_model_name: the base model; typically the last part of the huggingface model id like "granite-3.3-8b-instruct"
-            server_type: the server type (ie LOCALHOST / OPENAI); usually the backend has information on this
-            remote_path: optional; used only if the server_type is REMOTE_VLLM; base path at which to find the adapter
+            base_model_name: the base model; typically the last part of the huggingface
+                model id like "granite-3.3-8b-instruct"
+            server_type: the server type (ie LOCALHOST / OPENAI); usually the backend
+                has information on this
+            remote_path: optional; used only if the server_type is REMOTE_VLLM; base
+                path at which to find the adapter
         """
         if server_type == _ServerType.LOCALHOST:
             path = self.download_and_get_path(base_model_name)
@@ -174,12 +196,16 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
         is_alora = self.adapter_type == AdapterType.ALORA
         return str(
             granite_common.intrinsics.util.obtain_lora(
-                self.name, base_model_name, alora=is_alora
+                self.intrinsic_name,
+                base_model_name,
+                alora=is_alora,
+                repo_id=self.repo_id,
             )
         )
 
     def get_path_on_remote(self, base_model_name: str, base_path: str) -> str:
         """Assumes the files have already been downloaded on the remote server."""
+        # TODO: This will break when we switch to the new repo!!!
         return f"./{base_path}/{self.name}/{self.adapter_type.value}/{base_model_name}"
 
 
@@ -187,6 +213,7 @@ T = TypeVar("T")
 
 
 def get_adapter_for_intrinsic(
+    repo_id: str,
     intrinsic_name: str,
     intrinsic_adapter_types: list[AdapterType],
     available_adapters: dict[str, T],
@@ -194,6 +221,8 @@ def get_adapter_for_intrinsic(
     """Finds an adapter from a dict of available adapters based on the intrinsic name and its allowed adapter types.
 
     Args:
+        repo_id: Name of Hugging Face Hub repository containing the adapters that
+                implement the intrinsic
         intrinsic_name: the name of the intrinsic, like "answerability"
         intrinsic_adapter_types: the adapter types allowed for this intrinsic, like ALORA / LORA
         available_adapters: the available adapters to choose from; maps adapter.qualified_name to the Adapter
@@ -203,8 +232,8 @@ def get_adapter_for_intrinsic(
     """
     adapter = None
     for adapter_type in intrinsic_adapter_types:
-        qualified_name = intrinsic_name + "_" + adapter_type.value
-        adapter = available_adapters.get(qualified_name, None)
+        qualified_name = f"{repo_id}_{intrinsic_name}_{adapter_type.value}"
+        adapter = available_adapters.get(qualified_name)
         if adapter is not None:
             break
 
@@ -222,3 +251,12 @@ class AdapterMixin(abc.ABC):
 
     def unload_adapter(self, adapter_qualified_name: str):
         """Unloads the given adapter from the backend."""
+
+    def list_adapters(self) -> list[str]:
+        """Lists the adapters added via add_adapter().
+
+        :returns: list of adapter names that are currently registered with this backend
+        """
+        raise NotImplementedError(
+            f"Backend type {type(self)} does not implement list_adapters() API call."
+        )
