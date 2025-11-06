@@ -24,9 +24,8 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
     end_think_token: str
     begin_response_token: str
     end_response_token: str
-    think_wait_suffix: str
-    answer_suffix: str
-    answer_regex: str
+    think_more_suffix: str
+    answer_suffix: str | None
 
     def __init__(
         self,
@@ -37,9 +36,8 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
         end_think_token: str = "</think>",
         begin_response_token: str = "",
         end_response_token: str = "",
-        think_wait_suffix: str = "",
-        answer_suffix: str = "\nThe final answer is:",
-        answer_regex: str = r"\\boxed{.*?}",
+        think_more_suffix: str = "",
+        answer_suffix: str | None = "\nThe final answer is:",
         loop_budget: int = 1,
         requirements: list[Requirement] | None,
     ):
@@ -54,9 +52,8 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
             end_think_token: Special end of think block token defaults to '</think>'
             begin_response_token: Special begin of response block token e.g. '<response>' defaults to ""
             end_response_token: Special end of response block token e.g. '</response>' defaults to ""
-            think_wait_suffix: Suffix for continue thinking e.g. "\nWait let's think more carefully" to force the model to think more, defaults to "".  If set to "", no force thinking will be applied, the token budget will be become an upper bound.
+            think_more_suffix: Suffix for continue thinking e.g. "\nWait let's think more carefully" to force the model to think more, defaults to "".  If set to "", no force thinking will be applied, the token budget will be become an upper bound.
             answer_suffix: Suffix to obtain final answer, default to "\nThe final answer is:"
-            answer_regex: Regex expression to detect final answer, defaults to r"\\boxed{.*?}"
             loop_budget: Number of times to iterate through the process. Must be greater than 0.
             requirements: List of requirements to test against. If None, test all requirements attached to the given instruction.
 
@@ -70,9 +67,8 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
         self.end_think_token = end_think_token
         self.begin_response_token = begin_response_token
         self.end_response_token = end_response_token
-        self.think_wait_suffix = think_wait_suffix
+        self.think_more_suffix = think_more_suffix
         self.answer_suffix = answer_suffix
-        self.answer_regex = answer_regex
 
     async def sample(
         self,
@@ -142,16 +138,6 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
             if not show_progress:
                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
-            # # run a generation pass
-            # result, result_ctx = backend.generate_from_context(
-            #     next_action,
-            #     ctx=next_context,
-            #     format=format,
-            #     model_options=model_options,
-            #     tool_calls=tool_calls,
-            # )
-            # await result.avalue()
-
             # TODO
             # tool_calls is not supported for budget forcing
             assert tool_calls is False, (
@@ -165,13 +151,15 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
             result = think_budget_forcing(
                 backend,
                 next_action,
+                ctx=context,
+                format=format,
+                tool_calls=tool_calls,
                 think_max_tokens=self.think_max_tokens,
                 answer_max_tokens=self.answer_max_tokens,
                 start_think_token=self.start_think_token,
                 end_think_token=self.end_think_token,
-                think_wait_suffix=self.think_wait_suffix,
+                think_more_suffix=self.think_more_suffix,
                 answer_suffix=self.answer_suffix,
-                answer_regex=self.answer_regex,
                 model_options=model_options,
             )
             result_ctx = next_context
