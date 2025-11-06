@@ -23,7 +23,7 @@ class InputEvalResult:
         model_output: str,
         validation_passed: bool,
         score: int,
-        validation_reason: str, # add input_id
+        validation_reason: str,  # add input_id
     ):
         self.input_text = input_text
         self.model_output = model_output
@@ -74,7 +74,9 @@ class TestEvalResult:
         return self.passed_count / self.total_count if self.total_count > 0 else 0.0
 
 
-def create_session(backend: str, model: str | None, max_tokens: int | None) -> mellea.MelleaSession:
+def create_session(
+    backend: str, model: str | None, max_tokens: int | None
+) -> mellea.MelleaSession:
     """Create a mellea session with the specified backend and  model."""
 
     model_id = None
@@ -96,35 +98,40 @@ def create_session(backend: str, model: str | None, max_tokens: int | None) -> m
             from mellea.backends.ollama import OllamaModelBackend
 
             backend_instance = OllamaModelBackend(
-                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
+                model_id=model_id,
+                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
             )
 
         elif backend_lower == "openai":
             from mellea.backends.openai import OpenAIBackend
 
             backend_instance = OpenAIBackend(
-                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
+                model_id=model_id,
+                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
             )
 
         elif backend_lower in ["hf", "huggingface"]:
             from mellea.backends.huggingface import LocalHFBackend
 
             backend_instance = LocalHFBackend(
-                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
+                model_id=model_id,
+                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
             )
 
         elif backend_lower == "watsonx":
             from mellea.backends.watsonx import WatsonxAIBackend
 
             backend_instance = WatsonxAIBackend(
-                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
+                model_id=model_id,
+                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
             )
 
         elif backend_lower == "litellm":
             from mellea.backends.litellm import LiteLLMBackend
 
             backend_instance = LiteLLMBackend(
-                model_id=model_id, model_options={ModelOption.MAX_NEW_TOKENS: max_tokens}
+                model_id=model_id,
+                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
             )
 
         else:
@@ -135,9 +142,7 @@ def create_session(backend: str, model: str | None, max_tokens: int | None) -> m
         # create session with backend instance
         from mellea.stdlib.base import SimpleContext
 
-        session = mellea.MelleaSession(
-            backend=backend_instance, ctx=SimpleContext()
-        ) 
+        session = mellea.MelleaSession(backend=backend_instance, ctx=SimpleContext())
         return session
 
     except Exception as e:
@@ -157,7 +162,6 @@ def run_evaluations(
     max_judge_tokens: int | None,
     output_path: str,
     output_format: str,
-    verbose: bool,
     continue_on_error: bool,
 ):
     """Run all 'unit test' evaluations"""
@@ -176,14 +180,16 @@ def run_evaluations(
         return
 
     console.print(f"Total test evals to run: {len(all_test_evals)}")
-    total_inputs = sum(len(te.inputs) for te in all_test_evals)
+    total_inputs = sum(len(test_eval.inputs) for test_eval in all_test_evals)
     console.print(f"Total inputs to run: {total_inputs}")
 
     console.print(f"Generation model: {model}")
     console.print(f"Judge model: {judge_model}")
 
     m = create_session(backend=backend, model=model, max_tokens=max_gen_tokens)
-    judge_session = create_session(backend=judge_backend, model=judge_model, max_tokens=max_judge_tokens)
+    judge_session = create_session(
+        backend=judge_backend, model=judge_model, max_tokens=max_judge_tokens
+    )
 
     all_results = []
 
@@ -234,12 +240,14 @@ def execute_test_eval(
         result: ModelOutputThunk = generation_session.act(input_text)
         model_output = str(result)
 
-        judge_session.ctx = judge_session.ctx.add(result)
-
-        targets_for_input = (test_eval.targets[idx] if idx < len(test_eval.targets) else [])
+        targets_for_input = (
+            test_eval.targets[idx] if idx < len(test_eval.targets) else []
+        )
 
         # query the judge
-        judge_prompt = create_judge_requirement(test_eval, input_text, model_output, targets_for_input)
+        judge_prompt = create_judge_requirement(
+            test_eval, input_text, model_output, targets_for_input
+        )
         judge_output_thunk = judge_session.act(judge_prompt)
         judge_output = str(judge_output_thunk)
         score, justification = parse_judge_output(judge_output)
@@ -263,7 +271,10 @@ def execute_test_eval(
 
 
 def create_judge_requirement(
-    test_eval: TestBasedEval, input_text: str, model_output: str, targets_for_input: list[str]
+    test_eval: TestBasedEval,
+    input_text: str,
+    model_output: str,
+    targets_for_input: list[str],
 ):
     """Create judge requirement description"""
 

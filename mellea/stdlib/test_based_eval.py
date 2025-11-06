@@ -18,7 +18,7 @@ class TestBasedEval(Component):
         inputs: list[str],
         targets: list[list[str]] | None = None,  # can be optional
         test_id: str | None = None,
-        input_ids: list[str] | None = None
+        input_ids: list[str] | None = None,
     ):
         """Initialize TestBasedEval (for a single unit test)."""
         self.source = source
@@ -61,7 +61,7 @@ class TestBasedEval(Component):
         """Load test evaluations from json/jsonl file, return list of TestBasedEval instances, one per 'unit test'."""
         path = Path(filepath)
 
-        with path.open('r') as f:
+        with path.open("r") as f:
             data = json.load(f)
 
         if not isinstance(data, list):
@@ -77,12 +77,18 @@ class TestBasedEval(Component):
 
             for example in examples:
                 input_messages = example.get("input", [])
-                user_messages = [msg for msg in input_messages if msg.get("role") == "user"]
+                user_messages = [
+                    msg for msg in input_messages if msg.get("role") == "user"
+                ]
                 if user_messages:
                     inputs.append(user_messages[-1].get("content", ""))
 
                 target_messages = example.get("targets", [])
-                targets_for_input = [msg.get("content", "") for msg in target_messages if msg.get("role") == "assistant"]
+                targets_for_input = [
+                    msg.get("content", "")
+                    for msg in target_messages
+                    if msg.get("role") == "assistant"
+                ]
                 targets.append(targets_for_input)
 
                 input_ids.append(example.get("input_id", ""))
@@ -94,7 +100,7 @@ class TestBasedEval(Component):
                 inputs=inputs,
                 targets=targets,
                 test_id=test_data.get("id", ""),
-                input_ids=input_ids
+                input_ids=input_ids,
             )
             test_evals.append(test_eval)
 
