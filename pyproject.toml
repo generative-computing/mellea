@@ -82,7 +82,7 @@ vllm = [
     "numpy<2.0.0",              # patching incorrect dependencies in vllm and outlines.
     # see https://github.com/vllm-project/vllm/issues/5587
     "outlines-core==0.1.26",
-    "vllm",                     # intentionally un-versioned, expecting a minor update. coutlines-core version should be enough to specify it
+    "vllm>=0.9.1",
 ]
 
 litellm = [
@@ -112,7 +112,6 @@ dev = [
     "pytest-asyncio",
     "mypy>=1.17.0",
     "python-semantic-release~=7.32",
-    "pytest-xdist>=3.8.0",
 ]
 
 notebook = [

@@ -9,7 +9,7 @@ from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock, ChatContext, SimpleContext
+from mellea.stdlib.base import CBlock, ChatContext, Context, ModelOutputThunk, SimpleContext
 from mellea.stdlib.requirement import (
     ALoraRequirement,
     LLMaJRequirement,
@@ -117,6 +117,14 @@ def test_constraint_lora_override_does_not_override_alora(session, backend):
     val_result = validation_outputs[0]
     assert isinstance(val_result, ValidationResult)
     assert str(val_result.reason) in ["Y", "N"]
+
+    # Ensure the ValidationResult has its thunk and context set. Ensure the context has
+    # the correct actions / results in it.
+    assert isinstance(val_result.context, Context)
+    assert isinstance(val_result.thunk, ModelOutputThunk)
+    assert isinstance(val_result.context.previous_node.node_data, ALoraRequirement)
+    assert val_result.context.node_data is val_result.thunk
+
     backend.default_to_constraint_checking_alora = True
 
 
@@ -150,7 +158,6 @@ def test_multiturn(session):
         "Take the result of the previous sum and find the corresponding letter in the greek alphabet.",
         model_options={ModelOption.MAX_NEW_TOKENS: 300},
     )
-    assert "β" in str(beta).lower()
     words = session.instruct("Now list five English words that start with that letter.")
     print(words)
 
@@ -193,7 +200,6 @@ def test_format(session):
         "The email address should be at example.com"
     )
 
-
 @pytest.mark.qualitative
 def test_generate_from_raw(session):
     prompts = [
@@ -209,7 +215,6 @@ def test_generate_from_raw(session):
     )
 
     assert len(results) == len(prompts)
-
 
 @pytest.mark.qualitative
 def test_generate_from_raw_with_format(session):

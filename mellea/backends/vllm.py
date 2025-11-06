@@ -35,7 +35,8 @@ from mellea.backends.tools import (
     convert_tools_to_json,
 )
 from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import send_to_queue
+from mellea.helpers.async_helpers import get_current_event_loop, send_to_queue
+from mellea.helpers.event_loop_helper import _run_async_in_thread
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
     CBlock,
@@ -80,6 +81,14 @@ class LocalVLLMBackend(FormatterBackend):
             formatter (Formatter): A mechanism for turning `stdlib` stuff into strings. Experimental Span-based models should use `mellea.backends.span.*` backends.
             model_options (Optional[dict]): Default model options.
         """
+        if os.environ.get("VLLM_USE_V1", -1) != "0":
+            FancyLogger.get_logger().error(
+                "Mellea LocalVLLMBackend doesn't support VLLM V1. Must `export VLLM_USE_V1=0`."
+            )
+            raise ValueError(
+                "Mellea LocalVLLMBackend doesn't support VLLM V1. Must `export VLLM_USE_V1=0`."
+            )
+
         formatter = (
             formatter if formatter is not None else TemplateFormatter(model_id=model_id)
         )
@@ -140,7 +149,7 @@ class LocalVLLMBackend(FormatterBackend):
         while True:
             retry += 1
             try:
-                self._model = vllm.AsyncLLMEngine.from_engine_args(
+                self._underlying_model = vllm.AsyncLLMEngine.from_engine_args(
                     vllm.AsyncEngineArgs(model=self._hf_model_id, **engine_args)
                 )
                 break
@@ -192,6 +201,9 @@ class LocalVLLMBackend(FormatterBackend):
             f"max_num_seqs: {engine_args['max_num_seqs']}\n"
         )
 
+        # Keep track of the event loop the engine was instantiated in.
+        self._event_loop = get_current_event_loop()
+
         self._tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
             self._hf_model_id
         )  # type:ignore
@@ -204,6 +216,24 @@ class LocalVLLMBackend(FormatterBackend):
         self._tokenizer_for_outlines: PreTrainedTokenizerBase = importlib.import_module(
             "outlines.models.vllm"
         ).adapt_tokenizer(self._tokenizer)
+
+    @property
+    def _model(self) -> vllm.AsyncLLMEngine:
+        """Use model when making generation requests."""
+        el = get_current_event_loop()
+
+        # vLLM attaches itself to the event loop that is running when instantiated /
+        # the first generate request is made. Thankfully, they provide helpers to
+        # reset that. We do that here if the event loop changes.
+
+        # Most of the time, this should be a no-op. The event loop will only change
+        # if switching between async and sync calls.
+        if el != self._event_loop:
+            self._underlying_model.shutdown_background_loop()
+            self._underlying_model.start_background_loop()
+            self._event_loop = el
+
+        return self._underlying_model
 
     def generate_from_context(
         self,
@@ -447,7 +477,8 @@ class LocalVLLMBackend(FormatterBackend):
             tasks = [generate(p, f"{id(prompts)}-{i}") for i, p in enumerate(prompts)]
             return await asyncio.gather(*tasks)
 
-        decoded_results = asyncio.run(generate_all(prompts))
+        # Allow calling this from async functions.
+        decoded_results = _run_async_in_thread(generate_all(prompts))
 
         results = [ModelOutputThunk(value=text) for text in decoded_results]
 

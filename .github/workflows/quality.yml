@@ -49,7 +49,7 @@ jobs:
         run: ollama pull llama3.2:1b
 
       - name: Run Tests
-        run: uv run -m pytest -v test -n auto --dist loadscope
+        run: uv run -m pytest -v test
       - name: Send failure message tests
         if: failure()  # This step will only run if a previous step failed
         run: echo "Tests failed. Please verify that tests are working locally."

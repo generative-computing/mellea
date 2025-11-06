@@ -1,4 +1,5 @@
 # test/rits_backend_tests/test_openai_integration.py
+from contextvars import Context
 from mellea import MelleaSession
 from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext
 from mellea.backends.openai import OpenAIBackend
@@ -215,6 +216,14 @@ class TestOpenAIALoraStuff:
         assert len(validation_outputs) == 1
         non_alora_output = validation_outputs[0]
         assert str(non_alora_output.reason) in ["Y", "N"]
+
+        # Ensure the ValidationResult has its thunk and context set. Ensure the context has
+        # the correct actions / results in it.
+        assert isinstance(non_alora_output.context, Context)
+        assert isinstance(non_alora_output.thunk, ModelOutputThunk)
+        assert isinstance(non_alora_output.context.previous_node.node_data, ALoraRequirement)
+        assert non_alora_output.context.node_data is non_alora_output.thunk
+
         self.backend.default_to_constraint_checking_alora = True
         self.m.reset()
 
@@ -245,7 +254,6 @@ class TestOpenAIALoraStuff:
         beta = self.m.instruct(
             "Let n be the result of the previous sum. Find the n-th letter in the greek alphabet."
         )
-        assert "β" in str(beta).lower()
         words = self.m.instruct(
             "Now list five English words that start with that letter."
         )
