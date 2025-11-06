@@ -18,26 +18,26 @@ from mellea.stdlib.sampling_algos.budget_forcing_alg import think_budget_forcing
 class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
     """Budget forcing sampling class."""
 
-    think_max_tokens: int
+    think_max_tokens: int | None
     answer_max_tokens: int | None
-    start_think_token: str
-    end_think_token: str
-    begin_response_token: str
+    start_think_token: str | None
+    end_think_token: str | None
+    begin_response_token: str | None
     end_response_token: str
-    think_more_suffix: str
+    think_more_suffix: str | None
     answer_suffix: str | None
 
     def __init__(
         self,
         *,
-        think_max_tokens: int = 4096,
+        think_max_tokens: int | None = 4096,
         answer_max_tokens: int | None = None,
-        start_think_token: str = "<think>",
-        end_think_token: str = "</think>",
-        begin_response_token: str = "",
+        start_think_token: str | None = "<think>",
+        end_think_token: str | None = "</think>",
+        begin_response_token: str | None = "",
         end_response_token: str = "",
-        think_more_suffix: str = "",
-        answer_suffix: str | None = "\nThe final answer is:",
+        think_more_suffix: str | None = "",
+        answer_suffix: str | None = "",
         loop_budget: int = 1,
         requirements: list[Requirement] | None,
     ):

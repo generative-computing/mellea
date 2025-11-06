@@ -40,11 +40,6 @@ def test_think_big(m_session: MelleaSession, gh_run: int):
     action = CBlock(value=prompt + prompt_suffix)
     THINK_MAX_TOKENS = 2048
     ANSWER_MAX_TOKENS = 512
-    if gh_run == 1:  # on github
-        THINK_MAX_TOKENS = 5
-        ANSWER_MAX_TOKENS = 5
-    # THINK_MAX_TOKENS = 5
-    # ANSWER_MAX_TOKENS = 5
 
     strategy = BudgetForcingSamplingStrategy(
         think_max_tokens=THINK_MAX_TOKENS,
@@ -63,13 +58,13 @@ def test_think_big(m_session: MelleaSession, gh_run: int):
 
 def test_think_little(m_session: MelleaSession, gh_run: int):
     """Tests little thinking budget."""
-    prompt = "What is the smallest positive integer $n$ such that all the roots of $z^4 + z^2 + 1 = 0$ are $n^{\\text{th}}$ roots of unity?"
+    prompt = "Compute 1+1?"
     prompt_suffix = "\nPlease reason step by step, use \n\n to end each step, and put your final answer within \\boxed{}."
     action = CBlock(value=prompt + prompt_suffix)
-    THINK_MAX_TOKENS = 512
-    ANSWER_MAX_TOKENS = 256
+    THINK_MAX_TOKENS = 16
+    ANSWER_MAX_TOKENS = 8
     if gh_run == 1:  # on github
-        THINK_MAX_TOKENS = 5
+        THINK_MAX_TOKENS = 0
         ANSWER_MAX_TOKENS = 5
 
     strategy = BudgetForcingSamplingStrategy(
@@ -77,8 +72,7 @@ def test_think_little(m_session: MelleaSession, gh_run: int):
         answer_max_tokens=ANSWER_MAX_TOKENS,
         start_think_token="<think>",
         end_think_token="</think>",
-        think_more_suffix="\nWait, let's think more carefully",
-        answer_suffix="The final answer is:",
+        answer_suffix="The final answer is: \\boxed{",
         requirements=None
     )
     result = m_session.instruct(action, strategy=strategy)

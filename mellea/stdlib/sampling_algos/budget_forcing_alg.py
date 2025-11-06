@@ -15,14 +15,13 @@ def think_budget_forcing(  # noqa: D417
     ctx: Context,
     format: type[BaseModelSubclass] | None = None,
     tool_calls: bool = False,
-    think_max_tokens: int = 4096,
+    think_max_tokens: int | None = 4096,
     answer_max_tokens: int | None = None,
-    start_think_token: str = "<think>",
-    end_think_token: str = "</think>",
-    begin_response_token: str = "",
-    end_response_token: str = "",
-    think_more_suffix: str = "",
-    answer_suffix: str | None = "The final answer is:",
+    start_think_token: str | None = "<think>",
+    end_think_token: str | None = "</think>",
+    begin_response_token: str | None = "",
+    think_more_suffix: str | None = "",
+    answer_suffix: str | None = "",
     model_options: dict | None = None,
 ) -> ModelOutputThunk:
     r"""Generate with budget forcing using the completions APIs.
@@ -36,11 +35,10 @@ def think_budget_forcing(  # noqa: D417
         backend: OllamaModelBackend
         action: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
         think_max_tokens: Budget in number of tokens allocated for the think block
-        answer_max_tokens: Budget in number of tokens allocated for the summary and answer block, None indicates generating till EoS
+        answer_max_tokens: Budget in number of tokens allocated for the summary and answer block, None indicates unbounded answer, generating till EoS
         start_think_token: String indicating start of think block, default <think>
         end_think_token: String indicating end of think block, default </think>
         begin_response_token: Used by certain models, string indicating start of response block, e.g. "<response>", default None
-        end_response_token: Used by certain models, string indicating end of response block, e.g. "</response>", default None
         think_more_suffix: String to append to force continued thinking, e.g. "\nWait" if set to None we will not force additional thinking. Use None for upper-bound budget case
         answer_suffix: String to append to force a final answer
         model_options: Any model options to upsert into the defaults for this call.
@@ -53,10 +51,6 @@ def think_budget_forcing(  # noqa: D417
     Limitations:
         -  Does not support batching
     """
-    # TODO should expand backend support
-    # assert isinstance(backend, OllamaModelBackend)
-    # model_options = backend._simplify_and_merge(model_options)
-
     responses = []
     prompt = backend.formatter.print(action)
     if start_think_token:
@@ -67,6 +61,8 @@ def think_budget_forcing(  # noqa: D417
     if model_options is None:
         model_options = dict()
     model_options["n"] = 1
+    if think_max_tokens is None:
+        think_max_tokens = 0
     rem_toks = think_max_tokens
     model_options[ModelOption.MAX_NEW_TOKENS] = rem_toks
     gen_tok_count = 0
@@ -81,9 +77,6 @@ def think_budget_forcing(  # noqa: D417
             break
 
         model_options[ModelOption.MAX_NEW_TOKENS] = rem_toks
-        # TODO workaround to obtain generated token counts
-        # The token count should be relayed by openai's CompletionUsage
-        # model_options["logprobs"] = 1  # To get number of generated tokens
         result = backend.generate_from_raw(
             [CBlock(value=curr_prompt)],
             model_options=model_options,
@@ -100,7 +93,7 @@ def think_budget_forcing(  # noqa: D417
         rem_toks = think_max_tokens - gen_tok_count
         response = result[0].value if result[0].value else ""
 
-        if think_more_suffix == "":
+        if think_more_suffix is None or think_more_suffix == "":
             # non-strict budget form
             responses.append(response)
             break
@@ -128,16 +121,14 @@ def think_budget_forcing(  # noqa: D417
         # create response ModelOutputThunk object
         _meta = _meta_logs[-1]  # Initialize using the last meta object
         _meta["usage"]["completion_tokens"] = gen_tok_count
-        _meta["usage"]["prompt_tokens"] = _meta_logs[0]["usage"][
-            "prompt_tokens"
-        ]  # the first prompt is the true prompt
+        # the first prompt is the true prompt
+        _meta["usage"]["prompt_tokens"] = _meta_logs[0]["usage"]["prompt_tokens"]
         _meta["usage"]["total_tokens"] = (
             _meta["usage"]["prompt_tokens"] + _meta["usage"]["completion_tokens"]
         )
         _res = ModelOutputThunk(value=response, meta=_meta)
-        _res._generate_log = _generate_logs[
-            -1
-        ]  # we will simply take the last log output as a representative log, alternatively we can merge the logs but that function is not available yet
+        # we will simply take the last log output as a representative log, alternatively we can merge the logs but that function is not available yet
+        _res._generate_log = _generate_logs[-1]
         return _res
 
     #  One more round of generate to get an answer
@@ -173,14 +164,12 @@ def think_budget_forcing(  # noqa: D417
     # create response ModelOutputThunk object
     _meta = _meta_logs[-1]  # Initialize using the last meta object
     _meta["usage"]["completion_tokens"] = gen_tok_count
-    _meta["usage"]["prompt_tokens"] = _meta_logs[0]["usage"][
-        "prompt_tokens"
-    ]  # the first prompt is the true prompt
+    # the first prompt is the true prompt
+    _meta["usage"]["prompt_tokens"] = _meta_logs[0]["usage"]["prompt_tokens"]
     _meta["usage"]["total_tokens"] = (
         _meta["usage"]["prompt_tokens"] + _meta["usage"]["completion_tokens"]
     )
     _res = ModelOutputThunk(value=response, meta=_meta)
-    _res._generate_log = _generate_logs[
-        -1
-    ]  # we will simply take the last log output as a representative log, alternatively we can merge the logs but that function is not available yet
+    # we will simply take the last log output as a representative log, alternatively we can merge the logs but that function is not available yet
+    _res._generate_log = _generate_logs[-1]
     return _res
