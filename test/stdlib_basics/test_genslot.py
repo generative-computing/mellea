@@ -5,7 +5,8 @@ from mellea import generative, start_session
 from mellea.backends.model_ids import META_LLAMA_3_2_1B
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.base import ChatContext, Context
-from mellea.stdlib.genslot import AsyncGenerativeSlot, GenerativeSlot, SyncGenerativeSlot
+from mellea.stdlib.genslot import AsyncGenerativeSlot, GenerativeSlot, PreconditionException, SyncGenerativeSlot
+from mellea.stdlib.requirement import Requirement, simple_validate
 from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 from mellea.stdlib.session import MelleaSession
 
@@ -166,6 +167,31 @@ def test_disallowed_parameter_names():
         @generative
         def test(backend):
             ...
+
+def test_precondition_failure(session):
+    with pytest.raises(PreconditionException):
+        classify_sentiment(
+            m=session,
+            text="hello",
+            precondition_requirements=[
+                Requirement("forced failure", validation_fn=simple_validate(lambda x: (False, "")))
+            ]
+        )
+
+def test_requirement(session):
+    classify_sentiment(
+        m=session,
+        text="hello",
+        requirements=["req1", "req2", Requirement("req3")]
+    )
+
+def test_with_no_args(session):
+    @generative
+    def generate_text() -> str:
+        """Generate text!"""
+        ...
+
+    generate_text(m=session)
 
 if __name__ == "__main__":
     pytest.main([__file__])

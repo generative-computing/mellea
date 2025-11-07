@@ -4,26 +4,23 @@ import abc
 import functools
 import inspect
 from collections.abc import Awaitable, Callable, Coroutine
-from copy import deepcopy
+from copy import copy, deepcopy
 from dataclasses import dataclass, fields
-from typing import (
-    Any,
-    Generic,
-    ParamSpec,
-    TypedDict,
-    TypeVar,
-    Union,
-    get_type_hints,
-    overload,
-)
+from typing import Any, Generic, ParamSpec, TypedDict, TypeVar, get_type_hints, overload
 
 from pydantic import BaseModel, Field, create_model
 
 import mellea.stdlib.funcs as mfuncs
 from mellea.backends import Backend
-from mellea.stdlib.base import Component, Context, TemplateRepresentation
-from mellea.stdlib.requirement import Requirement, reqify
-from mellea.stdlib.sampling.base import RejectionSamplingStrategy
+from mellea.helpers.fancy_logger import FancyLogger
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    Context,
+    ModelOutputThunk,
+    TemplateRepresentation,
+)
+from mellea.stdlib.requirement import Requirement, ValidationResult, reqify
 from mellea.stdlib.sampling.types import SamplingStrategy
 from mellea.stdlib.session import MelleaSession
 
@@ -76,6 +73,81 @@ class ArgumentDict(TypedDict):
     value: str | None
 
 
+class Argument:
+    """An Argument Component."""
+
+    def __init__(
+        self,
+        annotation: str | None = None,
+        name: str | None = None,
+        value: str | None = None,
+    ):
+        """An Argument Component."""
+        self._argument_dict: ArgumentDict = {
+            "name": name,
+            "annotation": annotation,
+            "value": value,
+        }
+
+
+class Arguments(CBlock):
+    def __init__(self, arguments: list[Argument]):
+        """Create a textual representation of a list of arguments."""
+        # Make meta the original list of arguments and create a list of textual representations.
+        meta: dict[str, Any] = {}
+        text_args = []
+        for arg in arguments:
+            assert arg._argument_dict["name"] is not None
+            meta[arg._argument_dict["name"]] = arg
+            text_args.append(
+                f"- {arg._argument_dict['name']}: {arg._argument_dict['value']}  (type: {arg._argument_dict['annotation']})"
+            )
+
+        super().__init__("\n".join(text_args), meta)
+
+
+class ArgPreconditionRequirement(Requirement):
+    """Specific requirement with template for validating precondition requirements against a set of args."""
+
+    def __init__(self, req: Requirement):
+        """Can only be instantiated from existing requirements. All function calls are delegated to the underlying requirement."""
+        self.req = req
+
+    def __getattr__(self, name):
+        return getattr(self.req, name)
+
+    def __copy__(self):
+        return ArgPreconditionRequirement(req=self.req)
+
+    def __deepcopy__(self, memo):
+        return ArgPreconditionRequirement(deepcopy(self.req, memo))
+
+
+class PreconditionException(Exception):
+    """Exception raised when validation fails for a generative slot's arguments."""
+
+    def __init__(
+        self, message: str, validation_results: list[ValidationResult]
+    ) -> None:
+        """Exception raised when validation fails for a generative slot's arguments.
+
+        Args:
+            message: the error message
+            validation_results: the list of validation results from the failed preconditions
+        """
+        super().__init__(message)
+        self.validation = validation_results
+
+
+class Function:
+    """A Function Component."""
+
+    def __init__(self, func: Callable):
+        """A Function Component."""
+        self._func: Callable = func
+        self._function_dict: FunctionDict = describe_function(func)
+
+
 def describe_function(func: Callable) -> FunctionDict:
     """Generates a FunctionDict given a function.
 
@@ -92,22 +164,30 @@ def describe_function(func: Callable) -> FunctionDict:
     }
 
 
-def get_annotation(func: Callable, key: str, val: Any) -> str:
-    """Returns a annotated list of arguments for a given function and list of arguments.
+def get_argument(func: Callable, key: str, val: Any) -> Argument:
+    """Returns an argument given a parameter.
+
+    Note: Performs additional formatting for string objects, putting them in quotes.
 
     Args:
         func : Callable Function
-        key : Arg keys
-        val : Arg Values
+        key : Arg key
+        val : Arg value
 
     Returns:
-        str: An annotated string for a given func.
+        Argument: an argument object representing the given parameter.
     """
     sig = inspect.signature(func)
     param = sig.parameters.get(key)
     if param and param.annotation is not inspect.Parameter.empty:
-        return str(param.annotation)
-    return str(type(val))
+        param_type = param.annotation
+    else:
+        param_type = type(val)
+
+    if param_type is str:
+        val = f'"{val!s}"'
+
+    return Argument(str(param_type), key, val)
 
 
 def bind_function_arguments(
@@ -127,32 +207,6 @@ def bind_function_arguments(
     bound_arguments = signature.bind(*args, **kwargs)
     bound_arguments.apply_defaults()
     return dict(bound_arguments.arguments)
-
-
-class Argument:
-    """An Argument Component."""
-
-    def __init__(
-        self,
-        annotation: str | None = None,
-        name: str | None = None,
-        value: str | None = None,
-    ):
-        """An Argument Component."""
-        self._argument_dict: ArgumentDict = {
-            "name": name,
-            "annotation": annotation,
-            "value": value,
-        }
-
-
-class Function:
-    """A Function Component."""
-
-    def __init__(self, func: Callable):
-        """A Function Component."""
-        self._func: Callable = func
-        self._function_dict: FunctionDict = describe_function(func)
 
 
 @dataclass
@@ -214,7 +268,7 @@ class GenerativeSlot(Component, Generic[P, R]):
             )
 
         self._function = Function(func)
-        self._arguments: list[Argument] = []
+        self._arguments: Arguments | None = None
         functools.update_wrapper(self, func)
 
         # Set when calling the decorated func.
@@ -314,7 +368,14 @@ class GenerativeSlot(Component, Generic[P, R]):
             obj=self,
             args={
                 "function": self._function._function_dict,
-                "arguments": [a._argument_dict for a in self._arguments],
+                "arguments": self._arguments,
+                "requirements": [
+                    r.description
+                    for r in self.requirements
+                    if r.description is not None
+                    and r.description != ""
+                    and not r.check_only
+                ],  # Same conditions on requirements as in instruction.
             },
             tools=None,
             template_order=["*", "GenerativeSlot"],
@@ -354,7 +415,7 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
             m: MelleaSession: A mellea session (optional: must set context and backend if None)
             context: the Context object (optional: session must be set if None)
             backend: the backend used for generation (optional: session must be set if None)
-            precondition_requirements: A list of requirements that the genslot inputs are validated against; raises an err if not met.
+            precondition_requirements: A list of requirements that the genslot inputs are validated against; does not use a sampling strategy.
             requirements: A list of requirements that the genslot output can be validated against.
             strategy: A SamplingStrategy that describes the strategy for validating and repairing/retrying. None means that no particular sampling strategy is used.
             model_options: Model options to pass to the backend.
@@ -362,27 +423,73 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
             **kwargs: Additional Kwargs to be passed to the func.
 
         Returns:
-            R: an object with the original return type of the function
+            Coroutine[Any, Any, R]: a coroutine that returns an object with the original return type of the function
 
         Raises:
             TypeError: if any of the original function's parameters were passed as positional args
+            PreconditionException: if the precondition validation fails, catch the err to get the validation results
         """
         extracted = self.extract_args_and_kwargs(*args, **kwargs)
 
         slot_copy = deepcopy(self)
+        if extracted.requirements is not None:
+            slot_copy.requirements = [reqify(r) for r in extracted.requirements]
+
+        if extracted.precondition_requirements is not None:
+            slot_copy.precondition_requirements = [
+                ArgPreconditionRequirement(reqify(r))
+                for r in extracted.precondition_requirements
+            ]
+
         arguments = bind_function_arguments(self._function._func, **extracted.f_kwargs)
         if arguments:
+            slot_args: list[Argument] = []
             for key, val in arguments.items():
-                annotation = get_annotation(slot_copy._function._func, key, val)
-                slot_copy._arguments.append(Argument(annotation, key, val))
+                slot_args.append(get_argument(slot_copy._function._func, key, val))
+            slot_copy._arguments = Arguments(slot_args)
 
         response_model = create_response_format(self._function._func)
+
+        # Do precondition validation first.
+        if slot_copy._arguments is not None:
+            if extracted.m is not None:
+                val_results = extracted.m.validate(
+                    reqs=slot_copy.precondition_requirements,
+                    model_options=extracted.model_options,
+                    output=ModelOutputThunk(slot_copy._arguments.value),
+                )
+            else:
+                # We know these aren't None from the `extract_args_and_kwargs` function.
+                assert extracted.context is not None
+                assert extracted.backend is not None
+                val_results = mfuncs.validate(
+                    reqs=slot_copy.precondition_requirements,
+                    context=extracted.context,
+                    backend=extracted.backend,
+                    model_options=extracted.model_options,
+                    output=ModelOutputThunk(slot_copy._arguments.value),
+                )
+
+            # No retries if precondition validation fails.
+            if not all(bool(val_result) for val_result in val_results):
+                FancyLogger.get_logger().error(
+                    "generative slot arguments did not satisfy precondition requirements"
+                )
+                raise PreconditionException(
+                    "generative slot arguments did not satisfy precondition requirements",
+                    validation_results=val_results,
+                )
+
+        elif len(slot_copy.precondition_requirements) > 0:
+            FancyLogger.get_logger().warning(
+                "calling a generative slot with precondition requirements but no args to validate the preconditions against; ignoring precondition validation"
+            )
 
         response, context = None, None
         if extracted.m is not None:
             response = extracted.m.act(
                 slot_copy,
-                requirements=extracted.requirements,
+                requirements=slot_copy.requirements,
                 strategy=extracted.strategy,
                 format=response_model,
                 model_options=extracted.model_options,
@@ -395,7 +502,7 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                 slot_copy,
                 extracted.context,
                 extracted.backend,
-                requirements=extracted.requirements,
+                requirements=slot_copy.requirements,
                 strategy=extracted.strategy,
                 format=response_model,
                 model_options=extracted.model_options,
@@ -446,7 +553,7 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
             m: MelleaSession: A mellea session (optional: must set context and backend if None)
             context: the Context object (optional: session must be set if None)
             backend: the backend used for generation (optional: session must be set if None)
-            precondition_requirements: A list of requirements that the genslot inputs are validated against; raises an err if not met.
+            precondition_requirements: A list of requirements that the genslot inputs are validated against; does not use a sampling strategy.
             requirements: A list of requirements that the genslot output can be validated against.
             strategy: A SamplingStrategy that describes the strategy for validating and repairing/retrying. None means that no particular sampling strategy is used.
             model_options: Model options to pass to the backend.
@@ -458,35 +565,74 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
 
         Raises:
             TypeError: if any of the original function's parameters were passed as positional args
+            PreconditionException: if the precondition validation fails, catch the err to get the validation results
         """
         extracted = self.extract_args_and_kwargs(*args, **kwargs)
 
         slot_copy = deepcopy(self)
-        slot_copy.requirements = extracted.requirements
-        slot_copy.precondition_requirements = extracted.precondition_requirements
-        # TODO: JAL; need to figure out where / how reqs work; if we want to keep as a part of the object,
-        # apply them here after the copy has happened...
-        # need to change the template; add to docstring using postconditions:
-        #     Postconditions:
-        # - The input 'data' list will be sorted in ascending order.
+        if extracted.requirements is not None:
+            slot_copy.requirements = [reqify(r) for r in extracted.requirements]
+
+        if extracted.precondition_requirements is not None:
+            slot_copy.precondition_requirements = [
+                ArgPreconditionRequirement(reqify(r))
+                for r in extracted.precondition_requirements
+            ]
+
         arguments = bind_function_arguments(self._function._func, **extracted.f_kwargs)
         if arguments:
+            slot_args: list[Argument] = []
             for key, val in arguments.items():
-                annotation = get_annotation(slot_copy._function._func, key, val)
-                slot_copy._arguments.append(Argument(annotation, key, val))
+                slot_args.append(get_argument(slot_copy._function._func, key, val))
+            slot_copy._arguments = Arguments(slot_args)
 
         response_model = create_response_format(self._function._func)
 
         # AsyncGenerativeSlots are used with async functions. In order to support that behavior,
         # they must return a coroutine object.
         async def __async_call__() -> tuple[R, Context] | R:
+            """Use async calls so that control flow doesn't get stuck here in async event loops."""
             response, context = None, None
 
-            # Use the async act func so that control flow doesn't get stuck here in async event loops.
+            # Do precondition validation first.
+            if slot_copy._arguments is not None:
+                if extracted.m is not None:
+                    val_results = await extracted.m.avalidate(
+                        reqs=slot_copy.precondition_requirements,
+                        model_options=extracted.model_options,
+                        output=ModelOutputThunk(slot_copy._arguments.value),
+                    )
+                else:
+                    # We know these aren't None from the `extract_args_and_kwargs` function.
+                    assert extracted.context is not None
+                    assert extracted.backend is not None
+                    val_results = await mfuncs.avalidate(
+                        reqs=slot_copy.precondition_requirements,
+                        context=extracted.context,
+                        backend=extracted.backend,
+                        model_options=extracted.model_options,
+                        output=ModelOutputThunk(slot_copy._arguments.value),
+                    )
+
+                # No retries if precondition validation fails.
+                if not all(bool(val_result) for val_result in val_results):
+                    FancyLogger.get_logger().error(
+                        "generative slot arguments did not satisfy precondition requirements"
+                    )
+                    raise PreconditionException(
+                        "generative slot arguments did not satisfy precondition requirements",
+                        validation_results=val_results,
+                    )
+
+            elif len(slot_copy.precondition_requirements) > 0:
+                FancyLogger.get_logger().warning(
+                    "calling a generative slot with precondition requirements but no args to validate the preconditions against; ignoring precondition validation"
+                )
+
             if extracted.m is not None:
                 response = await extracted.m.aact(
                     slot_copy,
-                    requirements=extracted.requirements,
+                    requirements=slot_copy.requirements,
                     strategy=extracted.strategy,
                     format=response_model,
                     model_options=extracted.model_options,
@@ -499,7 +645,7 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                     slot_copy,
                     extracted.context,
                     extracted.backend,
-                    requirements=extracted.requirements,
+                    requirements=slot_copy.requirements,
                     strategy=extracted.strategy,
                     format=response_model,
                     model_options=extracted.model_options,
@@ -525,7 +671,6 @@ def generative(func: Callable[P, Awaitable[R]]) -> AsyncGenerativeSlot[P, R]: ..
 def generative(func: Callable[P, R]) -> SyncGenerativeSlot[P, R]: ...
 
 
-# TODO: JAL Investigate changing genslots to functions and see if it fixes the defaults being populated.
 def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
     """Convert a function into an AI-powered function.
 
@@ -546,6 +691,18 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
     and familiar to any Python developer. The more natural and conventional your
     function definition, the better the AI will understand and imitate it.
 
+    The new function has the following additional args:
+        *m*: MelleaSession: A mellea session (optional: must set context and backend if None)
+        *context*: Context: the Context object (optional: session must be set if None)
+        *backend*: Backend: the backend used for generation (optional: session must be set if None)
+        *precondition_requirements*: list[Requirements | str] | None: A list of requirements that the genslot inputs are validated against; raises an err if not met.
+        *requirements*: list[Requirement | str] | None: A list of requirements that the genslot output can be validated against.
+        *strategy*: SamplingStrategy | None: A SamplingStrategy that describes the strategy for validating and repairing/retrying. None means that no particular sampling strategy is used.
+        *model_options*: dict | None: Model options to pass to the backend.
+
+    The requirements and validation for the generative function operate over a textual representation
+    of the arguments / outputs (not their python objects).
+
     Args:
         func: Function with docstring and type hints. Implementation can be empty (...).
 
@@ -557,6 +714,7 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         ValueError: (raised by @generative) if the decorated function has a parameter name used by generative slots
         ValidationError: (raised when calling the generative slot) if the generated output cannot be parsed into the expected return type. Typically happens when the token limit for the generated output results in invalid json.
         TypeError: (raised when calling the generative slot) if any of the original function's parameters were passed as positional args
+        PreconditionException: (raised when calling the generative slot) if the precondition validation of the args fails; catch the exception to get the validation results
 
     Examples:
         >>> from mellea import generative, start_session
@@ -634,12 +792,11 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         >>>
         >>> reasoning = generate_chain_of_thought(session, problem="How to optimize a slow database query?")
     """
-    # Grab and remove the func if it exists in kwargs. Otherwise, it's the only arg.
     if inspect.iscoroutinefunction(func):
         return AsyncGenerativeSlot(func)
     else:
         return SyncGenerativeSlot(func)
 
 
-# Export the decorator as the interface
-__all__ = ["generative"]
+# Export the decorator as the interface. Export the specific exception for debugging.
+__all__ = ["PreconditionException", "generative"]
