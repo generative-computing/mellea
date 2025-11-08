@@ -19,16 +19,16 @@ if __name__ == "__main__":
     sentiment_component = classify_sentiment(
         m,
         text="I love this!",
-
         # Preconditions are only checked with basic validation. Don't use the strategy.
-        precondition_requirements=["the text arg should be less than 100 words"], 
-
+        precondition_requirements=["the text arg should be less than 100 words"],
         # Reqs to use with the strategy. You could also just remove "unknown" from the structured output for this.
         requirements=["avoid classifying the sentiment as unknown"],
-        strategy=RejectionSamplingStrategy() # Must specify a strategy for gen slots
+        strategy=RejectionSamplingStrategy(),  # Must specify a strategy for gen slots
     )
 
-    print(f"Prompt to the model looked like:\n```\n{m.last_prompt()[0]["content"]}\n```")  # type: ignore
+    print(
+        f"Prompt to the model looked like:\n```\n{m.last_prompt()[0]['content']}\n```"
+    )  # type: ignore
     # Prompt to the model looked like:
     # ```
     # Your task is to imitate the output of the following function for the given arguments.
@@ -48,17 +48,18 @@ if __name__ == "__main__":
 
     print("\nOutput sentiment is:", sentiment_component)
 
-
     # We can also force a precondition failure.
     try:
         sentiment_component = classify_sentiment(
             m,
             text="I hate this!",
-
             # Requirement always fails to validate given the lambda.
             precondition_requirements=[
-                Requirement("the text arg should be only one word", validation_fn=simple_validate(lambda x: (False, "Forced to fail!")))
-            ], 
+                Requirement(
+                    "the text arg should be only one word",
+                    validation_fn=simple_validate(lambda x: (False, "Forced to fail!")),
+                )
+            ],
         )
     except PreconditionException as e:
         print(f"exception: {str(e)}")
