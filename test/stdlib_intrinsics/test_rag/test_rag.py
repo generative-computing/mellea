@@ -1,37 +1,37 @@
 """Tests of the code in ``mellea.stdlib.intrinsics.rag``"""
 
 import gc
-import os
 import json
+import os
 import pathlib
 
 import pytest
 import torch
 
-from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.base import ChatContext, Document
 from mellea.stdlib.chat import Message
 from mellea.stdlib.intrinsics import rag
 
-
 DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 """Location of data files for the tests in this file."""
+
 
 BASE_MODEL = "ibm-granite/granite-3.3-2b-instruct"
 
 
-@pytest.fixture
-def backend():
+@pytest.fixture(name="backend")
+def _backend():
     """Backend used by the tests in this file."""
 
-    backend = LocalHFBackend(
-        model_id=BASE_MODEL, formatter=TemplateFormatter(model_id=BASE_MODEL)
+    backend_ = LocalHFBackend(
+        model_id=BASE_MODEL
     )
-    yield backend
+    yield backend_
 
-    # Begin cleanup code
-    del backend
+    # Code after yield is cleanup code.
+    # Free GPU memory with extreme prejudice.
+    del backend_
     gc.collect()  # Force a collection of the newest generation
     gc.collect()
     gc.collect()  # Hopefully force a collection of the oldest generation
@@ -47,7 +47,7 @@ def _read_input_json(file_name: str):
     # Data is assumed to be an OpenAI chat completion request. Convert to Mellea format.
     context = ChatContext()
     for m in json_data["messages"][:-1]:
-        context.add(Message(m["role"], m["content"]))
+        context = context.add(Message(m["role"], m["content"]))
 
     # Store the user turn at the end of the messages list separately so that tests can
     # play it back.
@@ -59,19 +59,31 @@ def _read_input_json(file_name: str):
             documents.append(
                 Document(
                     text=d["text"],
-                    # Mellea doesn't have a doc_id, but OpenAI requires it. Compromise
-                    # by converting the doc_id to a title.
-                    title=d["doc_id"],
+                    doc_id=d["doc_id"],
                 )
             )
     return context, next_user_turn, documents
+
+
+def _read_output_json(file_name: str):
+    """Shared code for reading canned outputs stored in JSON files and converting
+    to Mellea types."""
+    with open(DATA_ROOT / "output_json" / file_name, encoding="utf-8") as f:
+        json_data = json.load(f)
+
+    # Output is in OpenAI chat completion response format. Assume only one choice.
+    result_str = json_data["choices"][0]["message"]["content"]
+
+    # Intrinsic outputs are always JSON, serialized to a string for OpenAI
+    # compatibility.
+    return json.loads(result_str)
 
 
 def test_answerability(backend):
     """Verify that the answerability intrinsic functions properly."""
     context, next_user_turn, documents = _read_input_json("answerability.json")
 
-    # First call triggers LoRA adapter loading
+    # First call triggers adapter loading
     result = rag.check_answerability(context, next_user_turn, documents, backend)
     assert pytest.approx(result) == 1.0
 
@@ -79,6 +91,52 @@ def test_answerability(backend):
     result = rag.check_answerability(context, next_user_turn, documents, backend)
     assert pytest.approx(result) == 1.0
 
+
+def test_query_rewrite(backend):
+    """Verify that the answerability intrinsic functions properly."""
+    context, next_user_turn, _ = _read_input_json("query_rewrite.json")
+    expected = (
+        "Is Rex, the dog, more likely to get fleas because he spends a lot of "
+        "time outdoors?"
+    )
+
+    # First call triggers adapter loading
+    result = rag.rewrite_question(context, next_user_turn, backend)
+    assert result == expected
+
+    # Second call hits a different code path from the first one
+    result = rag.rewrite_question(context, next_user_turn, backend)
+    assert result == expected
+
+
+def test_citations(backend):
+    """Verify that the citations intrinsic functions properly."""
+    context, assistant_response, docs = _read_input_json("citations.json")
+    expected = _read_output_json("citations.json")
+
+    # First call triggers adapter loading
+    result = rag.find_citations(context, assistant_response, docs, backend)
+    assert result == expected
+
+    # Second call hits a different code path from the first one
+    result = rag.find_citations(context, assistant_response, docs, backend)
+    assert result == expected
+
+def test_context_relevance(backend):
+    """Verify that the context relevance intrinsic functions properly."""
+    context, question, docs = _read_input_json("context_relevance.json")
+    
+    # Context relevance can only check against a single document at a time.
+    document = docs[0]
+        
+    # First call triggers adapter loading
+    result = rag.check_context_relevance(context, question, document, backend)
+    assert pytest.approx(result, 2e-2) == 0.45
+
+    # Second call hits a different code path from the first one
+    result = rag.check_context_relevance(context, question, document, backend)
+    assert pytest.approx(result, 2e-2) == 0.45
+    
 
 if __name__ == "__main__":
     pytest.main([__file__])

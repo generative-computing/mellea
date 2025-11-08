@@ -16,6 +16,7 @@ from mellea.stdlib.requirement import (
     Requirement,
     ValidationResult,
     default_output_to_bool,
+    REQUIREMENT_REPO_ID
 )
 
 
@@ -27,8 +28,11 @@ def backend():
         formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
         cache=SimpleLRUCache(5),
     )
-    backend.add_adapter(GraniteCommonAdapter("ibm-granite/rag-intrinsics-lib", 
-                                             "requirement_check"))
+    # Assertion to assuage the wrath of the linter
+    assert backend.model_id is not None
+    backend.add_adapter(GraniteCommonAdapter(REQUIREMENT_REPO_ID,
+                                             "requirement_check",
+                                             base_model_name=backend.model_id))
     return backend
 
 
@@ -42,7 +46,8 @@ def session(backend):
 def test_adapters(backend):
     assert len(backend._added_adapters.items()) > 0
 
-    adapter = backend._added_adapters["requirement_check_alora"]
+    expected_qualified_name = f"{REQUIREMENT_REPO_ID}_requirement_check_alora"
+    adapter = backend._added_adapters[expected_qualified_name]
     backend.load_adapter(adapter.qualified_name)
     assert adapter.qualified_name in backend._loaded_adapters
 

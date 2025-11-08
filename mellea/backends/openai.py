@@ -554,12 +554,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             if message._docs is not None:
                 docs.extend(message._docs)
 
-        # TODO: We can add doc_ids here for vllm if needed.
         json_docs: list[dict[str, str]] = []
         for doc in docs:
             json_doc = {"text": doc.text}
             if doc.title is not None:
                 json_doc["title"] = doc.title
+            if doc.doc_id is not None:
+                json_doc["doc_id"] = doc.doc_id
             json_docs.append(json_doc)
         return json_docs
 

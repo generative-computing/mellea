@@ -14,7 +14,6 @@ from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
-    GenerateLog,
     ModelOutputThunk,
     TemplateRepresentation,
 )
@@ -223,13 +222,14 @@ class ALoraRequirement(Requirement, Intrinsic):
         if intrinsic_name is None:
             intrinsic_name = "requirement_check"
 
-        self.intrinsic_name = intrinsic_name
-        self.adapter_types = [AdapterType.ALORA]
-
-    @property
-    def intrinsic_kwargs(self):
-        """An AloraRequirement's intrinsic kwarg is always the requirement's description."""
-        return {"requirement": f"{self.description}"}
+        # Initialize the other side of the inheritance tree
+        Intrinsic.__init__(
+            self,
+            repo_id=REQUIREMENT_REPO_ID,
+            intrinsic_name=intrinsic_name,
+            intrinsic_kwargs={"requirement": f"{self.description}"},
+            adapter_types=[AdapterType.ALORA],
+        )
 
 
 class ScorerRequirement(Requirement):
