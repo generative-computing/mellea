@@ -151,7 +151,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
             # run a generation pass
-            result, result_ctx = backend.generate_from_context(
+            result, result_ctx = await backend.generate_from_context(
                 next_action,
                 ctx=next_context,
                 format=format,

@@ -235,7 +235,7 @@ class LocalVLLMBackend(FormatterBackend):
 
         return self._underlying_model
 
-    def generate_from_context(
+    async def generate_from_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -251,7 +251,7 @@ class LocalVLLMBackend(FormatterBackend):
 
         # TODO: insert the alora code here.
 
-        mot = self._generate_from_context_standard(
+        mot = await self._generate_from_context_standard(
             action,
             ctx,
             format=format,
@@ -261,7 +261,7 @@ class LocalVLLMBackend(FormatterBackend):
         )
         return mot, ctx.add(action).add(mot)
 
-    def _generate_from_context_standard(
+    async def _generate_from_context_standard(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -423,7 +423,7 @@ class LocalVLLMBackend(FormatterBackend):
 
         mot._generate_log = generate_log
 
-    def generate_from_raw(
+    async def generate_from_raw(
         self,
         actions: list[Component | CBlock],
         ctx: Context,
@@ -473,12 +473,8 @@ class LocalVLLMBackend(FormatterBackend):
                 assert result_output.finished
                 return result_output.outputs[0].text
 
-        async def generate_all(prompts):
-            tasks = [generate(p, f"{id(prompts)}-{i}") for i, p in enumerate(prompts)]
-            return await asyncio.gather(*tasks)
-
-        # Allow calling this from async functions.
-        decoded_results = _run_async_in_thread(generate_all(prompts))
+        tasks = [generate(p, f"{id(prompts)}-{i}") for i, p in enumerate(prompts)]
+        decoded_results = await asyncio.gather(*tasks)
 
         results = [ModelOutputThunk(value=text) for text in decoded_results]
 

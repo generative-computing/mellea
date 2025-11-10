@@ -110,7 +110,7 @@ class LiteLLMBackend(FormatterBackend):
 
         self._past_event_loops: set[int] = set()
 
-    def generate_from_context(
+    async def generate_from_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -123,7 +123,7 @@ class LiteLLMBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
-        mot = self._generate_from_chat_context_standard(
+        mot = await self._generate_from_chat_context_standard(
             action,
             ctx,
             _format=format,
@@ -231,7 +231,7 @@ class LiteLLMBackend(FormatterBackend):
 
         return backend_specific
 
-    def _generate_from_chat_context_standard(
+    async def _generate_from_chat_context_standard(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -448,7 +448,7 @@ class LiteLLMBackend(FormatterBackend):
             "format": _format,
             "tools_available": tools,
             "tools_called": mot.tool_calls,
-            "seed": thinking,
+            "thinking": thinking,
         }
         generate_log.action = mot._action
         generate_log.result = mot
@@ -474,7 +474,7 @@ class LiteLLMBackend(FormatterBackend):
             FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
         return tools
 
-    def generate_from_raw(
+    async def generate_from_raw(
         self,
         actions: list[Component | CBlock],
         ctx: Context,
@@ -484,7 +484,73 @@ class LiteLLMBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
-        raise NotImplementedError("This method is not implemented yet.")
+        extra_body = {}
+        if format is not None:
+            FancyLogger.get_logger().warning(
+                "The official OpenAI completion api does not accept response format / structured decoding; "
+                "it will be passed as an extra arg."
+            )
+
+            # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
+            extra_body["guided_json"] = format.model_json_schema()
+        if tool_calls:
+            FancyLogger.get_logger().warning(
+                "The completion endpoint does not support tool calling."
+            )
+
+        # We don't do anything fancy for model_opts with generate from raw; litellm has too many potential options depending on provider.
+        model_opts = self._simplify_and_merge(model_options)
+        model_specific_options = self._make_backend_specific_and_remove(model_opts)
+
+        if self._has_potential_event_loop_errors():
+            FancyLogger().get_logger().warning(
+                "There is a known bug with litellm. This generation call may fail. If it does, you should ensure that you are either running only synchronous Mellea functions or running async Mellea functions from one asyncio.run() call."
+            )
+
+        prompts = [self.formatter.print(action) for action in actions]
+
+        completion_response = await litellm.atext_completion(
+            model=self._model_id, prompt=prompts, **model_specific_options
+        )
+
+        # Necessary for type checker.
+        assert isinstance(completion_response, litellm.TextCompletionResponse)  # type: ignore
+
+        results = []
+        date = datetime.datetime.now()
+        responses = completion_response.choices
+        if len(responses) != len(prompts):
+            FancyLogger().get_logger().error(
+                "litellm appears to have sent your batch request as a single message; this typically happens with providers like ollama that don't support batching"
+            )
+
+        for res, action, prompt in zip(responses, actions, prompts):
+            output = ModelOutputThunk(res.text)  # type: ignore
+            output._context = None  # There is no context for generate_from_raw for now
+            output._action = action
+            output._model_options = model_opts
+            output._meta = {
+                "litellm_chat_response": res.model_dump(),
+                "usage": completion_response.usage.model_dump()
+                if completion_response.usage
+                else None,
+            }
+
+            self.formatter.parse(action, output)
+
+            generate_log = GenerateLog()
+            generate_log.prompt = prompt
+            generate_log.backend = f"litellm::{self.model_id!s}"
+            generate_log.model_options = model_opts
+            generate_log.date = date
+            generate_log.model_output = completion_response
+            generate_log.extra = {"seed": model_opts.get("seed", None)}
+            generate_log.action = action
+            output._generate_log = generate_log
+
+            results.append(output)
+
+        return results
 
     def _extract_model_tool_requests(
         self,

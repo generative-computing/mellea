@@ -236,7 +236,7 @@ class WatsonxAIBackend(FormatterBackend):
 
         return model_opts
 
-    def generate_from_context(
+    async def generate_from_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -249,7 +249,7 @@ class WatsonxAIBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The watsonx.ai backend only supports chat-like contexts."
         )
-        mot = self.generate_from_chat_context(
+        mot = await self.generate_from_chat_context(
             action,
             ctx,
             _format=format,
@@ -258,7 +258,7 @@ class WatsonxAIBackend(FormatterBackend):
         )
         return mot, ctx.add(action).add(mot)
 
-    def generate_from_chat_context(
+    async def generate_from_chat_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -480,7 +480,7 @@ class WatsonxAIBackend(FormatterBackend):
         generate_log.action = mot._action
         mot._generate_log = generate_log
 
-    def generate_from_raw(
+    async def generate_from_raw(
         self,
         actions: list[Component | CBlock],
         ctx: Context,
@@ -499,12 +499,14 @@ class WatsonxAIBackend(FormatterBackend):
 
         prompts = [self.formatter.print(action) for action in actions]
 
-        responses = self._model.generate(
+        responses = await asyncio.to_thread(
+            self._model.generate,
             prompt=prompts,
             params=self._make_backend_specific_and_remove(
                 model_opts, is_chat_context=False
             ),
         )
+
         results = []
         date = datetime.datetime.now()
 

@@ -2,6 +2,7 @@
 import asyncio
 import os
 
+import openai
 import pydantic
 import pytest
 from typing_extensions import Annotated
@@ -112,15 +113,14 @@ def test_format(m_session):
     pass
 
 
-# @pytest.mark.qualitative
-# def test_generate_from_raw(m_session):
-#     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
+@pytest.mark.qualitative
+async def test_generate_from_raw(m_session):
+    prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
-#     results = m_session.backend.generate_from_raw(
-#         actions=[CBlock(value=prompt) for prompt in prompts], ctx=m_session.ctx
-#     )
-
-#     assert len(results) == len(prompts)
+    with pytest.raises(openai.BadRequestError):
+        results = await m_session.backend.generate_from_raw(
+            actions=[CBlock(value=prompt) for prompt in prompts], ctx=m_session.ctx
+        )
 
 # Default OpenAI implementation doesn't support structured outputs for the completions API.
 # def test_generate_from_raw_with_format(self):
@@ -147,10 +147,10 @@ def test_format(m_session):
 
 async def test_async_parallel_requests(m_session):
     model_opts = {ModelOption.STREAM: True}
-    mot1, _ = m_session.backend.generate_from_context(
+    mot1, _ = await m_session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext(), model_options=model_opts
     )
-    mot2, _ = m_session.backend.generate_from_context(
+    mot2, _ = await m_session.backend.generate_from_context(
         CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts
     )
 
@@ -181,7 +181,7 @@ async def test_async_parallel_requests(m_session):
 
 
 async def test_async_avalue(m_session):
-    mot1, _ = m_session.backend.generate_from_context(
+    mot1, _ = await m_session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext()
     )
     m1_final_val = await mot1.avalue()
@@ -218,4 +218,4 @@ def test_client_cache(backend):
 if __name__ == "__main__":
     import pytest
 
-    pytest.main([__file__])
+    pytest.main([__file__, "-k", "generate_from_raw"])

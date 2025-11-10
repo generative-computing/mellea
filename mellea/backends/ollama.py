@@ -252,7 +252,7 @@ class OllamaModelBackend(FormatterBackend):
         )
         return ModelOption.remove_special_keys(backend_specific)
 
-    def generate_from_context(
+    async def generate_from_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -265,7 +265,7 @@ class OllamaModelBackend(FormatterBackend):
         assert ctx.is_chat_context, (
             "The ollama backend only supports chat-like contexts."
         )
-        mot = self.generate_from_chat_context(
+        mot = await self.generate_from_chat_context(
             action,
             ctx,
             _format=format,
@@ -275,7 +275,7 @@ class OllamaModelBackend(FormatterBackend):
 
         return mot, ctx.add(action).add(mot)
 
-    def generate_from_chat_context(
+    async def generate_from_chat_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -375,6 +375,8 @@ class OllamaModelBackend(FormatterBackend):
 
             # This function should always be called from a running event loop so we don't have to worry about
             # scheduling the task to a specific event loop here.
+
+            # Use `create_task` so that we don't have to specifically await this task before it starts executing.
             output._generate = asyncio.create_task(
                 send_to_queue(chat_response, output._async_queue)
             )
@@ -385,7 +387,7 @@ class OllamaModelBackend(FormatterBackend):
 
         return output
 
-    def generate_from_raw(
+    async def generate_from_raw(
         self,
         actions: list[Component | CBlock],
         ctx: Context,
@@ -410,27 +412,20 @@ class OllamaModelBackend(FormatterBackend):
         # See https://github.com/ollama/ollama/blob/main/docs/faq.md#how-does-ollama-handle-concurrent-requests.
         prompts = [self.formatter.print(action) for action in actions]
 
-        async def get_response():
-            # Run async so that we can make use of Ollama's concurrency.
-            coroutines: list[Coroutine[Any, Any, ollama.GenerateResponse]] = []
-            for prompt in prompts:
-                co = self._async_client.generate(
-                    model=self._get_ollama_model_id(),
-                    prompt=prompt,
-                    raw=True,
-                    think=model_opts.get(ModelOption.THINKING, None),
-                    format=format.model_json_schema() if format is not None else None,
-                    options=self._make_backend_specific_and_remove(model_opts),
-                )
-                coroutines.append(co)
+        # Run async so that we can make use of Ollama's concurrency.
+        coroutines: list[Coroutine[Any, Any, ollama.GenerateResponse]] = []
+        for prompt in prompts:
+            co = self._async_client.generate(
+                model=self._get_ollama_model_id(),
+                prompt=prompt,
+                raw=True,
+                think=model_opts.get(ModelOption.THINKING, None),
+                format=format.model_json_schema() if format is not None else None,
+                options=self._make_backend_specific_and_remove(model_opts),
+            )
+            coroutines.append(co)
 
-            responses = await asyncio.gather(*coroutines, return_exceptions=True)
-            return responses
-
-        # Run in the same event_loop like other Mellea async code called from a sync function.
-        responses: list[ollama.GenerateResponse | BaseException] = _run_async_in_thread(
-            get_response()
-        )
+        responses = await asyncio.gather(*coroutines, return_exceptions=True)
 
         results = []
         date = datetime.datetime.now()

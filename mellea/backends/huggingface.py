@@ -185,7 +185,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         assert self._alora_model is None
         self._alora_model = model
 
-    def generate_from_context(
+    async def generate_from_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -198,6 +198,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # Upsert model options.
         model_opts = self._simplify_and_merge(model_options)
 
+        # TODO: JAL. Move to intrinsic branch and do async conversion here.
         if use_alora(
             action,
             self.get_alora("constraint"),
@@ -208,7 +209,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             )
             return mot, ctx.add(action).add(mot)
         else:
-            mot = self._generate_from_context_standard(
+            mot = await self._generate_from_context_standard(
                 action,
                 ctx,
                 _format=format,
@@ -264,7 +265,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
         return alora_output
 
-    def _generate_from_context_standard(
+    async def _generate_from_context_standard(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -497,7 +498,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
         mot._generate_log = generate_log
 
-    def generate_from_raw(
+    async def generate_from_raw(
         self,
         actions: list[Component | CBlock],
         ctx: Context,
@@ -533,7 +534,8 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         )
 
         if format is None:
-            outputs = self._model.generate(  # type: ignore
+            outputs = await asyncio.to_thread(
+                self._model.generate,  # type: ignore
                 input_ids=inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 return_dict_in_generate=True,
@@ -551,7 +553,8 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             from outlines.processors import RegexLogitsProcessor
             from transformers import LogitsProcessorList
 
-            outputs = self._model.generate(  # type: ignore
+            outputs = await asyncio.to_thread(
+                self._model.generate,  # type: ignore
                 input_ids=inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 return_dict_in_generate=True,
