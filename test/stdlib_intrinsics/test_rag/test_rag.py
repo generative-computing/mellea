@@ -23,10 +23,11 @@ BASE_MODEL = "ibm-granite/granite-3.3-2b-instruct"
 @pytest.fixture(name="backend")
 def _backend():
     """Backend used by the tests in this file."""
+    
+    # Prevent thrashing if the default device is CPU
+    torch.set_num_threads(4)
 
-    backend_ = LocalHFBackend(
-        model_id=BASE_MODEL
-    )
+    backend_ = LocalHFBackend(model_id=BASE_MODEL)
     yield backend_
 
     # Code after yield is cleanup code.
@@ -122,21 +123,57 @@ def test_citations(backend):
     result = rag.find_citations(context, assistant_response, docs, backend)
     assert result == expected
 
+
 def test_context_relevance(backend):
     """Verify that the context relevance intrinsic functions properly."""
     context, question, docs = _read_input_json("context_relevance.json")
-    
+
     # Context relevance can only check against a single document at a time.
     document = docs[0]
-        
+
     # First call triggers adapter loading
     result = rag.check_context_relevance(context, question, document, backend)
-    assert pytest.approx(result, 2e-2) == 0.45
+    assert pytest.approx(result, abs=2e-2) == 0.45
 
     # Second call hits a different code path from the first one
     result = rag.check_context_relevance(context, question, document, backend)
-    assert pytest.approx(result, 2e-2) == 0.45
-    
+    assert pytest.approx(result, abs=2e-2) == 0.45
+
+
+def test_hallucination_detection(backend):
+    """Verify that the hallucination detection intrinsic functions properly."""
+    context, assistant_response, docs = _read_input_json("hallucination_detection.json")
+    expected = _read_output_json("hallucination_detection.json")
+
+    # First call triggers adapter loading
+    result = rag.flag_hallucinated_content(context, assistant_response, docs, backend)
+    # pytest.approx() chokes on lists of records, so we do this complicated dance.
+    for r, e in zip(result, expected, strict=True):
+        assert pytest.approx(r, abs=2e-2) == e
+
+    # Second call hits a different code path from the first one
+    result = rag.flag_hallucinated_content(context, assistant_response, docs, backend)
+    for r, e in zip(result, expected, strict=True):
+        assert pytest.approx(r, abs=2e-2) == e
+
+
+def test_answer_relevance(backend):
+    """Verify that the answer relevance composite intrinsic functions properly."""
+    context, answer, docs = _read_input_json("answer_relevance.json")
+    expected_rewrite = "Alice, Bob, and Carol attended the meeting."
+
+    # First call triggers adapter loading
+    result = rag.rewrite_answer_for_relevance(context, answer, docs, backend)
+    assert result == expected_rewrite
+
+    # Second call hits a different code path from the first one
+    result = rag.rewrite_answer_for_relevance(context, answer, docs, backend)
+    assert result == expected_rewrite
+
+    # Canned input always gets rewritten. Set threshold to disable the rewrite.
+    result = rag.rewrite_answer_for_relevance(context, answer, docs, backend,
+                                              rewrite_threshold=0.0)
+    assert result == answer
 
 if __name__ == "__main__":
     pytest.main([__file__])
