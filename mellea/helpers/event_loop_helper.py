@@ -20,7 +20,8 @@ class _EventLoopHandler:
         """
         self._event_loop = asyncio.new_event_loop()
         self._thread: threading.Thread = threading.Thread(
-            target=self._event_loop.run_forever, daemon=True  # type: ignore
+            target=self._event_loop.run_forever,
+            daemon=True,  # type: ignore
         )
         self._thread.start()
 
