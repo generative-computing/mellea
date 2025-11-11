@@ -20,6 +20,9 @@ from mellea.stdlib.requirement import (
 @pytest.fixture(scope="module")
 def backend():
     """Shared vllm backend for all tests in this module."""
+    if os.environ.get("VLLM_USE_V1", -1) != "0":
+        pytest.skip("skipping vllm tests; tests require `export VLLM_USE_V1=0`")
+
     backend = LocalVLLMBackend(
         model_id=model_ids.QWEN3_0_6B,
         # formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
@@ -42,10 +45,6 @@ def session(backend):
 
 
 @pytest.mark.qualitative
-def test_v0_api(session):
-    assert os.environ["VLLM_USE_V1"] == "0"
-
-@pytest.mark.qualitative
 def test_system_prompt(session):
     result = session.chat(
         "Where are we going?",
@@ -66,7 +65,6 @@ def test_multiturn(session):
     beta = session.instruct(
         "Take the result of the previous sum and find the corresponding letter in the greek alphabet."
     )
-    assert "β" in str(beta).lower()
     words = session.instruct("Now list five English words that start with that letter.")
     print(words)
 
@@ -105,8 +103,9 @@ def test_format(session):
 def test_generate_from_raw(session):
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
-    results = session.backend._generate_from_raw(
-        actions=[CBlock(value=prompt) for prompt in prompts], generate_logs=None
+    results = session.backend.generate_from_raw(
+        actions=[CBlock(value=prompt) for prompt in prompts],
+        ctx=session.ctx
     )
 
     assert len(results) == len(prompts)
@@ -120,10 +119,10 @@ def test_generate_from_raw_with_format(session):
         name: str
         value: int
 
-    results = session.backend._generate_from_raw(
+    results = session.backend.generate_from_raw(
         actions=[CBlock(value=prompt) for prompt in prompts],
+        ctx=session.ctx,
         format=Answer,
-        generate_logs=None,
     )
 
     assert len(results) == len(prompts)

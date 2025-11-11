@@ -7,8 +7,10 @@ import functools
 import inspect
 import json
 from collections.abc import Callable, Coroutine
+from enum import Enum
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import urlparse
 
 import granite_common
 import openai
@@ -598,8 +600,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([self.message_to_openai_message(m) for m in messages])
 
+        extra_params: dict[str, Any] = {}
         if _format is not None:
-            response_format = {
+            extra_params["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
                     "name": _format.__name__,
@@ -607,8 +610,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     "strict": True,
                 },
             }
-        else:
-            response_format = {"type": "text"}
 
         # Append tool call information if applicable.
         tools: dict[str, Callable] = dict()
@@ -640,9 +641,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             model=self._hf_model_id,
             messages=conversation,  # type: ignore
             reasoning_effort=thinking,  # type: ignore
-            response_format=response_format,  # type: ignore
             tools=formatted_tools if use_tools else None,  # type: ignore
             # parallel_tool_calls=False, # We only support calling one tool per turn. But we do the choosing on our side so we leave this False.
+            **extra_params,
             **self._make_backend_specific_and_remove(
                 model_opts, is_chat_context=ctx.is_chat_context
             ),
@@ -779,13 +780,14 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         generate_log.result = mot
         mot._generate_log = generate_log
 
-    def _generate_from_raw(
+    def generate_from_raw(
         self,
         actions: list[Component | CBlock],
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
+        tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
         extra_body = {}
@@ -797,6 +799,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
             # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
             extra_body["guided_json"] = format.model_json_schema()
+        if tool_calls:
+            FancyLogger.get_logger().warning(
+                "The completion endpoint does not support tool calling at the moment."
+            )
 
         model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
 
@@ -822,32 +828,35 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # Necessary for type checker.
         assert isinstance(completion_response, Completion)
 
-        results = [
-            ModelOutputThunk(
-                value=response.text,
-                meta={"oai_completion_response": response.model_dump()},
-            )
-            for response in completion_response.choices
-        ]
+        results = []
+        for response, action, prompt in zip(
+            completion_response.choices, actions, prompts
+        ):
+            output = ModelOutputThunk(None)
+            output.value = response.text
+            output._context = None  # There is no context for generate_from_raw for now
+            output._action = action
+            output._model_options = model_opts
+            output._meta = {
+                "oai_completion_response": response.model_dump(),
+                "usage": completion_response.usage.model_dump()
+                if completion_response.usage
+                else None,
+            }
 
-        for i, result in enumerate(results):
-            self.formatter.parse(actions[i], result)
+            self.formatter.parse(action, output)
 
-        if generate_logs is not None:
-            assert isinstance(generate_logs, list)
-            date = datetime.datetime.now()
+            generate_log = GenerateLog()
+            generate_log.prompt = prompt
+            generate_log.backend = f"openai::{self.model_id!s}"
+            generate_log.model_options = model_opts
+            generate_log.date = datetime.datetime.now()
+            generate_log.model_output = completion_response
+            generate_log.extra = {"seed": model_opts.get("seed", None)}
+            generate_log.action = action
+            output._generate_log = generate_log
 
-            for i in range(len(prompts)):
-                generate_log = GenerateLog()
-                generate_log.prompt = prompts[i]
-                generate_log.backend = f"openai::{self.model_id!s}"
-                generate_log.model_options = model_opts
-                generate_log.date = date
-                generate_log.model_output = completion_response
-                generate_log.extra = {"seed": model_opts.get("seed", None)}
-                generate_log.action = actions[i]
-                generate_log.result = results[i]
-                generate_logs.append(generate_log)
+            results.append(output)
 
         return results
 

@@ -1,7 +1,8 @@
 import pytest
 from mellea import start_session
 from mellea.backends import ModelOption
-from mellea.stdlib.base import ChatContext
+from mellea.stdlib.base import ChatContext, ModelOutputThunk, Context
+from mellea.stdlib.requirement import Requirement
 from mellea.stdlib.sampling import (
     MultiTurnStrategy,
     RejectionSamplingStrategy,
@@ -46,6 +47,14 @@ class TestSamplingCtxCase:
             "there should only be a message and a response in the ctx."
         )
         assert len(self.m.last_prompt()) == 1, "Last prompt should only have only one instruction inside - independent of sampling iterations."
+
+        _, val_res = res.result_validations[0]
+        # Ensure the ValidationResult has its thunk and context set. Ensure the context has
+        # the correct actions / results in it.
+        assert isinstance(val_res.context, Context)
+        assert isinstance(val_res.thunk, ModelOutputThunk)
+        assert isinstance(val_res.context.previous_node.node_data, Requirement)
+        assert val_res.context.node_data is val_res.thunk
 
     def test_ctx_for_multiturn(self):
         self.m.reset()

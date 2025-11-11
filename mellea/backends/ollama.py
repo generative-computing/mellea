@@ -385,18 +385,23 @@ class OllamaModelBackend(FormatterBackend):
 
         return output
 
-    def _generate_from_raw(
+    def generate_from_raw(
         self,
         actions: list[Component | CBlock],
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
+        tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the generate api. Gives the input provided to the model without templating."""
         if len(actions) > 1:
             FancyLogger.get_logger().info(
                 "Ollama doesn't support batching; will attempt to process concurrently."
+            )
+        if tool_calls:
+            FancyLogger.get_logger().warning(
+                "The completion endpoint does not support tool calling at the moment."
             )
 
         model_opts = self._simplify_and_merge(model_options)
@@ -438,32 +443,41 @@ class OllamaModelBackend(FormatterBackend):
             else:
                 result = ModelOutputThunk(
                     value=response.response,
-                    meta={"generate_response": response.model_dump()},
+                    meta={
+                        "generate_response": response.model_dump(),
+                        "usage": {
+                            "completion_tokens": response.eval_count,
+                            "prompt_tokens": response.prompt_eval_count,
+                            "total_tokens": (
+                                response.prompt_eval_count + response.eval_count
+                                if response.prompt_eval_count is not None
+                                and response.eval_count is not None
+                                else None
+                            ),
+                        },
+                    },
                 )
 
             self.formatter.parse(actions[i], result)
+
+            generate_log = GenerateLog()
+            generate_log.prompt = prompts[i]
+            generate_log.backend = f"ollama::{self.model_id!s}"
+            generate_log.date = date
+            generate_log.model_options = model_opts
+            generate_log.model_output = result.value
+            generate_log.extra = {
+                "format": format,
+                "thinking": model_opts.get(ModelOption.THINKING, None),
+                "seed": model_opts.get(ModelOption.SEED, None),
+            }
+            generate_log.action = actions[i]
+
+            if error:
+                generate_log.extra["error"] = error
+            result._generate_log = generate_log
+
             results.append(result)
-
-            if generate_logs is not None:
-                # noinspection DuplicatedCode
-                assert isinstance(generate_logs, list)
-                generate_log = GenerateLog()
-                generate_log.prompt = prompts[i]
-                generate_log.backend = f"ollama::{self.model_id!s}"
-                generate_log.date = date
-                generate_log.model_options = model_opts
-                generate_log.model_output = result.value
-                generate_log.extra = {
-                    "format": format,
-                    "thinking": model_opts.get(ModelOption.THINKING, None),
-                    "seed": model_opts.get(ModelOption.SEED, None),
-                }
-                generate_log.action = actions[i]
-                generate_log.result = result
-
-                if error:
-                    generate_log.extra["error"] = error
-                generate_logs.append(generate_log)
 
         return results
 
