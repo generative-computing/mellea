@@ -155,10 +155,16 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
                         message += f"\nOutput: {result.stdout.strip()}"
                     return ExecutionResult(success=True, message=message)
                 else:
-                    return ExecutionResult(
-                        success=False,
-                        error=f"Sandbox execution failed: {result.stderr[:200] if result.stderr else 'Unknown error'}",
-                    )
+                    if result.stderr:
+                        error_msg = f"Sandbox execution failed: {result.stderr[:200]}"
+                    else:
+                        # Log unknown error details for debugging
+                        logger.warning(
+                            f"Sandbox execution failed without stderr. Exit code: {result.exit_code}, "
+                            f"Available attributes: {[attr for attr in dir(result) if not attr.startswith('_')]}"
+                        )
+                        error_msg = f"Sandbox execution failed with exit code {result.exit_code} (no error details available)"
+                    return ExecutionResult(success=False, error=error_msg)
 
         except Exception as e:
             return ExecutionResult(
