@@ -438,7 +438,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 add_generation_prompt=True,  # If we change this, must modify huggingface granite guardian.
                 return_tensors="pt",
                 **self._make_backend_specific_and_remove(model_options),
-            )
+            ).to(self._model.device)
 
             format_kwargs = {}
             if _format:

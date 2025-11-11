@@ -7,8 +7,8 @@ import functools
 import inspect
 import json
 from collections.abc import Callable, Coroutine
-from enum import Enum
 from copy import deepcopy
+from enum import Enum
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
 
