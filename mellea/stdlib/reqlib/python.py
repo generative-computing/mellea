@@ -31,6 +31,10 @@ class ExecutionResult:
 class ExecutionBackend(ABC):
     """Abstract backend for executing Python code."""
 
+    def __init__(self, allowed_imports: list[str] | None = None):
+        """Initialize with optional import restrictions."""
+        self.allowed_imports = allowed_imports
+
     @abstractmethod
     def execute(self, code: str, timeout: int) -> ExecutionResult:
         """Execute code and return result."""
@@ -38,10 +42,6 @@ class ExecutionBackend(ABC):
 
 class SafeBackend(ExecutionBackend):
     """Safe backend that validates but does not execute code."""
-
-    def __init__(self, allowed_imports: list[str] | None = None):
-        """Initialize with optional import restrictions."""
-        self.allowed_imports = allowed_imports
 
     def execute(self, code: str, timeout: int) -> ExecutionResult:
         """Validate code syntax and imports without executing."""
@@ -64,10 +64,6 @@ class SafeBackend(ExecutionBackend):
 
 class UnsafeBackend(ExecutionBackend):
     """Unsafe backend that executes code directly with subprocess."""
-
-    def __init__(self, allowed_imports: list[str] | None = None):
-        """Initialize with optional import restrictions."""
-        self.allowed_imports = allowed_imports
 
     def execute(self, code: str, timeout: int) -> ExecutionResult:
         """Execute code with subprocess after checking imports."""
@@ -115,10 +111,6 @@ class UnsafeBackend(ExecutionBackend):
 
 class LLMSandboxBackend(ExecutionBackend):
     """Backend using llm-sandbox for secure Docker-based execution."""
-
-    def __init__(self, allowed_imports: list[str] | None = None):
-        """Initialize with optional import restrictions."""
-        self.allowed_imports = allowed_imports
 
     def execute(self, code: str, timeout: int) -> ExecutionResult:
         """Execute code using llm-sandbox."""
