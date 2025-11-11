@@ -264,11 +264,15 @@ def _python_executes_without_error(
     allowed_imports: list[str] | None = None,
     use_sandbox: bool = False,
 ) -> ValidationResult:
-    """Validate that Python code executes without raising exceptions."""
+    """Validate that Python code executes without raising exceptions.
+
+    First extracts the highest-scoring Python code block from the context,
+    then validates/executes it based on the specified execution mode.
+    """
     extraction_result = _has_python_code_listing(ctx)
     if not extraction_result.as_bool():
         return ValidationResult(
-            result=False, reason="Could not extract Python code for execution"
+            result=False, reason=f"Could not extract Python code for execution: {extraction_result.reason}"
         )
 
     code = extraction_result.reason
