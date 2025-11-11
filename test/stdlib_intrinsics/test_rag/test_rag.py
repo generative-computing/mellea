@@ -80,6 +80,7 @@ def _read_output_json(file_name: str):
     return json.loads(result_str)
 
 
+@pytest.mark.qualitative
 def test_answerability(backend):
     """Verify that the answerability intrinsic functions properly."""
     context, next_user_turn, documents = _read_input_json("answerability.json")
@@ -93,6 +94,7 @@ def test_answerability(backend):
     assert pytest.approx(result) == 1.0
 
 
+@pytest.mark.qualitative
 def test_query_rewrite(backend):
     """Verify that the answerability intrinsic functions properly."""
     context, next_user_turn, _ = _read_input_json("query_rewrite.json")
@@ -110,6 +112,7 @@ def test_query_rewrite(backend):
     assert result == expected
 
 
+@pytest.mark.qualitative
 def test_citations(backend):
     """Verify that the citations intrinsic functions properly."""
     context, assistant_response, docs = _read_input_json("citations.json")
@@ -124,6 +127,7 @@ def test_citations(backend):
     assert result == expected
 
 
+@pytest.mark.qualitative
 def test_context_relevance(backend):
     """Verify that the context relevance intrinsic functions properly."""
     context, question, docs = _read_input_json("context_relevance.json")
@@ -140,6 +144,7 @@ def test_context_relevance(backend):
     assert pytest.approx(result, abs=2e-2) == 0.45
 
 
+@pytest.mark.qualitative
 def test_hallucination_detection(backend):
     """Verify that the hallucination detection intrinsic functions properly."""
     context, assistant_response, docs = _read_input_json("hallucination_detection.json")
@@ -157,6 +162,7 @@ def test_hallucination_detection(backend):
         assert pytest.approx(r, abs=2e-2) == e
 
 
+@pytest.mark.qualitative
 def test_answer_relevance(backend):
     """Verify that the answer relevance composite intrinsic functions properly."""
     context, answer, docs = _read_input_json("answer_relevance.json")
