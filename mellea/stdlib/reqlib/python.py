@@ -179,7 +179,7 @@ def _check_allowed_imports(code: str, allowed_imports: list[str]) -> bool:
 # region code extraction
 
 
-def _score_code_block(code: str, context_text: str = "") -> int:
+def _score_code_block(code: str) -> int:
     """Score a code block to determine if it's likely the main answer."""
     score = 0
     lines = code.split("\n")
@@ -232,7 +232,7 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
     # Add python blocks with high priority
     for block in python_blocks:
         all_blocks.append(
-            (block.strip(), _score_code_block(block.strip(), content) + 10)
+            (block.strip(), _score_code_block(block.strip()) + 10)
         )
 
     # Add generic blocks if they look like Python
@@ -242,7 +242,7 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
             keyword in block
             for keyword in ["def ", "class ", "import ", "print(", "if __name__"]
         ):
-            all_blocks.append((block, _score_code_block(block, content)))
+            all_blocks.append((block, _score_code_block(block)))
 
     if not all_blocks:
         return ValidationResult(result=False, reason="No Python code blocks found")
