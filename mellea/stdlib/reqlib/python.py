@@ -28,11 +28,15 @@ class ExecutionResult:
     skipped: bool = False
 
 
-class ExecutionBackend(ABC):
-    """Abstract backend for executing Python code."""
+class ExecutionEnvironment(ABC):
+    """Abstract environment for executing Python code."""
 
     def __init__(self, allowed_imports: list[str] | None = None):
-        """Initialize with optional import restrictions."""
+        """Initialize with optional import restrictions.
+
+        Args:
+            allowed_imports: List of allowed import modules. None means any import is allowed.
+        """
         self.allowed_imports = allowed_imports
 
     @abstractmethod
@@ -40,8 +44,8 @@ class ExecutionBackend(ABC):
         """Execute code and return result."""
 
 
-class SafeBackend(ExecutionBackend):
-    """Safe backend that validates but does not execute code."""
+class SafeEnvironment(ExecutionEnvironment):
+    """Safe environment that validates but does not execute code."""
 
     def execute(self, code: str, timeout: int) -> ExecutionResult:
         """Validate code syntax and imports without executing."""
@@ -62,8 +66,8 @@ class SafeBackend(ExecutionBackend):
         )
 
 
-class UnsafeBackend(ExecutionBackend):
-    """Unsafe backend that executes code directly with subprocess."""
+class UnsafeEnvironment(ExecutionEnvironment):
+    """Unsafe environment that executes code directly with subprocess."""
 
     def execute(self, code: str, timeout: int) -> ExecutionResult:
         """Execute code with subprocess after checking imports."""
@@ -109,8 +113,8 @@ class UnsafeBackend(ExecutionBackend):
                 pass
 
 
-class LLMSandboxBackend(ExecutionBackend):
-    """Backend using llm-sandbox for secure Docker-based execution."""
+class LLMSandboxEnvironment(ExecutionEnvironment):
+    """Environment using llm-sandbox for secure Docker-based execution."""
 
     def execute(self, code: str, timeout: int) -> ExecutionResult:
         """Execute code using llm-sandbox."""
@@ -267,15 +271,15 @@ def _python_executes_without_error(
     code = extraction_result.reason
     assert code is not None
 
-    backend: ExecutionBackend
+    environment: ExecutionEnvironment
     if use_sandbox:
-        backend = LLMSandboxBackend(allowed_imports=allowed_imports)
+        environment = LLMSandboxEnvironment(allowed_imports=allowed_imports)
     elif allow_unsafe:
-        backend = UnsafeBackend(allowed_imports=allowed_imports)
+        environment = UnsafeEnvironment(allowed_imports=allowed_imports)
     else:
-        backend = SafeBackend(allowed_imports=allowed_imports)
+        environment = SafeEnvironment(allowed_imports=allowed_imports)
 
-    result = backend.execute(code, timeout)
+    result = environment.execute(code, timeout)
     return ValidationResult(
         result=result.success, reason=result.message or result.error
     )
@@ -296,7 +300,7 @@ class PythonExecutionReq(Requirement):
         Args:
             timeout: Maximum seconds to allow code to run before timing out.
             allow_unsafe_execution: If True, execute code directly with subprocess (unsafe).
-            allowed_imports: List of allowed import modules when using execution.
+            allowed_imports: List of allowed import modules when using execution. None means any import is allowed.
             use_sandbox: If True, use llm-sandbox for secure Docker-based execution.
         """
         self._timeout = timeout
