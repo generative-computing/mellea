@@ -2,6 +2,17 @@
 
 import pytest
 
+try:
+    import llm_sandbox
+    try:
+        with llm_sandbox.SandboxSession(lang="python", verbose=False, keep_template=False) as session:
+            result = session.run("print('docker test')", timeout=5)
+        _llm_sandbox_available = True
+    except Exception:
+        _llm_sandbox_available = False
+except ImportError:
+    _llm_sandbox_available = False
+
 from mellea.stdlib.base import Context
 from mellea.stdlib.reqlib.python import (
     PythonExecutionReq,
@@ -208,8 +219,8 @@ def test_import_restrictions_with_safe_mode():
 
 
 @pytest.mark.skipif(
-    True,  # Skip by default since Docker may not be available in CI
-    reason="Sandbox tests require Docker and llm-sandbox setup"
+    not _llm_sandbox_available,
+    reason="Sandbox tests require llm-sandbox[docker] and Docker to be available"
 )
 def test_sandbox_execution_valid():
     """Test sandbox execution with valid code."""
@@ -220,8 +231,8 @@ def test_sandbox_execution_valid():
 
 
 @pytest.mark.skipif(
-    True,  # Skip by default since Docker may not be available in CI
-    reason="Sandbox tests require Docker and llm-sandbox setup"
+    not _llm_sandbox_available,
+    reason="Sandbox tests require llm-sandbox[docker] and Docker to be available"
 )
 def test_sandbox_execution_with_imports():
     """Test sandbox execution with allowed imports."""
@@ -235,8 +246,8 @@ def test_sandbox_execution_with_imports():
 
 
 @pytest.mark.skipif(
-    True,  # Skip by default since Docker may not be available in CI
-    reason="Sandbox tests require Docker and llm-sandbox setup"
+    not _llm_sandbox_available,
+    reason="Sandbox tests require llm-sandbox[docker] and Docker to be available"
 )
 def test_sandbox_execution_timeout():
     """Test sandbox execution timeout."""
