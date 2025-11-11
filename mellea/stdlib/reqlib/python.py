@@ -90,6 +90,8 @@ class UnsafeEnvironment(ExecutionEnvironment):
             temp_file = f.name
 
         try:
+            # Execute code using the same Python interpreter and environment as the current process
+            # This ensures the code has access to all installed packages and dependencies
             result = subprocess.run(
                 [sys.executable, temp_file],
                 capture_output=True,
