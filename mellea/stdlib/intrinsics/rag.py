@@ -5,7 +5,7 @@ import json
 
 import granite_common
 
-import mellea.stdlib.funcs
+import mellea.stdlib.funcs as mfuncs
 from mellea.backends import Backend
 from mellea.backends.adapters.adapter import (
     AdapterMixin,
@@ -44,7 +44,11 @@ so it's important to stick to in-domain prompts."""
 
 
 def _call_intrinsic(
-    intrinsic_name: str, context: ChatContext, backend, /, kwargs: dict | None = None
+    intrinsic_name: str,
+    context: ChatContext,
+    backend: AdapterMixin,  # type: ignore
+    /,
+    kwargs: dict | None = None,
 ):
     """Shared code for invoking intrinsics.
 
@@ -59,7 +63,7 @@ def _call_intrinsic(
             f"Should be one of {list(_CATALOG.keys())}"
         )
     repo_id, adapter_type = _CATALOG[intrinsic_name]
-    base_model_name = backend.model_id
+    base_model_name = backend.model_id  # type: ignore
     if base_model_name is None:
         raise ValueError("Backend has no model ID")
     adapter = GraniteCommonAdapter(
@@ -74,10 +78,10 @@ def _call_intrinsic(
     )
 
     # Execute the AST node.
-    model_output_thunk, _ = mellea.stdlib.funcs.act(
+    model_output_thunk, _ = mfuncs.act(
         intrinsic,
         context,
-        backend,
+        backend,  # type: ignore
         # No rejection sampling, please
         strategy=None,
     )
@@ -98,7 +102,7 @@ def check_answerability(
     context: ChatContext,
     question: str,
     documents: collections.abc.Iterable[Document],
-    backend,  # Can't put type hints here because linter complains
+    backend: AdapterMixin,
 ) -> float:
     """Test a user's question for answerability.
 
@@ -124,9 +128,7 @@ def check_answerability(
 
 
 def rewrite_question(
-    context: ChatContext,
-    question: str,
-    backend,  # Can't put type hints here because linter complains
+    context: ChatContext, question: str, backend: AdapterMixin
 ) -> float:
     """Rewrite a user's question for retrieval.
 
@@ -150,7 +152,7 @@ def find_citations(
     context: ChatContext,
     response: str,
     documents: collections.abc.Iterable[Document],
-    backend,  # Can't put type hints here because linter complains
+    backend: AdapterMixin,
 ) -> list[dict]:
     """Find information in documents that supports an assistant response.
 
@@ -184,10 +186,7 @@ def find_citations(
 
 
 def check_context_relevance(
-    context: ChatContext,
-    question: str,
-    document: Document,
-    backend,  # Can't put type hints here because linter complains
+    context: ChatContext, question: str, document: Document, backend: AdapterMixin
 ) -> float:
     """Test whether a document is relevant to a user's question.
 
@@ -217,7 +216,7 @@ def flag_hallucinated_content(
     context: ChatContext,
     response: str,
     documents: collections.abc.Iterable[Document],
-    backend,  # Can't put type hints here because linter complains
+    backend: AdapterMixin,
 ) -> float:
     """Flag potentially-hallucinated sentences in an agent's response.
 
@@ -251,7 +250,7 @@ def rewrite_answer_for_relevance(
     context,
     response: str,
     documents: collections.abc.Iterable[Document],
-    backend,  # Can't put type hints here because linter complains
+    backend: AdapterMixin,
     /,
     rewrite_threshold: float = 0.5,
 ) -> str:
