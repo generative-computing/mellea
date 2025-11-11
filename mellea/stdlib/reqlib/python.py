@@ -205,7 +205,17 @@ def _check_allowed_imports(code: str, allowed_imports: list[str]) -> bool:
 
 
 def _score_code_block(code: str) -> int:
-    """Score a code block to determine if it's likely the main answer."""
+    """Score a code block to determine if it's likely the main answer.
+
+    Scoring metrics:
+    - Length bonus: +1 per line (capped at 10) - longer blocks are generally more substantial
+    - Function/class bonus: +5 - indicates complete, structured code
+    - Control flow bonus: +3 - presence of if/for/while/try/with suggests meaningful logic
+    - Non-trivial content penalty: -5 if fewer than 2 executable lines (filters out import-only or comment-heavy blocks)
+
+    Returns:
+        int: Score indicating likelihood this is the primary code block to execute.
+    """
     score = 0
     lines = code.split("\n")
 
