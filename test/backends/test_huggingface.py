@@ -116,7 +116,6 @@ def test_constraint_lora_override_does_not_override_alora(session, backend):
     val_result = validation_outputs[0]
     assert isinstance(val_result, ValidationResult)
     assert "requirement_likelihood" in str(val_result.reason)
-    assert str(val_result.reason) in ["Y", "N"]
 
     # Ensure the ValidationResult has its thunk and context set. Ensure the context has
     # the correct actions / results in it.
@@ -196,7 +195,7 @@ def test_format(session):
     print(email)
 
     print("address:", email.to.email_address)
-    assert "@" in email.to.email_address, "The @ sign should be in the meail address."
+    assert "@" in email.to.email_address, "The @ sign should be in the email address."
     assert email.to.email_address.endswith("example.com"), (
         "The email address should be at example.com"
     )
