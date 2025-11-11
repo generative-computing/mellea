@@ -3,7 +3,7 @@ from mellea import start_session, MelleaSession
 from mellea.stdlib.requirement import check, req, simple_validate
 from mellea.stdlib.sampling.majority_voting import (
     MBRDRougeLStrategy,
-    MajorityVotingStrategyForMath
+    MajorityVotingStrategyForMath,
 )
 import pytest
 
@@ -19,10 +19,7 @@ def m_session(gh_run):
             model_options={ModelOption.MAX_NEW_TOKENS: 5},
         )
     else:
-        m = start_session(
-            "ollama",
-            model_id="llama3.2:1b",
-        )
+        m = start_session("ollama", model_id="llama3.2:1b")
     yield m
     del m
 

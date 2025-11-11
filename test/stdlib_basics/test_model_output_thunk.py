@@ -5,6 +5,7 @@ from mellea.backends.types import ModelOption
 from mellea.stdlib.base import ModelOutputThunk
 from mellea.stdlib.session import MelleaSession, start_session
 
+
 # Use generated ModelOutputThunks to fully test copying. This can technically be done without a
 # backend, but it simplifies test setup.
 @pytest.fixture(scope="module")
@@ -24,6 +25,7 @@ def m_session(gh_run):
     yield m
     del m
 
+
 def test_model_output_thunk_copy(m_session: MelleaSession):
     """Basic tests for copying ModelOutputThunk. Add checks if needed."""
     out = m_session.instruct("Hello!")
@@ -34,8 +36,7 @@ def test_model_output_thunk_copy(m_session: MelleaSession):
     assert copied._meta is out._meta
 
     empty = ModelOutputThunk("")
-    copy.copy(empty) # Make sure no errors happen.
-
+    copy.copy(empty)  # Make sure no errors happen.
 
 
 def test_model_output_thunk_deepcopy(m_session: MelleaSession):
@@ -48,7 +49,7 @@ def test_model_output_thunk_deepcopy(m_session: MelleaSession):
     assert deepcopied._meta is not out._meta
 
     empty = ModelOutputThunk("")
-    copy.deepcopy(empty) # Make sure no errors happen.
+    copy.deepcopy(empty)  # Make sure no errors happen.
 
 
 if __name__ == "__main__":

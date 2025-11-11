@@ -12,8 +12,10 @@ def classify_sentiment(text: str) -> Literal["positive", "negative"]: ...
 @generative
 def write_me_an_email() -> str: ...
 
+
 @generative
 async def async_write_short_sentence(topic: str) -> str: ...
+
 
 @pytest.fixture(scope="function")
 def session():
@@ -33,9 +35,12 @@ def test_gen_slot_output(classify_sentiment_output):
 
 
 def test_func(session):
-    assert isinstance(write_me_an_email, GenerativeSlot) and not isinstance(write_me_an_email, AsyncGenerativeSlot)
+    assert isinstance(write_me_an_email, GenerativeSlot) and not isinstance(
+        write_me_an_email, AsyncGenerativeSlot
+    )
     write_email_component = write_me_an_email(session)
     assert isinstance(write_email_component, str)
+
 
 @pytest.mark.qualitative
 def test_sentiment_output(classify_sentiment_output):
@@ -47,6 +52,7 @@ def test_gen_slot_logs(classify_sentiment_output, session):
     last_prompt = session.last_prompt()[-1]
     assert isinstance(last_prompt, dict)
     assert set(last_prompt.keys()) == {"role", "content", "images"}
+
 
 async def test_async_gen_slot(session):
     assert isinstance(async_write_short_sentence, AsyncGenerativeSlot)

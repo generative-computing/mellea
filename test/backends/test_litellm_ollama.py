@@ -9,6 +9,7 @@ from mellea.stdlib.base import CBlock, SimpleContext
 from mellea.stdlib.chat import Message
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
+
 @pytest.fixture(scope="function")
 def backend(gh_run: int):
     """Shared OpenAI backend configured for Ollama."""
@@ -23,10 +24,11 @@ def backend(gh_run: int):
         return LiteLLMBackend(
             model_id="ollama_chat/llama3.2:1b",
             base_url=url,
-            model_options={"api_base": url}
+            model_options={"api_base": url},
         )
     else:
         return LiteLLMBackend()
+
 
 @pytest.fixture(scope="function")
 def session(backend):
@@ -35,11 +37,12 @@ def session(backend):
     yield session
     session.reset()
 
+
 # Use capsys to check that the logging is working.
 def test_make_backend_specific_and_remove():
     # Doesn't need to be a real model here; just a provider that LiteLLM knows about.
     backend = LiteLLMBackend(model_id="ollama_chat/")
-    
+
     params = {
         "max_tokens": 1,
         "stream": 1,
@@ -51,9 +54,10 @@ def test_make_backend_specific_and_remove():
     mellea = backend._simplify_and_merge(params)
     backend_specific = backend._make_backend_specific_and_remove(mellea)
 
-
     # All of these options should be in the model options that get passed to LiteLLM since it handles the dropping.
-    assert "max_completion_tokens" in backend_specific, "max_tokens should get remapped to max_completion_tokens for ollama_chat/"
+    assert "max_completion_tokens" in backend_specific, (
+        "max_tokens should get remapped to max_completion_tokens for ollama_chat/"
+    )
     assert "stream" in backend_specific
     assert "temperature" in backend_specific
     assert "unknown_parameter" in backend_specific
@@ -69,13 +73,14 @@ def test_make_backend_specific_and_remove():
     # Do a quick test for the Watsonx specific scenario.
     backend = LiteLLMBackend(model_id="watsonx/")
     watsonx_params = {"max_tokens": 1}
-    
+
     # Make sure we make it Mellea specific correctly.
     watsonx_mellea = backend._simplify_and_merge(watsonx_params)
     assert ModelOption.MAX_NEW_TOKENS in watsonx_mellea
 
     watsonx_backend_specific = backend._make_backend_specific_and_remove(watsonx_mellea)
     assert "max_tokens" in watsonx_backend_specific
+
 
 @pytest.mark.qualitative
 def test_litellm_ollama_chat(session):
@@ -85,6 +90,7 @@ def test_litellm_ollama_chat(session):
     assert "2" in res.content, (
         f"Expected a message with content containing 2 but found {res}"
     )
+
 
 def test_litellm_ollama_instruct(session):
     res = session.instruct(
@@ -97,7 +103,7 @@ def test_litellm_ollama_instruct(session):
 
 
 def test_litellm_ollama_instruct_options(session):
-    model_options={
+    model_options = {
         ModelOption.SEED: 123,
         ModelOption.TEMPERATURE: 0.5,
         ModelOption.THINKING: True,
@@ -130,10 +136,15 @@ def test_gen_slot(session):
     # should yield to true - but, of course, is model dependent
     assert h is True
 
+
 async def test_async_parallel_requests(session):
     model_opts = {ModelOption.STREAM: True}
-    mot1, _ = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext(), model_options=model_opts)
-    mot2, _ = session.backend.generate_from_context(CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts)
+    mot1, _ = session.backend.generate_from_context(
+        CBlock("Say Hello."), SimpleContext(), model_options=model_opts
+    )
+    mot2, _ = session.backend.generate_from_context(
+        CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts
+    )
 
     m1_val = None
     m2_val = None
@@ -150,17 +161,25 @@ async def test_async_parallel_requests(session):
 
     # Ideally, we would be able to assert that m1_final_val != m1_val, but sometimes the first streaming response
     # contains the full response.
-    assert m1_final_val.startswith(m1_val), "final val should contain the first streamed chunk"
-    assert m2_final_val.startswith(m2_val), "final val should contain the first streamed chunk"
+    assert m1_final_val.startswith(m1_val), (
+        "final val should contain the first streamed chunk"
+    )
+    assert m2_final_val.startswith(m2_val), (
+        "final val should contain the first streamed chunk"
+    )
 
     assert m1_final_val == mot1.value
     assert m2_final_val == mot2.value
 
+
 async def test_async_avalue(session):
-    mot1, _ = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext())
+    mot1, _ = session.backend.generate_from_context(
+        CBlock("Say Hello."), SimpleContext()
+    )
     m1_final_val = await mot1.avalue()
     assert m1_final_val is not None
     assert m1_final_val == mot1.value
+
 
 if __name__ == "__main__":
     import pytest

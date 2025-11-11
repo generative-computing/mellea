@@ -59,7 +59,7 @@ class SafeEnvironment(ExecutionEnvironment):
             if unauthorized:
                 return ExecutionResult(
                     success=False,
-                    error=f"Unauthorized imports detected: {', '.join(unauthorized)}"
+                    error=f"Unauthorized imports detected: {', '.join(unauthorized)}",
                 )
 
         return ExecutionResult(
@@ -79,7 +79,7 @@ class UnsafeEnvironment(ExecutionEnvironment):
             if unauthorized:
                 return ExecutionResult(
                     success=False,
-                    error=f"Unauthorized imports detected: {', '.join(unauthorized)}"
+                    error=f"Unauthorized imports detected: {', '.join(unauthorized)}",
                 )
 
         return self._execute_subprocess(code, timeout)
@@ -132,7 +132,7 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             if unauthorized:
                 return ExecutionResult(
                     success=False,
-                    error=f"Unauthorized imports detected: {', '.join(unauthorized)}"
+                    error=f"Unauthorized imports detected: {', '.join(unauthorized)}",
                 )
 
         try:
@@ -151,7 +151,11 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
 
                 if result.exit_code == 0:
                     message = "Code executed successfully in sandbox"
-                    if hasattr(result, 'stdout') and result.stdout and result.stdout.strip():
+                    if (
+                        hasattr(result, "stdout")
+                        and result.stdout
+                        and result.stdout.strip()
+                    ):
                         message += f"\nOutput: {result.stdout.strip()}"
                     return ExecutionResult(success=True, message=message)
                 else:
@@ -174,7 +178,7 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
 
 def _get_unauthorized_imports(code: str, allowed_imports: list[str]) -> list[str]:
     """Get list of unauthorized imports used in code."""
-    unauthorized = []
+    unauthorized: list[str] = []
     try:
         tree = ast.parse(code)
     except SyntaxError:
@@ -184,12 +188,18 @@ def _get_unauthorized_imports(code: str, allowed_imports: list[str]) -> list[str
         if isinstance(node, ast.Import):
             for alias in node.names:
                 base_module = alias.name.split(".")[0]
-                if base_module not in allowed_imports and base_module not in unauthorized:
+                if (
+                    base_module not in allowed_imports
+                    and base_module not in unauthorized
+                ):
                     unauthorized.append(base_module)
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 base_module = node.module.split(".")[0]
-                if base_module not in allowed_imports and base_module not in unauthorized:
+                if (
+                    base_module not in allowed_imports
+                    and base_module not in unauthorized
+                ):
                     unauthorized.append(base_module)
     return unauthorized
 
@@ -266,9 +276,7 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
 
     # Add python blocks with high priority
     for block in python_blocks:
-        all_blocks.append(
-            (block.strip(), _score_code_block(block.strip()) + 10)
-        )
+        all_blocks.append((block.strip(), _score_code_block(block.strip()) + 10))
 
     # Add generic blocks if they look like Python
     for block in generic_blocks:
@@ -307,7 +315,8 @@ def _python_executes_without_error(
     extraction_result = _has_python_code_listing(ctx)
     if not extraction_result.as_bool():
         return ValidationResult(
-            result=False, reason=f"Could not extract Python code for execution: {extraction_result.reason}"
+            result=False,
+            reason=f"Could not extract Python code for execution: {extraction_result.reason}",
         )
 
     code = extraction_result.reason

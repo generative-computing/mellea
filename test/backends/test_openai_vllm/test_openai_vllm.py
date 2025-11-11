@@ -221,7 +221,9 @@ class TestOpenAIALoraStuff:
         # the correct actions / results in it.
         assert isinstance(non_alora_output.context, Context)
         assert isinstance(non_alora_output.thunk, ModelOutputThunk)
-        assert isinstance(non_alora_output.context.previous_node.node_data, ALoraRequirement)
+        assert isinstance(
+            non_alora_output.context.previous_node.node_data, ALoraRequirement
+        )
         assert non_alora_output.context.node_data is non_alora_output.thunk
 
         self.backend.default_to_constraint_checking_alora = True

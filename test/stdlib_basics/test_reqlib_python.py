@@ -4,8 +4,11 @@ import pytest
 
 try:
     import llm_sandbox
+
     try:
-        with llm_sandbox.SandboxSession(lang="python", verbose=False, keep_template=False) as session:
+        with llm_sandbox.SandboxSession(
+            lang="python", verbose=False, keep_template=False
+        ) as session:
             result = session.run("print('docker test')", timeout=5)
         _llm_sandbox_available = True
     except Exception:
@@ -24,6 +27,7 @@ from mellea.stdlib.reqlib.python import (
 def from_model(content: str) -> Context:
     """Helper to create context from model output."""
     from mellea.stdlib.base import ChatContext, ModelOutputThunk
+
     ctx = ChatContext()
     ctx = ctx.add(ModelOutputThunk(value=content))
     return ctx
@@ -184,10 +188,7 @@ def test_unsafe_execution_syntax_error():
 
 def test_import_restrictions_block_forbidden():
     """Test that import restrictions block forbidden imports."""
-    req = PythonExecutionReq(
-        allow_unsafe_execution=True,
-        allowed_imports=["os", "sys"]
-    )
+    req = PythonExecutionReq(allow_unsafe_execution=True, allowed_imports=["os", "sys"])
     result = req.validation_fn(PYTHON_WITH_FORBIDDEN_IMPORTS_CTX)
     assert result.as_bool() is False
     assert "Unauthorized imports" in result.reason
@@ -196,8 +197,7 @@ def test_import_restrictions_block_forbidden():
 def test_import_restrictions_allow_permitted():
     """Test that import restrictions allow permitted imports."""
     req = PythonExecutionReq(
-        allow_unsafe_execution=True,
-        allowed_imports=["os", "sys", "pathlib"]
+        allow_unsafe_execution=True, allowed_imports=["os", "sys", "pathlib"]
     )
     result = req.validation_fn(PYTHON_WITH_IMPORTS_CTX)
     assert result.as_bool() is True
@@ -205,9 +205,7 @@ def test_import_restrictions_allow_permitted():
 
 def test_import_restrictions_with_safe_mode():
     """Test that import restrictions work with safe mode."""
-    req = PythonExecutionReq(
-        allowed_imports=["os", "sys"]
-    )
+    req = PythonExecutionReq(allowed_imports=["os", "sys"])
     result = req.validation_fn(PYTHON_WITH_FORBIDDEN_IMPORTS_CTX)
     assert result.as_bool() is False
     assert "Unauthorized imports" in result.reason
@@ -220,7 +218,7 @@ def test_import_restrictions_with_safe_mode():
 
 @pytest.mark.skipif(
     not _llm_sandbox_available,
-    reason="Sandbox tests require llm-sandbox[docker] and Docker to be available"
+    reason="Sandbox tests require llm-sandbox[docker] and Docker to be available",
 )
 def test_sandbox_execution_valid():
     """Test sandbox execution with valid code."""
@@ -232,14 +230,12 @@ def test_sandbox_execution_valid():
 
 @pytest.mark.skipif(
     not _llm_sandbox_available,
-    reason="Sandbox tests require llm-sandbox[docker] and Docker to be available"
+    reason="Sandbox tests require llm-sandbox[docker] and Docker to be available",
 )
 def test_sandbox_execution_with_imports():
     """Test sandbox execution with allowed imports."""
     req = PythonExecutionReq(
-        use_sandbox=True,
-        allowed_imports=["os", "sys", "pathlib"],
-        timeout=10
+        use_sandbox=True, allowed_imports=["os", "sys", "pathlib"], timeout=10
     )
     result = req.validation_fn(PYTHON_WITH_IMPORTS_CTX)
     assert result.as_bool() is True
@@ -247,7 +243,7 @@ def test_sandbox_execution_with_imports():
 
 @pytest.mark.skipif(
     not _llm_sandbox_available,
-    reason="Sandbox tests require llm-sandbox[docker] and Docker to be available"
+    reason="Sandbox tests require llm-sandbox[docker] and Docker to be available",
 )
 def test_sandbox_execution_timeout():
     """Test sandbox execution timeout."""
@@ -314,19 +310,13 @@ def test_parameter_combinations():
 def test_direct_validation_function():
     """Test calling validation function directly."""
     result = _python_executes_without_error(
-        VALID_PYTHON_CTX,
-        timeout=5,
-        allow_unsafe=False,
-        use_sandbox=False
+        VALID_PYTHON_CTX, timeout=5, allow_unsafe=False, use_sandbox=False
     )
     assert result.as_bool() is True
     assert "safe mode" in result.reason
 
     result = _python_executes_without_error(
-        SYNTAX_ERROR_CTX,
-        timeout=5,
-        allow_unsafe=False,
-        use_sandbox=False
+        SYNTAX_ERROR_CTX, timeout=5, allow_unsafe=False, use_sandbox=False
     )
     assert result.as_bool() is False
 

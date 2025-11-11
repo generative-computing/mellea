@@ -9,7 +9,13 @@ from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock, ChatContext, Context, ModelOutputThunk, SimpleContext
+from mellea.stdlib.base import (
+    CBlock,
+    ChatContext,
+    Context,
+    ModelOutputThunk,
+    SimpleContext,
+)
 from mellea.stdlib.requirement import (
     ALoraRequirement,
     LLMaJRequirement,
@@ -200,6 +206,7 @@ def test_format(session):
         "The email address should be at example.com"
     )
 
+
 @pytest.mark.qualitative
 def test_generate_from_raw(session):
     prompts = [
@@ -215,6 +222,7 @@ def test_generate_from_raw(session):
     )
 
     assert len(results) == len(prompts)
+
 
 @pytest.mark.qualitative
 def test_generate_from_raw_with_format(session):
