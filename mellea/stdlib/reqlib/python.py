@@ -54,10 +54,13 @@ class SafeEnvironment(ExecutionEnvironment):
         except SyntaxError as e:
             return ExecutionResult(success=False, error=str(e))
 
-        if self.allowed_imports and not _check_allowed_imports(
-            code, self.allowed_imports
-        ):
-            return ExecutionResult(success=False, error="Unauthorized imports detected")
+        if self.allowed_imports:
+            unauthorized = _get_unauthorized_imports(code, self.allowed_imports)
+            if unauthorized:
+                return ExecutionResult(
+                    success=False,
+                    error=f"Unauthorized imports detected: {', '.join(unauthorized)}"
+                )
 
         return ExecutionResult(
             success=True,
@@ -71,10 +74,13 @@ class UnsafeEnvironment(ExecutionEnvironment):
 
     def execute(self, code: str, timeout: int) -> ExecutionResult:
         """Execute code with subprocess after checking imports."""
-        if self.allowed_imports and not _check_allowed_imports(
-            code, self.allowed_imports
-        ):
-            return ExecutionResult(success=False, error="Unauthorized imports detected")
+        if self.allowed_imports:
+            unauthorized = _get_unauthorized_imports(code, self.allowed_imports)
+            if unauthorized:
+                return ExecutionResult(
+                    success=False,
+                    error=f"Unauthorized imports detected: {', '.join(unauthorized)}"
+                )
 
         return self._execute_subprocess(code, timeout)
 
@@ -118,10 +124,13 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
 
     def execute(self, code: str, timeout: int) -> ExecutionResult:
         """Execute code using llm-sandbox."""
-        if self.allowed_imports and not _check_allowed_imports(
-            code, self.allowed_imports
-        ):
-            return ExecutionResult(success=False, error="Unauthorized imports detected")
+        if self.allowed_imports:
+            unauthorized = _get_unauthorized_imports(code, self.allowed_imports)
+            if unauthorized:
+                return ExecutionResult(
+                    success=False,
+                    error=f"Unauthorized imports detected: {', '.join(unauthorized)}"
+                )
 
         try:
             from llm_sandbox import SandboxSession
@@ -153,25 +162,31 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             )
 
 
-def _check_allowed_imports(code: str, allowed_imports: list[str]) -> bool:
-    """Check if code only uses allowed imports."""
+def _get_unauthorized_imports(code: str, allowed_imports: list[str]) -> list[str]:
+    """Get list of unauthorized imports used in code."""
+    unauthorized = []
     try:
         tree = ast.parse(code)
     except SyntaxError:
-        return False
+        return unauthorized
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 base_module = alias.name.split(".")[0]
-                if base_module not in allowed_imports:
-                    return False
+                if base_module not in allowed_imports and base_module not in unauthorized:
+                    unauthorized.append(base_module)
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 base_module = node.module.split(".")[0]
-                if base_module not in allowed_imports:
-                    return False
-    return True
+                if base_module not in allowed_imports and base_module not in unauthorized:
+                    unauthorized.append(base_module)
+    return unauthorized
+
+
+def _check_allowed_imports(code: str, allowed_imports: list[str]) -> bool:
+    """Check if code only uses allowed imports."""
+    return len(_get_unauthorized_imports(code, allowed_imports)) == 0
 
 
 # endregion
