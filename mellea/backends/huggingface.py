@@ -182,7 +182,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._use_caches = use_caches
         self._cache = cache if cache is not None else SimpleLRUCache(3)
 
-        # Adapters can be made know to the backend (added) and loaded.
+        # Adapters can be made known to the backend (added) and loaded.
         self._added_adapters: dict[str, LocalHFAdapter] = {}
         self._loaded_adapters: dict[str, LocalHFAdapter] = {}
 
@@ -912,6 +912,19 @@ class HFProcessRewardModel(PRM, abc.ABC):
             device (str): device: The computational device to use ("cuda" for GPU, "mps" for Apple Silicon, or "cpu"), defaults to None. If not specified, the best available device will be automatically selected.
         """
         super().__init__(model_name_or_path)
+
+        # auto-device if not more specific
+        self._device = device
+        if device is None:
+            device_name: str = (
+                "cuda"
+                if torch.cuda.is_available()
+                else "mps"
+                if torch.backends.mps.is_available()
+                else "cpu"
+            )
+            assert device_name is not None
+            self._device = torch.device(device_name)  # type: ignore
 
         self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
             self.model_name_or_path, torch_dtype=torch.bfloat16
