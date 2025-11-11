@@ -9,14 +9,20 @@ from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock, ChatContext, Context, ModelOutputThunk, SimpleContext
+from mellea.stdlib.base import (
+    CBlock,
+    ChatContext,
+    Context,
+    ModelOutputThunk,
+    SimpleContext,
+)
 from mellea.stdlib.requirement import (
     ALoraRequirement,
     LLMaJRequirement,
     Requirement,
     ValidationResult,
     default_output_to_bool,
-    REQUIREMENT_REPO_ID
+    REQUIREMENT_REPO_ID,
 )
 
 
@@ -30,9 +36,11 @@ def backend():
     )
     # Assertion to assuage the wrath of the linter
     assert backend.model_id is not None
-    backend.add_adapter(GraniteCommonAdapter(REQUIREMENT_REPO_ID,
-                                             "requirement_check",
-                                             base_model_name=backend.model_id))
+    backend.add_adapter(
+        GraniteCommonAdapter(
+            REQUIREMENT_REPO_ID, "requirement_check", base_model_name=backend.model_id
+        )
+    )
     return backend
 
 
@@ -42,6 +50,7 @@ def session(backend):
     session = MelleaSession(backend, ctx=ChatContext())
     yield session
     session.reset()
+
 
 def test_adapters(backend):
     assert len(backend._added_adapters.items()) > 0
@@ -58,6 +67,7 @@ def test_adapters(backend):
     backend.unload_adapter(adapter.qualified_name)
     backend.unload_adapter(adapter.qualified_name)
     assert adapter.qualified_name not in backend._loaded_adapters
+
 
 @pytest.mark.qualitative
 def test_system_prompt(session):
@@ -184,7 +194,10 @@ def test_format(session):
         body: str
 
     output = session.instruct(
-        "Write a short email to Olivia, thanking her for organizing a sailing activity. Her email server is example.com. No more than two sentences. ",
+        "Write a short email to Olivia, thanking her for organizing a sailing "
+        "activity. "
+        "Her email is olivia@example.com. "
+        "No more than two sentences. ",
         format=Email,
         model_options={ModelOption.MAX_NEW_TOKENS: 2**8},
     )
@@ -199,6 +212,7 @@ def test_format(session):
     assert email.to.email_address.endswith("example.com"), (
         "The email address should be at example.com"
     )
+
 
 @pytest.mark.qualitative
 def test_generate_from_raw(session):
@@ -215,6 +229,7 @@ def test_generate_from_raw(session):
     )
 
     assert len(results) == len(prompts)
+
 
 @pytest.mark.qualitative
 def test_generate_from_raw_with_format(session):
