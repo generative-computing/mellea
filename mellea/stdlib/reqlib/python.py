@@ -100,9 +100,10 @@ class UnsafeEnvironment(ExecutionEnvironment):
             )
 
             if result.returncode == 0:
-                return ExecutionResult(
-                    success=True, message="Code executed successfully"
-                )
+                message = "Code executed successfully"
+                if result.stdout.strip():
+                    message += f"\nOutput: {result.stdout.strip()}"
+                return ExecutionResult(success=True, message=message)
             else:
                 return ExecutionResult(
                     success=False,
@@ -149,9 +150,10 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
                 result = session.run(code, timeout=timeout)
 
                 if result.exit_code == 0:
-                    return ExecutionResult(
-                        success=True, message="Code executed successfully in sandbox"
-                    )
+                    message = "Code executed successfully in sandbox"
+                    if hasattr(result, 'stdout') and result.stdout and result.stdout.strip():
+                        message += f"\nOutput: {result.stdout.strip()}"
+                    return ExecutionResult(success=True, message=message)
                 else:
                     return ExecutionResult(
                         success=False,
