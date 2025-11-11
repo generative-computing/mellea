@@ -195,7 +195,10 @@ def _score_code_block(code: str, context_text: str = "") -> int:
     if any(keyword in code for keyword in ["if ", "for ", "while ", "try:", "with "]):
         score += 3
 
-    # Avoid pure imports or comments
+    # Penalize blocks that are mostly imports/comments without actual logic
+    # We want at least 2 lines of executable code to consider it a meaningful code block
+    # This helps filter out import-only blocks or heavily commented trivial snippets
+    # TODO: Consider using comment-to-code ratio in future iterations
     non_trivial_lines = [
         line.strip()
         for line in lines
