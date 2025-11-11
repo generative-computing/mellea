@@ -289,7 +289,7 @@ def _python_executes_without_error(
     )
 
 
-class PythonExecutesWithoutError(Requirement):
+class PythonExecutionReq(Requirement):
     """Verifies that Python code runs without raising exceptions."""
 
     def __init__(

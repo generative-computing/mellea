@@ -4,7 +4,7 @@ import pytest
 
 from mellea.stdlib.base import Context
 from mellea.stdlib.reqlib.python import (
-    PythonExecutesWithoutError,
+    PythonExecutionReq,
     _has_python_code_listing,
     _python_executes_without_error,
 )
@@ -110,7 +110,7 @@ def test_has_python_code_listing_simple():
 
 def test_safe_mode_default():
     """Test that safe mode is default and validates without executing."""
-    req = PythonExecutesWithoutError()
+    req = PythonExecutionReq()
     result = req.validation_fn(VALID_PYTHON_CTX)
     assert result.as_bool() is True
     assert "safe mode" in result.reason
@@ -118,14 +118,14 @@ def test_safe_mode_default():
 
 def test_safe_mode_syntax_error():
     """Test that safe mode catches syntax errors."""
-    req = PythonExecutesWithoutError()
+    req = PythonExecutionReq()
     result = req.validation_fn(SYNTAX_ERROR_CTX)
     assert result.as_bool() is False
 
 
 def test_safe_mode_no_execution():
     """Test that safe mode doesn't execute code (even infinite loops)."""
-    req = PythonExecutesWithoutError(timeout=1)
+    req = PythonExecutionReq(timeout=1)
     result = req.validation_fn(PYTHON_INFINITE_LOOP_CTX)
     assert result.as_bool() is True  # Should pass because it's not actually executed
     assert "safe mode" in result.reason
@@ -138,14 +138,14 @@ def test_safe_mode_no_execution():
 
 def test_unsafe_execution_valid():
     """Test unsafe execution with valid code."""
-    req = PythonExecutesWithoutError(allow_unsafe_execution=True, timeout=5)
+    req = PythonExecutionReq(allow_unsafe_execution=True, timeout=5)
     result = req.validation_fn(VALID_PYTHON_CTX)
     assert result.as_bool() is True
 
 
 def test_unsafe_execution_runtime_error():
     """Test unsafe execution with runtime error."""
-    req = PythonExecutesWithoutError(allow_unsafe_execution=True, timeout=5)
+    req = PythonExecutionReq(allow_unsafe_execution=True, timeout=5)
     result = req.validation_fn(RUNTIME_ERROR_CTX)
     assert result.as_bool() is False
     assert "error" in result.reason.lower()
@@ -153,7 +153,7 @@ def test_unsafe_execution_runtime_error():
 
 def test_unsafe_execution_timeout():
     """Test unsafe execution with timeout."""
-    req = PythonExecutesWithoutError(allow_unsafe_execution=True, timeout=1)
+    req = PythonExecutionReq(allow_unsafe_execution=True, timeout=1)
     result = req.validation_fn(PYTHON_INFINITE_LOOP_CTX)
     assert result.as_bool() is False
     assert "timed out" in result.reason.lower()
@@ -161,7 +161,7 @@ def test_unsafe_execution_timeout():
 
 def test_unsafe_execution_syntax_error():
     """Test unsafe execution with syntax error."""
-    req = PythonExecutesWithoutError(allow_unsafe_execution=True)
+    req = PythonExecutionReq(allow_unsafe_execution=True)
     result = req.validation_fn(SYNTAX_ERROR_CTX)
     assert result.as_bool() is False
 
@@ -173,7 +173,7 @@ def test_unsafe_execution_syntax_error():
 
 def test_import_restrictions_block_forbidden():
     """Test that import restrictions block forbidden imports."""
-    req = PythonExecutesWithoutError(
+    req = PythonExecutionReq(
         allow_unsafe_execution=True,
         allowed_imports=["os", "sys"]
     )
@@ -184,7 +184,7 @@ def test_import_restrictions_block_forbidden():
 
 def test_import_restrictions_allow_permitted():
     """Test that import restrictions allow permitted imports."""
-    req = PythonExecutesWithoutError(
+    req = PythonExecutionReq(
         allow_unsafe_execution=True,
         allowed_imports=["os", "sys", "pathlib"]
     )
@@ -194,7 +194,7 @@ def test_import_restrictions_allow_permitted():
 
 def test_import_restrictions_with_safe_mode():
     """Test that import restrictions work with safe mode."""
-    req = PythonExecutesWithoutError(
+    req = PythonExecutionReq(
         allowed_imports=["os", "sys"]
     )
     result = req.validation_fn(PYTHON_WITH_FORBIDDEN_IMPORTS_CTX)
@@ -213,7 +213,7 @@ def test_import_restrictions_with_safe_mode():
 )
 def test_sandbox_execution_valid():
     """Test sandbox execution with valid code."""
-    req = PythonExecutesWithoutError(use_sandbox=True, timeout=10)
+    req = PythonExecutionReq(use_sandbox=True, timeout=10)
     result = req.validation_fn(VALID_PYTHON_CTX)
     assert result.as_bool() is True
     assert "sandbox" in result.reason.lower()
@@ -225,7 +225,7 @@ def test_sandbox_execution_valid():
 )
 def test_sandbox_execution_with_imports():
     """Test sandbox execution with allowed imports."""
-    req = PythonExecutesWithoutError(
+    req = PythonExecutionReq(
         use_sandbox=True,
         allowed_imports=["os", "sys", "pathlib"],
         timeout=10
@@ -240,7 +240,7 @@ def test_sandbox_execution_with_imports():
 )
 def test_sandbox_execution_timeout():
     """Test sandbox execution timeout."""
-    req = PythonExecutesWithoutError(use_sandbox=True, timeout=2)
+    req = PythonExecutionReq(use_sandbox=True, timeout=2)
     result = req.validation_fn(PYTHON_INFINITE_LOOP_CTX)
     assert result.as_bool() is False
 
@@ -248,7 +248,7 @@ def test_sandbox_execution_timeout():
 def test_sandbox_without_llm_sandbox_installed():
     """Test graceful handling when llm-sandbox is not available."""
     # This test will pass even if llm-sandbox is installed, but tests the error handling
-    req = PythonExecutesWithoutError(use_sandbox=True)
+    req = PythonExecutionReq(use_sandbox=True)
     # We can't easily test this without mocking, but the error handling is in the code
     assert req is not None
 
@@ -260,14 +260,14 @@ def test_sandbox_without_llm_sandbox_installed():
 
 def test_description_updates_based_on_mode():
     """Test that requirement description reflects execution mode."""
-    safe_req = PythonExecutesWithoutError()
+    safe_req = PythonExecutionReq()
     assert "validation only" in safe_req.description
 
-    unsafe_req = PythonExecutesWithoutError(allow_unsafe_execution=True, timeout=5)
+    unsafe_req = PythonExecutionReq(allow_unsafe_execution=True, timeout=5)
     assert "unsafe execution" in unsafe_req.description
     assert "timeout: 5s" in unsafe_req.description
 
-    sandbox_req = PythonExecutesWithoutError(use_sandbox=True, timeout=10)
+    sandbox_req = PythonExecutionReq(use_sandbox=True, timeout=10)
     assert "sandbox execution" in sandbox_req.description
     assert "timeout: 10s" in sandbox_req.description
 
@@ -275,22 +275,22 @@ def test_description_updates_based_on_mode():
 def test_parameter_combinations():
     """Test various parameter combinations."""
     # Safe mode (default)
-    req1 = PythonExecutesWithoutError()
+    req1 = PythonExecutionReq()
     assert req1._allow_unsafe is False
     assert req1._use_sandbox is False
 
     # Unsafe mode
-    req2 = PythonExecutesWithoutError(allow_unsafe_execution=True)
+    req2 = PythonExecutionReq(allow_unsafe_execution=True)
     assert req2._allow_unsafe is True
     assert req2._use_sandbox is False
 
     # Sandbox mode
-    req3 = PythonExecutesWithoutError(use_sandbox=True)
+    req3 = PythonExecutionReq(use_sandbox=True)
     assert req3._allow_unsafe is False
     assert req3._use_sandbox is True
 
     # Sandbox + unsafe (sandbox takes precedence)
-    req4 = PythonExecutesWithoutError(allow_unsafe_execution=True, use_sandbox=True)
+    req4 = PythonExecutionReq(allow_unsafe_execution=True, use_sandbox=True)
     assert req4._allow_unsafe is True
     assert req4._use_sandbox is True
 
@@ -322,7 +322,7 @@ def test_direct_validation_function():
 
 def test_no_code_extraction():
     """Test behavior when no code can be extracted."""
-    req = PythonExecutesWithoutError()
+    req = PythonExecutionReq()
     result = req.validation_fn(NO_PYTHON_CTX)
     assert result.as_bool() is False
     assert "Could not extract Python code" in result.reason
