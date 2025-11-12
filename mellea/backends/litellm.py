@@ -270,8 +270,9 @@ class LiteLLMBackend(FormatterBackend):
             [OpenAIBackend.message_to_openai_message(m) for m in messages]
         )
 
+        extra_params: dict[str, Any] = {}
         if _format is not None:
-            response_format = {
+            extra_params["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
                     "name": _format.__name__,
@@ -279,8 +280,6 @@ class LiteLLMBackend(FormatterBackend):
                     "strict": True,
                 },
             }
-        else:
-            response_format = {"type": "text"}
 
         thinking = model_opts.get(ModelOption.THINKING, None)
         if type(thinking) is bool and thinking:
@@ -304,9 +303,9 @@ class LiteLLMBackend(FormatterBackend):
             model=self._model_id,
             messages=conversation,
             tools=formatted_tools,
-            response_format=response_format,
             reasoning_effort=thinking,  # type: ignore
             drop_params=True,  # See note in `_make_backend_specific_and_remove`.
+            **extra_params,
             **model_specific_options,
         )
 
@@ -475,13 +474,14 @@ class LiteLLMBackend(FormatterBackend):
             FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
         return tools
 
-    def _generate_from_raw(
+    def generate_from_raw(
         self,
         actions: list[Component | CBlock],
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
+        tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
         raise NotImplementedError("This method is not implemented yet.")

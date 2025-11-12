@@ -2,19 +2,25 @@ import pytest
 
 from mellea.backends import Backend
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.backends.tools import add_tools_from_context_actions, add_tools_from_model_options
+from mellea.backends.tools import (
+    add_tools_from_context_actions,
+    add_tools_from_model_options,
+)
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock, Component, ModelOutputThunk, TemplateRepresentation, ChatContext
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    ModelOutputThunk,
+    TemplateRepresentation,
+    ChatContext,
+)
 from mellea.stdlib.docs.richdocument import Table
 from mellea.stdlib.session import MelleaSession
 
 
 @pytest.fixture(scope="module")
 def m() -> MelleaSession:
-    return MelleaSession(
-        backend=OllamaModelBackend(),
-        ctx=ChatContext(),
-    )
+    return MelleaSession(backend=OllamaModelBackend(), ctx=ChatContext())
 
 
 @pytest.fixture(scope="module")
@@ -41,9 +47,7 @@ def test_tool_called_from_context_action(m: MelleaSession, table: Table):
     def test1(): ...
     def test2(): ...
 
-    model_opts = {
-        ModelOption.TOOLS: [test1, test2]
-    }
+    model_opts = {ModelOption.TOOLS: [test1, test2]}
 
     tools = {}
 
@@ -53,6 +57,7 @@ def test_tool_called_from_context_action(m: MelleaSession, table: Table):
 
     add_tools_from_context_actions(tools, m.ctx.actions_for_available_tools())
     assert "to_markdown" in tools
+
 
 def test_tool_called(m: MelleaSession, table: Table):
     """We don't force tools to be called. As a result, this test might unexpectedly fail."""
@@ -81,9 +86,10 @@ def test_tool_not_called(m: MelleaSession, table: Table):
             returned_no_tool = True
             break
 
-    assert (
-        returned_no_tool
-    ), f"only returned tools after {r} attempts, should've returned a response with no tools"
+    assert returned_no_tool, (
+        f"only returned tools after {r} attempts, should've returned a response with no tools"
+    )
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

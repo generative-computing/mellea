@@ -315,7 +315,7 @@ class GuardianCheck(Requirement):
             # Use a CBlock for HuggingFace - it won't be added as a message
             action = CBlock("")  # type: ignore
 
-        mot, _ = self._backend.generate_from_context(
+        mot, val_ctx = self._backend.generate_from_context(
             action, gctx, model_options=guardian_options
         )
         await mot.avalue()
@@ -337,5 +337,5 @@ class GuardianCheck(Requirement):
             reason_parts.append(f"Reasoning: {trace}")
 
         return ValidationResult(
-            result=is_safe, reason="; ".join(reason_parts), thunk=mot
+            result=is_safe, reason="; ".join(reason_parts), thunk=mot, context=val_ctx
         )

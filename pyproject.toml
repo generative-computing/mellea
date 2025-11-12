@@ -42,8 +42,9 @@ dependencies = [
     "mistletoe>=1.4.0",
     "huggingface-hub>=0.33.4",
     "pillow",
-    "math_verify", # Needed for Majority Voting Sampling Strategies.
-    "rouge_score" # Needed for Majority Voting Sampling Strategies.
+    "math_verify", # Needed for Majority Voting Sampling Strategies. # Needed for Majority Voting Sampling Strategies.
+    "rouge_score",
+    "llm-sandbox[docker]>=0.3.23",
 ]
 
 [project.scripts]
@@ -82,7 +83,7 @@ vllm = [
     "numpy<2.0.0",              # patching incorrect dependencies in vllm and outlines.
     # see https://github.com/vllm-project/vllm/issues/5587
     "outlines-core==0.1.26",
-    "vllm",                     # intentionally un-versioned, expecting a minor update. coutlines-core version should be enough to specify it
+    "vllm>=0.9.1",
 ]
 
 litellm = [

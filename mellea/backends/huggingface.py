@@ -206,7 +206,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             mot = self._generate_from_context_alora(
                 action, ctx, _format=format, model_options=model_opts
             )
-            return mot, ctx.add(mot)
+            return mot, ctx.add(action).add(mot)
         else:
             mot = self._generate_from_context_standard(
                 action,
@@ -497,15 +497,29 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
         mot._generate_log = generate_log
 
-    def _generate_from_raw(
+    def generate_from_raw(
         self,
         actions: list[Component | CBlock],
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
+        tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
+        if tool_calls:
+            FancyLogger.get_logger().warning(
+                "The raw endpoint does not support tool calling at the moment."
+            )
+
+        if self._model.device.type == "mps":
+            # TODO: Remove this when we are able to update the torch package.
+            #       Test this by ensuring all outputs from this call are populated when running on mps.
+            #       https://github.com/pytorch/pytorch/pull/157727
+            FancyLogger.get_logger().warning(
+                "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a huggingface backend; ensure all ModelOutputThunks have non-empty values."
+            )
+
         model_opts = self._simplify_and_merge(model_options)
         seed = model_opts.get(ModelOption.SEED, None)
         if seed is not None:
@@ -561,28 +575,34 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             sequences_to_decode, skip_special_tokens=True
         )
 
-        results = [
-            ModelOutputThunk(value=decoded_result) for decoded_result in decoded_results
-        ]
+        results = []
+        for i, decoded_result in enumerate(decoded_results):
+            n_prompt_tokens = inputs["input_ids"][i].size(0)  # type: ignore
+            n_completion_tokens = len(sequences_to_decode[i])
+            result = ModelOutputThunk(
+                value=decoded_result,
+                meta={
+                    "usage": {
+                        "prompt_tokens": n_prompt_tokens,  # type: ignore
+                        "completion_tokens": n_completion_tokens,
+                        "total_tokens": n_prompt_tokens + n_completion_tokens,
+                    }
+                },
+            )
 
-        for i, result in enumerate(results):
             self.formatter.parse(actions[i], result)
 
-        if generate_logs is not None:
-            assert isinstance(generate_logs, list)
-            date = datetime.datetime.now()
+            generate_log = GenerateLog()
+            generate_log.prompt = self.formatter.print(actions[i])
+            generate_log.backend = f"hf::{self.model_id!s}"
+            generate_log.model_options = model_opts
+            generate_log.date = datetime.datetime.now()
+            generate_log.model_output = decoded_result
+            generate_log.extra = {"format": format, "seed": seed}
+            generate_log.action = actions[i]
 
-            for i in range(len(prompts)):
-                generate_log = GenerateLog()
-                generate_log.prompt = prompts[i]
-                generate_log.backend = f"hf::{self.model_id!s}"
-                generate_log.model_options = model_opts
-                generate_log.date = date
-                generate_log.model_output = decoded_results
-                generate_log.extra = {"format": format, "seed": seed}
-                generate_log.action = actions[i]
-                generate_log.result = results[i]
-                generate_logs.append(generate_log)
+            result._generate_log = generate_log
+            results.append(result)
 
         return results
 

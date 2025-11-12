@@ -38,7 +38,9 @@ def test_render_view_for_simple_context():
     for i in range(5):
         ctx = ctx.add(CBlock(f"a {i}"))
     assert len(ctx.as_list()) == 5, "Adding 5 items to context should result in 5 items"
-    assert len(ctx.view_for_generation()) == 0, "Render size should be 0 -- NO HISTORY for SimpleContext"
+    assert len(ctx.view_for_generation()) == 0, (
+        "Render size should be 0 -- NO HISTORY for SimpleContext"
+    )
 
 
 def test_render_view_for_chat_context():

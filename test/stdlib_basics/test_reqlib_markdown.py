@@ -1,7 +1,11 @@
 import pytest
 
 from mellea.stdlib.base import CBlock, ModelOutputThunk, Context, ChatContext
-from mellea.stdlib.reqlib.md import is_markdown_list, is_markdown_table, as_markdown_list
+from mellea.stdlib.reqlib.md import (
+    is_markdown_list,
+    is_markdown_table,
+    as_markdown_list,
+)
 from mellea.stdlib.requirement import default_output_to_bool
 
 
@@ -51,17 +55,30 @@ def test_markdown_list():
 def test_markdown_table():
     assert is_markdown_table.validate(None, MARKDOWN_TABLE_CONTEXT)
 
+
 def test_default_output_to_bool_yes():
     assert default_output_to_bool("yeS") == True
+
 
 def test_default_output_to_bool_no():
     assert default_output_to_bool("nO") == False
 
+
 def test_default_output_to_bool_complicated_yes():
-    assert default_output_to_bool(CBlock("The requirement is met by the output. Therefore, my answer is yes.")) == True
+    assert (
+        default_output_to_bool(
+            CBlock("The requirement is met by the output. Therefore, my answer is yes.")
+        )
+        == True
+    )
+
 
 def test_default_output_to_bool_word_with_yes_in_it():
-    assert default_output_to_bool("Here's a word that meets those requirements: ayes.") == False
+    assert (
+        default_output_to_bool("Here's a word that meets those requirements: ayes.")
+        == False
+    )
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

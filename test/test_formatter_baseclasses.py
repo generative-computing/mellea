@@ -36,30 +36,30 @@ def instr() -> Instruction:
 
 
 def test_cblock_print(tf: TemplateFormatter):
-    assert (
-        tf.print(CBlock(value="cblock value")) == "cblock value"
-    ), "printed value did not match cblock value"
+    assert tf.print(CBlock(value="cblock value")) == "cblock value", (
+        "printed value did not match cblock value"
+    )
 
 
 def test_component_print(tf: TemplateFormatter, instr: Instruction):
     output = tf.print(instr)
 
-    assert isinstance(
-        instr._description, CBlock
-    ), "after printing, an instruction's description is not longer a CBlock"
-    assert (
-        instr._description.value is not None
-    ), "after printing, an instruction's description value is None"
-    assert (
-        instr._description.value in output
-    ), "printed instruction did not contain description"
+    assert isinstance(instr._description, CBlock), (
+        "after printing, an instruction's description is not longer a CBlock"
+    )
+    assert instr._description.value is not None, (
+        "after printing, an instruction's description value is None"
+    )
+    assert instr._description.value in output, (
+        "printed instruction did not contain description"
+    )
 
-    assert (
-        instr._requirements[0].description is not None
-    ), "specified requirement should not have description == None"
-    assert (
-        instr._requirements[0].description in output
-    ), "printed instruction did not contain requirement description"
+    assert instr._requirements[0].description is not None, (
+        "specified requirement should not have description == None"
+    )
+    assert instr._requirements[0].description in output, (
+        "printed instruction did not contain requirement description"
+    )
 
 
 def test_to_chat_messages(tf: TemplateFormatter):
@@ -68,9 +68,9 @@ def test_to_chat_messages(tf: TemplateFormatter):
     msgs = tf.to_chat_messages(
         [sys_msg, CBlock(value="cblock 1"), CBlock(value="cblock 2"), response]
     )
-    assert all(
-        isinstance(msg, Message) for msg in msgs
-    ), "to_chat_messages had a non-message item returned"
+    assert all(isinstance(msg, Message) for msg in msgs), (
+        "to_chat_messages had a non-message item returned"
+    )
 
 
 def test_parse(tf: TemplateFormatter):
@@ -88,28 +88,27 @@ def test_parse(tf: TemplateFormatter):
         },
     )
     tf.parse(source, result)
-    assert isinstance(
-        result.parsed_repr, Message
-    ), "result's parsed repr should be a message when meta includes a chat_response"
-    assert (
-        result.parsed_repr.role == "assistant"
-    ), "result's parsed repr role should be assistant"
+    assert isinstance(result.parsed_repr, Message), (
+        "result's parsed repr should be a message when meta includes a chat_response"
+    )
+    assert result.parsed_repr.role == "assistant", (
+        "result's parsed repr role should be assistant"
+    )
     assert result.parsed_repr.content == "assistant reply"
 
     result = ModelOutputThunk(value="result value")
     tf.parse(source, result)
-    assert isinstance(
-        result.parsed_repr, Message
-    ), "result's parsed repr should be a message when source component is a message"
+    assert isinstance(result.parsed_repr, Message), (
+        "result's parsed repr should be a message when source component is a message"
+    )
     assert result.parsed_repr.content == "result value"
 
     cblock_source = CBlock("cblock source")
     result = ModelOutputThunk(value="result value from cblock")
     tf.parse(cblock_source, result)
-    assert (
-        result.parsed_repr is result
-    ), "parse should set the result object to result.parsed_repr if it's not parsing a message"
-
+    assert result.parsed_repr is result, (
+        "parse should set the result object to result.parsed_repr if it's not parsing a message"
+    )
 
 
 def test_custom_template_string(tf: TemplateFormatter):
@@ -123,9 +122,9 @@ def test_custom_template_string(tf: TemplateFormatter):
     c = _TemplInstruction("description text", ["req1"])
     out = tf.print(c)
     assert out == "description text"
-    assert (
-        "req1" not in out
-    ), "custom template field failed, requirements shouldn't be included"
+    assert "req1" not in out, (
+        "custom template field failed, requirements shouldn't be included"
+    )
 
 
 def test_string_repre(tf: TemplateFormatter):
@@ -136,9 +135,9 @@ def test_string_repre(tf: TemplateFormatter):
             return str_repr
 
     output = tf.print(_StringRepr())
-    assert (
-        output == str_repr
-    ), "print output should match string output for format_for_llm"
+    assert output == str_repr, (
+        "print output should match string output for format_for_llm"
+    )
 
 
 def test_user_path(instr: Instruction):
@@ -151,14 +150,14 @@ def test_user_path(instr: Instruction):
     )
 
     repr = instr.format_for_llm()
-    assert (
-        type(repr) is TemplateRepresentation
-    ), "instruction's llm repr should be a TemplateRepresentation"
+    assert type(repr) is TemplateRepresentation, (
+        "instruction's llm repr should be a TemplateRepresentation"
+    )
 
     tmpl = tf._load_template(repr)
-    assert (
-        tmpl.name != ""
-    ), "a fake template path impacted template lookup; formatter should've defaulted to `mellea`"
+    assert tmpl.name != "", (
+        "a fake template path impacted template lookup; formatter should've defaulted to `mellea`"
+    )
 
     # Point to a user-specified directory with templates.
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
@@ -198,9 +197,9 @@ def test_no_module(tf: TemplateFormatter):
     c = Instruction("description")
     c.__module__ = "fake-module"
     tmpl = tf._load_template(c.format_for_llm())
-    assert (
-        tmpl.name == "prompts/default/Instruction.jinja2"
-    ), "did not load Mellea default package"
+    assert tmpl.name == "prompts/default/Instruction.jinja2", (
+        "did not load Mellea default package"
+    )
 
 
 def test_no_template(tf: TemplateFormatter):
@@ -219,23 +218,27 @@ def test_load_with_model_id(instr: Instruction):
     tf = TemplateFormatter(IBM_GRANITE_3_2_8B)
     tmpl = tf._load_template(instr.format_for_llm())
     assert tmpl.name is not None
-    assert (
-        "granite" in tmpl.name
-    ), "there should always be a granite specific instruction template"
+    assert "granite" in tmpl.name, (
+        "there should always be a granite specific instruction template"
+    )
 
 
 def test_fake_model_id(instr: Instruction):
     tf = TemplateFormatter("fake-model")
     tmpl = tf._load_template(instr.format_for_llm())
     assert tmpl.name is not None
-    assert (
-        "default" in tmpl.name
-    ), "there should always be a default instruction template"
+    assert "default" in tmpl.name, (
+        "there should always be a default instruction template"
+    )
+
 
 def test_custom_model_id():
     model_id = ModelIdentifier(mlx_name="new-model-here")
     tf = TemplateFormatter(model_id=model_id)
-    assert tf._get_model_id() == "new-model-here", "getting the model id should always give a string if one exists"
+    assert tf._get_model_id() == "new-model-here", (
+        "getting the model id should always give a string if one exists"
+    )
+
 
 def test_empty_model_id(instr: Instruction):
     model_id = ModelIdentifier()
@@ -244,9 +247,9 @@ def test_empty_model_id(instr: Instruction):
 
     tmpl = tf._load_template(instr.format_for_llm())
     assert tmpl.name is not None
-    assert (
-        "default" in tmpl.name
-    ), "there should always be a default instruction template"
+    assert "default" in tmpl.name, (
+        "there should always be a default instruction template"
+    )
 
 
 def test_template_caching(instr: Instruction):
@@ -267,9 +270,9 @@ def test_template_caching(instr: Instruction):
 
     tf._use_template_cache = False
     tmpl = tf._load_template(instr.format_for_llm())
-    assert (
-        tmpl is not default_tmpl
-    ), "template formatter appeared to use cache or grab the wrong template when caching was disabled"
+    assert tmpl is not default_tmpl, (
+        "template formatter appeared to use cache or grab the wrong template when caching was disabled"
+    )
 
 
 def test_custom_component_external_package(tf: TemplateFormatter):
@@ -312,9 +315,9 @@ class NewComponent(Component):
 
         NewComponent = getattr(temp_module, "NewComponent")
         nc = NewComponent()
-        assert (
-            tf.print(nc) == "template arg version of new component"
-        ), "did not get expected template for a 3rd party package NewComponent"
+        assert tf.print(nc) == "template arg version of new component", (
+            "did not get expected template for a 3rd party package NewComponent"
+        )
 
 
 def test_custom_template_order(tf: TemplateFormatter, instr: Instruction):
@@ -322,9 +325,9 @@ def test_custom_template_order(tf: TemplateFormatter, instr: Instruction):
     repr.template_order = ["Query"]
 
     tmpl = tf._load_template(repr)
-    assert (
-        tmpl.name == "prompts/default/Query.jinja2"
-    ), "changing template order did not change the template retrieved"
+    assert tmpl.name == "prompts/default/Query.jinja2", (
+        "changing template order did not change the template retrieved"
+    )
 
     repr.template_order = ["FakeQuery"]
     with pytest.raises(ValueError):

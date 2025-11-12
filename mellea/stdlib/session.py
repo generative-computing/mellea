@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import contextvars
+import inspect
 from copy import copy
 from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
 
-import mellea.stdlib.funcs as mfuncs
+import mellea.stdlib.functional as mfuncs
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.model_ids import (
     IBM_GRANITE_3_3_8B,
@@ -803,6 +804,12 @@ class MelleaSession:
         )
         self.ctx = context
         return result
+
+    @classmethod
+    def powerup(cls, powerup_cls: type):
+        """Appends methods in a class object `powerup_cls` to MelleaSession."""
+        for name, fn in inspect.getmembers(powerup_cls, predicate=inspect.isfunction):
+            setattr(cls, name, fn)
 
     # ###############################
     #  Convenience functions
