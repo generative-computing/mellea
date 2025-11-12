@@ -16,7 +16,7 @@ To install Agentstack, follow the instructions at this page: https://agentstack.
 
 Then, in order to run the example email writer, run:
 ```bash
-uv run --with mellea --with agentstack-sdk docs/examples/agentstack.py
+uv run --with mellea --with agentstack-sdk docs/examples/agentstack_agent.py
 ```
 
 In a separate terminal, either run
@@ -58,9 +58,9 @@ def mellea_func(m: MelleaSession, sender: str, recipient, subject: str, topic: s
     return sampling
 ```
 
-As shown above, that the first parameter is an **m** object.
+* As shown above, note that the first parameter should be an **m** object.
 
-Wrap your Mellea program with ```@bee_app``` and title the file ```agentstack_agent.py```.
+Then, wrap your Mellea program with the ```@agentstack_app``` decorator and title the file ```agentstack_agent.py```.
 
 Place your example in the ```docs/examples/``` folder.
 
