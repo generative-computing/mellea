@@ -5,7 +5,7 @@ import pathlib
 from enum import Enum
 from typing import Any, TypeVar
 
-import granite_common
+import granite_common.intrinsics
 import yaml
 from litellm import cast
 
