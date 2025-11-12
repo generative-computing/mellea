@@ -26,15 +26,16 @@ def backend():
     backend = LocalVLLMBackend(
         model_id=model_ids.QWEN3_0_6B,
         # formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
-        model_options = {
+        model_options={
             # made smaller for a testing environment with smaller gpus.
             # such an environment could possibly be running other gpu applications, including slack
-            "gpu_memory_utilization":0.8,
-            "max_model_len":8192,
-            "max_num_seqs":8,
+            "gpu_memory_utilization": 0.8,
+            "max_model_len": 8192,
+            "max_num_seqs": 8,
         },
-       )
+    )
     return backend
+
 
 @pytest.fixture(scope="function")
 def session(backend):
@@ -99,13 +100,13 @@ def test_format(session):
         "The email address should be at example.com"
     )
 
+
 @pytest.mark.qualitative
 def test_generate_from_raw(session):
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
     results = session.backend.generate_from_raw(
-        actions=[CBlock(value=prompt) for prompt in prompts],
-        ctx=session.ctx
+        actions=[CBlock(value=prompt) for prompt in prompts], ctx=session.ctx
     )
 
     assert len(results) == len(prompts)
@@ -140,8 +141,12 @@ def test_generate_from_raw_with_format(session):
 def test_async_parallel_requests(session):
     async def parallel_requests():
         model_opts = {ModelOption.STREAM: True}
-        mot1, _ = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext(), model_options=model_opts)
-        mot2, _ = session.backend.generate_from_context(CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts)
+        mot1, _ = session.backend.generate_from_context(
+            CBlock("Say Hello."), SimpleContext(), model_options=model_opts
+        )
+        mot2, _ = session.backend.generate_from_context(
+            CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts
+        )
 
         m1_val = None
         m2_val = None
@@ -158,21 +163,31 @@ def test_async_parallel_requests(session):
 
         # Ideally, we would be able to assert that m1_final_val != m1_val, but sometimes the first streaming response
         # contains the full response.
-        assert m1_final_val.startswith(m1_val), "final val should contain the first streamed chunk"
-        assert m2_final_val.startswith(m2_val), "final val should contain the first streamed chunk"
+        assert m1_final_val.startswith(m1_val), (
+            "final val should contain the first streamed chunk"
+        )
+        assert m2_final_val.startswith(m2_val), (
+            "final val should contain the first streamed chunk"
+        )
 
         assert m1_final_val == mot1.value
         assert m2_final_val == mot2.value
+
     asyncio.run(parallel_requests())
+
 
 @pytest.mark.qualitative
 def test_async_avalue(session):
     async def avalue():
-        mot1, _ = session.backend.generate_from_context(CBlock("Say Hello."), SimpleContext())
+        mot1, _ = session.backend.generate_from_context(
+            CBlock("Say Hello."), SimpleContext()
+        )
         m1_final_val = await mot1.avalue()
         assert m1_final_val is not None
         assert m1_final_val == mot1.value
+
     asyncio.run(avalue())
+
 
 if __name__ == "__main__":
     import pytest

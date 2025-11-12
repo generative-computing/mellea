@@ -2,6 +2,7 @@ import os
 
 import pytest
 
+
 @pytest.fixture(scope="session")
 def gh_run() -> int:
     return int(os.environ.get("CICD", 0))  # type: ignore

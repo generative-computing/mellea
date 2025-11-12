@@ -111,6 +111,7 @@ def test_format(m_session):
     # assert email.to.email_address.endswith("example.com")
     pass
 
+
 # @pytest.mark.qualitative
 # def test_generate_from_raw(m_session):
 #     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
@@ -121,27 +122,27 @@ def test_format(m_session):
 
 #     assert len(results) == len(prompts)
 
-    # Default OpenAI implementation doesn't support structured outputs for the completions API.
-    # def test_generate_from_raw_with_format(self):
-    #     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
+# Default OpenAI implementation doesn't support structured outputs for the completions API.
+# def test_generate_from_raw_with_format(self):
+#     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
-    #     class Answer(pydantic.BaseModel):
-    #         name: str
-    #         value: int
+#     class Answer(pydantic.BaseModel):
+#         name: str
+#         value: int
 
-    #     results = self.m.backend._generate_from_raw(
-    #         actions=[CBlock(value=prompt) for prompt in prompts],
-    #         format=Answer,
-    #         generate_logs=None,
-    #     )
+#     results = self.m.backend._generate_from_raw(
+#         actions=[CBlock(value=prompt) for prompt in prompts],
+#         format=Answer,
+#         generate_logs=None,
+#     )
 
-    #     assert len(results) == len(prompts)
+#     assert len(results) == len(prompts)
 
-    #     random_result = results[0]
-    #     try:
-    #         answer = Answer.model_validate_json(random_result.value)
-    #     except pydantic.ValidationError as e:
-    #         assert False, f"formatting directive failed for {random_result.value}: {e.json()}"
+#     random_result = results[0]
+#     try:
+#         answer = Answer.model_validate_json(random_result.value)
+#     except pydantic.ValidationError as e:
+#         assert False, f"formatting directive failed for {random_result.value}: {e.json()}"
 
 
 async def test_async_parallel_requests(m_session):
@@ -150,7 +151,7 @@ async def test_async_parallel_requests(m_session):
         CBlock("Say Hello."), SimpleContext(), model_options=model_opts
     )
     mot2, _ = m_session.backend.generate_from_context(
-        CBlock("Say Goodbye!"),SimpleContext(), model_options=model_opts
+        CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts
     )
 
     m1_val = None
@@ -187,6 +188,7 @@ async def test_async_avalue(m_session):
     assert m1_final_val is not None
     assert m1_final_val == mot1.value
 
+
 def test_client_cache(backend):
     first_client = backend._async_client
 
@@ -196,17 +198,22 @@ def test_client_cache(backend):
     second_client = asyncio.run(get_client_async())
 
     items_in_cache = backend._client_cache.cache.values()
-    assert len(items_in_cache) == 2, "should be two clients in the cache since _async_client was called from two event loops"
+    assert len(items_in_cache) == 2, (
+        "should be two clients in the cache since _async_client was called from two event loops"
+    )
     assert first_client in items_in_cache
     assert second_client in items_in_cache
     assert first_client is not second_client
 
     third_client = backend._async_client
-    assert third_client is first_client, "clients in sync code should be the same if haven't been pushed out of the cache"
+    assert third_client is first_client, (
+        "clients in sync code should be the same if haven't been pushed out of the cache"
+    )
 
     fourth_client = asyncio.run(get_client_async())
     assert fourth_client in backend._client_cache.cache.values()
     assert len(backend._client_cache.cache.values()) == 2
+
 
 if __name__ == "__main__":
     import pytest

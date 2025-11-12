@@ -46,7 +46,9 @@ class TestSamplingCtxCase:
         assert len(self.m.ctx.as_list()) == 2, (
             "there should only be a message and a response in the ctx."
         )
-        assert len(self.m.last_prompt()) == 1, "Last prompt should only have only one instruction inside - independent of sampling iterations."
+        assert len(self.m.last_prompt()) == 1, (
+            "Last prompt should only have only one instruction inside - independent of sampling iterations."
+        )
 
         _, val_res = res.result_validations[0]
         # Ensure the ValidationResult has its thunk and context set. Ensure the context has
@@ -73,7 +75,10 @@ class TestSamplingCtxCase:
         assert len(self.m.ctx.as_list()) >= 2, (
             "there should be at least a message and a response in the ctx; more if the first result failed validation"
         )
-        assert len(self.m.last_prompt()) == len(res.sample_generations)*2-1, "For n sampling iterations there should be 2n-1 prompt conversation elements in the last prompt."
+        assert len(self.m.last_prompt()) == len(res.sample_generations) * 2 - 1, (
+            "For n sampling iterations there should be 2n-1 prompt conversation elements in the last prompt."
+        )
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

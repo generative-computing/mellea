@@ -1,5 +1,3 @@
-
-
 import pytest
 
 from mellea.backends.types import ModelOption
@@ -27,6 +25,7 @@ def m_session(gh_run):
     yield m
     del m
 
+
 def test_func_context(m_session):
     initial_ctx = m_session.ctx
     backend = m_session.backend
@@ -35,31 +34,26 @@ def test_func_context(m_session):
     assert initial_ctx is not ctx
     assert ctx._data is out
 
+
 async def test_aact(m_session):
     initial_ctx = m_session.ctx
     backend = m_session.backend
 
-    out, ctx = await aact(
-        Message(role="user", content="hello"),
-        initial_ctx,
-        backend
-    )
+    out, ctx = await aact(Message(role="user", content="hello"), initial_ctx, backend)
 
     assert initial_ctx is not ctx
     assert ctx._data is out
+
 
 async def test_ainstruct(m_session):
     initial_ctx = m_session.ctx
     backend = m_session.backend
 
-    out, ctx = await ainstruct(
-        "Write a sentence",
-        initial_ctx,
-        backend
-    )
+    out, ctx = await ainstruct("Write a sentence", initial_ctx, backend)
 
     assert initial_ctx is not ctx
     assert ctx._data is out
+
 
 async def test_avalidate(m_session):
     initial_ctx = m_session.ctx
@@ -69,7 +63,7 @@ async def test_avalidate(m_session):
         reqs=[req("Be formal."), req("Avoid telling jokes.")],
         context=initial_ctx,
         backend=backend,
-        output=ModelOutputThunk("Here is an output.")
+        output=ModelOutputThunk("Here is an output."),
     )
 
     assert len(val_result) == 2

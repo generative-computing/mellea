@@ -16,15 +16,10 @@ def m_session(gh_run):
     """Start default Mellea's session."""
     if gh_run == 1:  # on github
         m = start_session(
-            "ollama",
-            model_id=MODEL_ID,
-            model_options={ModelOption.MAX_NEW_TOKENS: 5},
+            "ollama", model_id=MODEL_ID, model_options={ModelOption.MAX_NEW_TOKENS: 5}
         )
     else:
-        m = start_session(
-            "ollama",
-            model_id=MODEL_ID,
-        )
+        m = start_session("ollama", model_id=MODEL_ID)
     yield m
     del m
 
@@ -48,7 +43,7 @@ def test_think_big(m_session: MelleaSession, gh_run: int):
         end_think_token="</think>",
         think_more_suffix="\nWait, let's think more carefully",
         answer_suffix="The final answer is:",
-        requirements=None
+        requirements=None,
     )
     result = m_session.instruct(action, strategy=strategy)
 
@@ -73,7 +68,7 @@ def test_think_little(m_session: MelleaSession, gh_run: int):
         start_think_token="<think>",
         end_think_token="</think>",
         answer_suffix="The final answer is: \\boxed{",
-        requirements=None
+        requirements=None,
     )
     result = m_session.instruct(action, strategy=strategy)
 

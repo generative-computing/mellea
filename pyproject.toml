@@ -42,9 +42,10 @@ dependencies = [
     "mistletoe>=1.4.0",
     "huggingface-hub>=0.33.4",
     "pillow",
-    "math_verify", # Needed for Majority Voting Sampling Strategies.
-    "rouge_score", # Needed for Majority Voting Sampling Strategies.
     "granite_common", # Needed for Intrinsics.
+    "math_verify", # Needed for Majority Voting Sampling Strategies. # Needed for Majority Voting Sampling Strategies.
+    "rouge_score", # Needed for Majority Voting Sampling Strategies.
+    "llm-sandbox[docker]>=0.3.23",
 ]
 
 [project.scripts]
