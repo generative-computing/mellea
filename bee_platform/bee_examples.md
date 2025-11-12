@@ -7,6 +7,10 @@ their Mellea programs into Agentstack agentic interfaces with structured (form) 
 
 We provide the example of an email writer. Only text inputs are currently supported.
 
+# Installing Agentstack
+
+To install Agentstack, follow the instructions at this page: https://agentstack.beeai.dev/introduction/welcome
+
 
 # Running the example
 
@@ -17,13 +21,13 @@ uv run --with mellea --with agentstack-sdk docs/examples/agentstack.py
 
 In a separate terminal, either run
 ```bash
-beeai run mellea_agent
+agentstack run mellea_agent
 ```
 
 OR open the UI and select the **mellea-agent**.
 
 ```bash
-beeai ui
+agentstack ui
 ```
 
 # Tutorial
