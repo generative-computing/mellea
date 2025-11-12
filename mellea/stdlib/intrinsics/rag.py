@@ -5,7 +5,7 @@ import json
 
 import granite_common
 
-import mellea.stdlib.funcs as mfuncs
+import mellea.stdlib.functional as mfuncs
 from mellea.backends import Backend
 from mellea.backends.adapters.adapter import (
     AdapterMixin,

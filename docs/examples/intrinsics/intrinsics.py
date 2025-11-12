@@ -2,7 +2,7 @@ from mellea.backends.openai import OpenAIBackend, _ServerType
 from mellea.backends.adapters.adapter import AdapterType, GraniteCommonAdapter
 from mellea.stdlib.base import ChatContext, ModelOutputThunk
 from mellea.stdlib.chat import Message
-import mellea.stdlib.funcs as mfuncs
+import mellea.stdlib.functional as mfuncs
 from mellea.stdlib.intrinsics.intrinsic import Intrinsic
 
 # Create the Adapter. GraniteCommonAdapter's default to ALORAs.
