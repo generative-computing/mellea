@@ -32,7 +32,7 @@ agentstack ui
 
 # Tutorial
 
-To create your own Agentstack agent with Mellea, write a traditional program with Mellea, as shown below:
+To create your own Agentstack agent with Mellea, write a traditional program with Mellea, as shown below. We provide the source code of the email writer.
 
 ```bash
 def mellea_func(m: MelleaSession, sender: str, recipient, subject: str, topic: str, sampling_iters : int = 3) -> tuple[ModelOutputThunk, Context] | SamplingResult:
@@ -60,7 +60,7 @@ def mellea_func(m: MelleaSession, sender: str, recipient, subject: str, topic: s
 
 * As shown above, note that the first parameter should be an **m** object.
 
-Then, wrap your Mellea program with the ```@agentstack_app``` decorator and title the file ```agentstack_agent.py```.
+Then, wrap your Mellea program with the ```@agentstack_app``` decorator.
 
 Place your example in the ```docs/examples/``` folder.
 
