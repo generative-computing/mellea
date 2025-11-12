@@ -130,7 +130,7 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
             )
         if config_file is None and config_dict is None:
             is_alora = self.adapter_type == AdapterType.ALORA
-            config_file = granite_common.intrinsics.util.obtain_io_yaml(
+            config_file = granite_common.intrinsics.obtain_io_yaml(
                 self.intrinsic_name,
                 self.base_model_name,
                 alora=is_alora,
@@ -195,7 +195,7 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
         """
         is_alora = self.adapter_type == AdapterType.ALORA
         return str(
-            granite_common.intrinsics.util.obtain_lora(
+            granite_common.intrinsics.obtain_lora(
                 self.intrinsic_name,
                 base_model_name,
                 alora=is_alora,
