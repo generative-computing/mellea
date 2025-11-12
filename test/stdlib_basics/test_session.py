@@ -7,7 +7,7 @@ from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.types import ModelOption
 from mellea.stdlib.base import ChatContext, ModelOutputThunk
 from mellea.stdlib.chat import Message
-from mellea.stdlib.session import start_session
+from mellea.stdlib.session import start_session, MelleaSession
 
 
 # We edit the context type in the async tests below. Don't change the scope here.
@@ -132,6 +132,18 @@ def test_session_copy_with_context_ops(m_session):
     # Assert that the new sessions still branch off the original one.
     assert m1.ctx.previous_node.previous_node is m_session.ctx
     assert m2.ctx.previous_node.previous_node is m_session.ctx
+
+
+class TestPowerup:
+    def hello(m:MelleaSession):
+        return "hello"
+
+
+def test_powerup(m_session):
+
+    MelleaSession.powerup(TestPowerup)
+
+    assert "hello" == m_session.hello()
 
 
 if __name__ == "__main__":
