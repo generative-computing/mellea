@@ -1,10 +1,9 @@
 # test/rits_backend_tests/test_openai_integration.py
-from contextvars import Context
 from mellea import MelleaSession
 from mellea.backends.adapters.adapter import GraniteCommonAdapter
-from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext
+from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext, Context
 from mellea.backends.openai import OpenAIBackend
-from mellea.stdlib.requirement import Requirement, ALoraRequirement, LLMaJRequirement, req
+from mellea.stdlib.requirement import REQUIREMENT_REPO_ID, Requirement, ALoraRequirement, LLMaJRequirement, req
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.types import _ServerType, ModelOption
 
@@ -136,14 +135,14 @@ class TestOpenAIALoraStuff:
         base_url="http://localhost:8000/v1",
         api_key="EMPTY",
     )
-    backend.add_adapter(GraniteCommonAdapter("requirement_check"))
+    backend.add_adapter(GraniteCommonAdapter(REQUIREMENT_REPO_ID, "requirement_check", base_model_name=backend.base_model_name))
 
     m = MelleaSession(backend, ctx=ChatContext())
 
     def test_adapters(self):
         assert len(self.backend._added_adapters.items()) > 0
 
-        adapter = self.backend._added_adapters["requirement_check_alora"]
+        adapter = self.backend._added_adapters[f"{REQUIREMENT_REPO_ID}_requirement_check_alora"]
         self.backend.load_adapter(adapter.qualified_name)
         assert adapter.qualified_name in self.backend._loaded_adapters
 
@@ -209,7 +208,6 @@ class TestOpenAIALoraStuff:
         assert len(validation_outputs) == 1
         non_alora_output = validation_outputs[0]
         assert "requirement_likelihood" in str(non_alora_output.reason)
-        assert str(non_alora_output.reason) in ["Y", "N"]
 
         # Ensure the ValidationResult has its thunk and context set. Ensure the context has
         # the correct actions / results in it.

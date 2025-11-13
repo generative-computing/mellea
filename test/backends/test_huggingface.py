@@ -34,11 +34,9 @@ def backend():
         formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
         cache=SimpleLRUCache(5),
     )
-    # Assertion to assuage the wrath of the linter
-    assert backend.model_id is not None
     backend.add_adapter(
         GraniteCommonAdapter(
-            REQUIREMENT_REPO_ID, "requirement_check", base_model_name=backend.model_id
+            REQUIREMENT_REPO_ID, "requirement_check", base_model_name=backend.base_model_name
         )
     )
     return backend
