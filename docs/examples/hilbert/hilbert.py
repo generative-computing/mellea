@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+import os
 
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.stdlib.requirement import Requirement, simple_validate
@@ -15,6 +16,8 @@ class Hilbert:
         self.retriever = retriever
         self.reasoner = reasoner
         self.prover = prover
+        if lean_project_path is None:
+            lean_project_path = os.environ.get("LEAN_PROJECT_PATH")
         self.lean_project_path = Path(lean_project_path)
 
         result = subprocess.run(
