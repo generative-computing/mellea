@@ -8,7 +8,7 @@ from datasets import load_dataset
 Embedding = torch.Tensor
 Text = str
 
-class SemanticSearch:
+class Retriever:
     def __init__(self, dataset_name: str, model_name: str = "sentence-transformers/all-mpnet-base-v2"):
         self.model: SentenceTransformer = SentenceTransformer(model_name)
         self.dataset = load_dataset(dataset_name)
@@ -37,7 +37,7 @@ class SemanticSearch:
 
 # Example usage
 if __name__ == "__main__":
-    engine = SemanticSearch("FrenzyMath/mathlib_informal_v4.19.0")  # hypothetical dataset
+    engine = Retriever("FrenzyMath/mathlib_informal_v4.19.0")  # hypothetical dataset
     query = "Prove that every continuous function on [0,1] is bounded."
     top_matches = engine.search(query, k=3)
 

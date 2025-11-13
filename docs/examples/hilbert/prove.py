@@ -3,6 +3,7 @@
 
 import mellea
 from docs.examples.hilbert.hilbert import Hilbert
+from docs.examples.hilbert.mathlib_retriever import Retriever
 
 retriever = None
 reasoner = mellea.start_session("ollama", "gpt-oss:120b-cloud")
