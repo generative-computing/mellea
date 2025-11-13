@@ -10,7 +10,7 @@ from typing import Any, Generic, ParamSpec, TypedDict, TypeVar, get_type_hints, 
 
 from pydantic import BaseModel, Field, create_model
 
-import mellea.stdlib.funcs as mfuncs
+import mellea.stdlib.functional as mfuncs
 from mellea.backends import Backend
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
