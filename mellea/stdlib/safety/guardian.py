@@ -315,7 +315,7 @@ class GuardianCheck(Requirement):
             # Use a CBlock for HuggingFace - it won't be added as a message
             action = CBlock("")  # type: ignore
 
-        mot, val_ctx = self._backend.generate_from_context(
+        mot, val_ctx = await self._backend.generate_from_context(
             action, gctx, model_options=guardian_options
         )
         await mot.avalue()

@@ -16,7 +16,7 @@ class DummyBackend(Backend):
         self.responses = responses
         self.idx = 0
 
-    def generate_from_context(
+    async def generate_from_context(
         self,
         action: Component | CBlock,
         ctx: Context,
