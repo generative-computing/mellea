@@ -1,0 +1,3566 @@
+[
+  {
+    "id": 12164279,
+    "name": "The President and Directors of the Bank of New-Brunswick v. Aaron Hassert and others",
+    "name_abbreviation": "President of the Bank of New-Brunswick v. Hassert",
+    "decision_date": "1830-01",
+    "docket_number": "",
+    "first_page": "1",
+    "last_page": "4",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 1"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 371,
+      "char_count": 6568,
+      "ocr_confidence": 0.48,
+      "pagerank": {
+        "raw": 2.068451890922937e-07,
+        "percentile": 0.7489606189978409
+      },
+      "sha256": "fe183299d3cc3bd13915321d2c5e77a838a0b77213a2d97cb4c93b1bc17bc1a6",
+      "simhash": "1:af40d6f7ce5688de",
+      "word_count": 1101
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0001-01",
+    "first_page_order": 13,
+    "last_page_order": 16
+  },
+  {
+    "id": 12164290,
+    "name": "Joseph Quick and others v. Rachel Quick and others",
+    "name_abbreviation": "Quick v. Quick",
+    "decision_date": "1830-01",
+    "docket_number": "",
+    "first_page": "4",
+    "last_page": "8",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 4"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 402,
+      "char_count": 8975,
+      "ocr_confidence": 0.483,
+      "sha256": "0494b9222456d329850184d28904da4cc37b2ed4b9198613f06fa3bad629d9e8",
+      "simhash": "1:8d66741a920a893b",
+      "word_count": 1589
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0004-01",
+    "first_page_order": 16,
+    "last_page_order": 20
+  },
+  {
+    "id": 12164301,
+    "name": "Van Derveer v. Tallman et al.",
+    "name_abbreviation": "Van Derveer v. Tallman",
+    "decision_date": "1830-04",
+    "docket_number": "",
+    "first_page": "9",
+    "last_page": "9",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 9"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 121,
+      "char_count": 1497,
+      "ocr_confidence": 0.55,
+      "sha256": "34e5064b1d5a145dc02350ddaf6fd3e17931de734e9af9ed75fe9bdbe1c1d9d4",
+      "simhash": "1:144e3bb5a0ec826b",
+      "word_count": 257
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0009-01",
+    "first_page_order": 21,
+    "last_page_order": 21
+  },
+  {
+    "id": 12164316,
+    "name": "Copper, and the Executors of Calbraith, v. Wells, Hoy, and others",
+    "name_abbreviation": "Copper v. Wells",
+    "decision_date": "1830-04",
+    "docket_number": "",
+    "first_page": "10",
+    "last_page": "18",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 10"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 843,
+      "char_count": 21651,
+      "ocr_confidence": 0.544,
+      "pagerank": {
+        "raw": 1.9353521637700016e-07,
+        "percentile": 0.734820640122262
+      },
+      "sha256": "9dd8a4e9c0dcf0abc2c7f8a365bc53cce8424255c3e4bc282a6f7655e0a1d953",
+      "simhash": "1:bda362289e85cbf4",
+      "word_count": 3785
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0010-01",
+    "first_page_order": 22,
+    "last_page_order": 30
+  },
+  {
+    "id": 12164329,
+    "name": "In the case of Peter Covenhoven, a lunatic",
+    "name_abbreviation": "In the Case of Covenhoven",
+    "decision_date": "1830-04",
+    "docket_number": "",
+    "first_page": "19",
+    "last_page": "27",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 19"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 858,
+      "char_count": 23247,
+      "ocr_confidence": 0.522,
+      "pagerank": {
+        "raw": 1.2775495096334383e-07,
+        "percentile": 0.616198280285839
+      },
+      "sha256": "e184800c507b1288baccf4fd78e16b46cecdbfae8752b2e59348eb16014f48f1",
+      "simhash": "1:994c9448165ec937",
+      "word_count": 4089
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0019-01",
+    "first_page_order": 31,
+    "last_page_order": 39
+  },
+  {
+    "id": 12164340,
+    "name": "Cammann v. Executor of Traphagan",
+    "name_abbreviation": "Cammann v. Executor of Traphagan",
+    "decision_date": "1830-07",
+    "docket_number": "",
+    "first_page": "28",
+    "last_page": "30",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 28"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 286,
+      "char_count": 5274,
+      "ocr_confidence": 0.59,
+      "sha256": "7d20fac6391666054af03291b571ffbcb815c08836c21a86efc4b8dc7eac7bfe",
+      "simhash": "1:b981e2945648e2a6",
+      "word_count": 921
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0028-01",
+    "first_page_order": 40,
+    "last_page_order": 42
+  },
+  {
+    "id": 12164352,
+    "name": "P. Marselis & others v. The Morris Canal and Banking Company",
+    "name_abbreviation": "Marselis v. Morris Canal & Banking Co.",
+    "decision_date": "1830-07",
+    "docket_number": "",
+    "first_page": "31",
+    "last_page": "39",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 31"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 772,
+      "char_count": 21839,
+      "ocr_confidence": 0.481,
+      "pagerank": {
+        "raw": 1.6866193532472438e-07,
+        "percentile": 0.6984129190543541
+      },
+      "sha256": "50d02efcbdbb12fc05b69503e403d66c49a5ecb48b43286b17be9e693eeb4c7b",
+      "simhash": "1:faa7f3119d5c2614",
+      "word_count": 3795
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0031-01",
+    "first_page_order": 43,
+    "last_page_order": 51
+  },
+  {
+    "id": 12164361,
+    "name": "The Dutch Church at Acquackanonk v. The Surviving Executors of Abraham Ackerman, dec'd, and others",
+    "name_abbreviation": "Dutch Church at Acquackanonk v. Surviving Executors of Ackerman",
+    "decision_date": "1830-07",
+    "docket_number": "",
+    "first_page": "40",
+    "last_page": "43",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 40"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 448,
+      "char_count": 8748,
+      "ocr_confidence": 0.45,
+      "pagerank": {
+        "raw": 7.689036320876751e-08,
+        "percentile": 0.4532144538156472
+      },
+      "sha256": "f49e5022bf9989462e049eaa866c8d2dc97a31dc334b79559e24ce73c152ba3d",
+      "simhash": "1:f5b3bf2756041598",
+      "word_count": 1577
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0040-01",
+    "first_page_order": 52,
+    "last_page_order": 55
+  },
+  {
+    "id": 12164375,
+    "name": "Smith v. Allen et al.",
+    "name_abbreviation": "Smith v. Allen",
+    "decision_date": "1830-07",
+    "docket_number": "",
+    "first_page": "43",
+    "last_page": "55",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 43"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "2 Aik. 31",
+        "category": "reporters:state",
+        "reporter": "Aik.",
+        "case_ids": [
+          8544525
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/aik/2/0031-01"
+        ]
+      },
+      {
+        "cite": "14 John. 177",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "case_ids": [
+          376144
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/johns/14/0177-01"
+        ]
+      },
+      {
+        "cite": "10 John. 584",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 1111,
+      "char_count": 28840,
+      "ocr_confidence": 0.507,
+      "pagerank": {
+        "raw": 2.223389939421501e-07,
+        "percentile": 0.7778864713734276
+      },
+      "sha256": "521511042439cfc80e36ff93fd2525d26c3e68c008072feff51af4cd0e995809",
+      "simhash": "1:1617bd9c3f487891",
+      "word_count": 5252
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0043-01",
+    "first_page_order": 55,
+    "last_page_order": 67
+  },
+  {
+    "id": 12164388,
+    "name": "Executor of Simmons v. Vandegrift et al.",
+    "name_abbreviation": "Executor of Simmons v. Vandegrift",
+    "decision_date": "1830-07",
+    "docket_number": "",
+    "first_page": "55",
+    "last_page": "63",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 55"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 651,
+      "char_count": 18960,
+      "ocr_confidence": 0.478,
+      "pagerank": {
+        "raw": 5.749228430992235e-08,
+        "percentile": 0.3598146069519883
+      },
+      "sha256": "11be9d2789cdee300e9f7ab267b29405a483092dce3186665f901afbeaeb9e90",
+      "simhash": "1:da752df78c40b68a",
+      "word_count": 3315
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0055-01",
+    "first_page_order": 67,
+    "last_page_order": 75
+  },
+  {
+    "id": 12164401,
+    "name": "Wilson v. Hillyer and Dunn",
+    "name_abbreviation": "Wilson v. Hillyer",
+    "decision_date": "1830-07",
+    "docket_number": "",
+    "first_page": "63",
+    "last_page": "74",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 63"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 814,
+      "char_count": 25751,
+      "ocr_confidence": 0.541,
+      "sha256": "1261cbf6833173d7ebf414db8acf7751b3310c17f1f94d2511c8004b1b167a47",
+      "simhash": "1:7657651c8a63fc32",
+      "word_count": 4571
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0063-01",
+    "first_page_order": 75,
+    "last_page_order": 86
+  },
+  {
+    "id": 12164417,
+    "name": "Smith et al. v. Wood, on bill;-and, Wood v. Smith, on cross-bill",
+    "name_abbreviation": "Smith v. Wood",
+    "decision_date": "1830-07",
+    "docket_number": "",
+    "first_page": "74",
+    "last_page": "95",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 74"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "17 John. Rep. 340",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "case_ids": [
+          6065076
+        ],
+        "weight": 2,
+        "opinion_index": 0,
+        "case_paths": [
+          "/johns/17/0269-01"
+        ]
+      },
+      {
+        "cite": "2 Munf. 387",
+        "category": "reporters:state",
+        "reporter": "Munf.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "11 Mass. 469",
+        "category": "reporters:state",
+        "reporter": "Mass.",
+        "case_ids": [
+          2053362
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/mass/11/0422-01"
+        ]
+      },
+      {
+        "cite": "15 John. 159",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "case_ids": [
+          2140872
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/johns/15/0159-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 1290,
+      "char_count": 51101,
+      "ocr_confidence": 0.457,
+      "pagerank": {
+        "raw": 1.2548447750598082e-07,
+        "percentile": 0.6110784837262713
+      },
+      "sha256": "0a922ee85de37096c0e90234aa19b789d30489b0b6dc756de804a09b20df6310",
+      "simhash": "1:7e57a6541452b40a",
+      "word_count": 9074
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0074-01",
+    "first_page_order": 86,
+    "last_page_order": 107
+  },
+  {
+    "id": 12164426,
+    "name": "Zule v. Zule",
+    "name_abbreviation": "Zule v. Zule",
+    "decision_date": "1830-10",
+    "docket_number": "",
+    "first_page": "96",
+    "last_page": "100",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 96"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 388,
+      "char_count": 8501,
+      "ocr_confidence": 0.507,
+      "pagerank": {
+        "raw": 8.767067213580238e-08,
+        "percentile": 0.49534528847048614
+      },
+      "sha256": "16ddb0d2c29ede827fba1a61484a1d0b6267c90bc602372a3572f281ab772fa6",
+      "simhash": "1:e50ef8ac6a135cc7",
+      "word_count": 1450
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0096-01",
+    "first_page_order": 108,
+    "last_page_order": 112
+  },
+  {
+    "id": 12164445,
+    "name": "Hinchman v. Admrs. of Emans et al.",
+    "name_abbreviation": "Hinchman v. Admrs. of Emans",
+    "decision_date": "1830-10",
+    "docket_number": "",
+    "first_page": "100",
+    "last_page": "112",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 100"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 915,
+      "char_count": 29430,
+      "ocr_confidence": 0.492,
+      "pagerank": {
+        "raw": 2.5694697826410263e-07,
+        "percentile": 0.816114761903107
+      },
+      "sha256": "6cc122caf989c3f84cb1b974e87358eb966f22aa64e39810f4af1dfc7513f8a3",
+      "simhash": "1:c547cad418b86d3e",
+      "word_count": 5176
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0100-01",
+    "first_page_order": 112,
+    "last_page_order": 124
+  },
+  {
+    "id": 12164458,
+    "name": "Jacob Glover v. Elias Hedges",
+    "name_abbreviation": "Glover v. Hedges",
+    "decision_date": "1830-10",
+    "docket_number": "",
+    "first_page": "113",
+    "last_page": "121",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 113"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 633,
+      "char_count": 19764,
+      "ocr_confidence": 0.462,
+      "pagerank": {
+        "raw": 7.645426521715704e-08,
+        "percentile": 0.45161300909821384
+      },
+      "sha256": "e26b928615969af96d472308a66f18d75af800b25939353f79bfda3f19a0727f",
+      "simhash": "1:f2fa26f9b20a2b8a",
+      "word_count": 3403
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0113-01",
+    "first_page_order": 125,
+    "last_page_order": 133
+  },
+  {
+    "id": 12164473,
+    "name": "Clark & Smith v. Smith and others",
+    "name_abbreviation": "Clark v. Smith",
+    "decision_date": "1830-10",
+    "docket_number": "",
+    "first_page": "121",
+    "last_page": "140",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 121"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Johns. Ch. Rep. 27",
+        "category": "reporters:state",
+        "reporter": "Johns. Ch.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "1 Johns. Ch. Rep. 387",
+        "category": "reporters:state",
+        "reporter": "Johns. Ch.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "2 Pick. 505",
+        "category": "reporters:state",
+        "reporter": "Pick.",
+        "case_ids": [
+          2049646
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/mass/19/0536-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 1187,
+      "char_count": 46899,
+      "ocr_confidence": 0.492,
+      "pagerank": {
+        "raw": 2.799453307951925e-07,
+        "percentile": 0.8367153837926459
+      },
+      "sha256": "7a11e793d3f63c62e65791589e912042877b513c6bd6178500f1a3bd286ea77e",
+      "simhash": "1:9794a8f3cf0af658",
+      "word_count": 8247
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0121-01",
+    "first_page_order": 133,
+    "last_page_order": 152
+  },
+  {
+    "id": 12164486,
+    "name": "John Herbert v. Nichol Smith, Surviving Executor of B. Tuthill, dec'd, and others",
+    "name_abbreviation": "Herbert v. Smith",
+    "decision_date": "1830-10",
+    "docket_number": "",
+    "first_page": "141",
+    "last_page": "147",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 141"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 630,
+      "char_count": 17464,
+      "ocr_confidence": 0.572,
+      "pagerank": {
+        "raw": 1.7028732171802164e-07,
+        "percentile": 0.7011931969778933
+      },
+      "sha256": "98d7fc58860c2b27e28e268d534f998b4f379fb3e4cce21baf6f138e814b012f",
+      "simhash": "1:156f6651c8cea09c",
+      "word_count": 3147
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0141-01",
+    "first_page_order": 153,
+    "last_page_order": 159
+  },
+  {
+    "id": 12164498,
+    "name": "The Dutch Church at Freehold v. Smock et al.",
+    "name_abbreviation": "Dutch Church at Freehold v. Smock",
+    "decision_date": "1830-10",
+    "docket_number": "",
+    "first_page": "148",
+    "last_page": "156",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 148"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "16 Johns. Rep. 588",
+        "category": "reporters:state",
+        "reporter": "Johns. Rep.",
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 795,
+      "char_count": 21687,
+      "ocr_confidence": 0.574,
+      "pagerank": {
+        "raw": 8.27142626137619e-08,
+        "percentile": 0.47868543687296056
+      },
+      "sha256": "6025ecd9898757bb9eb8df3f3c3bd377e5f6e139762f670fa8cfc082e5338a39",
+      "simhash": "1:1383607a1665f14e",
+      "word_count": 3923
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0148-01",
+    "first_page_order": 160,
+    "last_page_order": 168
+  },
+  {
+    "id": 12164521,
+    "name": "The Society for establishing useful Manufactures et al. v. The Morris Canal and Banking Company",
+    "name_abbreviation": "Society for Establishing Useful Manufactures v. Morris Canal & Banking Co.",
+    "decision_date": "1830-10",
+    "docket_number": "",
+    "first_page": "157",
+    "last_page": "193",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 157"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "7 John. 315",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "19 Johns. 474",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 2050,
+      "char_count": 86993,
+      "ocr_confidence": 0.531,
+      "pagerank": {
+        "raw": 2.408790765143625e-07,
+        "percentile": 0.7997184391831338
+      },
+      "sha256": "2c12c1616e8f27d82b3902b72766c5e35940297fad12173b2be6a6ccd12478e4",
+      "simhash": "1:752a9dc0c429ae68",
+      "word_count": 15520
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0157-01",
+    "first_page_order": 169,
+    "last_page_order": 205
+  },
+  {
+    "id": 12164534,
+    "name": "Peter Jackson v. T. I. Darcy, E. Gould, and P. I. Ryerson",
+    "name_abbreviation": "Jackson v. Darcy",
+    "decision_date": "1831-01",
+    "docket_number": "",
+    "first_page": "194",
+    "last_page": "197",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 194"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 415,
+      "char_count": 8511,
+      "ocr_confidence": 0.435,
+      "pagerank": {
+        "raw": 7.317852702137001e-08,
+        "percentile": 0.43545260746862074
+      },
+      "sha256": "9aee224863044c8aaa4de6ae6628f13c28ad1f3e089a77f753cde684cdac34cc",
+      "simhash": "1:332be7966e65359d",
+      "word_count": 1499
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0194-01",
+    "first_page_order": 206,
+    "last_page_order": 209
+  },
+  {
+    "id": 12164550,
+    "name": "Elizabeth Meeker v. Joseph Marsh, Executor of Elizabeth Butler",
+    "name_abbreviation": "Meeker v. Marsh",
+    "decision_date": "1831-01",
+    "docket_number": "",
+    "first_page": "198",
+    "last_page": "204",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 198"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 580,
+      "char_count": 14557,
+      "ocr_confidence": 0.429,
+      "pagerank": {
+        "raw": 5.4033266686372354e-08,
+        "percentile": 0.33967308518759204
+      },
+      "sha256": "959df051625d64b1bc053bbdc5dc59b9853e8e3d303168a0da78adfeed352946",
+      "simhash": "1:9272a3c825e3ea4a",
+      "word_count": 2652
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0198-01",
+    "first_page_order": 210,
+    "last_page_order": 216
+  },
+  {
+    "id": 12164565,
+    "name": "Jacob Miller and Nathan Stiger v. David Wack and Wife, and others",
+    "name_abbreviation": "Miller v. Wack",
+    "decision_date": "1831-01",
+    "docket_number": "",
+    "first_page": "204",
+    "last_page": "216",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 204"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Munf. Rep. 373",
+        "category": "reporters:state",
+        "reporter": "Munf.",
+        "case_ids": [
+          2094043
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/va/15/0146-01"
+        ]
+      },
+      {
+        "cite": "1 Wash. Rep. 224",
+        "category": "reporters:state",
+        "reporter": "Wash. Rep.",
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 1002,
+      "char_count": 28106,
+      "ocr_confidence": 0.396,
+      "pagerank": {
+        "raw": 1.197392791966194e-07,
+        "percentile": 0.5928208555788388
+      },
+      "sha256": "6457c67125d3072e08798c0054f1acba998959efcfd57a69ffd958e62d66fa6e",
+      "simhash": "1:12d579f08c5e34b6",
+      "word_count": 5037
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0204-01",
+    "first_page_order": 216,
+    "last_page_order": 228
+  },
+  {
+    "id": 12164582,
+    "name": "Stark et al. v. Hunton et al.",
+    "name_abbreviation": "Stark v. Hunton",
+    "decision_date": "1831-01",
+    "docket_number": "",
+    "first_page": "216",
+    "last_page": "229",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 216"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "3 Aik. 607",
+        "category": "reporters:state",
+        "reporter": "Aik.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 996,
+      "char_count": 31905,
+      "ocr_confidence": 0.478,
+      "pagerank": {
+        "raw": 2.4336811210363503e-07,
+        "percentile": 0.8023288230317674
+      },
+      "sha256": "f976208ccae2a8aa8614779f2704e39f2e7357838e53b46df6afd44c3290aa9e",
+      "simhash": "1:d31d659306803e76",
+      "word_count": 5871
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0216-01",
+    "first_page_order": 228,
+    "last_page_order": 241
+  },
+  {
+    "id": 12164600,
+    "name": "Augustus F. Cammann v. David P. Traphagan, Executor of Henry D. Traphagan",
+    "name_abbreviation": "Cammann v. Traphagan",
+    "decision_date": "1831-01",
+    "docket_number": "",
+    "first_page": "230",
+    "last_page": "231",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 230"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 237,
+      "char_count": 3602,
+      "ocr_confidence": 0.38,
+      "pagerank": {
+        "raw": 4.2669379767208756e-08,
+        "percentile": 0.26975646070485193
+      },
+      "sha256": "eec661dc4c9d2eb4cc32900550752c5a501a47ead119b0772814bfe4a24437eb",
+      "simhash": "1:1962cf2623466bb9",
+      "word_count": 627
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0230-01",
+    "first_page_order": 242,
+    "last_page_order": 243
+  },
+  {
+    "id": 12164614,
+    "name": "Washington Skillman and Wife v. William Teeple and others",
+    "name_abbreviation": "Skillman v. Teeple",
+    "decision_date": "1831-01",
+    "docket_number": "",
+    "first_page": "232",
+    "last_page": "247",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 232"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 1019,
+      "char_count": 35354,
+      "ocr_confidence": 0.474,
+      "pagerank": {
+        "raw": 1.1889272006616031e-07,
+        "percentile": 0.5908931370130073
+      },
+      "sha256": "2c401b8e53177c19a94ee78a49d97969c858f3a25518dd0ed5207e2cc421bfa9",
+      "simhash": "1:3a4947e54c03fe79",
+      "word_count": 6125
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0232-01",
+    "first_page_order": 244,
+    "last_page_order": 259
+  },
+  {
+    "id": 12164629,
+    "name": "Jacob S. Vanness v. Simon Vanness",
+    "name_abbreviation": "Vanness v. Vanness",
+    "decision_date": "1831-04",
+    "docket_number": "",
+    "first_page": "248",
+    "last_page": "259",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 248"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 816,
+      "char_count": 24512,
+      "ocr_confidence": 0.426,
+      "sha256": "11eea2a4493f7160c47ab0a1e5b13207f33edd2e35d022b97e2156e5a42ea386",
+      "simhash": "1:f8c64328c968a952",
+      "word_count": 4355
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0248-01",
+    "first_page_order": 260,
+    "last_page_order": 271
+  },
+  {
+    "id": 12164643,
+    "name": "Susan Gray and others v. Jacob R. Fox and others",
+    "name_abbreviation": "Gray v. Fox",
+    "decision_date": "1831-04",
+    "docket_number": "",
+    "first_page": "259",
+    "last_page": "273",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 259"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 1250,
+      "char_count": 34966,
+      "ocr_confidence": 0.408,
+      "pagerank": {
+        "raw": 2.0659118455271823e-07,
+        "percentile": 0.7571306280790888
+      },
+      "sha256": "613d42a31882992834efd50fbc3280a9f3523e01ea4d42445652e4ed6b1940bc",
+      "simhash": "1:1a4d6fd64b43e96a",
+      "word_count": 6251
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0259-01",
+    "first_page_order": 271,
+    "last_page_order": 285
+  },
+  {
+    "id": 12164658,
+    "name": "Joseph King v. Jarret Morford, John Pintard, and Jonathan McClain",
+    "name_abbreviation": "King v. Morford",
+    "decision_date": "1831-04",
+    "docket_number": "",
+    "first_page": "274",
+    "last_page": "282",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 274"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "14 John. 15",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "case_ids": [
+          376201
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/johns/14/0015-01"
+        ]
+      },
+      {
+        "cite": "6 Wheat. 528",
+        "category": "reporters:scotus_early",
+        "reporter": "Wheat.",
+        "case_ids": [
+          11730840
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/us/19/0528-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 754,
+      "char_count": 19725,
+      "ocr_confidence": 0.467,
+      "pagerank": {
+        "raw": 3.0541568766988227e-07,
+        "percentile": 0.8561466324870678
+      },
+      "sha256": "be00a258512224efe6db0aae6df1f45b04b1cb7cf784d313bf614c6157553cb7",
+      "simhash": "1:36d2add51cfc6c32",
+      "word_count": 3553
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0274-01",
+    "first_page_order": 286,
+    "last_page_order": 294
+  },
+  {
+    "id": 12164671,
+    "name": "Ebenezer Tucker and others v. The Board of Chosen Freeholders of the County of Burlington",
+    "name_abbreviation": "Tucker v. Board of Chosen Freeholders",
+    "decision_date": "1831-04",
+    "docket_number": "",
+    "first_page": "282",
+    "last_page": "287",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 282"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 530,
+      "char_count": 13015,
+      "ocr_confidence": 0.507,
+      "pagerank": {
+        "raw": 1.259250070928045e-07,
+        "percentile": 0.6120426326013602
+      },
+      "sha256": "4814af221930cd64f409beb400a451cee04b295d63c144d37f2fcdab76fd710d",
+      "simhash": "1:184bb9a803d5eb4b",
+      "word_count": 2258
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0282-01",
+    "first_page_order": 294,
+    "last_page_order": 299
+  },
+  {
+    "id": 12164685,
+    "name": "The State Bank at Elizabeth v. Joseph Marsh and William Edgar",
+    "name_abbreviation": "State Bank at Elizabeth v. Marsh",
+    "decision_date": "1831-04",
+    "docket_number": "",
+    "first_page": "288",
+    "last_page": "297",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 288"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "10 Johns. 522",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 750,
+      "char_count": 23812,
+      "ocr_confidence": 0.557,
+      "pagerank": {
+        "raw": 1.1761088559331943e-07,
+        "percentile": 0.5875500849663436
+      },
+      "sha256": "3ee096e4f68b4dc26281678a460b9e5d290c11aaf8d9f6d09a91acdbb84c9409",
+      "simhash": "1:9f5aeb0490a8ac11",
+      "word_count": 4223
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0288-01",
+    "first_page_order": 300,
+    "last_page_order": 309
+  },
+  {
+    "id": 12164701,
+    "name": "John H. Disborough v. John Outcalt and others",
+    "name_abbreviation": "Disborough v. Outcalt",
+    "decision_date": "1831-04",
+    "docket_number": "",
+    "first_page": "298",
+    "last_page": "313",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 298"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "5 Johns. 335",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "case_ids": [
+          2131453
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/johns/5/0335-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 1084,
+      "char_count": 37558,
+      "ocr_confidence": 0.562,
+      "pagerank": {
+        "raw": 7.96253621386512e-08,
+        "percentile": 0.4629932092566014
+      },
+      "sha256": "dcb26dbab9b7f38d20bb2713055cd1b202ebda7b6d2e004546241275394aae58",
+      "simhash": "1:4be186358eaee816",
+      "word_count": 6719
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0298-01",
+    "first_page_order": 310,
+    "last_page_order": 325
+  },
+  {
+    "id": 12164718,
+    "name": "Sarah C. Wallington v. Samuel C. Taylor",
+    "name_abbreviation": "Wallington v. Taylor",
+    "decision_date": "1831-07",
+    "docket_number": "",
+    "first_page": "314",
+    "last_page": "320",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 314"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "7 P. R. 555",
+        "category": "reporters:state_regional",
+        "reporter": "P. R.",
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 550,
+      "char_count": 14099,
+      "ocr_confidence": 0.499,
+      "pagerank": {
+        "raw": 6.792437662868268e-08,
+        "percentile": 0.4156363942453788
+      },
+      "sha256": "36c572f33dd451b933b1d926c8f0aee005e680f255ffa82753b03de90da963d9",
+      "simhash": "1:05bc449026ab3489",
+      "word_count": 2596
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0314-01",
+    "first_page_order": 326,
+    "last_page_order": 332
+  },
+  {
+    "id": 12164733,
+    "name": "Samuel Rodman v. Amos Zilley, David S. Zilley, and Elizabeth Blakeley",
+    "name_abbreviation": "Rodman v. Zilley",
+    "decision_date": "1831-07",
+    "docket_number": "",
+    "first_page": "320",
+    "last_page": "331",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 320"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Wheat. 204",
+        "category": "reporters:scotus_early",
+        "reporter": "Wheat.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "5 Cranch, 262",
+        "category": "reporters:scotus_early",
+        "reporter": "Cranch,",
+        "case_ids": [
+          1446281
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/us/9/0262-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 872,
+      "char_count": 24224,
+      "ocr_confidence": 0.488,
+      "pagerank": {
+        "raw": 2.578859004845764e-07,
+        "percentile": 0.8170001417071033
+      },
+      "sha256": "714da3cea0123e39cd06a81f701e077a5b2c6de822d2378db33121247ea64d4a",
+      "simhash": "1:0e6788fc0325cde3",
+      "word_count": 4440
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0320-01",
+    "first_page_order": 332,
+    "last_page_order": 343
+  },
+  {
+    "id": 12164748,
+    "name": "John Pelletreau, Executor of Medcef Eden, deceased, v. John Rathbone",
+    "name_abbreviation": "Pelletreau v. Rathbone",
+    "decision_date": "1831-07",
+    "docket_number": "",
+    "first_page": "331",
+    "last_page": "338",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 331"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "12 Wheat. 169",
+        "category": "reporters:scotus_early",
+        "reporter": "Wheat.",
+        "case_ids": [
+          1429858
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/us/25/0169-01"
+        ]
+      },
+      {
+        "cite": "1 Pick. 82",
+        "category": "reporters:state",
+        "reporter": "Pick.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "3 Mass. R. 514",
+        "category": "reporters:state",
+        "reporter": "Mass.",
+        "case_ids": [
+          2005777
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/mass/3/0448-01"
+        ]
+      },
+      {
+        "cite": "9 Cranch, 151",
+        "category": "reporters:scotus_early",
+        "reporter": "Cranch,",
+        "case_ids": [
+          533626
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/us/13/0151-01"
+        ]
+      },
+      {
+        "cite": "3 Cranch, 219",
+        "category": "reporters:scotus_early",
+        "reporter": "Cranch,",
+        "opinion_index": 0
+      },
+      {
+        "cite": "1 Cranch, 258",
+        "category": "reporters:scotus_early",
+        "reporter": "Cranch,",
+        "pin_cites": [
+          {
+            "page": "282"
+          }
+        ],
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 608,
+      "char_count": 15915,
+      "ocr_confidence": 0.538,
+      "pagerank": {
+        "raw": 6.89516513629939e-08,
+        "percentile": 0.4192275302536943
+      },
+      "sha256": "08e1b6bb4fe5082ffddca5761183b68058f1b3ba92fd5bdb8222e39e1c51a37b",
+      "simhash": "1:ebe8fe8113099cb8",
+      "word_count": 2920
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0331-01",
+    "first_page_order": 343,
+    "last_page_order": 350
+  },
+  {
+    "id": 12164762,
+    "name": "William Stevenson, and T. L. Woodruff, surviving Executor of A. D. Woodruff, deceased, v. John Black",
+    "name_abbreviation": "Stevenson v. Black",
+    "decision_date": "1831-07",
+    "docket_number": "",
+    "first_page": "338",
+    "last_page": "346",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 338"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "12 Mass. R. 26",
+        "category": "reporters:state",
+        "reporter": "Mass.",
+        "case_ids": [
+          2052059
+        ],
+        "pin_cites": [
+          {
+            "page": "30"
+          }
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/mass/12/0031-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 664,
+      "char_count": 18912,
+      "ocr_confidence": 0.527,
+      "pagerank": {
+        "raw": 1.9981845442634874e-07,
+        "percentile": 0.7426276589870684
+      },
+      "sha256": "c182d700679b93106e3ec810c8086c1fd4d641ef30057bab3d5a7f6d18bf798d",
+      "simhash": "1:03dd85b55c2bc53b",
+      "word_count": 3349
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0338-01",
+    "first_page_order": 350,
+    "last_page_order": 358
+  },
+  {
+    "id": 12164780,
+    "name": "Isaac Crane and others v. William D. Conklin, Calvin Freeman and Johnson Ward",
+    "name_abbreviation": "Crane v. Conklin",
+    "decision_date": "1831-07",
+    "docket_number": "",
+    "first_page": "346",
+    "last_page": "358",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 346"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "1 Wash. Rep. 164",
+        "category": "reporters:state",
+        "reporter": "Wash. Rep.",
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 1029,
+      "char_count": 28575,
+      "ocr_confidence": 0.538,
+      "pagerank": {
+        "raw": 2.747234627475095e-07,
+        "percentile": 0.8324425478087719
+      },
+      "sha256": "d87773a8b5ab5a2a1512d7445947b70e947192027a83981219491d27aa0011b9",
+      "simhash": "1:2827a766ca092ed0",
+      "word_count": 5134
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0346-01",
+    "first_page_order": 358,
+    "last_page_order": 370
+  },
+  {
+    "id": 12164791,
+    "name": "Eliphalet Miller and Mary his wife, Isaac B. Miller, et al. v. Charles Ford, and the Administrators of Sylvanus Bonnell, deceased",
+    "name_abbreviation": "Miller v. Ford",
+    "decision_date": "1831-07",
+    "docket_number": "",
+    "first_page": "358",
+    "last_page": "368",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 358"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 902,
+      "char_count": 25514,
+      "ocr_confidence": 0.561,
+      "pagerank": {
+        "raw": 1.624449646410531e-07,
+        "percentile": 0.6878650068015548
+      },
+      "sha256": "f65caeb1b407a122252380ac4bd98b40aa777998240b38d7d2b1c5286f3e45ff",
+      "simhash": "1:5376745ac6ea5ed4",
+      "word_count": 4566
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0358-01",
+    "first_page_order": 370,
+    "last_page_order": 380
+  },
+  {
+    "id": 12164807,
+    "name": "The Attorney General of the State of New-Jersey, at the relation of Daniel Pettee and Joshua Smith, v. John A. Stevens, Edwin A. Stevens, and Jeremiah H. Sloan",
+    "name_abbreviation": "Attorney General of the State ex rel. Pettee v. Stevens",
+    "decision_date": "1831-07",
+    "docket_number": "",
+    "first_page": "369",
+    "last_page": "385",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 369"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "4 Mass. R. 125",
+        "category": "reporters:state",
+        "reporter": "Mass.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "10 Mass. R. 70",
+        "category": "reporters:state",
+        "reporter": "Mass.",
+        "case_ids": [
+          2026934
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/mass/10/0083-01"
+        ]
+      },
+      {
+        "cite": "2 Mass. R. 489",
+        "category": "reporters:state",
+        "reporter": "Mass.",
+        "case_ids": [
+          2007267
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/mass/2/0439-01"
+        ]
+      },
+      {
+        "cite": "4 Mass. R. 145",
+        "category": "reporters:state",
+        "reporter": "Mass.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "2 Mass. R. 489",
+        "category": "reporters:state",
+        "reporter": "Mass.",
+        "case_ids": [
+          2007267
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/mass/2/0439-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 1161,
+      "char_count": 40863,
+      "ocr_confidence": 0.546,
+      "pagerank": {
+        "raw": 1.4699253829467216e-07,
+        "percentile": 0.658981083453128
+      },
+      "sha256": "d0e8993867c682c2a6555518bccd8dfa45e47fa9594ede1ef79a1972967d3fe9",
+      "simhash": "1:1d73dbf1d6b8be29",
+      "word_count": 7148
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0369-01",
+    "first_page_order": 381,
+    "last_page_order": 397
+  },
+  {
+    "id": 12164825,
+    "name": "Martha Miller v. Jonathan W. Miller",
+    "name_abbreviation": "Miller v. Miller",
+    "decision_date": "1831-10",
+    "docket_number": "",
+    "first_page": "386",
+    "last_page": "393",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 386"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 639,
+      "char_count": 16148,
+      "ocr_confidence": 0.54,
+      "pagerank": {
+        "raw": 1.4871764943156481e-07,
+        "percentile": 0.6623457583820523
+      },
+      "sha256": "2181f9b6c8bdb4c7256c878d847fd2ea8641c8c3d6c80bf4ed0907f82adb2949",
+      "simhash": "1:5ee9b9fac26b1e9b",
+      "word_count": 2834
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0386-01",
+    "first_page_order": 398,
+    "last_page_order": 405
+  },
+  {
+    "id": 12164841,
+    "name": "The Society for establishing useful Manufactures, v. Warren Haight",
+    "name_abbreviation": "Society for Establishing Useful Manufactures v. Haight",
+    "decision_date": "1831-10",
+    "docket_number": "",
+    "first_page": "393",
+    "last_page": "403",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 393"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 853,
+      "char_count": 22537,
+      "ocr_confidence": 0.508,
+      "pagerank": {
+        "raw": 6.427003608561915e-08,
+        "percentile": 0.3970660065509611
+      },
+      "sha256": "447c1c15cf8f9ffa5203ba35ab4529c676a61e649e1efc7f605f47ec9880fb68",
+      "simhash": "1:e6ab5942472d5546",
+      "word_count": 4108
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0393-01",
+    "first_page_order": 405,
+    "last_page_order": 415
+  },
+  {
+    "id": 12164854,
+    "name": "Joseph Conover and John S. Reid, surviving Executors of William P. Conover, dec'd, v. Richard Conover et al. and; Joseph Conover and John S. Reid, surviving Executors of Theodorus Conover, dec'd, v. Richard Conover et al.",
+    "name_abbreviation": "Conover v. Conover",
+    "decision_date": "1831-10",
+    "docket_number": "",
+    "first_page": "403",
+    "last_page": "413",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 403"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 889,
+      "char_count": 23172,
+      "ocr_confidence": 0.476,
+      "pagerank": {
+        "raw": 1.5660966909517536e-07,
+        "percentile": 0.6778509094545666
+      },
+      "sha256": "4f16836666e6b64e5f881be756fe41c5e7e822d869b8d61672ec927e4ee27664",
+      "simhash": "1:5ef3df959728fe5a",
+      "word_count": 4175
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0403-01",
+    "first_page_order": 415,
+    "last_page_order": 425
+  },
+  {
+    "id": 12164910,
+    "name": "Joseph Shannon v. John Marselis et al.",
+    "name_abbreviation": "Shannon v. Marselis",
+    "decision_date": "1831-10",
+    "docket_number": "",
+    "first_page": "413",
+    "last_page": "427",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 413"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "19 John. 11",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "1 Paine, 525",
+        "category": "reporters:federal",
+        "reporter": "Paine",
+        "case_ids": [
+          12117419
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/f-cas/27/1358-01"
+        ]
+      },
+      {
+        "cite": "12 Wheat. 608",
+        "category": "reporters:scotus_early",
+        "reporter": "Wheat.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "2 Johns. Rep. 612",
+        "category": "reporters:state",
+        "reporter": "Johns. Rep.",
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 901,
+      "char_count": 32534,
+      "ocr_confidence": 0.471,
+      "pagerank": {
+        "raw": 2.186430748445154e-07,
+        "percentile": 0.7732705651951137
+      },
+      "sha256": "f713a53e4c9098e5f22835384406fa85ea463e0e2891061c0b3091b061642550",
+      "simhash": "1:b9ede307661877cf",
+      "word_count": 5867
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0413-01",
+    "first_page_order": 425,
+    "last_page_order": 439
+  },
+  {
+    "id": 12164931,
+    "name": "Bowdoin Decker v. Mary Caskey et al.",
+    "name_abbreviation": "Decker v. Caskey",
+    "decision_date": "1831-10",
+    "docket_number": "",
+    "first_page": "427",
+    "last_page": "434",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 427"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 686,
+      "char_count": 17324,
+      "ocr_confidence": 0.515,
+      "pagerank": {
+        "raw": 7.345432909102182e-08,
+        "percentile": 0.44049711006317355
+      },
+      "sha256": "52d0eb6d5436d34b7b20a69ffefb7b6ec3979df990e704c9957f9db424050d5c",
+      "simhash": "1:f70e952277a3e65b",
+      "word_count": 3146
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0427-01",
+    "first_page_order": 439,
+    "last_page_order": 446
+  },
+  {
+    "id": 12164950,
+    "name": "Jonathan Hill v. John White and Wife, the Executors of Catharine J. Miller, et al.",
+    "name_abbreviation": "Hill v. White",
+    "decision_date": "1831-10",
+    "docket_number": "",
+    "first_page": "435",
+    "last_page": "436",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 435"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 213,
+      "char_count": 3547,
+      "ocr_confidence": 0.475,
+      "pagerank": {
+        "raw": 4.3288477722853265e-08,
+        "percentile": 0.2724500540378995
+      },
+      "sha256": "97b336b64be90abec52a2db95657564b9fd505846bea7f0e55c23987fca13d78",
+      "simhash": "1:d78bc2f68f47d214",
+      "word_count": 618
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0435-01",
+    "first_page_order": 447,
+    "last_page_order": 448
+  },
+  {
+    "id": 12164966,
+    "name": "Abraham Shaver, John Stinson, and al. v. Philip Shaver",
+    "name_abbreviation": "Shaver v. Shaver",
+    "decision_date": "1831-10",
+    "docket_number": "",
+    "first_page": "437",
+    "last_page": "440",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 437"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 434,
+      "char_count": 8558,
+      "ocr_confidence": 0.495,
+      "pagerank": {
+        "raw": 4.89950402824256e-08,
+        "percentile": 0.30727563653324963
+      },
+      "sha256": "3ab7afab90c412dcc000448707538f2707a972310bbbed8755f4f05d63d6cd8f",
+      "simhash": "1:430b4030cfe7a49a",
+      "word_count": 1545
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0437-01",
+    "first_page_order": 449,
+    "last_page_order": 452
+  },
+  {
+    "id": 12164989,
+    "name": "Jesse Baldwin v. Elizabeth Johnson and the heirs at law of John Y. Baldwin, deceased",
+    "name_abbreviation": "Baldwin v. Johnson",
+    "decision_date": "1831-10",
+    "docket_number": "",
+    "first_page": "441",
+    "last_page": "458",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 441"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 1114,
+      "char_count": 41722,
+      "ocr_confidence": 0.487,
+      "pagerank": {
+        "raw": 1.1102868610392352e-07,
+        "percentile": 0.5705554648166746
+      },
+      "sha256": "fa876e58031743b81c499d2507c0332ef429161d5ffe1ddb4be2d29ca27771ef",
+      "simhash": "1:3ebfdaae055843de",
+      "word_count": 7511
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0441-01",
+    "first_page_order": 453,
+    "last_page_order": 470
+  },
+  {
+    "id": 12165014,
+    "name": "John Crawford and Richard S. Hartshorne v. John G. Bertholf, Joseph Parker, William Parker, and Joseph H. Van Mater",
+    "name_abbreviation": "Crawford v. Bertholf",
+    "decision_date": "1831-10",
+    "docket_number": "",
+    "first_page": "458",
+    "last_page": "473",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 458"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "18 John. 544",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "case_ids": [
+          8710977
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/johns/18/0544-01"
+        ]
+      },
+      {
+        "cite": "6 Conn. Rep. 111",
+        "category": "reporters:state",
+        "reporter": "Conn.",
+        "case_ids": [
+          6754293
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/conn/6/0111-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 1025,
+      "char_count": 38949,
+      "ocr_confidence": 0.491,
+      "pagerank": {
+        "raw": 1.4935297471930711e-07,
+        "percentile": 0.6634745886729303
+      },
+      "sha256": "a086898acc9af9d149c63cc0a7d8e3fbca3101a90c25971a9e9606041e90b0f4",
+      "simhash": "1:4fdb31731ca4d492",
+      "word_count": 7016
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0458-01",
+    "first_page_order": 470,
+    "last_page_order": 485
+  },
+  {
+    "id": 12165028,
+    "name": "Achsah Clutch v. James Clutch",
+    "name_abbreviation": "Clutch v. Clutch",
+    "decision_date": "1831-10",
+    "docket_number": "",
+    "first_page": "474",
+    "last_page": "476",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 474"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 300,
+      "char_count": 4685,
+      "ocr_confidence": 0.539,
+      "pagerank": {
+        "raw": 1.4776053785651986e-07,
+        "percentile": 0.6604724831447703
+      },
+      "sha256": "0250cad9de7d6aead3d3db0b0a984e7c90f14b58d473f83f9fd108ec1171fc14",
+      "simhash": "1:d46032408e80b2d2",
+      "word_count": 809
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0474-01",
+    "first_page_order": 486,
+    "last_page_order": 488
+  },
+  {
+    "id": 12165049,
+    "name": "Abraham A. Quackenbush v. Abraham Van Riper",
+    "name_abbreviation": "Quackenbush v. Van Riper",
+    "decision_date": "1831-10",
+    "docket_number": "",
+    "first_page": "476",
+    "last_page": "488",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 476"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 873,
+      "char_count": 27447,
+      "ocr_confidence": 0.536,
+      "pagerank": {
+        "raw": 4.173709108106174e-08,
+        "percentile": 0.2674364412751477
+      },
+      "sha256": "65d2d3f0789ec6418d3c732529143737ee326ddc07b7afdcc2d4fc9617654f38",
+      "simhash": "1:184aaaafcf16ce96",
+      "word_count": 4949
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0476-01",
+    "first_page_order": 488,
+    "last_page_order": 500
+  },
+  {
+    "id": 12165064,
+    "name": "Rebecca Bullock v. Benjamin Zilley, surviving Executor of John Butcher, deceased, and others",
+    "name_abbreviation": "Bullock v. Zilley",
+    "decision_date": "1832-01",
+    "docket_number": "",
+    "first_page": "489",
+    "last_page": "493",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 489"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 410,
+      "char_count": 10727,
+      "ocr_confidence": 0.528,
+      "pagerank": {
+        "raw": 1.3302138826886913e-07,
+        "percentile": 0.6287631054937952
+      },
+      "sha256": "12432a1bdd37cb9794f27cc76579b1c3b7d55c54236f8bd09fb16897273d33aa",
+      "simhash": "1:2c227184ce45e196",
+      "word_count": 1870
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0489-01",
+    "first_page_order": 501,
+    "last_page_order": 505
+  },
+  {
+    "id": 12165079,
+    "name": "John Smith, Administrator of Silas Axtell, deceased, v. Samuel L. Axtell, Henry Axtell, and Charles Roff and Phebe his wife",
+    "name_abbreviation": "Smith v. Axtell",
+    "decision_date": "1832-01",
+    "docket_number": "",
+    "first_page": "494",
+    "last_page": "500",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 494"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 626,
+      "char_count": 16045,
+      "ocr_confidence": 0.55,
+      "pagerank": {
+        "raw": 4.5046715916883656e-08,
+        "percentile": 0.2822087310881831
+      },
+      "sha256": "5acf7daf0dcfca717eb022d3277069d4895b725d206b7748579f7d12d55600f4",
+      "simhash": "1:7bdba17aecc77cef",
+      "word_count": 2857
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0494-01",
+    "first_page_order": 506,
+    "last_page_order": 512
+  },
+  {
+    "id": 12165098,
+    "name": "George Mickle, Executor of Samuel Mickle, deceased, v. John Rambo and others",
+    "name_abbreviation": "Mickle v. Rambo",
+    "decision_date": "1832-01",
+    "docket_number": "",
+    "first_page": "501",
+    "last_page": "503",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 501"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 304,
+      "char_count": 6035,
+      "ocr_confidence": 0.558,
+      "sha256": "2f5a542a29d16977db8387a6c254ddda8016aa2dbf05aac43f1123379cce43e5",
+      "simhash": "1:a861a42e9918f1d0",
+      "word_count": 1069
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0501-01",
+    "first_page_order": 513,
+    "last_page_order": 515
+  },
+  {
+    "id": 12165119,
+    "name": "John Buckley v. Israel Corse",
+    "name_abbreviation": "Buckley v. Corse",
+    "decision_date": "1832-01",
+    "docket_number": "",
+    "first_page": "504",
+    "last_page": "511",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 504"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 595,
+      "char_count": 17220,
+      "ocr_confidence": 0.492,
+      "pagerank": {
+        "raw": 9.11045309498607e-08,
+        "percentile": 0.5063586718762368
+      },
+      "sha256": "4e2ebea4455f3602e3aca12d6e0adc8fd84cf520f0dafeb24dbca98e1c189ff1",
+      "simhash": "1:9926ee3597cc077f",
+      "word_count": 2987
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0504-01",
+    "first_page_order": 516,
+    "last_page_order": 523
+  },
+  {
+    "id": 12165143,
+    "name": "Isaac Skillman v. James Van Pelt et ux. and Montgomery and Hillsborough",
+    "name_abbreviation": "Skillman v. Van Pelt",
+    "decision_date": "1832-01",
+    "docket_number": "",
+    "first_page": "511",
+    "last_page": "518",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 511"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 651,
+      "char_count": 17017,
+      "ocr_confidence": 0.528,
+      "pagerank": {
+        "raw": 1.1563672341054846e-07,
+        "percentile": 0.5829940278371442
+      },
+      "sha256": "e82e78a969347b51d9350ee9381baa4165fc4dc1bd652fb8777a75cf28aba395",
+      "simhash": "1:34ccad5ae6cdc802",
+      "word_count": 3015
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0511-01",
+    "first_page_order": 523,
+    "last_page_order": 530
+  },
+  {
+    "id": 12165166,
+    "name": "Timothy Southard and Mary E. his wife, late Mary E. Ludlow, Getty M. Ludlow, Phebe Ann Ludlow, and Daniel B. Ludlow, infants, &c. v. The Morris Canal and Banking Co., Alexander Henderson, Jun., Isaac Perry, and Freeman Woods",
+    "name_abbreviation": "Southard v. Morris Canal & Banking Co.",
+    "decision_date": "1832-01",
+    "docket_number": "",
+    "first_page": "518",
+    "last_page": "524",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 518"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 624,
+      "char_count": 13821,
+      "ocr_confidence": 0.541,
+      "pagerank": {
+        "raw": 1.839864160394446e-07,
+        "percentile": 0.7219855288860471
+      },
+      "sha256": "6c729716fc69d6248771e85683c21f668d3f78d0b96415dc469920608c8b145a",
+      "simhash": "1:9f2396adee2ca37b",
+      "word_count": 2390
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0518-01",
+    "first_page_order": 530,
+    "last_page_order": 536
+  },
+  {
+    "id": 12165180,
+    "name": "Maria Stafford v. James B. Stafford and Joseph B. Stafford",
+    "name_abbreviation": "Stafford v. Stafford",
+    "decision_date": "1832-04",
+    "docket_number": "",
+    "first_page": "525",
+    "last_page": "533",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 525"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 710,
+      "char_count": 19158,
+      "ocr_confidence": 0.544,
+      "pagerank": {
+        "raw": 4.1390170238732395e-08,
+        "percentile": 0.2669551390833983
+      },
+      "sha256": "3002ebe6a31a10d47de14ea4361abfd3272cd074331dafc1d0ea1433d46f16c8",
+      "simhash": "1:fd43bab823f2d2c6",
+      "word_count": 3374
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0525-01",
+    "first_page_order": 537,
+    "last_page_order": 545
+  },
+  {
+    "id": 12165195,
+    "name": "John Youle and Catharine his wife, v. Samuel Richards et al.",
+    "name_abbreviation": "Youle v. Richards",
+    "decision_date": "1832-04",
+    "docket_number": "",
+    "first_page": "534",
+    "last_page": "540",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 534"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 621,
+      "char_count": 15464,
+      "ocr_confidence": 0.536,
+      "pagerank": {
+        "raw": 1.069349002400053e-07,
+        "percentile": 0.5593945824640741
+      },
+      "sha256": "504f0134b78419b2bbf0d6aab7408097e6613ccf152c7c161cac97dbbbc931fa",
+      "simhash": "1:451d2e6c826eb26c",
+      "word_count": 2689
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0534-01",
+    "first_page_order": 546,
+    "last_page_order": 552
+  },
+  {
+    "id": 12165211,
+    "name": "Samuel Leggett and James A. Burtis, The President and Directors of the Franklin Bank of the City of New-York, and James Kent, Receiver for said Bank, v. The New-Jersey Manufacturing and Banking Company, and James Vanderpool, Samuel Cassedy and Archer Gifford, Receivers, &c.",
+    "name_abbreviation": "Leggett v. New-Jersey Manufacturing & Banking Co.",
+    "decision_date": "1832-04",
+    "docket_number": "",
+    "first_page": "541",
+    "last_page": "560",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 541"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "2 Cranch, 166",
+        "category": "reporters:scotus_early",
+        "reporter": "Cranch,",
+        "case_ids": [
+          6759868,
+          6759855
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/dc/2/0166-02",
+          "/dc/2/0166-01"
+        ]
+      },
+      {
+        "cite": "19 John. 1",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "case_ids": [
+          380558
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/johns/19/0001-01"
+        ]
+      },
+      {
+        "cite": "12 Wheat. 83",
+        "category": "reporters:scotus_early",
+        "reporter": "Wheat.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "1 Pet. 299",
+        "category": "reporters:scotus_early",
+        "reporter": "Pet.",
+        "case_ids": [
+          1432387
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/us/26/0299-01"
+        ]
+      },
+      {
+        "cite": "19 John. 65",
+        "category": "reporters:state",
+        "reporter": "Johns.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "7 Conn. Rep. 219",
+        "category": "reporters:state",
+        "reporter": "Conn.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "8 Wheat. 360",
+        "category": "reporters:scotus_early",
+        "reporter": "Wheat.",
+        "pin_cites": [
+          {
+            "page": "361"
+          }
+        ],
+        "opinion_index": 0
+      },
+      {
+        "cite": "10 Mass. Rep. 403",
+        "category": "reporters:state",
+        "reporter": "Mass.",
+        "case_ids": [
+          2026993
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/mass/10/0400-01"
+        ]
+      },
+      {
+        "cite": "8 Mass. Rep. 299",
+        "category": "reporters:state",
+        "reporter": "Mass.",
+        "case_ids": [
+          2028539
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/mass/8/0253-01"
+        ]
+      },
+      {
+        "cite": "12 Wheat. 64",
+        "category": "reporters:scotus_early",
+        "reporter": "Wheat.",
+        "case_ids": [
+          1429778
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/us/25/0064-01"
+        ]
+      },
+      {
+        "cite": "12 Wheat. 40",
+        "category": "reporters:scotus_early",
+        "reporter": "Wheat.",
+        "case_ids": [
+          1429889
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/us/25/0040-01"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 1299,
+      "char_count": 45357,
+      "ocr_confidence": 0.55,
+      "pagerank": {
+        "raw": 3.070306341413268e-07,
+        "percentile": 0.8572955411686164
+      },
+      "sha256": "4a2986b6be52b8131238281388fa30f999c323af263235ec8ad179087f3d3df0",
+      "simhash": "1:84cfd9603e448606",
+      "word_count": 7965
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0541-01",
+    "first_page_order": 553,
+    "last_page_order": 572
+  },
+  {
+    "id": 12165224,
+    "name": "James Murphy v. John Stults-on Original Bill; John Stults v. James Murphy, Aaron Longstreet, and John Rule-on Cross-Bill",
+    "name_abbreviation": "Murphy v. Stults",
+    "decision_date": "1832-04",
+    "docket_number": "",
+    "first_page": "560",
+    "last_page": "561",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 560"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 114,
+      "char_count": 1699,
+      "ocr_confidence": 0.525,
+      "sha256": "87678d7e7f3893f51d88815fcabef4389a7211e55216c12ac6aebb6c5284635b",
+      "simhash": "1:f0e8a471a149ebe7",
+      "word_count": 280
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0560-01",
+    "first_page_order": 572,
+    "last_page_order": 573
+  },
+  {
+    "id": 12165238,
+    "name": "Garret S. Hendrickson, William G. Hendrickson, Peter S. Hendrickson, Lawrence Thomas, William Hendrickson and Alice his wife, and Samuel Potter and Rebecca his wife, v. James Ivins",
+    "name_abbreviation": "Hendrickson v. Ivins",
+    "decision_date": "1832-07",
+    "docket_number": "",
+    "first_page": "562",
+    "last_page": "570",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 562"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 759,
+      "char_count": 19880,
+      "ocr_confidence": 0.54,
+      "pagerank": {
+        "raw": 1.163428188965336e-07,
+        "percentile": 0.584603001951079
+      },
+      "sha256": "6f8db0af8e15d0c85b6e527703963dca15ccbbb2322cab728858120303c7259c",
+      "simhash": "1:76189606acca65d7",
+      "word_count": 3487
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0562-01",
+    "first_page_order": 574,
+    "last_page_order": 582
+  },
+  {
+    "id": 12165250,
+    "name": "Jacob Prichett v. The Executors of Daniel Newbold, deceased, and others",
+    "name_abbreviation": "Prichett v. Executors of Newbold",
+    "decision_date": "1832-04",
+    "docket_number": "",
+    "first_page": "571",
+    "last_page": "576",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 571"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [],
+    "analysis": {
+      "cardinality": 495,
+      "char_count": 13413,
+      "ocr_confidence": 0.51,
+      "pagerank": {
+        "raw": 6.158808969568711e-08,
+        "percentile": 0.3826811910655795
+      },
+      "sha256": "cb630076e3fae0d12e1770a36f3a00431abee083b98bf3ca3801b3dd6dd600c9",
+      "simhash": "1:1fdc206d39687679",
+      "word_count": 2324
+    },
+    "last_updated": "2023-07-14T20:38:06.739521+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0571-01",
+    "first_page_order": 583,
+    "last_page_order": 588
+  },
+  {
+    "id": 12165293,
+    "name": "Joseph Hendrickson v. Thomas L. Shotwell and Elizabeth his wife-On bill for relief, &c.; Thomas L. Shotwell v. Joseph Hendrickson and Stacy Decow-On bill of interpleader, &c.",
+    "name_abbreviation": "Hendrickson v. Shotwell",
+    "decision_date": "1832-07",
+    "docket_number": "",
+    "first_page": "577",
+    "last_page": "685",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 577"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "16 Mass. 418",
+        "category": "reporters:state",
+        "reporter": "Mass.",
+        "opinion_index": 0
+      }
+    ],
+    "analysis": {
+      "cardinality": 3995,
+      "char_count": 252467,
+      "ocr_confidence": 0.518,
+      "pagerank": {
+        "raw": 8.649657653591699e-08,
+        "percentile": 0.4913844397878023
+      },
+      "sha256": "3082f11101ab4c2fca2c45b190811a6553603c71d282fd66b9e431634acd189d",
+      "simhash": "1:8b6dcf7a7111ec7d",
+      "word_count": 42317
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0577-01",
+    "first_page_order": 589,
+    "last_page_order": 697
+  },
+  {
+    "id": 12165310,
+    "name": "Christian Wanmaker, Henry R. Wanmaker and David I. Christie, Executors of Richard D. Wanmaker, deceased, v. Cornelia Van Buskirk, Paul Van Buskirk, a minor, Stephen Hemmion and Hannah ux., Harmanus, Goetchius, and Fanny, ux., and William W. Ramsay and Margaret, ux.",
+    "name_abbreviation": "Wanmaker v. Van Buskirk",
+    "decision_date": "1832-07",
+    "docket_number": "",
+    "first_page": "685",
+    "last_page": "694",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 685"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "9 Wheat. 490",
+        "category": "reporters:scotus_early",
+        "reporter": "Wheat.",
+        "pin_cites": [
+          {
+            "page": "497"
+          }
+        ],
+        "opinion_index": -1
+      }
+    ],
+    "analysis": {
+      "cardinality": 826,
+      "char_count": 22015,
+      "ocr_confidence": 0.432,
+      "pagerank": {
+        "raw": 1.05599883723321e-07,
+        "percentile": 0.5553447324535137
+      },
+      "sha256": "bcc5c907eb3e0694ec29a9512e5a4eb41b34704613b9474e3b8d6027d4c15ffd",
+      "simhash": "1:be43e252068fb420",
+      "word_count": 3888
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0685-01",
+    "first_page_order": 697,
+    "last_page_order": 706
+  },
+  {
+    "id": 12165334,
+    "name": "Jasper S. Scudder v. The Trenton Delaware Falls Company, William Perse, and Elam T. Baldwin",
+    "name_abbreviation": "Scudder v. Trenton Delaware Falls Co.",
+    "decision_date": "1832-07",
+    "docket_number": "",
+    "first_page": "694",
+    "last_page": "730",
+    "citations": [
+      {
+        "type": "official",
+        "cite": "1 N.J. Eq. 694"
+      }
+    ],
+    "court": {
+      "name_abbreviation": "N.J. Ch.",
+      "id": 8777,
+      "name": "New Jersey Court of Chancery"
+    },
+    "jurisdiction": {
+      "id": 24,
+      "name_long": "New Jersey",
+      "name": "N.J."
+    },
+    "cites_to": [
+      {
+        "cite": "4 Wheat. 668",
+        "category": "reporters:scotus_early",
+        "reporter": "Wheat.",
+        "opinion_index": -1
+      },
+      {
+        "cite": "9 Cranch, 43",
+        "category": "reporters:scotus_early",
+        "reporter": "Cranch,",
+        "case_ids": [
+          533628
+        ],
+        "pin_cites": [
+          {
+            "page": "292"
+          }
+        ],
+        "opinion_index": -1,
+        "case_paths": [
+          "/us/13/0043-01"
+        ]
+      },
+      {
+        "cite": "9 Wheat. 840",
+        "category": "reporters:scotus_early",
+        "reporter": "Wheat.",
+        "opinion_index": 0
+      },
+      {
+        "cite": "4 Wash. C. C. 601",
+        "category": "reporters:federal",
+        "reporter": "Wash. C. C.",
+        "case_ids": [
+          6105881
+        ],
+        "opinion_index": 0,
+        "case_paths": [
+          "/f-cas/11/0156-02"
+        ]
+      }
+    ],
+    "analysis": {
+      "cardinality": 2016,
+      "char_count": 84737,
+      "ocr_confidence": 0.48,
+      "pagerank": {
+        "raw": 4.826288306609381e-07,
+        "percentile": 0.9319406266542953
+      },
+      "sha256": "cad89d0fbe91038025a2d3bfca6b4642b31e5af5609cdbe892aa8da17b2f8722",
+      "simhash": "1:3722c4225a002510",
+      "word_count": 15035
+    },
+    "last_updated": "2024-02-27T22:01:05.048618+00:00",
+    "provenance": {
+      "date_added": "2019-08-29",
+      "source": "Harvard",
+      "batch": "2018"
+    },
+    "file_name": "0694-01",
+    "first_page_order": 706,
+    "last_page_order": 742
+  }
+]
