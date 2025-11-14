@@ -13,28 +13,20 @@ from mellea.stdlib.base import ChatContext, Document
 from mellea.stdlib.chat import Message
 from mellea.stdlib.intrinsics.intrinsic import Intrinsic
 
-RAG_REPO = "ibm-granite/rag-intrinsics-lib"
-# RAG_REPO = "generative-computing/rag-intrinsics-lib"
-
-# Mapping from name to <repository, adapter_type>.
-_CATALOG = {
-    "answer_relevance_classifier": (RAG_REPO, AdapterType.LORA),
-    "answer_relevance_rewriter": (RAG_REPO, AdapterType.LORA),
-    "answerability": (RAG_REPO, AdapterType.LORA),
-    "citations": (RAG_REPO, AdapterType.LORA),
-    "context_relevance": (RAG_REPO, AdapterType.LORA),
-    "hallucination_detection": (RAG_REPO, AdapterType.LORA),
-    "query_rewrite": (RAG_REPO, AdapterType.LORA),
-}
-ANSWERABILITY_MODEL_NAME = "answerability"
-
 _ANSWER_RELEVANCE_CORRECTION_METHODS = {
-    "Excessive unnecessary information": "removing the excessive information from the draft response",
-    "Unduly restrictive": "providing answer without the unwarranted restriction, or indicating that the desired answer is not available",
-    "Too vague or generic": "providing more crisp and to-the-point answer, or indicating that the desired answer is not available",
-    "Contextual misalignment": "providing a response that answers the last user inquiry, taking into account the context of the conversation",
-    "Misinterpreted inquiry": "providing answer only to the correct interpretation of the inquiry, or attempting clarification if the inquiry is ambiguous or otherwise confusing, or indicating that the desired answer is not available",
-    "No attempt": "providing a relevant response if an inquiry should be answered, or providing a short response if the last user utterance contains no inquiry",
+    "Excessive unnecessary information": "removing the excessive information from the "
+    "draft response",
+    "Unduly restrictive": "providing answer without the unwarranted restriction, or "
+    "indicating that the desired answer is not available",
+    "Too vague or generic": "providing more crisp and to-the-point answer, or "
+    "indicating that the desired answer is not available",
+    "Contextual misalignment": "providing a response that answers the last user "
+    "inquiry, taking into account the context of the conversation",
+    "Misinterpreted inquiry": "providing answer only to the correct interpretation of "
+    "the inquiry, or attempting clarification if the inquiry is ambiguous or otherwise "
+    "confusing, or indicating that the desired answer is not available",
+    "No attempt": "providing a relevant response if an inquiry should be answered, or "
+    "providing a short response if the last user utterance contains no inquiry",
 }
 """Prompting strings for the answer relevance rewriter. This model is a (a)LoRA adapter,
 so it's important to stick to in-domain prompts."""
@@ -54,25 +46,17 @@ def _call_intrinsic(
     # Adapter needs to be present in the backend before it can be invoked.
     # We must create the Adapter object in order to determine whether we need to create
     # the Adapter object.
-    if intrinsic_name not in _CATALOG:
-        raise ValueError(
-            f"Unexpected intrinsic name '{intrinsic_name}'. "
-            f"Should be one of {list(_CATALOG.keys())}"
-        )
-    repo_id, adapter_type = _CATALOG[intrinsic_name]
     base_model_name = backend.base_model_name
     if base_model_name is None:
         raise ValueError("Backend has no model ID")
     adapter = GraniteCommonAdapter(
-        repo_id, intrinsic_name, adapter_type, base_model_name=base_model_name
+        intrinsic_name, adapter_type=AdapterType.LORA, base_model_name=base_model_name
     )
     if adapter.qualified_name not in backend.list_adapters():
         backend.add_adapter(adapter)
 
     # Create the AST node for the action we wish to perform.
-    intrinsic = Intrinsic(
-        repo_id, intrinsic_name, adapter_types=[adapter_type], intrinsic_kwargs=kwargs
-    )
+    intrinsic = Intrinsic(intrinsic_name, intrinsic_kwargs=kwargs)
 
     # Execute the AST node.
     model_output_thunk, _ = mfuncs.act(

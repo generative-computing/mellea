@@ -1,16 +1,18 @@
 # test/rits_backend_tests/test_openai_integration.py
-from mellea import MelleaSession
-from mellea.backends.adapters.adapter import GraniteCommonAdapter
-from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext, Context
-from mellea.backends.openai import OpenAIBackend
-from mellea.stdlib.requirement import REQUIREMENT_REPO_ID, Requirement, ALoraRequirement, LLMaJRequirement, req
-from mellea.backends.formatter import TemplateFormatter
-from mellea.backends.types import _ServerType, ModelOption
+import os
 
 import pydantic
-from typing_extensions import Annotated
 import pytest
-import os
+from typing_extensions import Annotated
+
+from mellea import MelleaSession
+from mellea.backends.adapters.adapter import GraniteCommonAdapter
+from mellea.backends.formatter import TemplateFormatter
+from mellea.backends.openai import OpenAIBackend
+from mellea.backends.types import ModelOption, _ServerType
+from mellea.stdlib.base import CBlock, ChatContext, Context, ModelOutputThunk
+from mellea.stdlib.requirement import (ALoraRequirement, LLMaJRequirement,
+                                       Requirement, req)
 
 # The vllm tests are disabled by default, because we need a test environment with the vLLM server running.
 # We use an env var VLLM_TESTS_ENABLED to enable these tests.
@@ -135,14 +137,15 @@ class TestOpenAIALoraStuff:
         base_url="http://localhost:8000/v1",
         api_key="EMPTY",
     )
-    backend.add_adapter(GraniteCommonAdapter(REQUIREMENT_REPO_ID, "requirement_check", base_model_name=backend.base_model_name))
+    backend.add_adapter(GraniteCommonAdapter("requirement_check", 
+                                             base_model_name=backend.base_model_name))
 
     m = MelleaSession(backend, ctx=ChatContext())
 
     def test_adapters(self):
         assert len(self.backend._added_adapters.items()) > 0
 
-        adapter = self.backend._added_adapters[f"{REQUIREMENT_REPO_ID}_requirement_check_alora"]
+        adapter = self.backend._added_adapters["requirement_check_alora"]
         self.backend.load_adapter(adapter.qualified_name)
         assert adapter.qualified_name in self.backend._loaded_adapters
 

@@ -4,7 +4,7 @@ import pathlib
 from copy import copy
 from typing import cast
 
-from mellea.backends.adapters.adapter import AdapterType
+from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata
 from mellea.stdlib.base import CBlock, Component, TemplateRepresentation
 
 
@@ -12,11 +12,7 @@ class Intrinsic(Component):
     """A component representing an intrinsic."""
 
     def __init__(
-        self,
-        repo_id: str,
-        intrinsic_name: str,
-        intrinsic_kwargs: dict | None = None,
-        adapter_types: list[AdapterType] = [AdapterType.ALORA, AdapterType.LORA],
+        self, intrinsic_name: str, intrinsic_kwargs: dict | None = None
     ) -> None:
         """A component for rewriting messages using intrinsics.
 
@@ -29,22 +25,25 @@ class Intrinsic(Component):
         An intrinsic component should correspond to a loaded adapter.
 
         Args:
-            repo_id: name of Hugging Face Hub repository containing adapters that
-                implement the intrinsic
-            intrinsic_name: the name of the intrinsic; must match the name of the
-                associated adapters within the target repository
-            intrinsic_kwargs: some intrinsics require kwargs when utilizing them; provide them here
-            adapter_types: list of adapter types that can be used for this intrinsic
+            intrinsic_name: the user-visible name of the intrinsic; must match a known
+                name in Mellea's intrinsics catalog.
+            intrinsic_kwargs: some intrinsics require kwargs when utilizing them;
+                provide them here
         """
-        self.repo_id = repo_id
-        self.intrinsic_name = intrinsic_name
-
-        # Copy the list so that this intrinsic has its own list that can be modified independently.
-        self.adapter_types = copy(adapter_types)
-
+        self.metadata = fetch_intrinsic_metadata(intrinsic_name)
         if intrinsic_kwargs is None:
             intrinsic_kwargs = {}
         self.intrinsic_kwargs = intrinsic_kwargs
+
+    @property
+    def intrinsic_name(self):
+        """User-visible name of this intrinsic."""
+        return self.metadata.name
+
+    @property
+    def adapter_types(self) -> tuple[AdapterType, ...]:
+        """Tuple of available adapter types that implement this intrinsic."""
+        return self.metadata.adapter_types
 
     def parts(self) -> list[Component | CBlock]:
         """The set of all the constituent parts of the `Intrinsic`.
@@ -55,10 +54,13 @@ class Intrinsic(Component):
         raise NotImplementedError("parts isn't implemented by default")
 
     def format_for_llm(self) -> TemplateRepresentation | str:
-        """`Intrinsic` doesn't implement `format_for_default`. Formats the `Intrinsic` into a `TemplateRepresentation` or string.
+        """`Intrinsic` doesn't implement `format_for_default`.
+
+        Formats the `Intrinsic` into a `TemplateRepresentation` or string.
 
         Returns: a `TemplateRepresentation` or string
         """
         raise NotImplementedError(
-            "`Intrinsic` doesn't implement format_for_llm by default. You should only use an `Intrinsic` as the action and not as a part of the context."
+            "`Intrinsic` doesn't implement format_for_llm by default. You should only "
+            "use an `Intrinsic` as the action and not as a part of the context."
         )

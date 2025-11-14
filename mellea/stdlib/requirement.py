@@ -19,10 +19,6 @@ from mellea.stdlib.base import (
 )
 from mellea.stdlib.intrinsics.intrinsic import Intrinsic
 
-REQUIREMENT_REPO_ID = "ibm-granite/rag-intrinsics-lib"
-"""Hard-coded repository on Hugging Face Hub where Mellea keeps its requirement
-intrinsic's aLoRA adapter."""
-
 
 def default_output_to_bool(x: CBlock | str) -> bool:
     """Checks if a given output should be marked converted to `True`.
@@ -234,10 +230,8 @@ class ALoraRequirement(Requirement, Intrinsic):
         # Initialize the other side of the inheritance tree
         Intrinsic.__init__(
             self,
-            repo_id=REQUIREMENT_REPO_ID,
             intrinsic_name=intrinsic_name,
             intrinsic_kwargs={"requirement": f"{self.description}"},
-            adapter_types=[AdapterType.ALORA],
         )
 
 

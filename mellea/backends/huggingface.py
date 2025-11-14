@@ -41,6 +41,7 @@ from mellea.backends.adapters.adapter import (
     LocalHFAdapter,
     get_adapter_for_intrinsic,
 )
+from mellea.backends.adapters.catalog import fetch_intrinsic_metadata
 from mellea.backends.cache import Cache, SimpleLRUCache
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
@@ -65,12 +66,7 @@ from mellea.stdlib.base import (
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.intrinsics.intrinsic import Intrinsic
-from mellea.stdlib.requirement import (
-    REQUIREMENT_REPO_ID,
-    ALoraRequirement,
-    LLMaJRequirement,
-    Requirement,
-)
+from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
 
 assert outlines, "outlines needs to be present to make outlines_core work"
 
@@ -215,12 +211,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
                 alora_action = ALoraRequirement(action.description, adapter_name)
 
-            # Check if a requirement_check (or AloraRequirement specified) adapter exists.
+            # Check if a requirement_check (or AloraRequirement specified) adapter
+            # exists.
             alora_req_adapter = get_adapter_for_intrinsic(
-                REQUIREMENT_REPO_ID,
-                adapter_name,
-                [AdapterType.ALORA],
-                self._added_adapters,
+                adapter_name, [AdapterType.ALORA], self._added_adapters
             )
             if alora_req_adapter is None:
                 # Log a warning if using an AloraRequirement but no adapter fit.
@@ -285,10 +279,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             del model_options[ModelOption.STREAM]
 
         adapter = get_adapter_for_intrinsic(
-            action.repo_id,
-            action.intrinsic_name,
-            action.adapter_types,
-            self._added_adapters,
+            action.intrinsic_name, action.adapter_types, self._added_adapters
         )
         if adapter is None:
             raise ValueError(

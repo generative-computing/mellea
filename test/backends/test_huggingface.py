@@ -1,4 +1,5 @@
 import asyncio
+
 import pydantic
 import pytest
 from typing_extensions import Annotated
@@ -9,21 +10,11 @@ from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import (
-    CBlock,
-    ChatContext,
-    Context,
-    ModelOutputThunk,
-    SimpleContext,
-)
-from mellea.stdlib.requirement import (
-    ALoraRequirement,
-    LLMaJRequirement,
-    Requirement,
-    ValidationResult,
-    default_output_to_bool,
-    REQUIREMENT_REPO_ID,
-)
+from mellea.stdlib.base import (CBlock, ChatContext, Context, ModelOutputThunk,
+                                SimpleContext)
+from mellea.stdlib.requirement import (ALoraRequirement, LLMaJRequirement,
+                                       Requirement, ValidationResult,
+                                       default_output_to_bool)
 
 
 @pytest.fixture(scope="module")
@@ -36,7 +27,7 @@ def backend():
     )
     backend.add_adapter(
         GraniteCommonAdapter(
-            REQUIREMENT_REPO_ID, "requirement_check", base_model_name=backend.base_model_name
+            "requirement_check", base_model_name=backend.base_model_name
         )
     )
     return backend
@@ -53,7 +44,7 @@ def session(backend):
 def test_adapters(backend):
     assert len(backend._added_adapters.items()) > 0
 
-    expected_qualified_name = f"{REQUIREMENT_REPO_ID}_requirement_check_alora"
+    expected_qualified_name = "requirement_check_alora"
     adapter = backend._added_adapters[expected_qualified_name]
     backend.load_adapter(adapter.qualified_name)
     assert adapter.qualified_name in backend._loaded_adapters

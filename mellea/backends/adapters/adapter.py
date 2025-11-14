@@ -2,7 +2,6 @@
 
 import abc
 import pathlib
-from enum import Enum
 from typing import Any, TypeVar
 
 import granite_common.intrinsics
@@ -10,14 +9,8 @@ import yaml
 from litellm import cast
 
 from mellea.backends import Backend
+from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata
 from mellea.backends.types import _ServerType
-
-
-class AdapterType(Enum):
-    """Possible types of adapters for a backend."""
-
-    LORA = "lora"
-    ALORA = "alora"
 
 
 class Adapter(abc.ABC):
@@ -29,7 +22,8 @@ class Adapter(abc.ABC):
         Note: An adapter can only be added to a single backend.
 
         Args:
-            name: name of the adapter; when referencing this adapter, use adapter.qualified_name
+            name: name of the adapter; when referencing this adapter, use
+                adapter.qualified_name
             adapter_type: enum describing what type of adapter it is (ie LORA / ALORA)
         """
         self.name = name
@@ -78,11 +72,10 @@ class LocalHFAdapter(Adapter):
 
 
 class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
-    """Adapter for intrinsics that utilize the GraniteCommon library."""
+    """Adapter for intrinsics that utilize the ``granite-common`` library."""
 
     def __init__(
         self,
-        repo_id: str,
         intrinsic_name: str,
         adapter_type: AdapterType = AdapterType.ALORA,
         config_file: str | pathlib.Path | None = None,
@@ -95,9 +88,6 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
         Most intrinsics support LoRA or aLoRA adapter types.
 
         Args:
-            repo_id: Name of Hugging Face Hub repository containing the adapters that
-                implement the intrinsic; for example,
-                "generative-computing/rag-intrinsics-lib"
             intrinsic_name: name of the intrinsic; the local name of the loaded adapter
                 that implements this intrinsic will be adapter.qualified_name
             adapter_type: enum describing what type of adapter it is (ie LORA / ALORA)
@@ -106,14 +96,19 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
             base_model_name: optional; if provided with no config_file/config_dict,
                 will be used to look up the granite_common config for this adapter
         """
-        assert adapter_type in (AdapterType.ALORA, AdapterType.LORA), (
-            f"{adapter_type} not supported"
-        )
-        super().__init__(f"{repo_id}_{intrinsic_name}", adapter_type)
+        super().__init__(intrinsic_name, adapter_type)
 
-        self.repo_id = repo_id
         self.intrinsic_name = intrinsic_name
+        self.intrinsic_metadata = fetch_intrinsic_metadata(intrinsic_name)
         self.base_model_name = base_model_name
+
+        if adapter_type not in self.intrinsic_metadata.adapter_types:
+            raise ValueError(
+                f"Intrinsic '{intrinsic_name}' not available as an adapter of type "
+                f"'{adapter_type}. Available types are "
+                f"{self.intrinsic_metadata.adapter_types}."
+            )
+        self.adapter_type = adapter_type
 
         # If any of the optional params are specified, attempt to set up the
         # config for the intrinsic here.
@@ -132,12 +127,16 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
             assert self.base_model_name is not None, (
                 "must provide `base_model_name` if not providing a `config_file` or `config_dict`"
             )
+            # We're converting the adapter type to a boolean flag here.
+            assert adapter_type in (AdapterType.ALORA, AdapterType.LORA), (
+                f"{adapter_type} not supported"
+            )
             is_alora = self.adapter_type == AdapterType.ALORA
             config_file = granite_common.intrinsics.obtain_io_yaml(
                 self.intrinsic_name,
                 self.base_model_name,
                 alora=is_alora,
-                repo_id=repo_id,
+                repo_id=self.intrinsic_metadata.repo_id,
             )
         if config_file:
             with open(config_file, encoding="utf-8") as f:
@@ -183,15 +182,17 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
         """Returns the path needed to load the adapter.
 
         Args:
-            base_model_name: the base model; typically the last part of the huggingface model id like "granite-3.3-8b-instruct"
+            base_model_name: the base model; typically the last part of the huggingface
+                model id like "granite-3.3-8b-instruct"
         """
         return self.download_and_get_path(base_model_name)
 
     def download_and_get_path(self, base_model_name: str) -> str:
-        """Downloads the required rag intrinsics files if necessary and returns the path to the them.
+        """Downloads the required rag intrinsics files if necessary and returns the path to them.
 
         Args:
-            base_model_name: the base model; typically the last part of the huggingface model id like "granite-3.3-8b-instruct"
+            base_model_name: the base model; typically the last part of the huggingface
+                model id like "granite-3.3-8b-instruct"
 
         Returns:
             a path to the files
@@ -202,7 +203,7 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
                 self.intrinsic_name,
                 base_model_name,
                 alora=is_alora,
-                repo_id=self.repo_id,
+                repo_id=self.intrinsic_metadata.repo_id,
             )
         )
 
@@ -216,9 +217,8 @@ T = TypeVar("T")
 
 
 def get_adapter_for_intrinsic(
-    repo_id: str,
     intrinsic_name: str,
-    intrinsic_adapter_types: list[AdapterType],
+    intrinsic_adapter_types: list[AdapterType] | tuple[AdapterType, ...],
     available_adapters: dict[str, T],
 ) -> T | None:
     """Finds an adapter from a dict of available adapters based on the intrinsic name and its allowed adapter types.
@@ -235,7 +235,7 @@ def get_adapter_for_intrinsic(
     """
     adapter = None
     for adapter_type in intrinsic_adapter_types:
-        qualified_name = f"{repo_id}_{intrinsic_name}_{adapter_type.value}"
+        qualified_name = f"{intrinsic_name}_{adapter_type.value}"
         adapter = available_adapters.get(qualified_name)
         if adapter is not None:
             break

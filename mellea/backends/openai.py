@@ -57,12 +57,7 @@ from mellea.stdlib.base import (
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.intrinsics.intrinsic import Intrinsic
-from mellea.stdlib.requirement import (
-    REQUIREMENT_REPO_ID,
-    ALoraRequirement,
-    LLMaJRequirement,
-    Requirement,
-)
+from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
 
 if TYPE_CHECKING:
     from transformers.tokenization_utils import PreTrainedTokenizer
@@ -339,10 +334,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
             # Check if a requirement_check (or AloraRequirement specified) adapter exists.
             alora_req_adapter = get_adapter_for_intrinsic(
-                REQUIREMENT_REPO_ID,
-                adapter_name,
-                [AdapterType.ALORA],
-                self._added_adapters,
+                adapter_name, [AdapterType.ALORA], self._added_adapters
             )
             if alora_req_adapter is None:
                 # Log a warning if using an AloraRequirement but no adapter fit.
@@ -415,10 +407,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             del model_opts[ModelOption.STREAM]
 
         adapter = get_adapter_for_intrinsic(
-            action.repo_id,
-            action.intrinsic_name,
-            action.adapter_types,
-            self._added_adapters,
+            action.intrinsic_name, action.adapter_types, self._added_adapters
         )
         if adapter is None:
             raise ValueError(
