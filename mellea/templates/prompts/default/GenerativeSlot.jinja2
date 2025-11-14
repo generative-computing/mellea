@@ -2,13 +2,19 @@ Your task is to imitate the output of the following function for the given argum
 Reply Nothing else but the output of the function.
 
 Function:
-def {{ function.name }}({{ function.signature }})
-    """{{ function.docstring | default("No documentation provided.") }}"""
+def {{ function.name }}{{ function.signature }}:
+    """{{ function.docstring | default("No documentation provided.") -}}
+    {% if requirements|length > 0 %}
 
-{%- if arguments|length > 0 %}
+    Postconditions:
+    {%- for req in requirements %}
+        - {{ req -}}
+    {% endfor %}
+    {% endif -%}
+    """
+
+{%- if arguments is not none %}
 
 Arguments:
-{%- for arg in arguments %}
-- {{ arg.name }}: {{ arg.value }}  (type: {{ arg.annotation -}})
-{%- endfor -%}
+{{ arguments }}
 {%- endif -%}

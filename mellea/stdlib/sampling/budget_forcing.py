@@ -7,7 +7,7 @@ import tqdm
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib import funcs as mfuncs
+from mellea.stdlib import functional as mfuncs
 from mellea.stdlib.base import ModelOutputThunk
 from mellea.stdlib.requirement import Requirement, ValidationResult
 from mellea.stdlib.sampling import RejectionSamplingStrategy, SamplingResult
