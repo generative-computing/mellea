@@ -2,11 +2,9 @@ from mellea.backends.openai import OpenAIBackend, _ServerType
 from mellea.backends.adapters.adapter import AdapterType, GraniteCommonAdapter
 from mellea.stdlib.base import ChatContext, ModelOutputThunk
 from mellea.stdlib.chat import Message
-import mellea.stdlib.functional as mfuncs
+import mellea.stdlib.funcs as mfuncs
 from mellea.stdlib.intrinsics.intrinsic import Intrinsic
-
-# Create the Adapter. GraniteCommonAdapter's default to ALORAs.
-req_adapter = GraniteCommonAdapter("requirement_check")
+from mellea.stdlib.requirement import REQUIREMENT_REPO_ID
 
 # Create the backend. Assumes a locally running VLLM server.
 backend = OpenAIBackend(
@@ -19,6 +17,11 @@ backend = OpenAIBackend(
 # script with `export VLLM_DOWNLOAD_RAG_INTRINSICS=True`. This will download the granite_common
 # adapters on the server.
 backend._server_type = _ServerType.REMOTE_VLLM
+
+# Create the Adapter. GraniteCommonAdapter's default to ALORAs.
+req_adapter = GraniteCommonAdapter(
+    REQUIREMENT_REPO_ID, "requirement_check", base_model_name=backend.base_model_name
+)
 
 # Add the adapter to the backend.
 backend.add_adapter(req_adapter)

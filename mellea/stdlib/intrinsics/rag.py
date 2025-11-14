@@ -5,7 +5,7 @@ import json
 
 import granite_common
 
-import mellea.stdlib.functional as mfuncs
+import mellea.stdlib.funcs as mfuncs
 from mellea.backends import Backend
 from mellea.backends.adapters.adapter import (
     AdapterMixin,
@@ -46,7 +46,7 @@ so it's important to stick to in-domain prompts."""
 def _call_intrinsic(
     intrinsic_name: str,
     context: ChatContext,
-    backend: AdapterMixin,  # type: ignore
+    backend: AdapterMixin,
     /,
     kwargs: dict | None = None,
 ):
@@ -63,7 +63,7 @@ def _call_intrinsic(
             f"Should be one of {list(_CATALOG.keys())}"
         )
     repo_id, adapter_type = _CATALOG[intrinsic_name]
-    base_model_name = backend.model_id  # type: ignore
+    base_model_name = backend.base_model_name
     if base_model_name is None:
         raise ValueError("Backend has no model ID")
     adapter = GraniteCommonAdapter(
@@ -81,7 +81,7 @@ def _call_intrinsic(
     model_output_thunk, _ = mfuncs.act(
         intrinsic,
         context,
-        backend,  # type: ignore
+        backend,
         # No rejection sampling, please
         strategy=None,
     )
@@ -99,9 +99,9 @@ def _call_intrinsic(
 
 
 def check_answerability(
-    context: ChatContext,
     question: str,
     documents: collections.abc.Iterable[Document],
+    context: ChatContext,
     backend: AdapterMixin,
 ) -> float:
     """Test a user's question for answerability.
@@ -128,7 +128,7 @@ def check_answerability(
 
 
 def rewrite_question(
-    context: ChatContext, question: str, backend: AdapterMixin
+    question: str, context: ChatContext, backend: AdapterMixin
 ) -> float:
     """Rewrite a user's question for retrieval.
 
@@ -149,9 +149,9 @@ def rewrite_question(
 
 
 def find_citations(
-    context: ChatContext,
     response: str,
     documents: collections.abc.Iterable[Document],
+    context: ChatContext,
     backend: AdapterMixin,
 ) -> list[dict]:
     """Find information in documents that supports an assistant response.
@@ -186,7 +186,7 @@ def find_citations(
 
 
 def check_context_relevance(
-    context: ChatContext, question: str, document: Document, backend: AdapterMixin
+    question: str, document: Document, context: ChatContext, backend: AdapterMixin
 ) -> float:
     """Test whether a document is relevant to a user's question.
 
@@ -213,9 +213,9 @@ def check_context_relevance(
 
 
 def flag_hallucinated_content(
-    context: ChatContext,
     response: str,
     documents: collections.abc.Iterable[Document],
+    context: ChatContext,
     backend: AdapterMixin,
 ) -> float:
     """Flag potentially-hallucinated sentences in an agent's response.
@@ -247,9 +247,9 @@ def flag_hallucinated_content(
 
 
 def rewrite_answer_for_relevance(
-    context,
     response: str,
     documents: collections.abc.Iterable[Document],
+    context: ChatContext,
     backend: AdapterMixin,
     /,
     rewrite_threshold: float = 0.5,

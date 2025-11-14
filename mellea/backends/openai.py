@@ -860,6 +860,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         return results
 
+    @property
+    def base_model_name(self):
+        """Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`."""
+        return self._hf_model_id.split("/")[1]
+
     def add_adapter(self, adapter: OpenAIAdapter):
         """Adds the given adapter to the backend. Must not have been added to a different backend."""
         if adapter.backend is not None:
@@ -879,9 +884,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
             return None
 
-        base_model_name = self._hf_model_id.split("/")[-1]
         adapter.path = adapter.get_open_ai_path(
-            base_model_name, server_type=self._server_type
+            self.base_model_name, server_type=self._server_type
         )
         adapter.backend = self
         self._added_adapters[adapter.qualified_name] = adapter

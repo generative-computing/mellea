@@ -86,11 +86,11 @@ def test_answerability(backend):
     context, next_user_turn, documents = _read_input_json("answerability.json")
 
     # First call triggers adapter loading
-    result = rag.check_answerability(context, next_user_turn, documents, backend)
+    result = rag.check_answerability(next_user_turn, documents, context, backend)
     assert pytest.approx(result) == 1.0
 
     # Second call hits a different code path from the first one
-    result = rag.check_answerability(context, next_user_turn, documents, backend)
+    result = rag.check_answerability(next_user_turn, documents, context, backend)
     assert pytest.approx(result) == 1.0
 
 
@@ -104,11 +104,11 @@ def test_query_rewrite(backend):
     )
 
     # First call triggers adapter loading
-    result = rag.rewrite_question(context, next_user_turn, backend)
+    result = rag.rewrite_question(next_user_turn, context, backend)
     assert result == expected
 
     # Second call hits a different code path from the first one
-    result = rag.rewrite_question(context, next_user_turn, backend)
+    result = rag.rewrite_question(next_user_turn, context, backend)
     assert result == expected
 
 
@@ -119,11 +119,11 @@ def test_citations(backend):
     expected = _read_output_json("citations.json")
 
     # First call triggers adapter loading
-    result = rag.find_citations(context, assistant_response, docs, backend)
+    result = rag.find_citations(assistant_response, docs, context, backend)
     assert result == expected
 
     # Second call hits a different code path from the first one
-    result = rag.find_citations(context, assistant_response, docs, backend)
+    result = rag.find_citations(assistant_response, docs, context, backend)
     assert result == expected
 
 
@@ -136,11 +136,11 @@ def test_context_relevance(backend):
     document = docs[0]
 
     # First call triggers adapter loading
-    result = rag.check_context_relevance(context, question, document, backend)
+    result = rag.check_context_relevance(question, document, context, backend)
     assert pytest.approx(result, abs=2e-2) == 0.45
 
     # Second call hits a different code path from the first one
-    result = rag.check_context_relevance(context, question, document, backend)
+    result = rag.check_context_relevance(question, document, context, backend)
     assert pytest.approx(result, abs=2e-2) == 0.45
 
 
@@ -151,13 +151,13 @@ def test_hallucination_detection(backend):
     expected = _read_output_json("hallucination_detection.json")
 
     # First call triggers adapter loading
-    result = rag.flag_hallucinated_content(context, assistant_response, docs, backend)
+    result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
     # pytest.approx() chokes on lists of records, so we do this complicated dance.
     for r, e in zip(result, expected, strict=True):
         assert pytest.approx(r, abs=2e-2) == e
 
     # Second call hits a different code path from the first one
-    result = rag.flag_hallucinated_content(context, assistant_response, docs, backend)
+    result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
     for r, e in zip(result, expected, strict=True):
         assert pytest.approx(r, abs=2e-2) == e
 
@@ -169,15 +169,15 @@ def test_answer_relevance(backend):
     expected_rewrite = "Alice, Bob, and Carol attended the meeting."
 
     # First call triggers adapter loading
-    result = rag.rewrite_answer_for_relevance(context, answer, docs, backend)
+    result = rag.rewrite_answer_for_relevance(answer, docs, context, backend)
     assert result == expected_rewrite
 
     # Second call hits a different code path from the first one
-    result = rag.rewrite_answer_for_relevance(context, answer, docs, backend)
+    result = rag.rewrite_answer_for_relevance(answer, docs, context, backend)
     assert result == expected_rewrite
 
     # Canned input always gets rewritten. Set threshold to disable the rewrite.
-    result = rag.rewrite_answer_for_relevance(context, answer, docs, backend,
+    result = rag.rewrite_answer_for_relevance(answer, docs, context, backend,
                                               rewrite_threshold=0.0)
     assert result == answer
 

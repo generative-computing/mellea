@@ -123,12 +123,15 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
                 f"parameters provided. Values were {config_file=} "
                 f"and {config_dict=}"
             )
-        if config_file is None and config_dict is None and base_model_name is None:
+        if config_file is None and config_dict is None and self.base_model_name is None:
             raise ValueError(
                 "At least one of [config_file, config_dict, base_model_name] "
                 "must be provided."
             )
         if config_file is None and config_dict is None:
+            assert self.base_model_name is not None, (
+                "must provide `base_model_name` if not providing a `config_file` or `config_dict`"
+            )
             is_alora = self.adapter_type == AdapterType.ALORA
             config_file = granite_common.intrinsics.obtain_io_yaml(
                 self.intrinsic_name,
@@ -240,18 +243,27 @@ def get_adapter_for_intrinsic(
     return adapter
 
 
-class AdapterMixin(abc.ABC):
+class AdapterMixin(Backend, abc.ABC):
     """Mixin class for backends capable of utilizing adapters."""
 
+    @property
+    @abc.abstractmethod
+    def base_model_name(self) -> str:
+        """Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`."""
+
+    @abc.abstractmethod
     def add_adapter(self, *args, **kwargs):
         """Adds the given adapter to the backend. Must not have been added to a different backend."""
 
+    @abc.abstractmethod
     def load_adapter(self, adapter_qualified_name: str):
         """Loads the given adapter for the backend. Must have previously been added."""
 
+    @abc.abstractmethod
     def unload_adapter(self, adapter_qualified_name: str):
         """Unloads the given adapter from the backend."""
 
+    @abc.abstractmethod
     def list_adapters(self) -> list[str]:
         """Lists the adapters added via add_adapter().
 

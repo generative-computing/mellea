@@ -828,6 +828,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         return {k: v for k, v in model_options.items() if k not in chat_template_only}
 
     # region Adapter loading, unloading, and utility functions.
+    @property
+    def base_model_name(self):
+        """Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`."""
+        return self._hf_model_id.split("/")[1]
+
     def add_adapter(self, adapter: LocalHFAdapter):
         """Adds the given adapter to the backend. Must not have been added to a different backend."""
         if adapter.backend is not None:
@@ -847,8 +852,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
             return None
 
-        base_model_name = self._hf_model_id.split("/")[1]
-        adapter.path = adapter.get_local_hf_path(base_model_name)
+        adapter.path = adapter.get_local_hf_path(self.base_model_name)
         adapter.backend = self
         self._added_adapters[adapter.qualified_name] = adapter
 
@@ -861,7 +865,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
         try:
-            self._model.load_adapter(adapter.path, adapter.qualified_name)
+            adapter_kwargs = {}
+
+            # Peft tries to stringify the device. If it's mps, it gets stringified as "mps:0" which causes
+            # an error when loading with safetensors.torch.load_file. Force the device as a string "mps" to fix.
+            if self._device == torch.device("mps"):
+                adapter_kwargs["device"] = "mps"
+            self._model.load_adapter(
+                adapter.path, adapter.qualified_name, adapter_kwargs=adapter_kwargs
+            )
         except ValueError as e:
             # If it's just that it's already loaded, ignore it.
             if f"Adapter with name {adapter_qualified_name} already exists." not in str(
