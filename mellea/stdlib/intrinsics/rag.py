@@ -3,10 +3,7 @@
 import collections.abc
 import json
 
-import granite_common
-
-import mellea.stdlib.funcs as mfuncs
-from mellea.backends import Backend
+import mellea.stdlib.functional as mfuncs
 from mellea.backends.adapters.adapter import (
     AdapterMixin,
     AdapterType,
