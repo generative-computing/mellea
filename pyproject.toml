@@ -43,7 +43,7 @@ dependencies = [
     "huggingface-hub>=0.33.4",
     "pillow",
     "granite-common>=0.3.4", # Needed for Intrinsics.
-    "math_verify", # Needed for Majority Voting Sampling Strategies. # Needed for Majority Voting Sampling Strategies.
+    "math_verify", # Needed for Majority Voting Sampling Strategies.
     "rouge_score", # Needed for Majority Voting Sampling Strategies.
     "llm-sandbox[docker]>=0.3.23",
 ]
