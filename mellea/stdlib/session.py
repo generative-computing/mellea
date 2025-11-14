@@ -311,7 +311,7 @@ class MelleaSession:
     @overload
     def instruct(
         self,
-        description: str,
+        description: str | CBlock,
         *,
         images: list[ImageBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
@@ -330,7 +330,7 @@ class MelleaSession:
     @overload
     def instruct(
         self,
-        description: str,
+        description: str | CBlock,
         *,
         images: list[ImageBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
@@ -346,9 +346,10 @@ class MelleaSession:
         tool_calls: bool = False,
     ) -> SamplingResult: ...
 
+
     def instruct(
         self,
-        description: str,
+        description: str | CBlock,
         *,
         images: list[ImageBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
@@ -366,7 +367,7 @@ class MelleaSession:
         """Generates from an instruction.
 
         Args:
-            description: The description of the instruction.
+            description: The description of the instruction (str or CBlock).
             requirements: A list of requirements that the instruction can be validated against.
             icl_examples: A list of in-context-learning examples that the instruction can be validated against.
             grounding_context: A list of grounding contexts that the instruction can use. They can bind as variables using a (key: str, value: str | ContentBlock) tuple.
