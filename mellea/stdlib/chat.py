@@ -8,6 +8,7 @@ from mellea.stdlib.base import (
     CBlock,
     Component,
     Context,
+    Document,
     ImageBlock,
     ModelOutputThunk,
     ModelToolCall,
@@ -26,6 +27,7 @@ class Message(Component):
         content: str,
         *,
         images: None | list[ImageBlock] = None,
+        documents: None | list[Document] = None,
     ):
         """Initializer for Chat messages.
 
@@ -33,10 +35,12 @@ class Message(Component):
             role (str): The role that this message came from (e.g., user, assistant).
             content (str): The content of the message.
             images (list[ImageBlock]): The images associated with the message if any.
+            documents (list[Document]): documents associated with the message if any.
         """
         self.role = role
         self.content = content
         self._images = images
+        self._docs = documents
 
     @property
     def images(self) -> None | list[str]:
@@ -59,7 +63,12 @@ class Message(Component):
         """
         return TemplateRepresentation(
             obj=self,
-            args={"role": self.role, "content": self.content, "images": self.images},
+            args={
+                "role": self.role,
+                "content": self.content,
+                "images": self.images,
+                "documents": self._docs,
+            },
             template_order=["*", "Message"],
         )
 
@@ -68,7 +77,11 @@ class Message(Component):
         images = []
         if self.images is not None:
             images = [f"{i[:20]}..." for i in self.images]
-        return f'mellea.Message(role="{self.role}", content="{self.content}", images="{images}")'
+
+        docs = []
+        if self._docs is not None:
+            docs = [f"{doc.format_for_llm()[:10]}..." for doc in self._docs]
+        return f'mellea.Message(role="{self.role}", content="{self.content}", images="{images}", documents="{docs}")'
 
 
 class ToolMessage(Message):

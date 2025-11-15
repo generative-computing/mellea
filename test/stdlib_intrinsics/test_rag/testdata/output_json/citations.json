@@ -1,0 +1,11 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "[{\"response_begin\": 0, \"response_end\": 96, \"response_text\": \"Murdoch expanded in Australia and New Zealand by acquiring and expanding local newspapers. \", \"citation_doc_id\": \"0\", \"citation_begin\": 2468, \"citation_end\": 3533, \"citation_text\": \"He began to direct his attention to acquisition and expansion, buying the troubled Sunday Times in Perth, Western Australia (1956) and over the next few years acquiring suburban and provincial newspapers in New South Wales, Queensland, Victoria and the Northern Territory, including the Sydney afternoon tabloid, The Daily Mirror (1960). \"}, {\"response_begin\": 0, \"response_end\": 96, \"response_text\": \"Murdoch expanded in Australia and New Zealand by acquiring and expanding local newspapers. \", \"citation_doc_id\": \"0\", \"citation_begin\": 4792, \"citation_end\": 6183, \"citation_text\": \"Murdoch's first foray outside Australia involved the purchase of a controlling interest in the New Zealand daily The Dominion. \"}]",
+                "role": "assistant"
+            }
+        }
+    ]
+}

@@ -1,0 +1,11 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "[{\"response_begin\": 0, \"response_end\": 36, \"response_text\": \"Purple bumble fish are yellow. \", \"faithfulness_likelihood\": 0.2062460112028628, \"explanation\": \"This sentence makes a factual claim about the color of fish. However, the provided document only mentions one type of fish that is yellow, which is the purple bumble fish. There is no information about green bumble fish in the document, so the claim about green bumble fish being yellow cannot be verified.\"}, {\"response_begin\": 36, \"response_end\": 70, \"response_text\": \"Green bumble fish are also yellow.\", \"faithfulness_likelihood\": 0.006380047389365753, \"explanation\": \"This sentence makes a factual claim about the color of fish. However, the provided document only mentions one type of fish that is yellow, which is the purple bumble fish. There is no information about green bumble fish in the document, so the claim about green bumble fish being yellow cannot be verified.\"}]",
+                "role": "assistant"
+            }
+        }
+    ]
+}

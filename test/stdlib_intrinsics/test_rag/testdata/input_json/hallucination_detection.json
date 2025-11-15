@@ -1,0 +1,24 @@
+{
+  "messages": [
+    {
+      "role": "assistant",
+      "content": "Hello there, how can I help you?"
+    },
+    {
+      "content": "Tell me about some yellow fish.",
+      "role": "user"
+    },
+    {
+      "role": "assistant",
+      "content": "Purple bumble fish are yellow. Green bumble fish are also yellow."
+    }
+  ],
+  "extra_body": {
+    "documents": [
+      {
+          "doc_id": "1",
+          "text": "The only type of fish that is yellow is the purple bumble fish."
+      }
+    ]
+  }
+}

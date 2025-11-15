@@ -42,8 +42,9 @@ dependencies = [
     "mistletoe>=1.4.0",
     "huggingface-hub>=0.33.4",
     "pillow",
-    "math_verify", # Needed for Majority Voting Sampling Strategies. # Needed for Majority Voting Sampling Strategies.
-    "rouge_score",
+    "granite-common>=0.3.5", # Needed for Intrinsics.
+    "math_verify", # Needed for Majority Voting Sampling Strategies.
+    "rouge_score", # Needed for Majority Voting Sampling Strategies.
     "llm-sandbox[docker]>=0.3.23",
 ]
 
@@ -72,7 +73,7 @@ hf = [
     "datasets>=4.0.0",
     "outlines-core==0.1.26",
     "outlines",                 # intentionally un-versioned, expecting a minor update. coutlines-core version should be enough to specify it
-    "peft>=0.16.0",
+    "peft>=0.18.0", # aLoRA support was added in Peft 0.18.0
     "transformers>=4.53.2",
     "trl==0.19.1",
 ]

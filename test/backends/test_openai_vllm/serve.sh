@@ -26,8 +26,18 @@
 # see environment.yml.
 export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
 
+# Mellea makes assumptions about the location of the adapter files on the server. By default, it assumes
+# referenced adapters are at `./rag-intrinsics-lib/$adapter_name/$adapter_type/$base_model_name`. You can
+# change this behavior by defining custom adapter classes that override the path.
+# You will also need to set the OpenAIBackend's server_type to REMOTE_VLLM.
+if [[ "$VLLM_ALLOW_RUNTIME_LORA_UPDATING" == "True" ]] && [[ "$VLLM_DOWNLOAD_RAG_INTRINSICS" == "True" ]]
+then
+    echo "downloading rag-intrinsics-lib from huggingface"
+    hf download ibm-granite/rag-intrinsics-lib --local-dir ./rag-intrinsics-lib
+fi
+
 echo "launching a vllm server. Logs are found in $(readlink -ef $(dirname $0))/vllm.log"
-vllm serve ibm-granite/granite-3.2-8b-instruct \
+vllm serve ibm-granite/granite-3.3-8b-instruct \
       --enable-activated-lora \
       --enable-lora \
       --dtype bfloat16 \

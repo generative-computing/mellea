@@ -1,0 +1,13 @@
+{
+  "messages": [
+    {"role": "user", "content": "Who attended the meeting?"},
+    {"role": "assistant", "content": "Many people attended the meeting."}
+  ],
+  "extra_body": {
+    "documents": [
+        {"doc_id": "1", "text": "Meeting attendees: Alice, Bob, Carol."},
+        {"doc_id": "2", "text": "Meeting time: 9:00 am to 11:00 am."}
+    ]
+  },
+  "temperature": 0.0 
+}

@@ -1,39 +1,35 @@
 import asyncio
+
 import pydantic
 import pytest
 from typing_extensions import Annotated
 
 from mellea import MelleaSession
-from mellea.backends.aloras.huggingface.granite_aloras import add_granite_aloras
+from mellea.backends.adapters.adapter import GraniteCommonAdapter
 from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import (
-    CBlock,
-    ChatContext,
-    Context,
-    ModelOutputThunk,
-    SimpleContext,
-)
-from mellea.stdlib.requirement import (
-    ALoraRequirement,
-    LLMaJRequirement,
-    Requirement,
-    ValidationResult,
-    default_output_to_bool,
-)
+from mellea.stdlib.base import (CBlock, ChatContext, Context, ModelOutputThunk,
+                                SimpleContext)
+from mellea.stdlib.requirement import (ALoraRequirement, LLMaJRequirement,
+                                       Requirement, ValidationResult,
+                                       default_output_to_bool)
 
 
 @pytest.fixture(scope="module")
 def backend():
     """Shared HuggingFace backend for all tests in this module."""
     backend = LocalHFBackend(
-        model_id="ibm-granite/granite-3.2-8b-instruct",
+        model_id="ibm-granite/granite-3.3-8b-instruct",
         formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
         cache=SimpleLRUCache(5),
     )
-    add_granite_aloras(backend)
+    backend.add_adapter(
+        GraniteCommonAdapter(
+            "requirement_check", base_model_name=backend.base_model_name
+        )
+    )
     return backend
 
 
@@ -44,6 +40,23 @@ def session(backend):
     yield session
     session.reset()
 
+@pytest.mark.qualitative
+def test_adapters(backend):
+    assert len(backend._added_adapters.items()) > 0
+
+    expected_qualified_name = "requirement_check_alora"
+    adapter = backend._added_adapters[expected_qualified_name]
+    backend.load_adapter(adapter.qualified_name)
+    assert adapter.qualified_name in backend._loaded_adapters
+
+    # Ensure you can load the same adapter twice.
+    backend.load_adapter(adapter.qualified_name)
+
+    # Ensure you can unload an adapter.
+    backend.unload_adapter(adapter.qualified_name)
+    backend.unload_adapter(adapter.qualified_name)
+    assert adapter.qualified_name not in backend._loaded_adapters
+
 
 @pytest.mark.qualitative
 def test_system_prompt(session):
@@ -52,27 +65,6 @@ def test_system_prompt(session):
         model_options={ModelOption.SYSTEM_PROMPT: "Talk like a pirate."},
     )
     print(result)
-
-
-@pytest.mark.qualitative
-async def test_constraint_alora(session, backend):
-    answer = session.instruct(
-        "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa. Be concise and don't write code to answer the question.",
-        model_options={
-            ModelOption.MAX_NEW_TOKENS: 300
-        },  # Until aloras get a bit better, try not to abruptly end generation.
-    )
-
-    alora_output = backend.get_aloras()[
-        0
-    ].generate_using_strings(
-        input="Find the difference between these two strings: aaaaaaaaaa aaaaabaaaa",
-        response=str(answer),
-        constraint="The answer mention that there is a b in the middle of one of the strings but not the other.",
-        force_yn=False,  # make sure that the alora naturally output Y and N without constrained generation
-    )
-    await alora_output.avalue()
-    assert alora_output.value in ["Y", "N"], alora_output
 
 
 @pytest.mark.qualitative
@@ -89,7 +81,7 @@ def test_constraint_lora_with_requirement(session, backend):
     assert len(validation_outputs) == 1
     val_result = validation_outputs[0]
     assert isinstance(val_result, ValidationResult)
-    assert str(val_result.reason) in ["Y", "N"]
+    assert "requirement_likelihood" in str(val_result.reason)
 
 
 @pytest.mark.qualitative
@@ -122,7 +114,7 @@ def test_constraint_lora_override_does_not_override_alora(session, backend):
     assert len(validation_outputs) == 1
     val_result = validation_outputs[0]
     assert isinstance(val_result, ValidationResult)
-    assert str(val_result.reason) in ["Y", "N"]
+    assert "requirement_likelihood" in str(val_result.reason)
 
     # Ensure the ValidationResult has its thunk and context set. Ensure the context has
     # the correct actions / results in it.
@@ -149,6 +141,7 @@ def test_llmaj_req_does_not_use_alora(session, backend):
     val_result = validation_outputs[0]
     assert isinstance(val_result, ValidationResult)
     assert str(val_result.reason) not in ["Y", "N"]
+    assert "requirement_likelihood" not in str(val_result.reason)
 
 
 @pytest.mark.qualitative
@@ -190,7 +183,10 @@ def test_format(session):
         body: str
 
     output = session.instruct(
-        "Write a short email to Olivia, thanking her for organizing a sailing activity. Her email server is example.com. No more than two sentences. ",
+        "Write a short email to Olivia, thanking her for organizing a sailing "
+        "activity. "
+        "Her email is olivia@example.com. "
+        "No more than two sentences. ",
         format=Email,
         model_options={ModelOption.MAX_NEW_TOKENS: 2**8},
     )
@@ -201,7 +197,7 @@ def test_format(session):
     print(email)
 
     print("address:", email.to.email_address)
-    assert "@" in email.to.email_address, "The @ sign should be in the meail address."
+    assert "@" in email.to.email_address, "The @ sign should be in the email address."
     assert email.to.email_address.endswith("example.com"), (
         "The email address should be at example.com"
     )
