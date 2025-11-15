@@ -3330,7 +3330,7 @@ requires-dist = [
     { name = "outlines", marker = "extra == 'hf'" },
     { name = "outlines-core", marker = "extra == 'hf'", specifier = "==0.1.26" },
     { name = "outlines-core", marker = "extra == 'vllm'", specifier = "==0.1.26" },
-    { name = "peft", marker = "extra == 'hf'", git = "https://github.com/huggingface/peft.git?rev=293aea5df6db240856a77f89955d1a89ce38b50d" },
+    { name = "peft", marker = "extra == 'hf'", specifier = ">=0.18.0" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "requests", specifier = ">=2.32.3" },
@@ -4607,8 +4607,8 @@ wheels = [
 
 [[package]]
 name = "peft"
-version = "0.17.2.dev0"
-source = { git = "https://github.com/huggingface/peft.git?rev=293aea5df6db240856a77f89955d1a89ce38b50d#293aea5df6db240856a77f89955d1a89ce38b50d" }
+version = "0.18.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "accelerate" },
     { name = "huggingface-hub" },
@@ -4620,6 +4620,10 @@ dependencies = [
     { name = "torch" },
     { name = "tqdm" },
     { name = "transformers" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4b/0c/f2938db546ac7fc961ab5917cd50fcf5d0d70b406de93e3faccaa504e152/peft-0.18.0.tar.gz", hash = "sha256:c81c80b2056ab40c23d58ef25f74daab417ac653970718589a11a8af28218588", size = 634141, upload-time = "2025-11-13T11:13:06.603Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0f/55/481bf25613d40ef53534f664deba7b138fe566356b6ca10304e2b3b2529c/peft-0.18.0-py3-none-any.whl", hash = "sha256:624f69ca6393b765ccc6734adda7ca57d80b238f0900a42c357d8b67a03d62ff", size = 556427, upload-time = "2025-11-13T11:13:03.664Z" },
 ]
 
 [[package]]
