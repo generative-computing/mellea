@@ -40,7 +40,7 @@ def session(backend):
     yield session
     session.reset()
 
-
+@pytest.mark.qualitative
 def test_adapters(backend):
     assert len(backend._added_adapters.items()) > 0
 
