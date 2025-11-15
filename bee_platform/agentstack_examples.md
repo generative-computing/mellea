@@ -35,7 +35,8 @@ agentstack ui
 To create your own Agentstack agent with Mellea, write a traditional program with Mellea, as shown below. We provide the source code of the email writer.
 
 ```bash
-def mellea_func(m: MelleaSession, sender: str, recipient, subject: str, topic: str, sampling_iters : int = 3) -> tuple[ModelOutputThunk, Context] | SamplingResult:
+@agentstack_app
+def mellea_func(m: MelleaSession, sender: str, recipient, subject: str, topic: str) -> tuple[ModelOutputThunk, Context] | SamplingResult:
     """
     Example email writing module that utilizes an IVR loop in Mellea to generate an email with a specific list of requirements.
     Inputs:
@@ -53,16 +54,18 @@ def mellea_func(m: MelleaSession, sender: str, recipient, subject: str, topic: s
         Requirement("Use less than 100 words.",
                    validation_fn=simple_validate(lambda o: len(o.split()) < 100))
     ]
-    sampling = m.instruct(f"Write an email from {sender}. Subject of email is {subject}. Name of recipient is {recipient}. Topic of email should be {topic}.", requirements=requirements, strategy=RejectionSamplingStrategy(loop_budget=1), return_sampling_results=True)
-
+    description = f"Write an email from {sender}. Subject of email is {subject}. Name of recipient is {recipient}. Topic of email should be {topic}."
+    sampling = m.instruct(description=description, requirements=requirements, strategy=RejectionSamplingStrategy(loop_budget=3), return_sampling_results=True)
     return sampling
 ```
 
-* As shown above, note that the first parameter should be an **m** object.
+Adjust ```requirements``` and ```prompt``` as necessary.
 
-Then, wrap your Mellea program with the ```@agentstack_app``` decorator.
+As shown above, note that the first parameter should be an **m** object.
 
-Place your example in the ```docs/examples/``` folder.
+Then, to deploy your Mellea program to Agentstack, wrap with the ```@agentstack_app``` decorator, as shown above.
+
+Place your code in the ```docs/examples/``` folder.
 
 
 
