@@ -14,7 +14,7 @@ To install Agentstack, follow the instructions at this page: https://agentstack.
 
 # Running the example
 
-Then, in order to run the example email writer, run:
+Then, in order to run the example email writer, run the code below in the root of the directory:
 ```bash
 uv run --with mellea --with agentstack-sdk docs/examples/agentstack_agent.py
 ```
