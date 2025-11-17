@@ -1,10 +1,11 @@
 from typing import Callable, Optional
-from mellea.stdlib.requirement import Context, ValidationResult, Requirement
+from mellea.stdlib.base import Context
+from mellea.stdlib.requirement import Requirement, ValidationResult
 
 
 def _name2str(tool_name: str | Callable) -> str:
     match tool_name:
-        case Callable():
+        case tool_name if callable(tool_name):
             return tool_name.__name__
         case str():
             return tool_name
@@ -72,8 +73,8 @@ def tool_arg_validator(
                 return ValidationResult(result=False, reason=f"Valiudation did not pass for {tool_name}.{arg_name}. Arg value: {arg_value}. Argument validation result: {validate_result}")
         else:
             for tool in ctx.last_output().tool_calls.keys():
-                if arg_name in output.tool_calls[tool_name].args:
-                    arg_value = output.tool_calls[tool_name].args[arg_name]
+                if arg_name in output.tool_calls[tool].args:
+                    arg_value = output.tool_calls[tool].args[arg_name]
                     validate_result = validation_fn(arg_value)
                     if not validate_result:
                         return ValidationResult(result=False, reason=f"Valiudation did not pass for {tool_name}.{arg_name}. Arg value: {arg_value}. Argument validation result: {validate_result}")
