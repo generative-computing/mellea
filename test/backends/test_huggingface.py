@@ -204,7 +204,7 @@ def test_format(session):
 
 
 @pytest.mark.qualitative
-def test_generate_from_raw(session):
+async def test_generate_from_raw(session):
     prompts = [
         "what is 1+1?",
         "what is 2+2?",
@@ -213,22 +213,23 @@ def test_generate_from_raw(session):
         "what is 4+2+2?",
     ]
 
-    results = session.backend.generate_from_raw(
+    results = await session.backend.generate_from_raw(
         actions=[CBlock(value=prompt) for prompt in prompts], ctx=session.ctx
     )
 
     assert len(results) == len(prompts)
+    assert results[0].value is not None
 
 
 @pytest.mark.qualitative
-def test_generate_from_raw_with_format(session):
+async def test_generate_from_raw_with_format(session):
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
     class Answer(pydantic.BaseModel):
         name: str
         value: int
 
-    results = session.backend.generate_from_raw(
+    results = await session.backend.generate_from_raw(
         actions=[CBlock(value=prompt) for prompt in prompts],
         format=Answer,
         ctx=session.ctx,
@@ -248,10 +249,10 @@ def test_generate_from_raw_with_format(session):
 @pytest.mark.qualitative
 async def test_async_parallel_requests(session):
     model_opts = {ModelOption.STREAM: True}
-    mot1, _ = session.backend.generate_from_context(
+    mot1, _ = await session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext(), model_options=model_opts
     )
-    mot2, _ = session.backend.generate_from_context(
+    mot2, _ = await session.backend.generate_from_context(
         CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts
     )
 
@@ -283,7 +284,7 @@ async def test_async_parallel_requests(session):
 
 @pytest.mark.qualitative
 async def test_async_avalue(session):
-    mot1, _ = session.backend.generate_from_context(
+    mot1, _ = await session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext()
     )
     m1_final_val = await mot1.avalue()

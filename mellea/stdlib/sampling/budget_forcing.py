@@ -148,7 +148,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                 "Only ollama backend supported with budget forcing"
             )
             # run a generation pass with budget forcing
-            result = think_budget_forcing(
+            result = await think_budget_forcing(
                 backend,
                 next_action,
                 ctx=context,

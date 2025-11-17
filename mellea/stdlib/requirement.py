@@ -149,7 +149,7 @@ class Requirement(Component):
             # and its template gets populated with the output correctly.
             req_copy = copy(self)
             req_copy._output = last_output.value
-            llm_as_a_judge_result, val_ctx = backend.generate_from_context(
+            llm_as_a_judge_result, val_ctx = await backend.generate_from_context(
                 req_copy, ctx, format=format, model_options=model_options
             )
             await llm_as_a_judge_result.avalue()
@@ -296,7 +296,7 @@ class ScorerRequirement(Requirement):
             # and its template gets populated with the output correctly.
             req_copy = copy(self)
             req_copy._output = last_output.value
-            llm_as_a_judge_result, val_ctx = backend.generate_from_context(
+            llm_as_a_judge_result, val_ctx = await backend.generate_from_context(
                 req_copy, ctx, format=format, model_options=model_options
             )
             await llm_as_a_judge_result.avalue()

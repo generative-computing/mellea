@@ -97,23 +97,24 @@ class TestOpenAIBackend:
         # assert email.to.email_address.endswith("example.com")
         pass
 
-    def test_generate_from_raw(self):
+    async def test_generate_from_raw(self):
         prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
-        results = self.m.backend.generate_from_raw(
+        results = await self.m.backend.generate_from_raw(
             actions=[CBlock(value=prompt) for prompt in prompts], ctx=self.m.ctx
         )
 
         assert len(results) == len(prompts)
+        assert results[0].value is not None
 
-    def test_generate_from_raw_with_format(self):
+    async def test_generate_from_raw_with_format(self):
         prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
         class Answer(pydantic.BaseModel):
             name: str
             value: int
 
-        results = self.m.backend.generate_from_raw(
+        results = await self.m.backend.generate_from_raw(
             actions=[CBlock(value=prompt) for prompt in prompts],
             format=Answer,
             ctx=self.m.ctx,

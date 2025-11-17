@@ -182,7 +182,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._added_adapters: dict[str, LocalHFAdapter] = {}
         self._loaded_adapters: dict[str, LocalHFAdapter] = {}
 
-    def generate_from_context(
+    async def generate_from_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -229,21 +229,23 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             if reroute_to_alora:
                 # Keep the alora requirement handling separate for now.
-                mot = self._generate_from_intrinsic(
+                mot = await self._generate_from_intrinsic(
                     alora_action, ctx, model_options=model_opts
                 )
                 return mot, ctx.add(alora_action).add(mot)
 
         elif isinstance(action, Intrinsic):
-            mot = self._generate_from_intrinsic(action, ctx, model_options=model_opts)
+            mot = await self._generate_from_intrinsic(
+                action, ctx, model_options=model_opts
+            )
             return mot, ctx.add(action).add(mot)
 
-        mot = self._generate_from_context_standard(
+        mot = await self._generate_from_context_standard(
             action, ctx, _format=format, model_options=model_opts, tool_calls=tool_calls
         )
         return mot, ctx.add(action).add(mot)
 
-    def _generate_from_intrinsic(
+    async def _generate_from_intrinsic(
         self, action: Intrinsic, ctx: Context, *, model_options: dict[str, Any]
     ) -> ModelOutputThunk:
         if not ctx.is_chat_context:
@@ -394,7 +396,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         return output
 
-    def _generate_from_context_standard(
+    async def _generate_from_context_standard(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -627,7 +629,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         mot._generate_log = generate_log
 
-    def generate_from_raw(
+    async def generate_from_raw(
         self,
         actions: list[Component | CBlock],
         ctx: Context,
@@ -663,7 +665,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         if format is None:
-            outputs = self._model.generate(  # type: ignore
+            outputs = await asyncio.to_thread(
+                self._model.generate,  # type: ignore
                 input_ids=inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 return_dict_in_generate=True,
@@ -681,7 +684,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             from outlines.processors import RegexLogitsProcessor
             from transformers import LogitsProcessorList
 
-            outputs = self._model.generate(  # type: ignore
+            outputs = await asyncio.to_thread(
+                self._model.generate,  # type: ignore
                 input_ids=inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 return_dict_in_generate=True,

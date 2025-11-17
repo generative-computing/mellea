@@ -284,7 +284,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         return model_opts
 
-    def generate_from_context(
+    async def generate_from_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -297,7 +297,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
-        return self.generate_from_chat_context(
+        return await self.generate_from_chat_context(
             action,
             ctx,
             _format=format,
@@ -305,7 +305,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             tool_calls=tool_calls,
         )
 
-    def generate_from_chat_context(
+    async def generate_from_chat_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -349,18 +349,18 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
             if reroute_to_alora:
                 # Keep the alora requirement handling separate for now.
-                mot = self._generate_from_intrinsic(
+                mot = await self._generate_from_intrinsic(
                     alora_action, ctx, model_options=model_options
                 )
                 return mot, ctx.add(alora_action).add(mot)
 
         elif isinstance(action, Intrinsic):
-            mot = self._generate_from_intrinsic(
+            mot = await self._generate_from_intrinsic(
                 action, ctx, model_options=model_options
             )
             return mot, ctx.add(action).add(mot)
 
-        mot = self._generate_from_chat_context_standard(
+        mot = await self._generate_from_chat_context_standard(
             action,
             ctx,
             _format=_format,
@@ -369,7 +369,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         )
         return mot, ctx.add(action).add(mot)
 
-    def _generate_from_intrinsic(
+    async def _generate_from_intrinsic(
         self, action: Intrinsic, ctx: Context, *, model_options: dict | None = None
     ) -> ModelOutputThunk:
         model_opts = self._simplify_and_merge(
@@ -556,7 +556,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             json_docs.append(json_doc)
         return json_docs
 
-    def _generate_from_chat_context_standard(
+    async def _generate_from_chat_context_standard(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -770,7 +770,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         generate_log.result = mot
         mot._generate_log = generate_log
 
-    def generate_from_raw(
+    async def generate_from_raw(
         self,
         actions: list[Component | CBlock],
         ctx: Context,
@@ -799,13 +799,15 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         prompts = [self.formatter.print(action) for action in actions]
 
         try:
-            completion_response: Completion = self._client.completions.create(
-                model=self._hf_model_id,
-                prompt=prompts,
-                extra_body=extra_body,
-                **self._make_backend_specific_and_remove(
-                    model_opts, is_chat_context=False
-                ),
+            completion_response: Completion = (
+                await self._async_client.completions.create(
+                    model=self._hf_model_id,
+                    prompt=prompts,
+                    extra_body=extra_body,
+                    **self._make_backend_specific_and_remove(
+                        model_opts, is_chat_context=False
+                    ),
+                )
             )  # type: ignore
         except openai.BadRequestError as e:
             if openai_ollama_batching_error in e.message:
@@ -822,8 +824,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         for response, action, prompt in zip(
             completion_response.choices, actions, prompts
         ):
-            output = ModelOutputThunk(None)
-            output.value = response.text
+            output = ModelOutputThunk(response.text)
             output._context = None  # There is no context for generate_from_raw for now
             output._action = action
             output._model_options = model_opts
