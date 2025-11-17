@@ -218,10 +218,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
             if alora_req_adapter is None:
                 # Log a warning if using an AloraRequirement but no adapter fit.
-                if reroute_to_alora:
+                if reroute_to_alora and isinstance(action, ALoraRequirement):
                     FancyLogger.get_logger().warning(
                         f"attempted to use an AloraRequirement but backend {self} doesn't have the specified adapter added {adapter_name}; defaulting to regular generation"
                     )
+                reroute_to_alora = False
 
             if issubclass(type(action), LLMaJRequirement):
                 reroute_to_alora = False
