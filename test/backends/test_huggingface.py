@@ -120,7 +120,7 @@ def test_constraint_lora_override_does_not_override_alora(session, backend):
     # the correct actions / results in it.
     assert isinstance(val_result.context, Context)
     assert isinstance(val_result.thunk, ModelOutputThunk)
-    assert isinstance(val_result.context.previous_node.node_data, ALoraRequirement)
+    assert isinstance(val_result.context.previous_node.node_data, ALoraRequirement)  # type: ignore
     assert val_result.context.node_data is val_result.thunk
 
     backend.default_to_constraint_checking_alora = True
