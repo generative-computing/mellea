@@ -3,6 +3,7 @@ import pytest
 
 from mellea import MelleaSession
 from mellea.backends.litellm import LiteLLMBackend
+from mellea.stdlib.base import CBlock
 
 
 @pytest.fixture(scope="function")
@@ -36,6 +37,23 @@ def test_has_potential_event_loop_errors(session):
 def test_multiple_sync_funcs(session):
     session.chat("first")
     session.chat("second")
+
+
+@pytest.mark.qualitative
+async def test_generate_from_raw(session):
+    prompts = [
+        "what is 1+1?",
+        "what is 2+2?",
+        "what is 3+3?",
+        "what is 4+2+2?",
+    ]
+
+    results = await session.backend.generate_from_raw(
+        actions=[CBlock(value=prompt) for prompt in prompts], ctx=session.ctx
+    )
+
+    assert len(results) == 1, "litellm converts a batch request for watsonx into a single message"
+    assert results[0].value is not None
 
 
 @pytest.mark.qualitative

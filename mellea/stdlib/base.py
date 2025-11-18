@@ -186,6 +186,35 @@ def get_images_from_component(c: Component) -> None | list[ImageBlock]:
         return None
 
 
+# TODO: Add support for passing in docs as model options.
+class Document(Component):
+    """Documents should typically be used in a Message object."""
+
+    def __init__(self, text: str, title: str | None = None, doc_id: str | None = None):
+        """Create a document object. Should typically be used as a list in the `_docs` field of Message."""
+        self.text = text
+        self.title = title
+        self.doc_id = doc_id
+
+    def parts(self) -> list[Component | CBlock]:
+        """The set of all the constituent parts of the `Component`."""
+        raise NotImplementedError("parts isn't implemented by default")
+
+    def format_for_llm(self) -> str:
+        """Formats the `Document` into a string.
+
+        Returns: a string
+        """
+        doc = ""
+        if self.doc_id is not None:
+            doc += f"document ID '{self.doc_id}': "
+        if self.title is not None:
+            doc += f"'{self.title}': "
+        doc += f"{self.text}"
+
+        return doc
+
+
 class GenerateType(enum.Enum):
     """Used to track what functions can be used to extract a value from a ModelOutputThunk."""
 

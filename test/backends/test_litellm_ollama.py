@@ -8,6 +8,10 @@ from mellea.backends.litellm import LiteLLMBackend
 from mellea.stdlib.base import CBlock, SimpleContext
 from mellea.stdlib.chat import Message
 from mellea.stdlib.sampling import RejectionSamplingStrategy
+from mellea.backends import model_ids
+
+
+_MODEL_ID = f"ollama_chat/{model_ids.IBM_GRANITE_4_MICRO_3B.ollama_name}"
 
 
 @pytest.fixture(scope="function")
@@ -22,12 +26,12 @@ def backend(gh_run: int):
             url = url.replace("127.0.0.1", "http://localhost")
 
         return LiteLLMBackend(
-            model_id="ollama_chat/llama3.2:1b",
+            model_id=_MODEL_ID,
             base_url=url,
             model_options={"api_base": url},
         )
     else:
-        return LiteLLMBackend()
+        return LiteLLMBackend(model_id=_MODEL_ID)
 
 
 @pytest.fixture(scope="function")
@@ -106,9 +110,13 @@ def test_litellm_ollama_instruct_options(session):
     model_options = {
         ModelOption.SEED: 123,
         ModelOption.TEMPERATURE: 0.5,
-        ModelOption.THINKING: True,
         ModelOption.MAX_NEW_TOKENS: 100,
-        "reasoning_effort": True,
+        
+        # Ollama thinking controls currently broken on Granite; see 
+        # https://github.com/ollama/ollama/issues/10983
+        # TODO: Re-enable when this upstream bug gets fixed.
+        #ModelOption.THINKING: True,
+        #"reasoning_effort": True,
         "homer_simpson": "option should be kicked out",
     }
 
@@ -136,13 +144,29 @@ def test_gen_slot(session):
     # should yield to true - but, of course, is model dependent
     assert h is True
 
+async def test_generate_from_raw(session):
+    prompts = [
+        "what is 1+1?",
+        "what is 2+2?",
+        "what is 3+3?",
+        "what is 4+4?",
+        "what is 4+2+2?",
+    ]
+
+    results = await session.backend.generate_from_raw(
+        actions=[CBlock(value=prompt) for prompt in prompts], ctx=session.ctx
+    )
+
+    assert len(results) == 1, "ollama doesn't support batching; litellm should send a single message containing all prompts"
+    assert results[0].value is not None
+
 
 async def test_async_parallel_requests(session):
     model_opts = {ModelOption.STREAM: True}
-    mot1, _ = session.backend.generate_from_context(
+    mot1, _ = await session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext(), model_options=model_opts
     )
-    mot2, _ = session.backend.generate_from_context(
+    mot2, _ = await session.backend.generate_from_context(
         CBlock("Say Goodbye!"), SimpleContext(), model_options=model_opts
     )
 
@@ -173,7 +197,7 @@ async def test_async_parallel_requests(session):
 
 
 async def test_async_avalue(session):
-    mot1, _ = session.backend.generate_from_context(
+    mot1, _ = await session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext()
     )
     m1_final_val = await mot1.avalue()
