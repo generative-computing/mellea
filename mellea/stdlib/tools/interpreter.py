@@ -1,4 +1,5 @@
-""" Code interpreter tool. """
+"""Code interpreter tool."""
+
 import ast
 import subprocess
 import sys
@@ -144,7 +145,7 @@ class UnsafeEnvironment(ExecutionEnvironment):
                 stdout=None,
                 stderr=None,
                 skipped=True,
-                skip_message="Execution timed out."
+                skip_message="Execution timed out.",
             )
         except Exception as e:
             return ExecutionResult(
@@ -152,7 +153,7 @@ class UnsafeEnvironment(ExecutionEnvironment):
                 stdout=None,
                 stderr=None,
                 skipped=True,
-                skip_message=f"Exception encountered in Mellea process (*not* the code interpreter process) when trying to run code_interpreter: {e!s}"
+                skip_message=f"Exception encountered in Mellea process (*not* the code interpreter process) when trying to run code_interpreter: {e!s}",
             )
         finally:
             try:

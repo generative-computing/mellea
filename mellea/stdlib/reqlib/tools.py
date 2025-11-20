@@ -50,7 +50,7 @@ def tool_arg_validator(
     check_only: bool = False,
 ) -> Requirement:
     """A requirement that passes only if `validation_fn` returns a True value for the *value* of the `arg_name` argument to `tool_name`.
-    
+
     If `tool_name` is not specified, then this requirement is enforced for *every* tool that
 
     Args:
