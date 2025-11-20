@@ -12,7 +12,12 @@ from typing import Any
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import Context
 from mellea.stdlib.requirement import Requirement, ValidationResult
-from mellea.stdlib.tools.interpreter import LLMSandboxEnvironment, UnsafeEnvironment, ExecutionEnvironment, StaticAnalysisEnvironment
+from mellea.stdlib.tools.interpreter import (
+    ExecutionEnvironment,
+    LLMSandboxEnvironment,
+    StaticAnalysisEnvironment,
+    UnsafeEnvironment,
+)
 
 logger = FancyLogger.get_logger()
 
@@ -138,7 +143,10 @@ def _python_executes_without_error(
 
     result = environment.execute(code, timeout)
     return ValidationResult(
-        result=result.success, reason=result.stdout if result.success else result.stderr # TODO should we pass back both?
+        result=result.success,
+        reason=result.stdout
+        if result.success
+        else result.stderr,  # TODO should we pass back both?
     )
 
 

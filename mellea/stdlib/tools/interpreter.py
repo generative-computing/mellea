@@ -1,15 +1,15 @@
-from dataclasses import dataclass
-from abc import ABC, abstractmethod
 import ast
-import tempfile
 import subprocess
 import sys
+import tempfile
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import Context
 from mellea.stdlib.requirement import Requirement, ValidationResult
-from typing import Any
-
 
 logger = FancyLogger.get_logger()
 
@@ -26,8 +26,9 @@ class ExecutionResult:
 
     We also use the `ExecutionResult` object to communicate the result of static and dynamic analyses. Those are passed back
     using the `analysis_result` field.
-    
-    TODO: should we also be trying to pass back the value of the final expression evaluated, or the value of locals() and globals()?"""
+
+    TODO: should we also be trying to pass back the value of the final expression evaluated, or the value of locals() and globals()?
+    """
 
     success: bool
 
@@ -42,7 +43,7 @@ class ExecutionResult:
     skip_message: str | None = None
 
     """ Used for returning results from static analyses. """
-    analysis_result : Any | None = None
+    analysis_result: Any | None = None
 
 
 class ExecutionEnvironment(ABC):
@@ -69,7 +70,14 @@ class StaticAnalysisEnvironment(ExecutionEnvironment):
         try:
             parse_tree = ast.parse(code)
         except SyntaxError as e:
-            return ExecutionResult(success=False, error=str(e))
+            return ExecutionResult(
+                success=False,
+                stdout=None,
+                stderr=None,
+                skipped=True,
+                skip_message="Parse failed.",
+                analysis_result=e,
+            )
 
         if self.allowed_imports:
             unauthorized = _get_unauthorized_imports(code, self.allowed_imports)
@@ -85,7 +93,7 @@ class StaticAnalysisEnvironment(ExecutionEnvironment):
             stderr=None,
             skipped=True,
             skip_message="The static analysis execution environment does not execute code. To execute code, use one of the other execution environments.",
-            analysis_result=parse_tree
+            analysis_result=parse_tree,
         )
 
 
@@ -118,7 +126,11 @@ class UnsafeEnvironment(ExecutionEnvironment):
                 text=True,
                 timeout=timeout,
             )
-            return ExecutionResult(success=result.returncode == 0, stdout=result.stdout.strip(), stderr=result.stderr.strip())
+            return ExecutionResult(
+                success=result.returncode == 0,
+                stdout=result.stdout.strip(),
+                stderr=result.stderr.strip(),
+            )
         except subprocess.TimeoutExpired:
             return ExecutionResult(
                 success=False, error=f"Execution timed out after {timeout} seconds"
@@ -168,15 +180,15 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
                 return ExecutionResult(
                     success=result.exit_code == 0,
                     stdout=result.stdout.strip(),
-                    stderr=result.stderr.strip()
+                    stderr=result.stderr.strip(),
                 )
         except Exception as e:
             return ExecutionResult(
-                success=False, 
+                success=False,
                 stdout=None,
                 stderr=None,
-                skipped=True, 
-                skip_message=f"Sandbox execution error: {e!s}"
+                skipped=True,
+                skip_message=f"Sandbox execution error: {e!s}",
             )
 
 
@@ -215,7 +227,7 @@ def _check_allowed_imports(code: str, allowed_imports: list[str]) -> bool:
 
 def code_interpreter(code: str) -> ExecutionResult:
     """Executes python code.
-    
+
     Args:
         code: The Python code to execute.
     """
@@ -225,7 +237,7 @@ def code_interpreter(code: str) -> ExecutionResult:
 
 def local_code_interpreter(code: str) -> ExecutionResult:
     """Executes python code in the cwd
-    
+
     Args:
         code: The Python code to execute.
     """
