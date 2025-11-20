@@ -1,3 +1,5 @@
+"""Requirements for tool-use workflows."""
+
 from collections.abc import Callable
 from typing import Optional
 
@@ -54,6 +56,7 @@ def tool_arg_validator(
         tool_name: The (optional) tool name for .
         arg_name: The argument to check.
         validation_fn: A validation function for validating the value of the `arg_name` argument.
+        check_only: propagates the `check_only` flag to the requirement.
 
     Todo:
         1. should this be a requirement?

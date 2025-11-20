@@ -84,7 +84,10 @@ class StaticAnalysisEnvironment(ExecutionEnvironment):
             if unauthorized:
                 return ExecutionResult(
                     success=False,
-                    error=f"Unauthorized imports detected: {', '.join(unauthorized)}",
+                    stdout=None,
+                    stderr=None,
+                    skipped=True,
+                    skip_message=f"Unauthorized imports detected: {', '.join(unauthorized)}",
                 )
 
         return ExecutionResult(
@@ -107,7 +110,10 @@ class UnsafeEnvironment(ExecutionEnvironment):
             if unauthorized:
                 return ExecutionResult(
                     success=False,
-                    error=f"Unauthorized imports detected: {', '.join(unauthorized)}",
+                    stdout=None,
+                    stderr=None,
+                    skipped=True,
+                    skip_message=f"Unauthorized imports detected: {', '.join(unauthorized)}",
                 )
 
         return self._execute_subprocess(code, timeout)
@@ -236,7 +242,7 @@ def code_interpreter(code: str) -> ExecutionResult:
 
 
 def local_code_interpreter(code: str) -> ExecutionResult:
-    """Executes python code in the cwd
+    """Executes python code in the cwd.
 
     Args:
         code: The Python code to execute.
