@@ -69,7 +69,6 @@ def tool_arg_validator(
 
     def _validate(ctx: Context):
         output = ctx.last_output()
-
         assert output is not None
 
         if output.tool_calls is None:
@@ -98,7 +97,7 @@ def tool_arg_validator(
                     reason=f"Valiudation did not pass for {tool_name}.{arg_name}. Arg value: {arg_value}. Argument validation result: {validate_result}",
                 )
         else:
-            for tool in ctx.last_output().tool_calls.keys():
+            for tool in output.tool_calls.keys():
                 if arg_name in output.tool_calls[tool].args:
                     arg_value = output.tool_calls[tool].args[arg_name]
                     validate_result = validation_fn(arg_value)
