@@ -26,6 +26,8 @@ def uses_tool(tool_name: str | Callable, check_only=False):
     
     def _validate(ctx: Context):
         output = ctx.last_output()
+        if output.tool_calls is None:
+            return ValidationResult(result=False, reason="There were no tool calls.")
         return ValidationResult(result=tool_name in output.tool_calls)
     
     return Requirement(
