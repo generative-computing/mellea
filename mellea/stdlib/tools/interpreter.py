@@ -47,6 +47,25 @@ class ExecutionResult:
     """ Used for returning results from static analyses. """
     analysis_result: Any | None = None
 
+    def to_validationresult_reason(self):
+        """Maps an ExecutionResult to a ValidationResult reason.
+
+        TODO: Downstream use of this method is really hacky. A far better solution is for `ExecutionResult` to implement the `ValidationResult` interface.
+        """
+        assert self.skip_message is not None or (
+            self.stderr is not None and self.stdout is not None
+        ), (
+            "Every ExecutionResult should have either a skip_message or a stdout/stderr stream."
+        )
+        if self.skip_message:
+            reason = self.skip_message
+        else:
+            if self.success:
+                reason = self.stdout
+            else:
+                reason = self.stderr
+        return reason
+
 
 class ExecutionEnvironment(ABC):
     """Abstract environment for executing Python code."""
@@ -97,7 +116,7 @@ class StaticAnalysisEnvironment(ExecutionEnvironment):
             stdout=None,
             stderr=None,
             skipped=True,
-            skip_message="The static analysis execution environment does not execute code. To execute code, use one of the other execution environments.",
+            skip_message="Code parses successful; the parse result is in the analysis_result field of the ExecutionResult object. The static analysis execution environment does not execute code. To execute code, use one of the other execution environments.",
             analysis_result=parse_tree,
         )
 
