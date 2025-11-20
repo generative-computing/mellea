@@ -69,7 +69,14 @@ def tool_arg_validator(
 
     def _validate(ctx: Context):
         output = ctx.last_output()
+        
         assert output is not None
+
+        if output.tool_calls is None:
+            return ValidationResult(
+                result=False, reason=f"Expected {tool_name} to be called but no tools were called."
+            )
+        
         if tool_name:
             if tool_name not in output.tool_calls:
                 return ValidationResult(
