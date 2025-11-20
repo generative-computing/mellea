@@ -149,6 +149,35 @@ def get_images_from_component(c: Component) -> None | list[ImageBlock]:
         return None
 
 
+# TODO: Add support for passing in docs as model options.
+class Document(Component):
+    """Documents should typically be used in a Message object."""
+
+    def __init__(self, text: str, title: str | None = None, doc_id: str | None = None):
+        """Create a document object. Should typically be used as a list in the `_docs` field of Message."""
+        self.text = text
+        self.title = title
+        self.doc_id = doc_id
+
+    def parts(self) -> list[Component | CBlock]:
+        """The set of all the constituent parts of the `Component`."""
+        raise NotImplementedError("parts isn't implemented by default")
+
+    def format_for_llm(self) -> str:
+        """Formats the `Document` into a string.
+
+        Returns: a string
+        """
+        doc = ""
+        if self.doc_id is not None:
+            doc += f"document ID '{self.doc_id}': "
+        if self.title is not None:
+            doc += f"'{self.title}': "
+        doc += f"{self.text}"
+
+        return doc
+
+
 class GenerateType(enum.Enum):
     """Used to track what functions can be used to extract a value from a ModelOutputThunk."""
 
@@ -321,6 +350,55 @@ class ModelOutputThunk(CBlock):
         Differs from CBlock because `._meta` can be very large for ModelOutputThunks.
         """
         return f"ModelOutputThunk({self.value})"
+
+    def __copy__(self):
+        """Returns a shallow copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generating."""
+        copied = ModelOutputThunk(
+            self._underlying_value, self._meta, self.parsed_repr, self.tool_calls
+        )
+
+        # Check if the parsed_repr needs to be changed. A ModelOutputThunk's parsed_repr can point to
+        # itself if the parsing didn't result in a new representation. It makes sense to update the
+        # parsed_repr to the copied ModelOutputThunk in that case.
+        if self.parsed_repr is self:
+            copied.parsed_repr = copied
+
+        copied._computed = self._computed
+        copied._thinking = self._thinking
+        copied._action = self._action
+        copied._context = self._context
+        copied._generate_log = self._generate_log
+        copied._model_options = self._model_options
+        return copied
+
+    def __deepcopy__(self, memo):
+        """Returns a deep copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generation. Similar to __copy__ but creates deepcopies of _meta, parsed_repr, and most other fields that are objects."""
+        # Use __init__ to initialize all fields. Modify the fields that need to be copied/deepcopied below.
+        deepcopied = ModelOutputThunk(self._underlying_value)
+        memo[id(self)] = deepcopied
+
+        # TODO: We can tweak what gets deepcopied here. ModelOutputThunks should be immutable (unless generating),
+        # so this __deepcopy__ operation should be okay if it needs to be changed to be a shallow copy.
+
+        # Check if the parsed_repr needs to be changed. A ModelOutputThunk's parsed_repr can point to
+        # itself if the parsing didn't result in a new representation. It makes sense to update the
+        # parsed_repr to the deepcopied ModelOutputThunk in that case.
+        if self.parsed_repr is self:
+            deepcopied.parsed_repr = deepcopied
+        else:
+            deepcopied.parsed_repr = deepcopy(self.parsed_repr)
+
+        deepcopied._meta = deepcopy(self._meta)
+        deepcopied.tool_calls = deepcopy(self.tool_calls)
+        deepcopied._computed = self._computed
+        deepcopied._thinking = self._thinking
+        deepcopied._action = deepcopy(self._action)
+        deepcopied._context = copy(
+            self._context
+        )  # The items in a context should be immutable.
+        deepcopied._generate_log = copy(self._generate_log)
+        deepcopied._model_options = copy(self._model_options)
+        return deepcopied
 
 
 def blockify(s: str | CBlock | Component) -> CBlock | Component:

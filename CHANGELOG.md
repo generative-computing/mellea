@@ -1,3 +1,48 @@
+## [v0.2.0](https://github.com/generative-computing/mellea/releases/tag/v0.2.0) - 2025-11-19
+
+### Feature
+
+* Change backend functions to use async; add generate_from_raw ([`16b8aea`](https://github.com/generative-computing/mellea/commit/16b8aea1ab4fc18428adafb2c6106314d986c537))
+* Updates for intrinsics support ([#227](https://github.com/generative-computing/mellea/issues/227)) ([`52953a5`](https://github.com/generative-computing/mellea/commit/52953a507729e8683d8b027d7c1e6d70b2356955))
+* Add requirements and preconditions to gen slots ([#226](https://github.com/generative-computing/mellea/issues/226)) ([`f73d8e2`](https://github.com/generative-computing/mellea/commit/f73d8e23c57146b44e8b552f5e30315e353ff592))
+* MelleaSession.register for functional interface and MelleaSession.powerup for dynamic mixin (register all methods in a class) ([#224](https://github.com/generative-computing/mellea/issues/224)) ([`662cfcc`](https://github.com/generative-computing/mellea/commit/662cfcc99c365411c7dcee0d55fcd0cba21bd4b8))
+* Add secure Python code execution with llm-sandbox support ([#217](https://github.com/generative-computing/mellea/issues/217)) ([`9d12458`](https://github.com/generative-computing/mellea/commit/9d12458432db3c1172d79ffdcbfae50f2bf8b402))
+* Adds think budget-forcing ([#107](https://github.com/generative-computing/mellea/issues/107)) ([`a2e29e6`](https://github.com/generative-computing/mellea/commit/a2e29e633b9f470d3992335becb8231dc57d0d69))
+* Making generate_from_raw public ([#219](https://github.com/generative-computing/mellea/issues/219)) ([`7eae224`](https://github.com/generative-computing/mellea/commit/7eae2244763a4349e202e6b87502d23e111ea07e))
+* Conda/Mamba-based installation script ([#138](https://github.com/generative-computing/mellea/issues/138)) ([`6aea9dc`](https://github.com/generative-computing/mellea/commit/6aea9dc85b0147a22ff5a5553a75d9179958ce6e))
+* Adds a vllm backend ([#122](https://github.com/generative-computing/mellea/issues/122)) ([`21908e5`](https://github.com/generative-computing/mellea/commit/21908e5bbc6bfd3bfd6f84953cefb3f6a56fccf2))
+* Add the ability to run examples with pytest ([#198](https://github.com/generative-computing/mellea/issues/198)) ([`e30afe6`](https://github.com/generative-computing/mellea/commit/e30afe6148d68b6ef1d6aa3417823c7a51ff0743))
+* Ollama generate_from_raw uses existing event loop ([#204](https://github.com/generative-computing/mellea/issues/204)) ([`36a069f`](https://github.com/generative-computing/mellea/commit/36a069fb6f9912a25c5c8aa51a5fe46ce2e945d3))
+
+### Fix
+
+* Vllm format issues ([`abbde23`](https://github.com/generative-computing/mellea/commit/abbde236d4d5900a3717d4a6af4759743dcd21d9))
+* Some minor fixes ([#223](https://github.com/generative-computing/mellea/issues/223)) ([`7fa0891`](https://github.com/generative-computing/mellea/commit/7fa08915573ee696d230dffef5532be8b7d3b7e3))
+* Watsonx self._project_id not getting set ([#220](https://github.com/generative-computing/mellea/issues/220)) ([`10f6ffa`](https://github.com/generative-computing/mellea/commit/10f6ffa35ea089b2396d184b18a1efbac75b94a7))
+* Decomp subtask regex ([#218](https://github.com/generative-computing/mellea/issues/218)) ([`5ac34be`](https://github.com/generative-computing/mellea/commit/5ac34be51ee1d14678888d53c6374810a7ed5871))
+
+### Documentation
+
+* Adding pii m serve example ([#215](https://github.com/generative-computing/mellea/issues/215)) ([`54f13f4`](https://github.com/generative-computing/mellea/commit/54f13f4c0314ff21189a4a06051dfea84b5420d1))
+
+## [v0.1.3](https://github.com/generative-computing/mellea/releases/tag/v0.1.3) - 2025-10-22
+
+### Feature
+
+* Decompose cli tool enhancements & new prompt_modules ([#170](https://github.com/generative-computing/mellea/issues/170)) ([`b8fc8e1`](https://github.com/generative-computing/mellea/commit/b8fc8e1bd9478d87c6a9c5cf5c0cca751f13bd11))
+* Add async functions ([#169](https://github.com/generative-computing/mellea/issues/169)) ([`689e1a9`](https://github.com/generative-computing/mellea/commit/689e1a942efab6cb1d7840f6bdbd96d579bdd684))
+* Add Granite Guardian 3.3 8B with updated examples function call validation and repair with reason. ([#167](https://github.com/generative-computing/mellea/issues/167)) ([`517e9c5`](https://github.com/generative-computing/mellea/commit/517e9c5fb93cba0b5f5a69278806fc0eda897785))
+* Majority voting sampling strategy ([#142](https://github.com/generative-computing/mellea/issues/142)) ([`36eaca4`](https://github.com/generative-computing/mellea/commit/36eaca482957353ba505d494f7be32c5226de651))
+
+### Fix
+
+* Fix vllm install script ([#185](https://github.com/generative-computing/mellea/issues/185)) ([`abcf622`](https://github.com/generative-computing/mellea/commit/abcf622347bfbb3c5d97c74a2624bf8f051f4136))
+* Watsonx and litellm parameter filtering ([#187](https://github.com/generative-computing/mellea/issues/187)) ([`793844c`](https://github.com/generative-computing/mellea/commit/793844c44ed091f4c6abae1cc711e3746a960ef4))
+* Pin trl to version 0.19.1 to avoid deprecation ([#202](https://github.com/generative-computing/mellea/issues/202)) ([`9948907`](https://github.com/generative-computing/mellea/commit/9948907303774494fee6286d482dd10525121ba2))
+* Rename format argument in internal methods for better mypiability ([#172](https://github.com/generative-computing/mellea/issues/172)) ([`7a6f780`](https://github.com/generative-computing/mellea/commit/7a6f780bdd71db0a7e0a1e78dfc78dcc4e4e5d93))
+* Async overhaul; create global event loop; add client cache ([#186](https://github.com/generative-computing/mellea/issues/186)) ([`1e236dd`](https://github.com/generative-computing/mellea/commit/1e236dd15bd426ed31f148ccdca4c63e43468fd0))
+* Update readme and other places with granite model and tweaks ([#184](https://github.com/generative-computing/mellea/issues/184)) ([`519a35a`](https://github.com/generative-computing/mellea/commit/519a35a7bb8a2547e90cf04fd5e70a3f74d9fc22))
+
 ## [v0.1.2](https://github.com/generative-computing/mellea/releases/tag/v0.1.2) - 2025-10-03
 
 ### Feature

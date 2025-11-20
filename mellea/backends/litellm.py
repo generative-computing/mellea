@@ -22,7 +22,7 @@ from mellea.backends.tools import (
     convert_tools_to_json,
 )
 from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import send_to_queue
+from mellea.helpers.async_helpers import get_current_event_loop, send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.helpers.openai_compatible_helpers import (
     chat_completion_delta_merge,
@@ -40,13 +40,16 @@ from mellea.stdlib.base import (
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement
 
+format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
+
 
 class LiteLLMBackend(FormatterBackend):
     """A generic LiteLLM compatible backend."""
 
     def __init__(
         self,
-        model_id: str = "ollama/" + str(model_ids.IBM_GRANITE_4_MICRO_3B.ollama_name),
+        model_id: str = "ollama_chat/"
+        + str(model_ids.IBM_GRANITE_4_MICRO_3B.ollama_name),
         formatter: Formatter | None = None,
         base_url: str | None = "http://localhost:11434",
         model_options: dict | None = None,
@@ -98,14 +101,16 @@ class LiteLLMBackend(FormatterBackend):
         # These options should almost always be a subset of those specified in the `to_mellea_model_opts_map`.
         # Usually, values that are intentionally extracted while prepping for the backend generate call
         # will be omitted here so that they will be removed when model_options are processed
-        # for the call to the model.
+        # for the call to the model. For LiteLLM, this dict might change slightly depending on the provider.
         self.from_mellea_model_opts_map = {
             ModelOption.SEED: "seed",
             ModelOption.MAX_NEW_TOKENS: "max_completion_tokens",
             ModelOption.STREAM: "stream",
         }
 
-    def generate_from_context(
+        self._past_event_loops: set[int] = set()
+
+    async def generate_from_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -118,10 +123,10 @@ class LiteLLMBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
-        mot = self._generate_from_chat_context_standard(
+        mot = await self._generate_from_chat_context_standard(
             action,
             ctx,
-            format=format,
+            _format=format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
@@ -172,15 +177,9 @@ class LiteLLMBackend(FormatterBackend):
         Returns:
             a new dict
         """
-        backend_specific = ModelOption.replace_keys(
-            model_options, self.from_mellea_model_opts_map
-        )
-        backend_specific = ModelOption.remove_special_keys(backend_specific)
-
         # We set `drop_params=True` which will drop non-supported openai params; check for non-openai
         # params that might cause errors and log which openai params aren't supported here.
         # See https://docs.litellm.ai/docs/completion/input.
-        # standard_openai_subset = litellm.get_standard_openai_params(backend_specific)
         supported_params_list = litellm.litellm_core_utils.get_supported_openai_params.get_supported_openai_params(
             self._model_id
         )
@@ -188,32 +187,56 @@ class LiteLLMBackend(FormatterBackend):
             set(supported_params_list) if supported_params_list is not None else set()
         )
 
-        # unknown_keys = []  # keys that are unknown to litellm
-        unsupported_openai_params = []  # openai params that are known to litellm but not supported for this model/provider
+        # LiteLLM specific remappings (typically based on provider). There's a few cases where the provider accepts
+        # different parameters than LiteLLM says it does. Here's a few rules that help in those scenarios.
+        model_opts_remapping = self.from_mellea_model_opts_map.copy()
+        if (
+            "max_completion_tokens" not in supported_params
+            and "max_tokens" in supported_params
+        ):
+            # Scenario hit by Watsonx. LiteLLM believes Watsonx doesn't accept "max_completion_tokens" even though
+            # OpenAI compatible endpoints should accept both (and Watsonx does accept both).
+            model_opts_remapping[ModelOption.MAX_NEW_TOKENS] = "max_tokens"
+
+        backend_specific = ModelOption.replace_keys(model_options, model_opts_remapping)
+        backend_specific = ModelOption.remove_special_keys(backend_specific)
+
+        # Since LiteLLM has many different providers, we add some additional parameter logging here.
+        # There's two sets of parameters we have to look at:
+        #   - unsupported_openai_params: standard OpenAI parameters that LiteLLM will automatically drop for us when `drop_params=True` if the provider doesn't support them.
+        #   - unknown_keys: parameters that LiteLLM doesn't know about, aren't standard OpenAI parameters, and might be used by the provider. We don't drop these.
+        # We want to flag both for the end user.
+        standard_openai_subset = litellm.get_standard_openai_params(backend_specific)
+        unknown_keys = []  # Keys that are unknown to litellm.
+        unsupported_openai_params = []  # OpenAI params that are known to litellm but not supported for this model/provider.
         for key in backend_specific.keys():
             if key not in supported_params:
-                unsupported_openai_params.append(key)
+                if key in standard_openai_subset:
+                    # LiteLLM is pretty confident that this standard OpenAI parameter won't work.
+                    unsupported_openai_params.append(key)
+                else:
+                    # LiteLLM doesn't make any claims about this parameter; we won't drop it but we will keep track of it..
+                    unknown_keys.append(key)
 
-        # if len(unknown_keys) > 0:
-        #     FancyLogger.get_logger().warning(
-        #         f"litellm allows for unknown / non-openai input params; mellea won't validate the following params that may cause issues: {', '.join(unknown_keys)}"
-        #     )
+        if len(unknown_keys) > 0:
+            FancyLogger.get_logger().warning(
+                f"litellm allows for unknown / non-openai input params; mellea won't validate the following params that may cause issues: {', '.join(unknown_keys)}"
+            )
 
         if len(unsupported_openai_params) > 0:
             FancyLogger.get_logger().warning(
-                f"litellm will automatically drop the following openai keys that aren't supported by the current model/provider: {', '.join(unsupported_openai_params)}"
+                f"litellm may drop the following openai keys that it doesn't seem to recognize as being supported by the current model/provider: {', '.join(unsupported_openai_params)}"
+                "\nThere are sometimes false positives here."
             )
-            for key in unsupported_openai_params:
-                del backend_specific[key]
 
         return backend_specific
 
-    def _generate_from_chat_context_standard(
+    async def _generate_from_chat_context_standard(
         self,
         action: Component | CBlock,
         ctx: Context,
         *,
-        format: type[BaseModelSubclass]
+        _format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
@@ -247,17 +270,16 @@ class LiteLLMBackend(FormatterBackend):
             [OpenAIBackend.message_to_openai_message(m) for m in messages]
         )
 
-        if format is not None:
-            response_format = {
+        extra_params: dict[str, Any] = {}
+        if _format is not None:
+            extra_params["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
-                    "name": format.__name__,
-                    "schema": format.model_json_schema(),
+                    "name": _format.__name__,
+                    "schema": _format.model_json_schema(),
                     "strict": True,
                 },
             }
-        else:
-            response_format = {"type": "text"}
 
         thinking = model_opts.get(ModelOption.THINKING, None)
         if type(thinking) is bool and thinking:
@@ -265,10 +287,15 @@ class LiteLLMBackend(FormatterBackend):
             thinking = "medium"
 
         # Append tool call information if applicable.
-        tools = self._extract_tools(action, format, model_opts, tool_calls, ctx)
+        tools = self._extract_tools(action, _format, model_opts, tool_calls, ctx)
         formatted_tools = convert_tools_to_json(tools) if len(tools) > 0 else None
 
         model_specific_options = self._make_backend_specific_and_remove(model_opts)
+
+        if self._has_potential_event_loop_errors():
+            FancyLogger().get_logger().warning(
+                "There is a known bug with litellm. This generation call may fail. If it does, you should ensure that you are either running only synchronous Mellea functions or running async Mellea functions from one asyncio.run() call."
+            )
 
         chat_response: Coroutine[
             Any, Any, litellm.ModelResponse | litellm.ModelResponseStream  # type: ignore
@@ -276,9 +303,9 @@ class LiteLLMBackend(FormatterBackend):
             model=self._model_id,
             messages=conversation,
             tools=formatted_tools,
-            response_format=response_format,
             reasoning_effort=thinking,  # type: ignore
             drop_params=True,  # See note in `_make_backend_specific_and_remove`.
+            **extra_params,
             **model_specific_options,
         )
 
@@ -295,7 +322,7 @@ class LiteLLMBackend(FormatterBackend):
             conversation=conversation,
             tools=tools,
             thinking=thinking,
-            format=format,
+            _format=_format,
         )
 
         try:
@@ -373,7 +400,7 @@ class LiteLLMBackend(FormatterBackend):
         conversation: list[dict],
         tools: dict[str, Callable],
         thinking,
-        format,
+        _format,
     ):
         """Called when generation is done."""
         # Reconstruct the chat_response from chunks if streamed.
@@ -418,10 +445,10 @@ class LiteLLMBackend(FormatterBackend):
         generate_log.date = datetime.datetime.now()
         generate_log.model_output = mot._meta["litellm_chat_response"]
         generate_log.extra = {
-            "format": format,
+            "format": _format,
             "tools_available": tools,
             "tools_called": mot.tool_calls,
-            "seed": thinking,
+            "thinking": thinking,
         }
         generate_log.action = mot._action
         generate_log.result = mot
@@ -429,11 +456,11 @@ class LiteLLMBackend(FormatterBackend):
 
     @staticmethod
     def _extract_tools(
-        action, format, model_opts, tool_calls, ctx
+        action, _format, model_opts, tool_calls, ctx
     ) -> dict[str, Callable]:
         tools: dict[str, Callable] = dict()
         if tool_calls:
-            if format:
+            if _format:
                 FancyLogger.get_logger().warning(
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
@@ -447,16 +474,83 @@ class LiteLLMBackend(FormatterBackend):
             FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
         return tools
 
-    def _generate_from_raw(
+    async def generate_from_raw(
         self,
         actions: list[Component | CBlock],
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
+        tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
-        raise NotImplementedError("This method is not implemented yet.")
+        extra_body = {}
+        if format is not None:
+            FancyLogger.get_logger().warning(
+                "The official OpenAI completion api does not accept response format / structured decoding; "
+                "it will be passed as an extra arg."
+            )
+
+            # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
+            extra_body["guided_json"] = format.model_json_schema()
+        if tool_calls:
+            FancyLogger.get_logger().warning(
+                "The completion endpoint does not support tool calling."
+            )
+
+        # We don't do anything fancy for model_opts with generate from raw; litellm has too many potential options depending on provider.
+        model_opts = self._simplify_and_merge(model_options)
+        model_specific_options = self._make_backend_specific_and_remove(model_opts)
+
+        if self._has_potential_event_loop_errors():
+            FancyLogger().get_logger().warning(
+                "There is a known bug with litellm. This generation call may fail. If it does, you should ensure that you are either running only synchronous Mellea functions or running async Mellea functions from one asyncio.run() call."
+            )
+
+        prompts = [self.formatter.print(action) for action in actions]
+
+        completion_response = await litellm.atext_completion(
+            model=self._model_id, prompt=prompts, **model_specific_options
+        )
+
+        # Necessary for type checker.
+        assert isinstance(completion_response, litellm.TextCompletionResponse)  # type: ignore
+
+        results = []
+        date = datetime.datetime.now()
+        responses = completion_response.choices
+        if len(responses) != len(prompts):
+            FancyLogger().get_logger().error(
+                "litellm appears to have sent your batch request as a single message; this typically happens with providers like ollama that don't support batching"
+            )
+
+        for res, action, prompt in zip(responses, actions, prompts):
+            output = ModelOutputThunk(res.text)  # type: ignore
+            output._context = None  # There is no context for generate_from_raw for now
+            output._action = action
+            output._model_options = model_opts
+            output._meta = {
+                "litellm_chat_response": res.model_dump(),
+                "usage": completion_response.usage.model_dump()
+                if completion_response.usage
+                else None,
+            }
+
+            self.formatter.parse(action, output)
+
+            generate_log = GenerateLog()
+            generate_log.prompt = prompt
+            generate_log.backend = f"litellm::{self.model_id!s}"
+            generate_log.model_options = model_opts
+            generate_log.date = date
+            generate_log.model_output = completion_response
+            generate_log.extra = {"seed": model_opts.get("seed", None)}
+            generate_log.action = action
+            output._generate_log = generate_log
+
+            results.append(output)
+
+        return results
 
     def _extract_model_tool_requests(
         self,
@@ -488,3 +582,24 @@ class LiteLLMBackend(FormatterBackend):
         if len(model_tool_calls) > 0:
             return model_tool_calls
         return None
+
+    def _has_potential_event_loop_errors(self) -> bool:
+        """In some cases litellm doesn't create a new async client. There doesn't appear to be any way for us to force that behavior. As a result, log a warning for known cases.
+
+        This whole function can be removed once the bug is fixed: https://github.com/BerriAI/litellm/issues/15294.
+        """
+        # Async clients are tied to event loops.
+        key = id(get_current_event_loop())
+
+        has_potential_issue = False
+        if (
+            len(self._past_event_loops) > 0
+            and key not in self._past_event_loops
+            and "watsonx/" in str(self.model_id)
+        ):
+            has_potential_issue = True
+
+        # Add this loop to the known set.
+        self._past_event_loops.add(key)
+
+        return has_potential_issue

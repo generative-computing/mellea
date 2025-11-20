@@ -35,8 +35,10 @@ def m_session(gh_run):
 def pil_image():
     width = 200
     height = 150
-    random_pixel_data = np.random.randint(0, 256, size=(height, width, 3), dtype=np.uint8)
-    random_image = Image.fromarray(random_pixel_data, 'RGB')
+    random_pixel_data = np.random.randint(
+        0, 256, size=(height, width, 3), dtype=np.uint8
+    )
+    random_image = Image.fromarray(random_pixel_data, "RGB")
     yield random_image
     del random_image
 
@@ -59,11 +61,17 @@ def test_image_block_construction_from_pil(pil_image: Image.Image):
     assert ImageBlock.is_valid_base64_png(str(image_block))
 
 
-def test_image_block_in_instruction(m_session: MelleaSession, pil_image: Image.Image, gh_run: int):
+def test_image_block_in_instruction(
+    m_session: MelleaSession, pil_image: Image.Image, gh_run: int
+):
     image_block = ImageBlock.from_pil_image(pil_image)
 
     # Set strategy=None here since we are directly comparing the object and sampling strategies tend to do a deepcopy.
-    instr = m_session.instruct("Is this image mainly blue? Answer yes or no.", images=[image_block], strategy=None)
+    instr = m_session.instruct(
+        "Is this image mainly blue? Answer yes or no.",
+        images=[image_block],
+        strategy=None,
+    )
     assert isinstance(instr, ModelOutputThunk)
 
     # if not on GH
@@ -105,8 +113,12 @@ def test_image_block_in_instruction(m_session: MelleaSession, pil_image: Image.I
     assert content_img == str(image_block)
 
 
-def test_image_block_in_chat(m_session: MelleaSession, pil_image: Image.Image, gh_run: int):
-    ct = m_session.chat("Is this image mainly blue? Answer yes or no.", images=[pil_image])
+def test_image_block_in_chat(
+    m_session: MelleaSession, pil_image: Image.Image, gh_run: int
+):
+    ct = m_session.chat(
+        "Is this image mainly blue? Answer yes or no.", images=[pil_image]
+    )
     assert isinstance(ct, Message)
 
     # if not on GH

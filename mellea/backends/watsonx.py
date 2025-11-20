@@ -7,6 +7,7 @@ import json
 import os
 import warnings
 from collections.abc import AsyncGenerator, Callable, Coroutine
+from dataclasses import fields
 from typing import Any
 
 from ibm_watsonx_ai import APIClient, Credentials
@@ -22,7 +23,11 @@ from mellea.backends.tools import (
     convert_tools_to_json,
 )
 from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import send_to_queue
+from mellea.helpers.async_helpers import (
+    ClientCache,
+    get_current_event_loop,
+    send_to_queue,
+)
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.helpers.openai_compatible_helpers import (
     chat_completion_delta_merge,
@@ -39,6 +44,8 @@ from mellea.stdlib.base import (
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement  # type: ignore
+
+format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
 class WatsonxAIBackend(FormatterBackend):
@@ -89,25 +96,25 @@ class WatsonxAIBackend(FormatterBackend):
             base_url = f"{os.environ.get('WATSONX_URL')}"
         if api_key is None:
             api_key = os.environ.get("WATSONX_API_KEY")
+
         if project_id is None:
-            self._project_id = os.environ.get("WATSONX_PROJECT_ID")
+            project_id = os.environ.get("WATSONX_PROJECT_ID")
+        self._project_id = project_id
 
         self._creds = Credentials(url=base_url, api_key=api_key)
-        _client = APIClient(credentials=self._creds)
-        self._model_inference = ModelInference(
-            model_id=self._get_watsonx_model_id(),
-            api_client=_client,
-            credentials=self._creds,
-            project_id=self._project_id,
-            params=self.model_options,
-            **kwargs,
-        )
+        self._kwargs = kwargs
+
+        self._client_cache = ClientCache(2)
+
+        # Call once to set up the model inference and prepopulate the cache.
+        _ = self._model
 
         # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
         # These are usually values that must be extracted before hand or that are common among backend providers.
         self.to_mellea_model_opts_map_chats = {
             "system": ModelOption.SYSTEM_PROMPT,
-            "max_tokens": ModelOption.MAX_NEW_TOKENS,
+            "max_tokens": ModelOption.MAX_NEW_TOKENS,  # Is being deprecated in favor of `max_completion_tokens.`
+            "max_completion_tokens": ModelOption.MAX_NEW_TOKENS,
             "tools": ModelOption.TOOLS,
             "stream": ModelOption.STREAM,
         }
@@ -117,7 +124,7 @@ class WatsonxAIBackend(FormatterBackend):
         # will be omitted here so that they will be removed when model_options are processed
         # for the call to the model.
         self.from_mellea_model_opts_map_chats = {
-            ModelOption.MAX_NEW_TOKENS: "max_tokens"
+            ModelOption.MAX_NEW_TOKENS: "max_completion_tokens"
         }
 
         # See notes above.
@@ -134,16 +141,22 @@ class WatsonxAIBackend(FormatterBackend):
 
     @property
     def _model(self) -> ModelInference:
-        """Watsonx's client gets tied to a specific event loop. Reset it here."""
-        _client = APIClient(credentials=self._creds)
-        self._model_inference = ModelInference(
-            model_id=self._get_watsonx_model_id(),
-            api_client=_client,
-            credentials=self._creds,
-            project_id=self._project_id,
-            params=self.model_options,
-        )
-        return self._model_inference
+        """Watsonx's client gets tied to a specific event loop. Reset it if needed here."""
+        key = id(get_current_event_loop())
+
+        _model_inference = self._client_cache.get(key)
+        if _model_inference is None:
+            _client = APIClient(credentials=self._creds)
+            _model_inference = ModelInference(
+                model_id=self._get_watsonx_model_id(),
+                api_client=_client,
+                credentials=self._creds,
+                project_id=self._project_id,
+                params=self.model_options,
+                **self._kwargs,
+            )
+            self._client_cache.put(key, _model_inference)
+        return _model_inference
 
     def _get_watsonx_model_id(self) -> str:
         """Gets the watsonx model id from the model_id that was provided in the constructor. Raises AssertionError if the ModelIdentifier does not provide a watsonx_name."""
@@ -159,7 +172,10 @@ class WatsonxAIBackend(FormatterBackend):
 
     def filter_chat_completions_kwargs(self, model_options: dict) -> dict:
         """Filter kwargs to only include valid watsonx chat.completions.create parameters."""
-        chat_params = TextChatParameters.get_sample_params().keys()
+        # TextChatParameters.get_sample_params().keys() can't be completely trusted. It doesn't always contain all
+        # all of the accepted keys. In version 1.3.39, max_tokens was removed even though it's still accepted.
+        # It's a dataclass so use the fields function to get the names.
+        chat_params = {field.name for field in fields(TextChatParameters)}
         return {k: v for k, v in model_options.items() if k in chat_params}
 
     def _simplify_and_merge(
@@ -220,7 +236,7 @@ class WatsonxAIBackend(FormatterBackend):
 
         return model_opts
 
-    def generate_from_context(
+    async def generate_from_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -233,21 +249,21 @@ class WatsonxAIBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The watsonx.ai backend only supports chat-like contexts."
         )
-        mot = self.generate_from_chat_context(
+        mot = await self.generate_from_chat_context(
             action,
             ctx,
-            format=format,
+            _format=format,
             model_options=model_options,
             tool_calls=tool_calls,
         )
         return mot, ctx.add(action).add(mot)
 
-    def generate_from_chat_context(
+    async def generate_from_chat_context(
         self,
         action: Component | CBlock,
         ctx: Context,
         *,
-        format: type[BaseModelSubclass]
+        _format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
@@ -278,12 +294,12 @@ class WatsonxAIBackend(FormatterBackend):
             conversation.append({"role": "system", "content": system_prompt})
         conversation.extend([{"role": m.role, "content": m.content} for m in messages])
 
-        if format is not None:
+        if _format is not None:
             model_opts["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
-                    "name": format.__name__,
-                    "schema": format.model_json_schema(),
+                    "name": _format.__name__,
+                    "schema": _format.model_json_schema(),
                     "strict": True,
                 },
             }
@@ -293,7 +309,7 @@ class WatsonxAIBackend(FormatterBackend):
         # Append tool call information if applicable.
         tools: dict[str, Callable] = {}
         if tool_calls:
-            if format:
+            if _format:
                 FancyLogger.get_logger().warning(
                     f"tool calling is superseded by format; will not call tools for request: {action}"
                 )
@@ -349,7 +365,7 @@ class WatsonxAIBackend(FormatterBackend):
             conversation=conversation,
             tools=tools,
             seed=model_opts.get(ModelOption.SEED, None),
-            format=format,
+            _format=_format,
         )
 
         try:
@@ -417,7 +433,7 @@ class WatsonxAIBackend(FormatterBackend):
         conversation: list[dict],
         tools: dict[str, Callable],
         seed,
-        format,
+        _format,
     ):
         """Called when generation is done."""
         # Reconstruct the chat_response from chunks if streamed.
@@ -455,7 +471,7 @@ class WatsonxAIBackend(FormatterBackend):
         generate_log.date = datetime.datetime.now()
         generate_log.model_output = mot._meta["oai_chat_response"]
         generate_log.extra = {
-            "format": format,
+            "format": _format,
             "tools_available": tools,
             "tools_called": mot.tool_calls,
             "seed": seed,
@@ -464,13 +480,14 @@ class WatsonxAIBackend(FormatterBackend):
         generate_log.action = mot._action
         mot._generate_log = generate_log
 
-    def _generate_from_raw(
+    async def generate_from_raw(
         self,
         actions: list[Component | CBlock],
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
+        tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generates a completion text. Gives the input provided to the model without templating."""
         if format is not None:
@@ -482,42 +499,49 @@ class WatsonxAIBackend(FormatterBackend):
 
         prompts = [self.formatter.print(action) for action in actions]
 
-        responses = self._model.generate(
+        responses = await asyncio.to_thread(
+            self._model.generate,
             prompt=prompts,
             params=self._make_backend_specific_and_remove(
                 model_opts, is_chat_context=False
             ),
         )
 
-        results = [
-            ModelOutputThunk(
-                value=response["results"][0]["generated_text"],
-                meta={"oai_completion_response": response["results"][0]},
-            )
-            for response in responses
-        ]
+        results = []
+        date = datetime.datetime.now()
 
-        for i, result in enumerate(results):
+        for i, response in enumerate(responses):
+            output = response["results"][0]
+            result = ModelOutputThunk(
+                value=output["generated_text"],
+                meta={
+                    "oai_completion_response": response["results"][0],
+                    "usage": {
+                        "prompt_tokens": output.get("input_token_count", 0),
+                        "completion_tokens": output.get("generated_token_count", 0),
+                        "total_tokens": output.get("input_token_count", 0)
+                        + output.get("generated_token_count", 0),
+                    },
+                },
+            )
+
             self.formatter.parse(actions[i], result)
 
-        if generate_logs is not None:
-            assert isinstance(generate_logs, list)
-            date = datetime.datetime.now()
+            generate_log = GenerateLog()
+            generate_log.prompt = prompts[i]
+            generate_log.backend = f"watsonx::{self.model_id!s}"
+            generate_log.model_options = model_opts
+            generate_log.date = date
+            generate_log.model_output = responses
+            generate_log.extra = {
+                "format": format,
+                "seed": model_opts.get(ModelOption.SEED, None),
+            }
+            generate_log.action = actions[i]
 
-            for i in range(len(prompts)):
-                generate_log = GenerateLog()
-                generate_log.prompt = prompts[i]
-                generate_log.backend = f"watsonx::{self.model_id!s}"
-                generate_log.model_options = model_opts
-                generate_log.date = date
-                generate_log.model_output = responses
-                generate_log.extra = {
-                    "format": format,
-                    "seed": model_opts.get(ModelOption.SEED, None),
-                }
-                generate_log.action = actions[i]
-                generate_log.result = results[i]
-                generate_logs.append(generate_log)
+            result._generate_log = generate_log
+
+            results.append(result)
 
         return results
 

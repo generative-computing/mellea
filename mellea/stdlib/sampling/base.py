@@ -5,9 +5,9 @@ from copy import deepcopy
 
 import tqdm
 
+import mellea.stdlib.functional as mfuncs
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib import funcs as mfuncs
 from mellea.stdlib.base import CBlock, ChatContext, Component, Context, ModelOutputThunk
 from mellea.stdlib.chat import Message
 from mellea.stdlib.instruction import Instruction
@@ -151,7 +151,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
             # run a generation pass
-            result, result_ctx = backend.generate_from_context(
+            result, result_ctx = await backend.generate_from_context(
                 next_action,
                 ctx=next_context,
                 format=format,
@@ -161,12 +161,12 @@ class BaseSamplingStrategy(SamplingStrategy):
             await result.avalue()
 
             # validation pass
-            val_scores_co = mfuncs._validate(
+            val_scores_co = mfuncs.avalidate(
                 reqs=reqs,
                 context=result_ctx,
                 backend=backend,
                 output=result,
-                format=format,
+                format=None,
                 model_options=model_options,
                 # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.
             )
@@ -327,15 +327,25 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
         """
         pa = past_actions[-1]
         if isinstance(pa, Instruction):
-            last_failed_reqs: list[Requirement] = [
-                s[0] for s in past_val[-1] if not s[1]
+            # Get failed requirements and their detailed validation reasons
+            failed_items = [
+                (req, val) for req, val in past_val[-1] if not val.as_bool()
             ]
-            last_failed_reqs_str = "* " + "\n* ".join(
-                [str(r.description) for r in last_failed_reqs]
+
+            # Build repair feedback using ValidationResult.reason when available
+            repair_lines = []
+            for req, validation in failed_items:
+                if validation.reason:
+                    repair_lines.append(f"* {validation.reason}")
+                else:
+                    # Fallback to requirement description if no reason
+                    repair_lines.append(f"* {req.description}")
+
+            repair_string = "The following requirements failed before:\n" + "\n".join(
+                repair_lines
             )
-            return pa.copy_and_repair(
-                repair_string=f"The following requirements failed before:\n{last_failed_reqs_str}"
-            ), old_ctx
+
+            return pa.copy_and_repair(repair_string=repair_string), old_ctx
         return pa, old_ctx
 
 

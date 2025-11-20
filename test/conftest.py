@@ -2,11 +2,6 @@ import os
 
 import pytest
 
-from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.ollama import OllamaModelBackend
-from mellea.backends.openai import OpenAIBackend
-from mellea.stdlib.session import MelleaSession
-
 
 @pytest.fixture(scope="session")
 def gh_run() -> int:
@@ -21,6 +16,6 @@ def pytest_runtest_setup(item):
     gh_run = int(os.environ.get("CICD", 0))
 
     if gh_run == 1:
-        pytest.xfail(
+        pytest.skip(
             reason="Skipping qualitative test: got env variable CICD == 1. Used only in gh workflows."
         )
