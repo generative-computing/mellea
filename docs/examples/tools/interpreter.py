@@ -1,0 +1,34 @@
+from mellea.stdlib.tools import code_interpreter, local_code_interpreter
+from mellea import start_session
+from mellea.backends.types import ModelOption
+
+m = start_session()
+
+# # First, let's see how the code interpreter function works without an LLM in the loop:
+# result = code_interpreter("print(1+1)")
+# print(result)
+
+# # Now let's ask the LLM to make a plot.
+# 
+# plot_output = m.instruct(
+#     description="Make a plot of y=x^2",
+#     model_options={
+#         ModelOption.TOOLS: [local_code_interpreter]
+#     }
+# )
+# print(plot_output)
+
+# Notice that the model did not actually generate a plot. Let's force tool use:
+
+from mellea.stdlib.reqlib.tools import uses_tool
+
+plot_output = m.instruct(
+    description="Make a plot of y=x^2",
+    requirements=[
+        uses_tool(local_code_interpreter)
+    ],
+    model_options={
+        ModelOption.TOOLS: [local_code_interpreter]
+    }
+)
+print(plot_output)

@@ -1,1 +1,1 @@
-from .code_interpreter import code_interpreter, local_code_interpreter
+from mellea.stdlib.tools.interpreter import code_interpreter, local_code_interpreter

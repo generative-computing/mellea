@@ -220,7 +220,7 @@ def code_interpreter(code: str) -> ExecutionResult:
         code: The Python code to execute.
     """
     exec_env = LLMSandboxEnvironment(allowed_imports=None)
-    exec_env.execute(code, 60)
+    return exec_env.execute(code, 60)
 
 
 def local_code_interpreter(code: str) -> ExecutionResult:
@@ -230,4 +230,4 @@ def local_code_interpreter(code: str) -> ExecutionResult:
         code: The Python code to execute.
     """
     exec_env = UnsafeEnvironment(allowed_imports=None)
-    exec_env.execute(code, 60)    
+    return exec_env.execute(code, 60)    
