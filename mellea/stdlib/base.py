@@ -654,14 +654,6 @@ class ModelToolCall:
     func: Callable
     args: Mapping[str, Any]
 
-    def call_func(self, timeout: float | None=None) -> Any:
-        """A helper function for calling the function/tool represented by this object.
-        
-            Args:
-                timeout: if set, the tool call will time-out and an exception will be thrown after `timeout` seconds."""
-        if timeout:
-            with multiprocessing.pool.ThreadPool() as pool:
-                result = pool.apply_async(self.func, kwds=self.args).get(timeout=timeout)
-                return result
-        else:
-            return self.func(**self.args)
+    def call_func(self) -> Any:
+        """A helper function for calling the function/tool represented by this object."""
+        return self.func(**self.args)
