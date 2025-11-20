@@ -1,40 +1,88 @@
 from __future__ import annotations
-from typing import List, Tuple
+import os
+from typing import List, Dict, Any # Changed to support dictionary returns
 import torch
 from sentence_transformers import SentenceTransformer, util
 from datasets import load_dataset
 
 class Retriever:
-    def __init__(self, dataset_name: str, model_name: str = "sentence-transformers/all-mpnet-base-v2"):
-        self.model: SentenceTransformer = SentenceTransformer(model_name)
+    """
+    A retriever class that efficiently searches a dataset using pre-computed embeddings.
+    It returns detailed information about each match, including its file path.
+    """
+    def __init__(
+        self,
+        dataset_name: str = "FrenzyMath/mathlib_informal_v4.19.0",
+        model_name: str = "sentence-transformers/all-mpnet-base-v2",
+        embedding_cache_path: str = "mathlib_embeddings.pt"
+    ):
+        if not os.path.exists(embedding_cache_path):
+            raise FileNotFoundError(
+                f"Embedding cache not found at '{embedding_cache_path}'. "
+                f"Please run the 'precompute_embeddings.py' script first."
+            )
+
+        if torch.backends.mps.is_available():
+            self.device = "mps"
+        elif torch.cuda.is_available():
+            self.device = "cuda"
+        else:
+            self.device = "cpu"
+        print(f"Using device: {self.device}")
+
+        self.model = SentenceTransformer(model_name, device=self.device)
         self.dataset = load_dataset(dataset_name)
 
-        # Assume your dataset has a text column and possibly precomputed embeddings
-        if "embedding" in self.dataset["train"].features:
-            self.embeddings: torch.tensor = torch.tensor(self.dataset["train"]["embedding"])
-        else:
-            texts: List[str] = self.dataset["train"]["informal_description"]
-            self.embeddings = self.model.encode(texts, convert_to_tensor=True, show_progress_bar=True)
+        print(f"Loading embeddings from cache: {embedding_cache_path}")
+        self.embeddings = torch.load(embedding_cache_path, map_location=self.device)
 
-    def search(self, query: str, k: int = 5) -> List[Tuple[str, float]]:
-        query_emb: torch.tensor = self.model.encode(query, convert_to_tensor=True)
-        cosine_scores: torch.tensor = util.cos_sim(query_emb, self.embeddings)[0]
+        print(f"Loaded {self.embeddings.shape[0]} embeddings.")
 
-        # Get top-k results
-        top_results = torch.topk(cosine_scores, k)
+    def search(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
+        """
+        Searches for the most similar documents to the query.
+
+        Args:
+            query (str): The search query.
+            k (int): The number of top results to return.
+
+        Returns:
+            List[Dict[str, Any]]: A list of dictionaries, where each dictionary
+                                  contains the name, score, file_path, and
+                                  start_line_no of a match.
+        """
+        query_emb = self.model.encode(query, convert_to_tensor=True, device=self.device)
+        cosine_scores = util.cos_sim(query_emb, self.embeddings)[0]
+
+        top_results = torch.topk(cosine_scores, k=k)
         top_indices = top_results.indices.tolist()
         top_scores = top_results.values.tolist()
 
-        results = [
-            (self.dataset["train"][i]["name"], float(top_scores[j]))
-            for j, i in enumerate(top_indices)
-        ]
+        results = []
+        for j, i in enumerate(top_indices):
+            item = self.dataset["train"][i]
+            results.append(item)
+
+        return results
+
+    def search_queries(self, queries: List[str], k: int = 5) -> List[Dict[str, Any]]:
+        results = []
+        for query_obj in queries:
+            results += self.search(query_obj, k)
         return results
 
 if __name__ == "__main__":
-    engine = Retriever("FrenzyMath/mathlib_informal_v4.19.0")  # hypothetical dataset
+    print("--- Initializing Retriever from pre-computed embeddings ---")
+    engine = Retriever(
+        dataset_name="FrenzyMath/mathlib_informal_v4.19.0",
+        embedding_cache_path="mathlib_embeddings.pt"
+    )
+    print("\n--- Retriever Initialized. Ready for queries. ---\n")
+
     query = "Prove that every continuous function on [0,1] is bounded."
+    print(f"Query: '{query}'")
     top_matches = engine.search(query, k=3)
 
-    for text, score in top_matches:
-        print(f"{score:.4f} | {text[:80]}...")
+    for match in top_matches:
+        print(match)
+        print("-" * 20)
