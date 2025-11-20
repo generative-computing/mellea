@@ -30,6 +30,7 @@ def uses_tool(tool_name: str | Callable, check_only=False):
 
     def _validate(ctx: Context):
         output = ctx.last_output()
+        assert output is not None
         if output.tool_calls is None:
             return ValidationResult(result=False, reason="There were no tool calls.")
         return ValidationResult(result=tool_name in output.tool_calls)
@@ -49,6 +50,7 @@ def tool_arg_validator(
     check_only: bool = False,
 ) -> Requirement:
     """A requirement that passes only if `validation_fn` returns a True value for the *value* of the `arg_name` argument to `tool_name`.
+    
     If `tool_name` is not specified, then this requirement is enforced for *every* tool that
 
     Args:
@@ -67,6 +69,7 @@ def tool_arg_validator(
 
     def _validate(ctx: Context):
         output = ctx.last_output()
+        assert output is not None
         if tool_name:
             if tool_name not in output.tool_calls:
                 return ValidationResult(

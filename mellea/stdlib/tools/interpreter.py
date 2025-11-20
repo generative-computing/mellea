@@ -1,3 +1,4 @@
+""" Code interpreter tool. """
 import ast
 import subprocess
 import sys
@@ -139,10 +140,20 @@ class UnsafeEnvironment(ExecutionEnvironment):
             )
         except subprocess.TimeoutExpired:
             return ExecutionResult(
-                success=False, error=f"Execution timed out after {timeout} seconds"
+                success=False,
+                stdout=None,
+                stderr=None,
+                skipped=True,
+                skip_message="Execution timed out."
             )
         except Exception as e:
-            return ExecutionResult(success=False, error=f"Execution error: {e!s}")
+            return ExecutionResult(
+                success=False,
+                stdout=None,
+                stderr=None,
+                skipped=True,
+                skip_message=f"Exception encountered in Mellea process (*not* the code interpreter process) when trying to run code_interpreter: {e!s}"
+            )
         finally:
             try:
                 Path(temp_file).unlink()
