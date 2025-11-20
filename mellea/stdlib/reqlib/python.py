@@ -12,6 +12,7 @@ from typing import Any
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import Context
 from mellea.stdlib.requirement import Requirement, ValidationResult
+from mellea.stdlib.tools.code_interpreter import LLMSandboxEnvironment, UnsafeEnvironment, ExecutionEnvironment, SafeEnvironment
 
 logger = FancyLogger.get_logger()
 
