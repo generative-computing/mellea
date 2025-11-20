@@ -8,18 +8,41 @@ from pathlib import Path
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import Context
 from mellea.stdlib.requirement import Requirement, ValidationResult
+from typing import Any
+
 
 logger = FancyLogger.get_logger()
 
 
 @dataclass
 class ExecutionResult:
-    """Result of code execution."""
+    """Result of code execution.
+
+    Code execution can be aborted prior to spinning up an interpreter (e.g., if prohibited imports are used).
+    In these cases, the `success` flag is set to False and the `skipped` flag is set to True.
+
+    If code is executed, then `success` is set to true iff the exit code is 0, and the `stdout` and `stderr` outputs
+    are set to non-None values.
+
+    We also use the `ExecutionResult` object to communicate the result of static and dynamic analyses. Those are passed back
+    using the `analysis_result` field.
+    
+    TODO: should we also be trying to pass back the value of the final expression evaluated, or the value of locals() and globals()?"""
 
     success: bool
-    message: str | None = None
-    error: str | None = None
+
+    stdout: str | None
+
+    stderr: str | None
+
+    """ Indicates whether execution was skipped. """
     skipped: bool = False
+
+    """ If execution is skipped, this message indicates why. """
+    skip_message: str | None = None
+
+    """ Used for returning results from static analyses. """
+    analysis_result : Any | None = None
 
 
 class ExecutionEnvironment(ABC):
@@ -44,7 +67,7 @@ class StaticAnalysisEnvironment(ExecutionEnvironment):
     def execute(self, code: str, timeout: int) -> ExecutionResult:
         """Validate code syntax and imports without executing."""
         try:
-            ast.parse(code)
+            parse_tree = ast.parse(code)
         except SyntaxError as e:
             return ExecutionResult(success=False, error=str(e))
 
@@ -58,8 +81,11 @@ class StaticAnalysisEnvironment(ExecutionEnvironment):
 
         return ExecutionResult(
             success=True,
+            stdout=None,
+            stderr=None,
             skipped=True,
-            message="Code validated but not executed (safe mode)",
+            skip_message="The static analysis execution environment does not execute code. To execute code, use one of the other execution environments.",
+            analysis_result=parse_tree
         )
 
 
@@ -92,17 +118,7 @@ class UnsafeEnvironment(ExecutionEnvironment):
                 text=True,
                 timeout=timeout,
             )
-
-            if result.returncode == 0:
-                message = "Code executed successfully"
-                if result.stdout.strip():
-                    message += f"\nOutput: {result.stdout.strip()}"
-                return ExecutionResult(success=True, message=message)
-            else:
-                return ExecutionResult(
-                    success=False,
-                    error=f"Execution failed with error: {result.stderr[:200]}",
-                )
+            return ExecutionResult(success=result.returncode == 0, stdout=result.stdout.strip(), stderr=result.stderr.strip())
         except subprocess.TimeoutExpired:
             return ExecutionResult(
                 success=False, error=f"Execution timed out after {timeout} seconds"
@@ -126,7 +142,10 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             if unauthorized:
                 return ExecutionResult(
                     success=False,
-                    error=f"Unauthorized imports detected: {', '.join(unauthorized)}",
+                    stdout=None,
+                    stderr=None,
+                    skipped=True,
+                    skip_message=f"Unauthorized imports detected: {', '.join(unauthorized)}",
                 )
 
         try:
@@ -134,7 +153,10 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
         except ImportError:
             return ExecutionResult(
                 success=False,
-                error="llm-sandbox not installed. Install with: uv add 'llm-sandbox[docker]'",
+                stdout=None,
+                stderr=None,
+                skipped=True,
+                skip_message="llm-sandbox not installed. Install with: uv add 'llm-sandbox[docker]'",
             )
 
         try:
@@ -143,30 +165,18 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
             ) as session:
                 result = session.run(code, timeout=timeout)
 
-                if result.exit_code == 0:
-                    message = "Code executed successfully in sandbox"
-                    if (
-                        hasattr(result, "stdout")
-                        and result.stdout
-                        and result.stdout.strip()
-                    ):
-                        message += f"\nOutput: {result.stdout.strip()}"
-                    return ExecutionResult(success=True, message=message)
-                else:
-                    if result.stderr:
-                        error_msg = f"Sandbox execution failed: {result.stderr[:200]}"
-                    else:
-                        # Log unknown error details for debugging
-                        logger.warning(
-                            f"Sandbox execution failed without stderr. Exit code: {result.exit_code}, "
-                            f"Available attributes: {[attr for attr in dir(result) if not attr.startswith('_')]}"
-                        )
-                        error_msg = f"Sandbox execution failed with exit code {result.exit_code} (no error details available)"
-                    return ExecutionResult(success=False, error=error_msg)
-
+                return ExecutionResult(
+                    success=result.exit_code == 0,
+                    stdout=result.stdout.strip(),
+                    stderr=result.stderr.strip()
+                )
         except Exception as e:
             return ExecutionResult(
-                success=False, error=f"Sandbox execution error: {e!s}"
+                success=False, 
+                stdout=None,
+                stderr=None,
+                skipped=True, 
+                skip_message=f"Sandbox execution error: {e!s}"
             )
 
 
@@ -203,7 +213,7 @@ def _check_allowed_imports(code: str, allowed_imports: list[str]) -> bool:
     return len(_get_unauthorized_imports(code, allowed_imports)) == 0
 
 
-def code_interpreter(code: str):
+def code_interpreter(code: str) -> ExecutionResult:
     """Executes python code.
     
     Args:
@@ -213,7 +223,7 @@ def code_interpreter(code: str):
     exec_env.execute(code, 60)
 
 
-def local_code_interpreter(code: str):
+def local_code_interpreter(code: str) -> ExecutionResult:
     """Executes python code in the cwd
     
     Args:

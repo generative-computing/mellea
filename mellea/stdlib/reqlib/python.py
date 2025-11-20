@@ -138,7 +138,7 @@ def _python_executes_without_error(
 
     result = environment.execute(code, timeout)
     return ValidationResult(
-        result=result.success, reason=result.message or result.error
+        result=result.success, reason=result.stdout if result.success else result.stderr # TODO should we pass back both?
     )
 
 
