@@ -12,6 +12,7 @@ examples_to_skip = {
     "simple_rag_with_filter.py",
     "mcp_example.py",
     "client.py",
+    "pii_serve.py",
 }
 
 

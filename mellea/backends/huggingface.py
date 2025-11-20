@@ -13,10 +13,13 @@ import functools
 import inspect
 import json
 from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING, Any
+from copy import deepcopy
+from typing import TYPE_CHECKING, Any, cast
 
+import granite_common
 import outlines
 import outlines_core
+import peft
 import torch
 from transformers import (
     AsyncTextIteratorStreamer,
@@ -30,16 +33,24 @@ from transformers import (
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 from mellea.backends import BaseModelSubclass
-from mellea.backends.aloras import Alora, AloraBackendMixin
+from mellea.backends._utils import to_chat, to_tool_calls
+from mellea.backends.adapters.adapter import (
+    AdapterMixin,
+    AdapterType,
+    GraniteCommonAdapter,
+    LocalHFAdapter,
+    get_adapter_for_intrinsic,
+)
+from mellea.backends.adapters.catalog import fetch_intrinsic_metadata
 from mellea.backends.cache import Cache, SimpleLRUCache
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
+from mellea.backends.openai import OpenAIBackend
 from mellea.backends.process_reward_models import PRM
 from mellea.backends.tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
-    parse_tools,
 )
 from mellea.backends.types import ModelOption
 from mellea.helpers.async_helpers import send_to_queue
@@ -54,10 +65,8 @@ from mellea.stdlib.base import (
     ModelToolCall,
 )
 from mellea.stdlib.chat import Message
+from mellea.stdlib.intrinsics.intrinsic import Intrinsic
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
-
-if TYPE_CHECKING:
-    from alora.peft_model_alora import aLoRAPeftModelForCausalLM  # type: ignore
 
 assert outlines, "outlines needs to be present to make outlines_core work"
 
@@ -80,7 +89,7 @@ class HFAloraCacheInfo:
     q_end: int = -1
 
 
-class LocalHFBackend(FormatterBackend, AloraBackendMixin):
+class LocalHFBackend(FormatterBackend, AdapterMixin):
     """The LocalHFBackend uses Huggingface's transformers library for inference, and uses a Formatter to convert `Component`s into prompts. This backend also supports Activated LoRAs (ALoras)](https://arxiv.org/pdf/2504.12397).
 
     This backend is designed for running an HF model for small-scale inference locally on your machine.
@@ -169,23 +178,11 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         self._use_caches = use_caches
         self._cache = cache if cache is not None else SimpleLRUCache(3)
 
-        # Used when running aLoRAs with this backend.
-        self._alora_model: "aLoRAPeftModelForCausalLM | None" = None  # noqa: UP037
-        # ALoras that have been loaded for this model.
-        self._aloras: dict[str, HFAlora] = {}
+        # Adapters can be made known to the backend (added) and loaded.
+        self._added_adapters: dict[str, LocalHFAdapter] = {}
+        self._loaded_adapters: dict[str, LocalHFAdapter] = {}
 
-    @property
-    def alora_model(self) -> "aLoRAPeftModelForCausalLM | None":  # noqa: UP037
-        """The ALora model."""
-        return self._alora_model
-
-    @alora_model.setter
-    def alora_model(self, model: "aLoRAPeftModelForCausalLM | None"):  # noqa: UP037
-        """Sets the ALora model. This should only happen once in a backend's lifetime."""
-        assert self._alora_model is None
-        self._alora_model = model
-
-    def generate_from_context(
+    async def generate_from_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -198,75 +195,208 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # Upsert model options.
         model_opts = self._simplify_and_merge(model_options)
 
-        # See `docs/dev/requirement_aLoRA_rerouting.md` for an explanation of the following code block.
-        if issubclass(type(action), Requirement):
-            # The general rule is that we reroute to the alora if it exists.
-            reroute_to_alora = self.get_alora("constraint") is not None
-            # However, there are some exceptions:
-            if not self.default_to_constraint_checking_alora:
+        # Requirements can be automatically rerouted to a requirement adapter.
+        if isinstance(action, Requirement):
+            # See docs/dev/requirement_aLoRA_rerouting.md
+            reroute_to_alora = self.default_to_constraint_checking_alora
+            adapter_name = "requirement_check"
+
+            if isinstance(action, ALoraRequirement):
+                reroute_to_alora = True
+                adapter_name = action.intrinsic_name
+                alora_action = action
+            else:
+                assert action.description is not None, (
+                    "must have a description when generating from a requirement"
+                )
+                alora_action = ALoraRequirement(action.description, adapter_name)
+
+            # Check if a requirement_check (or AloraRequirement specified) adapter
+            # exists.
+            alora_req_adapter = get_adapter_for_intrinsic(
+                adapter_name, [AdapterType.ALORA], self._added_adapters
+            )
+            if alora_req_adapter is None:
+                # Log a warning if using an AloraRequirement but no adapter fit.
+                if reroute_to_alora and isinstance(action, ALoraRequirement):
+                    FancyLogger.get_logger().warning(
+                        f"attempted to use an AloraRequirement but backend {self} doesn't have the specified adapter added {adapter_name}; defaulting to regular generation"
+                    )
                 reroute_to_alora = False
+
             if issubclass(type(action), LLMaJRequirement):
                 reroute_to_alora = False
-            if issubclass(type(action), ALoraRequirement):
-                reroute_to_alora = True
+
             if reroute_to_alora:
-                mot = self._generate_from_context_alora(
-                    action, ctx, _format=format, model_options=model_opts
+                # Keep the alora requirement handling separate for now.
+                mot = await self._generate_from_intrinsic(
+                    alora_action, ctx, model_options=model_opts
                 )
-                return mot, ctx.add(mot)
-        mot = self._generate_from_context_standard(
+                return mot, ctx.add(alora_action).add(mot)
+
+        elif isinstance(action, Intrinsic):
+            mot = await self._generate_from_intrinsic(
+                action, ctx, model_options=model_opts
+            )
+            return mot, ctx.add(action).add(mot)
+
+        mot = await self._generate_from_context_standard(
             action, ctx, _format=format, model_options=model_opts, tool_calls=tool_calls
         )
         return mot, ctx.add(action).add(mot)
 
-    def _generate_from_context_alora(
-        self,
-        action: Component | CBlock,
-        ctx: Context,
-        *,
-        _format: type[BaseModelSubclass] | None = None,
-        model_options: dict[str, Any],
+    async def _generate_from_intrinsic(
+        self, action: Intrinsic, ctx: Context, *, model_options: dict[str, Any]
     ) -> ModelOutputThunk:
-        match action:
-            case ALoraRequirement():
-                alora_for_this_request = (
-                    self.get_alora("constraint")
-                    if action.alora is None
-                    else action.alora
-                )
-            case _:
-                alora_for_this_request = self.get_alora("constraint")
-                assert alora_for_this_request is not None, (
-                    "This code block should not execute unless there is a 'constraint' alora loaded."
-                )
-        # Construct the linearized context. This is very similar to normal generation.
-        linearized_ctx = ctx.view_for_generation()
-        assert linearized_ctx is not None and len(linearized_ctx) > 1
-        msgs = self.formatter.to_chat_messages(linearized_ctx)
-        user_message, assistant_message = msgs[-2].content, msgs[-1].content
-        assert alora_for_this_request is not None
-        assert type(user_message) is str
-        assert type(assistant_message) is str
-        assert _format is None, "Structured outputs are not supported by ALoRAs."
+        if not ctx.is_chat_context:
+            raise Exception("Does not yet support non-chat contexts.")
 
-        alora_output = alora_for_this_request.generate_using_strings(
-            input=user_message,
-            response=assistant_message,
-            constraint=action.description,  # type: ignore
-            stream=model_options.get(ModelOption.STREAM, False),
+        linearized_ctx = ctx.view_for_generation()
+        assert linearized_ctx is not None, (
+            "If ctx.is_chat_context, then the context should be linearizable."
+        )
+        ctx_as_message_list: list[Message] = self.formatter.to_chat_messages(
+            linearized_ctx
         )
 
-        # The alora function doesn't set up all the fields.
-        alora_output._context = linearized_ctx
-        alora_output._action = action
-        alora_output._model_options = model_options
+        conversation: list[dict] = []
+        system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
+        if system_prompt != "":
+            conversation.append({"role": "system", "content": system_prompt})
 
-        # TODO: Figure out what info we want to populate for aloras here.
-        alora_output._generate_log = GenerateLog()
+        conversation.extend(
+            [OpenAIBackend.message_to_openai_message(m) for m in ctx_as_message_list]
+        )
 
-        return alora_output
+        docs = OpenAIBackend.messages_to_docs(ctx_as_message_list)
 
-    def _generate_from_context_standard(
+        seed = model_options.get(ModelOption.SEED, None)
+        if seed is not None:
+            set_seed(seed)
+
+        if model_options.get(ModelOption.STREAM, None) is not None:
+            # Intrinsics don't support streaming because of their post-processing step.
+            FancyLogger.get_logger().warning(
+                "intrinsics cannot use streaming; removing model option"
+            )
+            del model_options[ModelOption.STREAM]
+
+        adapter = get_adapter_for_intrinsic(
+            action.intrinsic_name, action.adapter_types, self._added_adapters
+        )
+        if adapter is None:
+            raise ValueError(
+                f"backend ({self}) has no adapter for processing intrinsic: {action.intrinsic_name}"
+            )
+
+        # TODO: Code below this point is mostly specific to RagIntrinsics (and granite_common).
+        #       It should be refactored into a specific adapter.transform() function.
+        assert isinstance(adapter, GraniteCommonAdapter), (
+            "currently Mellea only supports GraniteCommonAdapters and Intrinsics"
+        )
+
+        intrinsic_config = adapter.config
+        assert intrinsic_config is not None
+
+        rewriter = granite_common.IntrinsicsRewriter(
+            config_dict=intrinsic_config, model_name=adapter.name
+        )
+        result_processor = granite_common.IntrinsicsResultProcessor(
+            config_dict=intrinsic_config
+        )
+
+        # Convert our conversation into a proper chat completions dict.
+        # [{role: user, content: Hello}, {...}] -> {messages: [{role:user,...}, ...], model:..., ...}
+        request_json: dict = {
+            "messages": conversation,
+            "extra_body": {"documents": docs},
+        }
+        rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
+
+        # TODO: Handle caching here. granite_common doesn't tell us what changed,
+        #       so we will have to invalidate the cache on our side. This requires
+        #       us having specific caching for each Component/Message.
+
+        self.load_adapter(adapter.qualified_name)
+
+        # TODO: This modifies the underlying model. We should set a non-exclusive lock here.
+        #       It should allow generate requests with the same adapter to proceed. This logic also
+        #       needs to be added to the other generate functions.
+        self._model.set_adapter(adapter.qualified_name)
+
+        generate_input, other_input = (
+            granite_common.util.chat_completion_request_to_transformers_inputs(
+                rewritten, self._tokenizer, self._model
+            )
+        )
+
+        chat_response: Coroutine[Any, Any, granite_common.ChatCompletionResponse] = (
+            asyncio.to_thread(
+                granite_common.util.generate_with_transformers,
+                self._tokenizer,
+                self._model,
+                generate_input,
+                other_input,
+            )
+        )
+
+        output = ModelOutputThunk(None)
+        output._context = ctx.view_for_generation()
+        output._action = action
+        output._model_options = model_options
+
+        # Add another step to the processing function.
+        async def granite_common_processing(
+            mot: ModelOutputThunk,
+            chunk: granite_common.ChatCompletionResponse,
+            rewritten: granite_common.ChatCompletion,
+            result_processor: granite_common.IntrinsicsResultProcessor,
+            input_ids,
+        ):
+            res = result_processor.transform(chunk, rewritten)  # type: ignore
+
+            # TODO: If we want to support caches, we need to get the GenerateDecoderOnlyOutput. This means we
+            #       probably need to break out the pieces from `generate_with_transformers`.
+            # processing expects a str or a GenerateDecoderOnlyOutput. Extract the str.
+            return await self.processing(
+                mot, res.choices[0].message.content, input_ids=input_ids
+            )
+
+        output._process = functools.partial(
+            granite_common_processing,
+            rewritten=rewritten,
+            result_processor=result_processor,
+            input_ids=generate_input["input_tokens"],
+        )
+
+        # TODO: Post-processing should release the lock for this generation.
+        output._post_process = functools.partial(
+            self.post_processing,
+            conversation=conversation,
+            input_ids=generate_input["input_tokens"],
+            _format=None,
+            tool_calls=False,
+            tools={},
+            seed=seed,
+        )
+
+        try:
+            # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
+            # We can also support synchronous calls by adding a flag and changing this ._generate function.
+
+            # This function should always be called from a running event loop so we don't have to worry about
+            # scheduling the task to a specific event loop here.
+            output._generate = asyncio.create_task(
+                send_to_queue(chat_response, output._async_queue)  # type: ignore
+            )
+            output._generate_type = GenerateType.ASYNC
+        except RuntimeError as e:
+            # Most likely cause is running this function without an event loop present.
+            raise e
+
+        return output
+
+    async def _generate_from_context_standard(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -279,35 +409,8 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
         # Otherwise, we will linearize the context and treat it as a raw input.
         if ctx.is_chat_context:
-            linearized_ctx = ctx.view_for_generation()
-            assert linearized_ctx is not None, (
-                "If ctx.is_chat_context, then the context should be linearizable."
-            )
-            ctx_as_message_list: list[Message] = self.formatter.to_chat_messages(
-                linearized_ctx
-            )
-            # add action
-            ctx_as_message_list.extend(self.formatter.to_chat_messages([action]))
-            ctx_as_conversation = [
-                {"role": m.role, "content": m.content} for m in ctx_as_message_list
-            ]
-
-            # Check that we ddin't accidentally end up with CBlocks.
-            for msg in ctx_as_conversation:
-                for v in msg.values():
-                    if "CBlock" in v:
-                        FancyLogger.get_logger().error(
-                            f"Found the string `CBlock` in what should've been a stringified context: {ctx_as_conversation}"
-                        )
-
-            # handle custom system prompts. It's important that we do this before the _parse_and_**clean**_model_options step.
             system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, None)
-            if system_prompt is not None:
-                system_msg: dict[str, str] = {
-                    "role": "system",
-                    "content": system_prompt,
-                }
-                ctx_as_conversation.insert(0, system_msg)
+            ctx_as_chat = to_chat(action, ctx, self.formatter, system_prompt)
 
             # Append tool call information if applicable.
             tools: dict[str, Callable] = dict()
@@ -332,7 +435,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
                 set_seed(seed)
 
             input_ids = self._tokenizer.apply_chat_template(  # type: ignore
-                ctx_as_conversation,
+                ctx_as_chat,
                 tools=convert_tools_to_json(tools),  # type: ignore
                 add_generation_prompt=True,  # If we change this, must modify huggingface granite guardian.
                 return_tensors="pt",
@@ -397,7 +500,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             )
 
             output = ModelOutputThunk(None)
-            output._context = linearized_ctx
+            output._context = ctx.view_for_generation()
             output._action = action
             output._model_options = model_options
 
@@ -406,7 +509,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             output._process = functools.partial(self.processing, input_ids=input_ids)
             output._post_process = functools.partial(
                 self.post_processing,
-                conversation=ctx_as_conversation,
+                conversation=ctx_as_chat,
                 input_ids=input_ids,
                 _format=_format,
                 tool_calls=tool_calls,
@@ -482,7 +585,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         assert mot.value is not None
 
         # Add an entry to the cache for ALora reuse.
-        if self._use_caches:
+        if self._use_caches and mot._meta.get("hf_output", None) is not None:
             output_complete = mot._meta["hf_output"].sequences[0]
             cache: DynamicCache = mot._meta["hf_output"].past_key_values  # type: ignore
 
@@ -497,7 +600,7 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
-            mot.tool_calls = self._extract_model_tool_requests(tools, mot.value)
+            mot.tool_calls = to_tool_calls(tools, mot.value)
 
         assert mot._action is not None, (
             "ModelOutputThunks should have their action assigned during generation"
@@ -526,15 +629,29 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
 
         mot._generate_log = generate_log
 
-    def _generate_from_raw(
+    async def generate_from_raw(
         self,
         actions: list[Component | CBlock],
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
+        tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
+        if tool_calls:
+            FancyLogger.get_logger().warning(
+                "The raw endpoint does not support tool calling at the moment."
+            )
+
+        if self._model.device.type == "mps":
+            # TODO: Remove this when we are able to update the torch package.
+            #       Test this by ensuring all outputs from this call are populated when running on mps.
+            #       https://github.com/pytorch/pytorch/pull/157727
+            FancyLogger.get_logger().warning(
+                "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a huggingface backend; ensure all ModelOutputThunks have non-empty values."
+            )
+
         model_opts = self._simplify_and_merge(model_options)
         seed = model_opts.get(ModelOption.SEED, None)
         if seed is not None:
@@ -548,7 +665,8 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         )
 
         if format is None:
-            outputs = self._model.generate(  # type: ignore
+            outputs = await asyncio.to_thread(
+                self._model.generate,  # type: ignore
                 input_ids=inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 return_dict_in_generate=True,
@@ -566,7 +684,8 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             from outlines.processors import RegexLogitsProcessor
             from transformers import LogitsProcessorList
 
-            outputs = self._model.generate(  # type: ignore
+            outputs = await asyncio.to_thread(
+                self._model.generate,  # type: ignore
                 input_ids=inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 return_dict_in_generate=True,
@@ -590,28 +709,34 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
             sequences_to_decode, skip_special_tokens=True
         )
 
-        results = [
-            ModelOutputThunk(value=decoded_result) for decoded_result in decoded_results
-        ]
+        results = []
+        for i, decoded_result in enumerate(decoded_results):
+            n_prompt_tokens = inputs["input_ids"][i].size(0)  # type: ignore
+            n_completion_tokens = len(sequences_to_decode[i])
+            result = ModelOutputThunk(
+                value=decoded_result,
+                meta={
+                    "usage": {
+                        "prompt_tokens": n_prompt_tokens,  # type: ignore
+                        "completion_tokens": n_completion_tokens,
+                        "total_tokens": n_prompt_tokens + n_completion_tokens,
+                    }
+                },
+            )
 
-        for i, result in enumerate(results):
             self.formatter.parse(actions[i], result)
 
-        if generate_logs is not None:
-            assert isinstance(generate_logs, list)
-            date = datetime.datetime.now()
+            generate_log = GenerateLog()
+            generate_log.prompt = self.formatter.print(actions[i])
+            generate_log.backend = f"hf::{self.model_id!s}"
+            generate_log.model_options = model_opts
+            generate_log.date = datetime.datetime.now()
+            generate_log.model_output = decoded_result
+            generate_log.extra = {"format": format, "seed": seed}
+            generate_log.action = actions[i]
 
-            for i in range(len(prompts)):
-                generate_log = GenerateLog()
-                generate_log.prompt = prompts[i]
-                generate_log.backend = f"hf::{self.model_id!s}"
-                generate_log.model_options = model_opts
-                generate_log.date = date
-                generate_log.model_output = decoded_results
-                generate_log.extra = {"format": format, "seed": seed}
-                generate_log.action = actions[i]
-                generate_log.result = results[i]
-                generate_logs.append(generate_log)
+            result._generate_log = generate_log
+            results.append(result)
 
         return results
 
@@ -698,96 +823,87 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         }
         return {k: v for k, v in model_options.items() if k not in chat_template_only}
 
-    def _extract_model_tool_requests(
-        self, tools: dict[str, Callable], decoded_result: str
-    ) -> dict[str, ModelToolCall] | None:
-        model_tool_calls: dict[str, ModelToolCall] = dict()
-        for tool_name, tool_args in parse_tools(decoded_result):
-            func = tools.get(tool_name)
-            if func is None:
+    # region Adapter loading, unloading, and utility functions.
+    @property
+    def base_model_name(self):
+        """Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`."""
+        return self._hf_model_id.split("/")[1]
+
+    def add_adapter(self, adapter: LocalHFAdapter):
+        """Adds the given adapter to the backend. Must not have been added to a different backend."""
+        if adapter.backend is not None:
+            if adapter.backend is self:
                 FancyLogger.get_logger().warning(
-                    f"model attempted to call a non-existing function: {tool_name}"
+                    f"attempted to add adapter {adapter.name} with type {adapter.adapter_type} to the same backend {adapter.backend}"
                 )
-                continue
+                return
+            else:
+                raise Exception(
+                    f"adapter {adapter.name} with type {adapter.adapter_type} has already been added to backend {adapter.backend}"
+                )
 
-            # Clean up the function args slightly. Some models seem to
-            # hallucinate parameters when none are required.
-            sig = inspect.signature(func)
-            if len(sig.parameters) == 0:
-                tool_args = {}
-
-            model_tool_calls[tool_name] = ModelToolCall(tool_name, func, tool_args)
-
-        if len(model_tool_calls) > 0:
-            return model_tool_calls
-        return None
-
-    # region ALora loading, unloading, and utility functions.
-    def add_alora(self, alora: HFAlora):
-        """Loads an ALora for this backend.
-
-        Args:
-            alora (str): identifier for the ALora adapter
-        """
-        from alora.peft_model_alora import aLoRAPeftModelForCausalLM  # type: ignore
-
-        assert issubclass(alora.__class__, HFAlora), (
-            f"cannot add an ALora of type {alora.__class__} to model; must inherit from {HFAlora.__class__}"
-        )
-        assert alora._backend == self, "Cannot load an ALora into the wrong backend."
-
-        if self.get_alora(alora.name) is not None:
+        if self._added_adapters.get(adapter.qualified_name) is not None:
             FancyLogger.get_logger().warning(
-                f"Client code attempted to add {alora.name} but {alora.name} was already added to {self.__class__}. The backend is refusing to do this, because ALora loading is not idempotent."
+                f"Client code attempted to add {adapter.name} with type {adapter.adapter_type} but {adapter.name} was already added to {self.__class__}. The backend is refusing to do this, because adapter loading is not idempotent."
             )
             return None
 
-        if self.alora_model is None:
-            base_model = self._model
-            self.alora_model = aLoRAPeftModelForCausalLM.from_pretrained(
-                base_model, alora.path_or_model_id, alora.name
+        adapter.path = adapter.get_local_hf_path(self.base_model_name)
+        adapter.backend = self
+        self._added_adapters[adapter.qualified_name] = adapter
+
+    def load_adapter(self, adapter_qualified_name: str):
+        """Loads the given adapter for the backend. Must have previously been added."""
+        adapter = self._added_adapters.get(adapter_qualified_name, None)
+        if adapter is None:
+            raise ValueError(
+                f"could not load adapter {adapter_qualified_name} for backend {self}: adapter was not previously added"
             )
-        else:
-            self.alora_model.load_adapter(alora.path_or_model_id, alora.name)
 
-        self._aloras[alora.name] = alora
+        try:
+            adapter_kwargs = {}
 
-    def get_alora(self, alora_name: str) -> Alora | None:
-        """Returns the ALora by name, or None if that ALora isn't loaded."""
-        return self._aloras.get(alora_name)
+            # Peft tries to stringify the device. If it's mps, it gets stringified as "mps:0" which causes
+            # an error when loading with safetensors.torch.load_file. Force the device as a string "mps" to fix.
+            if self._device == torch.device("mps"):
+                adapter_kwargs["device"] = "mps"
+            self._model.load_adapter(
+                adapter.path, adapter.qualified_name, adapter_kwargs=adapter_kwargs
+            )
+        except ValueError as e:
+            # If it's just that it's already loaded, ignore it.
+            if f"Adapter with name {adapter_qualified_name} already exists." not in str(
+                e
+            ):
+                raise e
 
-    def get_aloras(self) -> list[Alora]:
-        """Returns a list of all loaded ALora adapters."""
-        return list(self._aloras.values())
+        # Loading an adapter activates it. We disable adapters immediately after.
+        # Prefer this over `.disable_adapters()`; the disable function doesn't always
+        # seem to work.
+        self._model.set_adapter([])
+        self._loaded_adapters[adapter.qualified_name] = adapter
 
-    # endregion
+    def unload_adapter(self, adapter_qualified_name: str):
+        """Unloads the given adapter from the backend."""
+        # Check if the backend knows about this adapter.
+        adapter = self._loaded_adapters.get(adapter_qualified_name, None)
+        if adapter is None:
+            FancyLogger.get_logger().info(
+                f"could not unload adapter {adapter_qualified_name} for backend {self}: adapter is not loaded"
+            )
+            return
 
+        self._model.delete_adapter(adapter.qualified_name)
 
-class HFAlora(Alora, abc.ABC):
-    """ALoras that work with the local huggingface backend."""
+        # Remove the adapter from the list of loaded adapters.
+        del self._loaded_adapters[adapter.qualified_name]
 
-    def __init__(
-        self,
-        name: str,
-        path_or_model_id: str,
-        generation_prompt: str,
-        backend: LocalHFBackend,
-    ):
-        """Initialize an ALora that should work with huggingface backends that support ALoras.
+    def list_adapters(self) -> list[str]:
+        """Lists the adapters added via add_adapter().
 
-        Args:
-            name (str): An arbitrary name/label to assign to an ALora. This is irrelevant from the alora's (huggingface) model id.
-            path_or_model_id (str): A local path to ALora's weights or a Huggingface model_id to an ALora.
-            generation_prompt (str): A prompt used to "activate" the Lora. This string goes between the pre-activation context and the aLora generate call. This needs to be provided by the entity that trained the ALora.
-            backend (LocalHFBackend): Mained as a pointer to the backend to which this this ALora is attached.
+        :returns: list of adapter names that are currently registered with this backend
         """
-        super().__init__(name)
-        self.path_or_model_id = path_or_model_id
-        self._backend = backend
-        self._generation_prompt = generation_prompt
-        self._generation_prompt_tokens = self._backend._tokenizer(
-            self._generation_prompt, return_tensors="pt"
-        ).to(self._backend._device)
+        return list(self._loaded_adapters.keys())
 
 
 class HFProcessRewardModel(PRM, abc.ABC):
@@ -821,7 +937,6 @@ class HFProcessRewardModel(PRM, abc.ABC):
         self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
             self.model_name_or_path, torch_dtype=torch.bfloat16
         )
-        self.model.to(self._device)  # type: ignore
         self.model.eval()
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path)
 

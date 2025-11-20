@@ -93,7 +93,7 @@ def test_empty_table():
     assert table is None, "table should be empty when supplied string is empty"
 
 
-@pytest.mark.skip # Test requires too much memory for smaller machines.
+@pytest.mark.skip  # Test requires too much memory for smaller machines.
 def test_richdocument_generation(rd: RichDocument):
     m = mellea.start_session(backend_name="hf")
     response = m.chat(rd.to_markdown()[:500] + "\nSummarize the provided document.")

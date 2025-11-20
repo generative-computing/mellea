@@ -1,4 +1,3 @@
-
 import pytest
 
 from mellea.stdlib.base import ChatContext, ModelOutputThunk
@@ -29,6 +28,7 @@ def test_chat_view_linear_ctx(linear_session):
     assert all([type(x) == Message for x in as_chat_history(linear_session.ctx)])
     assert len(linear_session.ctx.view_for_generation()) == 4
 
+
 # @pytest.mark.skip("linearize() returns [] for a SimpleContext... that's going to be annoying.")
 def test_chat_view_simple_ctx(simple_session):
     simple_session.chat("What is 1+1?")
@@ -36,7 +36,6 @@ def test_chat_view_simple_ctx(simple_session):
     assert len(as_chat_history(simple_session.ctx)) == 4
     assert all([type(x) == Message for x in as_chat_history(simple_session.ctx)])
     assert len(simple_session.ctx.view_for_generation()) == 0
-
 
 
 if __name__ == "__main__":

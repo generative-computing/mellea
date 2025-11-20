@@ -96,8 +96,10 @@ class WatsonxAIBackend(FormatterBackend):
             base_url = f"{os.environ.get('WATSONX_URL')}"
         if api_key is None:
             api_key = os.environ.get("WATSONX_API_KEY")
+
         if project_id is None:
-            self._project_id = os.environ.get("WATSONX_PROJECT_ID")
+            project_id = os.environ.get("WATSONX_PROJECT_ID")
+        self._project_id = project_id
 
         self._creds = Credentials(url=base_url, api_key=api_key)
         self._kwargs = kwargs
@@ -234,7 +236,7 @@ class WatsonxAIBackend(FormatterBackend):
 
         return model_opts
 
-    def generate_from_context(
+    async def generate_from_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -247,7 +249,7 @@ class WatsonxAIBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The watsonx.ai backend only supports chat-like contexts."
         )
-        mot = self.generate_from_chat_context(
+        mot = await self.generate_from_chat_context(
             action,
             ctx,
             _format=format,
@@ -256,7 +258,7 @@ class WatsonxAIBackend(FormatterBackend):
         )
         return mot, ctx.add(action).add(mot)
 
-    def generate_from_chat_context(
+    async def generate_from_chat_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -478,13 +480,14 @@ class WatsonxAIBackend(FormatterBackend):
         generate_log.action = mot._action
         mot._generate_log = generate_log
 
-    def _generate_from_raw(
+    async def generate_from_raw(
         self,
         actions: list[Component | CBlock],
+        ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
-        generate_logs: list[GenerateLog] | None = None,
+        tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generates a completion text. Gives the input provided to the model without templating."""
         if format is not None:
@@ -496,42 +499,49 @@ class WatsonxAIBackend(FormatterBackend):
 
         prompts = [self.formatter.print(action) for action in actions]
 
-        responses = self._model.generate(
+        responses = await asyncio.to_thread(
+            self._model.generate,
             prompt=prompts,
             params=self._make_backend_specific_and_remove(
                 model_opts, is_chat_context=False
             ),
         )
 
-        results = [
-            ModelOutputThunk(
-                value=response["results"][0]["generated_text"],
-                meta={"oai_completion_response": response["results"][0]},
-            )
-            for response in responses
-        ]
+        results = []
+        date = datetime.datetime.now()
 
-        for i, result in enumerate(results):
+        for i, response in enumerate(responses):
+            output = response["results"][0]
+            result = ModelOutputThunk(
+                value=output["generated_text"],
+                meta={
+                    "oai_completion_response": response["results"][0],
+                    "usage": {
+                        "prompt_tokens": output.get("input_token_count", 0),
+                        "completion_tokens": output.get("generated_token_count", 0),
+                        "total_tokens": output.get("input_token_count", 0)
+                        + output.get("generated_token_count", 0),
+                    },
+                },
+            )
+
             self.formatter.parse(actions[i], result)
 
-        if generate_logs is not None:
-            assert isinstance(generate_logs, list)
-            date = datetime.datetime.now()
+            generate_log = GenerateLog()
+            generate_log.prompt = prompts[i]
+            generate_log.backend = f"watsonx::{self.model_id!s}"
+            generate_log.model_options = model_opts
+            generate_log.date = date
+            generate_log.model_output = responses
+            generate_log.extra = {
+                "format": format,
+                "seed": model_opts.get(ModelOption.SEED, None),
+            }
+            generate_log.action = actions[i]
 
-            for i in range(len(prompts)):
-                generate_log = GenerateLog()
-                generate_log.prompt = prompts[i]
-                generate_log.backend = f"watsonx::{self.model_id!s}"
-                generate_log.model_options = model_opts
-                generate_log.date = date
-                generate_log.model_output = responses
-                generate_log.extra = {
-                    "format": format,
-                    "seed": model_opts.get(ModelOption.SEED, None),
-                }
-                generate_log.action = actions[i]
-                generate_log.result = results[i]
-                generate_logs.append(generate_log)
+            result._generate_log = generate_log
+
+            results.append(result)
 
         return results
 

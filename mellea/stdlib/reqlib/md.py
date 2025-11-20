@@ -14,11 +14,11 @@ def as_markdown_list(ctx: Context) -> list[str] | None:
     raw_output = ctx.last_output()
     assert raw_output is not None
     try:
-        parsed = mistletoe.Document(raw_output.value)
-        for child in parsed.children:
+        parsed = mistletoe.Document(raw_output.value)  # type: ignore
+        for child in parsed.children:  # type: ignore
             if type(child) is not mistletoe.block_token.List:
                 return None
-        for item in child.children:
+        for item in child.children:  # type: ignore
             xs.append(mistletoe.base_renderer.BaseRenderer().render(item))
         return xs
     except Exception:
@@ -44,10 +44,10 @@ def _md_table(ctx: Context):
     raw_output = ctx.last_output()
     assert raw_output is not None
     try:
-        parsed = mistletoe.Document(raw_output.value)
-        if len(parsed.children) != 1:
+        parsed = mistletoe.Document(raw_output.value)  # type: ignore
+        if len(parsed.children) != 1:  # type: ignore
             return False
-        return type(parsed.children[0]) is mistletoe.block_token.Table
+        return type(parsed.children[0]) is mistletoe.block_token.Table  # type: ignore
     except Exception:
         return False
 

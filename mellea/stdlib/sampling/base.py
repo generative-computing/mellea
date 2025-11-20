@@ -5,9 +5,9 @@ from copy import deepcopy
 
 import tqdm
 
+import mellea.stdlib.functional as mfuncs
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib import funcs as mfuncs
 from mellea.stdlib.base import CBlock, ChatContext, Component, Context, ModelOutputThunk
 from mellea.stdlib.chat import Message
 from mellea.stdlib.instruction import Instruction
@@ -151,7 +151,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
             # run a generation pass
-            result, result_ctx = backend.generate_from_context(
+            result, result_ctx = await backend.generate_from_context(
                 next_action,
                 ctx=next_context,
                 format=format,
@@ -166,7 +166,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 context=result_ctx,
                 backend=backend,
                 output=result,
-                format=format,
+                format=None,
                 model_options=model_options,
                 # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.
             )
