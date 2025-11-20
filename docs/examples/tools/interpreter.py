@@ -1,7 +1,10 @@
 from mellea.stdlib.tools import code_interpreter, local_code_interpreter
 from mellea import start_session
 from mellea.backends.types import ModelOption
+from mellea.backends.model_ids import OPENAI_GPT_OSS_20B
+from mellea.stdlib.reqlib.tools import uses_tool
 
+# m = start_session(backend_name="ollama", model_id=OPENAI_GPT_OSS_20B)
 m = start_session()
 
 # # First, let's see how the code interpreter function works without an LLM in the loop:
@@ -20,15 +23,22 @@ m = start_session()
 
 # Notice that the model did not actually generate a plot. Let's force tool use:
 
-from mellea.stdlib.reqlib.tools import uses_tool
 
 plot_output = m.instruct(
-    description="Make a plot of y=x^2",
+    description="Use the code interpreter tool to make a plot of y=x^2.",
     requirements=[
         uses_tool(local_code_interpreter)
     ],
     model_options={
         ModelOption.TOOLS: [local_code_interpreter]
-    }
+    },
+    tool_calls=True
 )
-print(plot_output)
+
+code = plot_output.tool_calls['local_code_interpreter'].args['code']
+print(f"Going to execute the following code:\n```python\n{code}\n```")
+
+# Call the tool.
+exec_result = plot_output.tool_calls['local_code_interpreter'].call_func()
+
+print(exec_result)
