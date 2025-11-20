@@ -16,9 +16,6 @@ from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from PIL import Image as PILImage
 
-from mellea.helpers.fancy_logger import FancyLogger
-import multiprocessing.pool
-
 
 class CBlock:
     """A `CBlock` is a block of content that can serve as input to or output from an LLM."""
