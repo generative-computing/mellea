@@ -38,7 +38,7 @@ class ExecutionEnvironment(ABC):
         """Execute code and return result."""
 
 
-class SafeEnvironment(ExecutionEnvironment):
+class StaticAnalysisEnvironment(ExecutionEnvironment):
     """Safe environment that validates but does not execute code."""
 
     def execute(self, code: str, timeout: int) -> ExecutionResult:
