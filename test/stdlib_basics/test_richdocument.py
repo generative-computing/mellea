@@ -1,10 +1,12 @@
 import os
+import tempfile
+
+import pytest
+from docling_core.types.doc.document import DoclingDocument
+
+import mellea
 from mellea.stdlib.base import TemplateRepresentation
 from mellea.stdlib.docs.richdocument import RichDocument, Table
-import mellea
-from docling_core.types.doc.document import DoclingDocument
-import tempfile
-import pytest
 
 
 @pytest.fixture(scope="module")
@@ -97,7 +99,7 @@ def test_empty_table():
 def test_richdocument_generation(rd: RichDocument):
     m = mellea.start_session(backend_name="hf")
     response = m.chat(rd.to_markdown()[:500] + "\nSummarize the provided document.")
-    assert response.content is not "", (
+    assert response.content != "", (
         "response content should not be empty when summarizing a rich document"
     )
     assert "paper" in response.content.lower() or "gltr" in response.content.lower(), (

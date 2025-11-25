@@ -1,6 +1,7 @@
+from typing import Annotated
+
 import pydantic
 import pytest
-from typing_extensions import Annotated
 
 import mellea.backends.model_ids as model_ids
 from mellea import MelleaSession

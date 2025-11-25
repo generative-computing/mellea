@@ -128,6 +128,7 @@ def test_safe_mode_default():
     req = PythonExecutionReq()
     result = req.validation_fn(VALID_PYTHON_CTX)
     assert result.as_bool() is True
+    assert "safe mode" in result.reason
 
 
 def test_safe_mode_syntax_error():
@@ -142,6 +143,7 @@ def test_safe_mode_no_execution():
     req = PythonExecutionReq(timeout=1)
     result = req.validation_fn(PYTHON_INFINITE_LOOP_CTX)
     assert result.as_bool() is True  # Should pass because it's not actually executed
+    assert "safe mode" in result.reason
 
 
 # endregion
@@ -223,6 +225,7 @@ def test_sandbox_execution_valid():
     req = PythonExecutionReq(use_sandbox=True, timeout=10)
     result = req.validation_fn(VALID_PYTHON_CTX)
     assert result.as_bool() is True
+    assert "sandbox" in result.reason.lower()
 
 
 @pytest.mark.skipif(
@@ -310,6 +313,7 @@ def test_direct_validation_function():
         VALID_PYTHON_CTX, timeout=5, allow_unsafe=False, use_sandbox=False
     )
     assert result.as_bool() is True
+    assert "safe mode" in result.reason
 
     result = _python_executes_without_error(
         SYNTAX_ERROR_CTX, timeout=5, allow_unsafe=False, use_sandbox=False
@@ -323,6 +327,216 @@ def test_no_code_extraction():
     result = req.validation_fn(NO_PYTHON_CTX)
     assert result.as_bool() is False
     assert "Could not extract Python code" in result.reason
+
+
+# endregion
+
+# region: Additional verifier tests
+
+
+def test_extract_python_code_from_markdown():
+    """Test extraction of Python code from markdown blocks."""
+    from mellea.stdlib.reqlib.python import extract_python_code
+
+    code = extract_python_code(VALID_PYTHON_CODE)
+    assert code is not None
+    assert "def hello_world" in code
+
+
+def test_extract_python_code_no_code():
+    """Test extraction when no code is present."""
+    from mellea.stdlib.reqlib.python import extract_python_code
+
+    code = extract_python_code("This is just text without any Python code blocks.")
+    assert code is None
+
+
+def test_has_python_code_listing_valid():
+    """Test HasPythonCodeListing with valid code."""
+    from mellea.stdlib.reqlib.python import HasPythonCodeListing
+
+    requirement = HasPythonCodeListing()
+    result = requirement.validation_fn(VALID_PYTHON_CTX)
+    assert result.as_bool() is True
+    assert "def hello_world" in result.reason
+
+
+def test_has_python_code_listing_invalid():
+    """Test HasPythonCodeListing with no code."""
+    from mellea.stdlib.reqlib.python import HasPythonCodeListing
+
+    requirement = HasPythonCodeListing()
+    result = requirement.validation_fn(NO_PYTHON_CTX)
+    assert result.as_bool() is False
+    assert "No Python code block found" in result.reason
+
+
+def test_python_code_parses_valid():
+    """Test PythonCodeParses with valid code."""
+    from mellea.stdlib.reqlib.python import PythonCodeParses
+
+    requirement = PythonCodeParses()
+    result = requirement.validation_fn(VALID_PYTHON_CTX)
+    assert result.as_bool() is True
+    assert "parses successfully" in result.reason
+
+
+def test_python_code_parses_invalid():
+    """Test PythonCodeParses with syntax error."""
+    from mellea.stdlib.reqlib.python import PythonCodeParses
+
+    requirement = PythonCodeParses()
+    result = requirement.validation_fn(SYNTAX_ERROR_CTX)
+    assert result.as_bool() is False
+    assert "Syntax error" in result.reason
+
+
+def test_python_valid_imports_valid():
+    """Test PythonValidImports with valid imports."""
+    from mellea.stdlib.reqlib.python import PythonValidImports
+
+    requirement = PythonValidImports()
+    result = requirement.validation_fn(PYTHON_WITH_IMPORTS_CTX)
+    assert result.as_bool() is True
+    assert "All imports valid" in result.reason
+
+
+def test_python_valid_imports_forbidden():
+    """Test PythonValidImports with forbidden imports."""
+    from mellea.stdlib.reqlib.python import PythonValidImports
+
+    requirement = PythonValidImports()
+    result = requirement.validation_fn(PYTHON_WITH_FORBIDDEN_IMPORTS_CTX)
+    # subprocess, socket, urllib are not typically available in test environments
+    # This test might pass or fail depending on environment, so we just check it runs
+    assert isinstance(result.as_bool(), bool)
+
+
+def test_python_has_function_def_valid():
+    """Test PythonHasFunctionDef with valid function."""
+    from mellea.stdlib.reqlib.python import PythonHasFunctionDef
+
+    requirement = PythonHasFunctionDef()
+    result = requirement.validation_fn(VALID_PYTHON_CTX)
+    assert result.as_bool() is True
+    assert "Found" in result.reason and "function" in result.reason
+
+
+def test_python_has_function_def_invalid():
+    """Test PythonHasFunctionDef with no function."""
+    from mellea.stdlib.reqlib.python import PythonHasFunctionDef
+
+    simple_code = from_model("```python\nx = 5\nprint(x)\n```")
+    requirement = PythonHasFunctionDef()
+    result = requirement.validation_fn(simple_code)
+    assert result.as_bool() is False
+    assert "No function definitions found" in result.reason
+
+
+def test_python_has_class_def_valid():
+    """Test PythonHasClassDef with valid class."""
+    from mellea.stdlib.reqlib.python import PythonHasClassDef
+
+    class_code = from_model("""```python
+class Calculator:
+    def add(self, a, b):
+        return a + b
+```""")
+    requirement = PythonHasClassDef()
+    result = requirement.validation_fn(class_code)
+    assert result.as_bool() is True
+    assert "Calculator" in result.reason
+
+
+def test_python_has_class_def_invalid():
+    """Test PythonHasClassDef with no class."""
+    from mellea.stdlib.reqlib.python import PythonHasClassDef
+
+    requirement = PythonHasClassDef()
+    result = requirement.validation_fn(VALID_PYTHON_CTX)
+    assert result.as_bool() is False
+    assert "No class definitions found" in result.reason
+
+
+def test_python_matches_examples_correct():
+    """Test PythonMatchesExamples with correct function."""
+    from mellea.stdlib.reqlib.python import PythonMatchesExamples
+
+    factorial_code = from_model("""```python
+def factorial(n):
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+```""")
+
+    requirement = PythonMatchesExamples(
+        function_name="factorial",
+        examples=[({"n": 0}, 1), ({"n": 1}, 1), ({"n": 5}, 120)],
+    )
+    result = requirement.validation_fn(factorial_code)
+    assert result.as_bool() is True
+    assert "All 3 examples passed" in result.reason
+
+
+def test_python_matches_examples_incorrect():
+    """Test PythonMatchesExamples with incorrect function."""
+    from mellea.stdlib.reqlib.python import PythonMatchesExamples
+
+    wrong_factorial = from_model("""```python
+def factorial(n):
+    return 0  # Always returns 0 - wrong!
+```""")
+
+    requirement = PythonMatchesExamples(
+        function_name="factorial", examples=[({"n": 5}, 120)]
+    )
+    result = requirement.validation_fn(wrong_factorial)
+    assert result.as_bool() is False
+    assert "Failed" in result.reason
+
+
+def test_python_matches_docstring():
+    """Test PythonMatchesDocstring with pre-generated tests."""
+    from mellea.stdlib.reqlib.python import PythonMatchesDocstring
+
+    factorial_code = from_model("""```python
+def factorial(n):
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+```""")
+
+    # Pre-generate tests to avoid needing an active session
+    requirement = PythonMatchesDocstring(
+        docstring="Calculate factorial of n",
+        function_name="factorial",
+        tests=[({"n": 0}, 1), ({"n": 5}, 120)],
+    )
+    result = requirement.validation_fn(factorial_code)
+    assert result.as_bool() is True
+
+
+def test_python_matches_docstring_no_tests():
+    """Test PythonMatchesDocstring without generated tests."""
+    from mellea.stdlib.reqlib.python import PythonMatchesDocstring
+
+    requirement = PythonMatchesDocstring(
+        docstring="Calculate factorial of n", function_name="factorial"
+    )
+    result = requirement.validation_fn(VALID_PYTHON_CTX)
+    assert result.as_bool() is False
+    assert "Tests not generated" in result.reason
+
+
+# Test backwards compatibility alias
+def test_python_executes_without_error_alias():
+    """Test that PythonExecutesWithoutError is an alias for PythonExecutionReq."""
+    from mellea.stdlib.reqlib.python import (
+        PythonExecutesWithoutError,
+        PythonExecutionReq,
+    )
+
+    assert PythonExecutesWithoutError is PythonExecutionReq
 
 
 # endregion

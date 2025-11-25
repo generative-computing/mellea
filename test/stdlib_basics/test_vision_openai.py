@@ -3,10 +3,10 @@ import os
 from io import BytesIO
 
 import numpy as np
-from PIL import Image
 import pytest
+from PIL import Image
 
-from mellea import start_session, MelleaSession
+from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
 from mellea.stdlib.base import ImageBlock, ModelOutputThunk
 from mellea.stdlib.chat import Message
