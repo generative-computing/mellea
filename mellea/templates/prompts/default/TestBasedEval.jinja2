@@ -1,0 +1,27 @@
+**Input to the model**
+
+{{ input }}
+
+**Model output to be rated**
+
+{{ prediction }}
+
+{% if target and target != "N/A" %}
+**Ground truth text**
+
+{{ target }}
+{% endif %}
+
+**Rating Guidelines**
+The model output should adhere to the following guidelines:
+{{ guidelines }}
+
+**Scoring Criteria**
+* Score 0: The model output violates any of the guidelines.
+* Score 1: The model output is well aligned with the ground truth{% if target and target != "N/A" %} - if it exists{% endif %}, the input to the model, and adheres to all guidelines.
+
+**Return Your Rating**
+Return your rating in the following format:
+{"score": your_score, "justification": "your_justification"}
+
+Your rating:           

@@ -15,7 +15,7 @@ console = Console()
 
 
 class InputEvalResult:
-    """Store results of a single input evaluation (within a unit test)"""
+    """Store results of a single input evaluation (within a unit test)."""
 
     def __init__(
         self,
@@ -42,7 +42,7 @@ class InputEvalResult:
 
 
 class TestEvalResult:
-    """Store results of a single test evaluation"""
+    """Store results of a single test evaluation."""
 
     def __init__(self, test_eval: TestBasedEval, input_results: list[InputEvalResult]):
         self.test_eval = test_eval
@@ -77,7 +77,7 @@ class TestEvalResult:
 def create_session(
     backend: str, model: str | None, max_tokens: int | None
 ) -> mellea.MelleaSession:
-    """Create a mellea session with the specified backend and  model."""
+    """Create a mellea session with the specified backend and model."""
 
     model_id = None
     if model:
@@ -164,7 +164,15 @@ def run_evaluations(
     output_format: str,
     continue_on_error: bool,
 ):
-    """Run all 'unit test' evaluations"""
+    """Run all 'unit test' evaluations
+
+    Each test file should be a json containing:
+        "id": an id that is unique to this test file
+        "source": the origin for the evaluation prompts, else "N/A"
+        "name": an instruction-following attribute that the user intends to evaluate through this test
+        "instructions": a set (in string form) of requirements which the generation should follow; the judge will evaluate if these are satisfied
+        "examples": a list of entries containing an input_id, an input(prompt), and a list of targets. Each input may have multiple (or no) targets; inputs and targets are in messages format.
+    """
     all_test_evals: List[TestBasedEval] = []
 
     for test_file in test_files:
@@ -230,7 +238,7 @@ def execute_test_eval(
 ) -> TestEvalResult:
     """Execute a single test evaluation
     For each input in the test, generate a response using generation_session
-    Then, after all inputs are processed, validate using judge_session
+    Then, after all inputs are processed, validate using judge_session.
     """
 
     input_results = []
@@ -245,10 +253,12 @@ def execute_test_eval(
         )
 
         # query the judge
-        judge_prompt = create_judge_requirement(
-            test_eval, input_text, model_output, targets_for_input
+        test_eval.set_judge_context(
+            input_text=input_text,
+            prediction=model_output,
+            targets_for_input=targets_for_input,
         )
-        judge_output_thunk = judge_session.act(judge_prompt)
+        judge_output_thunk = judge_session.act(test_eval)
         judge_output = str(judge_output_thunk)
         score, justification = parse_judge_output(judge_output)
         passed = score == 1 if score is not None else False
@@ -268,33 +278,6 @@ def execute_test_eval(
 
     test_result = TestEvalResult(test_eval=test_eval, input_results=input_results)
     return test_result
-
-
-def create_judge_requirement(
-    test_eval: TestBasedEval,
-    input_text: str,
-    model_output: str,
-    targets_for_input: list[str],
-):
-    """Create judge requirement description"""
-
-    if len(targets_for_input) == 0:  # no reference
-        target_text = "N/A"
-    elif len(targets_for_input) == 1:
-        target_text = targets_for_input[0]
-    else:  # enumerate when there are multiple targets
-        target_text = "\n".join(
-            [f"{i}. {target}" for i, target in enumerate(targets_for_input, 1)]
-        )
-
-    judge_prompt = test_eval.judge_prompt.format(
-        input=input_text,
-        prediction=model_output,
-        target=target_text,
-        guidelines=test_eval.instructions,
-    )
-
-    return judge_prompt
 
 
 def parse_judge_output(judge_output: str):
