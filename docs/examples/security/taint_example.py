@@ -3,7 +3,7 @@ from mellea.stdlib.session import start_session
 from mellea.security import SecLevel, privileged, SecurityError
 
 # Create tainted content
-tainted_desc = CBlock("Process this sensitive data", sec_level=SecLevel.tainted_by(None))
+tainted_desc = CBlock("Process this sensitive user data", sec_level=SecLevel.tainted_by(None))
 
 print(f"Original CBlock is tainted: {tainted_desc.sec_level.is_tainted() if tainted_desc.sec_level else False}")
 
@@ -25,16 +25,16 @@ if result.sec_level and result.sec_level.is_tainted():
 else:
     print("❌ FAIL: Result should be tainted but isn't!")
 
-# Mock privileged function that requires safe input
+# Mock privileged function that requires un-tainted input
 @privileged
-def process_safe_data(data: CBlock) -> str:
-    """A function that requires safe (non-tainted) input."""
+def process_un_tainted_data(data: CBlock) -> str:
+    """A function that requires un-tainted input."""
     return f"Processed: {data.value}"
 
 print("\nTesting privileged function with tainted result...")
 try:
     # This should raise a SecurityError
-    processed = process_safe_data(result)
+    processed = process_un_tainted_data(result)
     print("❌ FAIL: Should have raised SecurityError!")
 except SecurityError as e:
     print(f"✅ SUCCESS: SecurityError raised - {e}")

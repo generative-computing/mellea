@@ -7,7 +7,7 @@ Mellea backends implement thread security using the **SecLevel** model with capa
 The security system uses three types of security levels:
 
 ```python
-SecLevel := None | Classified of AccessType | TaintedBy of (CBlock | Component)
+SecLevel := None | Classified of AccessType | TaintedBy of (CBlock | Component | None)
 ```
 
 - **SecLevel.none()**: Safe content with no restrictions
