@@ -204,19 +204,7 @@ def taint_sources(action: Union[Component, CBlock], ctx: Any) -> list[Union[CBlo
             except Exception:
                 # If parts() fails, continue without it
                 pass
-        case _:
-            # For other types that might have parts(), check with hasattr
-            try:
-                if hasattr(action, 'parts'):
-                    parts = action.parts()
-                    for part in parts:
-                        if hasattr(part, '_meta') and '_security' in part._meta:
-                            security_meta = part._meta['_security']
-                            if isinstance(security_meta, SecurityMetadata) and security_meta.is_tainted():
-                                sources.append(part)
-            except Exception:
-                # If parts() fails or doesn't exist, continue without it
-                pass
+
     
     # Check context for tainted content (shallow check)
     if hasattr(ctx, 'as_list'):

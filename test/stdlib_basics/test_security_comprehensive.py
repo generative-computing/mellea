@@ -2,6 +2,7 @@
 
 import pytest
 from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext
+from mellea.stdlib.instruction import Instruction
 from mellea.security import (
     AccessType,
     SecLevel, 
@@ -280,6 +281,40 @@ class TestTaintSources:
         
         sources = taint_sources(action, ctx)
         assert len(sources) == 0
+    
+    def test_taint_sources_from_component_parts(self):
+        """Test taint sources from Component parts."""
+        # Create Instruction with tainted description
+        tainted_desc = CBlock("tainted description", sec_level=SecLevel.tainted_by(None))
+        instruction = Instruction(description=tainted_desc)
+        
+        sources = taint_sources(instruction, None)
+        assert len(sources) == 1
+        assert sources[0] is tainted_desc
+    
+    def test_taint_sources_shallow_search_limit(self):
+        """Test that shallow search only checks last 5 components."""
+        action = CBlock("safe action")
+        
+        # Create context with 7 items: tainted at positions 0 and 5
+        ctx = ChatContext()
+        tainted_early = CBlock("tainted early", sec_level=SecLevel.tainted_by(None))
+        ctx = ctx.add(tainted_early)  # Position 0 - outside last 5
+        
+        # Add 4 safe items
+        for i in range(4):
+            ctx = ctx.add(CBlock(f"safe {i}"))
+        
+        tainted_late = CBlock("tainted late", sec_level=SecLevel.tainted_by(None))
+        ctx = ctx.add(tainted_late)  # Position 5 - within last 5
+        
+        # Add one more safe item
+        ctx = ctx.add(CBlock("safe final"))  # Position 6
+        
+        sources = taint_sources(action, ctx)
+        # Should only find tainted_late (position 5), not tainted_early (position 0)
+        assert len(sources) == 1
+        assert sources[0] is tainted_late
 
 
 class TestModelOutputThunkSecurity:
