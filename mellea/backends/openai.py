@@ -291,7 +291,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
     def generate_from_context(
         self,
-        action: Component | CBlock,
+        action: Component | CBlock | None,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -311,11 +311,16 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             tool_calls=tool_calls,
             labels=labels,
         )
-        return mot, ctx.add(action, labels=labels).add(mot, labels=labels)
+        #
+        if action is not None:
+            ctx = ctx.add(action, labels=labels)
+
+        # return
+        return mot, ctx.add(mot, labels=labels)
 
     def generate_from_chat_context(
         self,
-        action: Component | CBlock,
+        action: Component | CBlock | None,
         ctx: Context,
         *,
         _format: (
@@ -439,7 +444,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
 
     def _generate_from_chat_context_standard(
         self,
-        action: Component | CBlock,
+        action: Component | CBlock | None,
         ctx: Context,
         *,
         _format: (
@@ -464,6 +469,8 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                 raise Exception(
                     "The OpenAI backend does not support currently support activated LoRAs."
                 )
+            case None:
+                action = ctx.node_data  # action defaults to node_data if None provided
             case _:
                 messages.extend(self.formatter.to_chat_messages([action]))
         conversation: list[dict] = []

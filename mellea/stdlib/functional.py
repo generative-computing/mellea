@@ -450,7 +450,7 @@ async def aact(
 
 
 async def aact(
-    action: Component,
+    action: Component | None,
     context: Context,
     backend: Backend,
     *,

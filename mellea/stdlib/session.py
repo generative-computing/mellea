@@ -531,7 +531,7 @@ class MelleaSession:
     @overload
     async def aact(
         self,
-        action: Component,
+        action: Component | None,
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -545,7 +545,7 @@ class MelleaSession:
     @overload
     async def aact(
         self,
-        action: Component,
+        action: Component | None,
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -558,7 +558,7 @@ class MelleaSession:
 
     async def aact(
         self,
-        action: Component,
+        action: Component | None,
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
