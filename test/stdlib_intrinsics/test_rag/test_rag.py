@@ -23,7 +23,7 @@ BASE_MODEL = "ibm-granite/granite-3.3-2b-instruct"
 @pytest.fixture(name="backend")
 def _backend():
     """Backend used by the tests in this file."""
-    
+
     # Prevent thrashing if the default device is CPU
     torch.set_num_threads(4)
 
@@ -57,12 +57,7 @@ def _read_input_json(file_name: str):
     documents = []
     if "extra_body" in json_data and "documents" in json_data["extra_body"]:
         for d in json_data["extra_body"]["documents"]:
-            documents.append(
-                Document(
-                    text=d["text"],
-                    doc_id=d["doc_id"],
-                )
-            )
+            documents.append(Document(text=d["text"], doc_id=d["doc_id"]))
     return context, next_user_turn, documents
 
 
@@ -177,9 +172,11 @@ def test_answer_relevance(backend):
     assert result == expected_rewrite
 
     # Canned input always gets rewritten. Set threshold to disable the rewrite.
-    result = rag.rewrite_answer_for_relevance(answer, docs, context, backend,
-                                              rewrite_threshold=0.0)
+    result = rag.rewrite_answer_for_relevance(
+        answer, docs, context, backend, rewrite_threshold=0.0
+    )
     assert result == answer
+
 
 if __name__ == "__main__":
     pytest.main([__file__])
