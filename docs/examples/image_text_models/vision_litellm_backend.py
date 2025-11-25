@@ -1,6 +1,7 @@
 """Examples of using vision models with LiteLLM backend."""
 
 import os
+import pathlib
 
 import litellm
 from PIL import Image
@@ -9,7 +10,6 @@ from mellea import MelleaSession, start_session
 from mellea.backends.litellm import LiteLLMBackend
 from mellea.backends.openai import OpenAIBackend
 from mellea.stdlib.base import ImageBlock
-import pathlib
 
 # use LiteLLM to talk to Ollama or anthropic or.....
 m = MelleaSession(LiteLLMBackend("ollama/granite3.2-vision"))

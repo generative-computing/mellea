@@ -3,7 +3,7 @@
 from mellea import MelleaSession
 from mellea.backends import model_ids
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.stdlib.base import ContextTurn, ModelOutputThunk, ChatContext
+from mellea.stdlib.base import ChatContext, ContextTurn, ModelOutputThunk
 from mellea.stdlib.chat import Message
 from mellea.stdlib.safety.guardian import GuardianCheck, GuardianRisk
 

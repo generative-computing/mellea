@@ -1,4 +1,5 @@
 from typing import Literal
+
 from PIL import Image as PILImage
 
 from mellea import MelleaSession
