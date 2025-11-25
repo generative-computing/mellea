@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Sequence
 from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
@@ -269,8 +269,9 @@ def validate(
     output: CBlock | None = None,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
-    generate_logs: list[GenerateLog]
-    | None = None,  # TODO: Can we get rid of gen logs here and in act?
+    generate_logs: (
+        list[GenerateLog] | None
+    ) = None,  # TODO: Can we get rid of gen logs here and in act?
     input: CBlock | None = None,
 ) -> list[ValidationResult]:
     """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
@@ -460,6 +461,7 @@ async def aact(
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
+    labels: Sequence[str] | None = None,
 ) -> tuple[ModelOutputThunk, Context] | SamplingResult:
     """Asynchronous version of .act; runs a generic action, and adds both the action and the result to the context.
 
@@ -474,6 +476,7 @@ async def aact(
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tool_calls: if true, tool calling is enabled.
         silence_context_type_warning: if called directly from an asynchronous function, will log a warning if not using a SimpleContext
+        labels: if provided, restrict generation to context nodes with matching labels
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -505,6 +508,7 @@ async def aact(
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            labels=labels,
         )
         await result.avalue()
 
@@ -526,6 +530,7 @@ async def aact(
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            labels=labels,
         )
 
         assert sampling_result.sample_generations is not None

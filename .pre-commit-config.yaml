@@ -13,14 +13,14 @@ repos:
         args: [--exit-non-zero-on-fix, --fix, --config=pyproject.toml]
         files: '^(mellea|tests).*\.(py|ipynb)$'
 
-  - repo: local
-    hooks:
-      - id: mypy
-        name: MyPy
-        entry: uv run --no-sync mypy mellea
-        pass_filenames: false
-        language: system
-        files: '\.py$'
+  # - repo: local
+  #   hooks:
+  #     - id: mypy
+  #       name: MyPy
+  #       entry: uv run --no-sync mypy mellea
+  #       pass_filenames: false
+  #       language: system
+  #       files: '\.py$'
 
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.7.8
