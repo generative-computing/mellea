@@ -22,14 +22,25 @@ from mellea.helpers.fancy_logger import FancyLogger
 class CBlock:
     """A `CBlock` is a block of content that can serve as input to or output from an LLM."""
 
-    def __init__(self, value: str | None, meta: dict[str, Any] | None = None):
-        """Initializes the CBlock with a string and some metadata."""
+    def __init__(self, value: str | None, meta: dict[str, Any] | None = None, sec_level: Any = None):
+        """Initializes the CBlock with a string and some metadata.
+        
+        Args:
+            value: The string content of the block
+            meta: Optional metadata dictionary
+            sec_level: Optional SecLevel for security metadata
+        """
         if value is not None and not isinstance(value, str):
             raise TypeError("value to a Cblock should always be a string or None")
         self._underlying_value = value
         if meta is None:
             meta = {}
         self._meta = meta
+        
+        # Set security metadata if sec_level is provided
+        if sec_level is not None:
+            from mellea.security import SecurityMetadata
+            self._meta["_security"] = SecurityMetadata(sec_level)
 
     @property
     def value(self) -> str | None:
@@ -49,42 +60,24 @@ class CBlock:
         """Provides a python-parsable representation of the block (usually)."""
         return f"CBlock({self.value}, {self._meta.__repr__()})"
     
-    def mark_tainted(self, source: Union[CBlock, Component, None] = None):
-        """Mark this CBlock as tainted by a specific source.
+    @property
+    def sec_level(self) -> Any | None:
+        """Get the security metadata for this CBlock.
         
-        Args:
-            source: The CBlock or Component that tainted this content. If None,
-                   this CBlock is marked as tainted by itself.
-        """
-        from mellea.security import SecLevel, SecurityMetadata
-        
-        if self._meta is None:
-            self._meta = {}
-        
-        # If no source provided, taint by self
-        taint_source = source if source is not None else self
-        self._meta["_security"] = SecurityMetadata(SecLevel.tainted_by(taint_source))
-    
-    def is_safe(self, entitlement: Any = None) -> bool:
-        """Check if this CBlock is considered safe for the given entitlement.
-        
-        Args:
-            entitlement: The entitlement to check access for (for classified content)
-            
         Returns:
-            True if the block has no security metadata or is marked as safe,
-            False if it's marked as tainted or classified without proper entitlement
+            SecurityMetadata if present, None otherwise
         """
         from mellea.security import SecurityMetadata
         
         if self._meta is None or "_security" not in self._meta:
-            return True  # Default to safe if no security metadata
+            return None
         
         security_meta = self._meta["_security"]
         if isinstance(security_meta, SecurityMetadata):
-            return security_meta.is_safe(entitlement)
+            return security_meta
         
-        return True  # Default to safe if security metadata is not the expected type
+        return None
+    
 
 
 class ImageBlock:

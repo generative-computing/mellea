@@ -6,12 +6,20 @@ tracking security levels of content blocks and enforcing security policies.
 
 import abc
 import functools
+from enum import Enum
 from typing import Any, Callable, Generic, TypeVar, Union
 
 from mellea.stdlib.base import CBlock, Component
 
 
 T = TypeVar('T')
+
+
+class SecLevelType(str, Enum):
+    """Security level type constants."""
+    NONE = "none"
+    CLASSIFIED = "classified"
+    TAINTED_BY = "tainted_by"
 
 
 class AccessType(Generic[T], abc.ABC):
@@ -40,50 +48,33 @@ class SecLevel(Generic[T]):
     SecLevel := None | Classified of AccessType | TaintedBy of (CBlock | Component)
     """
     
-    def __init__(self, level_type: str, data: Any = None):
+    def __init__(self, level_type: SecLevelType | str, data: Any = None):
         """Initialize security level.
         
         Args:
-            level_type: Type of security level ("none", "classified", "tainted_by")
-            data: Associated data (AccessType for classified, CBlock/Component for tainted_by)
+            level_type: Type of security level (SecLevelType enum or string)
+            data: Associated data (AccessType for classified, CBlock/Component/None for tainted_by)
         """
+        # Convert string to enum if needed for backward compatibility
+        if isinstance(level_type, str):
+            level_type = SecLevelType(level_type)
         self.level_type = level_type
         self.data = data
     
     @classmethod
     def none(cls) -> "SecLevel":
         """Create a SecLevel with no restrictions (safe)."""
-        return cls("none")
+        return cls(SecLevelType.NONE)
     
     @classmethod
     def classified(cls, access_type: AccessType[T]) -> "SecLevel":
         """Create a SecLevel with classified access requirements."""
-        return cls("classified", access_type)
+        return cls(SecLevelType.CLASSIFIED, access_type)
     
     @classmethod
-    def tainted_by(cls, source: Union[CBlock, Component]) -> "SecLevel":
-        """Create a SecLevel tainted by a specific CBlock or Component."""
-        return cls("tainted_by", source)
-    
-    def is_safe(self, entitlement: T | None = None) -> bool:
-        """Check if this security level is safe for the given entitlement.
-        
-        Args:
-            entitlement: The entitlement to check access for
-            
-        Returns:
-            True if safe, False if restricted
-        """
-        if self.level_type == "none":
-            return True
-        elif self.level_type == "classified":
-            if self.data is None:
-                return False
-            return self.data.has_access(entitlement)
-        elif self.level_type == "tainted_by":
-            return False  # Tainted content is never safe
-        else:
-            return False
+    def tainted_by(cls, source: Union[CBlock, Component, None]) -> "SecLevel":
+        """Create a SecLevel tainted by a specific CBlock, Component, or None for root nodes."""
+        return cls(SecLevelType.TAINTED_BY, source)
     
     def is_tainted(self) -> bool:
         """Check if this security level represents tainted content.
@@ -91,7 +82,7 @@ class SecLevel(Generic[T]):
         Returns:
             True if tainted, False otherwise
         """
-        return self.level_type == "tainted_by"
+        return self.level_type == SecLevelType.TAINTED_BY
     
     def is_classified(self) -> bool:
         """Check if this security level represents classified content.
@@ -99,7 +90,17 @@ class SecLevel(Generic[T]):
         Returns:
             True if classified, False otherwise
         """
-        return self.level_type == "classified"
+        return self.level_type == SecLevelType.CLASSIFIED
+    
+    def get_access_type(self) -> AccessType[T] | None:
+        """Get the AccessType for classified content.
+        
+        Returns:
+            The AccessType if this is classified, None otherwise
+        """
+        if self.level_type == SecLevelType.CLASSIFIED:
+            return self.data
+        return None
     
     def get_taint_source(self) -> Union[CBlock, Component, None]:
         """Get the source of taint if this is a tainted level.
@@ -107,7 +108,7 @@ class SecLevel(Generic[T]):
         Returns:
             The CBlock or Component that tainted this content, or None
         """
-        if self.level_type == "tainted_by":
+        if self.level_type == SecLevelType.TAINTED_BY:
             return self.data
         return None
 
@@ -122,17 +123,6 @@ class SecurityMetadata:
             sec_level: The security level for this content
         """
         self.sec_level = sec_level
-    
-    def is_safe(self, entitlement: Any = None) -> bool:
-        """Check if this security level is safe for the given entitlement.
-        
-        Args:
-            entitlement: The entitlement to check access for
-            
-        Returns:
-            True if safe, False if restricted
-        """
-        return self.sec_level.is_safe(entitlement)
     
     def is_tainted(self) -> bool:
         """Check if this security level represents tainted content.
@@ -149,6 +139,14 @@ class SecurityMetadata:
             True if classified, False otherwise
         """
         return self.sec_level.is_classified()
+    
+    def get_access_type(self) -> AccessType[Any] | None:
+        """Get the AccessType for classified content.
+        
+        Returns:
+            The AccessType if this is classified, None otherwise
+        """
+        return self.sec_level.get_access_type()
     
     def get_taint_source(self) -> Union[CBlock, Component, None]:
         """Get the source of taint if this is a tainted level.
@@ -188,17 +186,37 @@ def taint_sources(action: Union[Component, CBlock], ctx: Any) -> list[Union[CBlo
             sources.append(action)
     
     # For Components, check their constituent parts for taint
-    if hasattr(action, 'parts'):
-        try:
-            parts = action.parts()
-            for part in parts:
-                if hasattr(part, '_meta') and '_security' in part._meta:
-                    security_meta = part._meta['_security']
-                    if isinstance(security_meta, SecurityMetadata) and security_meta.is_tainted():
-                        sources.append(part)
-        except Exception:
-            # If parts() fails, continue without it
+    # Use pattern matching: CBlock doesn't have parts, Components do
+    match action:
+        case CBlock():
+            # CBlock doesn't have parts, nothing to do
             pass
+        case _ if isinstance(action, Component):
+            # Component is @runtime_checkable, so isinstance() works
+            # If it's a Component, it has parts() method by protocol definition
+            try:
+                parts = action.parts()
+                for part in parts:
+                    if hasattr(part, '_meta') and '_security' in part._meta:
+                        security_meta = part._meta['_security']
+                        if isinstance(security_meta, SecurityMetadata) and security_meta.is_tainted():
+                            sources.append(part)
+            except Exception:
+                # If parts() fails, continue without it
+                pass
+        case _:
+            # For other types that might have parts(), check with hasattr
+            try:
+                if hasattr(action, 'parts'):
+                    parts = action.parts()
+                    for part in parts:
+                        if hasattr(part, '_meta') and '_security' in part._meta:
+                            security_meta = part._meta['_security']
+                            if isinstance(security_meta, SecurityMetadata) and security_meta.is_tainted():
+                                sources.append(part)
+            except Exception:
+                # If parts() fails or doesn't exist, continue without it
+                pass
     
     # Check context for tainted content (shallow check)
     if hasattr(ctx, 'as_list'):
@@ -236,11 +254,11 @@ def privileged(func: F) -> F:
     """
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        # Check all arguments for unsafe content (tainted or classified)
+        # Check all arguments for marked content (tainted or classified)
         for arg in args:
             if isinstance(arg, CBlock) and hasattr(arg, '_meta') and '_security' in arg._meta:
                 security_meta = arg._meta['_security']
-                if isinstance(security_meta, SecurityMetadata) and not security_meta.is_safe():
+                if isinstance(security_meta, SecurityMetadata):
                     if security_meta.is_tainted():
                         taint_source = security_meta.get_taint_source()
                         source_info = f" (tainted by: {type(taint_source).__name__})" if taint_source else ""
@@ -254,11 +272,11 @@ def privileged(func: F) -> F:
                             f"classified content"
                         )
         
-        # Check keyword arguments for unsafe content (tainted or classified)
+        # Check keyword arguments for marked content (tainted or classified)
         for key, value in kwargs.items():
             if isinstance(value, CBlock) and hasattr(value, '_meta') and '_security' in value._meta:
                 security_meta = value._meta['_security']
-                if isinstance(security_meta, SecurityMetadata) and not security_meta.is_safe():
+                if isinstance(security_meta, SecurityMetadata):
                     if security_meta.is_tainted():
                         taint_source = security_meta.get_taint_source()
                         source_info = f" (tainted by: {type(taint_source).__name__})" if taint_source else ""

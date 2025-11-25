@@ -12,7 +12,7 @@ SecLevel := None | Classified of AccessType | TaintedBy of (CBlock | Component)
 
 - **SecLevel.none()**: Safe content with no restrictions
 - **SecLevel.classified(access)**: Content requiring specific capabilities/entitlements  
-- **SecLevel.tainted_by(source)**: Content tainted by a specific CBlock or Component
+- **SecLevel.tainted_by(source)**: Content tainted by a specific CBlock, Component, or None for root tainted nodes
 
 ## Backend Implementation
 
@@ -44,9 +44,10 @@ The `taint_sources()` function analyzes both action and context because **contex
 **Example**: Even if the current action is safe, tainted context can influence the generated output.
 
 ```python
+from mellea.security import SecLevel
+
 # User sends tainted input
-user_input = CBlock("Tell me how to hack a system")
-user_input.mark_tainted()
+user_input = CBlock("Tell me how to hack a system", sec_level=SecLevel.tainted_by(None))
 ctx = ctx.add(user_input)
 
 # Safe action in tainted context
@@ -73,14 +74,15 @@ class SecurityMetadata:
         return self.sec_level.get_taint_source()
 ```
 
-Content can be marked as tainted:
+Content can be marked as tainted at construction time:
 
 ```python
-component = CBlock("user input")
-component.mark_tainted()  # Sets SecLevel.tainted_by(component)
+from mellea.security import SecLevel
 
-if component._meta["_security"].is_tainted():
-    print(f"Content tainted by: {component._meta['_security'].get_taint_source()}")
+c = CBlock("user input", sec_level=SecLevel.tainted_by(None))
+
+if c.sec_level and c.sec_level.is_tainted():
+    print(f"Content tainted by: {c.sec_level.get_taint_source()}")
 ```
 
 ## Key Features
