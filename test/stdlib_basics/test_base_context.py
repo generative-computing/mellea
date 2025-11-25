@@ -1,6 +1,6 @@
 import pytest
 
-from mellea.stdlib.base import Context, CBlock, SimpleContext, ChatContext
+from mellea.stdlib.base import CBlock, ChatContext, Context, SimpleContext
 
 
 def context_construction(cls: type[Context]):

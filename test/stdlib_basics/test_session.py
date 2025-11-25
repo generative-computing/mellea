@@ -135,12 +135,11 @@ def test_session_copy_with_context_ops(m_session):
 
 
 class TestPowerup:
-    def hello(m:MelleaSession):
+    def hello(m: MelleaSession):
         return "hello"
 
 
 def test_powerup(m_session):
-
     MelleaSession.powerup(TestPowerup)
 
     assert "hello" == m_session.hello()

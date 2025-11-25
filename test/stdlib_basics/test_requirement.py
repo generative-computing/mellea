@@ -1,5 +1,7 @@
 import asyncio
+
 import pytest
+
 from mellea.stdlib.base import ChatContext, ModelOutputThunk
 from mellea.stdlib.requirement import Requirement, simple_validate
 from mellea.stdlib.session import start_session

@@ -2,8 +2,8 @@
 
 import spacy
 
-from cli.serve.models import ChatMessage
 import mellea
+from cli.serve.models import ChatMessage
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.stdlib.base import ModelOutputThunk
 from mellea.stdlib.requirement import req, simple_validate

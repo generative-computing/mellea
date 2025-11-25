@@ -9,7 +9,7 @@ from mellea import MelleaSession
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.types import ModelOption
 from mellea.backends.watsonx import WatsonxAIBackend
-from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext, SimpleContext
+from mellea.stdlib.base import CBlock, ChatContext, ModelOutputThunk, SimpleContext
 
 
 @pytest.fixture(scope="module")
@@ -38,7 +38,6 @@ def session(backend: WatsonxAIBackend):
 @pytest.mark.qualitative
 def test_filter_chat_completions_kwargs(backend: WatsonxAIBackend):
     """Detect changes to the WatsonxAI TextChatParameters."""
-
     known_keys = [
         "frequency_penalty",
         "logprobs",
@@ -59,7 +58,7 @@ def test_filter_chat_completions_kwargs(backend: WatsonxAIBackend):
         "guided_grammar",
         "guided_json",
     ]
-    test_dict = {key: 1 for key in known_keys}
+    test_dict = dict.fromkeys(known_keys, 1)
 
     # Make sure keys that we think should be in the TextChatParameters are there.
     filtered_dict = backend.filter_chat_completions_kwargs(test_dict)
@@ -126,7 +125,6 @@ def test_format(session: MelleaSession):
     # this is not guaranteed, due to the lack of regexp pattern
     # assert "@" in email.to.email_address
     # assert email.to.email_address.endswith("example.com")
-    pass
 
 
 @pytest.mark.qualitative

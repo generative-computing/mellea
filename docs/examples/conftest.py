@@ -88,7 +88,7 @@ class ExampleItem(pytest.Item):
 
         if retcode != 0:
             raise ExampleTestException(
-                (f"Example failed with exit code {retcode}.\nStderr: {stderr}\n")
+                f"Example failed with exit code {retcode}.\nStderr: {stderr}\n"
             )
 
     def repr_failure(self, excinfo, style=None):

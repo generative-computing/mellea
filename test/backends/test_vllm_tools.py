@@ -1,12 +1,13 @@
 import os
+from typing import Annotated
+
 import pydantic
 import pytest
-from typing_extensions import Annotated
 
-from mellea import MelleaSession
-from mellea.backends.vllm import LocalVLLMBackend
-from mellea.backends.types import ModelOption
 import mellea.backends.model_ids as model_ids
+from mellea import MelleaSession
+from mellea.backends.types import ModelOption
+from mellea.backends.vllm import LocalVLLMBackend
 from mellea.stdlib.base import CBlock, ChatContext
 from mellea.stdlib.requirement import (
     LLMaJRequirement,

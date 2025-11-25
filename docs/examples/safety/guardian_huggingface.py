@@ -6,8 +6,8 @@ to avoid reloading the model multiple times.
 
 from mellea import MelleaSession
 from mellea.backends import model_ids
-from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.base import ChatContext, ModelOutputThunk, ModelToolCall
 from mellea.stdlib.chat import Message
 from mellea.stdlib.safety.guardian import GuardianCheck, GuardianRisk
@@ -45,7 +45,7 @@ print(f"Content is safe: {validation_result[0]._result}")
 print(f"Guardian detected harm: {not validation_result[0]._result}")
 
 if validation_result[0]._reason:
-    print(f"\nGuardian feedback:")
+    print("\nGuardian feedback:")
     print(validation_result[0]._reason[:200] + "...")
 
 # Test 2: Groundedness detection
