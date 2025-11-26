@@ -52,6 +52,8 @@ from mellea.stdlib.requirement import LLMaJRequirement, Requirement
 
 assert outlines, "outlines needs to be present to make outlines_core work"
 
+format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
+
 
 class LocalVLLMBackend(FormatterBackend):
     """The LocalVLLMBackend uses vLLM's python interface for inference, and uses a Formatter to convert `Component`s into prompts.
@@ -235,7 +237,7 @@ class LocalVLLMBackend(FormatterBackend):
 
         return self._underlying_model
 
-    def generate_from_context(
+    async def generate_from_context(
         self,
         action: Component | CBlock,
         ctx: Context,
@@ -251,22 +253,22 @@ class LocalVLLMBackend(FormatterBackend):
 
         # TODO: insert the alora code here.
 
-        mot = self._generate_from_context_standard(
+        mot = await self._generate_from_context_standard(
             action,
             ctx,
-            format=format,
+            _format=format,
             model_options=model_options,
             generate_logs=generate_logs,
             tool_calls=tool_calls,
         )
         return mot, ctx.add(action).add(mot)
 
-    def _generate_from_context_standard(
+    async def _generate_from_context_standard(
         self,
         action: Component | CBlock,
         ctx: Context,
         *,
-        format: type[BaseModelSubclass] | None = None,
+        _format: type[BaseModelSubclass] | None = None,
         model_options: dict[str, Any],
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
@@ -281,7 +283,7 @@ class LocalVLLMBackend(FormatterBackend):
             # Append tool call information if applicable.
             tools: dict[str, Callable] = dict()
             if tool_calls:
-                if format:
+                if _format:
                     FancyLogger.get_logger().warning(
                         f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                     )
@@ -315,10 +317,10 @@ class LocalVLLMBackend(FormatterBackend):
                 ),
             )
 
-            if format is not None:
+            if _format is not None:
                 # outlines.generate.json always parses the resulting json into a python dict.
                 # We however want to keep it as a json string for later storing it in ModelOutputThunk
-                schema: dict[str, Any] = format.model_json_schema()
+                schema: dict[str, Any] = _format.model_json_schema()
                 schema_json: str = json.dumps(schema)
                 regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(
                     schema_json
@@ -353,6 +355,7 @@ class LocalVLLMBackend(FormatterBackend):
             output._post_process = functools.partial(
                 self.post_processing,
                 conversation=ctx_as_chat,
+                _format=_format,
                 tool_calls=tool_calls,
                 tools=tools,
                 seed=model_options.get(ModelOption.SEED, None),
@@ -384,6 +387,7 @@ class LocalVLLMBackend(FormatterBackend):
         self,
         mot: ModelOutputThunk,
         conversation: list[dict],
+        _format: type[BaseModelSubclass] | None,
         tool_calls: bool,
         tools: dict[str, Callable],
         seed,
@@ -393,7 +397,7 @@ class LocalVLLMBackend(FormatterBackend):
         assert mot.value is not None
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
-        if format is None and tool_calls:
+        if _format is None and tool_calls:
             mot.tool_calls = to_tool_calls(tools, mot.value)
 
         assert mot._action is not None, (
@@ -413,7 +417,7 @@ class LocalVLLMBackend(FormatterBackend):
         generate_log.date = datetime.datetime.now()
         generate_log.model_output = mot.value
         generate_log.extra = {
-            "format": format,
+            "format": _format,
             "tools_available": tools,
             "tools_called": mot.tool_calls,
             "seed": seed,
@@ -423,7 +427,7 @@ class LocalVLLMBackend(FormatterBackend):
 
         mot._generate_log = generate_log
 
-    def generate_from_raw(
+    async def generate_from_raw(
         self,
         actions: list[Component | CBlock],
         ctx: Context,
@@ -473,12 +477,8 @@ class LocalVLLMBackend(FormatterBackend):
                 assert result_output.finished
                 return result_output.outputs[0].text
 
-        async def generate_all(prompts):
-            tasks = [generate(p, f"{id(prompts)}-{i}") for i, p in enumerate(prompts)]
-            return await asyncio.gather(*tasks)
-
-        # Allow calling this from async functions.
-        decoded_results = _run_async_in_thread(generate_all(prompts))
+        tasks = [generate(p, f"{id(prompts)}-{i}") for i, p in enumerate(prompts)]
+        decoded_results = await asyncio.gather(*tasks)
 
         results = [ModelOutputThunk(value=text) for text in decoded_results]
 

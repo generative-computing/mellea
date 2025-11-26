@@ -108,7 +108,7 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
             # run a generation pass
-            result, result_ctx = backend.generate_from_context(
+            result, result_ctx = await backend.generate_from_context(
                 next_action,
                 ctx=next_context,
                 format=format,
@@ -132,7 +132,7 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
                 context=result_ctx,
                 backend=backend,
                 output=result,
-                format=format,
+                format=None,
                 model_options=model_options,
                 input=next_action._description,  # type: ignore
                 # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.
