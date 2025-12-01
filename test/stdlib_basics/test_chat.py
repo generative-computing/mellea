@@ -3,6 +3,7 @@ from mellea.backends.openai import OpenAIBackend
 from mellea.stdlib.base import Document
 from mellea.stdlib.chat import Message
 
+
 def test_message_with_docs():
     doc = Document("I'm text!", "Im a title!")
     msg = Message("user", "hello", documents=[doc])

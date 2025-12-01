@@ -7,11 +7,11 @@ repos:
       - id: ruff-format
         name: "Ruff formatter"
         args: [--config=pyproject.toml]
-        files: '^(mellea|tests|cli|docs).*\.(py|ipynb)$'
+        files: '^(mellea|test|cli|docs).*\.(py|ipynb)$'
       - id: ruff
         name: "Ruff linter"
         args: [--exit-non-zero-on-fix, --fix, --config=pyproject.toml]
-        files: '^(mellea|tests).*\.(py|ipynb)$'
+        files: '^(mellea).*\.(py|ipynb)$'
 
   - repo: local
     hooks:
