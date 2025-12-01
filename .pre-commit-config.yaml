@@ -20,7 +20,7 @@ repos:
         entry: uv run --no-sync mypy mellea
         pass_filenames: false
         language: system
-        files: '\.py$'
+        files: '^(mellea|tests|cli|docs).*\.(py|ipynb)$'
 
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.7.8
