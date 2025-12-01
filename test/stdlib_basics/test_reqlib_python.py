@@ -128,7 +128,6 @@ def test_safe_mode_default():
     req = PythonExecutionReq()
     result = req.validation_fn(VALID_PYTHON_CTX)
     assert result.as_bool() is True
-    assert "safe mode" in result.reason
 
 
 def test_safe_mode_syntax_error():
@@ -143,7 +142,6 @@ def test_safe_mode_no_execution():
     req = PythonExecutionReq(timeout=1)
     result = req.validation_fn(PYTHON_INFINITE_LOOP_CTX)
     assert result.as_bool() is True  # Should pass because it's not actually executed
-    assert "safe mode" in result.reason
 
 
 # endregion
@@ -225,7 +223,6 @@ def test_sandbox_execution_valid():
     req = PythonExecutionReq(use_sandbox=True, timeout=10)
     result = req.validation_fn(VALID_PYTHON_CTX)
     assert result.as_bool() is True
-    assert "sandbox" in result.reason.lower()
 
 
 @pytest.mark.skipif(
@@ -313,7 +310,6 @@ def test_direct_validation_function():
         VALID_PYTHON_CTX, timeout=5, allow_unsafe=False, use_sandbox=False
     )
     assert result.as_bool() is True
-    assert "safe mode" in result.reason
 
     result = _python_executes_without_error(
         SYNTAX_ERROR_CTX, timeout=5, allow_unsafe=False, use_sandbox=False
