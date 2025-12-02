@@ -7,19 +7,19 @@ level of content blocks and components in the mellea library.
 from .core import (
     AccessType,
     SecLevel,
-    SecurityMetadata,
     SecurityError,
-    privileged,
+    SecurityMetadata,
     declassify,
+    privileged,
     taint_sources,
 )
 
 __all__ = [
     "AccessType",
     "SecLevel",
-    "SecurityMetadata", 
     "SecurityError",
-    "privileged",
+    "SecurityMetadata",
     "declassify",
+    "privileged",
     "taint_sources",
 ]

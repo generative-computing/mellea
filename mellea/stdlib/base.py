@@ -22,9 +22,14 @@ from mellea.helpers.fancy_logger import FancyLogger
 class CBlock:
     """A `CBlock` is a block of content that can serve as input to or output from an LLM."""
 
-    def __init__(self, value: str | None, meta: dict[str, Any] | None = None, sec_level: Any = None):
+    def __init__(
+        self,
+        value: str | None,
+        meta: dict[str, Any] | None = None,
+        sec_level: Any = None,
+    ):
         """Initializes the CBlock with a string and some metadata.
-        
+
         Args:
             value: The string content of the block
             meta: Optional metadata dictionary
@@ -36,10 +41,11 @@ class CBlock:
         if meta is None:
             meta = {}
         self._meta = meta
-        
+
         # Set security metadata if sec_level is provided
         if sec_level is not None:
             from mellea.security import SecurityMetadata
+
             self._meta["_security"] = SecurityMetadata(sec_level)
 
     @property
@@ -59,25 +65,24 @@ class CBlock:
     def __repr__(self):
         """Provides a python-parsable representation of the block (usually)."""
         return f"CBlock({self.value}, {self._meta.__repr__()})"
-    
+
     @property
     def sec_level(self) -> Any | None:
         """Get the security metadata for this CBlock.
-        
+
         Returns:
             SecurityMetadata if present, None otherwise
         """
         from mellea.security import SecurityMetadata
-        
+
         if self._meta is None or "_security" not in self._meta:
             return None
-        
+
         security_meta = self._meta["_security"]
         if isinstance(security_meta, SecurityMetadata):
             return security_meta
-        
+
         return None
-    
 
 
 class ImageBlock:
@@ -380,41 +385,41 @@ class ModelOutputThunk(CBlock):
         Differs from CBlock because `._meta` can be very large for ModelOutputThunks.
         """
         return f"ModelOutputThunk({self.value})"
-    
+
     @classmethod
     def from_generation(
         cls,
         value: str | None,
-        taint_sources: list[Union[CBlock, Component]] | None = None,
+        taint_sources: list[CBlock | Component] | None = None,
         meta: dict[str, Any] | None = None,
         parsed_repr: CBlock | Component | Any | None = None,
         tool_calls: dict[str, ModelToolCall] | None = None,
-    ) -> "ModelOutputThunk":
+    ) -> ModelOutputThunk:
         """Create a ModelOutputThunk from generation with security metadata.
-        
+
         Args:
             value: The generated content
             taint_sources: List of tainted CBlocks or Components from the generation context
             meta: Additional metadata for the thunk
             parsed_repr: Parsed representation of the output
             tool_calls: Tool calls made during generation
-            
+
         Returns:
             A new ModelOutputThunk with appropriate security metadata
         """
         if meta is None:
             meta = {}
-        
+
         # Add security metadata based on taint sources
         from mellea.security import SecLevel, SecurityMetadata
-        
+
         if taint_sources:
             # If there are taint sources, mark as tainted by the first source
             meta["_security"] = SecurityMetadata(SecLevel.tainted_by(taint_sources[0]))
         else:
             # If no taint sources, mark as safe
             meta["_security"] = SecurityMetadata(SecLevel.none())
-        
+
         return cls(value, meta, parsed_repr, tool_calls)
 
     def __copy__(self):

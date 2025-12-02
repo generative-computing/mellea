@@ -346,7 +346,6 @@ class MelleaSession:
         tool_calls: bool = False,
     ) -> SamplingResult: ...
 
-
     def instruct(
         self,
         description: str | CBlock,

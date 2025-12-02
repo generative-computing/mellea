@@ -46,6 +46,7 @@ from mellea.helpers.openai_compatible_helpers import (
     chat_completion_delta_merge,
     extract_model_tool_requests,
 )
+from mellea.security import taint_sources
 from mellea.stdlib.base import (
     CBlock,
     Component,
@@ -55,7 +56,6 @@ from mellea.stdlib.base import (
     GenerateType,
     ModelOutputThunk,
 )
-from mellea.security import taint_sources
 from mellea.stdlib.chat import Message
 from mellea.stdlib.intrinsics.intrinsic import Intrinsic
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
@@ -642,11 +642,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         # Compute taint sources from action and context
         sources = taint_sources(action, ctx)
-        
+
         output = ModelOutputThunk.from_generation(
-            value=None,
-            taint_sources=sources,
-            meta={}
+            value=None, taint_sources=sources, meta={}
         )
         output._context = linearized_context
         output._action = action
