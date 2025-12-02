@@ -140,7 +140,7 @@ class Instruction(Component):
         
         # Add grounding_context values
         for value in self._grounding_context.values():
-            if isinstance(value, (CBlock, Component)):
+            if isinstance(value, CBlock | Component):
                 parts.append(value)
         
         return parts
