@@ -435,6 +435,17 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             "extra_body": {"documents": docs},
         }
 
+        # Convert other parameters from Mellea proprietary format to standard format.
+        if model_options is not None:
+            for model_option in model_options:
+                if model_option == ModelOption.TEMPERATURE:
+                    request_json["temperature"] = model_options[model_option]
+                else:
+                    raise ValueError(
+                        f"Model option '{model_option}' not implemented "
+                        f"on this generation code path."
+                    )
+
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
 
         self.load_adapter(adapter.qualified_name)

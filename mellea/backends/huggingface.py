@@ -311,6 +311,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "messages": conversation,
             "extra_body": {"documents": docs},
         }
+
+        # Convert other parameters from Mellea proprietary format to standard format.
+        for model_option in model_options:
+            if model_option == ModelOption.TEMPERATURE:
+                request_json["temperature"] = model_options[model_option]
+            else:
+                raise ValueError(
+                    f"Model option '{model_option}' not implemented "
+                    f"on this generation code path."
+                )
+
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
 
         # TODO: Handle caching here. granite_common doesn't tell us what changed,
