@@ -64,8 +64,8 @@ def _call_intrinsic(
         intrinsic,
         context,
         backend,
-        # No rejection sampling, please
         model_options={ModelOption.TEMPERATURE: 0.0},
+        # No rejection sampling, please
         strategy=None,
     )
 

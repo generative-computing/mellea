@@ -251,6 +251,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if not ctx.is_chat_context:
             raise Exception("Does not yet support non-chat contexts.")
 
+        if len(model_options.items()) > 0:
+            FancyLogger.get_logger().info(
+                "passing in model options when generating with an adapter; some model options may be overwritten / ignored"
+            )
+
         linearized_ctx = ctx.view_for_generation()
         assert linearized_ctx is not None, (
             "If ctx.is_chat_context, then the context should be linearizable."
@@ -316,11 +321,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         for model_option in model_options:
             if model_option == ModelOption.TEMPERATURE:
                 request_json["temperature"] = model_options[model_option]
-            else:
-                raise ValueError(
-                    f"Model option '{model_option}' not implemented "
-                    f"on this generation code path."
-                )
 
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
 
