@@ -46,6 +46,7 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    labels: Sequence[str] | None = None,
 ) -> tuple[ModelOutputThunk, Context]: ...
 
 
@@ -61,6 +62,7 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    labels: Sequence[str] | None = None,
 ) -> SamplingResult: ...
 
 
@@ -75,6 +77,7 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    labels: Sequence[str] | None = None,
 ) -> tuple[ModelOutputThunk, Context] | SamplingResult:
     """Runs a generic action, and adds both the action and the result to the context.
 
@@ -88,6 +91,7 @@ def act(
         format: if set, the BaseModel to use for constrained decoding.
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tool_calls: if true, tool calling is enabled.
+        labels: if provided, restrict generation to context nodes with matching types.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -104,6 +108,7 @@ def act(
             model_options=model_options,
             tool_calls=tool_calls,
             silence_context_type_warning=True,  # We can safely silence this here since it's in a sync function.
+            labels=labels,
         )  # type: ignore[call-overload]
         # Mypy doesn't like the bool for return_sampling_results.
     )
@@ -129,6 +134,7 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    labels: Sequence[str] | None = None,
 ) -> tuple[ModelOutputThunk, Context]: ...
 
 
@@ -150,6 +156,7 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    labels: Sequence[str] | None = None,
 ) -> SamplingResult: ...
 
 
@@ -170,6 +177,7 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    labels: Sequence[str] | None = None,
 ) -> tuple[ModelOutputThunk, Context] | SamplingResult:
     """Generates from an instruction.
 
@@ -189,6 +197,7 @@ def instruct(
         model_options: Additional model options, which will upsert into the model/backend's defaults.
         tool_calls: If true, tool calling is enabled.
         images: A list of images to be used in the instruction or None if none.
+        labels: if provided, restrict generation to context nodes with matching types.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -221,6 +230,7 @@ def instruct(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        labels=labels,
     )  # type: ignore[call-overload]
 
 
@@ -235,6 +245,7 @@ def chat(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    labels: Sequence[str] | None = None,
 ) -> tuple[Message, Context]:
     """Sends a simple chat message and returns the response. Adds both messages to the Context."""
     if user_variables is not None:
@@ -254,6 +265,7 @@ def chat(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        labels=labels,
     )
     parsed_assistant_message = result.parsed_repr
     assert isinstance(parsed_assistant_message, Message)
@@ -429,6 +441,7 @@ async def aact(
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
+    labels: Sequence[str] | None = None,
 ) -> tuple[ModelOutputThunk, Context]: ...
 
 
@@ -445,6 +458,7 @@ async def aact(
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
+    labels: Sequence[str] | None = None,
 ) -> SamplingResult: ...
 
 
@@ -475,7 +489,7 @@ async def aact(
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tool_calls: if true, tool calling is enabled.
         silence_context_type_warning: if called directly from an asynchronous function, will log a warning if not using a SimpleContext
-        labels: if provided, restrict generation to context nodes with matching labels
+        labels: if provided, restrict generation to context nodes with matching types.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -571,6 +585,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    labels: Sequence[str] | None = None,
 ) -> tuple[ModelOutputThunk, Context]: ...
 
 
@@ -592,6 +607,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    labels: Sequence[str] | None = None,
 ) -> SamplingResult: ...
 
 
@@ -612,6 +628,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    labels: Sequence[str] | None = None,
 ) -> tuple[ModelOutputThunk, Context] | SamplingResult:
     """Generates from an instruction.
 
@@ -631,6 +648,7 @@ async def ainstruct(
         model_options: Additional model options, which will upsert into the model/backend's defaults.
         tool_calls: If true, tool calling is enabled.
         images: A list of images to be used in the instruction or None if none.
+        labels: if provided, restrict generation to context nodes with matching types.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -663,6 +681,7 @@ async def ainstruct(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        labels=labels,
     )  # type: ignore[call-overload]
 
 
@@ -677,6 +696,7 @@ async def achat(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    labels: Sequence[str] | None = None,
 ) -> tuple[Message, Context]:
     """Sends a simple chat message and returns the response. Adds both messages to the Context."""
     if user_variables is not None:
@@ -696,6 +716,7 @@ async def achat(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        labels=labels,
     )
     parsed_assistant_message = result.parsed_repr
     assert isinstance(parsed_assistant_message, Message)

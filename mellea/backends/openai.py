@@ -311,7 +311,8 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             tool_calls=tool_calls,
             labels=labels,
         )
-        #
+
+        # only add action to context if provided
         if action is not None:
             ctx = ctx.add(action, labels=labels)
 
