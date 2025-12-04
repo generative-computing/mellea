@@ -17,7 +17,7 @@ repos:
     hooks:
       - id: mypy
         name: MyPy
-        entry: uv run --no-sync mypy mellea --no-namespace-packages
+        entry: uv run --no-sync mypy mellea
         pass_filenames: false
         language: system
         files: '\.py$'
