@@ -323,9 +323,8 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         action: Component | CBlock | None,
         ctx: Context,
         *,
-        _format: (
-            type[BaseModelSubclass] | None
-        ) = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
+        _format: type[BaseModelSubclass]
+        | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
         labels: Sequence[str] | None = None,
@@ -360,9 +359,8 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         action: Component | CBlock,
         ctx: Context,
         *,
-        _format: (
-            type[BaseModelSubclass] | None
-        ) = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
+        _format: type[BaseModelSubclass]
+        | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
     ) -> ModelOutputThunk:
         match action:
@@ -447,9 +445,8 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         action: Component | CBlock | None,
         ctx: Context,
         *,
-        _format: (
-            type[BaseModelSubclass] | None
-        ) = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
+        _format: type[BaseModelSubclass]
+        | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
         labels: Sequence[str] | None = None,
@@ -719,11 +716,9 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             output._model_options = model_opts
             output._meta = {
                 "oai_completion_response": response.model_dump(),
-                "usage": (
-                    completion_response.usage.model_dump()
-                    if completion_response.usage
-                    else None
-                ),
+                "usage": completion_response.usage.model_dump()
+                if completion_response.usage
+                else None,
             }
 
             self.formatter.parse(action, output)

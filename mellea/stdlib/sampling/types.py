@@ -1,6 +1,7 @@
 """Base types for sampling."""
 
 import abc
+from collections.abc import Sequence
 
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.stdlib.base import CBlock, Component, Context, ModelOutputThunk
@@ -95,6 +96,7 @@ class SamplingStrategy(abc.ABC):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        labels: Sequence[str] | None = None,
     ) -> SamplingResult:
         """This method is the abstract method for sampling a given component.
 
@@ -109,6 +111,7 @@ class SamplingStrategy(abc.ABC):
             format: output format for structured outputs.
             model_options: model options to pass to the backend during generation / validation.
             tool_calls: True if tool calls should be used during this sampling strategy.
+            labels: if provided, restrict generation to context nodes with matching types.
 
         Returns:
             SamplingResult: A result object indicating the success or failure of the sampling process.

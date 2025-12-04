@@ -407,7 +407,7 @@ class Context(abc.ABC):
     _data: Component | CBlock | None
     _is_root: bool
     _is_chat_context: bool = True
-    _labels: set[str] = None
+    _labels: set[str] | None = None
 
     def __init__(self):
         """Constructs a new root context with no content."""

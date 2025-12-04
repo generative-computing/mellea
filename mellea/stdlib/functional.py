@@ -269,9 +269,8 @@ def validate(
     output: CBlock | None = None,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
-    generate_logs: (
-        list[GenerateLog] | None
-    ) = None,  # TODO: Can we get rid of gen logs here and in act?
+    generate_logs: list[GenerateLog]
+    | None = None,  # TODO: Can we get rid of gen logs here and in act?
     input: CBlock | None = None,
 ) -> list[ValidationResult]:
     """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
