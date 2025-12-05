@@ -10,11 +10,20 @@ from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import (CBlock, ChatContext, Context, ModelOutputThunk,
-                                SimpleContext)
-from mellea.stdlib.requirement import (ALoraRequirement, LLMaJRequirement,
-                                       Requirement, ValidationResult,
-                                       default_output_to_bool)
+from mellea.stdlib.base import (
+    CBlock,
+    ChatContext,
+    Context,
+    ModelOutputThunk,
+    SimpleContext,
+)
+from mellea.stdlib.requirement import (
+    ALoraRequirement,
+    LLMaJRequirement,
+    Requirement,
+    ValidationResult,
+    default_output_to_bool,
+)
 
 
 @pytest.fixture(scope="module")
@@ -39,6 +48,7 @@ def session(backend):
     session = MelleaSession(backend, ctx=ChatContext())
     yield session
     session.reset()
+
 
 @pytest.mark.qualitative
 def test_adapters(backend):

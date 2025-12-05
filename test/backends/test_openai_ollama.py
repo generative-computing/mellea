@@ -122,6 +122,7 @@ async def test_generate_from_raw(m_session):
             actions=[CBlock(value=prompt) for prompt in prompts], ctx=m_session.ctx
         )
 
+
 # Default OpenAI implementation doesn't support structured outputs for the completions API.
 # def test_generate_from_raw_with_format(self):
 #     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]

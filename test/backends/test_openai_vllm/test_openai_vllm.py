@@ -11,8 +11,12 @@ from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.openai import OpenAIBackend
 from mellea.backends.types import ModelOption, _ServerType
 from mellea.stdlib.base import CBlock, ChatContext, Context, ModelOutputThunk
-from mellea.stdlib.requirement import (ALoraRequirement, LLMaJRequirement,
-                                       Requirement, req)
+from mellea.stdlib.requirement import (
+    ALoraRequirement,
+    LLMaJRequirement,
+    Requirement,
+    req,
+)
 
 # The vllm tests are disabled by default, because we need a test environment with the vLLM server running.
 # We use an env var VLLM_TESTS_ENABLED to enable these tests.
@@ -138,8 +142,11 @@ class TestOpenAIALoraStuff:
         base_url="http://localhost:8000/v1",
         api_key="EMPTY",
     )
-    backend.add_adapter(GraniteCommonAdapter("requirement_check", 
-                                             base_model_name=backend.base_model_name))
+    backend.add_adapter(
+        GraniteCommonAdapter(
+            "requirement_check", base_model_name=backend.base_model_name
+        )
+    )
 
     m = MelleaSession(backend, ctx=ChatContext())
 

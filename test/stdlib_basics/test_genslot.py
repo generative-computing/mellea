@@ -5,22 +5,27 @@ from mellea import generative, start_session
 from mellea.backends.model_ids import META_LLAMA_3_2_1B
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.base import ChatContext, Context
-from mellea.stdlib.genslot import AsyncGenerativeSlot, GenerativeSlot, PreconditionException, SyncGenerativeSlot
+from mellea.stdlib.genslot import (
+    AsyncGenerativeSlot,
+    GenerativeSlot,
+    PreconditionException,
+    SyncGenerativeSlot,
+)
 from mellea.stdlib.requirement import Requirement, simple_validate
 from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 from mellea.stdlib.session import MelleaSession
+
 
 @pytest.fixture(scope="module")
 def backend(gh_run: int):
     """Shared backend."""
     if gh_run == 1:
         return OllamaModelBackend(
-            model_id=META_LLAMA_3_2_1B.ollama_name,  # type: ignore
+            model_id=META_LLAMA_3_2_1B.ollama_name  # type: ignore
         )
     else:
-        return OllamaModelBackend(
-            model_id="granite3.3:8b",
-        )
+        return OllamaModelBackend(model_id="granite3.3:8b")
+
 
 @generative
 def classify_sentiment(text: str) -> Literal["positive", "negative"]: ...
@@ -81,26 +86,66 @@ async def test_async_gen_slot(session):
     r1 = async_write_short_sentence(session, topic="cats")
     r2 = async_write_short_sentence(session, topic="dogs")
 
-    r3, c3 = await async_write_short_sentence(context=session.ctx, backend=session.backend, topic="fish")
+    r3, c3 = await async_write_short_sentence(
+        context=session.ctx, backend=session.backend, topic="fish"
+    )
     results = await asyncio.gather(r1, r2)
 
     assert isinstance(r3, str)
     assert isinstance(c3, Context)
     assert len(results) == 2
 
+
 @pytest.mark.parametrize(
     "arg_choices,kwarg_choices,errs",
     [
         pytest.param(["m"], ["func1", "func2", "func3"], False, id="session"),
         pytest.param(["context"], ["backend"], False, id="context and backend"),
-        pytest.param(["backend"], ["func1", "func2", "func3"], True, id="backend without context"),
+        pytest.param(
+            ["backend"], ["func1", "func2", "func3"], True, id="backend without context"
+        ),
         pytest.param(["m"], ["m"], True, id="duplicate arg and kwarg"),
-        pytest.param(["m", "precondition_requirements", "requirements", "strategy", "model_options", "func1", "func2", "func3"], [], True, id="original func args as positional args"),
-        pytest.param([], ["m", "func1", "func2", "func3"], False, id="session and func as kwargs"),
-        pytest.param([], ["m", "precondition_requirements", "requirements", "strategy", "model_options", "func1", "func2", "func3"], False, id="all kwargs"),
-        pytest.param([], ["func1", "m", "func2", "requirements", "func3"], False, id="interspersed kwargs"),
-        pytest.param([], [], True, id="missing required args")
-    ]
+        pytest.param(
+            [
+                "m",
+                "precondition_requirements",
+                "requirements",
+                "strategy",
+                "model_options",
+                "func1",
+                "func2",
+                "func3",
+            ],
+            [],
+            True,
+            id="original func args as positional args",
+        ),
+        pytest.param(
+            [], ["m", "func1", "func2", "func3"], False, id="session and func as kwargs"
+        ),
+        pytest.param(
+            [],
+            [
+                "m",
+                "precondition_requirements",
+                "requirements",
+                "strategy",
+                "model_options",
+                "func1",
+                "func2",
+                "func3",
+            ],
+            False,
+            id="all kwargs",
+        ),
+        pytest.param(
+            [],
+            ["func1", "m", "func2", "requirements", "func3"],
+            False,
+            id="interspersed kwargs",
+        ),
+        pytest.param([], [], True, id="missing required args"),
+    ],
 )
 def test_arg_extraction(backend, arg_choices, kwarg_choices, errs):
     """Tests the internal extract_args_and_kwargs function.
@@ -156,17 +201,19 @@ def test_arg_extraction(backend, arg_choices, kwarg_choices, errs):
     except Exception as e:
         found_err = True
         err = e
-    
+
     if errs:
         assert found_err, "expected an exception and got none"
     else:
         assert not found_err, f"got unexpected err: {err}"
 
+
 def test_disallowed_parameter_names():
     with pytest.raises(ValueError):
+
         @generative
-        def test(backend):
-            ...
+        def test(backend): ...
+
 
 def test_precondition_failure(session):
     with pytest.raises(PreconditionException):
@@ -174,16 +221,19 @@ def test_precondition_failure(session):
             m=session,
             text="hello",
             precondition_requirements=[
-                Requirement("forced failure", validation_fn=simple_validate(lambda x: (False, "")))
-            ]
+                Requirement(
+                    "forced failure",
+                    validation_fn=simple_validate(lambda x: (False, "")),
+                )
+            ],
         )
+
 
 def test_requirement(session):
     classify_sentiment(
-        m=session,
-        text="hello",
-        requirements=["req1", "req2", Requirement("req3")]
+        m=session, text="hello", requirements=["req1", "req2", Requirement("req3")]
     )
+
 
 def test_with_no_args(session):
     @generative
@@ -192,6 +242,7 @@ def test_with_no_args(session):
         ...
 
     generate_text(m=session)
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

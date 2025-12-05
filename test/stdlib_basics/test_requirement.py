@@ -18,6 +18,7 @@ async def test_llmaj_validation_req_output_field():
         "requirement's output shouldn't be updated during/after validation"
     )
 
+
 async def test_llmaj_requirement_uses_requirement_template():
     m = start_session(ctx=ctx)
     req = LLMaJRequirement("Must output test.")

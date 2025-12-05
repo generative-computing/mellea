@@ -26,9 +26,7 @@ def backend(gh_run: int):
             url = url.replace("127.0.0.1", "http://localhost")
 
         return LiteLLMBackend(
-            model_id=_MODEL_ID,
-            base_url=url,
-            model_options={"api_base": url},
+            model_id=_MODEL_ID, base_url=url, model_options={"api_base": url}
         )
     else:
         return LiteLLMBackend(model_id=_MODEL_ID)
@@ -138,6 +136,7 @@ def test_gen_slot(session):
     # should yield to true - but, of course, is model dependent
     assert h is True
 
+
 async def test_generate_from_raw(session):
     prompts = [
         "what is 1+1?",
@@ -151,7 +150,9 @@ async def test_generate_from_raw(session):
         actions=[CBlock(value=prompt) for prompt in prompts], ctx=session.ctx
     )
 
-    assert len(results) == 1, "ollama doesn't support batching; litellm should send a single message containing all prompts"
+    assert len(results) == 1, (
+        "ollama doesn't support batching; litellm should send a single message containing all prompts"
+    )
     assert results[0].value is not None
 
 
