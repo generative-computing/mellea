@@ -17,13 +17,22 @@ from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.huggingface import LocalHFBackend, _assert_correct_adapters
 from mellea.backends.types import ModelOption
-from mellea.stdlib.base import (CBlock, ChatContext, Context, ModelOutputThunk,
-                                SimpleContext)
+from mellea.stdlib.base import (
+    CBlock,
+    ChatContext,
+    Context,
+    ModelOutputThunk,
+    SimpleContext,
+)
 from mellea.stdlib.chat import Message
 from mellea.stdlib.intrinsics.intrinsic import Intrinsic
-from mellea.stdlib.requirement import (ALoraRequirement, LLMaJRequirement,
-                                       Requirement, ValidationResult,
-                                       default_output_to_bool)
+from mellea.stdlib.requirement import (
+    ALoraRequirement,
+    LLMaJRequirement,
+    Requirement,
+    ValidationResult,
+    default_output_to_bool,
+)
 
 
 @pytest.fixture(scope="module")
@@ -40,9 +49,7 @@ def backend():
         )
     )
     backend.add_adapter(
-        GraniteCommonAdapter(
-            "answerability", base_model_name=backend.base_model_name
-        )
+        GraniteCommonAdapter("answerability", base_model_name=backend.base_model_name)
     )
     return backend
 
@@ -53,6 +60,7 @@ def session(backend):
     session = MelleaSession(backend, ctx=ChatContext())
     yield session
     session.reset()
+
 
 @pytest.mark.qualitative
 def test_adapters(backend):
@@ -305,6 +313,7 @@ async def test_async_avalue(session):
     assert m1_final_val is not None
     assert m1_final_val == mot1.value
 
+
 @pytest.mark.qualitative
 async def test_generate_with_lock(backend):
     # Enable the faulthandler for this test.
@@ -319,23 +328,20 @@ async def test_generate_with_lock(backend):
     b._added_adapters = {}
     b._loaded_adapters = {}
     b.add_adapter(
-        GraniteCommonAdapter(
-            "requirement_check", base_model_name=b.base_model_name
-        )
+        GraniteCommonAdapter("requirement_check", base_model_name=b.base_model_name)
     )
     b.add_adapter(
-        GraniteCommonAdapter(
-            "answerability", base_model_name=b.base_model_name
-        )
+        GraniteCommonAdapter("answerability", base_model_name=b.base_model_name)
     )
 
     memoized = dict()
     gen_func = model.generate
+
     def mock_func(input_ids, *args, **kwargs):
         """Mocks the generate function. Must call `populate_mocked_dict` with each input that must be cached before using this."""
         for key, val in memoized.items():
             if torch.equal(key, input_ids):
-                time.sleep(random.uniform(.1, .5)) # Simulate a bit of work.
+                time.sleep(random.uniform(0.1, 0.5))  # Simulate a bit of work.
                 return val
         assert False, "did not get a cached response"
 
@@ -347,7 +353,9 @@ async def test_generate_with_lock(backend):
         return output
 
     model.generate = Mock(side_effect=populate_mocked_dict)
-    assert not isinstance(backend._model, Mock), "mocking went wrong; backend fixture changed; other tests may fail"
+    assert not isinstance(backend._model, Mock), (
+        "mocking went wrong; backend fixture changed; other tests may fail"
+    )
 
     # Set up the inputs.
     ctx = ChatContext().add(Message("user", "hello"))
@@ -362,18 +370,22 @@ async def test_generate_with_lock(backend):
             b.generate_from_context(act, ctx),
             b.generate_from_context(req_intrinsic, ctx),
             b.generate_from_context(answerability_intrinsic, ctx),
-            b.generate_from_raw([raw_act], ctx, model_options={ModelOption.MAX_NEW_TOKENS: 3})
+            b.generate_from_raw(
+                [raw_act], ctx, model_options={ModelOption.MAX_NEW_TOKENS: 3}
+            ),
         ]
 
     # Call once to populate the memoized mock.
     outputs = await asyncio.gather(*call_backend_generate())
     for output in outputs:
         mot = output[0]
-        await mot.avalue() # Ensure all values are computed.
+        await mot.avalue()  # Ensure all values are computed.
 
     # Use the memoized mock that errors if not precomputed.
     model.generate = Mock(side_effect=mock_func)
-    count = 5 # Use a high number to try to put pressure on the lock and catch deadlocks.
+    count = (
+        5  # Use a high number to try to put pressure on the lock and catch deadlocks.
+    )
     coros: list[Coroutine[Any, Any, tuple[ModelOutputThunk, Context]]] = []
     for _ in range(count):
         coros.extend(call_backend_generate())
@@ -388,10 +400,11 @@ async def test_generate_with_lock(backend):
 
     faulthandler.disable()
 
+
 @pytest.mark.qualitative
 async def test_generate_with_lock_does_not_block_when_awaiting_value(backend):
-    """This is a tricky test to setup. 
-    
+    """This is a tricky test to setup.
+
     It's purpose is to ensure that a long-running generation doesn't get blocked
     when awaiting the `model_output_thunk.avalue()` of a different generation request.
 
@@ -417,14 +430,28 @@ async def test_generate_with_lock_does_not_block_when_awaiting_value(backend):
     # - a streaming generation that will take a long time to resolve.
     # - a regular generation that should be able to happen while the streaming is happening.
     # - two intrinsics that shouldn't be able to happen concurrently.
-    reg_mot_stream, _ = await backend.generate_from_context(act, ctx, model_options={ModelOption.STREAM: True, ModelOption.MAX_NEW_TOKENS: token_generation_length, "min_length": token_generation_length})
+    reg_mot_stream, _ = await backend.generate_from_context(
+        act,
+        ctx,
+        model_options={
+            ModelOption.STREAM: True,
+            ModelOption.MAX_NEW_TOKENS: token_generation_length,
+            "min_length": token_generation_length,
+        },
+    )
     reg_mot, _ = await backend.generate_from_context(act, ctx)
-    req_mot, _ = await backend.generate_from_context(req_intrinsic, ctx, model_options={ModelOption.STREAM: True})
-    answerability_mot, _ = await backend.generate_from_context(answerability_intrinsic, ctx, model_options={ModelOption.STREAM: True})
+    req_mot, _ = await backend.generate_from_context(
+        req_intrinsic, ctx, model_options={ModelOption.STREAM: True}
+    )
+    answerability_mot, _ = await backend.generate_from_context(
+        answerability_intrinsic, ctx, model_options={ModelOption.STREAM: True}
+    )
 
     # Ensure the stream is generating but not yet completing.
     await reg_mot_stream.astream()
-    assert not reg_mot_stream.is_computed(), "generation completed too early, see test for more details"
+    assert not reg_mot_stream.is_computed(), (
+        "generation completed too early, see test for more details"
+    )
 
     # Awaiting this shouldn't cause a deadlock. Add the timeout so the test can fail.
     # If the test fails, this means that the streaming generation wasn't able to complete,
@@ -442,10 +469,11 @@ async def test_generate_with_lock_does_not_block_when_awaiting_value(backend):
             raise e
         else:
             raise Exception("timeout ended too early, see test for more details")
-    
+
     for output in [reg_mot_stream, reg_mot, req_mot, answerability_mot]:
         if not output.is_computed():
             await output.avalue()  # Ensure everything gets computed.
+
 
 @pytest.mark.qualitative
 async def test_error_during_generate_with_lock(backend):
@@ -459,12 +487,11 @@ async def test_error_during_generate_with_lock(backend):
     b._added_adapters = {}
     b._loaded_adapters = {}
     b.add_adapter(
-        GraniteCommonAdapter(
-            "requirement_check", base_model_name=b.base_model_name
-        )
+        GraniteCommonAdapter("requirement_check", base_model_name=b.base_model_name)
     )
 
     regular_generate = b._model.generate
+
     def generate_and_raise_exc(*args, **kwargs):
         """Will generate like usual for the intrinsic request. Will fail for the regular generation request."""
         if "max_new_tokens" in kwargs:
@@ -472,7 +499,9 @@ async def test_error_during_generate_with_lock(backend):
         raise Exception("Oops!")
 
     b._model.generate = Mock(side_effect=generate_and_raise_exc)
-    assert not isinstance(backend._model, Mock), "mocking went wrong; backend fixture changed; other tests may fail"
+    assert not isinstance(backend._model, Mock), (
+        "mocking went wrong; backend fixture changed; other tests may fail"
+    )
 
     # Set up the inputs.
     ctx = ChatContext().add(Message("user", "hello"))
@@ -487,9 +516,10 @@ async def test_error_during_generate_with_lock(backend):
 
     await req_mot.avalue()
 
+
 def test_assert_correct_adapters():
     model = Mock()
-    
+
     # Test scenarios with no active adapters.
     model.active_adapters = Mock(return_value=[])
     _assert_correct_adapters("", model)
@@ -505,10 +535,15 @@ def test_assert_correct_adapters():
     _assert_correct_adapters("new", model)
 
     # Test scenarios when no adapters have been loaded.
-    model.active_adapters = Mock(side_effect=ValueError("No adapter loaded. Please load an adapter first."))
-    _assert_correct_adapters("", model)  # This will fail if peft ever changes the error message.
+    model.active_adapters = Mock(
+        side_effect=ValueError("No adapter loaded. Please load an adapter first.")
+    )
+    _assert_correct_adapters(
+        "", model
+    )  # This will fail if peft ever changes the error message.
     with pytest.raises(AssertionError):
         _assert_correct_adapters("new", model)
+
 
 if __name__ == "__main__":
     import pytest
