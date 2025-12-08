@@ -26,9 +26,7 @@ def backend(gh_run: int):
             url = url.replace("127.0.0.1", "http://localhost")
 
         return LiteLLMBackend(
-            model_id=_MODEL_ID,
-            base_url=url,
-            model_options={"api_base": url},
+            model_id=_MODEL_ID, base_url=url, model_options={"api_base": url}
         )
     else:
         return LiteLLMBackend(model_id=_MODEL_ID)
@@ -111,12 +109,6 @@ def test_litellm_ollama_instruct_options(session):
         ModelOption.SEED: 123,
         ModelOption.TEMPERATURE: 0.5,
         ModelOption.MAX_NEW_TOKENS: 100,
-        
-        # Ollama thinking controls currently broken on Granite; see 
-        # https://github.com/ollama/ollama/issues/10983
-        # TODO: Re-enable when this upstream bug gets fixed.
-        #ModelOption.THINKING: True,
-        #"reasoning_effort": True,
         "homer_simpson": "option should be kicked out",
     }
 
@@ -144,6 +136,7 @@ def test_gen_slot(session):
     # should yield to true - but, of course, is model dependent
     assert h is True
 
+
 async def test_generate_from_raw(session):
     prompts = [
         "what is 1+1?",
@@ -157,7 +150,9 @@ async def test_generate_from_raw(session):
         actions=[CBlock(value=prompt) for prompt in prompts], ctx=session.ctx
     )
 
-    assert len(results) == 1, "ollama doesn't support batching; litellm should send a single message containing all prompts"
+    assert len(results) == 1, (
+        "ollama doesn't support batching; litellm should send a single message containing all prompts"
+    )
     assert results[0].value is not None
 
 

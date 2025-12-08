@@ -9,6 +9,7 @@ from mellea.backends.adapters.adapter import (
     AdapterType,
     GraniteCommonAdapter,
 )
+from mellea.backends.types import ModelOption
 from mellea.stdlib.base import ChatContext, Document
 from mellea.stdlib.chat import Message
 from mellea.stdlib.intrinsics.intrinsic import Intrinsic
@@ -63,6 +64,7 @@ def _call_intrinsic(
         intrinsic,
         context,
         backend,
+        model_options={ModelOption.TEMPERATURE: 0.0},
         # No rejection sampling, please
         strategy=None,
     )
@@ -277,7 +279,7 @@ def rewrite_answer_for_relevance(
         backend,
         kwargs={
             "answer_relevance_category": result_json["answer_relevance_category"],
-            "answer_relevance_analysis": result_json["answer_relevance_category"],
+            "answer_relevance_analysis": result_json["answer_relevance_analysis"],
             "correction_method": correction_method,
         },
     )

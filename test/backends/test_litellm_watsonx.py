@@ -41,18 +41,15 @@ def test_multiple_sync_funcs(session):
 
 @pytest.mark.qualitative
 async def test_generate_from_raw(session):
-    prompts = [
-        "what is 1+1?",
-        "what is 2+2?",
-        "what is 3+3?",
-        "what is 4+2+2?",
-    ]
+    prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+2+2?"]
 
     results = await session.backend.generate_from_raw(
         actions=[CBlock(value=prompt) for prompt in prompts], ctx=session.ctx
     )
 
-    assert len(results) == 1, "litellm converts a batch request for watsonx into a single message"
+    assert len(results) == 1, (
+        "litellm converts a batch request for watsonx into a single message"
+    )
     assert results[0].value is not None
 
 

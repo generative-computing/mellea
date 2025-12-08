@@ -23,7 +23,7 @@ BASE_MODEL = "ibm-granite/granite-3.3-2b-instruct"
 @pytest.fixture(name="backend")
 def _backend():
     """Backend used by the tests in this file."""
-    
+
     # Prevent thrashing if the default device is CPU
     torch.set_num_threads(4)
 
@@ -57,12 +57,7 @@ def _read_input_json(file_name: str):
     documents = []
     if "extra_body" in json_data and "documents" in json_data["extra_body"]:
         for d in json_data["extra_body"]["documents"]:
-            documents.append(
-                Document(
-                    text=d["text"],
-                    doc_id=d["doc_id"],
-                )
-            )
+            documents.append(Document(text=d["text"], doc_id=d["doc_id"]))
     return context, next_user_turn, documents
 
 
@@ -166,7 +161,13 @@ def test_hallucination_detection(backend):
 def test_answer_relevance(backend):
     """Verify that the answer relevance composite intrinsic functions properly."""
     context, answer, docs = _read_input_json("answer_relevance.json")
-    expected_rewrite = "Alice, Bob, and Carol attended the meeting."
+
+    # Note that this is not the optimal answer. This test is currently using an
+    # outdated LoRA adapter. Releases of new adapters will come after the Mellea
+    # integration has stabilized.
+    expected_rewrite = (
+        "The documents do not provide information about the attendees of the meeting."
+    )
 
     # First call triggers adapter loading
     result = rag.rewrite_answer_for_relevance(answer, docs, context, backend)
@@ -177,9 +178,23 @@ def test_answer_relevance(backend):
     assert result == expected_rewrite
 
     # Canned input always gets rewritten. Set threshold to disable the rewrite.
-    result = rag.rewrite_answer_for_relevance(answer, docs, context, backend,
-                                              rewrite_threshold=0.0)
+    result = rag.rewrite_answer_for_relevance(
+        answer, docs, context, backend, rewrite_threshold=0.0
+    )
     assert result == answer
+
+
+def test_answer_relevance_classifier(backend):
+    """Verify that the first phase of the answer relevance flow behaves as expectee."""
+    context, answer, docs = _read_input_json("answer_relevance.json")
+
+    result_json = rag._call_intrinsic(
+        "answer_relevance_classifier",
+        context.add(Message("assistant", answer, documents=list(docs))),
+        backend,
+    )
+    assert result_json["answer_relevance_likelihood"] == 0.0
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

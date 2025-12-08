@@ -2,11 +2,10 @@
 
 import abc
 import pathlib
-from typing import Any, TypeVar
+from typing import TypeVar
 
 import granite_common.intrinsics
 import yaml
-from litellm import cast
 
 from mellea.backends import Backend
 from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata

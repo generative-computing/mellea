@@ -1,7 +1,7 @@
 import asyncio
 import pytest
 from mellea.stdlib.base import ChatContext, ModelOutputThunk
-from mellea.stdlib.requirement import Requirement, simple_validate
+from mellea.stdlib.requirement import LLMaJRequirement, Requirement, simple_validate
 from mellea.stdlib.session import start_session
 
 ctx = ChatContext()
@@ -11,6 +11,17 @@ ctx = ctx.add(ModelOutputThunk("test"))
 async def test_llmaj_validation_req_output_field():
     m = start_session(ctx=ctx)
     req = Requirement("Must output test.")
+    assert req._output is None
+
+    _ = await req.validate(m.backend, ctx=ctx)
+    assert req._output is None, (
+        "requirement's output shouldn't be updated during/after validation"
+    )
+
+
+async def test_llmaj_requirement_uses_requirement_template():
+    m = start_session(ctx=ctx)
+    req = LLMaJRequirement("Must output test.")
     assert req._output is None
 
     _ = await req.validate(m.backend, ctx=ctx)
