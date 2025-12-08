@@ -55,12 +55,12 @@ class LiteLLMBackend(FormatterBackend):
         base_url: str | None = "http://localhost:11434",
         model_options: dict | None = None,
     ):
-        """Initialize and OpenAI compatible backend. For any additional kwargs that you need to pass the the client, pass them as a part of **kwargs.
+        """Initialize an OpenAI compatible backend using the [LiteLLM Python SDK](https://docs.litellm.ai/docs/#litellm-python-sdk).
 
         Note: If getting `Unclosed client session`, set `export DISABLE_AIOHTTP_TRANSPORT=True` in your environment. See: https://github.com/BerriAI/litellm/issues/13251.
 
         Args:
-            model_id : The LiteLLM model identifier. Make sure that all necessary credentials are in OS environment variables.
+            model_id : The LiteLLM model identifier; in most cases requires some combination of `<provider>/<model_creator>/<model_name>`. Make sure that all necessary credentials are in OS environment variables.
             formatter: A custom formatter based on backend.If None, defaults to TemplateFormatter
             base_url : Base url for LLM API. Defaults to None.
             model_options : Generation options to pass to the LLM. Defaults to None.
