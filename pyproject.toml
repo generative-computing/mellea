@@ -46,6 +46,14 @@ dependencies = [
     "math_verify", # Needed for Majority Voting Sampling Strategies.
     "rouge_score", # Needed for Majority Voting Sampling Strategies.
     "llm-sandbox[docker]>=0.3.23",
+    "neo4j>=6.0.3",
+    "pandas>=2.2.3",
+    "transformers>=4.53.3",
+    "bs4>=0.0.2",
+    "trafilatura>=2.0.0",
+    "litellm>=1.79.3",
+    "torch>=2.7.0",
+    "sentence-transformers>=5.1.2",
 ]
 
 [project.scripts]
