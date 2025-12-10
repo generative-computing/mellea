@@ -1,0 +1,17 @@
+Please check if the following arguments satisfy the precondition.
+Reply with 'yes' if the precondition is satisfied and 'no' otherwise.
+Do not include any other text in your response.
+
+{%- block output -%}
+{% if output %}
+
+Arguments:
+{{ output -}}
+{%- endif -%}
+{% endblock output%}
+
+{%- block description %}
+{% if description %}
+Precondition: {{ description -}}
+{%- endif -%}
+{% endblock description %}

@@ -35,7 +35,7 @@ class Backend(abc.ABC):
         self.model_options = model_options if model_options is not None else {}
 
     @abc.abstractmethod
-    def generate_from_context(
+    async def generate_from_context(
         self,
         action: Component | CBlock | None,
         ctx: Context,
@@ -61,7 +61,7 @@ class Backend(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def generate_from_raw(
+    async def generate_from_raw(
         self,
         actions: list[Component | CBlock],
         ctx: Context,

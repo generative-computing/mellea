@@ -8,7 +8,7 @@ from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.base import CBlock, Component, Context, GenerateLog, ModelOutputThunk
 
 
-def think_budget_forcing(  # noqa: D417
+async def think_budget_forcing(  # noqa: D417
     backend: OllamaModelBackend,
     action: CBlock | Component,
     *,
@@ -77,7 +77,7 @@ def think_budget_forcing(  # noqa: D417
             break
 
         model_options[ModelOption.MAX_NEW_TOKENS] = rem_toks
-        result = backend.generate_from_raw(
+        result = await backend.generate_from_raw(
             [CBlock(value=curr_prompt)],
             model_options=model_options,
             ctx=ctx,
@@ -150,7 +150,7 @@ def think_budget_forcing(  # noqa: D417
         model_options.pop(ModelOption.MAX_NEW_TOKENS, None)  # generate unconditionally
 
     # model_options["logprobs"] = 1  # To get number of generated tokens
-    result = backend.generate_from_raw(
+    result = await backend.generate_from_raw(
         [CBlock(curr_prompt)],
         model_options=model_options,
         ctx=ctx,
