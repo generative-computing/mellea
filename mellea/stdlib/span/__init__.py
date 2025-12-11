@@ -1,0 +1,52 @@
+"""Conceptual Spans."""
+
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    ModelOutputThunk,
+    TemplateRepresentation,
+)
+
+Span = CBlock | Component | ModelOutputThunk
+
+
+class SimpleComponent(Component):
+    """A Component that is make up of named spans."""
+
+    def __init__(self, **kwargs):
+        """Initialized a simple component of the constructor's kwargs."""
+        for key in kwargs.keys():
+            if type(kwargs[key]) is str:
+                kwargs[key] = CBlock(value=kwargs[key])
+        self._kwargs_type_check(kwargs)
+        self._kwargs = kwargs
+
+    def parts(self):
+        """Returns the values of the kwargs."""
+        return self._kwargs.values()
+
+    def _kwargs_type_check(self, kwargs):
+        for key in kwargs.keys():
+            value = kwargs[key]
+            assert issubclass(type(value), Component) or issubclass(
+                type(value), CBlock
+            ), f"Expected span but found {type(value)}"
+            assert type(key) is str
+        return True
+
+    @staticmethod
+    def make_simple_string(kwargs):
+        """Uses <|key|>value</|key|> to represent a simple component."""
+        return "\n".join(
+            [f"<|{key}|>{value}</|{key}|>" for (key, value) in kwargs.items()]
+        )
+
+    def format_for_llm(self):
+        """Uses a string rep."""
+        return SimpleComponent.make_simple_string(self._kwargs)
+        # """ Uses a simple tagging structure that needs to be changed in the future. """
+        # return TemplateRepresentation(
+        #     obj=self,
+        #     args=self._kwargs,
+        #     template=SimpleComponent.make_simple_template(self._kwargs),
+        # )
