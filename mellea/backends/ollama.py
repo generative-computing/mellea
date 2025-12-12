@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 import mellea.backends.model_ids as model_ids
 from mellea.backends import BaseModelSubclass
+from mellea.backends._utils import generate_walk
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.tools import (
@@ -294,6 +295,12 @@ class OllamaModelBackend(FormatterBackend):
         Raises:
             RuntimeError: If not called from a thread with a running event loop.
         """
+        # Start by awaiting any necessary computation.
+        _computed = [await todo.avalue() for todo in generate_walk(action)]
+        FancyLogger.get_logger().info(
+            f"generate_from_chat_context awaited on {len(_computed)} uncomputed mots."
+        )
+
         model_opts = self._simplify_and_merge(model_options)
 
         linearized_context = ctx.view_for_generation()
@@ -408,9 +415,14 @@ class OllamaModelBackend(FormatterBackend):
 
         model_opts = self._simplify_and_merge(model_options)
 
+        for act in actions:
+            for todo in generate_walk(act):
+                await todo.avalue()
+
+        prompts = [self.formatter.print(action) for action in actions]
+
         # Ollama doesn't support "batching". There's some ability for concurrency. Use that here.
         # See https://github.com/ollama/ollama/blob/main/docs/faq.md#how-does-ollama-handle-concurrent-requests.
-        prompts = [self.formatter.print(action) for action in actions]
 
         # Run async so that we can make use of Ollama's concurrency.
         coroutines: list[Coroutine[Any, Any, ollama.GenerateResponse]] = []
