@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import inspect
+import itertools
 from collections.abc import Callable
 from typing import Any, Literal
 
 from mellea.backends.formatter import Formatter
 from mellea.backends.tools import parse_tools
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import CBlock, Component, Context, ModelToolCall
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    Context,
+    ModelOutputThunk,
+    ModelToolCall,
+)
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
 
@@ -80,3 +87,15 @@ def to_tool_calls(
     if len(model_tool_calls) > 0:
         return model_tool_calls
     return None
+
+
+def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputThunk]:
+    """Returns the generation walk ordering for a Span."""
+    match c:
+        case ModelOutputThunk() if not c.is_computed():
+            return [c]
+        case CBlock():
+            return []
+        case Component():
+            parts_walk = [generate_walk(p) for p in c.parts()]
+            return itertools.chain.from_iterable(parts_walk)  # aka flatten

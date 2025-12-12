@@ -1,8 +1,10 @@
 import asyncio
 from mellea.stdlib.span import Span, SimpleComponent
 from mellea.stdlib.base import SimpleContext, Context, CBlock, ModelOutputThunk
+from mellea.stdlib.requirement import Requirement
 from mellea.backends import Backend
 from mellea.backends.ollama import OllamaModelBackend
+from typing import Tuple
 
 backend = OllamaModelBackend("granite4:latest")
 
@@ -15,20 +17,22 @@ async def fib(backend: Backend, ctx: Context, x: CBlock, y: CBlock) -> ModelOutp
     return mot
 
 
-async def main(backend: Backend, ctx: Context):
+async def fib_main(backend: Backend, ctx: Context):
     fibs = []
-    for i in range(100):
+    for i in range(20):
         if i == 0 or i == 1:
-            fibs.append(CBlock(f"{i + 1}"))
+            fibs.append(CBlock(f"{i}"))
         else:
-            fibs.append(await fib(backend, ctx, fibs[i - 1], fibs[i - 2]))
+            mot = await fib(backend, ctx, fibs[i - 1], fibs[i - 2])
+            fibs.append(mot)
 
-    for x in fibs:
+    for x in enumerate(fibs):
         match x:
             case ModelOutputThunk():
-                print(await x.avalue())
+                n = await x.avalue()
+                print(n)
             case CBlock():
                 print(x.value)
 
 
-asyncio.run(main(backend, SimpleContext()))
+asyncio.run(fib_main(backend, SimpleContext()))

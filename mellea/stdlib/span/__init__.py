@@ -23,14 +23,14 @@ class SimpleComponent(Component):
 
     def parts(self):
         """Returns the values of the kwargs."""
-        return self._kwargs.values()
+        return list(self._kwargs.values())
 
     def _kwargs_type_check(self, kwargs):
         for key in kwargs.keys():
             value = kwargs[key]
             assert issubclass(type(value), Component) or issubclass(
                 type(value), CBlock
-            ), f"Expected span but found {type(value)}"
+            ), f"Expected span but found {type(value)} of value: {value}"
             assert type(key) is str
         return True
 
@@ -41,9 +41,23 @@ class SimpleComponent(Component):
             [f"<|{key}|>{value}</|{key}|>" for (key, value) in kwargs.items()]
         )
 
+    @staticmethod
+    def make_json_string(kwargs):
+        """Uses json."""
+        str_args = dict()
+        for key in kwargs.keys():
+            match kwargs[key]:
+                case ModelOutputThunk() | CBlock():
+                    str_args[key] = kwargs[key].value
+                case Component():
+                    str_args[key] = kwargs[key].format_for_llm()
+        import json
+
+        return json.dumps(str_args)
+
     def format_for_llm(self):
         """Uses a string rep."""
-        return SimpleComponent.make_simple_string(self._kwargs)
+        return SimpleComponent.make_json_string(self._kwargs)
         # """ Uses a simple tagging structure that needs to be changed in the future. """
         # return TemplateRepresentation(
         #     obj=self,
