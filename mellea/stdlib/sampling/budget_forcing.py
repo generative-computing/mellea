@@ -1,5 +1,6 @@
 """Sampling Strategies for budget forcing generation."""
 
+from collections.abc import Sequence
 from copy import deepcopy
 
 import tqdm
@@ -82,6 +83,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
         model_options: dict | None = None,
         tool_calls: bool = False,
         show_progress: bool = True,
+        labels: Sequence[str] | None = None,
     ) -> SamplingResult:
         """This method performs a sampling operation based on the given instruction.
 
@@ -95,6 +97,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
             model_options: model options to pass to the backend during generation / validation.
             tool_calls: True if tool calls should be used during this sampling strategy.
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
+            labels: if provided, restrict generation to context nodes with matching types.
 
         Returns:
             SamplingResult: A result object indicating the success or failure of the sampling process.
