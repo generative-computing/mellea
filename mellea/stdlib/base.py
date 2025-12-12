@@ -18,7 +18,11 @@ from PIL import Image as PILImage
 
 from mellea.helpers.fancy_logger import FancyLogger
 
-
+def callback(input):
+    yield trajectory.trajectory_metadata(
+        title="Execution",
+        content=input
+    )
 class CBlock:
     """A `CBlock` is a block of content that can serve as input to or output from an LLM."""
 
@@ -341,8 +345,13 @@ class ModelOutputThunk(CBlock):
         if self._computed:
             assert self._post_process is not None
             await self._post_process(self)
+        
+        display_string = self._underlying_value
 
-        return self._underlying_value  # type: ignore
+        if "yes" in display_string.lower() or "no" in display_string.lower():
+            display_string = "Requirement result: " + display_string
+        print(display_string)
+        return self._underlying_value
 
     def __repr__(self):
         """Provides a python-parsable representation (usually).
