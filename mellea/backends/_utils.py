@@ -98,4 +98,4 @@ def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputT
             return []
         case Component():
             parts_walk = [generate_walk(p) for p in c.parts()]
-            return itertools.chain.from_iterable(parts_walk)  # aka flatten
+            return list(itertools.chain.from_iterable(parts_walk))  # aka flatten
