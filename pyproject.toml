@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "mellea"
-version = "0.2.0"
+version = "0.2.1"
 authors = [
     { name = "Nathan Fulton", email = "nathan@ibm.com" },
     { name = "Hendrik Strobelt", email = "hendrik.strobelt@ibm.com" },

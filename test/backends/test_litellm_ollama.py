@@ -109,11 +109,6 @@ def test_litellm_ollama_instruct_options(session):
         ModelOption.SEED: 123,
         ModelOption.TEMPERATURE: 0.5,
         ModelOption.MAX_NEW_TOKENS: 100,
-        # Ollama thinking controls currently broken on Granite; see
-        # https://github.com/ollama/ollama/issues/10983
-        # TODO: Re-enable when this upstream bug gets fixed.
-        # ModelOption.THINKING: True,
-        # "reasoning_effort": True,
         "homer_simpson": "option should be kicked out",
     }
 
