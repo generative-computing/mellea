@@ -87,15 +87,3 @@ def to_tool_calls(
     if len(model_tool_calls) > 0:
         return model_tool_calls
     return None
-
-
-def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputThunk]:
-    """Returns the generation walk ordering for a Span."""
-    match c:
-        case ModelOutputThunk() if not c.is_computed():
-            return [c]
-        case CBlock():
-            return []
-        case Component():
-            parts_walk = [generate_walk(p) for p in c.parts()]
-            return list(itertools.chain.from_iterable(parts_walk))  # aka flatten

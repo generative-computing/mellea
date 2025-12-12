@@ -10,8 +10,7 @@ import ollama
 from tqdm import tqdm
 
 import mellea.backends.model_ids as model_ids
-from mellea.backends import BaseModelSubclass
-from mellea.backends._utils import generate_walk
+from mellea.backends import BaseModelSubclass, generate_walk
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.tools import (
@@ -296,12 +295,7 @@ class OllamaModelBackend(FormatterBackend):
             RuntimeError: If not called from a thread with a running event loop.
         """
         # Start by awaiting any necessary computation.
-        _to_compute = list(generate_walk(action))
-        coroutines = [x.avalue() for x in _to_compute]
-        await asyncio.gather(*coroutines)
-        FancyLogger.get_logger().info(
-            f"generate_from_chat_context awaited on {len(_to_compute)} uncomputed mots."
-        )
+        await self.do_generate_walk(action)
 
         model_opts = self._simplify_and_merge(model_options)
 
