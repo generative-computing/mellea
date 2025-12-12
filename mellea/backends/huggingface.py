@@ -196,6 +196,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         tool_calls: bool = False,
     ):
         """Generate using the huggingface model."""
+        await self.do_generate_walk(action)
+
         # Upsert model options.
         model_opts = self._simplify_and_merge(model_options)
 
@@ -677,6 +679,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
+        await self.do_generate_walks(actions)
+
         if tool_calls:
             FancyLogger.get_logger().warning(
                 "The raw endpoint does not support tool calling at the moment."

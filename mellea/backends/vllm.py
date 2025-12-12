@@ -248,6 +248,8 @@ class LocalVLLMBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk, Context]:
         """Generate using the huggingface model."""
+        await self.do_generate_walk(action)
+
         # Upsert model options.
         model_options = self._simplify_and_merge(model_options)
 
@@ -437,6 +439,8 @@ class LocalVLLMBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
+        await self.do_generate_walks(actions)
+
         if tool_calls:
             FancyLogger.get_logger().warning(
                 "The completion endpoint does not support tool calling at the moment."

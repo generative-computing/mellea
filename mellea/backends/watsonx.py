@@ -269,6 +269,8 @@ class WatsonxAIBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
         """Generates a new completion from the provided Context using this backend's `Formatter`."""
+        await self.do_generate_walk(action)
+
         model_opts = self._simplify_and_merge(
             model_options, is_chat_context=ctx.is_chat_context
         )
@@ -490,6 +492,8 @@ class WatsonxAIBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generates a completion text. Gives the input provided to the model without templating."""
+        await self.do_generate_walks(actions)
+
         if format is not None:
             FancyLogger.get_logger().warning(
                 "WatsonxAI completion api does not accept response format, ignoring it for this request."
