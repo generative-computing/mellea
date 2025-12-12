@@ -296,9 +296,10 @@ class OllamaModelBackend(FormatterBackend):
             RuntimeError: If not called from a thread with a running event loop.
         """
         # Start by awaiting any necessary computation.
-        _computed = [await todo.avalue() for todo in generate_walk(action)]
+        _to_compute = generate_walk(action)
+        await asyncio.gather([x.avalue() for x in _to_compute])
         FancyLogger.get_logger().info(
-            f"generate_from_chat_context awaited on {len(_computed)} uncomputed mots."
+            f"generate_from_chat_context awaited on {len(_to_compute)} uncomputed mots."
         )
 
         model_opts = self._simplify_and_merge(model_options)
@@ -415,9 +416,10 @@ class OllamaModelBackend(FormatterBackend):
 
         model_opts = self._simplify_and_merge(model_options)
 
+        _to_compute = []
         for act in actions:
-            for todo in generate_walk(act):
-                await todo.avalue()
+            _to_compute.extend(generate_walk(act))
+        await asyncio.gather([x.avalue() for x in _to_compute])
 
         prompts = [self.formatter.print(action) for action in actions]
 
