@@ -706,3 +706,38 @@ class SimpleComponent(Component):
     def format_for_llm(self):
         """Uses a string rep."""
         return SimpleComponent.make_json_string(self._kwargs)
+
+
+class HeapContext(Context):
+    """A HeapContext is a context that is constructed by reading off all of the locals() and globals() whose values are CBlock | Component | MoTs."""
+    def __init__(self):
+        """Heap at construction-time. Should this be at the use site?"""
+        self._heap = dict()
+
+        for key, value in globals().items():
+            match value:
+                case ModelOutputThunk() | Component() | CBlock():
+                    self._heap[key] = value
+                case _:
+                    continue
+
+        for key, value in locals().items():
+            match value:
+                case ModelOutputThunk() | Component() | CBlock():
+                    self._heap[key] = value
+                case _:
+                    continue
+
+    def is_chat_context(self):
+        """Heap contexts are not chat contexts."""
+        return False
+
+    def add(self, c: Component | CBlock) -> Context:
+        """Returns a new context obtained by adding `c` to this context as the "last item", using _ to denote the last expression."""
+        new_context = HeapContext()
+        new_context["_"] = c
+        return new_context
+
+    def view_for_generation(self) -> list[Component | CBlock] | None:
+        """Provides a linear list of context components to use for generation, or None if that is not possible to construct."""
+        return [SimpleComponent(**self._heap)]
