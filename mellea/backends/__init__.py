@@ -86,10 +86,12 @@ class Backend(abc.ABC):
         """Does the generation walk."""
         _to_compute = list(generate_walk(action))
         coroutines = [x.avalue() for x in _to_compute]
+        # The following log message might get noisy. Feel free to remove if so.
+        if len(_to_compute) > 0:
+            FancyLogger.get_logger().info(
+                f"generate_from_chat_context awaited on {len(_to_compute)} uncomputed mots."
+            )
         await asyncio.gather(*coroutines)
-        FancyLogger.get_logger().info(
-            f"generate_from_chat_context awaited on {len(_to_compute)} uncomputed mots."
-        )
 
     async def do_generate_walks(
         self, actions: list[CBlock | Component | ModelOutputThunk]
@@ -99,10 +101,12 @@ class Backend(abc.ABC):
         for action in actions:
             _to_compute.extend(list(generate_walk(action)))
         coroutines = [x.avalue() for x in _to_compute]
+        # The following log message might get noisy. Feel free to remove if so.
+        if len(_to_compute) > 0:
+            FancyLogger.get_logger().info(
+                f"generate_from_chat_context awaited on {len(_to_compute)} uncomputed mots."
+            )
         await asyncio.gather(*coroutines)
-        FancyLogger.get_logger().info(
-            f"generate_from_chat_context awaited on {len(_to_compute)} uncomputed mots."
-        )
 
 
 def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputThunk]:
