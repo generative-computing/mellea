@@ -74,7 +74,7 @@ class ArgumentDict(TypedDict):
 
 
 class Argument:
-    """An Argument Component."""
+    """An Argument."""
 
     def __init__(
         self,
@@ -82,7 +82,7 @@ class Argument:
         name: str | None = None,
         value: str | None = None,
     ):
-        """An Argument Component."""
+        """An Argument."""
         self._argument_dict: ArgumentDict = {
             "name": name,
             "annotation": annotation,
