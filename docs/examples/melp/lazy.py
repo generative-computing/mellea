@@ -1,5 +1,11 @@
 import asyncio
-from mellea.stdlib.base import SimpleContext, Context, CBlock, ModelOutputThunk, SimpleComponent
+from mellea.stdlib.base import (
+    SimpleContext,
+    Context,
+    CBlock,
+    ModelOutputThunk,
+    SimpleComponent,
+)
 from mellea.backends import Backend
 from mellea.backends.ollama import OllamaModelBackend
 

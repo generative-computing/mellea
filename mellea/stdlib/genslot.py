@@ -387,7 +387,6 @@ class GenerativeSlot(Component, Generic[P, R]):
         cs.extend(self._function)
         return cs
 
-
     def format_for_llm(self) -> TemplateRepresentation:
         """Formats the instruction for Formatter use."""
         return TemplateRepresentation(

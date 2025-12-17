@@ -710,6 +710,7 @@ class SimpleComponent(Component):
 
 class HeapContext(Context):
     """A HeapContext is a context that is constructed by reading off all of the locals() and globals() whose values are CBlock | Component | MoTs."""
+
     def __init__(self):
         """Heap at construction-time. Should this be at the use site?"""
         self._heap = dict()

@@ -121,7 +121,12 @@ class Instruction(Component):
 
     def parts(self):
         """Returns all of the constituent parts of an Instruction."""
-        cs = [self._description, self._grounding_context, self._prefix, self._output_prefix]
+        cs = [
+            self._description,
+            self._grounding_context,
+            self._prefix,
+            self._output_prefix,
+        ]
         cs.extend(self._requirements)
         cs.extend(self._icl_examples)
         cs = list(filter(lambda x: x is not None, cs))
