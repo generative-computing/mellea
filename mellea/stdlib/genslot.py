@@ -140,10 +140,10 @@ class PreconditionException(Exception):
 
 
 class Function:
-    """A Function Component."""
+    """A Function."""
 
     def __init__(self, func: Callable):
-        """A Function Component."""
+        """A Function."""
         self._func: Callable = func
         self._function_dict: FunctionDict = describe_function(func)
 
@@ -382,7 +382,11 @@ class GenerativeSlot(Component, Generic[P, R]):
 
     def parts(self):
         """Not implemented."""
-        raise NotImplementedError
+        cs: list = self._arguments
+        cs.extend(self.requirements)
+        cs.extend(self._function)
+        return cs
+
 
     def format_for_llm(self) -> TemplateRepresentation:
         """Formats the instruction for Formatter use."""
