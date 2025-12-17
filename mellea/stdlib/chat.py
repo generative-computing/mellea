@@ -51,9 +51,12 @@ class Message(Component):
 
     def parts(self):
         """Returns all of the constituent parts of an Instruction."""
-        raise Exception(
-            "Disallowing use of `parts` until we figure out exactly what it's supposed to be for"
-        )
+        assert self._images is None, "TODO: images are not handled correctly in the mellea core."
+        parts = []
+        if self._docs is not None:
+            parts.extend(self._docs)
+        return parts
+        
 
     def format_for_llm(self) -> TemplateRepresentation:
         """Formats the content for a Language Model.
