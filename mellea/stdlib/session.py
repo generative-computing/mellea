@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextvars
 import inspect
+from collections.abc import Sequence
 from copy import copy
 from typing import Any, Literal, overload
 
@@ -227,6 +228,12 @@ class MelleaSession:
         self.reset()
         if hasattr(self.backend, "close"):
             self.backend.close()  # type: ignore
+
+    def append_to_ctx(
+        self, c: Component | CBlock, labels: Sequence[str] | None = None
+    ) -> None:
+        """Adds new component to current context."""
+        self.ctx = self.ctx.add(c, labels=labels)
 
     @overload
     def act(
@@ -515,7 +522,7 @@ class MelleaSession:
     @overload
     async def aact(
         self,
-        action: Component,
+        action: Component | None,
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -523,12 +530,13 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        labels: Sequence[str] | None = None,
     ) -> ModelOutputThunk: ...
 
     @overload
     async def aact(
         self,
-        action: Component,
+        action: Component | None,
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -536,11 +544,12 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        labels: Sequence[str] | None = None,
     ) -> SamplingResult: ...
 
     async def aact(
         self,
-        action: Component,
+        action: Component | None,
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -548,6 +557,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        labels: Sequence[str] | None = None,
     ) -> ModelOutputThunk | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
@@ -559,6 +569,7 @@ class MelleaSession:
             format: if set, the BaseModel to use for constrained decoding.
             model_options: additional model options, which will upsert into the model/backend's defaults.
             tool_calls: if true, tool calling is enabled.
+            labels: labels to filter on
 
         Returns:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -573,6 +584,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            labels=labels,
         )  # type: ignore
 
         if isinstance(r, SamplingResult):

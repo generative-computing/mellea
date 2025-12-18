@@ -67,5 +67,22 @@ def test_actions_for_available_tools():
         assert actions[i] == for_generation[i]
 
 
+def test_render_view_for_chat_context_with_labels():
+    ctx = ChatContext(window_size=3)
+    for i in range(5):
+        ctx = ctx.add(CBlock(f"a {i}"), labels=[str(i // 2)])
+
+    # no labels
+    assert len(ctx.as_list()) == 5, "Context size must be 5"
+    assert len(ctx.view_for_generation()) == 3, "Render size must be 3"
+
+    # with explicit labels
+    for labels, al_sz, vg_sz in [(None, 5, 3), ([str(0)], 2, 2), ([str(2)], 1, 1)]:
+        assert len(ctx.as_list(labels=labels)) == al_sz, f"Context size must be {al_sz}"
+        assert len(ctx.view_for_generation(labels=labels)) == vg_sz, (
+            f"Render size must be {vg_sz}"
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
