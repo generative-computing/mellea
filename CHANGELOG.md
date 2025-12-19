@@ -1,3 +1,16 @@
+## [v0.2.2](https://github.com/generative-computing/mellea/releases/tag/v0.2.2) - 2025-12-18
+
+### Feature
+
+* Add langchain / message interop example ([#257](https://github.com/generative-computing/mellea/issues/257)) ([`9b1f299`](https://github.com/generative-computing/mellea/commit/9b1f29961aa15bcc2cad2181d2c598e668b4f383))
+* Add better error messages for incorrect genslot args ([#248](https://github.com/generative-computing/mellea/issues/248)) ([`9d875d6`](https://github.com/generative-computing/mellea/commit/9d875d669979f58bc574853837b8b51bacd7f0db))
+
+### Fix
+
+* Uv-lock package changes ([#261](https://github.com/generative-computing/mellea/issues/261)) ([`cb0623f`](https://github.com/generative-computing/mellea/commit/cb0623f12a23c1e567bcc2c4f6659adb571738cb))
+* Lock granite-common version to avoid arg changes ([#260](https://github.com/generative-computing/mellea/issues/260)) ([`03716c1`](https://github.com/generative-computing/mellea/commit/03716c1c6ce37be921ba47ae07ec9191021d6e49))
+* Docstrings to have code blocks ([#256](https://github.com/generative-computing/mellea/issues/256)) ([`94a7b40`](https://github.com/generative-computing/mellea/commit/94a7b40950b8c25882f8acf5106d08e353e13d21))
+
 ## [v0.2.1](https://github.com/generative-computing/mellea/releases/tag/v0.2.1) - 2025-12-10
 
 ### Feature
