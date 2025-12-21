@@ -46,6 +46,7 @@ from mellea.helpers.openai_compatible_helpers import (
     chat_completion_delta_merge,
     extract_model_tool_requests,
 )
+from mellea.security import taint_sources
 from mellea.stdlib.base import (
     CBlock,
     Component,
@@ -645,7 +646,12 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             ),
         )  # type: ignore
 
-        output = ModelOutputThunk(None)
+        # Compute taint sources from action and context
+        sources = taint_sources(action, ctx)
+
+        output = ModelOutputThunk.from_generation(
+            value=None, taint_sources=sources, meta={}
+        )
         output._context = linearized_context
         output._action = action
         output._model_options = model_opts
@@ -833,6 +839,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             output = ModelOutputThunk(response.text)
             output._context = None  # There is no context for generate_from_raw for now
             output._action = action
+            # TODO: add taint sources to the ModelOutputThunk
+            # output._taint_sources = taint_sources(action, None)
             output._model_options = model_opts
             output._meta = {
                 "oai_completion_response": response.model_dump(),

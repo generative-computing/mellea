@@ -12,7 +12,7 @@ from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, Protocol, TypeVar, runtime_checkable
+from typing import Any, Protocol, TypeVar, Union, runtime_checkable
 
 from PIL import Image as PILImage
 
@@ -22,14 +22,31 @@ from mellea.helpers.fancy_logger import FancyLogger
 class CBlock:
     """A `CBlock` is a block of content that can serve as input to or output from an LLM."""
 
-    def __init__(self, value: str | None, meta: dict[str, Any] | None = None):
-        """Initializes the CBlock with a string and some metadata."""
+    def __init__(
+        self,
+        value: str | None,
+        meta: dict[str, Any] | None = None,
+        sec_level: Any = None,
+    ):
+        """Initializes the CBlock with a string and some metadata.
+
+        Args:
+            value: The string content of the block
+            meta: Optional metadata dictionary
+            sec_level: Optional SecLevel for security metadata
+        """
         if value is not None and not isinstance(value, str):
             raise TypeError("value to a Cblock should always be a string or None")
         self._underlying_value = value
         if meta is None:
             meta = {}
         self._meta = meta
+
+        # Set security metadata if sec_level is provided
+        if sec_level is not None:
+            from mellea.security import SecurityMetadata
+
+            self._meta["_security"] = SecurityMetadata(sec_level)
 
     @property
     def value(self) -> str | None:
@@ -48,6 +65,24 @@ class CBlock:
     def __repr__(self):
         """Provides a python-parsable representation of the block (usually)."""
         return f"CBlock({self.value}, {self._meta.__repr__()})"
+
+    @property
+    def sec_level(self) -> Any | None:
+        """Get the security metadata for this CBlock.
+
+        Returns:
+            SecurityMetadata if present, None otherwise
+        """
+        from mellea.security import SecurityMetadata
+
+        if self._meta is None or "_security" not in self._meta:
+            return None
+
+        security_meta = self._meta["_security"]
+        if isinstance(security_meta, SecurityMetadata):
+            return security_meta
+
+        return None
 
 
 class ImageBlock:
@@ -350,6 +385,42 @@ class ModelOutputThunk(CBlock):
         Differs from CBlock because `._meta` can be very large for ModelOutputThunks.
         """
         return f"ModelOutputThunk({self.value})"
+
+    @classmethod
+    def from_generation(
+        cls,
+        value: str | None,
+        taint_sources: list[CBlock | Component] | None = None,
+        meta: dict[str, Any] | None = None,
+        parsed_repr: CBlock | Component | Any | None = None,
+        tool_calls: dict[str, ModelToolCall] | None = None,
+    ) -> ModelOutputThunk:
+        """Create a ModelOutputThunk from generation with security metadata.
+
+        Args:
+            value: The generated content
+            taint_sources: List of tainted CBlocks or Components from the generation context
+            meta: Additional metadata for the thunk
+            parsed_repr: Parsed representation of the output
+            tool_calls: Tool calls made during generation
+
+        Returns:
+            A new ModelOutputThunk with appropriate security metadata
+        """
+        if meta is None:
+            meta = {}
+
+        # Add security metadata based on taint sources
+        from mellea.security import SecLevel, SecurityMetadata
+
+        if taint_sources:
+            # If there are taint sources, mark as tainted by the first source
+            meta["_security"] = SecurityMetadata(SecLevel.tainted_by(taint_sources[0]))
+        else:
+            # If no taint sources, mark as safe
+            meta["_security"] = SecurityMetadata(SecLevel.none())
+
+        return cls(value, meta, parsed_repr, tool_calls)
 
     def __copy__(self):
         """Returns a shallow copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generating."""
