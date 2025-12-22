@@ -1,3 +1,12 @@
+"""
+Example usage of minimum Bayes risk decoding (MBRD).
+
+To run this script from the root of the Mellea source tree, use the command:
+```
+uv run python docs/examples/majority_voting/mbrd_example.py
+```
+"""
+
 from mellea import MelleaSession
 from mellea.backends.vllm import LocalVLLMBackend
 from mellea.backends.types import ModelOption

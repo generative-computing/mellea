@@ -1,3 +1,12 @@
+"""
+Example usage of budget forcing in long-chain-of-thought reasoning tasks.
+
+To run this script from the root of the Mellea source tree, use the command:
+```
+uv run python docs/examples/budget_forcing/budget_forcing_example.py
+```
+"""
+
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
@@ -18,7 +27,7 @@ def solve_on_budget(
         requirements=None,
     )
 
-    # Solve the problem using greedy decoding, not exceeding the thinking token budget
+    # Perform greedy decoding, not exceeding the thinking token budget
     result = m_session.instruct(
         prompt, strategy=strategy, model_options={ModelOption.TEMPERATURE: 0}
     )
