@@ -121,12 +121,13 @@ class Instruction(Component):
 
     def parts(self):
         """Returns all of the constituent parts of an Instruction."""
-        cs = [
-            self._description,
-            self._grounding_context,
-            self._prefix,
-            self._output_prefix,
-        ]
+        # Add all of the optionally defined CBlocks/Components then filter Nones at the end.
+        cs = [self._description, self._prefix, self._output_prefix]
+        match self._grounding_context:
+            case CBlock():
+                cs.append(self._grounding_context)
+            case _:
+                cs.extend(list(self._grounding_context.values()))
         cs.extend(self._requirements)
         cs.extend(self._icl_examples)
         cs = list(filter(lambda x: x is not None, cs))
