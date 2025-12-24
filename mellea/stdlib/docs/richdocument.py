@@ -26,10 +26,9 @@ class RichDocument(Component):
         self._doc = doc
 
     def parts(self) -> list[Component | CBlock]:
-        """A `RichDocument` has no parts."""
-        raise NotImplementedError(
-            "Disallowing use of `parts` until we figure out exactly what it's supposed to be for"
-        )
+        # TODO: we could separate a DoclingDocument into chunks and then treat those chunks as parts.
+        # for now, do nothing.
+        return []
 
     def format_for_llm(self) -> TemplateRepresentation | str:
         """Return Document content as Markdown.
