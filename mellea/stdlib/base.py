@@ -736,7 +736,8 @@ class HeapContext(Context):
     def add(self, c: Component | CBlock) -> Context:
         """Returns a new context obtained by adding `c` to this context as the "last item", using _ to denote the last expression."""
         new_context = HeapContext()
-        new_context["_"] = c
+        new_context._heap = copy(self._heap)
+        new_context._heap["_"] = c
         return new_context
 
     def view_for_generation(self) -> list[Component | CBlock] | None:
