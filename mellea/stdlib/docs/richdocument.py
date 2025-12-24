@@ -126,6 +126,10 @@ class TableTransform(Transform):
         """
         super().__init__(obj, transformation)
 
+    def parts(self):
+        """The parts for this component."""
+        return [self.obj]
+
     def format_for_llm(self) -> TemplateRepresentation:
         """Template arguments for Formatter."""
         assert isinstance(self._obj, Table)
@@ -162,6 +166,10 @@ class Table(MObject):
             return doc.get_tables()[0]
         else:
             return None
+
+    def parts(self):
+        """The current implementation does not necessarily entail any string re-use, so parts is empty."""
+        return []
 
     def to_markdown(self) -> str:
         """Get the `Table` as markdown."""
