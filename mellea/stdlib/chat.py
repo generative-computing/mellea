@@ -46,15 +46,15 @@ class Message(Component):
         self._content_cblock = CBlock(self.content)
         self._images = images
         # TODO this should replace _images.
-        self._images_cblocks = (
-            [CBlock(str(i)) for i in images] if self._images is not None else None
-        )
+        self._images_cblocks: list[CBlock] | None = None
+        if self._images is not None:
+            self._images_cblocks = [CBlock(str(i)) for i in self._images]
         self._docs = documents
 
     @property
     def images(self) -> None | list[str]:
         """Returns the images associated with this message as list of base 64 strings."""
-        if self._images is not None:
+        if self._images_cblocks is not None:
             return [str(i.value) for i in self._images_cblocks]
         return None
 

@@ -414,8 +414,8 @@ class OllamaModelBackend(FormatterBackend):
         _to_compute = []
         for act in actions:
             _to_compute.extend(generate_walk(act))
-        coroutines = [x.avalue() for x in _to_compute]
-        await asyncio.gather(*coroutines)
+        parts_coroutines = [x.avalue() for x in _to_compute]
+        await asyncio.gather(*parts_coroutines)
 
         prompts = [self.formatter.print(action) for action in actions]
 
