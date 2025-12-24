@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import abc
+import asyncio
+import itertools
 from typing import TypeVar
 
 import pydantic
 
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.types import ModelOption
+from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import CBlock, Component, Context, GenerateLog, ModelOutputThunk
 
 BaseModelSubclass = TypeVar(
@@ -76,3 +79,43 @@ class Backend(abc.ABC):
             model_options: Any model options to upsert into the defaults for this call.
             tool_calls: Always set to false unless supported by backend.
         """
+
+    async def do_generate_walk(
+        self, action: CBlock | Component | ModelOutputThunk
+    ) -> None:
+        """Does the generation walk."""
+        _to_compute = list(generate_walk(action))
+        coroutines = [x.avalue() for x in _to_compute]
+        # The following log message might get noisy. Feel free to remove if so.
+        if len(_to_compute) > 0:
+            FancyLogger.get_logger().info(
+                f"generate_from_chat_context awaited on {len(_to_compute)} uncomputed mots."
+            )
+        await asyncio.gather(*coroutines)
+
+    async def do_generate_walks(
+        self, actions: list[CBlock | Component | ModelOutputThunk]
+    ) -> None:
+        """Does the generation walk."""
+        _to_compute = []
+        for action in actions:
+            _to_compute.extend(list(generate_walk(action)))
+        coroutines = [x.avalue() for x in _to_compute]
+        # The following log message might get noisy. Feel free to remove if so.
+        if len(_to_compute) > 0:
+            FancyLogger.get_logger().info(
+                f"generate_from_chat_context awaited on {len(_to_compute)} uncomputed mots."
+            )
+        await asyncio.gather(*coroutines)
+
+
+def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputThunk]:
+    """Returns the generation walk ordering for a Span."""
+    match c:
+        case ModelOutputThunk() if not c.is_computed():
+            return [c]
+        case CBlock():
+            return []
+        case Component():
+            parts_walk = [generate_walk(p) for p in c.parts()]
+            return list(itertools.chain.from_iterable(parts_walk))  # aka flatten
