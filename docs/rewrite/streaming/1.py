@@ -12,7 +12,7 @@ async def main(backend: Backend, ctx: Context):
 
     response, _ = await backend.generate_from_context(
         SimpleComponent(instruction="What is x+y?", x=x, y=y),
-        ctx=ctx # TODO we should rationalize ctx and context acress mfuncs and base/backend.
+        ctx=ctx,  # TODO we should rationalize ctx and context acress mfuncs and base/backend.
     )
 
     print(f"x currently computed: {x.is_computed()}")

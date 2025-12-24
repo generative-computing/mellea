@@ -26,6 +26,10 @@ class RichDocument(Component):
         self._doc = doc
 
     def parts(self) -> list[Component | CBlock]:
+        """RichDocument has no parts.
+
+        In the future, we should allow chunking of DoclingDocuments to correspond to parts().
+        """
         # TODO: we could separate a DoclingDocument into chunks and then treat those chunks as parts.
         # for now, do nothing.
         return []
@@ -91,9 +95,10 @@ class TableQuery(Query):
             query : The query string.
         """
         super().__init__(obj, query)
-    
+
     def parts(self):
-        return [ self.obj ]
+        """The list of cblocks/components on which TableQuery depends."""
+        return [self.obj]
 
     def format_for_llm(self) -> TemplateRepresentation:
         """Template arguments for Formatter."""

@@ -8,7 +8,7 @@ import asyncio
 async def main(backend: Backend, ctx: Context):
     response, next_context = await backend.generate_from_context(
         CBlock("What is 1+1?"),
-        ctx=ctx # TODO we should rationalize ctx and context acress mfuncs and base/backend.
+        ctx=ctx,  # TODO we should rationalize ctx and context acress mfuncs and base/backend.
     )
 
     print(f"Currently computed: {response.is_computed()}")
