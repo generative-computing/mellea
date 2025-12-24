@@ -91,6 +91,9 @@ class TableQuery(Query):
             query : The query string.
         """
         super().__init__(obj, query)
+    
+    def parts(self):
+        return [ self.obj ]
 
     def format_for_llm(self) -> TemplateRepresentation:
         """Template arguments for Formatter."""
