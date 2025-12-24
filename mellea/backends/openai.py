@@ -631,15 +631,20 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         formatted_tools = convert_tools_to_json(tools)
         use_tools = len(formatted_tools) > 0
 
+        # Build optional reasoning parameters
+        reasoning_params = {}
+        if thinking is not None:
+            reasoning_params["reasoning_effort"] = thinking
+
         chat_response: Coroutine[
             Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]
         ] = self._async_client.chat.completions.create(
             model=self._hf_model_id,
             messages=conversation,  # type: ignore
-            reasoning_effort=thinking,  # type: ignore
             tools=formatted_tools if use_tools else None,  # type: ignore
             # parallel_tool_calls=False, # We only support calling one tool per turn. But we do the choosing on our side so we leave this False.
             **extra_params,
+            **reasoning_params,  # type: ignore
             **self._make_backend_specific_and_remove(
                 model_opts, is_chat_context=ctx.is_chat_context
             ),
