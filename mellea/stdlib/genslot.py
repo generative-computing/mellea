@@ -742,6 +742,7 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         PreconditionException: (raised when calling the generative slot) if the precondition validation of the args fails; catch the exception to get the validation results
 
     Examples:
+        ```python
         >>> from mellea import generative, start_session
         >>> session = start_session()
         >>> @generative
@@ -816,6 +817,7 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         ...     ...
         >>>
         >>> reasoning = generate_chain_of_thought(session, problem="How to optimize a slow database query?")
+        ```
     """
     if inspect.iscoroutinefunction(func):
         return AsyncGenerativeSlot(func)

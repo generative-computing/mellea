@@ -921,7 +921,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Loading an adapter activates it. We disable adapters immediately after.
         # Prefer this over `.disable_adapters()`; the disable function doesn't always
         # seem to work.
-        self._model.disable_adapters()
+        self._model.set_adapter([])
+        # self._model.disable_adapters()
         self._loaded_adapters[adapter.qualified_name] = adapter
 
     def unload_adapter(self, adapter_qualified_name: str):
