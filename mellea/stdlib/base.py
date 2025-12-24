@@ -292,15 +292,16 @@ class ModelOutputThunk(CBlock):
 
         # Type of the chunk depends on the backend.
         chunks: list[Any | None] = []
+
+        # Step 1: collect all immediately available chunks
         while True:
             try:
                 item = self._async_queue.get_nowait()
                 chunks.append(item)
             except asyncio.QueueEmpty:
-                # We've exhausted the current items in the queue.
                 break
 
-        # Make sure we always get the minimum chunk size.
+        # Step 2: Loop forever until it collects a certain number of chunks or it collects a None (a sentinel value) or an Exception
         while len(chunks) <= self._chunk_size:
             if len(chunks) > 0:
                 if chunks[-1] is None or isinstance(chunks[-1], Exception):
@@ -312,7 +313,7 @@ class ModelOutputThunk(CBlock):
             item = await self._async_queue.get()
             chunks.append(item)
 
-        # Process the sentinel value if it's there.
+        # Step 3: If Step 2 stopped because of the sentinel value, cancel other tasks
         if chunks[-1] is None:
             chunks.pop()  # Remove the sentinel value.
             self._computed = True
@@ -334,10 +335,12 @@ class ModelOutputThunk(CBlock):
             # chunks. We should investigate allowing recovery in the future.
             raise chunks[-1]
 
+        # Step 4: process collected chunks
         for chunk in chunks:
             assert self._process is not None
             await self._process(self, chunk)
 
+        # Step 5: run postprocess
         if self._computed:
             assert self._post_process is not None
             await self._post_process(self)
