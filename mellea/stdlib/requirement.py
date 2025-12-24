@@ -163,9 +163,7 @@ class Requirement(Component):
 
     def parts(self):
         """Returns all of the constituent parts of a Requirement."""
-        raise Exception(
-            "Disallowing use of `parts` until we figure out exactly what it's supposed to be for"
-        )
+        return []
 
     def format_for_llm(self) -> TemplateRepresentation | str:
         """Some object protocol magic happens here with management of the output."""
