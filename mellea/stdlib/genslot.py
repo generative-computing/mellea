@@ -382,9 +382,9 @@ class GenerativeSlot(Component, Generic[P, R]):
 
     def parts(self):
         """Not implemented."""
-        cs: list = self._arguments
+        cs: list = []
+        cs.extend(self._arguments)
         cs.extend(self.requirements)
-        cs.extend(self._function)
         return cs
 
     def format_for_llm(self) -> TemplateRepresentation:
