@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, create_model
 import mellea.stdlib.functional as mfuncs
 from mellea.backends import Backend
 from mellea.helpers.fancy_logger import FancyLogger
+from mellea.helpers.prompt_linting import warn_genslot_antipatterns
 from mellea.stdlib.base import (
     CBlock,
     Component,
@@ -280,6 +281,9 @@ class GenerativeSlot(Component, Generic[P, R]):
         self._function = Function(func)
         self._arguments: Arguments | None = None
         functools.update_wrapper(self, func)
+
+        # Check for anti-patterns in the docstring (respects MELLEA_WARN_ANTIPATTERNS env var)
+        warn_genslot_antipatterns(self._function._function_dict["docstring"])
 
         # Set when calling the decorated func.
         self.precondition_requirements: list[Requirement] = []
