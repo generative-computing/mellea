@@ -3,12 +3,8 @@
 import os
 from unittest.mock import patch
 
-import pytest
-
 from mellea.helpers.prompt_linting import (
-    _DOCSTRING_CHAR_THRESHOLD,
     _DOCSTRING_WORD_THRESHOLD,
-    _INSTRUCTION_CHAR_THRESHOLD,
     _INSTRUCTION_WORD_THRESHOLD,
     AntiPatternType,
     AntiPatternWarning,
