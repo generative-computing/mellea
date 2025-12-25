@@ -6,6 +6,7 @@ from copy import deepcopy
 
 import jinja2
 
+from mellea.helpers.prompt_linting import warn_instruction_antipatterns
 from mellea.stdlib.base import (
     CBlock,
     Component,
@@ -105,6 +106,9 @@ class Instruction(Component):
                 grounding_context[key] = Instruction.apply_user_dict_from_jinja(
                     user_variables, g
                 )  # type: ignore
+
+        # Check for anti-patterns in the description (respects MELLEA_WARN_ANTIPATTERNS env var)
+        warn_instruction_antipatterns(description)
 
         self._description = blockify(description) if description is not None else None
         self._requirements: list[Requirement] = [reqify(r) for r in requirements]
