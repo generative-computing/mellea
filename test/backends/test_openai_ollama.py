@@ -216,6 +216,46 @@ def test_client_cache(backend):
     assert len(backend._client_cache.cache.values()) == 2
 
 
+async def test_reasoning_effort_conditional_passing(backend):
+    """Test that reasoning_effort is only passed to API when not None."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    ctx = ChatContext()
+    ctx = ctx.add(CBlock(value="Test"))
+
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message = MagicMock()
+    mock_response.choices[0].message.content = "Response"
+    mock_response.choices[0].message.role = "assistant"
+
+    # Test 1: reasoning_effort should NOT be passed when not specified
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = mock_response
+        await backend.generate_from_chat_context(
+            CBlock(value="Hi"), ctx, model_options={}
+        )
+        call_kwargs = mock_create.call_args.kwargs
+        assert "reasoning_effort" not in call_kwargs, (
+            "reasoning_effort should not be passed when not specified"
+        )
+
+    # Test 2: reasoning_effort SHOULD be passed when specified
+    with patch.object(
+        backend._async_client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.return_value = mock_response
+        await backend.generate_from_chat_context(
+            CBlock(value="Hi"), ctx, model_options={ModelOption.THINKING: "medium"}
+        )
+        call_kwargs = mock_create.call_args.kwargs
+        assert call_kwargs.get("reasoning_effort") == "medium", (
+            "reasoning_effort should be passed with correct value when specified"
+        )
+
+
 if __name__ == "__main__":
     import pytest
 
