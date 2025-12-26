@@ -623,7 +623,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                         "strict": True,
                     },
                 }
-                print(extra_params["response_format"])
             else:
                 FancyLogger().get_logger().warning(
                     "Mellea assumes you are NOT using the OpenAI platform, and that other model providers have less strict requirements on support JSON schemas passed into `format=`. If you encounter a server-side error following this message, then you found an exception to this assumption. Please open an issue at github.com/generative_computing/mellea with this stack trace and your inference engine / model provider."
