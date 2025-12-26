@@ -603,14 +603,31 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         extra_params: dict[str, Any] = {}
         if _format is not None:
-            extra_params["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": _format.__name__,
-                    "schema": _format.model_json_schema(),
-                    "strict": True,
-                },
-            }
+            monkey_patched_response_schema = _format.model_json_schema()
+            monkey_patched_response_schema["additionalProperties"] = False
+            if self._server_type == _ServerType.OPENAI:
+                extra_params["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": _format.__name__,
+                        "schema": monkey_patched_response_schema,
+                        "strict": True,
+                        # "additionalProperties": False,
+                    },
+                }
+                print(extra_params["response_format"])
+            else:
+                FancyLogger().get_logger().warning(
+                    "Mellea assumes you are NOT using the OpenAI platform, and that other model providers have less strict requirements on support JSON schemas passed into `format=`. If you encounter a server-side error following this message, then you found an exception to this assumption. Please open an issue at github.com/generative_computing/mellea with this stack trace and your inference engine / model provider."
+                )
+                extra_params["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": _format.__name__,
+                        "schema": _format.model_json_schema(),
+                        "strict": True,
+                    },
+                }
 
         # Append tool call information if applicable.
         tools: dict[str, Callable] = dict()
