@@ -152,16 +152,21 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 )
                 self._hf_model_id = model_id.hf_model_name
 
-        if base_url is None:
-            self._base_url = "http://localhost:11434/v1"  # ollama
-        else:
-            self._base_url = base_url
         if api_key is None:
+            FancyLogger.get_logger().warning(
+                "You are using an OpenAI backend with no api_key. Because no API key was provided, mellea assumes you intend to use the openai-compatible interface to your local ollama instance. If you intend to use OpenAI's platform you must specify your API key when instantiating your Mellea session/backend object."
+            )
+            self._base_url: str | None = "http://localhost:11434/v1"  # ollama
             self._api_key = "ollama"
         else:
+            self._base_url = base_url
             self._api_key = api_key
 
-        self._server_type = _server_type(self._base_url)
+        self._server_type: _ServerType = (
+            _server_type(self._base_url)
+            if self._base_url is not None
+            else _ServerType.OPENAI
+        )  # type: ignore
 
         self._openai_client_kwargs = self.filter_openai_client_kwargs(**kwargs)
 
@@ -981,6 +986,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         from transformers import AutoTokenizer
 
         if not hasattr(self, "_tokenizer"):
+            assert self._base_url, (
+                "The OpenAI Platform does not support adapters. You must specify a _base_url when using adapters."
+            )
             match _server_type(self._base_url):
                 case _ServerType.LOCALHOST:
                     self._tokenizer: "PreTrainedTokenizer" = (  # noqa: UP037
