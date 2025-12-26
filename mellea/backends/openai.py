@@ -603,16 +603,24 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         extra_params: dict[str, Any] = {}
         if _format is not None:
-            monkey_patched_response_schema = _format.model_json_schema()
-            monkey_patched_response_schema["additionalProperties"] = False
             if self._server_type == _ServerType.OPENAI:
+                # The OpenAI platform requires that additionalProperties=False on all response_format schemas.
+                # However, not all schemas generates by Mellea include additionalProperties.
+                # GenerativeSlot, in particular, does not add this property.
+                # The easiest way to address this disparity between OpenAI and other inference providers is to
+                # monkey-patch the response format exactly when we are actually using the OpenAI server.
+                #
+                # This only addresses the additionalProperties=False constraint.
+                # Other constraints we should be checking/patching are described here:
+                # https://platform.openai.com/docs/guides/structured-outputs?api-mode=chat
+                monkey_patched_response_schema = _format.model_json_schema()
+                monkey_patched_response_schema["additionalProperties"] = False
                 extra_params["response_format"] = {
                     "type": "json_schema",
                     "json_schema": {
                         "name": _format.__name__,
                         "schema": monkey_patched_response_schema,
                         "strict": True,
-                        # "additionalProperties": False,
                     },
                 }
                 print(extra_params["response_format"])
