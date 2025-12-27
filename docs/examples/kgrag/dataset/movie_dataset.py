@@ -3,7 +3,7 @@ import trafilatura
 from typing import AsyncGenerator, Any, Dict
 
 from utils.data import BaseDatasetLoader
-from utils.logger import *
+from utils.logger import logger
 from utils.utils import parse_timestamp
 
 class MovieDatasetLoader(BaseDatasetLoader):

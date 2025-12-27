@@ -8,9 +8,8 @@ from neo4j import AsyncGraphDatabase
 from neo4j.exceptions import TransientError
 from tqdm import tqdm
 
-from kg.kg_rep import *
-from utils.logger import *
-from utils.utils import *
+from kg.kg_rep import normalize_entity, normalize_relation, normalize_value, timestamp_to_text
+from utils.logger import logger
 from constants import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 
 # Define a Semaphore to control concurrency (e.g., max 50 tasks at a time)

@@ -5,7 +5,9 @@ import os
 import re
 from tqdm.auto import tqdm
 
-from utils.utils import *
+from constants import MODEL_NAME, EMB_MODEL_NAME, EVAL_MODEL_NAME
+from utils.logger import logger
+from utils.utils import generate_eval_response, maybe_load_json
 
 INSTRUCTIONS = """Assume you are a human expert in grading predictions given by a model. You are given a question and a model prediction. Judge if the prediction matches the ground truth answer by following these steps:
 1: Take it as granted that the Ground Truth is always correct.

@@ -1,7 +1,7 @@
 import argparse
 import asyncio
 
-from kg.kg_preprocessor import *
+from kg.kg_preprocessor import MovieKG_Preprocessor, logger
 
 if __name__ == "__main__":
     preprocessors = [MovieKG_Preprocessor()]
