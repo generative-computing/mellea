@@ -374,12 +374,12 @@ def timestamp_to_text(timestamp: datetime,
         return timestamp.date().isoformat()
     return timestamp.isoformat()
 
-# def update_ref(old: str, new: str) -> str:
-#     """Update a reference JSON string to include the new reference.
-#     """
-#     if not old: return new
-#     if not new: return old
-#     return json.dumps({**json.loads(old), **json.loads(new)})
+def update_ref(old: str, new: str) -> str:
+    """Update a reference JSON string to include the new reference.
+    """
+    if not old: return new
+    if not new: return old
+    return json.dumps({**json.loads(old), **json.loads(new)})
 
 ALLOWED = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:.'-_,& ")
 def normalize_string(text: str, 

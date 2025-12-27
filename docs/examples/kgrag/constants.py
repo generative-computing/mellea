@@ -9,7 +9,7 @@ NEO4J_URI = "bolt://localhost:7687"
 NEO4J_USER = "neo4j"
 NEO4J_PASSWORD=os.environ.get("NEO4J_PASSWORD", "")
 
-DATASET_PATH =  os.path.dirname(os.path.abspath(__file__)) + "/data"
+DATASET_PATH = os.environ.get("KG_BASE_DIRECTORY", os.path.dirname(os.path.abspath(__file__)) + "/data")
 
 # Evaluation
 

@@ -1,9 +1,11 @@
 from bs4 import BeautifulSoup
+import bz2
+import json
 import trafilatura
 from typing import AsyncGenerator, Any, Dict
 
 from utils.data import BaseDatasetLoader
-from utils.logger import logger
+from utils.logger import logger, DefaultProgressLogger, BaseProgressLogger
 from utils.utils import parse_timestamp
 
 class MovieDatasetLoader(BaseDatasetLoader):
@@ -107,7 +109,13 @@ def load_data_in_batches(dataset_path, batch_size, domain=None, start_idx=None):
 
     try:
         cur = -1
-        with open(dataset_path, "rt") as file:
+        # Handle both compressed (.bz2) and uncompressed files
+        if dataset_path.endswith('.bz2'):
+            file = bz2.open(dataset_path, "rt", encoding='utf-8')
+        else:
+            file = open(dataset_path, "rt", encoding='utf-8')
+
+        with file:
             batch = initialize_batch()
             for line in file:
                 try:
