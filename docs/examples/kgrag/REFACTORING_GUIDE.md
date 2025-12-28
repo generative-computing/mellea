@@ -6,6 +6,22 @@ This guide explains how the KG-RAG implementation has been refactored to align w
 
 The refactored version transforms KG-RAG from **"using Mellea as a backend"** to **"building with Mellea's composable patterns"**. This makes the code more maintainable, type-safe, and aligned with functional programming principles.
 
+## 📚 Refactoring Documentation
+
+This repository includes two comprehensive refactoring guides:
+
+1. **[REFACTORING_GUIDE.md](REFACTORING_GUIDE.md)** (this file) - Covers the main KG-RAG components:
+   - `@generative` decorator for LLM functions
+   - Pydantic models for structured outputs
+   - Requirements for validation
+   - KGRagComponent architecture
+
+2. **[PREPROCESSOR_REFACTORING.md](PREPROCESSOR_REFACTORING.md)** - Covers the KG preprocessing pipeline:
+   - Refactored preprocessor with type safety
+   - Neo4j connection management
+   - Batch operations for performance
+   - Configuration management
+
 ## Key Changes
 
 ### 1. Pydantic Models for Structured Outputs
