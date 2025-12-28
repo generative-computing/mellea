@@ -160,23 +160,56 @@ EVAL_TIME_OUT=1800
 
 ### 2. Dataset Preparation
 
-Download the CRAG movie dataset:
+This example uses the **CRAG (Comprehensive RAG) Benchmark** for evaluation. The knowledge graph is built from movie domain data including structured databases and question-answer pairs.
+
+#### Download CRAG Benchmark and Mock API
 
 ```bash
+# Navigate to the kgrag directory
+cd docs/examples/kgrag
+
+# Clone the CRAG Benchmark repository
+# Note: You may need to install Git LFS to properly download all datasets
+git lfs install
+git clone https://github.com/facebookresearch/CRAG.git
+
+# Copy the mock_api folder to the dataset directory
+# The mock_api contains the knowledge graph databases (movie_db.json, person_db.json, year_db.json)
+# These files are essential for building the knowledge graph
+cp -r CRAG/mock_api/movie dataset/movie
+
+# Download the CRAG movie dataset (questions and answers)
 cd dataset
-# Download the dataset (example - adjust URL to actual source)
-wget https://example.com/crag_movie_dev.jsonl.bz2
-# Extract if compressed
-bunzip2 crag_movie_dev.jsonl.bz2
+# The dataset file should be named crag_movie_dev.jsonl or crag_movie_dev.jsonl.bz2
+# If compressed, extract it:
+bunzip2 crag_movie_dev.jsonl.bz2  # if .bz2 format
 ```
 
-The dataset should be in JSONL format with entries containing:
+#### Dataset Structure
+
+After setup, your dataset directory should contain:
+
+```
+dataset/
+├── crag_movie_dev.jsonl          # Questions and answers
+└── movie/                         # Mock API databases
+    ├── movie_db.json             # Movie entity database
+    ├── person_db.json            # Person entity database
+    └── year_db.json              # Year/temporal database
+```
+
+**JSONL Dataset Format**: Each line in `crag_movie_dev.jsonl` contains:
 - `domain`: "movie"
 - `query`: The question to answer
 - `query_time`: Timestamp of the query
 - `search_results`: List of web pages with content
 - `answer`: Ground truth answer
 - `interaction_id`: Unique identifier
+
+**Mock API Format**: The `*_db.json` files contain structured knowledge graph data:
+- `movie_db.json`: Movie entities with properties (title, release date, cast, awards, etc.)
+- `person_db.json`: Person entities (actors, directors, producers, etc.)
+- `year_db.json`: Temporal information and year-specific events
 
 ### 3. Knowledge Graph Construction
 
@@ -494,6 +527,22 @@ If you use this example in your research, please cite:
 ```
 
 This implementation is adapted from the Bidirection project for temporal knowledge graph reasoning.
+
+### CRAG Benchmark
+
+This example uses the CRAG (Comprehensive RAG Benchmark) dataset:
+
+```bibtex
+@article{yang2024crag,
+  title={CRAG -- Comprehensive RAG Benchmark},
+  author={Yang, Xiao and Yue, Kai and Zhang, Haotian and Fan, Zhiyuan and Xu, Wenhao and others},
+  journal={arXiv preprint arXiv:2406.04744},
+  year={2024},
+  url={https://github.com/facebookresearch/CRAG}
+}
+```
+
+For more information about the CRAG benchmark, visit: https://github.com/facebookresearch/CRAG
 
 ## Contributing
 
