@@ -50,6 +50,33 @@ This document provides a quick overview of all refactoring work completed for th
    - Modern `asyncio.run()` pattern
    - Better error handling and logging
 
+### Embedding Refactoring
+
+9. **[kg/kg_embed_models.py](kg/kg_embed_models.py)** - Embedding Pydantic models
+   - `EmbeddingConfig`, `EmbeddingStats`, etc.
+   - Type-safe configuration
+
+10. **[kg/kg_embedder_refactored.py](kg/kg_embedder_refactored.py)** - Refactored embedder
+    - `KGEmbedderBase` with common functionality
+    - `KGEmbedder` implementation
+    - No eval(), better error handling, statistics tracking
+
+11. **[run/run_kg_embed_refactored.py](run/run_kg_embed_refactored.py)** - Improved embedding CLI
+    - Command-line arguments (`--batch-size`, `--dimensions`, `--verbose`)
+    - Modern `asyncio.run()` pattern
+    - Flexible configuration
+
+### Updater Refactoring
+
+12. **[kg/kg_updater_models.py](kg/kg_updater_models.py)** - Updater Pydantic models
+    - `UpdaterConfig`, `SessionConfig`, `DatasetConfig`
+    - Validated configuration ranges
+
+13. **[run/run_kg_update_refactored.py](run/run_kg_update_refactored.py)** - Improved updater CLI
+    - Command-line arguments (`--dataset`, `--domain`, `--num-workers`, `--verbose`)
+    - Modern `asyncio.run()` pattern
+    - Configuration factory functions
+
 ### Documentation
 
 9. **[REFACTORING_GUIDE.md](REFACTORING_GUIDE.md)** - Main refactoring guide
