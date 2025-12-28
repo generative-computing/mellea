@@ -1,5 +1,6 @@
 import asyncio
 from dateutil import parser as dateparser
+from dotenv import load_dotenv
 import functools
 import html
 import json
@@ -12,15 +13,20 @@ from typing import Any, List
 
 from mellea.stdlib.base import ChatContext
 from mellea.stdlib.chat import Message
-
-from constants import (
-    MODEL_NAME, CONTEXT_LENGTH, 
-    EVAL_MODEL_NAME, 
-    EMB_API_BASE, EMB_MODEL_NAME, EMB_CONTEXT_LENGTH,
-    MAX_RETRIES
-    )
 from utils.logger import logger, DefaultProgressLogger, BaseProgressLogger
 from mellea import MelleaSession
+
+# Load environment variables
+load_dotenv()
+
+# Get configuration from environment
+MODEL_NAME = os.getenv("MODEL_NAME", "")
+CONTEXT_LENGTH = int(os.getenv("CONTEXT_LENGTH", "131072"))
+EVAL_MODEL_NAME = os.getenv("EVAL_MODEL_NAME", "")
+EMB_API_BASE = os.getenv("EMB_API_BASE", "")
+EMB_MODEL_NAME = os.getenv("EMB_MODEL_NAME", "")
+EMB_CONTEXT_LENGTH = int(os.getenv("EMB_CONTEXT_LENGTH", "512"))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
 
 
 def get_tokenizer(model_name: str):

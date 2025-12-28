@@ -117,46 +117,7 @@ CREATE INDEX entity_name IF NOT EXISTS FOR (n:Entity) ON (n.name);
 
 ### 1. Environment Configuration
 
-Create a `.env` file in the `kgrag` directory:
-
-```bash
-# Neo4j Configuration
-NEO4J_PASSWORD=your_neo4j_password
-
-# Data Directory
-KG_BASE_DIRECTORY=./dataset
-
-# LLM Backend Configuration (choose one)
-# Option 1: OpenAI
-API_KEY=sk-your-openai-api-key
-API_BASE=https://api.openai.com/v1
-MODEL_NAME=gpt-4
-
-# Option 2: Local LLM via vLLM or Ollama
-API_KEY=dummy
-API_BASE=http://localhost:8000/v1
-MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct
-
-# Embedding Model Configuration
-# Option 1: Remote embedding API
-EMB_API_KEY=your_embedding_api_key
-EMB_API_BASE=https://api.your-provider.com/v1
-EMB_MODEL_NAME=your-embedding-model
-
-# Option 2: Local embedding model (leave EMB_API_BASE empty)
-# EMB_API_BASE=
-EMB_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
-
-# Evaluation Model (for LLM-as-judge)
-EVAL_API_KEY=your_eval_api_key
-EVAL_API_BASE=https://api.openai.com/v1
-EVAL_MODEL_NAME=gpt-4
-
-# Timeouts (in seconds)
-TIME_OUT=1800
-EMB_TIME_OUT=1800
-EVAL_TIME_OUT=1800
-```
+Create a `.env` file in the `kgrag` directory based on the .env_template
 
 ### 2. Dataset Preparation
 

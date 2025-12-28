@@ -30,15 +30,21 @@ Create a comprehensive README.md that includes:
 - [x] Add example configurations for different backends (OpenAI, Ollama, local models)
 
 ### 1.3 Configuration Issues
-**Priority: High**
+**Priority: High** ✅ **COMPLETED**
 
 Fix hardcoded configurations in `constants.py`:
-- [ ] Remove IBM-specific endpoints that external users cannot access
-- [ ] Remove local model paths (`/net/storage149/...`)
-- [ ] Fix duplicate variable assignments
-- [ ] Move all configuration to environment variables
-- [ ] Provide sensible defaults that work out-of-the-box
+- [x] Remove IBM-specific endpoints that external users cannot access
+- [x] Remove local model paths (`/net/storage149/...`)
+- [x] Fix duplicate variable assignments
+- [x] Move all configuration to environment variables
+- [x] Provide sensible defaults that work out-of-the-box
 - [ ] Add configuration validator to check required variables
+
+**Recent Changes:**
+- Converted all files to use environment variables with `os.getenv()` and `python-dotenv`
+- Removed direct imports from `constants.py` in all 8 files
+- Created comprehensive `.env_template` with all configuration options
+- Added default values for all environment variables
 
 ### 1.4 Dependencies Documentation
 **Priority: High** ✅ **COMPLETED**
@@ -268,7 +274,7 @@ Note: README includes comprehensive beginner-friendly content with clear explana
 
 **Immediate (High Priority):**
 1. ✅ Create README.md with setup instructions - **COMPLETED**
-2. ⚠️ Fix configuration issues (remove hardcoded IBM endpoints) - **IN PROGRESS**
+2. ✅ Fix configuration issues (remove hardcoded IBM endpoints) - **COMPLETED**
 3. ✅ Document dependencies and prerequisites - **COMPLETED**
 4. ⚠️ Show Mellea pattern integration - **PARTIALLY COMPLETED**
 
@@ -299,10 +305,11 @@ Note: README includes comprehensive beginner-friendly content with clear explana
   - Integration with Mellea framework documentation
 
 ### Next Priority Items:
-1. **Configuration cleanup**: Remove IBM-specific endpoints and hardcoded paths in `constants.py`
-2. **Create .env.example**: Template file with all required environment variables
+1. ✅ **Configuration cleanup**: Remove IBM-specific endpoints and hardcoded paths in `constants.py` - **COMPLETED**
+2. ✅ **Create .env_template**: Template file with all required environment variables - **COMPLETED**
 3. **Enhanced Mellea integration**: Add more examples using `@generative`, requirements, and sampling strategies
 4. **Code refactoring**: Break down large files (especially `kg_model.py`) into smaller modules
+5. **Add configuration validator**: Check required variables on startup
 
 ## Notes
 

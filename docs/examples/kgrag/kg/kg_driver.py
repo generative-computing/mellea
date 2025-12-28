@@ -1,5 +1,7 @@
 import asyncio
+import os
 import textwrap
+from dotenv import load_dotenv
 from tqdm.asyncio import tqdm
 import neo4j
 from dataclasses import dataclass
@@ -7,15 +9,15 @@ from typing import Optional, Tuple, List, Dict, Union
 from datetime import datetime
 from utils.utils import generate_embedding
 from kg.kg_rep import (
-    RESERVED_KEYS, 
-    normalize_key, 
+    RESERVED_KEYS,
+    normalize_key,
     normalize_value,
     normalize_relation,
     entity_schema_to_text,
     relation_schema_to_text,
     relation_to_text,
     RelevantRelation,
-    KGEntity, 
+    KGEntity,
     KGRelation,
     RelevantEntity,
     entity_to_text,
@@ -31,11 +33,13 @@ from kg.kg_rep import (
 )
 from utils.utils import maybe_load_json
 
-from constants import (
-    NEO4J_URI,
-    NEO4J_PASSWORD,
-    NEO4J_USER
-)
+# Load environment variables
+load_dotenv()
+
+# Get configuration from environment
+NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
 
 
 @dataclass

@@ -5,6 +5,7 @@ import functools
 import json
 import os
 import time
+from dotenv import load_dotenv
 
 from mellea import MelleaSession
 from dataset.movie_dataset import MovieDatasetLoader
@@ -12,16 +13,28 @@ from kg_model import KGModel
 from utils.logger import BaseProgressLogger, DefaultProgressLogger, QAProgressLogger
 from utils.utils import token_counter, always_get_an_event_loop
 from eval import evaluate_predictions
-from constants import (
-    DATASET_PATH, 
-    API_BASE, API_KEY, TIME_OUT, MODEL_NAME,
-    EVAL_API_BASE, EVAL_API_KEY, EVAL_TIME_OUT, EVAL_MODEL_NAME,
-    EMB_API_BASE, EMB_API_KEY, EMB_TIME_OUT, EMB_MODEL_NAME,
-    RITS_API_KEY
-)
 from mellea.backends.openai import OpenAIBackend, TemplateFormatter
 import openai
 import torch
+
+# Load environment variables
+load_dotenv()
+
+# Get configuration from environment
+DATASET_PATH = os.getenv("KG_BASE_DIRECTORY", os.path.join(os.path.dirname(__file__), "..", "dataset"))
+API_BASE = os.getenv("API_BASE", "http://localhost:7878/v1")
+API_KEY = os.getenv("API_KEY", "dummy")
+TIME_OUT = int(os.getenv("TIME_OUT", "1800"))
+MODEL_NAME = os.getenv("MODEL_NAME", "")
+EVAL_API_BASE = os.getenv("EVAL_API_BASE", "")
+EVAL_API_KEY = os.getenv("EVAL_API_KEY", "dummy")
+EVAL_TIME_OUT = int(os.getenv("EVAL_TIME_OUT", "1800"))
+EVAL_MODEL_NAME = os.getenv("EVAL_MODEL_NAME", "")
+EMB_API_BASE = os.getenv("EMB_API_BASE", "")
+EMB_API_KEY = os.getenv("EMB_API_KEY", "dummy")
+EMB_TIME_OUT = int(os.getenv("EMB_TIME_OUT", "1800"))
+EMB_MODEL_NAME = os.getenv("EMB_MODEL_NAME", "")
+RITS_API_KEY = os.getenv("RITS_API_KEY", "")
 
 def parse_key_value(arg):
     """Parses key=value string into a (key, value) pair, converting value to int/float if needed."""

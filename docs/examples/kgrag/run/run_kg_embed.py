@@ -1,18 +1,22 @@
 import asyncio
+import os
 import textwrap
+from dotenv import load_dotenv
 from tqdm import tqdm
 from typing import List
 from utils.logger import logger
 import numpy as np
 import openai
 
-from constants import (
-    API_KEY,
-    EMB_API_BASE,
-    EMB_MODEL_NAME,
-    EMB_TIME_OUT,
-    RITS_API_KEY,
-)
+# Load environment variables
+load_dotenv()
+
+# Get configuration from environment
+API_KEY = os.getenv("API_KEY", "dummy")
+EMB_API_BASE = os.getenv("EMB_API_BASE", "")
+EMB_MODEL_NAME = os.getenv("EMB_MODEL_NAME", "")
+EMB_TIME_OUT = int(os.getenv("EMB_TIME_OUT", "1800"))
+RITS_API_KEY = os.getenv("RITS_API_KEY", "")
 from kg.kg_driver import kg_driver
 from kg.kg_rep import (
     KGEntity,

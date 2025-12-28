@@ -3,11 +3,19 @@ from datetime import datetime
 import json
 import os
 import re
+from dotenv import load_dotenv
 from tqdm.auto import tqdm
 
-from constants import MODEL_NAME, EMB_MODEL_NAME, EVAL_MODEL_NAME
 from utils.logger import logger
 from utils.utils import generate_eval_response, maybe_load_json
+
+# Load environment variables
+load_dotenv()
+
+# Get configuration from environment
+MODEL_NAME = os.getenv("MODEL_NAME", "")
+EMB_MODEL_NAME = os.getenv("EMB_MODEL_NAME", "")
+EVAL_MODEL_NAME = os.getenv("EVAL_MODEL_NAME", "")
 
 INSTRUCTIONS = """Assume you are a human expert in grading predictions given by a model. You are given a question and a model prediction. Judge if the prediction matches the ground truth answer by following these steps:
 1: Take it as granted that the Ground Truth is always correct.

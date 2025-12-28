@@ -4,13 +4,21 @@ import os
 import pandas as pd
 import pickle
 import sqlite3 as sql
+from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
 from neo4j.exceptions import TransientError
 from tqdm import tqdm
 
 from kg.kg_rep import normalize_entity, normalize_relation, normalize_value, timestamp_to_text
 from utils.logger import logger
-from constants import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
+
+# Load environment variables
+load_dotenv()
+
+# Get configuration from environment
+NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
 
 # Define a Semaphore to control concurrency (e.g., max 50 tasks at a time)
 SEMAPHORE = asyncio.Semaphore(50)

@@ -1,7 +1,9 @@
 import asyncio
 import asyncio
 import json
+import os
 import textwrap
+from dotenv import load_dotenv
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
@@ -10,7 +12,13 @@ from mellea import MelleaSession
 from utils.logger import BaseProgressLogger, DefaultProgressLogger
 from utils.utils import generate_response, maybe_load_json, generate_embedding, llm_retry
 from utils.prompt_list import get_default_prompts
-from constants import MODEL_NAME, MAX_RETRIES
+
+# Load environment variables
+load_dotenv()
+
+# Get configuration from environment
+MODEL_NAME = os.getenv("MODEL_NAME", "")
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
 from kg.kg_driver import kg_driver
 from kg.kg_rep import (
     KGEntity, 
