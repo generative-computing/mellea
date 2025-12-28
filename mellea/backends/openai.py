@@ -6,7 +6,7 @@ import datetime
 import functools
 import inspect
 import json
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Sequence
 from copy import deepcopy
 from enum import Enum
 from typing import TYPE_CHECKING, Any, cast
@@ -286,12 +286,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     async def generate_from_context(
         self,
-        action: Component | CBlock,
+        action: Component | CBlock | None,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        labels: Sequence[str] | None = None,
     ):
         """See `generate_from_chat_context`."""
         assert ctx.is_chat_context, NotImplementedError(
@@ -303,18 +304,27 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             _format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            labels=labels,
         )
+
+        # only add action to context if provided
+        if action is not None:
+            ctx = ctx.add(action, labels=labels)
+
+        # return
+        return mot, ctx.add(mot, labels=labels)
 
     async def generate_from_chat_context(
         self,
-        action: Component | CBlock,
+        action: Component | CBlock | None,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> tuple[ModelOutputThunk, Context]:
+        labels: Sequence[str] | None = None,
+    ) -> ModelOutputThunk:
         """Generates a new completion from the provided Context using this backend's `Formatter`."""
         # Requirements can be automatically rerouted to a requirement adapter.
         if isinstance(action, Requirement):
@@ -366,6 +376,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             _format=_format,
             model_options=model_options,
             tool_calls=tool_calls,
+            labels=labels,
         )
         return mot, ctx.add(action).add(mot)
 
@@ -564,18 +575,19 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     async def _generate_from_chat_context_standard(
         self,
-        action: Component | CBlock,
+        action: Component | CBlock | None,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
+        labels: Sequence[str] | None = None,
     ) -> ModelOutputThunk:
         model_opts = self._simplify_and_merge(
             model_options, is_chat_context=ctx.is_chat_context
         )
-        linearized_context = ctx.view_for_generation()
+        linearized_context = ctx.view_for_generation(labels=labels)
         assert linearized_context is not None, (
             "Cannot generate from a non-linear context in a FormatterBackend."
         )
@@ -587,6 +599,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 raise Exception(
                     "The OpenAI backend does not support currently support activated LoRAs."
                 )
+            case None:
+                action = ctx.node_data  # action defaults to node_data if None provided
             case _:
                 messages.extend(self.formatter.to_chat_messages([action]))
         conversation: list[dict] = []

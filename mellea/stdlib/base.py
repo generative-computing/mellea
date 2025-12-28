@@ -8,7 +8,7 @@ import base64
 import binascii
 import datetime
 import enum
-from collections.abc import Callable, Coroutine, Iterable, Mapping
+from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
@@ -436,18 +436,23 @@ class Context(abc.ABC):
     _data: Component | CBlock | None
     _is_root: bool
     _is_chat_context: bool = True
+    _labels: set[str] | None = None
 
     def __init__(self):
         """Constructs a new root context with no content."""
         self._previous = None
         self._data = None
         self._is_root = True
+        self._labels = set()
 
     # factory functions below this line.
 
     @classmethod
     def from_previous(
-        cls: type[ContextT], previous: Context, data: Component | CBlock
+        cls: type[ContextT],
+        previous: Context,
+        data: Component | CBlock,
+        labels: Sequence[str] | None = None,
     ) -> ContextT:
         """Constructs a new context from an existing context."""
         assert isinstance(previous, Context), (
@@ -460,6 +465,7 @@ class Context(abc.ABC):
         x._data = data
         x._is_root = False
         x._is_chat_context = previous._is_chat_context
+        x._labels = set(labels) if labels is not None else previous._labels
         return x
 
     @classmethod
@@ -495,9 +501,16 @@ class Context(abc.ABC):
         """Returns whether this context is a chat context."""
         return self._is_chat_context
 
+    @property
+    def labels(self) -> set[str]:
+        """Returns the list of labels for this context node."""
+        return self._labels
+
     # User functions below this line.
 
-    def as_list(self, last_n_components: int | None = None) -> list[Component | CBlock]:
+    def as_list(
+        self, last_n_components: int | None = None, labels: Sequence[str] | None = None
+    ) -> list[Component | CBlock]:
         """Returns a list of the last n components in the context sorted from FIRST TO LAST.
 
         If `last_n_components` is `None`, then all components are returned.
@@ -505,17 +518,18 @@ class Context(abc.ABC):
         context_list: list[Component | CBlock] = []
         current_context: Context = self
 
-        last_n_count = 0
         while not current_context.is_root_node and (
-            last_n_components is None or last_n_count < last_n_components
+            last_n_components is None or len(context_list) < last_n_components
         ):
             data = current_context.node_data
             assert data is not None, "Data cannot be None (except for root context)."
             assert data not in context_list, (
                 "There might be a cycle in the context tree. That is not allowed."
             )
-            context_list.append(data)
-            last_n_count += 1
+
+            # append only if no label is specified or label is within allowed label set
+            if labels is None or current_context.labels.intersection(labels):
+                context_list.append(data)
 
             current_context = current_context.previous_node  # type: ignore
             assert current_context is not None, (
@@ -532,19 +546,23 @@ class Context(abc.ABC):
         """
         return self.view_for_generation()
 
-    def last_output(self, check_last_n_components: int = 3) -> ModelOutputThunk | None:
+    def last_output(
+        self, check_last_n_components: int = 3, labels: Sequence[str] | None = None
+    ) -> ModelOutputThunk | None:
         """The last output thunk of the context."""
-        for c in self.as_list(last_n_components=check_last_n_components)[::-1]:
+        for c in self.as_list(last_n_components=check_last_n_components, labels=labels)[
+            ::-1
+        ]:
             if isinstance(c, ModelOutputThunk):
                 return c
         return None
 
-    def last_turn(self):
+    def last_turn(self, labels: Sequence[str] | None = None):
         """The last input/output turn of the context.
 
         This can be partial. If the last event is an input, then the output is None.
         """
-        history = self.as_list(last_n_components=2)
+        history = self.as_list(last_n_components=2, labels=labels)
 
         if len(history) == 0:
             return None
@@ -563,13 +581,17 @@ class Context(abc.ABC):
     # Abstract methods below this line.
 
     @abc.abstractmethod
-    def add(self, c: Component | CBlock) -> Context:
+    def add(
+        self, c: Component | CBlock, labels: Sequence[str] | None = None
+    ) -> Context:
         """Returns a new context obtained by adding `c` to this context."""
         # something along ....from_previous(self, c)
         ...
 
     @abc.abstractmethod
-    def view_for_generation(self) -> list[Component | CBlock] | None:
+    def view_for_generation(
+        self, labels: Sequence[str] | None = None
+    ) -> list[Component | CBlock] | None:
         """Provides a linear list of context components to use for generation, or None if that is not possible to construct."""
         ...
 
@@ -582,25 +604,33 @@ class ChatContext(Context):
         super().__init__()
         self._window_size = window_size
 
-    def add(self, c: Component | CBlock) -> ChatContext:
+    def add(
+        self, c: Component | CBlock, labels: Sequence[str] | None = None
+    ) -> ChatContext:
         """Add a new component/cblock to the context. Returns the new context."""
-        new = ChatContext.from_previous(self, c)
+        new = ChatContext.from_previous(self, c, labels=labels)
         new._window_size = self._window_size
         return new
 
-    def view_for_generation(self) -> list[Component | CBlock] | None:
+    def view_for_generation(
+        self, labels: Sequence[str] | None = None
+    ) -> list[Component | CBlock] | None:
         """Returns the context in a linearized form. Uses the window_size set during initialization."""
-        return self.as_list(self._window_size)
+        return self.as_list(self._window_size, labels=labels)
 
 
 class SimpleContext(Context):
     """A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved.."""
 
-    def add(self, c: Component | CBlock) -> SimpleContext:
+    def add(
+        self, c: Component | CBlock, labels: Sequence[str] | None = None
+    ) -> SimpleContext:
         """Add a new component/cblock to the context. Returns the new context."""
-        return SimpleContext.from_previous(self, c)
+        return SimpleContext.from_previous(self, c, labels=labels)
 
-    def view_for_generation(self) -> list[Component | CBlock] | None:
+    def view_for_generation(
+        self, labels: Sequence[str] | None = None
+    ) -> list[Component | CBlock] | None:
         """Returns an empty list."""
         return []
 

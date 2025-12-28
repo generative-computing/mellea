@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import abc
+from collections.abc import Sequence
 from typing import TypeVar
 
 import pydantic
@@ -36,12 +37,13 @@ class Backend(abc.ABC):
     @abc.abstractmethod
     async def generate_from_context(
         self,
-        action: Component | CBlock,
+        action: Component | CBlock | None,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        labels: Sequence[str] | None = None,
     ) -> tuple[ModelOutputThunk, Context]:
         """Generates a model output from a context. May not mutate the context. This must be called from a running event loop as it creates a task to run the generation request.
 
@@ -51,6 +53,7 @@ class Backend(abc.ABC):
             format: A response format to used for structured outputs / constrained decoding.
             model_options: Any model options to upsert into the defaults for this call.
             tool_calls: If `True`, then tool calls are extracts from the `action` `Component`. Assumption: if tool_calls is enabled, then the action `Component` has a TemplateRepresentation
+            labels: The labels under which to execute this action.
 
         Returns:
             a tuple of (ModelOutputThunk, Context) where the Context is the new context after the generation has been completed.
