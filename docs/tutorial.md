@@ -80,7 +80,7 @@ Here, we initialized a backend running Ollama on a local machine using the grani
 We then ask the model to generate an email and print it to the console.
 
 > [!NOTE]
-> Mellea supports many other models and backends. By default, a new Mellea session will run IBM's capable Granite 8B model on your own laptop. This is a good (and free!) way to get started. If you would like to try out other models or backends, you can explicitly specify the backend and model in the start_session method. For example, `mellea.start_session(backend_name="ollama", model_id=mellea.model_ids.IBM_GRANITE_3_3_8B)`.
+> Mellea supports many other models and backends. By default, a new Mellea session will run IBM's capable Granite 3B model on your own laptop. This is a good (and free!) way to get started. If you would like to try out other models or backends, you can explicitly specify the backend and model in the start_session method. For example, `mellea.start_session(backend_name="ollama", model_id=mellea.model_ids.IBM_GRANITE_4_MICRO_3B)`.
 
 Before continuing, let's wrap this call into a function with some arguments:
 
