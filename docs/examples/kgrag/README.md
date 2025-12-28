@@ -205,6 +205,37 @@ dataset/
 - `person_db.json`: Person entities (actors, directors, producers, etc.)
 - `year_db.json`: Temporal information and year-specific events
 
+#### Creating a Demo Dataset (Optional but Recommended)
+
+The full database is quite large (225MB+). For faster demos and testing, create a smaller focused dataset:
+
+```bash
+# Create a demo dataset with ~100 recent movies (2020-2024)
+cd docs/examples/kgrag
+uv run python create_demo_dataset.py \
+    --year-start 2020 \
+    --year-end 2024 \
+    --max-movies 100 \
+    --topics "oscar,academy award" \
+    --include-related
+
+# Switch to the demo dataset
+mv dataset/movie dataset/movie_full
+mv dataset/movie_demo dataset/movie
+```
+
+**Benefits of using a demo dataset:**
+- ⚡ **10-20x faster processing** (15-20 minutes vs 4-6 hours)
+- 💾 **95% smaller** (~5MB vs 225MB)
+- 🎯 **Focused testing** with coherent topic clusters
+- 🚀 **Quick iteration** for development and demos
+
+See [DEMO_DATASET.md](DEMO_DATASET.md) for more options including:
+- Animated films dataset
+- Marvel/superhero dataset
+- Minimal 30-movie dataset for quick testing
+- Custom topic filtering
+
 ### 3. Knowledge Graph Construction
 
 Build the knowledge graph from the dataset:
