@@ -11,5 +11,5 @@ export KG_BASE_DIRECTORY="$(pwd)/dataset"
 
 # uv run --with mellea run/run_kg_preprocess.py
 # uv run --with mellea run/run_kg_embed.py
-uv run --with mellea run/run_kg_update.py --num-worker 1 --queue-size 1
-# uv run --with mellea run/run_qa.py --num-worker 1 --queue-size 1
+uv run --with mellea run/run_kg_update.py --num-workers 1 --queue-size 1
+# uv run --with mellea run/run_qa.py --num-workers 1 --queue-size 1
