@@ -2,6 +2,21 @@
 
 This example demonstrates a Knowledge Graph-enhanced Retrieval-Augmented Generation (KG-RAG) system built with the Mellea framework, adapted from the [Bidirection](https://github.com/junhongmit/Bidirection) project for temporal reasoning over movie domain knowledge.
 
+## 🎉 What's New - Fully Refactored!
+
+This codebase has been **completely refactored** to follow Mellea's design patterns and modern Python best practices:
+
+- ✅ **Type-Safe Configuration**: Pydantic models with automatic validation
+- ✅ **Modern Async Patterns**: Python 3.7+ `asyncio.run()` instead of manual event loops
+- ✅ **Factory Functions**: Clean session creation with intelligent defaults
+- ✅ **Comprehensive CLI**: Rich argparse with examples and help text
+- ✅ **Better Error Handling**: Proper exit codes (0=success, 1=error, 130=interrupt)
+- ✅ **Robust Code**: Graceful handling of edge cases and missing data
+- ✅ **Clean File Structure**: Removed `_refactored` suffixes, single source of truth
+- ✅ **Full Documentation**: Detailed refactoring guides for each component
+
+See [CLEANUP_SUMMARY.md](CLEANUP_SUMMARY.md) for details on the cleanup and [REFACTORING_GUIDE.md](REFACTORING_GUIDE.md) for comprehensive patterns.
+
 ## Overview
 
 KGRag combines the power of Knowledge Graphs with Large Language Models to answer complex questions that require multi-hop reasoning over structured knowledge. The system uses a Neo4j graph database to store and query entities, relationships, and temporal information, enabling more accurate and explainable answers compared to traditional RAG approaches.
@@ -56,12 +71,30 @@ The system consists of several key components:
 
 ### Key Components
 
+**Core Modules:**
 - **[kg_model.py](kg_model.py)**: Core KGModel class implementing the reasoning pipeline
-- **[kg/kg_driver.py](kg/kg_driver.py)**: Neo4j database driver for graph operations
-- **[kg/kg_preprocessor.py](kg/kg_preprocessor.py)**: Entity and relation extraction from documents
-- **[kg/kg_updater.py](kg/kg_updater.py)**: Incremental graph updates with new information
+- **[kg/kg_driver.py](kg/kg_driver.py)**: Neo4j database driver for graph operations (refactored with emb_session support)
+- **[kg/kg_preprocessor.py](kg/kg_preprocessor.py)**: Refactored entity and relation extraction with Pydantic models
+- **[kg/kg_embedder.py](kg/kg_embedder.py)**: Refactored embedding generation with batch processing
+- **[kg/kg_updater.py](kg/kg_updater.py)**: Incremental graph updates with robust error handling
+- **[kg/kg_rag.py](kg/kg_rag.py)**: RAG component following Mellea patterns
+
+**Configuration Models (Pydantic):**
+- **[kg/kg_entity_models.py](kg/kg_entity_models.py)**: Type-safe entity models (Movie, Person, Award, etc.)
+- **[kg/kg_embed_models.py](kg/kg_embed_models.py)**: Embedding configuration and validation
+- **[kg/kg_updater_models.py](kg/kg_updater_models.py)**: Updater configuration models
+- **[kg/kg_qa_models.py](kg/kg_qa_models.py)**: QA configuration models
+
+**Run Scripts:**
+- **[run/run_kg_preprocess.py](run/run_kg_preprocess.py)**: Preprocessing with modern async patterns
+- **[run/run_kg_embed.py](run/run_kg_embed.py)**: Embedding generation script
+- **[run/run_kg_update.py](run/run_kg_update.py)**: Graph update with comprehensive CLI
+- **[run/run_qa.py](run/run_qa.py)**: QA evaluation with factory functions and proper exit codes
+
+**Utilities:**
 - **[dataset/movie_dataset.py](dataset/movie_dataset.py)**: Movie domain dataset loader
 - **[eval.py](eval.py)**: LLM-as-a-judge evaluation framework
+- **[demo.py](demo.py)**: Complete demo showing KGRag usage
 
 ## Prerequisites
 
@@ -189,10 +222,21 @@ uv run --with mellea run/run_kg_preprocess.py
 uv run --with mellea run/run_kg_embed.py
 
 # Step 3: Update the knowledge graph with extracted information
-uv run --with mellea run/run_kg_update.py --num-worker 4 --queue-size 10
+uv run --with mellea run/run_kg_update.py --num-workers 4 --queue-size 10
 ```
 
 **Note**: The preprocessing and graph construction can take several hours depending on dataset size and hardware.
+
+### 4. Quick Start with Demo
+
+After building the knowledge graph, try the demo:
+
+```bash
+# Run the interactive demo
+uv run --with mellea python demo.py
+```
+
+The demo will run example queries and show the complete KGRag pipeline in action.
 
 ## Usage
 
@@ -202,20 +246,31 @@ After building the knowledge graph, run QA inference:
 
 ```bash
 # Run with default settings
-uv run --with mellea run/run_qa.py --num-worker 4 --queue-size 10
+uv run --with mellea run/run_qa.py --num-workers 4 --queue-size 10
 
 # Run with custom configuration
 uv run --with mellea run/run_qa.py \
-    --num-worker 8 \
+    --num-workers 8 \
     --queue-size 16 \
     --config route=3 width=20 depth=2 \
     --prefix my_experiment \
-    --postfix v1
+    --postfix v1 \
+    --verbose
+
+# Run with specific dataset
+uv run --with mellea run/run_qa.py \
+    --dataset dataset/custom_questions.jsonl \
+    --domain movie \
+    --eval-batch-size 64 \
+    --eval-method llama
 ```
 
 **Parameters:**
-- `--num-worker`: Number of parallel workers for inference
-- `--queue-size`: Size of the data loading queue
+- `--dataset`: Path to dataset file (default: uses KG_BASE_DIRECTORY)
+- `--domain`: Knowledge domain (default: movie)
+- `--num-workers`: Number of parallel workers for inference (default: 128)
+- `--queue-size`: Size of the data loading queue (default: 128)
+- `--split`: Dataset split index (default: 0)
 - `--config`: Override model configuration (e.g., `route=5 width=30 depth=3`)
   - `route`: Number of solving routes to explore (default: 5)
   - `width`: Maximum number of relations to consider at each step (default: 30)
@@ -223,6 +278,9 @@ uv run --with mellea run/run_qa.py \
 - `--prefix`: Prefix for output file names
 - `--postfix`: Postfix for output file names
 - `--keep`: Keep progress file after completion
+- `--eval-batch-size`: Batch size for evaluation (default: 64)
+- `--eval-method`: Evaluation method (default: llama)
+- `--verbose` or `-v`: Enable verbose logging
 
 ### Using the Convenience Script
 
@@ -346,7 +404,123 @@ print(answer)
 
 ## Integration with Mellea
 
-This example demonstrates several Mellea framework patterns:
+This example demonstrates several Mellea framework patterns and modern Python best practices:
+
+### 🔄 Refactored Architecture
+
+The codebase has been completely refactored to follow Mellea's design patterns:
+
+**✅ Pydantic Models for Type Safety**
+```python
+from kg.kg_qa_models import QAConfig, QASessionConfig
+
+# Type-safe configuration with automatic validation
+session_config = QASessionConfig(
+    api_base="http://localhost:7878/v1",
+    model_name="gpt-4",
+    timeout=1800  # Validated: must be 1-3600
+)
+
+qa_config = QAConfig(
+    num_workers=128,  # Validated: must be 1-512
+    queue_size=128,   # Validated: must be 1-1024
+    eval_batch_size=64
+)
+```
+
+**✅ Modern Async Patterns**
+```python
+# Old pattern (deprecated)
+loop = asyncio.get_event_loop()
+loop.run_until_complete(main())
+
+# New pattern (Python 3.7+)
+async def main() -> int:
+    try:
+        # Your async code
+        return 0
+    except KeyboardInterrupt:
+        return 130
+    except Exception:
+        return 1
+
+if __name__ == "__main__":
+    sys.exit(asyncio.run(main()))
+```
+
+**✅ Factory Functions for Session Creation**
+```python
+def create_mellea_session(session_config: QASessionConfig) -> MelleaSession:
+    """Create Mellea session with intelligent defaults."""
+    logger.info(f"Creating session with model: {session_config.model_name}")
+
+    headers = {}
+    if session_config.rits_api_key:
+        headers['RITS_API_KEY'] = session_config.rits_api_key
+
+    return MelleaSession(
+        backend=OpenAIBackend(
+            model_id=session_config.model_name,
+            formatter=TemplateFormatter(model_id=session_config.model_name),
+            base_url=session_config.api_base,
+            api_key=session_config.api_key,
+            timeout=session_config.timeout,
+            default_headers=headers if headers else None
+        )
+    )
+
+# Intelligent fallbacks for evaluation session
+def create_eval_session(session_config: QASessionConfig) -> MelleaSession:
+    """Create eval session with fallback to main config."""
+    eval_api_base = session_config.eval_api_base or session_config.api_base
+    eval_model_name = session_config.eval_model_name or session_config.model_name
+    # ... create session with fallback values
+```
+
+**✅ Comprehensive CLI with argparse**
+```python
+def parse_arguments() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Run QA evaluation on knowledge graph",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s --dataset data/crag_movie_dev.jsonl
+  %(prog)s --num-workers 256 --queue-size 256
+  %(prog)s --config route=5 width=30 depth=3
+  %(prog)s --verbose --keep
+        """
+    )
+    # ... comprehensive argument definitions
+    return parser.parse_args()
+```
+
+**✅ Better Error Handling**
+```python
+async def main() -> int:
+    """Main async entry point with proper error handling."""
+    try:
+        # Pre-flight validation
+        if not Path(dataset_config.dataset_path).exists():
+            logger.error(f"Dataset not found: {dataset_config.dataset_path}")
+            return 1
+
+        # ... processing
+
+        logger.info("✅ QA evaluation completed successfully!")
+        return 0
+
+    except KeyboardInterrupt:
+        logger.warning("\n⚠️  QA evaluation interrupted by user")
+        return 130
+    except Exception as e:
+        logger.error(f"❌ QA evaluation failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        return 1
+```
 
 ### Backend Configuration
 ```python
@@ -355,6 +529,7 @@ from mellea.backends.openai import OpenAIBackend
 
 session = MelleaSession(backend=OpenAIBackend(
     model_id=MODEL_NAME,
+    formatter=TemplateFormatter(model_id=MODEL_NAME),
     base_url=API_BASE,
     api_key=API_KEY,
     timeout=TIME_OUT
@@ -376,6 +551,17 @@ async def extract_entity(self, query: Query) -> List[str]:
     # LLM call with automatic retries
     pass
 ```
+
+### 📚 Refactoring Documentation
+
+For detailed information about the refactoring work:
+- **[REFACTORING_GUIDE.md](REFACTORING_GUIDE.md)**: Comprehensive guide to Mellea patterns
+- **[REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md)**: Summary of all refactoring work
+- **[PREPROCESSOR_REFACTORING.md](PREPROCESSOR_REFACTORING.md)**: Preprocessing refactoring details
+- **[EMBEDDING_REFACTORING.md](EMBEDDING_REFACTORING.md)**: Embedding generation refactoring
+- **[UPDATER_REFACTORING.md](UPDATER_REFACTORING.md)**: Graph updater refactoring
+- **[QA_REFACTORING.md](QA_REFACTORING.md)**: QA evaluation refactoring
+- **[CLEANUP_SUMMARY.md](CLEANUP_SUMMARY.md)**: File cleanup and consolidation
 
 ## Evaluation
 
