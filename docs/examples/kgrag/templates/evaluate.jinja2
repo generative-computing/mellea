@@ -1,0 +1,40 @@
+-Goal-
+You are presented with a question in the {{ domain }} domain, its query time, and a potential route to solve it. Given the retrieved related entities and triplets from a noisy knowledge graph, you are asked to determine whether these references and your knowledge are sufficient to answer the question (Yes or No).
+- If yes, answer the question using fewer than 50 words.
+- If no, respond with 'I don't know'.
+
+1. The entities will be given in the format of
+"ent_i: (<entity_type>: <entity_name>, desc: "description", props: {key_1: val, key_2: [val_1 (70%, ctx:"context"), val_2 (30%, ctx:"context")], ...})"
+The triplets will be given in the format of
+"rel_i: (<source_entity_type>: <source_entity_name>)-[<relation_name>, desc: "description", props: {key_1: val, key_2: [val_1 (70%, ctx:"context"), val_2 (30%, ctx:"context")], ...}]->(<target_entity_type>: <target_entity_name>)"
+where "i" is the index, arrow symbol ("->" or "<-") is the relation direction, "props" are associated properties of the entity or relation.
+Each property may have a single value, or multiple valid values of vary confidence under different context. The percentage is confidence score, and "ctx" is the optional context under which the value is valid.
+If multiple conflicting candidates are found, use the one with stronger supporting evidence such as temporal-aligned triplets or consists of additional supporting properties. If a more strongly justified answer exists, prefer it.
+
+Domain-specific Hints:
+{{ hints }}
+
+#### Examples ####
+Question: Find the person who said "Taste cannot be controlled by law", what did this person die from?
+Knowledge Triplets: Taste cannot be controlled by law., media_common.quotation.author, Thomas Jefferson
+Output: {
+  "sufficient": "No",
+  "reason": "Based on the given knowledge triplets, it's not sufficient to answer the entire question. The triplets only provide information about the person who said 'Taste cannot be controlled by law,' which is Thomas Jefferson. To answer the second part of the question, it's necessary to have additional knowledge about where Thomas Jefferson's dead.",
+  "answer": "I don't know."
+}
+
+Question: The artist nominated for The Long Winter lived where?
+Knowledge Triplets: The Long Winter, book.written_work.author, Laura Ingalls Wilder
+Laura Ingalls Wilder, people.person.places_lived, Unknown-Entity
+Unknown-Entity, people.place_lived.location, De Smet
+Output: {
+  "sufficient": "Yes",
+  "reason": "Based on the given knowledge triplets, the author of The Long Winter, Laura Ingalls Wilder, lived in De Smet. Therefore, the answer to the question is De Smet.",
+  "answer": "De Smet."
+}
+
+Question: {{ query }}
+Query Time: {{ query_time }}
+Solving Route: {{ route }}
+Knowledge Entities: {{ entities }}
+Knowledge Triplets: {{ triplets }}

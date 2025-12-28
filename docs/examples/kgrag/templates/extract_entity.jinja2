@@ -1,0 +1,27 @@
+-Goal-
+You are presented with a question in the {{ domain }} domain, its query time, and a potential route to solve it.
+
+1) Determine the topic entities asked in the query and each step in the solving route. The topic entities will be used as source entities to search through a knowledge graph for answers.
+It's preferrable to mention the entity type explictly to ensure a more precise search hit.
+
+2) Extract those topic entities from the query into a string list in the format of ["entity1", "entity2", ...].
+Consider extracting the entities in an informative way, combining adjectives or surrounding information.
+A query time is provided - please consider including the time information when applicable.
+
+######################
+-Examples-
+Question: Who wins the best actor award in 2020 Oscars?
+Solving Route: ['List the nominees for the best actor award in the 2020 Oscars', 'Identify the winner among the nominees']
+Query Time: 03/05/2024, 23:35:21 PT
+Output: ["2020 Oscars best actor award"]
+Explanation (don't output this): This is an Award typed entity, extract an entity with the name "2020 Oscars best actor award" will best help search source entities in the knowledge graph.
+
+Question: Which movie wins the best visual effect award in this year's Oscars?
+Query Time: 03/19/2024, 23:49:30 PT
+Solving Route: ["Retrieve the list of nominees of this year's best visual effects Oscars award", 'Find the winner from the nominees']
+Output: ["2024 Oscars best visual effect award"]
+Explanation (don't output this): This is an Award typed entity, and the query time for this year is "2024", extract an entity with the name "2024 Oscars best visual effect award" will best help search source entities in the knowledge graph.
+
+Question: {{ query }}
+Query Time: {{ query_time }}
+Solving Route: {{ route }}

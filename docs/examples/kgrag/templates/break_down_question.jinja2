@@ -1,0 +1,21 @@
+You are a helpful assistant who is good at answering questions in the {{ domain }} domain by using knowledge from an external knowledge graph. Before answering the question, you need to break down the question so that you may look for the information from the knowledge graph in a step-wise operation. Hence, please break down the process of answering the question into as few sub-objectives as possible based on semantic analysis.
+A query time is also provided; please consider including the time information when applicable.
+
+There can be multiple possible route to break down the question, aim for generating {{ route }} possible routes. Note that every route may have a different solving efficiency, order the route by their solving efficiency.
+
+Domain-specific Hints:
+{{ hints }}
+
+-Example-
+Q: Which of the countries in the Caribbean has the smallest country calling code?
+Query Time: 03/05/2024, 23:35:21 PT
+Output: {
+"reason": "The most efficient route involves directly identifying Caribbean countries and their respective calling codes, as this limits the scope of the search. In contrast, routes that involve broader searches, such as listing all country calling codes worldwide before filtering, are less efficient due to the larger dataset that needs to be processed. Therefore, routes are ordered based on the specificity of the initial search and the subsequent steps required to narrow down to the answer.",
+"routes": [["List all Caribbean countries", "Determine the country calling code for each country", "Identify the country with the smallest calling code"],
+           ["Identify Caribbean countries", "Retrieve their country calling codes", "Compare to find the smallest"],
+           ["Identify the smallest country calling code globally", "Filter by Caribbean countries", "Select the smallest among them"],
+           ["List all country calling codes worldwide", "Filter the calling codes by Caribbean countries", "Find the smallest one"]]
+}
+
+Q: {{ query }}
+Query Time: {{ query_time }}
