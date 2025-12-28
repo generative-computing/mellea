@@ -57,7 +57,7 @@ class KG_Driver:
             cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self, database=None):
+    def __init__(self, database=None, emb_session=None):
         if not hasattr(self, "_initialized"):
             self._initialized = True
 
@@ -66,9 +66,14 @@ class KG_Driver:
             self.async_driver = neo4j.AsyncGraphDatabase.driver(
                 NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
             self.database = database
+            self.emb_session = emb_session
 
             self.entity_schema_cache = set(self.get_entity_schema())
             self.relation_schema_cache = set(self.get_relation_schema())
+
+    def set_emb_session(self, emb_session):
+        """Set or update the embedding session."""
+        self.emb_session = emb_session
 
     async def close(self):
         self.driver.close()
@@ -229,7 +234,7 @@ class KG_Driver:
                 self.entity_schema_cache.add(schema)
                 description_list.append(entity_schema_to_text(schema))
         
-        embeddings = await generate_embedding(description_list)
+        embeddings = await generate_embedding(self.emb_session, description_list)
 
         batch = []
         for name, embedding in zip(description_list, embeddings):
@@ -254,7 +259,7 @@ class KG_Driver:
                 description_list.append(relation_schema_to_text(schema))
                 relation_schema.append(schema)
         
-        embeddings = await generate_embedding(description_list)
+        embeddings = await generate_embedding(self.emb_session, description_list)
 
         batch = []
         for schema, embedding in zip(relation_schema, embeddings):
@@ -977,7 +982,7 @@ class KG_Driver:
         for i in tqdm(range(0, len(description_list), batch_size), desc="Encoding Sentences"):
             batch = description_list[i: i + batch_size]
             # Store batch results
-            embeddings.extend(np.array(await generate_embedding(batch)))
+            embeddings.extend(np.array(await generate_embedding(self.emb_session, batch)))
         embeddings_np = np.vstack(embeddings)
         embeddings_np.shape
 
@@ -1153,7 +1158,7 @@ class KG_Driver:
             Dict[str, KGEntity]: An updated dictionary of KG entities inserted.
         """
         texts = [entity_to_text(entity) for entity in entities_dict.values()]
-        embeddings = await generate_embedding(texts)
+        embeddings = await generate_embedding(self.emb_session, texts)
 
         semaphore = asyncio.Semaphore(50)
         # Insert Entities
@@ -1179,7 +1184,7 @@ class KG_Driver:
             Dict[str, KGEntity]: An updated dictionary of KG entities inserted.
         """
         texts = [relation_to_text(relation) for relation in relations_dict.values()]
-        embeddings = await generate_embedding(texts)
+        embeddings = await generate_embedding(self.emb_session, texts)
 
         semaphore = asyncio.Semaphore(50)
         # Insert Entities
