@@ -88,22 +88,46 @@ Fix hardcoded configurations in `constants.py`:
 - [ ] Separate concerns: data loading, model inference, evaluation
 
 ### 2.3 run.sh Improvements
-**Priority: Low**
+**Priority: Low** ✅ **COMPLETED**
 
-- [ ] Complete the incomplete comment reference (lines 2-4)
-- [ ] Add error handling (set -e)
-- [ ] Add usage instructions in comments
+- [x] Add error handling (set -e)
+- [x] Add clear step-by-step execution with progress messages
+- [x] Add Neo4j database cleanup step
+- [x] Add demo dataset creation step
+- [x] Add all pipeline steps (preprocess, embed, update, qa, eval)
+- [x] Add intelligent eval check (skip if already run in QA step)
+- [x] Add proper environment variable setup
 - [ ] Make parameters configurable via command-line arguments
 - [ ] Add example usage with different configurations
 
-### 2.4 eval.py Improvements
-**Priority: Medium** ✅ **PARTIALLY COMPLETED**
+**Recent Changes:**
+- Complete pipeline execution with 7 steps
+- Database cleanup using cypher-shell
+- Error handling and informative logging
+- Conditional evaluation based on existing results
+
+### 2.4 eval.py and run_eval.py Improvements
+**Priority: Medium** ✅ **COMPLETED**
 
 - [x] Document evaluation metrics and scoring system
-- [ ] Move hardcoded prompts and examples to configuration
 - [x] Add explanation of LLM-as-judge approach
 - [x] Provide guidance on interpreting evaluation results
+- [x] **Refactored run_eval.py to mellea style** with:
+  - [x] Clean separation into focused helper functions
+  - [x] Comprehensive type hints and docstrings
+  - [x] Proper async/await pattern
+  - [x] Better argument parsing with examples
+  - [x] Support for re-evaluation and result-path modes
+  - [x] Consistent logging and error handling
+  - [x] Token usage tracking
+- [ ] Move hardcoded prompts and examples to configuration
 - [ ] Add visualization of results
+
+**Recent Changes:**
+- Created run/run_eval.py following mellea architectural patterns
+- Matches style of run_qa.py, run_kg_update.py
+- Modular functions for loading, processing, and saving results
+- Updated run.sh to use new run_eval.py script
 
 ## 3. Missing Integration with Mellea Patterns
 
@@ -290,7 +314,7 @@ Note: README includes comprehensive beginner-friendly content with clear explana
 11. Comparison studies
 12. Platform testing
 
-## Recent Progress (2024)
+## Recent Progress (2024-2025)
 
 ### Completed Items:
 - ✅ **Comprehensive README.md created** with:
@@ -304,12 +328,31 @@ Note: README includes comprehensive beginner-friendly content with clear explana
   - Performance optimization tips
   - Integration with Mellea framework documentation
 
+- ✅ **Configuration cleanup** - **COMPLETED**:
+  - Removed IBM-specific endpoints and hardcoded paths
+  - All files now use environment variables
+  - Created comprehensive .env_template
+
+- ✅ **run.sh Complete Pipeline** - **COMPLETED**:
+  - 7-step pipeline execution
+  - Neo4j database cleanup
+  - Demo dataset creation
+  - All processing steps integrated
+  - Intelligent evaluation handling
+
+- ✅ **run_eval.py Refactoring** - **COMPLETED**:
+  - Converted to mellea architectural style
+  - Modular, well-documented functions
+  - Proper async/await patterns
+  - Comprehensive error handling
+  - Matches patterns in run_qa.py and run_kg_update.py
+
 ### Next Priority Items:
-1. ✅ **Configuration cleanup**: Remove IBM-specific endpoints and hardcoded paths in `constants.py` - **COMPLETED**
-2. ✅ **Create .env_template**: Template file with all required environment variables - **COMPLETED**
-3. **Enhanced Mellea integration**: Add more examples using `@generative`, requirements, and sampling strategies
-4. **Code refactoring**: Break down large files (especially `kg_model.py`) into smaller modules
-5. **Add configuration validator**: Check required variables on startup
+1. **Enhanced Mellea integration**: Add more examples using `@generative`, requirements, and sampling strategies
+2. **Code refactoring**: Break down large files (especially `kg_model.py`) into smaller modules
+3. **Add configuration validator**: Check required variables on startup
+4. **Add tests**: Unit tests for core components
+5. **Tutorial content**: Jupyter notebook with step-by-step examples
 
 ## Notes
 

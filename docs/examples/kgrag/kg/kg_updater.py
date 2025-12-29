@@ -1481,13 +1481,17 @@ class KG_Updater:
 
         for key, result in results.items():
             if key.startswith("ent") and len(result):
+                # Ensure anchors are strings (LLM sometimes returns integers)
+                start_anchor = str(result[3]) if len(result) > 3 and result[3] is not None else ""
+                end_anchor = str(result[4]) if len(result) > 4 and result[4] is not None else ""
+
                 candidate = CandidateEntity(
                     extracted=KGEntity(
                         id="",
                         type=normalize_entity_type(result[0]),
                         name=normalize_entity(result[1]),
                         description=result[2],
-                        paragraph=self.extract_paragraph_by_anchors(context, result[3], result[4]),
+                        paragraph=self.extract_paragraph_by_anchors(context, start_anchor, end_anchor),
                         created_at=created_at,
                         modified_at=modified_at,
                         properties=kg_driver.get_properties(result[5], created_at)  if len(result) > 5 else {},
@@ -1532,6 +1536,11 @@ class KG_Updater:
                 target = ext_entities.get(normalize_entity(result[2]))
                 if source is None or target is None:
                     continue
+
+                # Ensure anchors are strings (LLM sometimes returns integers)
+                start_anchor = str(result[4]) if len(result) > 4 and result[4] is not None else ""
+                end_anchor = str(result[5]) if len(result) > 5 and result[5] is not None else ""
+
                 candidate = CandidateRelation(
                     extracted=KGRelation(
                         id="",
@@ -1539,14 +1548,14 @@ class KG_Updater:
                         source=source.final,
                         target=target.final,
                         description=result[3],
-                        paragraph=self.extract_paragraph_by_anchors(context, result[4], result[5]),
+                        paragraph=self.extract_paragraph_by_anchors(context, start_anchor, end_anchor),
                         properties=kg_driver.get_properties(result[6], created_at) if len(result) > 6 else {},
                         ref=ref
                     )
                 )
-                relation_name = relation_to_text(candidate.extracted, 
+                relation_name = relation_to_text(candidate.extracted,
                                                 include_des=False,
-                                                include_prop=False, 
+                                                include_prop=False,
                                                 include_src_des=False,
                                                 include_src_prop=False,
                                                 include_dst_des=False,
