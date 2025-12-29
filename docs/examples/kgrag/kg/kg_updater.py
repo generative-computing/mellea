@@ -520,6 +520,10 @@ class KG_Updater:
 
         self.logger = logger
 
+        # Set embedding session on the global kg_driver singleton
+        if emb_session is not None:
+            kg_driver.set_emb_session(emb_session)
+
     @llm_retry(max_retries=MAX_RETRIES, default_output={})
     async def align_entity(
         self,
@@ -1271,7 +1275,9 @@ class KG_Updater:
         4) Expand to paragraph boundaries using two-or-more newlines.
         """
         if not paragraph_start_anchor or not paragraph_end_anchor:
-            raise ValueError("Both anchors must be non-empty verbatim substrings.")
+            # Return empty string if anchors are missing instead of raising error
+            # This allows processing to continue even if LLM fails to generate anchors
+            return ""
 
         text = self._normalize_newlines(raw_text)
 
