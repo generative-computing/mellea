@@ -361,6 +361,7 @@ Note: README includes comprehensive beginner-friendly content with clear explana
   - Created run_kg_update_mellea.py showcasing Mellea patterns for KG updates
   - Created run_kg_embed_mellea.py showcasing Mellea patterns for KG embedding
   - Created run_kg_preprocess_mellea.py showcasing enhanced preprocessing with statistics
+  - Created run_eval_mellea.py showcasing @generative for LLM-based evaluation
   - Integrated kg_generative.py with @generative functions for QA
   - Integrated kg_updater_generative.py with @generative functions for KG updates
   - Integrated kg_updater_component.py as Component for KG updates
@@ -369,16 +370,21 @@ Note: README includes comprehensive beginner-friendly content with clear explana
   - Integrated kg_models.py with Pydantic models
   - Integrated kg_utils_mellea.py with Mellea utilities
   - Fixed all imports for proper module resolution
-  - Provides side-by-side comparison: traditional vs Mellea-native for all major pipeline components
+  - Provides complete side-by-side comparison: traditional vs Mellea-native for entire pipeline
 
 - ✅ **Bug Fixes** - **COMPLETED**:
   - Fixed TypeError in kg_updater.py for paragraph anchor type conversion (lines 1484-1486, 1540-1542)
   - Fixed TypeError in kg_updater.py for entity/relation names in identify_missing_entities (lines 1103-1139)
+  - Fixed TypeError in kg_updater.py for batch result processing (lines 640-643, 757-760, 915-918, 1055-1058)
+  - Added defensive type checking in kg_updater_component.py (lines 284-287, 315-318)
   - Added proper type conversion for LLM-returned values:
     - Integer anchors → strings
     - List entity names → strings (take first element)
     - List relation sources/targets → strings
-  - Applied fixes for entity extraction, relation extraction, and missing entity identification
+    - Non-dict batch results → skip with warning
+    - Malformed Pydantic objects → skip with warning
+  - Applied fixes for entity extraction, relation extraction, missing entity identification, alignment, and merging
+  - Traditional and Mellea-native implementations now have comprehensive error handling
 
 ### Next Priority Items:
 1. **Add tests**: Unit tests for core components

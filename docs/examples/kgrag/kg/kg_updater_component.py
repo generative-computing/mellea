@@ -280,30 +280,48 @@ class KGUpdaterComponent(Component):
 
             # Step 2: Process entities
             for extracted_entity in extraction.entities:
-                # Normalize name
-                norm_name = normalize_entity(extracted_entity.name)
+                try:
+                    # Defensive check: ensure extracted_entity is an object with required attributes
+                    if not hasattr(extracted_entity, 'name') or not hasattr(extracted_entity, 'type'):
+                        self.logger.warning(f"Skipping malformed entity: {type(extracted_entity)}")
+                        continue
 
-                # Search for similar entities in KG
-                # (simplified - in reality would use vector search)
-                # For now, just create new entity
-                entity = KGEntity(
-                    id="",  # Will be assigned by KG
-                    name=norm_name,
-                    type=extracted_entity.type,
-                    description=extracted_entity.description,
-                    properties=extracted_entity.properties,
-                    created_at=created_at,
-                    ref=reference
-                )
+                    # Normalize name
+                    norm_name = normalize_entity(extracted_entity.name)
 
-                # Upsert to KG
-                # await self.kg_driver.upsert_entity(entity)
-                stats["entities_new"] += 1
+                    # Search for similar entities in KG
+                    # (simplified - in reality would use vector search)
+                    # For now, just create new entity
+                    entity = KGEntity(
+                        id="",  # Will be assigned by KG
+                        name=norm_name,
+                        type=extracted_entity.type,
+                        description=extracted_entity.description,
+                        properties=extracted_entity.properties,
+                        created_at=created_at,
+                        ref=reference
+                    )
+
+                    # Upsert to KG
+                    # await self.kg_driver.upsert_entity(entity)
+                    stats["entities_new"] += 1
+                except Exception as e:
+                    self.logger.error(f"Failed to process entity: {e}")
+                    continue
 
             # Step 3: Process relations
             for extracted_relation in extraction.relations:
-                # Similar process for relations
-                stats["relations_new"] += 1
+                try:
+                    # Defensive check: ensure extracted_relation is an object with required attributes
+                    if not hasattr(extracted_relation, 'source_entity') or not hasattr(extracted_relation, 'target_entity'):
+                        self.logger.warning(f"Skipping malformed relation: {type(extracted_relation)}")
+                        continue
+
+                    # Similar process for relations
+                    stats["relations_new"] += 1
+                except Exception as e:
+                    self.logger.error(f"Failed to process relation: {e}")
+                    continue
 
             self.logger.info(
                 f"Document {doc_id} processed: "

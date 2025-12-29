@@ -22,6 +22,10 @@ The KG-RAG example now includes **parallel implementations** for all major pipel
    - Traditional: `run/run_qa.py` - Direct LLM API calls with manual validation
    - Mellea-Native: `run/run_qa_mellea.py` - Uses Mellea's @generative, Requirements, and Components
 
+5. **Evaluation Pipeline**:
+   - Traditional: `run/run_eval.py` - Manual evaluation with direct LLM calls
+   - Mellea-Native: `run/run_eval_mellea.py` - Uses @generative for LLM-as-judge evaluation
+
 Both implementations produce the same results, but the Mellea-native versions demonstrate best practices for building robust, composable LLM applications.
 
 ## Key Benefits
@@ -49,11 +53,15 @@ uv run --with mellea run/run_kg_update_mellea.py --num-workers 64
 # Run Mellea-native QA
 uv run --with mellea run/run_qa_mellea.py --num-workers 1 --prefix mellea
 
+# Run Mellea-native evaluation
+uv run --with mellea run/run_eval_mellea.py --prefix mellea --verbose
+
 # Compare with traditional versions
 uv run --with mellea run/run_kg_preprocess.py --domain movie
 uv run --with mellea run/run_kg_embed.py
 uv run --with mellea run/run_kg_update.py --num-workers 64
 uv run --with mellea run/run_qa.py --num-workers 1 --prefix traditional
+uv run --with mellea run/run_eval.py --prefix traditional
 ```
 
 ## Architecture
@@ -125,7 +133,7 @@ embeddings = await embedder.generate_embeddings_mellea(
 - ✅ Better logging and progress tracking
 - ✅ Type-safe configuration prevents errors
 
-### 2. KG Update (run_kg_update_mellea.py)
+### 3. KG Update (run_kg_update_mellea.py)
 
 The Mellea-native KG update implementation demonstrates:
 
@@ -173,7 +181,7 @@ stats = await kg_updater.update_kg_from_document(
 - ✅ Composable architecture with Component pattern
 - ✅ Clear separation of concerns
 
-### 3. QA Pipeline (run_qa_mellea.py)
+### 4. QA Pipeline (run_qa_mellea.py)
 
 The Mellea-native QA implementation showcases:
 
@@ -211,6 +219,56 @@ prediction = await kg_rag.generate_answer(q)
 - ✅ Automatic validation with Requirements
 - ✅ Easy to test individual components
 - ✅ Composable and reusable
+
+### 5. Evaluation Pipeline (run_eval_mellea.py)
+
+The Mellea-native evaluation implementation showcases:
+
+**Key Features:**
+- Uses `@generative` decorator for LLM-as-judge evaluation
+- Type-safe `EvaluationResult` Pydantic model for structured outputs
+- `EvaluationStats` dataclass for comprehensive metrics tracking
+- `MelleaEvaluator` class for batch evaluation with progress bars
+- Requirements validation with `VALID_EVAL_SCORE` requirement
+- Async batch processing with error recovery
+
+**Example Usage:**
+```python
+# Define evaluation function
+@generative
+async def evaluate_single_prediction(
+    query: str,
+    ground_truth: str,
+    prediction: str
+) -> EvaluationResult:
+    """Evaluate a single prediction against ground truth.
+
+    You are an expert human evaluator. Judge if the prediction matches
+    the ground truth answer following these instructions:
+    [Detailed evaluation rubric in docstring...]
+
+    Return: {"score": 0 or 1, "explanation": "..."}
+    """
+    pass
+
+# Create evaluator
+evaluator = MelleaEvaluator(session, batch_size=64)
+
+# Evaluate all predictions
+stats, history = await evaluator.evaluate_all(
+    queries,
+    ground_truths_list,
+    predictions
+)
+```
+
+**Benefits:**
+- ✅ Self-documenting evaluation rubric in @generative docstring
+- ✅ Type-safe evaluation results with Pydantic
+- ✅ Detailed statistics tracking (accuracy, token usage, timing)
+- ✅ Async batch processing with progress bars
+- ✅ Graceful error handling for failed evaluations
+- ✅ Requirements validation ensures valid scores
 
 ## Migration Guide
 

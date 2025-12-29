@@ -634,15 +634,20 @@ class KG_Updater:
             expected_ids = set(range(1, consecutive_idx))
             for _ in range(max_realign):
                 batch_results = maybe_load_json(response)
-            
+
                 for result in batch_results:
                     try:
+                        # Ensure result is a dictionary (LLM sometimes returns strings or other types)
+                        if not isinstance(result, dict):
+                            self.logger.warning(f"Skipping non-dict result in align_entity: {type(result)}")
+                            continue
+
                         idx = result["id"]  # Convert back to index
                         entity_id = entity_mapping[idx]["entity_id"]
                         entity_name = entity_names[entity_id]
                         aligned_type = result["aligned_type"]
                         match = result["matched_entity"]
-                                
+
                         top_k_entities_dict = entity_mapping[idx]["top_k_entities"]
                         entities[entity_name].extracted.type = aligned_type
                         entities[entity_name].aligned = top_k_entities_dict[match] \
@@ -749,6 +754,11 @@ class KG_Updater:
                 # Process results
                 for result in batch_results:
                     try:
+                        # Ensure result is a dictionary (LLM sometimes returns strings or other types)
+                        if not isinstance(result, dict):
+                            self.logger.warning(f"Skipping non-dict result in merge_entity: {type(result)}")
+                            continue
+
                         entity_id = result["id"]
                         entity_name = entity_names[int(entity_id) - 1]
 
@@ -769,7 +779,7 @@ class KG_Updater:
                             ref=update_ref(entities[entity_name].aligned.ref, entities[entity_name].extracted.ref)
                         )
                         entities[entity_name].merged = merged_entity
-                        
+
                         found_ids.add(entity_id)
                     except Exception as e:
                         self.logger.error("Encount error while parsing merged entity", exc_info=True)
@@ -912,6 +922,11 @@ class KG_Updater:
                 # Process results
                 for result in batch_results:
                     try:
+                        # Ensure result is a dictionary (LLM sometimes returns strings or other types)
+                        if not isinstance(result, dict):
+                            self.logger.warning(f"Skipping non-dict result in align_relation: {type(result)}")
+                            continue
+
                         idx = result["id"]  # Convert back to index
                         relation_id = relation_mapping[idx]["relation_id"]
                         relation_name = relation_names[relation_id]
@@ -922,7 +937,7 @@ class KG_Updater:
                         relations[relation_name].extracted.name = aligned_name
                         relations[relation_name].aligned = top_k_relations_dict[match] \
                             if (match in top_k_relations_dict) else None
-                        
+
                         found_ids.add(idx)
                     except Exception as e:
                         self.logger.error("Encount error while parsing aligned relation", exc_info=True)
@@ -1037,6 +1052,11 @@ class KG_Updater:
                 # Process results
                 for result in batch_results:
                     try:
+                        # Ensure result is a dictionary (LLM sometimes returns strings or other types)
+                        if not isinstance(result, dict):
+                            self.logger.warning(f"Skipping non-dict result in merge_relation: {type(result)}")
+                            continue
+
                         relation_id = result["id"]
                         relation_name = relation_names[int(relation_id) - 1]
 
