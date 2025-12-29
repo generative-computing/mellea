@@ -370,9 +370,13 @@ Note: README includes comprehensive beginner-friendly content with clear explana
   - Provides side-by-side comparison: traditional vs Mellea-native for both QA and KG updates
 
 - ✅ **Bug Fixes** - **COMPLETED**:
-  - Fixed TypeError in kg_updater.py for paragraph anchor type conversion
-  - Added proper string conversion for LLM-returned integer anchors
-  - Applied fix for both entities and relations extraction
+  - Fixed TypeError in kg_updater.py for paragraph anchor type conversion (lines 1484-1486, 1540-1542)
+  - Fixed TypeError in kg_updater.py for entity/relation names in identify_missing_entities (lines 1103-1139)
+  - Added proper type conversion for LLM-returned values:
+    - Integer anchors → strings
+    - List entity names → strings (take first element)
+    - List relation sources/targets → strings
+  - Applied fixes for entity extraction, relation extraction, and missing entity identification
 
 ### Next Priority Items:
 1. **Add tests**: Unit tests for core components

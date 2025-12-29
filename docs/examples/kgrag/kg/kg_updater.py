@@ -1101,19 +1101,41 @@ class KG_Updater:
             results.update(maybe_load_json(response))
         ext_entities_set = set()
         for key, result in results.items():
-            if key.startswith("ent"):
-                ext_entities_set.add(normalize_entity(result[1]))
-        
+            if key.startswith("ent") and len(result) > 1:
+                # Ensure entity name is a string (LLM sometimes returns list)
+                entity_name = result[1]
+                if isinstance(entity_name, list):
+                    # If it's a list, join or take first element
+                    entity_name = entity_name[0] if entity_name else ""
+                entity_name = str(entity_name) if entity_name else ""
+                if entity_name:
+                    ext_entities_set.add(normalize_entity(entity_name))
+
         missing_entities = set()
         for key, result in results.items():
-            if key.startswith("rel"):
-                source = normalize_entity(result[0])
-                target = normalize_entity(result[2])
-                if source not in ext_entities_set:
-                    missing_entities.add(source)
-                if target not in ext_entities_set:
-                    missing_entities.add(target)
-        
+            if key.startswith("rel") and len(result) > 2:
+                # Ensure source and target are strings (LLM sometimes returns list)
+                source = result[0]
+                target = result[2]
+
+                # Convert to string if needed
+                if isinstance(source, list):
+                    source = source[0] if source else ""
+                if isinstance(target, list):
+                    target = target[0] if target else ""
+
+                source = str(source) if source else ""
+                target = str(target) if target else ""
+
+                if source:
+                    source_norm = normalize_entity(source)
+                    if source_norm not in ext_entities_set:
+                        missing_entities.add(source_norm)
+                if target:
+                    target_norm = normalize_entity(target)
+                    if target_norm not in ext_entities_set:
+                        missing_entities.add(target_norm)
+
         return list(missing_entities)
 
     def finalize_entities(
