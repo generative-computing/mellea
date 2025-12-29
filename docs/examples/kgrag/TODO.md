@@ -357,14 +357,17 @@ Note: README includes comprehensive beginner-friendly content with clear explana
   - Matches patterns in run_qa.py and run_kg_update.py
 
 - ✅ **Mellea-Native Implementation** - **COMPLETED**:
-  - Created run_qa_mellea.py showcasing Mellea patterns
-  - Integrated kg_generative.py with @generative functions
+  - Created run_qa_mellea.py showcasing Mellea patterns for QA
+  - Created run_kg_update_mellea.py showcasing Mellea patterns for KG updates
+  - Integrated kg_generative.py with @generative functions for QA
+  - Integrated kg_updater_generative.py with @generative functions for KG updates
+  - Integrated kg_updater_component.py as Component for KG updates
   - Integrated kg_requirements.py with validation requirements
-  - Integrated kg_rag.py as Component-based architecture
+  - Integrated kg_rag.py as Component-based architecture for QA
   - Integrated kg_models.py with Pydantic models
   - Integrated kg_utils_mellea.py with Mellea utilities
   - Fixed all imports for proper module resolution
-  - Provides side-by-side comparison: traditional vs Mellea-native
+  - Provides side-by-side comparison: traditional vs Mellea-native for both QA and KG updates
 
 - ✅ **Bug Fixes** - **COMPLETED**:
   - Fixed TypeError in kg_updater.py for paragraph anchor type conversion
