@@ -73,12 +73,12 @@ if [ -f "$RESULTS_FILE" ]; then
         echo "Evaluation already completed in QA step, skipping separate eval"
     else
         echo "Running separate evaluation..."
-        uv run --with mellea eval.py
+        uv run --with mellea run/run_eval.py --result-path "$RESULTS_FILE"
     fi
 else
     echo "Warning: Results file not found at $RESULTS_FILE"
     echo "Running evaluation anyway..."
-    uv run --with mellea eval.py
+    uv run --with mellea run/run_eval.py --result-path "$RESULTS_FILE"
 fi
 
 echo ""
