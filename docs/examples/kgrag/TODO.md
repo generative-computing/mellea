@@ -359,6 +359,8 @@ Note: README includes comprehensive beginner-friendly content with clear explana
 - ✅ **Mellea-Native Implementation** - **COMPLETED**:
   - Created run_qa_mellea.py showcasing Mellea patterns for QA
   - Created run_kg_update_mellea.py showcasing Mellea patterns for KG updates
+  - Created run_kg_embed_mellea.py showcasing Mellea patterns for KG embedding
+  - Created run_kg_preprocess_mellea.py showcasing enhanced preprocessing with statistics
   - Integrated kg_generative.py with @generative functions for QA
   - Integrated kg_updater_generative.py with @generative functions for KG updates
   - Integrated kg_updater_component.py as Component for KG updates
@@ -367,7 +369,7 @@ Note: README includes comprehensive beginner-friendly content with clear explana
   - Integrated kg_models.py with Pydantic models
   - Integrated kg_utils_mellea.py with Mellea utilities
   - Fixed all imports for proper module resolution
-  - Provides side-by-side comparison: traditional vs Mellea-native for both QA and KG updates
+  - Provides side-by-side comparison: traditional vs Mellea-native for all major pipeline components
 
 - ✅ **Bug Fixes** - **COMPLETED**:
   - Fixed TypeError in kg_updater.py for paragraph anchor type conversion (lines 1484-1486, 1540-1542)
