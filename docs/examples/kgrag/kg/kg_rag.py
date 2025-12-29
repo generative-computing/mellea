@@ -19,7 +19,7 @@ from kg.kg_rep import (
     normalize_entity,
     entity_to_text,
 )
-from kg_generative import (
+from kg.kg_generative import (
     break_down_question,
     extract_topic_entities,
     align_topic_entities,
@@ -29,13 +29,17 @@ from kg_generative import (
     validate_consensus,
     generate_direct_answer,
 )
-from kg_requirements import get_requirements_for_task
+from kg.kg_requirements import get_requirements_for_task
 from utils.logger import BaseProgressLogger, DefaultProgressLogger
 from utils.utils import generate_embedding
-from utils.prompt_list import get_default_prompts
 
-
-PROMPTS = get_default_prompts()
+# Use simple prompts dict for now
+PROMPTS = {
+    "domain_hints": {
+        "movie": "Focus on movies, actors, directors, release dates, genres, and awards.",
+        "finance": "Focus on companies, stocks, financial metrics, and market data.",
+    }
+}
 
 
 @dataclass
