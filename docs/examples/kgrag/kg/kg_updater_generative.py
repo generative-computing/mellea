@@ -52,7 +52,7 @@ class MergeDecision(BaseModel):
 
 @generative
 async def extract_entities_and_relations(
-    context: str,
+    doc_context: str,
     domain: str,
     hints: str,
     reference: str
@@ -86,7 +86,7 @@ async def extract_entities_and_relations(
     Domain-specific Hints: {hints}
 
     Context:
-    {context}
+    {doc_context}
 
     Reference: {reference}
 

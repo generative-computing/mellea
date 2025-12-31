@@ -249,7 +249,13 @@ def create_dataset_config(args: argparse.Namespace) -> QADatasetConfig:
             "KG_BASE_DIRECTORY",
             os.path.join(os.path.dirname(__file__), "..", "dataset")
         )
-        dataset_path = os.path.join(base_dir, "crag_movie_dev.jsonl")
+        # Try compressed version first, then uncompressed
+        compressed_path = os.path.join(base_dir, "crag_movie_dev.jsonl.bz2")
+        uncompressed_path = os.path.join(base_dir, "crag_movie_dev.jsonl")
+        if os.path.exists(compressed_path):
+            dataset_path = compressed_path
+        else:
+            dataset_path = uncompressed_path
 
     # Create output paths with optional prefix/postfix
     prefix_str = f"_{args.prefix}" if args.prefix else ""
@@ -436,11 +442,8 @@ async def generate_prediction(
     start_time = time.perf_counter()
     token_usage_start = snapshot_token_usage()
 
-    # Create Query object
-    q = Query(query=query, query_time=query_time)
-
     # Generate answer using Mellea-native component
-    prediction = await kg_rag.generate_answer(q)
+    prediction = await kg_rag.execute(query=query, query_time=query_time)
 
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time

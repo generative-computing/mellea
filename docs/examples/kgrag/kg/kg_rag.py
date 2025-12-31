@@ -6,7 +6,7 @@ from typing import Any, List, Optional, Dict
 
 from mellea import MelleaSession
 from mellea.stdlib.base import Component, Context, ModelOutputThunk
-from mellea.stdlib.sampling.rejection_sampling import RejectionSamplingStrategy
+from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.stdlib.requirement import Requirement
 
 from kg.kg_driver import kg_driver
@@ -108,13 +108,19 @@ class KGRagComponent(Component):
         requirements = get_requirements_for_task("break_down")
         strategy = RejectionSamplingStrategy(loop_budget=3)
 
-        result = await break_down_question(
+        # Reset context before calling generative function
+        self.session.reset()
+
+        result, _ = await break_down_question(
+            self.session.ctx,
+            self.session.backend,
+            requirements=requirements,
+            strategy=strategy,
             query=query.query,
             query_time=str(query.query_time),
             domain=self.domain,
             route=self.route,
             hints=hints,
-            # Mellea will automatically handle requirements and strategy
         )
 
         # Convert to Query objects
@@ -134,7 +140,14 @@ class KGRagComponent(Component):
         requirements = get_requirements_for_task("extract_entity")
         strategy = RejectionSamplingStrategy(loop_budget=3)
 
-        result = await extract_topic_entities(
+        # Reset context before calling generative function
+        self.session.reset()
+
+        result, _ = await extract_topic_entities(
+            self.session.ctx,
+            self.session.backend,
+            requirements=requirements,
+            strategy=strategy,
             query=query.query,
             query_time=str(query.query_time),
             route=query.subqueries,
@@ -189,7 +202,16 @@ class KGRagComponent(Component):
 
             # Use generative function with requirements
             requirements = get_requirements_for_task("align_topic")
-            result = await align_topic_entities(
+            strategy = RejectionSamplingStrategy(loop_budget=3)
+
+            # Reset context before calling generative function
+            self.session.reset()
+
+            result, _ = await align_topic_entities(
+                self.session.ctx,
+                self.session.backend,
+                requirements=requirements,
+                strategy=strategy,
                 query=query.query,
                 query_time=str(query.query_time),
                 route=query.subqueries,
@@ -242,7 +264,17 @@ class KGRagComponent(Component):
         hints = PROMPTS.get("domain_hints", {}).get(self.domain, "No hints available.")
 
         # Use generative function
-        result = await prune_relations(
+        requirements = get_requirements_for_task("prune_relations")
+        strategy = RejectionSamplingStrategy(loop_budget=3)
+
+        # Reset context before calling generative function
+        self.session.reset()
+
+        result, _ = await prune_relations(
+            self.session.ctx,
+            self.session.backend,
+            requirements=requirements,
+            strategy=strategy,
             query=query.query,
             query_time=str(query.query_time),
             route=query.subqueries,
@@ -287,7 +319,17 @@ class KGRagComponent(Component):
         hints = PROMPTS.get("domain_hints", {}).get(self.domain, "No hints available.")
 
         # Use generative function
-        result = await prune_triplets(
+        requirements = get_requirements_for_task("prune_triplets")
+        strategy = RejectionSamplingStrategy(loop_budget=3)
+
+        # Reset context before calling generative function
+        self.session.reset()
+
+        result, _ = await prune_triplets(
+            self.session.ctx,
+            self.session.backend,
+            requirements=requirements,
+            strategy=strategy,
             query=query.query,
             query_time=str(query.query_time),
             route=query.subqueries,
@@ -351,7 +393,17 @@ class KGRagComponent(Component):
         hints = PROMPTS.get("domain_hints", {}).get(self.domain, "No hints available.")
 
         # Use generative function
-        result = await evaluate_knowledge_sufficiency(
+        requirements = get_requirements_for_task("evaluate")
+        strategy = RejectionSamplingStrategy(loop_budget=3)
+
+        # Reset context before calling generative function
+        self.eval_session.reset()
+
+        result, _ = await evaluate_knowledge_sufficiency(
+            self.eval_session.ctx,
+            self.eval_session.backend,
+            requirements=requirements,
+            strategy=strategy,
             query=route.query,
             query_time=str(route.query_time),
             route=route.subqueries,
@@ -566,22 +618,32 @@ class KGRagComponent(Component):
             }
 
         # Run first few routes in parallel, plus direct answer
+        # Note: We need to call generate_direct_answer separately since it needs context/backend
+        requirements = get_requirements_for_task("direct_answer")
+        strategy = RejectionSamplingStrategy(loop_budget=3)
+
+        # Reset context before calling generative function
+        self.eval_session.reset()
+
+        direct_result, _ = await generate_direct_answer(
+            self.eval_session.ctx,
+            self.eval_session.backend,
+            requirements=requirements,
+            strategy=strategy,
+            query=query_obj.query,
+            query_time=str(query_obj.query_time),
+            domain=self.domain,
+        )
+
+        # Run routes in parallel
         tasks = [
-            generate_direct_answer(
-                query=query_obj.query,
-                query_time=str(query_obj.query_time),
-                domain=self.domain,
-            ),
             explore_one_route(queries[0]),
             explore_one_route(queries[1]) if len(queries) > 1 else None,
         ]
         tasks = [t for t in tasks if t is not None]
 
-        results = await asyncio.gather(*tasks)
-        direct_result = results[0]
+        route_results = await asyncio.gather(*tasks)
         attempt = f'"{direct_result.answer}". {direct_result.reason}'
-
-        route_results = results[1:]
 
         # Explore remaining routes with validation
         stop = False
@@ -609,7 +671,17 @@ class KGRagComponent(Component):
                 )
 
                 # Validate consensus
-                validation_result = await validate_consensus(
+                requirements = get_requirements_for_task("validate")
+                strategy = RejectionSamplingStrategy(loop_budget=3)
+
+                # Reset context before calling generative function
+                self.eval_session.reset()
+
+                validation_result, _ = await validate_consensus(
+                    self.eval_session.ctx,
+                    self.eval_session.backend,
+                    requirements=requirements,
+                    strategy=strategy,
                     query=query_obj.query,
                     query_time=str(query_obj.query_time),
                     domain=self.domain,

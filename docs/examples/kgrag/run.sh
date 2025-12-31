@@ -16,63 +16,63 @@ echo "=================================================="
 echo "KGRAG Pipeline Execution"
 echo "=================================================="
 
-# Step 1: Empty the Neo4j database if it exists
-echo ""
-echo "Step 1: Cleaning Neo4j database..."
-if command -v cypher-shell &> /dev/null; then
-    # Load Neo4j credentials from environment
-    NEO4J_PASSWORD="${NEO4J_PASSWORD:-}"
-    if [ -n "$NEO4J_PASSWORD" ]; then
-        echo "Clearing all nodes and relationships from Neo4j..."
-        cypher-shell -u neo4j -p "$NEO4J_PASSWORD" "MATCH (n) DETACH DELETE n" || echo "Warning: Failed to clear database (it may already be empty)"
-    else
-        echo "Warning: NEO4J_PASSWORD not set, skipping database cleanup"
-    fi
-else
-    echo "Warning: cypher-shell not found, skipping database cleanup"
-    echo "You can manually clear the database with: MATCH (n) DETACH DELETE n"
-fi
+# # Step 1: Empty the Neo4j database if it exists
+# echo ""
+# echo "Step 1: Cleaning Neo4j database..."
+# if command -v cypher-shell &> /dev/null; then
+#     # Load Neo4j credentials from environment
+#     NEO4J_PASSWORD="${NEO4J_PASSWORD:-}"
+#     if [ -n "$NEO4J_PASSWORD" ]; then
+#         echo "Clearing all nodes and relationships from Neo4j..."
+#         cypher-shell -u neo4j -p "$NEO4J_PASSWORD" "MATCH (n) DETACH DELETE n" || echo "Warning: Failed to clear database (it may already be empty)"
+#     else
+#         echo "Warning: NEO4J_PASSWORD not set, skipping database cleanup"
+#     fi
+# else
+#     echo "Warning: cypher-shell not found, skipping database cleanup"
+#     echo "You can manually clear the database with: MATCH (n) DETACH DELETE n"
+# fi
 
-# Step 2: Create the demo datasets
-echo ""
-echo "Step 2: Creating demo datasets..."
-# Create a smaller KG database (20 movies instead of 100)
-if [ -f "create_demo_dataset.py" ]; then
-    echo "Creating small movie database (20 movies)..."
-    uv run --with mellea create_demo_dataset.py --year-start 2022 --year-end 2024 --max-movies 20
-else
-    echo "Warning: create_demo_dataset.py not found, skipping demo dataset creation"
-fi
+# # Step 2: Create the demo datasets
+# echo ""
+# echo "Step 2: Creating demo datasets..."
+# # Create a smaller KG database (20 movies instead of 100)
+# if [ -f "create_demo_dataset.py" ]; then
+#     echo "Creating small movie database (20 movies)..."
+#     uv run --with mellea create_demo_dataset.py --year-start 2022 --year-end 2024 --max-movies 20
+# else
+#     echo "Warning: create_demo_dataset.py not found, skipping demo dataset creation"
+# fi
 
-# Create a tiny document dataset (10 documents instead of 565)
-if [ -f "create_tiny_dataset.py" ]; then
-    echo "Creating tiny document dataset (10 documents)..."
-    uv run --with mellea create_tiny_dataset.py --num-docs 10
-else
-    echo "Warning: create_tiny_dataset.py not found, will use full dataset"
-fi
+# # Create a tiny document dataset (10 documents instead of 565)
+# if [ -f "create_tiny_dataset.py" ]; then
+#     echo "Creating tiny document dataset (10 documents)..."
+#     uv run --with mellea create_tiny_dataset.py --num-docs 10
+# else
+#     echo "Warning: create_tiny_dataset.py not found, will use full dataset"
+# fi
 
-# Step 3: Run preprocessing
-echo ""
-echo "Step 3: Running KG preprocessing..."
-uv run --with mellea run/run_kg_preprocess_mellea.py
+# # Step 3: Run preprocessing
+# echo ""
+# echo "Step 3: Running KG preprocessing..."
+# uv run --with mellea run/run_kg_preprocess_mellea.py
 
-# Step 4: Run KG embedding
-echo ""
-echo "Step 4: Running KG embedding..."
-uv run --with mellea run/run_kg_embed_mellea.py
+# # Step 4: Run KG embedding
+# echo ""
+# echo "Step 4: Running KG embedding..."
+# uv run --with mellea run/run_kg_embed_mellea.py
 
 # Step 5: Run KG update (using tiny dataset if available)
-echo ""
-echo "Step 5: Running KG update..."
-TINY_DATASET="dataset/crag_movie_tiny.jsonl.bz2"
-if [ -f "$TINY_DATASET" ]; then
-    echo "Using tiny dataset: $TINY_DATASET"
-    uv run --with mellea run/run_kg_update_mellea.py --dataset "$TINY_DATASET" --num-workers 1 --queue-size 1
-else
-    echo "Tiny dataset not found, using default dataset"
-    uv run --with mellea run/run_kg_update_mellea.py --num-workers 1 --queue-size 1
-fi
+# echo ""
+# echo "Step 5: Running KG update..."
+# TINY_DATASET="dataset/crag_movie_tiny.jsonl.bz2"
+# if [ -f "$TINY_DATASET" ]; then
+#     echo "Using tiny dataset: $TINY_DATASET"
+#     uv run --with mellea run/run_kg_update_mellea.py --dataset "$TINY_DATASET" --num-workers 64 --queue-size 64
+# else
+#     echo "Tiny dataset not found, using default dataset"
+#     uv run --with mellea run/run_kg_update_mellea.py --num-workers 64 --queue-size 64
+# fi
 
 # Step 6: Run QA
 echo ""

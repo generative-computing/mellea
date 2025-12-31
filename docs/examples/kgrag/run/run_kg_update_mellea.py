@@ -284,7 +284,7 @@ async def process_document(
             "processing_time": round(elapsed_time, 2),
         })
 
-        print(f"Processed documents: {len(logger.processed_questions)}")
+        print(f"Processed documents: {len(logger.processed_docs)}")
         logger.update_progress({"last_doc_time": round(elapsed_time, 2)})
 
     except Exception as e:
@@ -341,7 +341,7 @@ async def main() -> int:
 
         # Create progress logger
         kg_logger = KGProgressLogger(progress_path=dataset_config.progress_path)
-        logger.info(f"Processed documents at start: {len(kg_logger.processed_questions)}")
+        logger.info(f"Processed documents at start: {len(kg_logger.processed_docs)}")
 
         # Create Mellea-native KG Updater component
         kg_updater = KGUpdaterComponent(

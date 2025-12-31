@@ -1,111 +1,106 @@
 """Mellea Requirements for KG-RAG validation."""
 import json
-from mellea.stdlib.requirement import Requirement
-from mellea.stdlib.base import ModelOutputThunk
+from mellea.stdlib.requirement import Requirement, ValidationResult
+from mellea.stdlib.base import Context
 
 
-def is_valid_json(output: ModelOutputThunk) -> bool:
+def is_valid_json(ctx: Context) -> ValidationResult:
     """Check if output is valid JSON."""
     try:
-        json.loads(output.value)
+        output = ctx.last_assistant_message.as_str()
+        json.loads(output)
         return True
-    except (json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, TypeError, AttributeError):
         return False
 
 
 def has_required_json_field(field: str):
     """Check if JSON output has a required field."""
-    def validator(output: ModelOutputThunk) -> bool:
+    def validator(ctx: Context) -> ValidationResult:
         try:
-            data = json.loads(output.value)
+            output = ctx.last_assistant_message.as_str()
+            data = json.loads(output)
             return field in data and data[field] is not None
-        except (json.JSONDecodeError, TypeError, KeyError):
+        except (json.JSONDecodeError, TypeError, KeyError, AttributeError):
             return False
     return validator
 
 
 def has_nonempty_list(field: str):
     """Check if JSON field contains a non-empty list."""
-    def validator(output: ModelOutputThunk) -> bool:
+    def validator(ctx: Context) -> ValidationResult:
         try:
-            data = json.loads(output.value)
+            output = ctx.last_assistant_message.as_str()
+            data = json.loads(output)
             return field in data and isinstance(data[field], list) and len(data[field]) > 0
-        except (json.JSONDecodeError, TypeError, KeyError):
+        except (json.JSONDecodeError, TypeError, KeyError, AttributeError):
             return False
     return validator
 
 
 def scores_sum_to_one(field: str, tolerance: float = 0.1):
     """Check if scores in a dict approximately sum to 1."""
-    def validator(output: ModelOutputThunk) -> bool:
+    def validator(ctx: Context) -> ValidationResult:
         try:
-            data = json.loads(output.value)
+            output = ctx.last_assistant_message.as_str()
+            data = json.loads(output)
             if field not in data or not isinstance(data[field], dict):
                 return False
             scores = data[field].values()
             total = sum(float(s) for s in scores)
             return abs(total - 1.0) <= tolerance
-        except (json.JSONDecodeError, TypeError, ValueError, KeyError):
+        except (json.JSONDecodeError, TypeError, ValueError, KeyError, AttributeError):
             return False
     return validator
 
 
 # Define reusable requirements
 VALID_JSON_REQ = Requirement(
-    name="valid_json",
-    requirement="Output must be valid JSON format",
-    validator=is_valid_json
+    description="Output must be valid JSON format",
+    validation_fn=is_valid_json
 )
 
 ROUTES_PRESENT_REQ = Requirement(
-    name="routes_present",
-    requirement="Output must contain 'routes' field with at least one route",
-    validator=has_nonempty_list("routes")
+    description="Output must contain 'routes' field with at least one route",
+    validation_fn=has_nonempty_list("routes")
 )
 
 ENTITIES_PRESENT_REQ = Requirement(
-    name="entities_present",
-    requirement="Output must contain 'entities' field with at least one entity",
-    validator=has_nonempty_list("entities")
+    description="Output must contain 'entities' field with at least one entity",
+    validation_fn=has_nonempty_list("entities")
 )
 
 REASON_PRESENT_REQ = Requirement(
-    name="reason_present",
-    requirement="Output must contain 'reason' field",
-    validator=has_required_json_field("reason")
+    description="Output must contain 'reason' field",
+    validation_fn=has_required_json_field("reason")
 )
 
 RELEVANT_ENTITIES_REQ = Requirement(
-    name="relevant_entities_present",
-    requirement="Output must contain 'relevant_entities' dict",
-    validator=has_required_json_field("relevant_entities")
+    description="Output must contain 'relevant_entities' dict",
+    validation_fn=has_required_json_field("relevant_entities")
 )
 
 RELEVANT_RELATIONS_REQ = Requirement(
-    name="relevant_relations_present",
-    requirement="Output must contain 'relevant_relations' dict",
-    validator=has_required_json_field("relevant_relations")
+    description="Output must contain 'relevant_relations' dict",
+    validation_fn=has_required_json_field("relevant_relations")
 )
 
 SCORES_SUM_REQ = Requirement(
-    name="scores_sum_to_one",
-    requirement="Relevance scores should approximately sum to 1.0",
-    validator=scores_sum_to_one("relevant_entities")
+    description="Relevance scores should approximately sum to 1.0",
+    validation_fn=scores_sum_to_one("relevant_entities")
 )
 
 EVALUATION_FIELDS_REQ = Requirement(
-    name="evaluation_fields",
-    requirement="Output must contain 'sufficient', 'reason', and 'answer' fields",
-    validator=lambda o: all(
-        has_required_json_field(f)(o) for f in ["sufficient", "reason", "answer"]
+    description="Output must contain 'sufficient', 'reason', and 'answer' fields",
+    validation_fn=lambda ctx: all(
+        has_required_json_field(f)(ctx) for f in ["sufficient", "reason", "answer"]
     )
 )
 
 VALIDATION_FIELDS_REQ = Requirement(
-    name="validation_fields",
-    requirement="Output must contain 'judgement' and 'final_answer' fields",
-    validator=lambda o: all(
-        has_required_json_field(f)(o) for f in ["judgement", "final_answer"]
+    description="Output must contain 'judgement' and 'final_answer' fields",
+    validation_fn=lambda ctx: all(
+        has_required_json_field(f)(ctx) for f in ["judgement", "final_answer"]
     )
 )
 

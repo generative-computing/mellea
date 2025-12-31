@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from mellea import MelleaSession
 from mellea.stdlib.base import Component
-from mellea.stdlib.sampling.rejection_sampling import RejectionSamplingStrategy
+from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 from kg.kg_driver import KG_Driver
 from kg.kg_rep import KGEntity, KGRelation, normalize_entity, normalize_relation
@@ -26,23 +26,29 @@ from utils.logger import BaseProgressLogger, DefaultProgressLogger
 
 
 # Define requirements for KG update tasks
+def has_entities_or_relations(ctx) -> bool:
+    """Check if output has at least one entity or relation."""
+    try:
+        output = ctx.last_assistant_message.as_str()
+        import json
+        data = json.loads(output)
+        return "entities" in data or "relations" in data
+    except Exception:
+        return True
+
 EXTRACTION_REQS = [
     VALID_JSON_REQ,
     Requirement(
-        name="has_entities_or_relations",
-        requirement="Must extract at least one entity or relation",
-        validator=lambda o: (
-            "entities" in o.value or "relations" in o.value
-        ) if hasattr(o, 'value') else True
+        description="Must extract at least one entity or relation",
+        validation_fn=has_entities_or_relations
     )
 ]
 
 ALIGNMENT_REQS = [
     VALID_JSON_REQ,
     Requirement(
-        name="has_confidence",
-        requirement="Must provide confidence score between 0 and 1",
-        validator=lambda o: True  # Pydantic handles this
+        description="Must provide confidence score between 0 and 1",
+        validation_fn=lambda ctx: True  # Pydantic handles this
     )
 ]
 
@@ -122,8 +128,15 @@ class KGUpdaterComponent(Component):
         )
 
         try:
-            result = await extract_entities_and_relations(
-                context=context,
+            # Reset context before each generative call
+            self.session.reset()
+
+            result, ctx = await extract_entities_and_relations(
+                self.session.ctx,
+                self.session.backend,
+                requirements=EXTRACTION_REQS,
+                strategy=strategy,
+                doc_context=context,
                 domain=self.domain,
                 hints=hints or f"Extract knowledge relevant to {self.domain}",
                 reference=reference,
@@ -170,8 +183,19 @@ class KGUpdaterComponent(Component):
 
         self.logger.debug(f"Aligning entity '{entity_name}' with {len(candidate_entities)} candidates")
 
+        strategy = RejectionSamplingStrategy(
+            loop_budget=self.config.get("alignment_loop_budget", 3)
+        )
+
         try:
-            result = await align_entity_with_kg(
+            # Reset context before each generative call
+            self.session.reset()
+
+            result, ctx = await align_entity_with_kg(
+                self.session.ctx,
+                self.session.backend,
+                requirements=ALIGNMENT_REQS,
+                strategy=strategy,
                 extracted_entity_name=entity_name,
                 extracted_entity_type=entity_type,
                 extracted_entity_desc=entity_desc,
@@ -210,8 +234,18 @@ class KGUpdaterComponent(Component):
         entity1_info = f"Name: {entity1.name}\nType: {entity1.type}\nDescription: {entity1.description}"
         entity2_info = f"Name: {entity2.name}\nType: {entity2.type}\nDescription: {entity2.description}"
 
+        strategy = RejectionSamplingStrategy(
+            loop_budget=self.config.get("merge_loop_budget", 3)
+        )
+
         try:
-            result = await decide_entity_merge(
+            # Reset context before each generative call
+            self.session.reset()
+
+            result, ctx = await decide_entity_merge(
+                self.session.ctx,
+                self.session.backend,
+                strategy=strategy,
                 entity1_info=entity1_info,
                 entity2_info=entity2_info,
                 domain=self.domain,
