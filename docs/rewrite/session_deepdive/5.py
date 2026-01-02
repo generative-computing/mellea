@@ -10,10 +10,6 @@ from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends import Backend
 import asyncio
 
-import os
-
-os.r
-
 
 async def main(backend: Backend, ctx: Context):
     x, _ = await backend.generate_from_context(CBlock("What is 1+1?"), ctx=ctx)
