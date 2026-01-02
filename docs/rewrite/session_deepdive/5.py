@@ -10,11 +10,17 @@ from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends import Backend
 import asyncio
 
+import os
+
+os.r
+
 
 async def main(backend: Backend, ctx: Context):
     x, _ = await backend.generate_from_context(CBlock("What is 1+1?"), ctx=ctx)
 
     y, _ = await backend.generate_from_context(CBlock("What is 2+2?"), ctx=ctx)
+
+    # here, x and y have not necessarily been computed!
 
     response, _ = await backend.generate_from_context(
         SimpleComponent(instruction="What is x+y?", x=x, y=y),
