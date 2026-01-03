@@ -33,7 +33,7 @@ from transformers import (
 )
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 
-from mellea.backends import BaseModelSubclass
+from mellea.backends import BaseModelSubclass, kv_block_helpers
 from mellea.backends._utils import to_chat, to_tool_calls
 from mellea.backends.adapters.adapter import (
     AdapterMixin,
