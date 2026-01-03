@@ -198,7 +198,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 **model_options,
             ).past_key_values
         return dc
-    
+
     async def generate_from_context(
         self,
         action: Component | CBlock,
@@ -446,126 +446,127 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         return output
 
-
-
     # TODO make this async.
-    def _make_merged_kv_cache(self, linearized_ctx: list[Component | CBlock | ModelOutputThunk], ctx_as_conversation: Any, model_options: Any, tools: Any):
-            # Explanation for code blocks inside of use_kv_cache checks:
-            # 1. cache every CBlock that is marked with `cache=True` and store in _cached_blocks.
-            # 2. Mark each "hit" by adding the string (tokenized?) value to `cached_block_keys`.
-            # 3. apply the chat template (without?) tokenization
-            # 4. split on cache hits
-            # 5. prefill + smash together everything.
-            # 6. generate
+    def _make_merged_kv_cache(
+        self,
+        linearized_ctx: list[Component | CBlock | ModelOutputThunk],
+        ctx_as_conversation: Any,
+        model_options: Any,
+        tools: Any,
+    ):
+        # Explanation for code blocks inside of use_kv_cache checks:
+        # 1. cache every CBlock that is marked with `cache=True` and store in _cached_blocks.
+        # 2. Mark each "hit" by adding the string (tokenized?) value to `cached_block_keys`.
+        # 3. apply the chat template (without?) tokenization
+        # 4. split on cache hits
+        # 5. prefill + smash together everything.
+        # 6. generate
 
-            # 1. cache every CBlock that is marked with `cache=True` and store in _cached_blocks.
-            # AND
-            # 2. Mark each "hit" by adding the string (tokenized?) value to `cached_block_keys`.
-            cached_block_keys = []
-            print("Pre-computing cache blocks.")
-            for c in linearized_ctx:
-                print(f"c of {len(linearized_ctx)}")
-                match c:
-                    case CBlock() if c.cache:
-                        assert c.value is not None
-                        if c.value in self._cached_blocks:
-                            FancyLogger.get_logger().info(
-                                f"KV CACHE HIT for: {hash(c.value)} ({c.value[:3]}..{c.value[-3:]})"  # type: ignore
-                            )
-                        else:
-                            FancyLogger.get_logger().debug(
-                                f"HF backend is caching a CBlock with hashed contents: {hash(c.value)} ({c.value[:3]}..{c.value[-3:]})"
-                            )
-                            tokens = self._tokenizer(c.value, return_tensors="pt")
-                            dc = DynamicCache()
-                            with torch.no_grad():
-                                dc = self._model(
-                                    tokens["input_ids"].to(self._device),  # type: ignore
-                                    attention_mask=tokens["attention_mask"].to(
-                                        self._device
-                                    ),  # type: ignore
-                                    past_key_values=dc,
-                                    use_cache=True,
-                                ).past_key_values
-                            self._cached_blocks[c.value] = dc
-                            cached_block_keys.append(c.value)
-                    case _:
-                        continue
+        # 1. cache every CBlock that is marked with `cache=True` and store in _cached_blocks.
+        # AND
+        # 2. Mark each "hit" by adding the string (tokenized?) value to `cached_block_keys`.
+        cached_block_keys = []
+        print("Pre-computing cache blocks.")
+        for c in linearized_ctx:
+            print(f"c of {len(linearized_ctx)}")
+            match c:
+                case CBlock() if c.cache:
+                    assert c.value is not None
+                    if c.value in self._cached_blocks:
+                        FancyLogger.get_logger().info(
+                            f"KV CACHE HIT for: {hash(c.value)} ({c.value[:3]}..{c.value[-3:]})"  # type: ignore
+                        )
+                    else:
+                        FancyLogger.get_logger().debug(
+                            f"HF backend is caching a CBlock with hashed contents: {hash(c.value)} ({c.value[:3]}..{c.value[-3:]})"
+                        )
+                        tokens = self._tokenizer(c.value, return_tensors="pt")
+                        dc = DynamicCache()
+                        with torch.no_grad():
+                            dc = self._model(
+                                tokens["input_ids"].to(self._device),  # type: ignore
+                                attention_mask=tokens["attention_mask"].to(
+                                    self._device
+                                ),  # type: ignore
+                                past_key_values=dc,
+                                use_cache=True,
+                            ).past_key_values
+                        self._cached_blocks[c.value] = dc
+                        cached_block_keys.append(c.value)
+                case _:
+                    continue
 
-            # 3. apply the chat template WITHOUT tokenization.
-            # Doing this without tokenization and then gluing together the tokens is necessary because
-            # things that KV cache together must tokenize together.
-            input_text = self._tokenizer.apply_chat_template(  # type: ignore
-                ctx_as_conversation,
-                tools=convert_tools_to_json(tools),  # type: ignore
-                **self._make_backend_specific_and_remove(model_options),
-                tokenize=False,
+        # 3. apply the chat template WITHOUT tokenization.
+        # Doing this without tokenization and then gluing together the tokens is necessary because
+        # things that KV cache together must tokenize together.
+        input_text = self._tokenizer.apply_chat_template(  # type: ignore
+            ctx_as_conversation,
+            tools=convert_tools_to_json(tools),  # type: ignore
+            **self._make_backend_specific_and_remove(model_options),
+            tokenize=False,
+        )
+
+        # 4. split the input_text back up again, re-using DC where it exists.
+        str_parts = []
+        tok_parts = []
+        dc_parts = []
+        current_suffix = input_text
+        for key in cached_block_keys:
+            assert key is not None, (
+                "Some input CBlock must not have bee ncomputed yet? The error comes far before this line."
             )
-
-            # 4. split the input_text back up again, re-using DC where it exists.
-            str_parts = []
-            tok_parts = []
-            dc_parts = []
-            current_suffix = input_text
-            for key in cached_block_keys:
-                assert key is not None, (
-                    "Some input CBlock must not have bee ncomputed yet? The error comes far before this line."
-                )
-                assert key in current_suffix, (
-                    "Could happen but would be rare. related to the other assert in this block."
-                )
-                parts = current_suffix.split(key)  # type: ignore
-                assert len(parts) == 2, (
-                    "Known issue: cached substring might occur more than once. We need to handle this situation earlier. Notice if this happens and keep a count."
-                )
-                prefix, suffix = parts
-                # Add the prefix, if any, to str+tok+dc parts.
-                if prefix != "":
-                    FancyLogger.get_logger().debug(
-                        f"Doing a forward pass on uncached block which is prefix to a cached CBlock: {prefix[:3]}.{len(prefix)}.{prefix[-3:]}"
-                    )
-                    str_parts.append(prefix)
-                    tok_parts.append(self._tokenizer(prefix, return_tensors="pt"))
-                    dc_parts.append(self._make_dc_cache(tok_parts[-1]))
-                # Add the cached CBlock to str+tok+dc parts.
+            assert key in current_suffix, (
+                "Could happen but would be rare. related to the other assert in this block."
+            )
+            parts = current_suffix.split(key)  # type: ignore
+            assert len(parts) == 2, (
+                "Known issue: cached substring might occur more than once. We need to handle this situation earlier. Notice if this happens and keep a count."
+            )
+            prefix, suffix = parts
+            # Add the prefix, if any, to str+tok+dc parts.
+            if prefix != "":
                 FancyLogger.get_logger().debug(
-                    f"Replacing a substring with previously computed/retrieved cache with hahs value {hash(key)} ({key[:3]}..{key[-3:]})"
+                    f"Doing a forward pass on uncached block which is prefix to a cached CBlock: {prefix[:3]}.{len(prefix)}.{prefix[-3:]}"
                 )
-                # str_parts.append(key)
-                # tok_parts.append(self._tokenizer(key, return_tensors="pt"))
-                # dc_parts.append(self._make_dc_cache(tok_parts[-1])) # TODO this is wrong.
-                str_parts.append(key)
-                tok_parts.append(self._tokenizer(key, return_tensors="pt"))
-                dc_parts.append(self._cached_blocks[key])
-                # set the suffix for the next loop iteration.
-                current_suffix = suffix
-            # "base" case: the final suffix.
-            if current_suffix != "":
-                FancyLogger.get_logger().debug(  # type: ignore
-                    f"Doing a forward pass on final suffix, an uncached block: {current_suffix[:3]}.{len(current_suffix)}.{current_suffix[-3:]}"  # type: ignore
-                )  # type: ignore
-                str_parts.append(current_suffix)
-                tok_parts.append(self._tokenizer(current_suffix, return_tensors="pt"))
+                str_parts.append(prefix)
+                tok_parts.append(self._tokenizer(prefix, return_tensors="pt"))
                 dc_parts.append(self._make_dc_cache(tok_parts[-1]))
-
-            # Smash together the caches, the input_ids, and the attention masks.
-            assert "".join(str_parts) == input_text, (
-                "Should've ended up with the same input text!"
+            # Add the cached CBlock to str+tok+dc parts.
+            FancyLogger.get_logger().debug(
+                f"Replacing a substring with previously computed/retrieved cache with hahs value {hash(key)} ({key[:3]}..{key[-3:]})"
             )
-            input_ids = torch.cat([toks["input_ids"] for toks in tok_parts], dim=1)
-            attention_mask = torch.cat(
-                [toks["attention_mask"] for toks in tok_parts], dim=1
-            )
-            assert input_ids.shape == attention_mask.shape
-            merged_cache: DynamicCache = kv_block_helpers.merge_dynamic_caches(dc_parts)
-            # TODO: also assert that the merged cached is the correct shape given the input_ids and attention_mask shapes.
-            # rewind merged cache by 1 for safety.
-            merged_cache.crop(-1)
-            # Return the merged cache.
-            return input_text, input_ids, merged_cache, attention_mask
+            # str_parts.append(key)
+            # tok_parts.append(self._tokenizer(key, return_tensors="pt"))
+            # dc_parts.append(self._make_dc_cache(tok_parts[-1])) # TODO this is wrong.
+            str_parts.append(key)
+            tok_parts.append(self._tokenizer(key, return_tensors="pt"))
+            dc_parts.append(self._cached_blocks[key])
+            # set the suffix for the next loop iteration.
+            current_suffix = suffix
+        # "base" case: the final suffix.
+        if current_suffix != "":
+            FancyLogger.get_logger().debug(  # type: ignore
+                f"Doing a forward pass on final suffix, an uncached block: {current_suffix[:3]}.{len(current_suffix)}.{current_suffix[-3:]}"  # type: ignore
+            )  # type: ignore
+            str_parts.append(current_suffix)
+            tok_parts.append(self._tokenizer(current_suffix, return_tensors="pt"))
+            dc_parts.append(self._make_dc_cache(tok_parts[-1]))
 
-
-
+        # Smash together the caches, the input_ids, and the attention masks.
+        assert "".join(str_parts) == input_text, (
+            "Should've ended up with the same input text!"
+        )
+        input_ids = torch.cat([toks["input_ids"] for toks in tok_parts], dim=1)
+        attention_mask = torch.cat(
+            [toks["attention_mask"] for toks in tok_parts], dim=1
+        )
+        assert input_ids.shape == attention_mask.shape
+        merged_cache: DynamicCache = kv_block_helpers.merge_dynamic_caches(dc_parts)
+        # TODO: also assert that the merged cached is the correct shape given the input_ids and attention_mask shapes.
+        # rewind merged cache by 1 for safety.
+        merged_cache.crop(-1)  # type: ignore
+        # Return the merged cache.
+        return input_text, input_ids, merged_cache, attention_mask
 
     async def _generate_from_context_with_kv_cache(
         self,
@@ -652,10 +653,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Filter out chat template-only options before passing to generate()
             generate_options = self._filter_chat_template_only_options(model_options)
 
-            linearized_ctx = ctx.view_for_generation()            
+            linearized_ctx = ctx.view_for_generation()
             assert linearized_ctx is not None
-            input_text, input_ids, merged_cache, attention_mask = self._make_merged_kv_cache(linearized_ctx=linearized_ctx, ctx_as_conversation=ctx_as_chat, model_options=model_options, tools=tools)
-            
+            input_text, input_ids, merged_cache, attention_mask = (
+                self._make_merged_kv_cache(
+                    linearized_ctx=linearized_ctx,
+                    ctx_as_conversation=ctx_as_chat,
+                    model_options=model_options,
+                    tools=tools,
+                )
+            )
+
             chat_response = asyncio.to_thread(
                 self._generate_with_adapter_lock,
                 "",  # Empty for no adapters.
@@ -718,7 +726,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         else:
             raise Exception("Does not yet support non-chat contexts.")
-
 
     async def _generate_from_context_standard(
         self,

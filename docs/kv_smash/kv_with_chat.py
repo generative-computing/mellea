@@ -39,12 +39,12 @@ def merge(toks, dcs):
 
 c_blocks = ["this is a test", "this is another test"]
 
-# pretend this stuff already existed in the cahce.
+# pretend this stuff already existed in the cache.
 for cb in c_blocks:
     cache(cb)
 
 
-# apply the chat template to a conversation that contins these strings, but without tokenization.
+# apply the chat template to a conversation that contains these strings, but without tokenization.
 messages = [
     {"role": "user", "content": c_blocks[0]},
     {"role": "user", "content": "Not cached"},
@@ -86,7 +86,7 @@ if current_suffix != "":
     tok_parts.append(tokenizer(current_suffix, return_tensors="pt"))
     dc_parts.append(cache(current_suffix, store=False))
 
-# Merge evertything together.
+# Merge everything together.
 merged_toks = torch.cat([toks["input_ids"] for toks in tok_parts], dim=1)
 merged_masks = torch.cat([toks["attention_mask"] for toks in tok_parts], dim=1)
 merged_dcs = merge_dynamic_caches(dc_parts)

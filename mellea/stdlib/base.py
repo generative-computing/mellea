@@ -34,7 +34,8 @@ class CBlock:
         Args:
             value: the underlying value stored in this CBlock
             meta: Any meta-information about this CBlock (e.g., the inference engine's Completion object).
-            cache: If set to `True` then this CBlock's KV cache might be stored by the inference engine. Experimental."""
+            cache: If set to `True` then this CBlock's KV cache might be stored by the inference engine. Experimental.
+        """
         if value is not None and not isinstance(value, str):
             raise TypeError("value to a Cblock should always be a string or None")
         self._underlying_value = value

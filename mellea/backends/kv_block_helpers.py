@@ -22,7 +22,7 @@ def legacy_cache_smash(a: LegacyCache, b: LegacyCache) -> LegacyCache:
 
 def merge_dynamic_caches(caches: Iterable[DynamicCache]) -> DynamicCache:
     """Merges two DynamicCache Ks and Vs along the time axis."""
-    legacies = [c.to_legacy_cache() for c in caches]
+    legacies = [c.to_legacy_cache() for c in caches]  # type: ignore
     assert len(legacies) >= 1
     rv = DynamicCache.from_legacy_cache(reduce(legacy_cache_smash, legacies))  # type: ignore
     return rv  # type: ignore
@@ -31,6 +31,7 @@ def merge_dynamic_caches(caches: Iterable[DynamicCache]) -> DynamicCache:
 def combine_representations(
     tokenizer, reps: Iterable[str | DynamicCache]
 ) -> TokenizedCacheIterleaving:
+    """Inexplicable code. I have no idea why this makes any sense. TODO please flag this in any code review and sync with Hendrik re: why we ever wrong this down..."""
     rv = []
     for rep in reps:
         if type(rep) is DynamicCache:
@@ -45,7 +46,7 @@ def tokens_to_legacy_cache(
 ) -> Iterable[LegacyCache]:
     """Prefills and returns Ks and Vs as a LegacyCache."""
     if type(tokens_or_cache) is DynamicCache:
-        return tokens_or_cache.to_legacy_cache()
+        return tokens_or_cache.to_legacy_cache()  # type: ignore
     else:
         tokens = tokens_or_cache
         dc = DynamicCache()

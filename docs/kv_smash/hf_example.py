@@ -20,11 +20,13 @@ async def example():
             cache=True,
         )
     )
-    ctx = ctx.add(CBlock("The ZIP code for 314 Main St, Cambridge, Massachusetts is 02142"))
-
+    ctx = ctx.add(
+        CBlock("The ZIP code for 314 Main St, Cambridge, Massachusetts is 02142")
+    )
 
     msg = Message(
-        role="user", content="What is the likely ZIP code of Nathan Fulton's work address."
+        role="user",
+        content="What is the likely ZIP code of Nathan Fulton's work address.",
     )
     backend = LocalHFBackend(model_id=IBM_GRANITE_3_3_8B)
     mot = await backend._generate_from_context_with_kv_cache(
