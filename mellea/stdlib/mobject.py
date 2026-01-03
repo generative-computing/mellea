@@ -24,7 +24,7 @@ class Query(Component):
 
     def parts(self) -> list[Component | CBlock]:
         """Get the parts of the query."""
-        return []
+        return [self._obj]
 
     def format_for_llm(self) -> TemplateRepresentation | str:
         """Format the query for llm."""
@@ -64,7 +64,7 @@ class Transform(Component):
 
     def parts(self) -> list[Component | CBlock]:
         """Get the parts of the transform."""
-        return []
+        return [self._obj]
 
     def format_for_llm(self) -> TemplateRepresentation | str:
         """Format the transform for llm."""
@@ -154,10 +154,8 @@ class MObject(Component):
         self._transform_type = transform_type
 
     def parts(self) -> list[Component | CBlock]:
-        """Returns a list of parts for MObject."""
-        raise NotImplementedError(
-            "Disallowing use of `parts` until we figure out exactly what it's supposed to be for"
-        )
+        """MObject has no parts because of how format_for_llm is defined."""
+        return []
 
     def get_query_object(self, query: str) -> Query:
         """Returns the instantiated query object.

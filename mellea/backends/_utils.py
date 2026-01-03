@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import inspect
+import itertools
 from collections.abc import Callable
 from typing import Any, Literal
 
 from mellea.backends.formatter import Formatter
 from mellea.backends.tools import parse_tools
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import CBlock, Component, Context, ModelToolCall
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    Context,
+    ModelOutputThunk,
+    ModelToolCall,
+)
 from mellea.stdlib.chat import Message
 from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
 

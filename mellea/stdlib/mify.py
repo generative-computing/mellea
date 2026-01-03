@@ -28,13 +28,13 @@ class MifiedProtocol(MObjectProtocol, Protocol):
     _stringify_func: Callable[[object], str] | None = None
 
     def parts(self) -> list[Component | CBlock]:
-        """Returns a list of parts for MObject.
+        """TODO: we need to rewrite this component to use format_for_llm and initializer correctly.
+
+        For now an empty list is the correct behavior.
 
         [no-index]
         """
-        raise NotImplementedError(
-            "Disallowing use of `parts` until we figure out exactly what it's supposed to be for"
-        )
+        return []
 
     def get_query_object(self, query: str) -> Query:
         """Returns the instantiated query object.

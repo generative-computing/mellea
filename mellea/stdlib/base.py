@@ -22,11 +22,24 @@ from mellea.helpers.fancy_logger import FancyLogger
 class CBlock:
     """A `CBlock` is a block of content that can serve as input to or output from an LLM."""
 
-    def __init__(self, value: str | None, meta: dict[str, Any] | None = None):
-        """Initializes the CBlock with a string and some metadata."""
+    def __init__(
+        self,
+        value: str | None,
+        meta: dict[str, Any] | None = None,
+        *,
+        cache: bool = False,
+    ):
+        """Initializes the CBlock with a string and some metadata.
+
+        Args:
+            value: the underlying value stored in this CBlock
+            meta: Any meta-information about this CBlock (e.g., the inference engine's Completion object).
+            cache: If set to `True` then this CBlock's KV cache might be stored by the inference engine. Experimental.
+        """
         if value is not None and not isinstance(value, str):
             raise TypeError("value to a Cblock should always be a string or None")
         self._underlying_value = value
+        self.cache = cache
         if meta is None:
             meta = {}
         self._meta = meta
@@ -656,3 +669,90 @@ class ModelToolCall:
     def call_func(self) -> Any:
         """A helper function for calling the function/tool represented by this object."""
         return self.func(**self.args)
+
+
+class SimpleComponent(Component):
+    """A Component that is make up of named spans."""
+
+    def __init__(self, **kwargs):
+        """Initialized a simple component of the constructor's kwargs."""
+        for key in kwargs.keys():
+            if type(kwargs[key]) is str:
+                kwargs[key] = CBlock(value=kwargs[key])
+        self._kwargs_type_check(kwargs)
+        self._kwargs = kwargs
+
+    def parts(self):
+        """Returns the values of the kwargs."""
+        return list(self._kwargs.values())
+
+    def _kwargs_type_check(self, kwargs):
+        for key in kwargs.keys():
+            value = kwargs[key]
+            assert issubclass(type(value), Component) or issubclass(
+                type(value), CBlock
+            ), f"Expected span but found {type(value)} of value: {value}"
+            assert type(key) is str
+        return True
+
+    @staticmethod
+    def make_simple_string(kwargs):
+        """Uses <|key|>value</|key|> to represent a simple component."""
+        return "\n".join(
+            [f"<|{key}|>{value}</|{key}|>" for (key, value) in kwargs.items()]
+        )
+
+    @staticmethod
+    def make_json_string(kwargs):
+        """Uses json."""
+        str_args = dict()
+        for key in kwargs.keys():
+            match kwargs[key]:
+                case ModelOutputThunk() | CBlock():
+                    str_args[key] = kwargs[key].value
+                case Component():
+                    str_args[key] = kwargs[key].format_for_llm()
+        import json
+
+        return json.dumps(str_args)
+
+    def format_for_llm(self):
+        """Uses a string rep."""
+        return SimpleComponent.make_json_string(self._kwargs)
+
+
+class HeapContext(Context):
+    """A HeapContext is a context that is constructed by reading off all of the locals() and globals() whose values are CBlock | Component | MoTs."""
+
+    def __init__(self):
+        """Heap at construction-time. Should this be at the use site?"""
+        self._heap = dict()
+
+        for key, value in globals().items():
+            match value:
+                case ModelOutputThunk() | Component() | CBlock():
+                    self._heap[key] = value
+                case _:
+                    continue
+
+        for key, value in locals().items():
+            match value:
+                case ModelOutputThunk() | Component() | CBlock():
+                    self._heap[key] = value
+                case _:
+                    continue
+
+    def is_chat_context(self):
+        """Heap contexts are not chat contexts."""
+        return False
+
+    def add(self, c: Component | CBlock) -> Context:
+        """Returns a new context obtained by adding `c` to this context as the "last item", using _ to denote the last expression."""
+        new_context = HeapContext()
+        new_context._heap = copy(self._heap)
+        new_context._heap["_"] = c
+        return new_context
+
+    def view_for_generation(self) -> list[Component | CBlock] | None:
+        """Provides a linear list of context components to use for generation, or None if that is not possible to construct."""
+        return [SimpleComponent(**self._heap)]
