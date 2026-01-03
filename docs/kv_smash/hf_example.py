@@ -28,8 +28,12 @@ async def example():
     )
     backend = LocalHFBackend(model_id=IBM_GRANITE_3_3_8B)
     mot = await backend._generate_from_context_with_kv_cache(
-        action=msg, ctx=ctx, model_options={ModelOption.MAX_NEW_TOKENS: 1000}
+        action=msg, ctx=ctx, model_options={ModelOption.MAX_NEW_TOKENS: 20}
     )
+    # mot = await backend._generate_from_context_standard(
+    #     action=msg, ctx=ctx, model_options={ModelOption.MAX_NEW_TOKENS: 10}
+    # )
+
     result = await mot.avalue()
     print(f".{result}.")
 
@@ -38,7 +42,7 @@ async def example():
         content="We know that Nathan does not work for a university. What is the likely name of Nathan's employer?",
     )
     mot = await backend._generate_from_context_with_kv_cache(
-        action=msg2, ctx=ctx, model_options={ModelOption.MAX_NEW_TOKENS: 1000}
+        action=msg2, ctx=ctx, model_options={ModelOption.MAX_NEW_TOKENS: 20}
     )
     result = await mot.avalue()
     print(f".{result}.")

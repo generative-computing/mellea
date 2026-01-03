@@ -3,7 +3,7 @@ import torch
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.kv_block_helpers import DynamicCache, merge_dynamic_caches
 from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
-from mellea.stdlib.base import CBlock, LinearContext
+from mellea.stdlib.base import CBlock, ChatContext
 from mellea.stdlib.chat import Message
 
 backend = LocalHFBackend(model_id=IBM_GRANITE_3_3_8B)

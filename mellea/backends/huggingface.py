@@ -462,7 +462,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # AND
             # 2. Mark each "hit" by adding the string (tokenized?) value to `cached_block_keys`.
             cached_block_keys = []
+            print("Pre-computing cache blocks.")
             for c in linearized_ctx:
+                print(f"c of {len(linearized_ctx)}")
                 match c:
                     case CBlock() if c.cache:
                         assert c.value is not None
@@ -650,9 +652,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # Filter out chat template-only options before passing to generate()
             generate_options = self._filter_chat_template_only_options(model_options)
 
-            # TODO nathan-placeholder-1.
-            linearized_ctx = ctx.view_for_generation()
-            
+            linearized_ctx = ctx.view_for_generation()            
             assert linearized_ctx is not None
             input_text, input_ids, merged_cache, attention_mask = self._make_merged_kv_cache(linearized_ctx=linearized_ctx, ctx_as_conversation=ctx_as_chat, model_options=model_options, tools=tools)
             
