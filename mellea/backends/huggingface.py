@@ -98,6 +98,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     This backend is NOT designed for inference scaling on CUDA-enabled hardware.
     """
 
+    _cached_blocks: dict[str, DynamicCache] = dict()
+
     def __init__(
         self,
         model_id: str | ModelIdentifier,
@@ -186,6 +188,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._generation_lock = threading.Lock()
         """Used to force generation requests to be non-concurrent. Necessary for preventing issues with adapters."""
 
+    def _make_dc_cache(self, toks, **model_options):
+        dc = DynamicCache()
+        with torch.no_grad():
+            dc = self._model(
+                toks["input_ids"].to(self._device),
+                attention_mask=toks["attention_mask"].to(self._device),
+                past_key_values=dc,
+                **model_options,
+            ).past_key_values
+        return dc
+    
     async def generate_from_context(
         self,
         action: Component | CBlock,
@@ -432,6 +445,280 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             raise e
 
         return output
+
+
+
+    # TODO make this async.
+    def _make_merged_kv_cache(self, linearized_ctx: list[Component | CBlock | ModelOutputThunk], ctx_as_conversation: Any, model_options: Any, tools: Any):
+            # Explanation for code blocks inside of use_kv_cache checks:
+            # 1. cache every CBlock that is marked with `cache=True` and store in _cached_blocks.
+            # 2. Mark each "hit" by adding the string (tokenized?) value to `cached_block_keys`.
+            # 3. apply the chat template (without?) tokenization
+            # 4. split on cache hits
+            # 5. prefill + smash together everything.
+            # 6. generate
+
+            # 1. cache every CBlock that is marked with `cache=True` and store in _cached_blocks.
+            # AND
+            # 2. Mark each "hit" by adding the string (tokenized?) value to `cached_block_keys`.
+            cached_block_keys = []
+            for c in linearized_ctx:
+                match c:
+                    case CBlock() if c.cache:
+                        assert c.value is not None
+                        if c.value in self._cached_blocks:
+                            FancyLogger.get_logger().info(
+                                f"KV CACHE HIT for: {hash(c.value)} ({c.value[:3]}..{c.value[-3:]})"  # type: ignore
+                            )
+                        else:
+                            FancyLogger.get_logger().debug(
+                                f"HF backend is caching a CBlock with hashed contents: {hash(c.value)} ({c.value[:3]}..{c.value[-3:]})"
+                            )
+                            tokens = self._tokenizer(c.value, return_tensors="pt")
+                            dc = DynamicCache()
+                            with torch.no_grad():
+                                dc = self._model(
+                                    tokens["input_ids"].to(self._device),  # type: ignore
+                                    attention_mask=tokens["attention_mask"].to(
+                                        self._device
+                                    ),  # type: ignore
+                                    past_key_values=dc,
+                                    use_cache=True,
+                                ).past_key_values
+                            self._cached_blocks[c.value] = dc
+                            cached_block_keys.append(c.value)
+                    case _:
+                        continue
+
+            # 3. apply the chat template WITHOUT tokenization.
+            # Doing this without tokenization and then gluing together the tokens is necessary because
+            # things that KV cache together must tokenize together.
+            input_text = self._tokenizer.apply_chat_template(  # type: ignore
+                ctx_as_conversation,
+                tools=convert_tools_to_json(tools),  # type: ignore
+                **self._make_backend_specific_and_remove(model_options),
+                tokenize=False,
+            )
+
+            # 4. split the input_text back up again, re-using DC where it exists.
+            str_parts = []
+            tok_parts = []
+            dc_parts = []
+            current_suffix = input_text
+            for key in cached_block_keys:
+                assert key is not None, (
+                    "Some input CBlock must not have bee ncomputed yet? The error comes far before this line."
+                )
+                assert key in current_suffix, (
+                    "Could happen but would be rare. related to the other assert in this block."
+                )
+                parts = current_suffix.split(key)  # type: ignore
+                assert len(parts) == 2, (
+                    "Known issue: cached substring might occur more than once. We need to handle this situation earlier. Notice if this happens and keep a count."
+                )
+                prefix, suffix = parts
+                # Add the prefix, if any, to str+tok+dc parts.
+                if prefix != "":
+                    FancyLogger.get_logger().debug(
+                        f"Doing a forward pass on uncached block which is prefix to a cached CBlock: {prefix[:3]}.{len(prefix)}.{prefix[-3:]}"
+                    )
+                    str_parts.append(prefix)
+                    tok_parts.append(self._tokenizer(prefix, return_tensors="pt"))
+                    dc_parts.append(self._make_dc_cache(tok_parts[-1]))
+                # Add the cached CBlock to str+tok+dc parts.
+                FancyLogger.get_logger().debug(
+                    f"Replacing a substring with previously computed/retrieved cache with hahs value {hash(key)} ({key[:3]}..{key[-3:]})"
+                )
+                # str_parts.append(key)
+                # tok_parts.append(self._tokenizer(key, return_tensors="pt"))
+                # dc_parts.append(self._make_dc_cache(tok_parts[-1])) # TODO this is wrong.
+                str_parts.append(key)
+                tok_parts.append(self._tokenizer(key, return_tensors="pt"))
+                dc_parts.append(self._cached_blocks[key])
+                # set the suffix for the next loop iteration.
+                current_suffix = suffix
+            # "base" case: the final suffix.
+            if current_suffix != "":
+                FancyLogger.get_logger().debug(  # type: ignore
+                    f"Doing a forward pass on final suffix, an uncached block: {current_suffix[:3]}.{len(current_suffix)}.{current_suffix[-3:]}"  # type: ignore
+                )  # type: ignore
+                str_parts.append(current_suffix)
+                tok_parts.append(self._tokenizer(current_suffix, return_tensors="pt"))
+                dc_parts.append(self._make_dc_cache(tok_parts[-1]))
+
+            # Smash together the caches, the input_ids, and the attention masks.
+            assert "".join(str_parts) == input_text, (
+                "Should've ended up with the same input text!"
+            )
+            input_ids = torch.cat([toks["input_ids"] for toks in tok_parts], dim=1)
+            attention_mask = torch.cat(
+                [toks["attention_mask"] for toks in tok_parts], dim=1
+            )
+            assert input_ids.shape == attention_mask.shape
+            merged_cache: DynamicCache = kv_block_helpers.merge_dynamic_caches(dc_parts)
+            # TODO: also assert that the merged cached is the correct shape given the input_ids and attention_mask shapes.
+            # rewind merged cache by 1 for safety.
+            merged_cache.crop(-1)
+            # Return the merged cache.
+            return input_text, input_ids, merged_cache, attention_mask
+
+
+
+
+    async def _generate_from_context_with_kv_cache(
+        self,
+        action: Component | CBlock,
+        ctx: Context,
+        *,
+        _format: type[BaseModelSubclass] | None = None,
+        model_options: dict[str, Any],
+        tool_calls: bool = False,
+    ) -> ModelOutputThunk:
+        # Construct input.
+        # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
+        # Otherwise, we will linearize the context and treat it as a raw input.
+        if ctx.is_chat_context:
+            system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, None)
+            ctx_as_chat = to_chat(action, ctx, self.formatter, system_prompt)
+
+            # Append tool call information if applicable.
+            tools: dict[str, Callable] = dict()
+            if tool_calls:
+                if _format:
+                    FancyLogger.get_logger().warning(
+                        f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
+                    )
+                else:
+                    add_tools_from_model_options(tools, model_options)
+                    add_tools_from_context_actions(
+                        tools, ctx.actions_for_available_tools()
+                    )
+
+                    # Add the tools from the action for this generation last so that
+                    # they overwrite conflicting names.
+                    add_tools_from_context_actions(tools, [action])
+                FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+
+            seed = model_options.get(ModelOption.SEED, None)
+            if seed is not None:
+                set_seed(seed)
+
+            format_kwargs = {}
+            if _format:
+                # outlines.generate.json always parses the resulting json into a python dict.
+                # We however want to keep it as a json string for later storing it in ModelOutputThunk
+                schema: dict[str, Any] = _format.model_json_schema()
+                schema_json: str = json.dumps(schema)
+                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
+                    schema_json
+                )
+
+                from outlines.models.transformers import TransformerTokenizer
+                from outlines.processors.structured import RegexLogitsProcessor
+                from transformers import LogitsProcessorList
+
+                format_kwargs["logits_processor"] = LogitsProcessorList(
+                    [
+                        RegexLogitsProcessor(
+                            regex_str, tokenizer=TransformerTokenizer(self._tokenizer)
+                        )
+                    ]
+                )
+
+            streaming_kwargs = {}
+            streamer = None
+            stream = model_options.get(ModelOption.STREAM, False)
+            if stream:
+                try:
+                    # HuggingFace uses a streaming interface that you pass to the generate call.
+                    # Must be called from a running event loop. This should always be the case given the same
+                    # requirement of the ._generate function below.
+                    streamer = AsyncTextIteratorStreamer(
+                        self._tokenizer,  # type: ignore
+                        skip_prompt=True,
+                        skip_special_tokens=True,
+                    )
+                    streaming_kwargs["streamer"] = streamer
+                except RuntimeError as e:
+                    # Most likely cause is creating this object without an event loop present.
+                    raise e
+
+            # Create a separate thread to handle the processing. Make it awaitable
+            # for non-streaming cases and to get the final output.
+            # Details: https://huggingface.co/docs/transformers/en/internal/generation_utils#transformers.AsyncTextIteratorStreamer
+
+            # Filter out chat template-only options before passing to generate()
+            generate_options = self._filter_chat_template_only_options(model_options)
+
+            # TODO nathan-placeholder-1.
+            linearized_ctx = ctx.view_for_generation()
+            
+            assert linearized_ctx is not None
+            input_text, input_ids, merged_cache, attention_mask = self._make_merged_kv_cache(linearized_ctx=linearized_ctx, ctx_as_conversation=ctx_as_chat, model_options=model_options, tools=tools)
+            
+            chat_response = asyncio.to_thread(
+                self._generate_with_adapter_lock,
+                "",  # Empty for no adapters.
+                self._model.generate,  # type: ignore
+                # Passed as args/kwargs to generate.
+                input_ids.to(self._device),
+                use_cache=True,
+                past_key_values=merged_cache,
+                attention_mask=attention_mask.to(self._device),
+                return_dict_in_generate=True,
+                output_scores=True,
+                **self._make_backend_specific_and_remove(generate_options),
+                **streaming_kwargs,  # type: ignore
+                **format_kwargs,  # type: ignore
+            )
+
+            output = ModelOutputThunk(None)
+            output._context = ctx.view_for_generation()
+            output._action = action
+            output._model_options = model_options
+
+            # Processing functions only pass the ModelOutputThunk (and current chunk of response). Bind the other vars necessary for
+            # each processing step.
+            output._process = functools.partial(self.processing, input_ids=input_ids)
+            output._post_process = functools.partial(
+                self.post_processing,
+                conversation=ctx_as_chat,
+                input_ids=input_ids,
+                _format=_format,
+                tool_calls=tool_calls,
+                tools=tools,
+                seed=seed,
+            )
+
+            try:
+                # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
+                # We can also support synchronous calls by adding a flag and changing this ._generate function.
+
+                response: AsyncTextIteratorStreamer | Coroutine = chat_response
+                if stream and streamer is not None:
+                    # For streaming, we want to pass the AsyncIterator to the function. Unlike other backends,
+                    # this isn't returned by the chat_response coroutine. So we handle it here.
+                    response = streamer
+
+                    # Since the async iterator isn't returned by the chat_response coroutine, we have to create a separate
+                    # task for it here so that it runs in the background. Attach it to the ModelOutputThunk.
+                    output._generate_extra = asyncio.create_task(chat_response)
+
+                # This function should always be called from a running event loop so we don't have to worry about
+                # scheduling the task to a specific event loop here.
+                output._generate = asyncio.create_task(
+                    send_to_queue(response, output._async_queue)  # type: ignore
+                )
+                output._generate_type = GenerateType.ASYNC
+            except RuntimeError as e:
+                # Most likely cause is running this function without an event loop present.
+                raise e
+
+            return output
+
+        else:
+            raise Exception("Does not yet support non-chat contexts.")
+
 
     async def _generate_from_context_standard(
         self,
