@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-Knowledge Graph Embedding Script (Refactored)
-
+Knowledge Graph Embedding Script (Mellea-Native Implementation)
 This script generates and stores embeddings for entities, relations, and schemas
 in the knowledge graph using modern patterns.
 
 Usage:
-    python run_kg_embed_refactored.py
-    python run_kg_embed_refactored.py --verbose
-    python run_kg_embed_refactored.py --batch-size 10000
+    python run_kg_embed.py
+    python run_kg_embed.py --verbose
+    python run_kg_embed.py --batch-size 10000
 """
 
 import argparse
@@ -18,11 +17,12 @@ import sys
 from typing import Any
 
 from dotenv import load_dotenv
-import openai
 
-from kg.kg_embedder import KGEmbedder
+from kg.kg_embedder import MelleaKGEmbedder, test_embedding_session
 from kg.kg_embed_models import EmbeddingConfig
+
 from utils.logger import logger
+from utils.utils_mellea import create_embedding_session
 
 # Load environment variables
 load_dotenv()
@@ -64,6 +64,13 @@ Examples:
     )
 
     parser.add_argument(
+        "--concurrent-batches",
+        type=int,
+        default=None,
+        help="Number of concurrent batches for embedding"
+    )
+
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -73,48 +80,6 @@ Examples:
     return parser.parse_args()
 
 
-def create_embedding_session(config: EmbeddingConfig) -> Any:
-    """Create embedding session (OpenAI or local model).
-
-    Args:
-        config: Embedding configuration
-
-    Returns:
-        Embedding session object
-    """
-    if config.api_base:
-        logger.info(f"Using OpenAI API at {config.api_base}")
-        logger.info(f"Model: {config.model_name}")
-
-        headers = {}
-        if config.rits_api_key:
-            headers['RITS_API_KEY'] = config.rits_api_key
-
-        return openai.AsyncOpenAI(
-            base_url=config.api_base,
-            api_key=config.api_key,
-            timeout=config.timeout,
-            default_headers=headers if headers else None
-        )
-    else:
-        logger.info("Using local SentenceTransformer model")
-        logger.info(f"Model: {config.model_name}")
-
-        import torch
-        from sentence_transformers import SentenceTransformer
-
-        device = torch.device(
-            "cuda" if torch.cuda.is_available() else
-            "mps" if torch.backends.mps.is_available() else
-            "cpu"
-        )
-
-        logger.info(f"Using device: {device}")
-
-        return SentenceTransformer(
-            config.model_name,
-            device=device
-        )
 
 
 def create_config(args: argparse.Namespace) -> EmbeddingConfig:
@@ -124,7 +89,7 @@ def create_config(args: argparse.Namespace) -> EmbeddingConfig:
         args: Parsed command-line arguments
 
     Returns:
-        Embedding configuration
+        Embedding configuration with Pydantic validation
     """
     # Start with env-based config
     config = EmbeddingConfig(
@@ -133,6 +98,10 @@ def create_config(args: argparse.Namespace) -> EmbeddingConfig:
         model_name=os.getenv("EMB_MODEL_NAME", ""),
         timeout=int(os.getenv("EMB_TIME_OUT", "1800")),
         rits_api_key=os.getenv("RITS_API_KEY"),
+        vector_dimensions=int(os.getenv("VECTOR_DIMENSIONS", "768")),
+        batch_size=int(os.getenv("EMB_BATCH_SIZE", "8192")),
+        concurrent_batches=int(os.getenv("EMB_CONCURRENT_BATCHES", "64")),
+        storage_batch_size=int(os.getenv("EMB_STORAGE_BATCH_SIZE", "50000")),
     )
 
     # Override with CLI arguments if provided
@@ -144,6 +113,9 @@ def create_config(args: argparse.Namespace) -> EmbeddingConfig:
 
     if args.dimensions is not None:
         config.vector_dimensions = args.dimensions
+
+    if args.concurrent_batches is not None:
+        config.concurrent_batches = args.concurrent_batches
 
     return config
 
@@ -166,16 +138,36 @@ async def main() -> int:
         logger.info(f"  Concurrent batches: {config.concurrent_batches}")
 
         # Create embedding session
-        emb_session = create_embedding_session(config)
+        emb_session = create_embedding_session(
+            api_base=config.api_base,
+            api_key=config.api_key,
+            model_name=config.model_name,
+            timeout=config.timeout,
+            rits_api_key=config.rits_api_key
+        )
 
-        # Create embedder
-        embedder = KGEmbedder(emb_session, config)
+        # Test embedding session
+        if not await test_embedding_session(emb_session, config):
+            logger.error("Embedding session test failed. Please check your configuration.")
+            return 1
+
+        logger.info("")
+
+        # Create Mellea-native embedder
+        embedder = MelleaKGEmbedder(emb_session, config)
 
         # Run embedding pipeline
+        logger.info("Starting embedding pipeline...")
         stats = await embedder.embed_all()
 
+        logger.info("")
         logger.info("=" * 60)
-        logger.info("✅ Neo4j KG embedding completed!")
+        logger.info("✅ Mellea-native KG embedding completed!")
+        logger.info("=" * 60)
+        logger.info(f"Entities embedded: {stats.entities_embedded}")
+        logger.info(f"Relations embedded: {stats.relations_embedded}")
+        logger.info(f"Schemas embedded: {stats.schemas_embedded}")
+        logger.info(f"Total embeddings: {stats.total_embeddings}")
         logger.info("=" * 60)
 
         return 0

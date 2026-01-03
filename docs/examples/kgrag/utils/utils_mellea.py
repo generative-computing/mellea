@@ -1,8 +1,68 @@
 """Simplified utils using Mellea's built-in features."""
-import asyncio
-from typing import Any, List
+from typing import Any, List, Optional
 from mellea import MelleaSession
 from utils.logger import logger
+
+
+def create_embedding_session(
+    api_base: Optional[str] = None,
+    api_key: str = "dummy",
+    model_name: Optional[str] = None,
+    timeout: int = 1800,
+    rits_api_key: Optional[str] = None
+) -> Any:
+    """Create embedding session (OpenAI API or local model).
+
+    This function creates an embedding session that can be either:
+    - An OpenAI-compatible API client (if api_base is provided)
+    - A local SentenceTransformer model (if api_base is None)
+
+    Args:
+        api_base: API base URL for OpenAI-compatible embedding service (None for local)
+        api_key: API key for authentication (default: "dummy")
+        model_name: Model name/path for embeddings
+        timeout: Request timeout in seconds (default: 1800)
+        rits_api_key: Optional RITS API key for custom headers
+
+    Returns:
+        Embedding session object (openai.AsyncOpenAI or SentenceTransformer)
+    """
+    if api_base:
+        logger.info("Using OpenAI-compatible embedding API")
+        logger.info(f"  API base: {api_base}")
+        logger.info(f"  Model: {model_name}")
+
+        import openai
+
+        headers = {}
+        if rits_api_key:
+            headers['RITS_API_KEY'] = rits_api_key
+
+        return openai.AsyncOpenAI(
+            base_url=api_base,
+            api_key=api_key,
+            timeout=timeout,
+            default_headers=headers if headers else None
+        )
+    else:
+        logger.info("Using local SentenceTransformer model")
+        logger.info(f"  Model: {model_name}")
+
+        import torch
+        from sentence_transformers import SentenceTransformer
+
+        device = torch.device(
+            "cuda" if torch.cuda.is_available() else
+            "mps" if torch.backends.mps.is_available() else
+            "cpu"
+        )
+
+        logger.info(f"  Device: {device}")
+
+        return SentenceTransformer(
+            model_name,
+            device=device
+        )
 
 
 async def generate_embedding_mellea(

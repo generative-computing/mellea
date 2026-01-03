@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
 """
-Knowledge Graph Update Script (Mellea-Native Implementation)
-
-This script demonstrates KG updates using Mellea's native patterns:
-- @generative decorator for extraction functions
-- Requirements for output validation
-- RejectionSamplingStrategy for robustness
-- Component-based architecture
+Knowledge Graph Update Script
+This script updates the knowledge graph by processing documents and extracting
+entities and relations using modern patterns.
 
 Usage:
-    python run_kg_update_mellea.py --dataset path/to/dataset.jsonl.bz2
-    python run_kg_update_mellea.py --num-workers 64 --verbose
-    python run_kg_update_mellea.py --domain movie --progress-path results/progress.json
+    python run_kg_update.py --domain movie --progress-path results/progress.json
 """
 
 import argparse
@@ -23,8 +17,6 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-import openai
-import torch
 
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend, TemplateFormatter
@@ -36,6 +28,7 @@ from dataset.movie_dataset import MovieDatasetLoader
 from utils.logger import KGProgressLogger
 from utils.utils import token_counter
 from utils.logger import logger
+from utils.utils_mellea import create_embedding_session
 
 # Load environment variables
 load_dotenv()
@@ -44,13 +37,13 @@ load_dotenv()
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Update knowledge graph using Mellea-native patterns",
+        description="Update knowledge graph from documents",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   %(prog)s --dataset data/corpus.jsonl.bz2
-  %(prog)s --num-workers 64 --queue-size 64
-  %(prog)s --domain movie --progress-path results/progress_mellea.json
+  %(prog)s --num-workers 128 --queue-size 128
+  %(prog)s --domain movie --progress-path results/progress.json
   %(prog)s --verbose
         """
     )
@@ -89,7 +82,7 @@ Examples:
     parser.add_argument(
         "--progress-path",
         type=str,
-        default="results/update_movie_kg_progress_mellea.json",
+        default="results/update_movie_kg_progress.json",
         help="Progress log file path"
     )
 
@@ -163,9 +156,14 @@ def create_dataset_config(args: argparse.Namespace) -> DatasetConfig:
         )
         dataset_path = os.path.join(base_dir, "crag_movie_dev.jsonl.bz2")
 
+    if args.domain:
+        domain = args.domain
+    else:
+        domain = "moive"
+
     return DatasetConfig(
         dataset_path=dataset_path,
-        domain=args.domain,
+        domain=domain,
         progress_path=args.progress_path,
     )
 
@@ -198,47 +196,6 @@ def create_mellea_session(session_config: SessionConfig) -> MelleaSession:
     )
 
 
-def create_embedding_session(session_config: SessionConfig) -> Any:
-    """Create embedding session.
-
-    Args:
-        session_config: Session configuration
-
-    Returns:
-        Embedding session object
-    """
-    if session_config.emb_api_base:
-        logger.info(f"Using OpenAI embedding API at {session_config.emb_api_base}")
-        logger.info(f"Model: {session_config.emb_model_name}")
-
-        headers = {}
-        if session_config.rits_api_key:
-            headers['RITS_API_KEY'] = session_config.rits_api_key
-
-        return openai.AsyncOpenAI(
-            base_url=session_config.emb_api_base,
-            api_key=session_config.emb_api_key or session_config.api_key,
-            timeout=session_config.emb_timeout or session_config.timeout,
-            default_headers=headers if headers else None
-        )
-    else:
-        logger.info("Using local SentenceTransformer for embeddings")
-        logger.info(f"Model: {session_config.emb_model_name}")
-
-        from sentence_transformers import SentenceTransformer
-
-        device = torch.device(
-            "cuda" if torch.cuda.is_available() else
-            "mps" if torch.backends.mps.is_available() else
-            "cpu"
-        )
-
-        logger.info(f"Using device: {device}")
-
-        return SentenceTransformer(
-            session_config.emb_model_name,
-            device=device
-        )
 
 
 async def process_document(
@@ -307,18 +264,13 @@ async def main() -> int:
         dataset_config = create_dataset_config(args)
 
         logger.info("=" * 60)
-        logger.info("Mellea-Native KG Update Configuration:")
+        logger.info("KG Update Configuration:")
         logger.info("=" * 60)
         logger.info(f"Dataset: {dataset_config.dataset_path}")
         logger.info(f"Domain: {dataset_config.domain}")
         logger.info(f"Workers: {updater_config.num_workers}")
         logger.info(f"Queue size: {updater_config.queue_size}")
         logger.info(f"Progress: {dataset_config.progress_path}")
-        logger.info("Using Mellea-native implementation with:")
-        logger.info("  ✓ @generative decorator for extractions")
-        logger.info("  ✓ Requirements validation")
-        logger.info("  ✓ RejectionSamplingStrategy")
-        logger.info("  ✓ Component architecture")
         logger.info("=" * 60)
 
         # Verify dataset exists
@@ -331,7 +283,13 @@ async def main() -> int:
 
         # Create sessions
         session = create_mellea_session(session_config)
-        emb_session = create_embedding_session(session_config)
+        emb_session = create_embedding_session(
+            api_base=session_config.emb_api_base,
+            api_key=session_config.emb_api_key or session_config.api_key,
+            model_name=session_config.emb_model_name,
+            timeout=session_config.emb_timeout or session_config.timeout,
+            rits_api_key=session_config.rits_api_key
+        )
 
         # Create KG driver
         kg_driver = KG_Driver(
@@ -355,6 +313,12 @@ async def main() -> int:
                 "align_relation": True,
                 "merge_relation": True,
                 "extraction_loop_budget": 3,
+                "alignment_loop_budget": 2,
+                "align_topk": 10,  # Number of candidates to consider during alignment
+                "align_entity_batch_size": 10,
+                "merge_entity_batch_size": 10,
+                "align_relation_batch_size": 10,
+                "merge_relation_batch_size": 10,
             },
             logger=kg_logger
         )

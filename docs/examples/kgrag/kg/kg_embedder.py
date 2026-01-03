@@ -39,7 +39,7 @@ from kg.kg_rep import (
 )
 from utils.utils import generate_embedding
 from utils.logger import logger
-
+from docs.examples.kgrag.utils.utils_mellea import generate_embedding_mellea
 # Load environment variables
 load_dotenv()
 
@@ -536,6 +536,90 @@ class KGEmbedder(KGEmbedderBase):
         logger.info(f"  Relation Schemas: {self.stats.total_relation_schemas}")
         logger.info(f"  Total Batches: {self.stats.total_batches}")
         logger.info(f"  Failed Batches: {self.stats.failed_batches}")
+
+
+class MelleaKGEmbedder(KGEmbedder):
+    """Mellea-native KG embedder with enhanced utilities.
+
+    Extends the base KGEmbedder with Mellea-native patterns:
+    - Uses kg_utils_mellea for embedding generation
+    - Better error handling and logging
+    - Demonstrates Mellea best practices
+    """
+
+    async def generate_embeddings_mellea(
+        self,
+        texts: List[str],
+        desc: str = "Embedding"
+    ) -> List[List[float]]:
+        """Generate embeddings using Mellea-native utilities.
+
+        Args:
+            texts: List of text descriptions to embed
+            desc: Description for logging
+
+        Returns:
+            List of embedding vectors
+        """
+        if not texts:
+            return []
+
+        logger.info(f"Generating embeddings for {len(texts)} {desc.lower()}...")
+
+        try:
+            embeddings = await generate_embedding_mellea(
+                session=self.emb_session,
+                texts=texts,
+                model=self.config.model_name if hasattr(self.emb_session, 'embeddings') else None
+            )
+
+            logger.info(f"✓ Generated {len(embeddings)} embeddings")
+            return embeddings
+
+        except Exception as e:
+            logger.error(f"Failed to generate embeddings: {e}")
+            return []
+
+
+async def test_embedding_session(emb_session: Any, config: EmbeddingConfig) -> bool:
+    """Test the embedding session with a simple query.
+
+    Args:
+        emb_session: Embedding session to test
+        config: Embedding configuration
+
+    Returns:
+        True if test succeeds, False otherwise
+    """
+    logger.info("Testing embedding session...")
+
+    try:
+        test_texts = ["This is a test embedding.", "Knowledge graph test."]
+        embeddings = await generate_embedding_mellea(
+            session=emb_session,
+            texts=test_texts,
+            model=config.model_name
+        )
+
+        if embeddings and len(embeddings) == len(test_texts):
+            embedding_dim = len(embeddings[0])
+            logger.info(f"✓ Embedding test successful (dimension: {embedding_dim})")
+
+            if embedding_dim != config.vector_dimensions:
+                logger.warning(
+                    f"⚠ Embedding dimension mismatch: expected {config.vector_dimensions}, "
+                    f"got {embedding_dim}"
+                )
+
+            return True
+        else:
+            logger.error("✗ Embedding test failed: incorrect number of embeddings")
+            return False
+
+    except Exception as e:
+        logger.error(f"✗ Embedding test failed: {e}")
+        return False
+
 
 
 # Backward compatibility alias

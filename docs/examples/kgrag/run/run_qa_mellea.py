@@ -28,8 +28,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
-import openai
-import torch
 
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend, TemplateFormatter
@@ -42,6 +40,7 @@ from utils.logger import BaseProgressLogger, DefaultProgressLogger, QAProgressLo
 from utils.utils import token_counter
 from eval import evaluate_predictions
 from utils.logger import logger
+from utils.utils_mellea import create_embedding_session
 
 # Load environment variables
 load_dotenv()
@@ -350,47 +349,6 @@ def create_eval_session(session_config: QASessionConfig) -> MelleaSession:
     )
 
 
-def create_embedding_session(session_config: QASessionConfig) -> Any:
-    """Create embedding session (OpenAI or local model).
-
-    Args:
-        session_config: Session configuration
-
-    Returns:
-        Embedding session object
-    """
-    if session_config.emb_api_base:
-        logger.info(f"Using OpenAI embedding API at {session_config.emb_api_base}")
-        logger.info(f"Model: {session_config.emb_model_name}")
-
-        headers = {}
-        if session_config.rits_api_key:
-            headers['RITS_API_KEY'] = session_config.rits_api_key
-
-        return openai.AsyncOpenAI(
-            base_url=session_config.emb_api_base,
-            api_key=session_config.emb_api_key or session_config.api_key,
-            timeout=session_config.emb_timeout or session_config.timeout,
-            default_headers=headers if headers else None
-        )
-    else:
-        logger.info("Using local SentenceTransformer for embeddings")
-        logger.info(f"Model: {session_config.emb_model_name}")
-
-        from sentence_transformers import SentenceTransformer
-
-        device = torch.device(
-            "cuda" if torch.cuda.is_available() else
-            "mps" if torch.backends.mps.is_available() else
-            "cpu"
-        )
-
-        logger.info(f"Using device: {device}")
-
-        return SentenceTransformer(
-            session_config.emb_model_name,
-            device=device
-        )
 
 
 def snapshot_token_usage() -> Dict[str, int]:
@@ -508,7 +466,13 @@ async def main() -> int:
         # Create sessions
         session = create_mellea_session(session_config)
         eval_session = create_eval_session(session_config)
-        emb_session = create_embedding_session(session_config)
+        emb_session = create_embedding_session(
+            api_base=session_config.emb_api_base,
+            api_key=session_config.emb_api_key or session_config.api_key,
+            model_name=session_config.emb_model_name,
+            timeout=session_config.emb_timeout or session_config.timeout,
+            rits_api_key=session_config.rits_api_key
+        )
 
         # Create progress logger
         qa_logger = QAProgressLogger(progress_path=dataset_config.progress_path)
