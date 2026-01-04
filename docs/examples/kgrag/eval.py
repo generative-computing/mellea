@@ -3,6 +3,7 @@ from datetime import datetime
 import json
 import os
 import re
+from typing import List
 from dotenv import load_dotenv
 from tqdm.auto import tqdm
 

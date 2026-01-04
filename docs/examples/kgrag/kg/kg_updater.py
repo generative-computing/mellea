@@ -634,15 +634,20 @@ class KG_Updater:
             expected_ids = set(range(1, consecutive_idx))
             for _ in range(max_realign):
                 batch_results = maybe_load_json(response)
-            
+
                 for result in batch_results:
                     try:
+                        # Ensure result is a dictionary (LLM sometimes returns strings or other types)
+                        if not isinstance(result, dict):
+                            self.logger.warning(f"Skipping non-dict result in align_entity: {type(result)}")
+                            continue
+
                         idx = result["id"]  # Convert back to index
                         entity_id = entity_mapping[idx]["entity_id"]
                         entity_name = entity_names[entity_id]
                         aligned_type = result["aligned_type"]
                         match = result["matched_entity"]
-                                
+
                         top_k_entities_dict = entity_mapping[idx]["top_k_entities"]
                         entities[entity_name].extracted.type = aligned_type
                         entities[entity_name].aligned = top_k_entities_dict[match] \
@@ -749,6 +754,11 @@ class KG_Updater:
                 # Process results
                 for result in batch_results:
                     try:
+                        # Ensure result is a dictionary (LLM sometimes returns strings or other types)
+                        if not isinstance(result, dict):
+                            self.logger.warning(f"Skipping non-dict result in merge_entity: {type(result)}")
+                            continue
+
                         entity_id = result["id"]
                         entity_name = entity_names[int(entity_id) - 1]
 
@@ -769,7 +779,7 @@ class KG_Updater:
                             ref=update_ref(entities[entity_name].aligned.ref, entities[entity_name].extracted.ref)
                         )
                         entities[entity_name].merged = merged_entity
-                        
+
                         found_ids.add(entity_id)
                     except Exception as e:
                         self.logger.error("Encount error while parsing merged entity", exc_info=True)
@@ -912,6 +922,11 @@ class KG_Updater:
                 # Process results
                 for result in batch_results:
                     try:
+                        # Ensure result is a dictionary (LLM sometimes returns strings or other types)
+                        if not isinstance(result, dict):
+                            self.logger.warning(f"Skipping non-dict result in align_relation: {type(result)}")
+                            continue
+
                         idx = result["id"]  # Convert back to index
                         relation_id = relation_mapping[idx]["relation_id"]
                         relation_name = relation_names[relation_id]
@@ -922,7 +937,7 @@ class KG_Updater:
                         relations[relation_name].extracted.name = aligned_name
                         relations[relation_name].aligned = top_k_relations_dict[match] \
                             if (match in top_k_relations_dict) else None
-                        
+
                         found_ids.add(idx)
                     except Exception as e:
                         self.logger.error("Encount error while parsing aligned relation", exc_info=True)
@@ -1037,6 +1052,11 @@ class KG_Updater:
                 # Process results
                 for result in batch_results:
                     try:
+                        # Ensure result is a dictionary (LLM sometimes returns strings or other types)
+                        if not isinstance(result, dict):
+                            self.logger.warning(f"Skipping non-dict result in merge_relation: {type(result)}")
+                            continue
+
                         relation_id = result["id"]
                         relation_name = relation_names[int(relation_id) - 1]
 
@@ -1101,19 +1121,41 @@ class KG_Updater:
             results.update(maybe_load_json(response))
         ext_entities_set = set()
         for key, result in results.items():
-            if key.startswith("ent"):
-                ext_entities_set.add(normalize_entity(result[1]))
-        
+            if key.startswith("ent") and len(result) > 1:
+                # Ensure entity name is a string (LLM sometimes returns list)
+                entity_name = result[1]
+                if isinstance(entity_name, list):
+                    # If it's a list, join or take first element
+                    entity_name = entity_name[0] if entity_name else ""
+                entity_name = str(entity_name) if entity_name else ""
+                if entity_name:
+                    ext_entities_set.add(normalize_entity(entity_name))
+
         missing_entities = set()
         for key, result in results.items():
-            if key.startswith("rel"):
-                source = normalize_entity(result[0])
-                target = normalize_entity(result[2])
-                if source not in ext_entities_set:
-                    missing_entities.add(source)
-                if target not in ext_entities_set:
-                    missing_entities.add(target)
-        
+            if key.startswith("rel") and len(result) > 2:
+                # Ensure source and target are strings (LLM sometimes returns list)
+                source = result[0]
+                target = result[2]
+
+                # Convert to string if needed
+                if isinstance(source, list):
+                    source = source[0] if source else ""
+                if isinstance(target, list):
+                    target = target[0] if target else ""
+
+                source = str(source) if source else ""
+                target = str(target) if target else ""
+
+                if source:
+                    source_norm = normalize_entity(source)
+                    if source_norm not in ext_entities_set:
+                        missing_entities.add(source_norm)
+                if target:
+                    target_norm = normalize_entity(target)
+                    if target_norm not in ext_entities_set:
+                        missing_entities.add(target_norm)
+
         return list(missing_entities)
 
     def finalize_entities(
@@ -1481,13 +1523,17 @@ class KG_Updater:
 
         for key, result in results.items():
             if key.startswith("ent") and len(result):
+                # Ensure anchors are strings (LLM sometimes returns integers)
+                start_anchor = str(result[3]) if len(result) > 3 and result[3] is not None else ""
+                end_anchor = str(result[4]) if len(result) > 4 and result[4] is not None else ""
+
                 candidate = CandidateEntity(
                     extracted=KGEntity(
                         id="",
                         type=normalize_entity_type(result[0]),
                         name=normalize_entity(result[1]),
                         description=result[2],
-                        paragraph=self.extract_paragraph_by_anchors(context, result[3], result[4]),
+                        paragraph=self.extract_paragraph_by_anchors(context, start_anchor, end_anchor),
                         created_at=created_at,
                         modified_at=modified_at,
                         properties=kg_driver.get_properties(result[5], created_at)  if len(result) > 5 else {},
@@ -1532,6 +1578,11 @@ class KG_Updater:
                 target = ext_entities.get(normalize_entity(result[2]))
                 if source is None or target is None:
                     continue
+
+                # Ensure anchors are strings (LLM sometimes returns integers)
+                start_anchor = str(result[4]) if len(result) > 4 and result[4] is not None else ""
+                end_anchor = str(result[5]) if len(result) > 5 and result[5] is not None else ""
+
                 candidate = CandidateRelation(
                     extracted=KGRelation(
                         id="",
@@ -1539,14 +1590,14 @@ class KG_Updater:
                         source=source.final,
                         target=target.final,
                         description=result[3],
-                        paragraph=self.extract_paragraph_by_anchors(context, result[4], result[5]),
+                        paragraph=self.extract_paragraph_by_anchors(context, start_anchor, end_anchor),
                         properties=kg_driver.get_properties(result[6], created_at) if len(result) > 6 else {},
                         ref=ref
                     )
                 )
-                relation_name = relation_to_text(candidate.extracted, 
+                relation_name = relation_to_text(candidate.extracted,
                                                 include_des=False,
-                                                include_prop=False, 
+                                                include_prop=False,
                                                 include_src_des=False,
                                                 include_src_prop=False,
                                                 include_dst_des=False,

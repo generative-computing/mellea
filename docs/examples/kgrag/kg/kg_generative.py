@@ -2,7 +2,7 @@
 import textwrap
 from typing import List
 from mellea.stdlib.genslot import generative
-from kg_models import (
+from kg.kg_models import (
     QuestionRoutes,
     TopicEntities,
     RelevantEntities,

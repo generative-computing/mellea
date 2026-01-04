@@ -78,7 +78,7 @@ class MovieDatasetLoader(BaseDatasetLoader):
                     docs.append(text)
                 
                 query_id = f"{group_id}"
-                if query_id in self.logger.processed_questions:
+                if query_id in self.logger.processed:
                     continue
 
                 query_time = parse_timestamp(query_time)

@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-Knowledge Graph QA Script (Refactored)
+Knowledge Graph QA Script (Mellea-Native Implementation)
 
-This script runs question answering on a dataset using the knowledge graph,
-evaluates the results, and generates comprehensive statistics.
+This script demonstrates KG-RAG using Mellea's native patterns:
+- @generative decorator for LLM functions
+- Requirements for output validation
+- RejectionSamplingStrategy for robustness
+- Component-based architecture
 
 Usage:
-    python run_qa_refactored.py --dataset data/crag_movie_dev.jsonl
-    python run_qa_refactored.py --num-workers 256 --verbose
-    python run_qa_refactored.py --prefix exp1 --postfix test1
-    python run_qa_refactored.py --config route=5 width=30 depth=3
+    python run_qa_mellea.py --dataset data/crag_movie_dev.jsonl
+    python run_qa_mellea.py --num-workers 256 --verbose
+    python run_qa_mellea.py --prefix exp1 --postfix test1
+    python run_qa_mellea.py --config route=5 width=30 depth=3
 """
 
 import argparse
@@ -31,8 +34,9 @@ import torch
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend, TemplateFormatter
 
-from kg_model import KGModel
-from kg.kg_qa_models import QAConfig, QASessionConfig, QADatasetConfig, KGModelConfig
+# Import Mellea-native KG-RAG component
+from kg.kg_rag import KGRagComponent, Query
+from kg.kg_qa_models import QAConfig, QASessionConfig, QADatasetConfig
 from dataset.movie_dataset import MovieDatasetLoader
 from utils.logger import BaseProgressLogger, DefaultProgressLogger, QAProgressLogger
 from utils.utils import token_counter
@@ -75,13 +79,13 @@ def parse_key_value(arg: str) -> tuple:
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Run QA evaluation on knowledge graph",
+        description="Run QA evaluation using Mellea-native KG-RAG",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   %(prog)s --dataset data/crag_movie_dev.jsonl
   %(prog)s --num-workers 256 --queue-size 256
-  %(prog)s --prefix exp1 --postfix test1
+  %(prog)s --prefix mellea --postfix test1
   %(prog)s --config route=5 width=30 depth=3
   %(prog)s --verbose --keep
         """
@@ -128,8 +132,8 @@ Examples:
     parser.add_argument(
         "--prefix",
         type=str,
-        default=None,
-        help="Prefix for output files"
+        default="mellea",
+        help="Prefix for output files (default: mellea)"
     )
 
     parser.add_argument(
@@ -416,7 +420,7 @@ def compute_token_usage_delta(start_usage: Dict[str, int]) -> Dict[str, int]:
 
 
 async def generate_prediction(
-    participant_model: KGModel,
+    kg_rag: KGRagComponent,
     id: str = "",
     query: str = "",
     query_time: datetime = None,
@@ -424,10 +428,10 @@ async def generate_prediction(
     logger: BaseProgressLogger = DefaultProgressLogger(),
     **kwargs
 ) -> None:
-    """Generate a prediction for a single question.
+    """Generate a prediction for a single question using Mellea-native KG-RAG.
 
     Args:
-        participant_model: KG model to use for generation
+        kg_rag: KGRagComponent instance
         id: Question ID
         query: Question text
         query_time: Query timestamp
@@ -438,11 +442,8 @@ async def generate_prediction(
     start_time = time.perf_counter()
     token_usage_start = snapshot_token_usage()
 
-    prediction = await participant_model.generate_answer(
-        query=query,
-        query_time=query_time,
-        **kwargs
-    )
+    # Generate answer using Mellea-native component
+    prediction = await kg_rag.execute(query=query, query_time=query_time)
 
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time
@@ -478,7 +479,7 @@ async def main() -> int:
         model_config = create_model_config(args)
 
         logger.info("=" * 60)
-        logger.info("KG QA Configuration:")
+        logger.info("Mellea-Native KG QA Configuration:")
         logger.info("=" * 60)
         logger.info(f"Dataset: {dataset_config.dataset_path}")
         logger.info(f"Domain: {dataset_config.domain}")
@@ -489,6 +490,11 @@ async def main() -> int:
         logger.info(f"Progress: {dataset_config.progress_path}")
         if model_config:
             logger.info(f"Model config: {model_config}")
+        logger.info("Using Mellea-native implementation with:")
+        logger.info("  ✓ @generative decorator")
+        logger.info("  ✓ Requirements validation")
+        logger.info("  ✓ RejectionSamplingStrategy")
+        logger.info("  ✓ Component architecture")
         logger.info("=" * 60)
 
         # Verify dataset exists
@@ -508,8 +514,8 @@ async def main() -> int:
         qa_logger = QAProgressLogger(progress_path=dataset_config.progress_path)
         logger.info(f"Processed questions at start: {len(qa_logger.processed_questions)}")
 
-        # Create KG model
-        participant_model = KGModel(
+        # Create Mellea-native KG-RAG component
+        kg_rag = KGRagComponent(
             session=session,
             eval_session=eval_session,
             emb_session=emb_session,
@@ -526,13 +532,13 @@ async def main() -> int:
             qa_logger,
             processor=functools.partial(
                 generate_prediction,
-                participant_model=participant_model,
+                kg_rag=kg_rag,
                 logger=qa_logger
             )
         )
 
         # Run QA generation
-        logger.info("Starting QA generation...")
+        logger.info("Starting QA generation with Mellea-native KG-RAG...")
         await loader.run()
 
         # Get inference token usage
@@ -585,7 +591,8 @@ async def main() -> int:
             "inf_total_tokens": inf_token_usage.get("total_tokens"),
             "eval_prompt_tokens": eval_token_usage.get("prompt_tokens"),
             "eval_completion_tokens": eval_token_usage.get("completion_tokens"),
-            "eval_total_tokens": eval_token_usage.get("total_tokens")
+            "eval_total_tokens": eval_token_usage.get("total_tokens"),
+            "implementation": "mellea_native"
         })
 
         # Add scores to results
@@ -601,7 +608,7 @@ async def main() -> int:
             json.dump(results, f, indent=4, ensure_ascii=False)
 
         logger.info("=" * 60)
-        logger.info("✅ QA evaluation completed successfully!")
+        logger.info("✅ Mellea-native QA evaluation completed successfully!")
         logger.info("=" * 60)
         logger.info(f"Results saved to: {dataset_config.result_path}")
         logger.info(f"Total questions: {len(results) - 1}")  # -1 for stats entry

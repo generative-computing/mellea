@@ -1,11 +1,11 @@
-"""Demo script for refactored KG-RAG using Mellea patterns.
+"""Demo script for KG-RAG using Mellea patterns.
 
-This script demonstrates how to use the refactored KGRagComponent that follows
+This script demonstrates how to use the KGRagComponent that follows
 Mellea's design patterns including @generative functions, Requirements, and
 Component architecture.
 
 Usage:
-    uv run --with mellea python demo_refactored.py
+    uv run --with mellea python demo.py
 """
 import asyncio
 import os
@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
-from kg_rag_refactored import KGRagComponent
+from kg.kg_rag import KGRagComponent
 from utils.logger import DefaultProgressLogger
 
 # Try to import SentenceTransformer for local embeddings
@@ -45,7 +45,7 @@ async def main():
     EVAL_MODEL_NAME = os.getenv("EVAL_MODEL_NAME", MODEL_NAME)
 
     print("=" * 80)
-    print("KG-RAG Refactored Demo - Using Mellea Patterns")
+    print("KG-RAG Demo - Using Mellea Patterns")
     print("=" * 80)
     print(f"\nConfiguration:")
     print(f"  Model: {MODEL_NAME}")

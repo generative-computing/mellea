@@ -77,6 +77,18 @@ This document provides a quick overview of all refactoring work completed for th
     - Modern `asyncio.run()` pattern
     - Configuration factory functions
 
+### QA Refactoring
+
+14. **[kg/kg_qa_models.py](kg/kg_qa_models.py)** - QA Pydantic models
+    - `QAConfig`, `QASessionConfig`, `QADatasetConfig`, `KGModelConfig`
+    - Validated ranges and types
+
+15. **[run/run_qa_refactored.py](run/run_qa_refactored.py)** - Improved QA CLI
+    - Command-line arguments (`--dataset`, `--config`, `--eval-batch-size`, `--verbose`)
+    - Modern `asyncio.run()` pattern
+    - Factory functions for session creation
+    - Better token usage tracking
+
 ### Documentation
 
 9. **[REFACTORING_GUIDE.md](REFACTORING_GUIDE.md)** - Main refactoring guide

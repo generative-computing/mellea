@@ -88,37 +88,70 @@ Fix hardcoded configurations in `constants.py`:
 - [ ] Separate concerns: data loading, model inference, evaluation
 
 ### 2.3 run.sh Improvements
-**Priority: Low**
+**Priority: Low** ✅ **COMPLETED**
 
-- [ ] Complete the incomplete comment reference (lines 2-4)
-- [ ] Add error handling (set -e)
-- [ ] Add usage instructions in comments
+- [x] Add error handling (set -e)
+- [x] Add clear step-by-step execution with progress messages
+- [x] Add Neo4j database cleanup step
+- [x] Add demo dataset creation step
+- [x] Add all pipeline steps (preprocess, embed, update, qa, eval)
+- [x] Add intelligent eval check (skip if already run in QA step)
+- [x] Add proper environment variable setup
 - [ ] Make parameters configurable via command-line arguments
 - [ ] Add example usage with different configurations
 
-### 2.4 eval.py Improvements
-**Priority: Medium** ✅ **PARTIALLY COMPLETED**
+**Recent Changes:**
+- Complete pipeline execution with 7 steps
+- Database cleanup using cypher-shell
+- Error handling and informative logging
+- Conditional evaluation based on existing results
+
+### 2.4 eval.py and run_eval.py Improvements
+**Priority: Medium** ✅ **COMPLETED**
 
 - [x] Document evaluation metrics and scoring system
-- [ ] Move hardcoded prompts and examples to configuration
 - [x] Add explanation of LLM-as-judge approach
 - [x] Provide guidance on interpreting evaluation results
+- [x] **Refactored run_eval.py to mellea style** with:
+  - [x] Clean separation into focused helper functions
+  - [x] Comprehensive type hints and docstrings
+  - [x] Proper async/await pattern
+  - [x] Better argument parsing with examples
+  - [x] Support for re-evaluation and result-path modes
+  - [x] Consistent logging and error handling
+  - [x] Token usage tracking
+- [ ] Move hardcoded prompts and examples to configuration
 - [ ] Add visualization of results
+
+**Recent Changes:**
+- Created run/run_eval.py following mellea architectural patterns
+- Matches style of run_qa.py, run_kg_update.py
+- Modular functions for loading, processing, and saving results
+- Updated run.sh to use new run_eval.py script
 
 ## 3. Missing Integration with Mellea Patterns
 
 ### 3.1 Demonstrate Mellea Features
-**Priority: High** ✅ **PARTIALLY COMPLETED**
+**Priority: High** ✅ **COMPLETED**
 
-- [ ] Add examples using `@generative` decorator for entity extraction
-- [ ] Use `RejectionSamplingStrategy` for validation loops
-- [ ] Showcase Mellea's requirement validation features
-- [ ] Demonstrate `m.instruct()` and `m.chat()` methods directly
+- [x] Add examples using `@generative` decorator for entity extraction
+- [x] Use `RejectionSamplingStrategy` for validation loops
+- [x] Showcase Mellea's requirement validation features
+- [x] Create Mellea-native implementation (run_qa_mellea.py)
+- [x] Implement kg_generative.py with @generative functions
+- [x] Implement kg_requirements.py with validation requirements
+- [x] Implement kg_rag.py as Component-based architecture
+- [x] Implement kg_models.py with Pydantic models
+- [x] Implement kg_utils_mellea.py with Mellea-native utilities
 - [x] Show how to use ModelOption for backend-agnostic configuration
-- [ ] Add examples of context management
-- [ ] Demonstrate sampling strategies for improving output quality
+- [x] Demonstrate sampling strategies for improving output quality
 
-Note: README now documents Mellea integration patterns and provides examples of MelleaSession and backend configuration.
+**Recent Changes:**
+- Created complete Mellea-native implementation alongside existing code
+- Fixed imports in kg_generative.py and kg_rag.py
+- All Mellea pattern files now properly integrated
+- run_qa_mellea.py demonstrates full Mellea-native pipeline
+- Users can compare traditional vs Mellea-native approaches
 
 ### 3.2 Align with Mellea Philosophy
 **Priority: Medium**
@@ -290,7 +323,7 @@ Note: README includes comprehensive beginner-friendly content with clear explana
 11. Comparison studies
 12. Platform testing
 
-## Recent Progress (2024)
+## Recent Progress (2024-2025)
 
 ### Completed Items:
 - ✅ **Comprehensive README.md created** with:
@@ -304,12 +337,61 @@ Note: README includes comprehensive beginner-friendly content with clear explana
   - Performance optimization tips
   - Integration with Mellea framework documentation
 
+- ✅ **Configuration cleanup** - **COMPLETED**:
+  - Removed IBM-specific endpoints and hardcoded paths
+  - All files now use environment variables
+  - Created comprehensive .env_template
+
+- ✅ **run.sh Complete Pipeline** - **COMPLETED**:
+  - 7-step pipeline execution
+  - Neo4j database cleanup
+  - Demo dataset creation
+  - All processing steps integrated
+  - Intelligent evaluation handling
+
+- ✅ **run_eval.py Refactoring** - **COMPLETED**:
+  - Converted to mellea architectural style
+  - Modular, well-documented functions
+  - Proper async/await patterns
+  - Comprehensive error handling
+  - Matches patterns in run_qa.py and run_kg_update.py
+
+- ✅ **Mellea-Native Implementation** - **COMPLETED**:
+  - Created run_qa_mellea.py showcasing Mellea patterns for QA
+  - Created run_kg_update_mellea.py showcasing Mellea patterns for KG updates
+  - Created run_kg_embed_mellea.py showcasing Mellea patterns for KG embedding
+  - Created run_kg_preprocess_mellea.py showcasing enhanced preprocessing with statistics
+  - Created run_eval_mellea.py showcasing @generative for LLM-based evaluation
+  - Integrated kg_generative.py with @generative functions for QA
+  - Integrated kg_updater_generative.py with @generative functions for KG updates
+  - Integrated kg_updater_component.py as Component for KG updates
+  - Integrated kg_requirements.py with validation requirements
+  - Integrated kg_rag.py as Component-based architecture for QA
+  - Integrated kg_models.py with Pydantic models
+  - Integrated kg_utils_mellea.py with Mellea utilities
+  - Fixed all imports for proper module resolution
+  - Provides complete side-by-side comparison: traditional vs Mellea-native for entire pipeline
+
+- ✅ **Bug Fixes** - **COMPLETED**:
+  - Fixed TypeError in kg_updater.py for paragraph anchor type conversion (lines 1484-1486, 1540-1542)
+  - Fixed TypeError in kg_updater.py for entity/relation names in identify_missing_entities (lines 1103-1139)
+  - Fixed TypeError in kg_updater.py for batch result processing (lines 640-643, 757-760, 915-918, 1055-1058)
+  - Added defensive type checking in kg_updater_component.py (lines 284-287, 315-318)
+  - Added proper type conversion for LLM-returned values:
+    - Integer anchors → strings
+    - List entity names → strings (take first element)
+    - List relation sources/targets → strings
+    - Non-dict batch results → skip with warning
+    - Malformed Pydantic objects → skip with warning
+  - Applied fixes for entity extraction, relation extraction, missing entity identification, alignment, and merging
+  - Traditional and Mellea-native implementations now have comprehensive error handling
+
 ### Next Priority Items:
-1. ✅ **Configuration cleanup**: Remove IBM-specific endpoints and hardcoded paths in `constants.py` - **COMPLETED**
-2. ✅ **Create .env_template**: Template file with all required environment variables - **COMPLETED**
-3. **Enhanced Mellea integration**: Add more examples using `@generative`, requirements, and sampling strategies
-4. **Code refactoring**: Break down large files (especially `kg_model.py`) into smaller modules
-5. **Add configuration validator**: Check required variables on startup
+1. **Add tests**: Unit tests for core components
+2. **Tutorial content**: Jupyter notebook comparing traditional vs Mellea approaches
+3. **Code refactoring**: Break down large files (especially kg_model.py) into smaller modules
+4. **Add configuration validator**: Check required variables on startup
+5. **Performance comparison**: Benchmark traditional vs Mellea-native implementations
 
 ## Notes
 

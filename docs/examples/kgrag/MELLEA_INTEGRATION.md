@@ -1,397 +1,284 @@
-# How KG-RAG Fits the Theme of Mellea
+# Mellea-Native KG-RAG Implementation
 
-This document explains how the refactored KG-RAG implementation embodies Mellea's core philosophy and design patterns.
+This document explains the Mellea-native implementation of KG-RAG and how it showcases Mellea's core patterns.
 
-## Mellea's Core Philosophy
+## Overview
 
-Mellea is designed around these principles:
+The KG-RAG example now includes **parallel implementations** for all major pipeline components:
 
-1. **Composability** - Build complex systems from simple, composable parts
-2. **Type Safety** - Use Pydantic models for structured, validated outputs
-3. **Declarative Programming** - Declare what you want, not how to get it
-4. **Context Management** - Efficient memory and KV-cache reuse
-5. **Robustness** - Requirements and sampling strategies for reliable outputs
-6. **Functional Patterns** - Pure functions, immutable data, clear data flow
+1. **KG Preprocessing Pipeline**:
+   - Traditional: `run/run_kg_preprocess.py` - Basic preprocessing with Neo4j
+   - Mellea-Native: `run/run_kg_preprocess_mellea.py` - Enhanced with statistics tracking, concurrent processing, and detailed reporting
 
-## How KG-RAG Aligns with Each Principle
+2. **KG Embedding Pipeline**:
+   - Traditional: `run/run_kg_embed.py` - Direct embedding API calls
+   - Mellea-Native: `run/run_kg_embed_mellea.py` - Uses kg_utils_mellea with enhanced error handling
 
-### 1. Composability ✅
+3. **KG Update Pipeline**:
+   - Traditional: `run/run_kg_update.py` - Manual extraction and validation
+   - Mellea-Native: `run/run_kg_update_mellea.py` - Uses @generative for extraction, alignment, and merging
 
-**Mellea Pattern**: Components that can be composed into larger pipelines
+4. **QA Pipeline**:
+   - Traditional: `run/run_qa.py` - Direct LLM API calls with manual validation
+   - Mellea-Native: `run/run_qa_mellea.py` - Uses Mellea's @generative, Requirements, and Components
 
-**KG-RAG Implementation**:
+5. **Evaluation Pipeline**:
+   - Traditional: `run/run_eval.py` - Manual evaluation with direct LLM calls
+   - Mellea-Native: `run/run_eval_mellea.py` - Uses @generative for LLM-as-judge evaluation
+
+Both implementations produce the same results, but the Mellea-native versions demonstrate best practices for building robust, composable LLM applications.
+
+## Key Benefits
+
+✅ **Type Safety** - Pydantic models ensure valid outputs  
+✅ **Robustness** - Automatic validation and retry logic  
+✅ **Composability** - Reusable functions and components  
+✅ **Maintainability** - Self-documenting code  
+✅ **Testability** - Easy to test individual pieces  
+
+## Quick Start
+
+```bash
+cd docs/examples/kgrag
+
+# Run Mellea-native preprocessing
+uv run --with mellea run/run_kg_preprocess_mellea.py --domain movie --verbose
+
+# Run Mellea-native KG embedding
+uv run --with mellea run/run_kg_embed_mellea.py --batch-size 8192 --verbose
+
+# Run Mellea-native KG update
+uv run --with mellea run/run_kg_update_mellea.py --num-workers 64
+
+# Run Mellea-native QA
+uv run --with mellea run/run_qa_mellea.py --num-workers 1 --prefix mellea
+
+# Run Mellea-native evaluation
+uv run --with mellea run/run_eval_mellea.py --prefix mellea --verbose
+
+# Compare with traditional versions
+uv run --with mellea run/run_kg_preprocess.py --domain movie
+uv run --with mellea run/run_kg_embed.py
+uv run --with mellea run/run_kg_update.py --num-workers 64
+uv run --with mellea run/run_qa.py --num-workers 1 --prefix traditional
+uv run --with mellea run/run_eval.py --prefix traditional
+```
+
+## Architecture
+
+### 1. KG Preprocessing (run_kg_preprocess_mellea.py)
+
+The Mellea-native preprocessing implementation showcases:
+
+**Key Features:**
+- Statistics tracking with `PreprocessingStats` dataclass
+- Sequential and concurrent preprocessing modes
+- Detailed summary reporting with per-domain statistics
+- Enhanced error handling with graceful failure recovery
+- Progress tracking with timestamps and durations
+- Dry-run mode for validation before execution
+
+**Example Usage:**
 ```python
-# KGRagComponent is a proper Mellea Component
-class KGRagComponent(Component):
-    async def execute(self, query: str, ...) -> str:
-        # Can be composed with other components
-        pass
+# Create preprocessor
+preprocessor = MovieKG_Preprocessor()
 
-# Use standalone
-answer = await kg_rag.execute(query="...")
+# Process with statistics tracking
+stats = await preprocess_single_domain(preprocessor, idx=1, total=1)
 
-# Or compose in a pipeline
-result = await session.instruct(
-    instruction="Answer comprehensively",
-    components=[kg_rag, summarizer, validator],
-    user_variables={"query": "..."}
+# Print summary
+print_summary([stats])
+```
+
+**Benefits:**
+- ✅ Detailed statistics for monitoring and debugging
+- ✅ Concurrent processing support for multiple domains
+- ✅ Comprehensive error reporting per domain
+- ✅ Type-safe stats with dataclasses
+- ✅ Better observability into preprocessing operations
+
+### 2. KG Embedding (run_kg_embed_mellea.py)
+
+The Mellea-native embedding implementation showcases:
+
+**Key Features:**
+- Uses `kg_utils_mellea.generate_embedding_mellea()` for consistent embedding generation
+- Extends `KGEmbedder` with `MelleaKGEmbedder` class for enhanced functionality
+- Adds embedding session testing with `test_embedding_session()`
+- Type-safe configuration using Pydantic `EmbeddingConfig`
+- Enhanced error handling and retry logic
+- Supports both OpenAI-compatible APIs and local SentenceTransformer models
+
+**Example Usage:**
+```python
+# Create embedding session
+emb_session = create_embedding_session(config)
+
+# Test the session
+await test_embedding_session(emb_session, config)
+
+# Create Mellea-native embedder
+embedder = MelleaKGEmbedder(emb_session, config)
+
+# Generate embeddings
+embeddings = await embedder.generate_embeddings_mellea(
+    texts=entity_descriptions,
+    desc="Entity embeddings"
 )
 ```
 
-**What This Achieves**:
-- KG-RAG is no longer a standalone system
-- It's a reusable component in larger Mellea applications
-- Can be mixed with other RAG methods, reasoning components, etc.
+**Benefits:**
+- ✅ Consistent error handling across embedding calls
+- ✅ Session validation before processing
+- ✅ Better logging and progress tracking
+- ✅ Type-safe configuration prevents errors
 
-### 2. Type Safety ✅
+### 3. KG Update (run_kg_update_mellea.py)
 
-**Mellea Pattern**: Pydantic models for all structured data
+The Mellea-native KG update implementation demonstrates:
 
-**KG-RAG Implementation**:
+**Key Components:**
+- `kg_updater_generative.py` - @generative functions for:
+  - `extract_entities_and_relations()` - Entity/relation extraction
+  - `align_entity_with_kg()` - Entity alignment
+  - `decide_entity_merge()` - Merge decisions
+  - `align_relation_with_kg()` - Relation alignment
+  - `decide_relation_merge()` - Relation merge decisions
+
+- `kg_updater_component.py` - Component-based architecture:
+  - Extends Mellea's `Component` base class
+  - Uses `RejectionSamplingStrategy` for robustness
+  - Integrates Requirements validation
+  - Modular methods for extraction, alignment, and merging
+
+**Example Usage:**
 ```python
-# Every LLM output is a typed Pydantic model
-class QuestionRoutes(BaseModel):
-    reason: str
-    routes: List[List[str]]
+# Create KG updater component
+kg_updater = KGUpdaterComponent(
+    session=session,
+    emb_session=emb_session,
+    kg_driver=kg_driver,
+    domain="movie",
+    config={
+        "align_entity": True,
+        "merge_entity": True,
+        "extraction_loop_budget": 3,
+    }
+)
 
-class RelevantEntities(BaseModel):
-    reason: str
-    relevant_entities: Dict[str, float]
-
-# Type-safe function signatures
-@generative
-async def break_down_question(...) -> QuestionRoutes:
-    pass
-
-# IDE knows the return type
-result: QuestionRoutes = await break_down_question(...)
-result.routes  # Type-safe access with autocomplete
+# Process document
+stats = await kg_updater.update_kg_from_document(
+    doc_id=doc_id,
+    context=context,
+    reference=reference,
+    created_at=datetime.now()
+)
 ```
 
-**What This Achieves**:
-- Catch errors at development time, not runtime
-- Self-documenting code with clear contracts
-- Better IDE support (autocomplete, refactoring)
-- Automatic validation of LLM outputs
+**Benefits:**
+- ✅ Automatic validation and retry with RejectionSamplingStrategy
+- ✅ Type-safe Pydantic models for all outputs
+- ✅ Composable architecture with Component pattern
+- ✅ Clear separation of concerns
 
-### 3. Declarative Programming ✅
+### 4. QA Pipeline (run_qa_mellea.py)
 
-**Mellea Pattern**: `@generative` decorator for LLM-powered functions
+The Mellea-native QA implementation showcases:
 
-**KG-RAG Implementation**:
+**Key Components:**
+- `kg_generative.py` - @generative functions for:
+  - `break_down_question()` - Question decomposition
+  - `extract_topic_entities()` - Topic entity extraction
+  - `find_relevant_entities()` - Entity relevance scoring
+  - `generate_answer()` - Final answer generation
+
+- `kg_rag.py` - Component-based RAG:
+  - Extends Mellea's `Component` base class
+  - Uses Requirements for output validation
+  - Integrates with KG_Driver for graph operations
+
+**Example Usage:**
 ```python
-# Before: Imperative - manually construct messages, call API, parse JSON
-response = await generate_response(
-    self.session,
-    [{"role": "system", "content": system_prompt},
-     {"role": "user", "content": user_message}],
-    max_tokens=2048
+# Create KG-RAG component
+kg_rag = KGRagComponent(
+    session=session,
+    eval_session=eval_session,
+    emb_session=emb_session,
+    domain="movie",
+    config=model_config,
+    logger=qa_logger
 )
-routes = maybe_load_json(response)["routes"]
 
-# After: Declarative - describe what you want
+# Generate answer
+q = Query(query=query, query_time=query_time)
+prediction = await kg_rag.generate_answer(q)
+```
+
+**Benefits:**
+- ✅ Self-documenting @generative functions with prompts as docstrings
+- ✅ Automatic validation with Requirements
+- ✅ Easy to test individual components
+- ✅ Composable and reusable
+
+### 5. Evaluation Pipeline (run_eval_mellea.py)
+
+The Mellea-native evaluation implementation showcases:
+
+**Key Features:**
+- Uses `@generative` decorator for LLM-as-judge evaluation
+- Type-safe `EvaluationResult` Pydantic model for structured outputs
+- `EvaluationStats` dataclass for comprehensive metrics tracking
+- `MelleaEvaluator` class for batch evaluation with progress bars
+- Requirements validation with `VALID_EVAL_SCORE` requirement
+- Async batch processing with error recovery
+
+**Example Usage:**
+```python
+# Define evaluation function
 @generative
-async def break_down_question(query: str, ...) -> QuestionRoutes:
-    """Break down the question into solving routes.
+async def evaluate_single_prediction(
+    query: str,
+    ground_truth: str,
+    prediction: str
+) -> EvaluationResult:
+    """Evaluate a single prediction against ground truth.
 
-    Question: {query}
+    You are an expert human evaluator. Judge if the prediction matches
+    the ground truth answer following these instructions:
+    [Detailed evaluation rubric in docstring...]
+
+    Return: {"score": 0 or 1, "explanation": "..."}
     """
     pass
 
-result = await break_down_question(query="...")
-```
+# Create evaluator
+evaluator = MelleaEvaluator(session, batch_size=64)
 
-**What This Achieves**:
-- Focus on what to generate, not how
-- Prompts live with the function (locality)
-- Automatic JSON parsing via return type
-- Less boilerplate, more signal
-
-### 4. Context Management ✅
-
-**Mellea Pattern**: Efficient context and KV-cache reuse
-
-**KG-RAG Implementation**:
-```python
-from mellea.stdlib.base import Context
-
-# Reuse context across related calls
-ctx = Context()
-ctx.add_system_message(f"You are an expert in {domain}.")
-
-# Multiple calls reuse the same context
-for entity in entities:
-    result = await prune_relations(
-        context=ctx,  # Reuses cached context
-        entity=entity,
-        ...
-    )
-```
-
-**What This Achieves**:
-- Reduces redundant token usage
-- Faster inference with KV-cache reuse
-- Lower API costs
-- Better memory efficiency
-
-### 5. Robustness ✅
-
-**Mellea Pattern**: Requirements + Sampling Strategies
-
-**KG-RAG Implementation**:
-```python
-from mellea.stdlib.requirement import Requirement
-from mellea.stdlib.sampling.rejection_sampling import RejectionSamplingStrategy
-
-# Define what makes a valid output
-requirements = [
-    Requirement(
-        name="valid_json",
-        requirement="Output must be valid JSON",
-        validator=is_valid_json
-    ),
-    Requirement(
-        name="routes_present",
-        requirement="Must contain at least one route",
-        validator=has_nonempty_list("routes")
-    ),
-]
-
-# Automatic retry until requirements are met
-result = await session.instruct(
-    instruction=prompt,
-    requirements=requirements,
-    strategy=RejectionSamplingStrategy(loop_budget=3)
+# Evaluate all predictions
+stats, history = await evaluator.evaluate_all(
+    queries,
+    ground_truths_list,
+    predictions
 )
 ```
 
-**What This Achieves**:
-- Replaces custom `@llm_retry` decorator
-- Declarative validation constraints
-- Built-in retry logic
-- Composable validators
-- Integrates with Mellea's inference-time scaling
+**Benefits:**
+- ✅ Self-documenting evaluation rubric in @generative docstring
+- ✅ Type-safe evaluation results with Pydantic
+- ✅ Detailed statistics tracking (accuracy, token usage, timing)
+- ✅ Async batch processing with progress bars
+- ✅ Graceful error handling for failed evaluations
+- ✅ Requirements validation ensures valid scores
 
-### 6. Functional Patterns ✅
+## Migration Guide
 
-**Mellea Pattern**: Pure functions, immutable data, clear data flow
+To migrate from traditional to Mellea-native:
 
-**KG-RAG Implementation**:
-```python
-# Each generative function is pure
-@generative
-async def extract_topic_entities(
-    query: str,
-    query_time: str,
-    route: List[str],
-    domain: str
-) -> TopicEntities:
-    """Extract entities from query."""
-    pass
+1. **Identify LLM calls** - Find direct API calls in your code
+2. **Create @generative functions** - Convert prompts to @generative docstrings
+3. **Add Pydantic models** - Define structured outputs
+4. **Add Requirements** - Specify validation rules
+5. **Use Components** - Organize related functionality
+6. **Apply sampling strategies** - Add RejectionSamplingStrategy for robustness
 
-# Clear data flow through the pipeline
-query_obj = Query(query="...", query_time=...)
-routes = await break_down_question(query_obj)
-entities = await extract_topic_entities(routes[0])
-aligned = await align_topic(query_obj, entities)
-answer = await reasoning(query_obj, aligned)
-```
-
-**What This Achieves**:
-- Easy to test individual functions
-- Clear input/output contracts
-- No hidden state or side effects
-- Easier to reason about and debug
-
-## Concrete Examples of Integration
-
-### Example 1: Multi-Route Validation with Majority Voting
-
-**Before**: Custom validation logic
-```python
-# Manual consensus checking in kg_model.py:892-935
-stop = False
-for route in queries[2:]:
-    route_results.append(await explore_one_route(route))
-    if len(route_results) >= 2:
-        stop, final = await self.validation(queries, attempt, route_results)
-        if stop:
-            break
-```
-
-**After**: Use Mellea's MajorityVotingStrategy
-```python
-from mellea.stdlib.sampling.majority_voting import MajorityVotingStrategy
-
-# Explore routes in parallel and vote
-strategy = MajorityVotingStrategy(
-    num_samples=len(routes),
-    vote_method="consensus"
-)
-
-final_answer = await session.instruct(
-    instruction=f"Answer: {query}",
-    strategy=strategy,
-    user_variables={"entities": entities_str, "triplets": triplets_str}
-)
-```
-
-### Example 2: LLM-as-Judge Evaluation
-
-**Before**: Custom evaluation logic in `eval.py`
-
-**After**: Use Mellea's test-based evaluation
-```python
-from mellea.stdlib.test_based_eval import LLMAsAJudge
-
-judge = LLMAsAJudge(
-    session=eval_session,
-    rubric="""
-    Evaluate if the prediction correctly answers the question.
-    Score 1.0 for correct, 0.5 for partial, 0.0 for incorrect.
-    """,
-)
-
-score = await judge.evaluate(
-    input=query,
-    output=prediction,
-    reference=ground_truth,
-)
-```
-
-### Example 3: Composing with Other Components
-
-**New Capability**: KG-RAG as part of a larger system
-
-```python
-from mellea.stdlib.instruction import Instruction
-from mellea.stdlib.intrinsics.structured_output import StructuredOutput
-
-# Build a multi-stage pipeline
-kg_retrieval = KGRagComponent(...)
-answer_formatter = StructuredOutput(schema=AnswerSchema)
-quality_checker = RequirementChecker(requirements=[...])
-
-# Compose them
-pipeline = session.create_pipeline([
-    kg_retrieval,      # Retrieve from KG
-    answer_formatter,  # Format the answer
-    quality_checker,   # Validate quality
-])
-
-result = await pipeline.execute(query="...")
-```
-
-## What Makes This "Mellea-Style"?
-
-### Before (External Library Approach)
-- KG-RAG feels like an external system that happens to use Mellea for API calls
-- Custom infrastructure (retry logic, token counting, JSON parsing)
-- Monolithic architecture
-- Hard to extend or compose
-
-### After (Integrated Mellea Approach)
-- KG-RAG is a **native Mellea component**
-- Uses Mellea's patterns throughout (Requirements, @generative, Components)
-- Composable with other Mellea components
-- Easy to extend and adapt
-
-### The Key Difference
-
-**External Library**:
-```python
-# Uses Mellea as a backend
-kg_model = KGModel(session=mellea_session)
-answer = await kg_model.generate_answer(query)
-```
-
-**Integrated Component**:
-```python
-# IS a Mellea component
-kg_rag = KGRagComponent(session, domain="movie")
-
-# Can use standalone
-answer = await kg_rag.execute(query)
-
-# Or compose with other Mellea patterns
-result = await session.instruct(
-    "Answer using knowledge graph and verify",
-    components=[kg_rag, verifier],
-    requirements=[accuracy_req],
-    strategy=MajorityVotingStrategy(num_samples=3)
-)
-```
-
-## Benefits of This Integration
-
-### 1. Unified Mental Model
-- Everything follows Mellea patterns
-- No context switching between "Mellea code" and "KG-RAG code"
-- Consistent APIs across the codebase
-
-### 2. Better Composability
-- Mix KG-RAG with vector RAG, web search, tool calling
-- Build sophisticated multi-stage pipelines
-- Reuse components across different applications
-
-### 3. Reduced Code Duplication
-- Don't reinvent retry logic, validation, token tracking
-- Leverage Mellea's battle-tested infrastructure
-- Focus on domain logic, not plumbing
-
-### 4. Easier Onboarding
-- New developers already know Mellea patterns
-- Less custom infrastructure to learn
-- Better documentation via types and docstrings
-
-### 5. Future-Proof
-- As Mellea evolves, KG-RAG benefits automatically
-- New sampling strategies, requirements, components just work
-- Easier to maintain and extend
-
-## Comparison Table
-
-| Aspect | Before | After |
-|--------|--------|-------|
-| **Architecture** | Monolithic KGModel class | Composable KGRagComponent |
-| **LLM Calls** | Manual `generate_response()` | `@generative` functions |
-| **Validation** | Custom `@llm_retry` | Mellea Requirements |
-| **Prompts** | Python strings in code | Jinja2 templates |
-| **Types** | Loose (dicts, strings) | Strong (Pydantic models) |
-| **Sampling** | Manual route validation | SamplingStrategies |
-| **Composition** | Standalone system | Mellea Component |
-| **Testing** | Hard to test | Easy to test pure functions |
-| **Extensibility** | Requires forking | Just add components |
-
-## Conclusion
-
-The refactored KG-RAG doesn't just **use** Mellea—it **embodies** Mellea's philosophy:
-
-- ✅ **Composable** - Proper Component architecture
-- ✅ **Type-safe** - Pydantic models throughout
-- ✅ **Declarative** - @generative functions
-- ✅ **Robust** - Requirements and sampling strategies
-- ✅ **Functional** - Pure functions, clear data flow
-- ✅ **Efficient** - Context management and caching
-
-This transformation makes KG-RAG:
-- A **showcase** of Mellea patterns
-- A **template** for building similar systems
-- A **component** in the Mellea ecosystem
-
-Instead of being a separate project that happens to use Mellea, it's now a **native Mellea application** that demonstrates the framework's power and flexibility.
-
-## Try It Yourself
-
-```bash
-# Original version
-uv run --with mellea run/run_qa.py
-
-# Refactored version
-uv run --with mellea python demo_refactored.py
-
-# Compare the code
-diff kg_model.py kg_rag_refactored.py
-```
-
-See [REFACTORING_GUIDE.md](REFACTORING_GUIDE.md) for detailed migration instructions.
+See individual Mellea-native files for complete examples.

@@ -85,3 +85,8 @@ class EmbeddingStats(BaseModel):
     schemas_embedded: int = 0
     total_batches: int = 0
     failed_batches: int = 0
+
+    @property
+    def total_embeddings(self) -> int:
+        """Calculate total embeddings across all types."""
+        return self.entities_embedded + self.relations_embedded + self.schemas_embedded

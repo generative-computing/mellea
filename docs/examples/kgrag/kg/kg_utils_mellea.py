@@ -2,7 +2,7 @@
 import asyncio
 from typing import Any, List
 from mellea import MelleaSession
-from mellea.helpers.logging import logger
+from utils.logger import logger
 
 
 async def generate_embedding_mellea(
