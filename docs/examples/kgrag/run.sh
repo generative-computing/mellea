@@ -41,25 +41,25 @@ fi
 echo ""
 echo "Step 2: Creating demo datasets..."
 # Create a smaller KG database (20 movies instead of 100)
-if [ -f "create_demo_dataset.py" ]; then
+if [ -f "run/create_demo_dataset.py" ]; then
     echo "Creating small movie database (20 movies)..."
-    uv run --with mellea create_demo_dataset.py --year-start 2022 --year-end 2024 --max-movies 20
+    uv run --with mellea run/create_demo_dataset.py --year-start 2022 --year-end 2024 --max-movies 20
 else
-    echo "Warning: create_demo_dataset.py not found, skipping demo dataset creation"
+    echo "Warning: run/create_demo_dataset.py not found, skipping demo dataset creation"
 fi
 
 # Create a tiny document dataset (10 documents instead of 565)
-if [ -f "create_tiny_dataset.py" ]; then
+if [ -f "run/create_tiny_dataset.py" ]; then
     echo "Creating tiny document dataset (10 documents)..."
-    uv run --with mellea create_tiny_dataset.py --num-docs 10
+    uv run --with mellea run/create_tiny_dataset.py --num-docs 10
 
     # Optionally truncate documents to 50k chars for faster processing
     if [ -f "dataset/crag_movie_tiny.jsonl.bz2" ]; then
         echo "Truncating documents to 50k chars for faster processing..."
-        python3 create_truncated_dataset.py --input dataset/crag_movie_tiny.jsonl.bz2 --output dataset/crag_movie_tiny_truncated.jsonl.bz2 --max-chars 50000
+        python3 run/create_truncated_dataset.py --input dataset/crag_movie_tiny.jsonl.bz2 --output dataset/crag_movie_tiny_truncated.jsonl.bz2 --max-chars 50000
     fi
 else
-    echo "Warning: create_tiny_dataset.py not found, will use full dataset"
+    echo "Warning: run/create_tiny_dataset.py not found, will use full dataset"
 fi
 
 # Step 3: Run preprocessing

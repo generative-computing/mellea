@@ -35,7 +35,7 @@ from kg.kg_qa_models import QAConfig, QASessionConfig, QADatasetConfig
 from dataset.movie_dataset import MovieDatasetLoader
 from utils.logger import BaseProgressLogger, DefaultProgressLogger, QAProgressLogger
 from utils.utils import token_counter
-from eval import evaluate_predictions
+from run.run_eval import evaluate_predictions
 from utils.logger import logger
 from utils.utils_mellea import create_embedding_session
 

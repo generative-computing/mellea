@@ -42,19 +42,19 @@ Both implementations produce the same results, but the Mellea-native versions de
 cd docs/examples/kgrag
 
 # Run Mellea-native preprocessing
-uv run --with mellea run/run_kg_preprocess_mellea.py --domain movie --verbose
+uv run --with mellea run/run_kg_preprocess.py --domain movie --verbose
 
 # Run Mellea-native KG embedding
-uv run --with mellea run/run_kg_embed_mellea.py --batch-size 8192 --verbose
+uv run --with mellea run/run_kg_embed.py --batch-size 8192 --verbose
 
 # Run Mellea-native KG update
-uv run --with mellea run/run_kg_update_mellea.py --num-workers 64
+uv run --with mellea run/run_kg_update.py --num-workers 64
 
 # Run Mellea-native QA
-uv run --with mellea run/run_qa_mellea.py --num-workers 1 --prefix mellea
+uv run --with mellea run/run_qa.py --num-workers 1 --prefix mellea
 
 # Run Mellea-native evaluation
-uv run --with mellea run/run_eval_mellea.py --prefix mellea --verbose
+uv run --with mellea run/run_eval.py --prefix mellea --verbose
 
 # Compare with traditional versions
 uv run --with mellea run/run_kg_preprocess.py --domain movie

@@ -256,6 +256,90 @@ class MelleaEvaluator:
         return stats, history
 
 
+def evaluate_predictions(
+    queries: List[str],
+    ground_truths_list: List[List[str]],
+    predictions: List[str],
+    evaluation_model_name: str,
+    batch_size: int = 64
+) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """Backward-compatible wrapper for evaluate_predictions.
+
+    This function provides the same interface as the old eval.py for compatibility
+    with run_qa.py, but uses the Mellea-based evaluator internally.
+
+    Args:
+        queries: List of queries
+        ground_truths_list: List of lists of ground truth answers
+        predictions: List of predictions
+        evaluation_model_name: Name of evaluation model (for logging)
+        batch_size: Batch size for evaluation
+
+    Returns:
+        Tuple of (results dict, history list)
+    """
+    import os
+
+    # Get environment variables
+    EVAL_API_KEY = os.getenv("EVAL_API_KEY", os.getenv("API_KEY", "dummy"))
+    EVAL_API_BASE = os.getenv("EVAL_API_BASE", os.getenv("API_BASE", "http://localhost:8000/v1"))
+    EVAL_MODEL_NAME = os.getenv("EVAL_MODEL_NAME", os.getenv("MODEL_NAME", "gpt-4"))
+    EVAL_TIME_OUT = int(os.getenv("EVAL_TIME_OUT", os.getenv("TIME_OUT", "1800")))
+
+    MODEL_NAME = os.getenv("MODEL_NAME", "")
+    EMB_MODEL_NAME = os.getenv("EMB_MODEL_NAME", "")
+
+    # Create evaluation session
+    eval_session = MelleaSession(
+        backend=OpenAIBackend(
+            model_id=EVAL_MODEL_NAME,
+            base_url=EVAL_API_BASE,
+            api_key=EVAL_API_KEY,
+            timeout=EVAL_TIME_OUT,
+        )
+    )
+
+    # Create evaluator
+    evaluator = MelleaEvaluator(session=eval_session, batch_size=batch_size)
+
+    # Run evaluation
+    stats, history = asyncio.run(
+        evaluator.evaluate_all(queries, ground_truths_list, predictions)
+    )
+
+    # Convert stats to dict format compatible with old eval.py
+    n_correct = stats.correct_answers
+    n_miss = 0  # Mellea evaluator doesn't track "I don't know" separately
+    n = stats.total_questions
+
+    # Handle "I don't know" cases
+    for i, pred in enumerate(predictions):
+        if "i don't know" in pred.lower():
+            n_miss += 1
+            if history[i]["score"] == 0:
+                history[i]["explanation"] = "I don't know."
+
+    # Adjust counts
+    n_hallucination = n - n_correct - n_miss
+
+    results = {
+        "score": ((2 * n_correct + n_miss) / n - 1) * 100.0 if n > 0 else 0.0,
+        "accuracy": stats.accuracy,
+        "hallucination": (n_hallucination / n) * 100.0 if n > 0 else 0.0,
+        "missing": (n_miss / n) * 100.0 if n > 0 else 0.0,
+        "n_miss": n_miss,
+        "n_correct": n_correct,
+        "n_hallucination": n_hallucination,
+        "total": n,
+        "llm": MODEL_NAME,
+        "emb_llm": EMB_MODEL_NAME,
+        "eval_llm": EVAL_MODEL_NAME
+    }
+
+    logger.info(results)
+    return results, history
+
+
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
