@@ -376,9 +376,21 @@ class KG_Driver:
         
         limit_clause = f"LIMIT $top_k" if top_k else ""
 
+        # Build WITH clause:
+        # - embedding: score comes from YIELD, include as "WITH n, score"
+        # - fuzzy: score_clause defines score with "AS score", include as "WITH n{score_clause}"
+        # - constraint (no embedding/fuzzy): just need "WITH n{score_clause}" for time_diff
+        with_clause = ""
+        if embedding:
+            # score comes from YIELD in the CALL statement
+            with_clause = f"WITH n, score{score_clause}"
+        elif fuzzy or constraint:
+            # score_clause defines score (fuzzy) or adds time_diff (constraint)
+            with_clause = f"WITH n{score_clause}"
+
         query = textwrap.dedent(f"""\
             {match_clause}
-            {f"WITH n{score_clause}" if fuzzy or constraint else ''}
+            {with_clause}
             {f"WHERE {where_clause}" if where_clause else ''}
             RETURN elementId(n) AS id, labels(n) AS labels, n.name AS name,
                 apoc.map.removeKey(properties(n), '{PROP_EMBEDDING}') AS properties

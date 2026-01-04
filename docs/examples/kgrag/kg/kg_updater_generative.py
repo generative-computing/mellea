@@ -160,7 +160,7 @@ async def align_entity_with_kg(
     extracted_entity_desc: str,
     candidate_entities: str,
     domain: str,
-    context: str = ""
+    doc_text: str = ""
 ) -> AlignmentResult:
     """
     -Goal-
@@ -259,7 +259,7 @@ async def align_entity_with_kg(
 
     *NEVER include ANY EXPLANATION or NOTE in the output, ONLY OUTPUT FLAT JSON*
 
-    Text: {context}
+    Text: {doc_text}
     Extracted Entity:
     - Name: {extracted_entity_name}
     - Type: {extracted_entity_type}
@@ -274,7 +274,7 @@ async def align_entity_with_kg(
 @generative
 async def decide_entity_merge(
     entity_pair: str,
-    context: str,
+    doc_text: str,
     domain: str
 ) -> MergeDecision:
     """
@@ -305,7 +305,7 @@ async def decide_entity_merge(
 
     *NEVER include ANY EXPLANATION or NOTE in the output, ONLY OUTPUT FLAT JSON*
 
-    Text: {context}
+    Text: {doc_text}
     Entity Pairs to Merge:
     {entity_pair}
 
@@ -323,7 +323,7 @@ async def align_relation_with_kg(
     candidate_relations: str,
     synonym_relations: str,
     domain: str,
-    context: str = ""
+    doc_text: str = ""
 ) -> AlignmentResult:
     """
     -Goal-
@@ -388,7 +388,7 @@ async def align_relation_with_kg(
 
     *NEVER include ANY EXPLANATION or NOTE in the output, ONLY OUTPUT FLAT JSON*
 
-    Text: {context}
+    Text: {doc_text}
     Extracted Relation:
     {extracted_relation}
 
@@ -404,7 +404,7 @@ async def align_relation_with_kg(
 @generative
 async def decide_relation_merge(
     relation_pair: str,
-    context: str,
+    doc_text: str,
     domain: str
 ) -> MergeDecision:
     """
@@ -437,7 +437,7 @@ async def decide_relation_merge(
 
     *NEVER include ANY EXPLANATION or NOTE in the output, ONLY OUTPUT FLAT JSON*
 
-    Text: {context}
+    Text: {doc_text}
     Relation Pairs to Merge:
     {relation_pair}
 

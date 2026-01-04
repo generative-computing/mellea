@@ -484,7 +484,7 @@ class KGUpdaterComponent(Component):
                 extracted_entity_desc=entity_desc,
                 candidate_entities=candidates_str,
                 domain=self.domain,
-                context=context[:2000] if context else "",  # Limit context to avoid token overflow
+                doc_text=context[:2000] if context else "",  # Limit context to avoid token overflow
             )
 
             if result.confidence > 0.7 and result.aligned_entity_id:
@@ -536,7 +536,7 @@ class KGUpdaterComponent(Component):
                 requirements=MERGE_REQS,
                 strategy=strategy,
                 entity_pair=entity_pair,
-                context=context[:2000] if context else "",  # Limit context size
+                doc_text=context[:2000] if context else "",  # Limit context size
                 domain=self.domain,
             )
 

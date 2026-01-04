@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Knowledge Graph QA Script (Refactored)
+Knowledge Graph QA Script (Mellea-Native Implementation)
 
 This script runs question answering on a dataset using the knowledge graph,
 evaluates the results, and generates comprehensive statistics.
 
 Usage:
-    python run_qa_refactored.py --dataset data/crag_movie_dev.jsonl
-    python run_qa_refactored.py --num-workers 256 --verbose
-    python run_qa_refactored.py --prefix exp1 --postfix test1
-    python run_qa_refactored.py --config route=5 width=30 depth=3
+    python run_qa.py --dataset data/crag_movie_dev.jsonl
+    python run_qa.py --num-workers 256 --verbose
+    python run_qa.py --prefix exp1 --postfix test1
+    python run_qa.py --config route=5 width=30 depth=3
 """
 
 import argparse
@@ -25,19 +25,19 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
-import openai
-import torch
 
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend, TemplateFormatter
 
-from kg_model import KGModel
-from kg.kg_qa_models import QAConfig, QASessionConfig, QADatasetConfig, KGModelConfig
+# Import Mellea-native KG-RAG component
+from kg.kg_rag import KGRagComponent, Query
+from kg.kg_qa_models import QAConfig, QASessionConfig, QADatasetConfig
 from dataset.movie_dataset import MovieDatasetLoader
 from utils.logger import BaseProgressLogger, DefaultProgressLogger, QAProgressLogger
 from utils.utils import token_counter
 from eval import evaluate_predictions
 from utils.logger import logger
+from utils.utils_mellea import create_embedding_session
 
 # Load environment variables
 load_dotenv()
@@ -75,7 +75,7 @@ def parse_key_value(arg: str) -> tuple:
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Run QA evaluation on knowledge graph",
+        description="Run QA evaluation",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -346,47 +346,6 @@ def create_eval_session(session_config: QASessionConfig) -> MelleaSession:
     )
 
 
-def create_embedding_session(session_config: QASessionConfig) -> Any:
-    """Create embedding session (OpenAI or local model).
-
-    Args:
-        session_config: Session configuration
-
-    Returns:
-        Embedding session object
-    """
-    if session_config.emb_api_base:
-        logger.info(f"Using OpenAI embedding API at {session_config.emb_api_base}")
-        logger.info(f"Model: {session_config.emb_model_name}")
-
-        headers = {}
-        if session_config.rits_api_key:
-            headers['RITS_API_KEY'] = session_config.rits_api_key
-
-        return openai.AsyncOpenAI(
-            base_url=session_config.emb_api_base,
-            api_key=session_config.emb_api_key or session_config.api_key,
-            timeout=session_config.emb_timeout or session_config.timeout,
-            default_headers=headers if headers else None
-        )
-    else:
-        logger.info("Using local SentenceTransformer for embeddings")
-        logger.info(f"Model: {session_config.emb_model_name}")
-
-        from sentence_transformers import SentenceTransformer
-
-        device = torch.device(
-            "cuda" if torch.cuda.is_available() else
-            "mps" if torch.backends.mps.is_available() else
-            "cpu"
-        )
-
-        logger.info(f"Using device: {device}")
-
-        return SentenceTransformer(
-            session_config.emb_model_name,
-            device=device
-        )
 
 
 def snapshot_token_usage() -> Dict[str, int]:
@@ -416,7 +375,7 @@ def compute_token_usage_delta(start_usage: Dict[str, int]) -> Dict[str, int]:
 
 
 async def generate_prediction(
-    participant_model: KGModel,
+    kg_rag: KGRagComponent,
     id: str = "",
     query: str = "",
     query_time: datetime = None,
@@ -427,7 +386,7 @@ async def generate_prediction(
     """Generate a prediction for a single question.
 
     Args:
-        participant_model: KG model to use for generation
+        kg_rag: KGRagComponent instance
         id: Question ID
         query: Question text
         query_time: Query timestamp
@@ -438,11 +397,8 @@ async def generate_prediction(
     start_time = time.perf_counter()
     token_usage_start = snapshot_token_usage()
 
-    prediction = await participant_model.generate_answer(
-        query=query,
-        query_time=query_time,
-        **kwargs
-    )
+    # Generate answer using Mellea-native component
+    prediction = await kg_rag.execute(query=query, query_time=query_time)
 
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time
@@ -502,14 +458,20 @@ async def main() -> int:
         # Create sessions
         session = create_mellea_session(session_config)
         eval_session = create_eval_session(session_config)
-        emb_session = create_embedding_session(session_config)
+        emb_session = create_embedding_session(
+            api_base=session_config.emb_api_base,
+            api_key=session_config.emb_api_key or session_config.api_key,
+            model_name=session_config.emb_model_name,
+            timeout=session_config.emb_timeout or session_config.timeout,
+            rits_api_key=session_config.rits_api_key
+        )
 
         # Create progress logger
         qa_logger = QAProgressLogger(progress_path=dataset_config.progress_path)
         logger.info(f"Processed questions at start: {len(qa_logger.processed_questions)}")
 
-        # Create KG model
-        participant_model = KGModel(
+        # Create KG-RAG component
+        kg_rag = KGRagComponent(
             session=session,
             eval_session=eval_session,
             emb_session=emb_session,
@@ -526,7 +488,7 @@ async def main() -> int:
             qa_logger,
             processor=functools.partial(
                 generate_prediction,
-                participant_model=participant_model,
+                kg_rag=kg_rag,
                 logger=qa_logger
             )
         )
