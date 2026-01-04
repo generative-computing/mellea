@@ -93,8 +93,12 @@ The system consists of several key components:
 
 **Utilities:**
 - **[dataset/movie_dataset.py](dataset/movie_dataset.py)**: Movie domain dataset loader
-- **[eval.py](eval.py)**: LLM-as-a-judge evaluation framework
-- **[demo.py](demo.py)**: Complete demo showing KGRag usage
+- **[demo/demo.py](demo/demo.py)**: Complete demo showing KGRag usage
+
+**Data Preparation Scripts:**
+- **[run/create_demo_dataset.py](run/create_demo_dataset.py)**: Create smaller demo KG database
+- **[run/create_tiny_dataset.py](run/create_tiny_dataset.py)**: Create tiny document dataset for testing
+- **[run/create_truncated_dataset.py](run/create_truncated_dataset.py)**: Truncate documents for faster processing
 
 ## Prerequisites
 
@@ -212,7 +216,7 @@ The full database is quite large (225MB+). For faster demos and testing, create 
 ```bash
 # Create a demo dataset with ~100 recent movies (2020-2024)
 cd docs/examples/kgrag
-uv run python create_demo_dataset.py \
+uv run python run/create_demo_dataset.py \
     --year-start 2020 \
     --year-end 2024 \
     --max-movies 100 \
@@ -230,11 +234,30 @@ mv dataset/movie_demo dataset/movie
 - 🎯 **Focused testing** with coherent topic clusters
 - 🚀 **Quick iteration** for development and demos
 
-See [DEMO_DATASET.md](DEMO_DATASET.md) for more options including:
-- Animated films dataset
-- Marvel/superhero dataset
-- Minimal 30-movie dataset for quick testing
-- Custom topic filtering
+#### Document Truncation for Faster Processing
+
+For even faster KG updates during development, truncate long documents to reduce processing time:
+
+```bash
+# Truncate documents to 50k characters (88.9% size reduction)
+python3 run/create_truncated_dataset.py \
+  --input dataset/crag_movie_tiny.jsonl.bz2 \
+  --output dataset/crag_movie_tiny_truncated.jsonl.bz2 \
+  --max-chars 50000
+```
+
+**Benefits:**
+- ⚡ **80-90% faster processing** - Less text to extract entities from
+- 💰 **Lower API costs** - Fewer tokens sent to LLM
+- 🎯 **Smart truncation** - Ends at sentence boundaries, preserves context
+- 📦 **Automatic usage** - `run.sh` uses truncated dataset if available
+
+**Recommended settings:**
+| Dataset | max-chars | Use Case |
+|---------|-----------|----------|
+| Tiny (10 docs) | 30k-50k | Quick testing, debugging |
+| Dev (565 docs) | 50k-100k | Development, experimentation |
+| Full dataset | 100k-200k | Production (or no truncation) |
 
 ### 3. Knowledge Graph Construction
 
@@ -264,7 +287,7 @@ After building the knowledge graph, try the demo:
 
 ```bash
 # Run the interactive demo
-uv run --with mellea python demo.py
+uv run --with mellea python demo/demo.py
 ```
 
 The demo will run example queries and show the complete KGRag pipeline in action.

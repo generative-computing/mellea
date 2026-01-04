@@ -9,7 +9,7 @@ from mellea.stdlib.base import Component
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 from kg.kg_driver import KG_Driver
-from kg.kg_rep import KGEntity, KGRelation, normalize_entity, normalize_relation
+from kg.kg_rep import KGEntity, KGRelation, normalize_entity, normalize_relation, entity_to_text
 from kg.kg_updater_generative import (
     extract_entities_and_relations,
     align_entity_with_kg,
@@ -23,32 +23,303 @@ from kg.kg_updater_generative import (
 from kg.kg_requirements import VALID_JSON_REQ
 from mellea.stdlib.requirement import Requirement
 from utils.logger import BaseProgressLogger, DefaultProgressLogger
+from utils.utils import generate_embedding
 
 
 # Define requirements for KG update tasks
 def has_entities_or_relations(ctx) -> bool:
-    """Check if output has at least one entity or relation."""
+    """Check if output has at least one entity or relation in flat JSON format."""
     try:
         output = ctx.last_assistant_message.as_str()
         import json
         data = json.loads(output)
-        return "entities" in data or "relations" in data
+
+        # Based on PROMPTS["extraction"], output should be flat JSON with:
+        # "ent_i": [...] and "rel_j": [...]
+        has_entity = any(key.startswith("ent_") for key in data.keys())
+        has_relation = any(key.startswith("rel_") for key in data.keys())
+
+        return has_entity or has_relation
     except Exception:
         return True
+
+
+def has_valid_entity_format(ctx) -> bool:
+    """Check if entities follow the format: ["type", "name", "description", "para_start", "para_end", {props}]."""
+    try:
+        output = ctx.last_assistant_message.as_str()
+        import json
+        data = json.loads(output)
+
+        for key, value in data.items():
+            if key.startswith("ent_"):
+                # Entity should be a list with at least 5 elements: [type, name, desc, para_start, para_end, props]
+                if not isinstance(value, list):
+                    return False
+                if len(value) < 5:
+                    return False
+                # First 5 elements should be strings
+                if not all(isinstance(value[i], str) for i in range(5)):
+                    return False
+                # 6th element (if present) should be a dict (properties)
+                if len(value) > 5 and not isinstance(value[5], dict):
+                    return False
+
+        return True
+    except Exception:
+        return False
+
+
+def has_valid_relation_format(ctx) -> bool:
+    """Check if relations follow the format: ["source", "relation", "target", "desc", "para_start", "para_end", {props}]."""
+    try:
+        output = ctx.last_assistant_message.as_str()
+        import json
+        data = json.loads(output)
+
+        for key, value in data.items():
+            if key.startswith("rel_"):
+                # Relation should be a list with at least 6 elements
+                if not isinstance(value, list):
+                    return False
+                if len(value) < 6:
+                    return False
+                # First 6 elements should be strings
+                if not all(isinstance(value[i], str) for i in range(6)):
+                    return False
+                # 7th element (if present) should be a dict (properties)
+                if len(value) > 6 and not isinstance(value[6], dict):
+                    return False
+
+        return True
+    except Exception:
+        return False
+
 
 EXTRACTION_REQS = [
     VALID_JSON_REQ,
     Requirement(
-        description="Must extract at least one entity or relation",
+        description="Must extract at least one entity (ent_i) or relation (rel_j)",
         validation_fn=has_entities_or_relations
+    ),
+    Requirement(
+        description="Entities must follow format: ['type', 'name', 'description', 'para_start', 'para_end', {props}]",
+        validation_fn=has_valid_entity_format
+    ),
+    Requirement(
+        description="Relations must follow format: ['source', 'relation', 'target', 'desc', 'para_start', 'para_end', {props}]",
+        validation_fn=has_valid_relation_format
     )
 ]
+
+def has_required_alignment_fields(ctx) -> bool:
+    """Check if alignment output has required fields from PROMPTS["align_entity"]."""
+    try:
+        output = ctx.last_assistant_message.as_str()
+        import json
+        data = json.loads(output)
+
+        # Based on PROMPTS["align_entity"], output should have:
+        # {"id": <id>, "aligned_type": "...", "reason": "...", "matched_entity": "..."}
+        required_fields = ["id", "aligned_type", "reason", "matched_entity"]
+
+        # Handle both single dict and list of dicts
+        if isinstance(data, dict):
+            data = [data]
+
+        if not isinstance(data, list):
+            return False
+
+        for item in data:
+            if not isinstance(item, dict):
+                return False
+            for field in required_fields:
+                if field not in item:
+                    return False
+
+        return True
+    except Exception:
+        return False
+
+
+def has_valid_matched_entity(ctx) -> bool:
+    """Check if matched_entity is either a valid entity reference or empty string."""
+    try:
+        output = ctx.last_assistant_message.as_str()
+        import json
+        data = json.loads(output)
+
+        # Handle both single dict and list of dicts
+        if isinstance(data, dict):
+            data = [data]
+
+        if not isinstance(data, list):
+            return True  # Let other validators catch this
+
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            matched_entity = item.get("matched_entity", "")
+            # matched_entity should be either empty string or start with "ent_"
+            if matched_entity and not (isinstance(matched_entity, str) and
+                                      (matched_entity == "" or matched_entity.startswith("ent_"))):
+                return False
+
+        return True
+    except Exception:
+        return False
+
 
 ALIGNMENT_REQS = [
     VALID_JSON_REQ,
     Requirement(
-        description="Must provide confidence score between 0 and 1",
-        validation_fn=lambda ctx: True  # Pydantic handles this
+        description="Must have id, aligned_type, reason, and matched_entity fields for each alignment",
+        validation_fn=has_required_alignment_fields
+    ),
+    Requirement(
+        description="matched_entity must be empty string or valid entity reference (ent_i)",
+        validation_fn=has_valid_matched_entity
+    )
+]
+
+
+def has_required_merge_fields(ctx) -> bool:
+    """Check if merge output has required fields from PROMPTS["merge_entity"] and PROMPTS["merge_relation"]."""
+    try:
+        output = ctx.last_assistant_message.as_str()
+        import json
+        data = json.loads(output)
+
+        # Based on merge prompts, output should be a list of dicts with:
+        # {"id": <id>, "desc": "...", "props": {...}}
+        if not isinstance(data, list):
+            return False
+
+        for item in data:
+            if not isinstance(item, dict):
+                return False
+            # Must have id, desc, and props fields
+            if "id" not in item or "desc" not in item or "props" not in item:
+                return False
+
+        return True
+    except Exception:
+        return False
+
+
+def has_valid_merge_properties(ctx) -> bool:
+    """Check if merged properties follow the format: {"key": ["val", "context"], ...}."""
+    try:
+        output = ctx.last_assistant_message.as_str()
+        import json
+        data = json.loads(output)
+
+        if not isinstance(data, list):
+            return True  # Let other validators catch this
+
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+
+            props = item.get("props", {})
+            if not isinstance(props, dict):
+                return False
+
+            # Each property value should be a list with 2 elements: [value, context]
+            for key, value in props.items():
+                if not isinstance(value, list):
+                    return False
+                if len(value) != 2:
+                    return False
+                # Both elements should be strings
+                if not all(isinstance(v, str) for v in value):
+                    return False
+
+        return True
+    except Exception:
+        return False
+
+
+MERGE_REQS = [
+    VALID_JSON_REQ,
+    Requirement(
+        description="Must have id, desc, and props fields for each merged item",
+        validation_fn=has_required_merge_fields
+    ),
+    Requirement(
+        description="Properties must follow format: {\"key\": [\"val\", \"context\"], ...}",
+        validation_fn=has_valid_merge_properties
+    )
+]
+
+
+def has_required_relation_alignment_fields(ctx) -> bool:
+    """Check if relation alignment output has required fields from PROMPTS["align_relation"]."""
+    try:
+        output = ctx.last_assistant_message.as_str()
+        import json
+        data = json.loads(output)
+
+        # Based on PROMPTS["align_relation"], output should have:
+        # {"id": <id>, "aligned_name": "...", "reason": "...", "matched_relation": "..."}
+        required_fields = ["id", "aligned_name", "reason", "matched_relation"]
+
+        # Handle both single dict and list of dicts
+        if isinstance(data, dict):
+            data = [data]
+
+        if not isinstance(data, list):
+            return False
+
+        for item in data:
+            if not isinstance(item, dict):
+                return False
+            for field in required_fields:
+                if field not in item:
+                    return False
+
+        return True
+    except Exception:
+        return False
+
+
+def has_valid_matched_relation(ctx) -> bool:
+    """Check if matched_relation is either a valid relation reference or empty string."""
+    try:
+        output = ctx.last_assistant_message.as_str()
+        import json
+        data = json.loads(output)
+
+        # Handle both single dict and list of dicts
+        if isinstance(data, dict):
+            data = [data]
+
+        if not isinstance(data, list):
+            return True  # Let other validators catch this
+
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            matched_relation = item.get("matched_relation", "")
+            # matched_relation should be either empty string or start with "rel_"
+            if matched_relation and not (isinstance(matched_relation, str) and
+                                        (matched_relation == "" or matched_relation.startswith("rel_"))):
+                return False
+
+        return True
+    except Exception:
+        return False
+
+
+RELATION_ALIGNMENT_REQS = [
+    VALID_JSON_REQ,
+    Requirement(
+        description="Must have id, aligned_name, reason, and matched_relation fields for each alignment",
+        validation_fn=has_required_relation_alignment_fields
+    ),
+    Requirement(
+        description="matched_relation must be empty string or valid relation reference (rel_i)",
+        validation_fn=has_valid_matched_relation
     )
 ]
 
@@ -96,6 +367,11 @@ class KGUpdaterComponent(Component):
             "merge_relation": True,
             "extraction_loop_budget": 3,
             "alignment_loop_budget": 2,
+            "align_topk": 10,
+            "align_entity_batch_size": 10,
+            "merge_entity_batch_size": 10,
+            "align_relation_batch_size": 10,
+            "merge_relation_batch_size": 10,
         }
         if config:
             self.config.update(config)
@@ -159,7 +435,9 @@ class KGUpdaterComponent(Component):
         entity_name: str,
         entity_type: str,
         entity_desc: str,
-        candidate_entities: List[KGEntity]
+        context: str,
+        candidate_entities: List[KGEntity],
+        top_k: Optional[int] = None
     ) -> Optional[str]:
         """Align extracted entity with existing KG entities.
 
@@ -167,7 +445,9 @@ class KGUpdaterComponent(Component):
             entity_name: Name of extracted entity
             entity_type: Type of extracted entity
             entity_desc: Description of extracted entity
+            context: Original document text for context-aware alignment
             candidate_entities: List of candidate entities from KG
+            top_k: Number of candidates to consider (default from config)
 
         Returns:
             ID of aligned entity, or None if no match
@@ -175,13 +455,16 @@ class KGUpdaterComponent(Component):
         if not candidate_entities:
             return None
 
-        # Format candidates for LLM
+        # Use config default if not specified
+        top_k = top_k or self.config.get("align_topk", 10)
+
+        # Format candidates for LLM with configurable limit
         candidates_str = "\n\n".join([
             f"ID: {e.id}\nName: {e.name}\nType: {e.type}\nDescription: {e.description[:200]}"
-            for e in candidate_entities[:10]  # Limit to top 10
+            for e in candidate_entities[:top_k]
         ])
 
-        self.logger.debug(f"Aligning entity '{entity_name}' with {len(candidate_entities)} candidates")
+        self.logger.debug(f"Aligning entity '{entity_name}' with {len(candidate_entities[:top_k])} candidates")
 
         strategy = RejectionSamplingStrategy(
             loop_budget=self.config.get("alignment_loop_budget", 3)
@@ -201,6 +484,7 @@ class KGUpdaterComponent(Component):
                 extracted_entity_desc=entity_desc,
                 candidate_entities=candidates_str,
                 domain=self.domain,
+                doc_text=context[:2000] if context else "",  # Limit context to avoid token overflow
             )
 
             if result.confidence > 0.7 and result.aligned_entity_id:
@@ -220,19 +504,23 @@ class KGUpdaterComponent(Component):
     async def merge_entities(
         self,
         entity1: KGEntity,
-        entity2: KGEntity
+        entity2: KGEntity,
+        context: str = ""
     ) -> Optional[KGEntity]:
-        """Decide whether to merge two entities.
+        """Merge two entities using PROMPTS["merge_entity"] format.
 
         Args:
-            entity1: First entity
-            entity2: Second entity
+            entity1: Extracted entity from text document
+            entity2: Existing entity from KG
+            context: Original document text
 
         Returns:
-            Merged entity if should merge, None otherwise
+            Merged entity with updated description and properties
         """
-        entity1_info = f"Name: {entity1.name}\nType: {entity1.type}\nDescription: {entity1.description}"
-        entity2_info = f"Name: {entity2.name}\nType: {entity2.type}\nDescription: {entity2.description}"
+        # Format entity pair according to PROMPTS["merge_entity"]
+        # Format: "idx: [(Type: Name, desc: "...", props: {...}), (Type: Name, desc: "...", props: {...})]"
+        entity_pair = f"1: [({entity1.type}: {entity1.name}, desc: \"{entity1.description}\", props: {entity1.properties}), " \
+                     f"({entity2.type}: {entity2.name}, desc: \"{entity2.description}\", props: {entity2.properties})]"
 
         strategy = RejectionSamplingStrategy(
             loop_budget=self.config.get("merge_loop_budget", 3)
@@ -245,21 +533,33 @@ class KGUpdaterComponent(Component):
             result, ctx = await decide_entity_merge(
                 self.session.ctx,
                 self.session.backend,
+                requirements=MERGE_REQS,
                 strategy=strategy,
-                entity1_info=entity1_info,
-                entity2_info=entity2_info,
+                entity_pair=entity_pair,
+                doc_text=context[:2000] if context else "",  # Limit context size
                 domain=self.domain,
             )
 
-            if result.should_merge:
-                self.logger.info(f"Merging entities '{entity1.name}' and '{entity2.name}'")
+            # Parse the result - expecting format: [{"id": 1, "desc": "...", "props": {"key": ["val", "context"], ...}}]
+            if result and len(result) > 0:
+                merge_result = result[0] if isinstance(result, list) else result
+                self.logger.info(f"Merged entities '{entity1.name}' and '{entity2.name}'")
+
+                # Convert properties format from ["val", "context"] to standard format
+                merged_properties = {}
+                if "props" in merge_result and merge_result["props"]:
+                    for key, val_list in merge_result["props"].items():
+                        if isinstance(val_list, list) and len(val_list) >= 1:
+                            # Take the value, ignore the context for now
+                            merged_properties[key] = val_list[0]
+
                 # Create merged entity
                 merged = KGEntity(
-                    id=entity1.id,  # Keep first entity's ID
-                    name=entity1.name,
-                    type=entity1.type,
-                    description=entity1.description,
-                    properties={**entity1.properties, **result.merged_properties}
+                    id=entity2.id,  # Keep KG entity's ID
+                    name=entity2.name,  # Keep KG entity's name
+                    type=entity2.type,  # Keep KG entity's type
+                    description=merge_result.get("desc", entity2.description),
+                    properties=merged_properties
                 )
                 return merged
             else:
@@ -323,11 +623,72 @@ class KGUpdaterComponent(Component):
                     # Normalize name
                     norm_name = normalize_entity(extracted_entity.name)
 
-                    # Search for similar entities in KG
-                    # (simplified - in reality would use vector search)
-                    # For now, just create new entity
+                    # Search for similar entities in KG if alignment is enabled
+                    aligned_entity_id = None
+                    if self.config.get("align_entity", False):
+                        # Get candidate entities from KG (vector search + exact match)
+                        candidate_entities = []
+                        top_k = self.config.get("align_topk", 10)
+
+                        # Try exact/fuzzy match first
+                        exact_matches = self.kg_driver.get_entities(
+                            type=extracted_entity.type,
+                            name=norm_name,
+                            top_k=top_k // 2,
+                            fuzzy=True
+                        )
+                        if exact_matches:
+                            candidate_entities.extend(exact_matches)
+
+                        # Generate embedding and do vector search for similar entities
+                        try:
+                            entity_text = entity_to_text(
+                                KGEntity(
+                                    id="",
+                                    name=norm_name,
+                                    type=extracted_entity.type,
+                                    description=extracted_entity.description,
+                                    properties=extracted_entity.properties
+                                ),
+                                include_des=False
+                            )
+                            entity_embeddings = await generate_embedding(
+                                self.emb_session,
+                                [entity_text],
+                                logger=self.logger
+                            )
+
+                            if entity_embeddings and len(entity_embeddings) > 0:
+                                similar_matches = self.kg_driver.get_entities(
+                                    embedding=entity_embeddings[0],
+                                    top_k=top_k - len(candidate_entities),
+                                    return_score=True
+                                )
+                                # Add similar matches that aren't already in candidates
+                                for relevant_entity in similar_matches:
+                                    if relevant_entity.entity not in candidate_entities:
+                                        candidate_entities.append(relevant_entity.entity)
+                        except Exception as e:
+                            self.logger.warning(f"Vector search failed for '{norm_name}': {e}")
+
+                        # Align entity with KG if candidates found
+                        if candidate_entities:
+                            aligned_entity_id = await self.align_entity(
+                                entity_name=norm_name,
+                                entity_type=extracted_entity.type,
+                                entity_desc=extracted_entity.description,
+                                context=context,
+                                candidate_entities=candidate_entities,
+                                top_k=top_k
+                            )
+
+                            if aligned_entity_id:
+                                stats["entities_aligned"] += 1
+                                self.logger.debug(f"Entity '{norm_name}' aligned to {aligned_entity_id}")
+
+                    # Create or update entity in KG
                     entity = KGEntity(
-                        id="",  # Will be assigned by KG
+                        id=aligned_entity_id or "",  # Use aligned ID or empty for new entity
                         name=norm_name,
                         type=extracted_entity.type,
                         description=extracted_entity.description,
@@ -338,7 +699,10 @@ class KGUpdaterComponent(Component):
 
                     # Upsert to KG
                     # await self.kg_driver.upsert_entity(entity)
-                    stats["entities_new"] += 1
+
+                    if not aligned_entity_id:
+                        stats["entities_new"] += 1
+
                 except Exception as e:
                     self.logger.error(f"Failed to process entity: {e}")
                     continue

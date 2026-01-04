@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 """
-Knowledge Graph Update Script (Refactored)
-
+Knowledge Graph Update Script
 This script updates the knowledge graph by processing documents and extracting
 entities and relations using modern patterns.
 
 Usage:
-    python run_kg_update_refactored.py --dataset path/to/dataset.jsonl.bz2
-    python run_kg_update_refactored.py --num-workers 128 --verbose
-    python run_kg_update_refactored.py --domain movie --progress-path results/progress.json
+    python run_kg_update.py --domain movie --progress-path results/progress.json
 """
 
 import argparse
@@ -20,18 +17,18 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-import openai
-import torch
 
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend, TemplateFormatter
 
-from kg.kg_updater import KG_Updater
+from kg.kg_updater_component import KGUpdaterComponent
+from kg.kg_driver import KG_Driver
 from kg.kg_updater_models import UpdaterConfig, SessionConfig, DatasetConfig
 from dataset.movie_dataset import MovieDatasetLoader
 from utils.logger import KGProgressLogger
 from utils.utils import token_counter
 from utils.logger import logger
+from utils.utils_mellea import create_embedding_session
 
 # Load environment variables
 load_dotenv()
@@ -101,7 +98,7 @@ Examples:
 
 
 def create_session_config(args: argparse.Namespace) -> SessionConfig:
-    """Create session configuration from environment and args.
+    """Create session configuration from environment.
 
     Args:
         args: Parsed command-line arguments
@@ -116,12 +113,6 @@ def create_session_config(args: argparse.Namespace) -> SessionConfig:
         model_name=os.getenv("MODEL_NAME", ""),
         timeout=int(os.getenv("TIME_OUT", "1800")),
         rits_api_key=os.getenv("RITS_API_KEY"),
-
-        # Evaluation LLM
-        eval_api_base=os.getenv("EVAL_API_BASE"),
-        eval_api_key=os.getenv("EVAL_API_KEY", "dummy"),
-        eval_model_name=os.getenv("EVAL_MODEL_NAME"),
-        eval_timeout=int(os.getenv("EVAL_TIME_OUT", "1800")) if os.getenv("EVAL_TIME_OUT") else None,
 
         # Embedding
         emb_api_base=os.getenv("EMB_API_BASE"),
@@ -147,7 +138,7 @@ def create_updater_config(args: argparse.Namespace) -> UpdaterConfig:
 
 
 def create_dataset_config(args: argparse.Namespace) -> DatasetConfig:
-    """Create dataset configuration from args and environment.
+    """Create dataset configuration from args.
 
     Args:
         args: Parsed command-line arguments
@@ -165,10 +156,15 @@ def create_dataset_config(args: argparse.Namespace) -> DatasetConfig:
         )
         dataset_path = os.path.join(base_dir, "crag_movie_dev.jsonl.bz2")
 
+    if args.domain:
+        domain = args.domain
+    else:
+        domain = "moive"
+
     return DatasetConfig(
         dataset_path=dataset_path,
-        domain=args.domain,
-        progress_path=args.progress_path
+        domain=domain,
+        progress_path=args.progress_path,
     )
 
 
@@ -181,7 +177,7 @@ def create_mellea_session(session_config: SessionConfig) -> MelleaSession:
     Returns:
         Mellea session
     """
-    logger.info(f"Creating Mellea session with model: {session_config.model_name}")
+    logger.info(f"Creating main session with model: {session_config.model_name}")
     logger.info(f"API base: {session_config.api_base}")
 
     headers = {}
@@ -200,47 +196,57 @@ def create_mellea_session(session_config: SessionConfig) -> MelleaSession:
     )
 
 
-def create_embedding_session(session_config: SessionConfig) -> Any:
-    """Create embedding session (OpenAI or local model).
+
+
+async def process_document(
+    kg_updater: KGUpdaterComponent,
+    doc_id: str = "",
+    context: str = "",
+    reference: str = "",
+    logger: KGProgressLogger = None,
+    **kwargs
+) -> None:
+    """Process a single document using Mellea-native KG updater.
 
     Args:
-        session_config: Session configuration
-
-    Returns:
-        Embedding session object
+        kg_updater: KGUpdaterComponent instance
+        doc_id: Document ID
+        context: Document text
+        reference: Reference/source
+        logger: Progress logger
+        **kwargs: Additional arguments
     """
-    if session_config.emb_api_base:
-        logger.info(f"Using OpenAI embedding API at {session_config.emb_api_base}")
-        logger.info(f"Model: {session_config.emb_model_name}")
+    from datetime import datetime
+    import time
 
-        headers = {}
-        if session_config.rits_api_key:
-            headers['RITS_API_KEY'] = session_config.rits_api_key
+    start_time = time.perf_counter()
 
-        return openai.AsyncOpenAI(
-            base_url=session_config.emb_api_base,
-            api_key=session_config.emb_api_key or session_config.api_key,
-            timeout=session_config.emb_timeout or session_config.timeout,
-            default_headers=headers if headers else None
-        )
-    else:
-        logger.info("Using local SentenceTransformer for embeddings")
-        logger.info(f"Model: {session_config.emb_model_name}")
-
-        from sentence_transformers import SentenceTransformer
-
-        device = torch.device(
-            "cuda" if torch.cuda.is_available() else
-            "mps" if torch.backends.mps.is_available() else
-            "cpu"
+    try:
+        stats = await kg_updater.update_kg_from_document(
+            doc_id=doc_id,
+            context=context,
+            reference=reference,
+            created_at=datetime.now()
         )
 
-        logger.info(f"Using device: {device}")
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
 
-        return SentenceTransformer(
-            session_config.emb_model_name,
-            device=device
-        )
+        logger.add_stat({
+            "doc_id": doc_id,
+            "entities_extracted": stats.get("entities_extracted", 0),
+            "entities_new": stats.get("entities_new", 0),
+            "relations_extracted": stats.get("relations_extracted", 0),
+            "relations_new": stats.get("relations_new", 0),
+            "processing_time": round(elapsed_time, 2),
+        })
+
+        print(f"Processed documents: {len(logger.processed_docs)}")
+        logger.update_progress({"last_doc_time": round(elapsed_time, 2)})
+
+    except Exception as e:
+        logger.error(f"Failed to process document {doc_id}: {e}")
+        raise
 
 
 async def main() -> int:
@@ -264,7 +270,7 @@ async def main() -> int:
         logger.info(f"Domain: {dataset_config.domain}")
         logger.info(f"Workers: {updater_config.num_workers}")
         logger.info(f"Queue size: {updater_config.queue_size}")
-        logger.info(f"Progress path: {dataset_config.progress_path}")
+        logger.info(f"Progress: {dataset_config.progress_path}")
         logger.info("=" * 60)
 
         # Verify dataset exists
@@ -272,18 +278,48 @@ async def main() -> int:
             logger.error(f"Dataset not found: {dataset_config.dataset_path}")
             return 1
 
+        # Ensure results directory exists
+        Path("results").mkdir(exist_ok=True)
+
         # Create sessions
         session = create_mellea_session(session_config)
-        emb_session = create_embedding_session(session_config)
+        emb_session = create_embedding_session(
+            api_base=session_config.emb_api_base,
+            api_key=session_config.emb_api_key or session_config.api_key,
+            model_name=session_config.emb_model_name,
+            timeout=session_config.emb_timeout or session_config.timeout,
+            rits_api_key=session_config.rits_api_key
+        )
+
+        # Create KG driver
+        kg_driver = KG_Driver(
+            database=None,  # Uses default from env
+            emb_session=emb_session
+        )
 
         # Create progress logger
         kg_logger = KGProgressLogger(progress_path=dataset_config.progress_path)
+        logger.info(f"Processed documents at start: {len(kg_logger.processed_docs)}")
 
-        # Create updater
-        updater = KG_Updater(
+        # Create Mellea-native KG Updater component
+        kg_updater = KGUpdaterComponent(
             session=session,
             emb_session=emb_session,
-            config=updater_config.model_dump(),  # Convert to dict for backward compatibility
+            kg_driver=kg_driver,
+            domain=dataset_config.domain,
+            config={
+                "align_entity": True,
+                "merge_entity": True,
+                "align_relation": True,
+                "merge_relation": True,
+                "extraction_loop_budget": 3,
+                "alignment_loop_budget": 2,
+                "align_topk": 10,  # Number of candidates to consider during alignment
+                "align_entity_batch_size": 10,
+                "merge_entity_batch_size": 10,
+                "align_relation_batch_size": 10,
+                "merge_relation_batch_size": 10,
+            },
             logger=kg_logger
         )
 
@@ -291,24 +327,39 @@ async def main() -> int:
         loader = MovieDatasetLoader(
             dataset_config.dataset_path,
             updater_config.model_dump(),
-            "doc",
+            "update",
             kg_logger,
             processor=functools.partial(
-                updater.process_doc,
-                domain=dataset_config.domain
+                process_document,
+                kg_updater=kg_updater,
+                logger=kg_logger
             )
         )
 
-        logger.info(f"Processed docs at start: {kg_logger.processed_docs}")
-
-        # Run the update process
+        # Run KG update
+        logger.info("Starting KG update with Mellea-native implementation...")
         await loader.run()
 
+        # Get token usage
+        token_usage = token_counter.get_token_usage()
+        logger.info(f"Update complete. Token usage: {token_usage}")
+
+        # Compute statistics
+        stats = kg_logger.progress_data.get("stats", [])
+        total_entities = sum(s.get("entities_new", 0) for s in stats)
+        total_relations = sum(s.get("relations_new", 0) for s in stats)
+
         logger.info("=" * 60)
-        logger.info("✅ KG update completed successfully!")
+        logger.info("✅ Mellea-native KG update completed successfully!")
         logger.info("=" * 60)
-        logger.info(f"Total processed docs: {kg_logger.processed_docs}")
-        logger.info(f"Token usage: {token_counter.get_token_usage()}")
+        logger.info(f"Processed documents: {len(stats)}")
+        logger.info(f"Total new entities: {total_entities}")
+        logger.info(f"Total new relations: {total_relations}")
+        logger.info(f"Total tokens: {token_usage.get('total_tokens', 0)}")
+        logger.info(f"Progress saved to: {dataset_config.progress_path}")
+
+        # Close KG driver
+        await kg_driver.close()
 
         return 0
 
