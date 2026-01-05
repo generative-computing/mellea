@@ -324,9 +324,9 @@ class LocalVLLMBackend(FormatterBackend):
                 # We however want to keep it as a json string for later storing it in ModelOutputThunk
                 schema: dict[str, Any] = _format.model_json_schema()
                 schema_json: str = json.dumps(schema)
-                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(
-                    schema_json
-                )
+                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
+                    schema_json  # type: ignore
+                )  # type: ignore
 
                 from outlines.processors import RegexLogitsProcessor
 
@@ -460,9 +460,9 @@ class LocalVLLMBackend(FormatterBackend):
         if format is not None:
             schema: dict[str, Any] = format.model_json_schema()
             schema_json: str = json.dumps(schema)
-            regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(
-                schema_json
-            )
+            regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
+                schema_json  # type: ignore
+            )  # type: ignore
 
             from outlines.processors import RegexLogitsProcessor
 
