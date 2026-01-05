@@ -466,9 +466,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # AND
         # 2. Mark each "hit" by adding the string (tokenized?) value to `cached_block_keys`.
         cached_block_keys = []
-        print("Pre-computing cache blocks.")
         for c in linearized_ctx:
-            print(f"c of {len(linearized_ctx)}")
             match c:
                 case CBlock() if c.cache:
                     assert c.value is not None
