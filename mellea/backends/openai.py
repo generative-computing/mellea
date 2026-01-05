@@ -72,7 +72,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     def __init__(
         self,
-        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_MICRO_3B,
+        model_id: str | ModelIdentifier = model_ids.OPENAI_GPT_5_1,
         formatter: Formatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
@@ -152,16 +152,21 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 )
                 self._hf_model_id = model_id.hf_model_name
 
-        if base_url is None:
-            self._base_url = "http://localhost:11434/v1"  # ollama
-        else:
-            self._base_url = base_url
         if api_key is None:
+            FancyLogger.get_logger().warning(
+                "You are using an OpenAI backend with no api_key. Because no API key was provided, mellea assumes you intend to use the openai-compatible interface to your local ollama instance. If you intend to use OpenAI's platform you must specify your API key when instantiating your Mellea session/backend object."
+            )
+            self._base_url: str | None = "http://localhost:11434/v1"  # ollama
             self._api_key = "ollama"
         else:
+            self._base_url = base_url
             self._api_key = api_key
 
-        self._server_type = _server_type(self._base_url)
+        self._server_type: _ServerType = (
+            _server_type(self._base_url)
+            if self._base_url is not None
+            else _ServerType.OPENAI
+        )  # type: ignore
 
         self._openai_client_kwargs = self.filter_openai_client_kwargs(**kwargs)
 
@@ -598,14 +603,38 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         extra_params: dict[str, Any] = {}
         if _format is not None:
-            extra_params["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": _format.__name__,
-                    "schema": _format.model_json_schema(),
-                    "strict": True,
-                },
-            }
+            if self._server_type == _ServerType.OPENAI:
+                # The OpenAI platform requires that additionalProperties=False on all response_format schemas.
+                # However, not all schemas generates by Mellea include additionalProperties.
+                # GenerativeSlot, in particular, does not add this property.
+                # The easiest way to address this disparity between OpenAI and other inference providers is to
+                # monkey-patch the response format exactly when we are actually using the OpenAI server.
+                #
+                # This only addresses the additionalProperties=False constraint.
+                # Other constraints we should be checking/patching are described here:
+                # https://platform.openai.com/docs/guides/structured-outputs?api-mode=chat
+                monkey_patched_response_schema = _format.model_json_schema()
+                monkey_patched_response_schema["additionalProperties"] = False
+                extra_params["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": _format.__name__,
+                        "schema": monkey_patched_response_schema,
+                        "strict": True,
+                    },
+                }
+            else:
+                FancyLogger().get_logger().warning(
+                    "Mellea assumes you are NOT using the OpenAI platform, and that other model providers have less strict requirements on support JSON schemas passed into `format=`. If you encounter a server-side error following this message, then you found an exception to this assumption. Please open an issue at github.com/generative_computing/mellea with this stack trace and your inference engine / model provider."
+                )
+                extra_params["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": _format.__name__,
+                        "schema": _format.model_json_schema(),
+                        "strict": True,
+                    },
+                }
 
         # Append tool call information if applicable.
         tools: dict[str, Callable] = dict()
@@ -982,6 +1011,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         from transformers import AutoTokenizer
 
         if not hasattr(self, "_tokenizer"):
+            assert self._base_url, (
+                "The OpenAI Platform does not support adapters. You must specify a _base_url when using adapters."
+            )
             match _server_type(self._base_url):
                 case _ServerType.LOCALHOST:
                     self._tokenizer: "PreTrainedTokenizer" = (  # noqa: UP037
