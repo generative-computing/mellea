@@ -632,6 +632,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         use_tools = len(formatted_tools) > 0
 
         # Build optional reasoning parameters
+        # NOTE: the openai SDK doesn't like it if you pass `reasoning_effort` param to a non-reasoning model e.g. gpt4o
         reasoning_params = {}
         if thinking is not None:
             reasoning_params["reasoning_effort"] = thinking
