@@ -24,7 +24,7 @@ async def main(backend: Backend, ctx: Context):
     fibs = []
     for i in range(100):
         if i == 0 or i == 1:
-            fibs.append(CBlock(f"{i + 1}"))
+            fibs.append(CBlock(f"{i}"))
         else:
             fibs.append(await fib(backend, ctx, fibs[i - 1], fibs[i - 2]))
 
