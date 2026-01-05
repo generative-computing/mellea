@@ -28,19 +28,6 @@ def merge_dynamic_caches(caches: Iterable[DynamicCache]) -> DynamicCache:
     return rv  # type: ignore
 
 
-def combine_representations(
-    tokenizer, reps: Iterable[str | DynamicCache]
-) -> TokenizedCacheIterleaving:
-    """Inexplicable code. I have no idea why this makes any sense. TODO please flag this in any code review and sync with Hendrik re: why we ever wrong this down..."""
-    rv = []
-    for rep in reps:
-        if type(rep) is DynamicCache:
-            rv.append(rep)
-        else:
-            rv.append(tokenizer(rep))
-    return rv
-
-
 def tokens_to_legacy_cache(
     model, device: str, tokens_or_cache: BatchEncoding | DynamicCache
 ) -> Iterable[LegacyCache]:
