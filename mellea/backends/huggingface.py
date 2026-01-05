@@ -479,17 +479,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                             f"HF backend is caching a CBlock with hashed contents: {hash(c.value)} ({c.value[:3]}..{c.value[-3:]})"
                         )
                         tokens = self._tokenizer(c.value, return_tensors="pt")
-                        dc = DynamicCache()
-                        with torch.no_grad():
-                            dc = self._model(
-                                tokens["input_ids"].to(self._device),  # type: ignore
-                                attention_mask=tokens["attention_mask"].to(
-                                    self._device
-                                ),  # type: ignore
-                                past_key_values=dc,
-                                use_cache=True,
-                            ).past_key_values
-                        self._cached_blocks[c.value] = dc
+                        self._cached_blocks[c.value] = self._make_dc_cache(tokens)
                         cached_block_keys.append(c.value)
                 case _:
                     continue
