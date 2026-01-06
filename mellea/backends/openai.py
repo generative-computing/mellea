@@ -166,7 +166,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         if self._base_url is None and os.getenv("OPENAI_BASE_URL") is None:
             FancyLogger.get_logger().warning(
-                "OPENAI_BASE_URL or base_url is not set. Please either:\n"
+                "OPENAI_BASE_URL or base_url is not set.\n"
                 "The openai SDK is going to assume that the base_url is `https://api.openai.com/v1`"
             )
 
