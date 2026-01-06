@@ -142,15 +142,14 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
 
-        self._model_id = model_id
         match model_id:
             case str():
-                self._hf_model_id = model_id
+                self._model_id = model_id
             case ModelIdentifier():
-                assert model_id.hf_model_name is not None, (
-                    "model_id is None. This can also happen if the ModelIdentifier has no hf_model_id name set."
+                assert model_id.openai_name is not None, (
+                    "model_id is None. This can also happen if the ModelIdentifier has no `openai_name` name set."
                 )
-                self._hf_model_id = model_id.hf_model_name
+                self._model_id = model_id.openai_name
 
         if api_key is None:
             FancyLogger.get_logger().warning(
@@ -669,7 +668,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         chat_response: Coroutine[
             Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]
         ] = self._async_client.chat.completions.create(
-            model=self._hf_model_id,
+            model=self._model_id,
             messages=conversation,  # type: ignore
             tools=formatted_tools if use_tools else None,  # type: ignore
             # parallel_tool_calls=False, # We only support calling one tool per turn. But we do the choosing on our side so we leave this False.
@@ -842,7 +841,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         try:
             completion_response: Completion = (
                 await self._async_client.completions.create(
-                    model=self._hf_model_id,
+                    model=self._model_id,
                     prompt=prompts,
                     extra_body=extra_body,
                     **self._make_backend_specific_and_remove(
@@ -895,7 +894,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     @property
     def base_model_name(self):
         """Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`."""
-        return self._hf_model_id.split("/")[1]
+        if "/" in self._model_id:
+            return self._model_id.split("/")[1]
+        else:
+            return self._model_id
 
     def add_adapter(self, adapter: OpenAIAdapter):
         """Adds the given adapter to the backend. Must not have been added to a different backend."""
@@ -1017,7 +1019,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             match _server_type(self._base_url):
                 case _ServerType.LOCALHOST:
                     self._tokenizer: "PreTrainedTokenizer" = (  # noqa: UP037
-                        AutoTokenizer.from_pretrained(self._hf_model_id)
+                        AutoTokenizer.from_pretrained(self._model_id)
                     )
                 case _ServerType.OPENAI:
                     raise Exception(
