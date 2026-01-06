@@ -6,6 +6,7 @@ import datetime
 import functools
 import inspect
 import json
+import os
 from collections.abc import Callable, Coroutine
 from copy import deepcopy
 from enum import Enum
@@ -151,15 +152,24 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 )
                 self._model_id = model_id.openai_name
 
-        if api_key is None:
-            FancyLogger.get_logger().warning(
-                "You are using an OpenAI backend with no api_key. Because no API key was provided, mellea assumes you intend to use the openai-compatible interface to your local ollama instance. If you intend to use OpenAI's platform you must specify your API key when instantiating your Mellea session/backend object."
+        # Use provided parameters or fall back to environment variables
+        self._api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self._base_url = base_url or os.getenv("OPENAI_BASE_URL")
+
+        # Validate that we have the required configuration
+        if self._api_key is None:
+            raise ValueError(
+                "OPENAI_API_KEY is required but not set. Please either:\n"
+                "  1. Set the environment variable: export OPENAI_API_KEY='your-key-here'\n"
+                "  2. Pass it as a parameter: OpenAIBackend(api_key='your-key-here')"
             )
-            self._base_url: str | None = "http://localhost:11434/v1"  # ollama
-            self._api_key = "ollama"
-        else:
-            self._base_url = base_url
-            self._api_key = api_key
+
+        if self._base_url is None:
+            raise ValueError(
+                "OPENAI_BASE_URL is required but not set. Please either:\n"
+                "  1. Set the environment variable: export OPENAI_BASE_URL=<your server url>\n"
+                "  2. Pass it as a parameter: OpenAIBackend(base_url=<your server url>)"
+            )
 
         self._server_type: _ServerType = (
             _server_type(self._base_url)
@@ -1007,25 +1017,3 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         :returns: list of adapter names that are currently registered with this backend
         """
         return list(self._loaded_adapters.keys())
-
-    def apply_chat_template(self, chat: list[dict[str, str]]):
-        """Apply the chat template for the model, if such a model is available (e.g., when it can deduce the huggingface model id)."""
-        from transformers import AutoTokenizer
-
-        if not hasattr(self, "_tokenizer"):
-            assert self._base_url, (
-                "The OpenAI Platform does not support adapters. You must specify a _base_url when using adapters."
-            )
-            match _server_type(self._base_url):
-                case _ServerType.LOCALHOST:
-                    self._tokenizer: "PreTrainedTokenizer" = (  # noqa: UP037
-                        AutoTokenizer.from_pretrained(self._model_id)
-                    )
-                case _ServerType.OPENAI:
-                    raise Exception(
-                        "apply_chat_template is called while targeting a server at openai.com. "
-                        "This is not supported --- openai.com does not support Activated Lora. "
-                        "Use a locally served vllm instance. "
-                    )
-
-        return self._tokenizer.apply_chat_template(chat, tokenize=False)
