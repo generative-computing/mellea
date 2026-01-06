@@ -4,8 +4,7 @@ CONDA=""
 if which mamba > /dev/null
 then
     CONDA=$(which mamba)
-fi
-if which conda > /dev/null
+elif which conda > /dev/null
 then
     CONDA=$(which conda)
 fi
