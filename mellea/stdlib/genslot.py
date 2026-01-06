@@ -383,7 +383,8 @@ class GenerativeSlot(Component, Generic[P, R]):
     def parts(self):
         """Not implemented."""
         cs: list = []
-        cs.extend(self._arguments)
+        if self._arguments is not None:
+            cs.append(self._arguments)
         cs.extend(self.requirements)
         return cs
 
