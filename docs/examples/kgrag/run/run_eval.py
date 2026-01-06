@@ -72,9 +72,8 @@ class EvaluationStats:
 
 # Define validation requirement
 VALID_EVAL_SCORE = Requirement(
-    name="valid_score",
-    requirement="Score must be 0 or 1",
-    validator=lambda o: o.score in [0, 1]
+    description="Score must be 0 or 1",
+    validation_fn=lambda o: o.score in [0, 1]
 )
 
 
@@ -524,6 +523,8 @@ async def main() -> int:
     # Configure logging
     if args.verbose:
         logger.setLevel("DEBUG")
+    else:
+        logger.setLevel("INFO")
 
     try:
         logger.info("=" * 60)

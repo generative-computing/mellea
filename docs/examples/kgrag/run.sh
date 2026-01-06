@@ -83,7 +83,7 @@ if [ -f "$TRUNCATED_DATASET" ]; then
     uv run --with mellea run/run_kg_update.py --dataset "$TRUNCATED_DATASET" --num-workers 1 --queue-size 1
 elif [ -f "$TINY_DATASET" ]; then
     echo "Using tiny dataset: $TINY_DATASET"
-    uv run --with mellea run/run_kg_update.py --dataset "$TINY_DATASET" --num-workers 1 --queue-size 1
+    uv run --with mellea run/run_kg_update.py --dataset "$TINY_DATASET" --num-workers 32 --queue-size 32
 else
     echo "Tiny dataset not found, using default dataset"
     uv run --with mellea run/run_kg_update.py --num-workers 64 --queue-size 64
@@ -92,7 +92,7 @@ fi
 # Step 6: Run QA
 echo ""
 echo "Step 6: Running QA..."
-uv run --with mellea run/run_qa.py --num-workers 1 --queue-size 1
+uv run --with mellea run/run_qa.py --num-workers 64 --queue-size 64
 
 # Step 7: Run eval if QA did not already call it
 echo ""

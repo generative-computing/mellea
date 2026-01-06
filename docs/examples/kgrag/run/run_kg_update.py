@@ -179,6 +179,7 @@ def create_mellea_session(session_config: SessionConfig) -> MelleaSession:
     """
     logger.info(f"Creating main session with model: {session_config.model_name}")
     logger.info(f"API base: {session_config.api_base}")
+    logger.info(f"Timeout: {session_config.timeout}s ({session_config.timeout/60:.1f} minutes)")
 
     headers = {}
     if session_config.rits_api_key:
@@ -198,8 +199,11 @@ def create_mellea_session(session_config: SessionConfig) -> MelleaSession:
 
 
 
+# Worker-local storage for KG updater instances
+_worker_kg_updater_instances = {}
+
 async def process_document(
-    kg_updater: KGUpdaterComponent,
+    kg_updater_factory: callable,
     doc_id: str = "",
     context: str = "",
     reference: str = "",
@@ -209,7 +213,7 @@ async def process_document(
     """Process a single document using Mellea-native KG updater.
 
     Args:
-        kg_updater: KGUpdaterComponent instance
+        kg_updater_factory: Factory function to create KGUpdaterComponent per worker
         doc_id: Document ID
         context: Document text
         reference: Reference/source
@@ -218,6 +222,13 @@ async def process_document(
     """
     from datetime import datetime
     import time
+
+    # Get or create a worker-local KG updater instance
+    # Each asyncio task (worker) gets its own instance to avoid session conflicts
+    task_name = asyncio.current_task().get_name()
+    if task_name not in _worker_kg_updater_instances:
+        _worker_kg_updater_instances[task_name] = kg_updater_factory()
+    kg_updater = _worker_kg_updater_instances[task_name]
 
     start_time = time.perf_counter()
 
@@ -256,6 +267,8 @@ async def main() -> int:
     # Configure logging
     if args.verbose:
         logger.setLevel("DEBUG")
+    else:
+        logger.setLevel("INFO")
 
     try:
         # Create configurations
@@ -281,8 +294,7 @@ async def main() -> int:
         # Ensure results directory exists
         Path("results").mkdir(exist_ok=True)
 
-        # Create sessions
-        session = create_mellea_session(session_config)
+        # Create shared resources (can be safely shared)
         emb_session = create_embedding_session(
             api_base=session_config.emb_api_base,
             api_key=session_config.emb_api_key or session_config.api_key,
@@ -291,7 +303,7 @@ async def main() -> int:
             rits_api_key=session_config.rits_api_key
         )
 
-        # Create KG driver
+        # Create KG driver (shared is OK, uses connection pool)
         kg_driver = KG_Driver(
             database=None,  # Uses default from env
             emb_session=emb_session
@@ -301,27 +313,31 @@ async def main() -> int:
         kg_logger = KGProgressLogger(progress_path=dataset_config.progress_path)
         logger.info(f"Processed documents at start: {len(kg_logger.processed_docs)}")
 
-        # Create Mellea-native KG Updater component
-        kg_updater = KGUpdaterComponent(
-            session=session,
-            emb_session=emb_session,
-            kg_driver=kg_driver,
-            domain=dataset_config.domain,
-            config={
-                "align_entity": True,
-                "merge_entity": True,
-                "align_relation": True,
-                "merge_relation": True,
-                "extraction_loop_budget": 3,
-                "alignment_loop_budget": 2,
-                "align_topk": 10,  # Number of candidates to consider during alignment
-                "align_entity_batch_size": 10,
-                "merge_entity_batch_size": 10,
-                "align_relation_batch_size": 10,
-                "merge_relation_batch_size": 10,
-            },
-            logger=kg_logger
-        )
+        # Note: We create KG updater instances per worker to avoid session conflicts
+        # Each worker needs its own session to prevent context resets from interfering
+        def create_worker_kg_updater():
+            """Factory to create a new KG updater instance for each worker."""
+            session = create_mellea_session(session_config)
+            return KGUpdaterComponent(
+                session=session,
+                emb_session=emb_session,  # Shared is OK
+                kg_driver=kg_driver,      # Shared is OK
+                domain=dataset_config.domain,
+                config={
+                    "align_entity": True,
+                    "merge_entity": True,
+                    "align_relation": True,
+                    "merge_relation": True,
+                    "extraction_loop_budget": 3,
+                    "alignment_loop_budget": 2,
+                    "align_topk": 10,  # Number of candidates to consider during alignment
+                    "align_entity_batch_size": 10,
+                    "merge_entity_batch_size": 10,
+                    "align_relation_batch_size": 10,
+                    "merge_relation_batch_size": 10,
+                },
+                logger=kg_logger
+            )
 
         # Create dataset loader
         loader = MovieDatasetLoader(
@@ -331,7 +347,7 @@ async def main() -> int:
             kg_logger,
             processor=functools.partial(
                 process_document,
-                kg_updater=kg_updater,
+                kg_updater_factory=create_worker_kg_updater,
                 logger=kg_logger
             )
         )

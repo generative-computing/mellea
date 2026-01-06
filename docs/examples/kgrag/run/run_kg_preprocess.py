@@ -334,6 +334,8 @@ async def main() -> int:
     # Configure logging verbosity
     if args.verbose:
         logger.setLevel("DEBUG")
+    else:
+        logger.setLevel("INFO")
 
     try:
         # Get preprocessors for selected domains

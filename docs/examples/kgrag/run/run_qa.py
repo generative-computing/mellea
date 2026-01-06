@@ -374,8 +374,11 @@ def compute_token_usage_delta(start_usage: Dict[str, int]) -> Dict[str, int]:
     return {key: end_usage.get(key, 0) - start_usage.get(key, 0) for key in keys}
 
 
+# Worker-local storage for KG-RAG instances
+_worker_kg_rag_instances = {}
+
 async def generate_prediction(
-    kg_rag: KGRagComponent,
+    kg_rag_factory: callable,
     id: str = "",
     query: str = "",
     query_time: datetime = None,
@@ -386,7 +389,7 @@ async def generate_prediction(
     """Generate a prediction for a single question.
 
     Args:
-        kg_rag: KGRagComponent instance
+        kg_rag_factory: Factory function to create KGRagComponent per worker
         id: Question ID
         query: Question text
         query_time: Query timestamp
@@ -394,6 +397,13 @@ async def generate_prediction(
         logger: Progress logger
         **kwargs: Additional arguments
     """
+    # Get or create a worker-local KG-RAG instance
+    # Each asyncio task (worker) gets its own instance to avoid session conflicts
+    task_name = asyncio.current_task().get_name()
+    if task_name not in _worker_kg_rag_instances:
+        _worker_kg_rag_instances[task_name] = kg_rag_factory()
+    kg_rag = _worker_kg_rag_instances[task_name]
+
     start_time = time.perf_counter()
     token_usage_start = snapshot_token_usage()
 
@@ -425,6 +435,8 @@ async def main() -> int:
     # Configure logging
     if args.verbose:
         logger.setLevel("DEBUG")
+    else:
+        logger.setLevel("INFO")
 
     try:
         # Create configurations
@@ -455,9 +467,7 @@ async def main() -> int:
         # Ensure results directory exists
         Path("results").mkdir(exist_ok=True)
 
-        # Create sessions
-        session = create_mellea_session(session_config)
-        eval_session = create_eval_session(session_config)
+        # Create shared embedding session (read-only, can be shared)
         emb_session = create_embedding_session(
             api_base=session_config.emb_api_base,
             api_key=session_config.emb_api_key or session_config.api_key,
@@ -470,15 +480,20 @@ async def main() -> int:
         qa_logger = QAProgressLogger(progress_path=dataset_config.progress_path)
         logger.info(f"Processed questions at start: {len(qa_logger.processed_questions)}")
 
-        # Create KG-RAG component
-        kg_rag = KGRagComponent(
-            session=session,
-            eval_session=eval_session,
-            emb_session=emb_session,
-            domain=dataset_config.domain,
-            config=model_config,
-            logger=qa_logger
-        )
+        # Note: We create KG-RAG instances per worker to avoid session conflicts
+        # Each worker needs its own session to prevent context resets from interfering
+        def create_worker_kg_rag():
+            """Factory to create a new KG-RAG instance for each worker."""
+            session = create_mellea_session(session_config)
+            eval_session = create_eval_session(session_config)
+            return KGRagComponent(
+                session=session,
+                eval_session=eval_session,
+                emb_session=emb_session,  # Shared is OK
+                domain=dataset_config.domain,
+                config=model_config,
+                logger=qa_logger
+            )
 
         # Create dataset loader
         loader = MovieDatasetLoader(
@@ -488,7 +503,7 @@ async def main() -> int:
             qa_logger,
             processor=functools.partial(
                 generate_prediction,
-                kg_rag=kg_rag,
+                kg_rag_factory=create_worker_kg_rag,
                 logger=qa_logger
             )
         )

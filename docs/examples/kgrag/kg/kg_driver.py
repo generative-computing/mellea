@@ -350,7 +350,8 @@ class KG_Driver:
         params = {"top_k": top_k, "embedding": embedding}
         score_clause, where_clause, order_clause = "", "", ""
 
-        label = f":{type}" if type else ""
+        # Normalize entity type to match database labels (e.g., "movie" -> "Movie")
+        label = f":{normalize_entity_type(type)}" if type else ""
         match_clause = f"MATCH (n{label})"
         if name:
             if not fuzzy:
@@ -376,17 +377,27 @@ class KG_Driver:
         
         limit_clause = f"LIMIT $top_k" if top_k else ""
 
-        # Build WITH clause:
+        # Build WITH clause and determine if score should be returned
         # - embedding: score comes from YIELD, include as "WITH n, score"
         # - fuzzy: score_clause defines score with "AS score", include as "WITH n{score_clause}"
         # - constraint (no embedding/fuzzy): just need "WITH n{score_clause}" for time_diff
         with_clause = ""
-        if embedding:
+        score_available = False  # Renamed to avoid shadowing function parameter
+
+        # Check conditions explicitly to determine WITH clause and score availability
+        if embedding is not None and embedding:  # Explicitly check for truthy, non-None embedding
             # score comes from YIELD in the CALL statement
             with_clause = f"WITH n, score{score_clause}"
-        elif fuzzy or constraint:
-            # score_clause defines score (fuzzy) or adds time_diff (constraint)
+            score_available = True
+        elif fuzzy and name:  # Fuzzy name matching requires a name to compare against
+            # score_clause defines score (fuzzy) - only set if name was provided
             with_clause = f"WITH n{score_clause}"
+            score_available = True
+        elif constraint is not None:  # Temporal constraint only
+            # Just time_diff, no score
+            with_clause = f"WITH n{score_clause}"
+            score_available = False
+        # If none of the above: no WITH clause needed, no score
 
         query = textwrap.dedent(f"""\
             {match_clause}
@@ -394,29 +405,85 @@ class KG_Driver:
             {f"WHERE {where_clause}" if where_clause else ''}
             RETURN elementId(n) AS id, labels(n) AS labels, n.name AS name,
                 apoc.map.removeKey(properties(n), '{PROP_EMBEDDING}') AS properties
-                {", score" if embedding or fuzzy else ""}
+                {", score" if score_available else ""}
             {order_clause}
             {limit_clause}
         """)
 
+        # Debug logging for score variable issue
+        from utils.logger import logger as debug_logger
+        debug_logger.debug(f"get_entities params - embedding={'<provided>' if embedding is not None else 'None'}, fuzzy={fuzzy}, constraint={'<provided>' if constraint is not None else 'None'}, name={name}, type={type}")
+        debug_logger.debug(f"get_entities logic - with_clause={repr(with_clause)}, score_available={score_available}, score_clause={repr(score_clause)}")
+        debug_logger.debug(f"Generated query:\n{query}")
+
         results = self.run_query(query, params)
 
-        entities = [
-            KGEntity(
-                id=record["id"],
-                type=self.get_label(record["labels"]),
-                name=record["name"],
-                description=record["properties"].get(PROP_DESCRIPTION),
-                paragraph=record["properties"].get(PROP_PARAGRAPH),
-                created_at=record["properties"].get(PROP_CREATED),
-                modified_at=record["properties"].get(PROP_MODIFIED),
-                properties=self.get_properties(record["properties"]),
-                ref=record["properties"].get(PROP_REFERENCE)
-            ) for record in results
-        ]
+        entities = []
+        for i, record in enumerate(results):
+            try:
+                # Skip None records
+                if record is None:
+                    continue
 
-        if return_score and (embedding or fuzzy):
-            return [RelevantEntity(entity, record["score"]) for entity, record in zip(entities, results)]
+                # Helper function to safely get field from record
+                def safe_get(field_name, default=None):
+                    try:
+                        return record.get(field_name, default)
+                    except (AttributeError, TypeError):
+                        try:
+                            return record[field_name]
+                        except (KeyError, TypeError, IndexError):
+                            return default
+
+                # Get all fields safely
+                record_id = safe_get("id", "")
+                record_labels = safe_get("labels", [])
+                record_name = safe_get("name", "")
+                raw_props = safe_get("properties")
+
+                # Ensure props is always a dict, never None
+                props = raw_props if (raw_props is not None and isinstance(raw_props, dict)) else {}
+
+                entities.append(KGEntity(
+                    id=record_id,
+                    type=self.get_label(record_labels) if record_labels else "",
+                    name=record_name,
+                    description=props.get(PROP_DESCRIPTION) if props else None,
+                    paragraph=props.get(PROP_PARAGRAPH) if props else None,
+                    created_at=props.get(PROP_CREATED) if props else None,
+                    modified_at=props.get(PROP_MODIFIED) if props else None,
+                    properties=self.get_properties(props) if props else {},
+                    ref=props.get(PROP_REFERENCE) if props else None
+                ))
+            except Exception as e:
+                from utils.logger import logger as error_logger
+                error_logger.error(f"Error processing record {i} in get_entities: {e}")
+                error_logger.error(f"Record type: {type(record)}, Record: {record}")
+                import traceback
+                error_logger.error(f"Traceback: {traceback.format_exc()}")
+                continue
+
+        # Return RelevantEntity only if user requested scores AND scores are available in query
+        if return_score and score_available:
+            relevant_entities = []
+            for entity, record in zip(entities, results):
+                try:
+                    if record is None:
+                        score = 0.0
+                    else:
+                        try:
+                            score = record.get("score", 0.0)
+                        except (AttributeError, TypeError):
+                            try:
+                                score = record["score"]
+                            except (KeyError, TypeError, IndexError):
+                                score = 0.0
+                    relevant_entities.append(RelevantEntity(entity, score))
+                except Exception as e:
+                    from utils.logger import logger as error_logger
+                    error_logger.error(f"Error creating RelevantEntity: {e}, using score=0.0")
+                    relevant_entities.append(RelevantEntity(entity, 0.0))
+            return relevant_entities
         else:
             return entities
 
@@ -906,7 +973,7 @@ class KG_Driver:
     async def get_existing_node_properties_async(self, type, name):
         """Async query to retrieve existing properties of an entity."""
         query = f"""
-        MATCH (e:{type} {{name: $name}})
+        MATCH (e:{normalize_entity_type(type)} {{name: $name}})
         RETURN apoc.map.removeKey(properties(n), "embedding") AS props
         """
         async with self.async_driver.session(database=self.database) as session:
@@ -948,7 +1015,7 @@ class KG_Driver:
     async def get_existing_edge_properties_async(self, src_name, edge_type, dst_name):
         """Async query to retrieve existing properties of an entity."""
         query = f"""
-        MATCH (s {{name: $src_name}})-[r: {edge_type}]->(d {{name: $dst_name}})
+        MATCH (s {{name: $src_name}})-[r:{normalize_relation(edge_type)}]->(d {{name: $dst_name}})
         RETURN apoc.map.removeKey(properties(r), "embedding") AS props
         """
         async with self.async_driver.session(database=self.database) as session:

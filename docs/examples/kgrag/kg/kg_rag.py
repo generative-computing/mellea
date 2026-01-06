@@ -247,6 +247,17 @@ class KGRagComponent(Component):
         if len(relation_list) == 0:
             return []
 
+        # Limit the number of relations to avoid extremely large prompts/responses
+        # that can cause JSON parsing errors or exceed model limits
+        MAX_RELATIONS = 100  # Conservative limit to avoid JSON parsing errors
+        if len(relation_list) > MAX_RELATIONS:
+            self.logger.warning(
+                f"Entity '{entity.name}' has {len(relation_list)} relations, "
+                f"limiting to {MAX_RELATIONS} to avoid prompt size issues"
+            )
+            relation_list = relation_list[:MAX_RELATIONS]
+
+        self.logger.debug(f"Processing {len(relation_list)} relations for entity '{entity.name}'")
         entity_str = entity_to_text(entity)
         unique_relations_dict = {}
         for i, relation in enumerate(relation_list):

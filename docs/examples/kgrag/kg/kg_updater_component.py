@@ -407,6 +407,13 @@ class KGUpdaterComponent(Component):
             # Reset context before each generative call
             self.session.reset()
 
+            import time
+            start_time = time.time()
+            self.logger.info(f"Starting extraction - context length: {len(context)} chars")
+
+            # Get entity types from KG to guide extraction
+            entity_types = ", ".join(self.kg_driver.get_node_types())
+
             result, ctx = await extract_entities_and_relations(
                 self.session.ctx,
                 self.session.backend,
@@ -416,17 +423,20 @@ class KGUpdaterComponent(Component):
                 domain=self.domain,
                 hints=hints or f"Extract knowledge relevant to {self.domain}",
                 reference=reference,
+                entity_types=entity_types,
             )
 
+            elapsed = time.time() - start_time
             self.logger.info(
                 f"Extracted {len(result.entities)} entities and "
-                f"{len(result.relations)} relations"
+                f"{len(result.relations)} relations in {elapsed:.1f}s"
             )
 
             return result
 
         except Exception as e:
-            self.logger.error(f"Extraction failed: {e}")
+            elapsed = time.time() - start_time if 'start_time' in locals() else 0
+            self.logger.error(f"Extraction failed after {elapsed:.1f}s: {e}")
             # Return empty result on failure
             return ExtractionResult(entities=[], relations=[], reasoning="Extraction failed")
 
@@ -460,7 +470,7 @@ class KGUpdaterComponent(Component):
 
         # Format candidates for LLM with configurable limit
         candidates_str = "\n\n".join([
-            f"ID: {e.id}\nName: {e.name}\nType: {e.type}\nDescription: {e.description[:200]}"
+            f"ID: {e.id}\nName: {e.name}\nType: {e.type}\nDescription: {(e.description or '')[:200]}"
             for e in candidate_entities[:top_k]
         ])
 
@@ -642,13 +652,17 @@ class KGUpdaterComponent(Component):
 
                         # Generate embedding and do vector search for similar entities
                         try:
+                            # Defensive: ensure properties is a dict, not None
+                            entity_props = extracted_entity.properties if hasattr(extracted_entity, 'properties') else {}
+                            entity_props = entity_props if entity_props is not None else {}
+
                             entity_text = entity_to_text(
                                 KGEntity(
                                     id="",
                                     name=norm_name,
                                     type=extracted_entity.type,
                                     description=extracted_entity.description,
-                                    properties=extracted_entity.properties
+                                    properties=entity_props
                                 ),
                                 include_des=False
                             )
@@ -687,12 +701,16 @@ class KGUpdaterComponent(Component):
                                 self.logger.debug(f"Entity '{norm_name}' aligned to {aligned_entity_id}")
 
                     # Create or update entity in KG
+                    # Defensive: ensure properties is a dict, not None
+                    final_props = extracted_entity.properties if hasattr(extracted_entity, 'properties') else {}
+                    final_props = final_props if final_props is not None else {}
+
                     entity = KGEntity(
                         id=aligned_entity_id or "",  # Use aligned ID or empty for new entity
                         name=norm_name,
                         type=extracted_entity.type,
                         description=extracted_entity.description,
-                        properties=extracted_entity.properties,
+                        properties=final_props,
                         created_at=created_at,
                         ref=reference
                     )
@@ -704,7 +722,9 @@ class KGUpdaterComponent(Component):
                         stats["entities_new"] += 1
 
                 except Exception as e:
+                    import traceback
                     self.logger.error(f"Failed to process entity: {e}")
+                    self.logger.error(f"Traceback: {traceback.format_exc()}")
                     continue
 
             # Step 3: Process relations

@@ -127,6 +127,8 @@ async def main() -> int:
     # Configure logging
     if args.verbose:
         logger.setLevel("DEBUG")
+    else:
+        logger.setLevel("INFO")
 
     try:
         # Create configuration
