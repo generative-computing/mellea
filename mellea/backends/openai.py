@@ -153,20 +153,20 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 self._model_id = model_id.openai_name
 
         # Use provided parameters or fall back to environment variables
-        self._api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self._base_url = base_url or os.getenv("OPENAI_BASE_URL")
+        self._api_key = api_key
+        self._base_url = base_url
 
         # Validate that we have the required configuration
-        if self._api_key is None:
+        if self._api_key is None and os.getenv("OPENAI_API_KEY") is None:
             raise ValueError(
-                "OPENAI_API_KEY is required but not set. Please either:\n"
+                "OPENAI_API_KEY or api_key is required but not set. Please either:\n"
                 "  1. Set the environment variable: export OPENAI_API_KEY='your-key-here'\n"
                 "  2. Pass it as a parameter: OpenAIBackend(api_key='your-key-here')"
             )
 
-        if self._base_url is None:
+        if self._base_url is None and os.getenv("OPENAI_BASE_URL") is None:
             raise ValueError(
-                "OPENAI_BASE_URL is required but not set. Please either:\n"
+                "OPENAI_BASE_URL or base_url is required but not set. Please either:\n"
                 "  1. Set the environment variable: export OPENAI_BASE_URL=<your server url>\n"
                 "  2. Pass it as a parameter: OpenAIBackend(base_url=<your server url>)"
             )

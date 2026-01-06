@@ -266,17 +266,6 @@ def test_api_key_and_base_url_from_parameters():
     assert backend._base_url == "https://api.test.com/v1"
 
 
-def test_api_key_and_base_url_from_env_variables():
-    """Test that API key and base URL fall back to environment variables."""
-    with patch.dict(
-        os.environ,
-        {"OPENAI_API_KEY": "env-api-key", "OPENAI_BASE_URL": "https://api.env.com/v1"},
-    ):
-        backend = OpenAIBackend(model_id="gpt-4")
-        assert backend._api_key == "env-api-key"
-        assert backend._base_url == "https://api.env.com/v1"
-
-
 def test_parameter_overrides_env_variable():
     """Test that explicit parameters override environment variables."""
     with patch.dict(
@@ -297,7 +286,9 @@ def test_missing_api_key_raises_error():
     with patch.dict(os.environ, {}, clear=True):
         with pytest.raises(ValueError) as exc_info:
             OpenAIBackend(model_id="gpt-4", base_url="https://api.test.com/v1")
-        assert "OPENAI_API_KEY is required but not set" in str(exc_info.value)
+        assert "OPENAI_API_KEY or api_key is required but not set" in str(
+            exc_info.value
+        )
 
 
 if __name__ == "__main__":
