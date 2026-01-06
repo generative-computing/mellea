@@ -165,10 +165,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
 
         if self._base_url is None and os.getenv("OPENAI_BASE_URL") is None:
-            raise ValueError(
-                "OPENAI_BASE_URL or base_url is required but not set. Please either:\n"
-                "  1. Set the environment variable: export OPENAI_BASE_URL=<your server url>\n"
-                "  2. Pass it as a parameter: OpenAIBackend(base_url=<your server url>)"
+            FancyLogger.get_logger().warning(
+                "OPENAI_BASE_URL or base_url is not set. Please either:\n"
+                "The openai SDK is going to assume that the base_url is `https://api.openai.com/v1`"
             )
 
         self._server_type: _ServerType = (
