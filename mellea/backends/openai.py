@@ -6,6 +6,7 @@ import datetime
 import functools
 import inspect
 import json
+import os
 from collections.abc import Callable, Coroutine
 from copy import deepcopy
 from enum import Enum
@@ -72,7 +73,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     def __init__(
         self,
-        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_MICRO_3B,
+        model_id: str | ModelIdentifier = model_ids.OPENAI_GPT_5_1,
         formatter: Formatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
@@ -142,26 +143,38 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         self.default_to_constraint_checking_alora = default_to_constraint_checking_alora
 
-        self._model_id = model_id
         match model_id:
             case str():
-                self._hf_model_id = model_id
+                self._model_id = model_id
             case ModelIdentifier():
-                assert model_id.hf_model_name is not None, (
-                    "model_id is None. This can also happen if the ModelIdentifier has no hf_model_id name set."
+                assert model_id.openai_name is not None, (
+                    "model_id is None. This can also happen if the ModelIdentifier has no `openai_name` name set."
                 )
-                self._hf_model_id = model_id.hf_model_name
+                self._model_id = model_id.openai_name
 
-        if base_url is None:
-            self._base_url = "http://localhost:11434/v1"  # ollama
-        else:
-            self._base_url = base_url
-        if api_key is None:
-            self._api_key = "ollama"
-        else:
-            self._api_key = api_key
+        # Use provided parameters or fall back to environment variables
+        self._api_key = api_key
+        self._base_url = base_url
 
-        self._server_type = _server_type(self._base_url)
+        # Validate that we have the required configuration
+        if self._api_key is None and os.getenv("OPENAI_API_KEY") is None:
+            raise ValueError(
+                "OPENAI_API_KEY or api_key is required but not set. Please either:\n"
+                "  1. Set the environment variable: export OPENAI_API_KEY='your-key-here'\n"
+                "  2. Pass it as a parameter: OpenAIBackend(api_key='your-key-here')"
+            )
+
+        if self._base_url is None and os.getenv("OPENAI_BASE_URL") is None:
+            FancyLogger.get_logger().warning(
+                "OPENAI_BASE_URL or base_url is not set.\n"
+                "The openai SDK is going to assume that the base_url is `https://api.openai.com/v1`"
+            )
+
+        self._server_type: _ServerType = (
+            _server_type(self._base_url)
+            if self._base_url is not None
+            else _ServerType.OPENAI
+        )  # type: ignore
 
         self._openai_client_kwargs = self.filter_openai_client_kwargs(**kwargs)
 
@@ -598,14 +611,38 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         extra_params: dict[str, Any] = {}
         if _format is not None:
-            extra_params["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": _format.__name__,
-                    "schema": _format.model_json_schema(),
-                    "strict": True,
-                },
-            }
+            if self._server_type == _ServerType.OPENAI:
+                # The OpenAI platform requires that additionalProperties=False on all response_format schemas.
+                # However, not all schemas generates by Mellea include additionalProperties.
+                # GenerativeSlot, in particular, does not add this property.
+                # The easiest way to address this disparity between OpenAI and other inference providers is to
+                # monkey-patch the response format exactly when we are actually using the OpenAI server.
+                #
+                # This only addresses the additionalProperties=False constraint.
+                # Other constraints we should be checking/patching are described here:
+                # https://platform.openai.com/docs/guides/structured-outputs?api-mode=chat
+                monkey_patched_response_schema = _format.model_json_schema()
+                monkey_patched_response_schema["additionalProperties"] = False
+                extra_params["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": _format.__name__,
+                        "schema": monkey_patched_response_schema,
+                        "strict": True,
+                    },
+                }
+            else:
+                FancyLogger().get_logger().warning(
+                    "Mellea assumes you are NOT using the OpenAI platform, and that other model providers have less strict requirements on support JSON schemas passed into `format=`. If you encounter a server-side error following this message, then you found an exception to this assumption. Please open an issue at github.com/generative_computing/mellea with this stack trace and your inference engine / model provider."
+                )
+                extra_params["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": _format.__name__,
+                        "schema": _format.model_json_schema(),
+                        "strict": True,
+                    },
+                }
 
         # Append tool call information if applicable.
         tools: dict[str, Callable] = dict()
@@ -631,15 +668,21 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         formatted_tools = convert_tools_to_json(tools)
         use_tools = len(formatted_tools) > 0
 
+        # Build optional reasoning parameters
+        # NOTE: the openai SDK doesn't like it if you pass `reasoning_effort` param to a non-reasoning model e.g. gpt4o
+        reasoning_params = {}
+        if thinking is not None:
+            reasoning_params["reasoning_effort"] = thinking
+
         chat_response: Coroutine[
             Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]
         ] = self._async_client.chat.completions.create(
-            model=self._hf_model_id,
+            model=self._model_id,
             messages=conversation,  # type: ignore
-            reasoning_effort=thinking,  # type: ignore
             tools=formatted_tools if use_tools else None,  # type: ignore
             # parallel_tool_calls=False, # We only support calling one tool per turn. But we do the choosing on our side so we leave this False.
             **extra_params,
+            **reasoning_params,  # type: ignore
             **self._make_backend_specific_and_remove(
                 model_opts, is_chat_context=ctx.is_chat_context
             ),
@@ -807,7 +850,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         try:
             completion_response: Completion = (
                 await self._async_client.completions.create(
-                    model=self._hf_model_id,
+                    model=self._model_id,
                     prompt=prompts,
                     extra_body=extra_body,
                     **self._make_backend_specific_and_remove(
@@ -860,7 +903,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     @property
     def base_model_name(self):
         """Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`."""
-        return self._hf_model_id.split("/")[1]
+        if "/" in self._model_id:
+            return self._model_id.split("/")[1]
+        else:
+            return self._model_id
 
     def add_adapter(self, adapter: OpenAIAdapter):
         """Adds the given adapter to the backend. Must not have been added to a different backend."""
@@ -970,22 +1016,3 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         :returns: list of adapter names that are currently registered with this backend
         """
         return list(self._loaded_adapters.keys())
-
-    def apply_chat_template(self, chat: list[dict[str, str]]):
-        """Apply the chat template for the model, if such a model is available (e.g., when it can deduce the huggingface model id)."""
-        from transformers import AutoTokenizer
-
-        if not hasattr(self, "_tokenizer"):
-            match _server_type(self._base_url):
-                case _ServerType.LOCALHOST:
-                    self._tokenizer: "PreTrainedTokenizer" = (  # noqa: UP037
-                        AutoTokenizer.from_pretrained(self._hf_model_id)
-                    )
-                case _ServerType.OPENAI:
-                    raise Exception(
-                        "apply_chat_template is called while targeting a server at openai.com. "
-                        "This is not supported --- openai.com does not support Activated Lora. "
-                        "Use a locally served vllm instance. "
-                    )
-
-        return self._tokenizer.apply_chat_template(chat, tokenize=False)
