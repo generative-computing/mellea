@@ -281,17 +281,6 @@ uv run --with mellea run/run_kg_update.py --num-workers 4 --queue-size 10
 
 **Note**: The preprocessing and graph construction can take several hours depending on dataset size and hardware.
 
-### 4. Quick Start with Demo
-
-After building the knowledge graph, try the demo:
-
-```bash
-# Run the interactive demo
-uv run --with mellea python demo/demo.py
-```
-
-The demo will run example queries and show the complete KGRag pipeline in action.
-
 ## Usage
 
 ### Running Question Answering
@@ -342,6 +331,22 @@ uv run --with mellea run/run_qa.py \
 # Edit run.sh to uncomment the desired step
 bash run.sh
 ```
+
+### Interactive Demo (Optional)
+
+For a quick demonstration of the KGRag pipeline with example queries:
+
+```bash
+# Run the interactive demo
+uv run --with mellea python demo/demo.py
+```
+
+**Note**: The demo is a standalone demonstration tool separate from the main QA evaluation pipeline. It's useful for:
+- Understanding how KGRag works with example queries
+- Testing the system with custom questions interactively
+- Debugging and exploring the reasoning process
+
+For production use and benchmark evaluation, use `run/run_qa.py` instead.
 
 ## How It Works
 
