@@ -3308,20 +3308,16 @@ dependencies = [
     { name = "huggingface-hub" },
     { name = "jinja2" },
     { name = "json5" },
-    { name = "litellm" },
     { name = "llm-sandbox", extra = ["docker"] },
     { name = "math-verify" },
     { name = "mistletoe" },
     { name = "neo4j" },
     { name = "ollama" },
     { name = "openai" },
-    { name = "pandas" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "requests" },
     { name = "rouge-score" },
-    { name = "sentence-transformers" },
-    { name = "torch" },
     { name = "trafilatura" },
     { name = "transformers" },
     { name = "typer" },
@@ -3343,6 +3339,8 @@ all = [
     { name = "outlines" },
     { name = "outlines-core" },
     { name = "peft" },
+    { name = "sentence-transformers" },
+    { name = "torch" },
     { name = "transformers" },
     { name = "trl" },
     { name = "vllm" },
@@ -3362,6 +3360,10 @@ hf = [
 ]
 litellm = [
     { name = "litellm" },
+]
+local-embeddings = [
+    { name = "sentence-transformers" },
+    { name = "torch" },
 ]
 vllm = [
     { name = "numpy" },
@@ -3414,11 +3416,10 @@ requires-dist = [
     { name = "ibm-watsonx-ai", marker = "extra == 'watsonx'", specifier = ">=1.3.31" },
     { name = "jinja2" },
     { name = "json5" },
-    { name = "litellm", specifier = ">=1.79.3" },
     { name = "litellm", marker = "extra == 'litellm'", specifier = ">=1.76" },
     { name = "llm-sandbox", extras = ["docker"], specifier = ">=0.3.23" },
     { name = "math-verify" },
-    { name = "mellea", extras = ["watsonx", "docling", "hf", "vllm", "litellm"], marker = "extra == 'all'" },
+    { name = "mellea", extras = ["watsonx", "docling", "hf", "vllm", "litellm", "local-embeddings"], marker = "extra == 'all'" },
     { name = "mistletoe", specifier = ">=1.4.0" },
     { name = "neo4j", specifier = ">=6.0.3" },
     { name = "numpy", marker = "extra == 'vllm'", specifier = "<2.0.0" },
@@ -3427,14 +3428,13 @@ requires-dist = [
     { name = "outlines", marker = "extra == 'hf'" },
     { name = "outlines-core", marker = "extra == 'hf'", specifier = "==0.1.26" },
     { name = "outlines-core", marker = "extra == 'vllm'", specifier = "==0.1.26" },
-    { name = "pandas", specifier = ">=2.2.3" },
     { name = "peft", marker = "extra == 'hf'", specifier = ">=0.18.0" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "rouge-score" },
-    { name = "sentence-transformers", specifier = ">=5.1.2" },
-    { name = "torch", specifier = ">=2.7.0" },
+    { name = "sentence-transformers", marker = "extra == 'local-embeddings'", specifier = ">=5.1.2" },
+    { name = "torch", marker = "extra == 'local-embeddings'", specifier = ">=2.7.0" },
     { name = "trafilatura", specifier = ">=2.0.0" },
     { name = "transformers", specifier = ">=4.53.3" },
     { name = "transformers", marker = "extra == 'hf'", specifier = ">=4.53.2" },
@@ -3446,7 +3446,7 @@ requires-dist = [
     { name = "uvicorn" },
     { name = "vllm", marker = "extra == 'vllm'", specifier = ">=0.9.1" },
 ]
-provides-extras = ["hf", "vllm", "litellm", "watsonx", "docling", "all"]
+provides-extras = ["hf", "vllm", "litellm", "watsonx", "docling", "local-embeddings", "all"]
 
 [package.metadata.requires-dev]
 dev = [
