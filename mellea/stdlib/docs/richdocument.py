@@ -26,10 +26,13 @@ class RichDocument(Component):
         self._doc = doc
 
     def parts(self) -> list[Component | CBlock]:
-        """A `RichDocument` has no parts."""
-        raise NotImplementedError(
-            "Disallowing use of `parts` until we figure out exactly what it's supposed to be for"
-        )
+        """RichDocument has no parts.
+
+        In the future, we should allow chunking of DoclingDocuments to correspond to parts().
+        """
+        # TODO: we could separate a DoclingDocument into chunks and then treat those chunks as parts.
+        # for now, do nothing.
+        return []
 
     def format_for_llm(self) -> TemplateRepresentation | str:
         """Return Document content as Markdown.
@@ -93,6 +96,10 @@ class TableQuery(Query):
         """
         super().__init__(obj, query)
 
+    def parts(self):
+        """The list of cblocks/components on which TableQuery depends."""
+        return [self._obj]
+
     def format_for_llm(self) -> TemplateRepresentation:
         """Template arguments for Formatter."""
         assert isinstance(self._obj, Table)
@@ -118,6 +125,10 @@ class TableTransform(Transform):
             transformation : The transformation description string.
         """
         super().__init__(obj, transformation)
+
+    def parts(self):
+        """The parts for this component."""
+        return [self._obj]
 
     def format_for_llm(self) -> TemplateRepresentation:
         """Template arguments for Formatter."""
@@ -155,6 +166,10 @@ class Table(MObject):
             return doc.get_tables()[0]
         else:
             return None
+
+    def parts(self):
+        """The current implementation does not necessarily entail any string re-use, so parts is empty."""
+        return []
 
     def to_markdown(self) -> str:
         """Get the `Table` as markdown."""
