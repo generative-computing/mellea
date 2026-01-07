@@ -33,7 +33,7 @@ This document summarizes the key changes and improvements made to the KGRAG (Kno
    - Output: `[{"id": 1, "desc": "...", "props": {...}}]`
 
 ### QA Prompts (kg_generative.py)
-✅ **All 8 prompts restored** with original detailed versions from `kg_model.py`:
+✅ **All 8 prompts migrated** with original detailed versions from the archived `kg_model.py`:
 
 1. **break_down_question** - PROMPTS["break_down_question"]
    - Decomposes questions into solving routes

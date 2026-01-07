@@ -46,7 +46,7 @@ The system consists of several key components:
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              KGModel (kg_model.py)                          │
+│           KGRagComponent (kg/kg_rag.py)                     │
 │  • Question breakdown into solving routes                   │
 │  • Topic entity extraction                                  │
 │  • Entity alignment with KG                                 │
@@ -72,12 +72,11 @@ The system consists of several key components:
 ### Key Components
 
 **Core Modules:**
-- **[kg_model.py](kg_model.py)**: Core KGModel class implementing the reasoning pipeline
-- **[kg/kg_driver.py](kg/kg_driver.py)**: Neo4j database driver for graph operations (refactored with emb_session support)
-- **[kg/kg_preprocessor.py](kg/kg_preprocessor.py)**: Refactored entity and relation extraction with Pydantic models
-- **[kg/kg_embedder.py](kg/kg_embedder.py)**: Refactored embedding generation with batch processing
-- **[kg/kg_updater.py](kg/kg_updater.py)**: Incremental graph updates with robust error handling
-- **[kg/kg_rag.py](kg/kg_rag.py)**: RAG component following Mellea patterns
+- **[kg/kg_rag.py](kg/kg_rag.py)**: KGRagComponent implementing the reasoning pipeline following Mellea patterns
+- **[kg/kg_driver.py](kg/kg_driver.py)**: Neo4j database driver for graph operations
+- **[kg/kg_preprocessor.py](kg/kg_preprocessor.py)**: Entity and relation extraction from structured databases
+- **[kg/kg_embedder.py](kg/kg_embedder.py)**: Embedding generation with batch processing
+- **[kg/kg_updater_component.py](kg/kg_updater_component.py)**: Incremental graph updates with document processing
 
 **Configuration Models (Pydantic):**
 - **[kg/kg_entity_models.py](kg/kg_entity_models.py)**: Type-safe entity models (Movie, Person, Award, etc.)
@@ -427,174 +426,6 @@ Results are saved to `results/*_results.json`:
 ]
 ```
 
-## Example Queries
-
-```python
-from kg_model import KGModel
-from mellea import MelleaSession
-from mellea.backends.openai import OpenAIBackend
-from datetime import datetime
-
-# Initialize sessions
-session = MelleaSession(backend=OpenAIBackend(
-    model_id="gpt-4",
-    base_url="https://api.openai.com/v1",
-    api_key="your-api-key"
-))
-
-# Create KG model
-kg_model = KGModel(
-    session=session,
-    eval_session=session,
-    emb_session=embedding_model,
-    domain="movie",
-    config={"route": 5, "width": 30, "depth": 3}
-)
-
-# Generate answer
-answer = await kg_model.generate_answer(
-    query="Who won the best actor Oscar in 2020?",
-    query_time=datetime(2024, 3, 19, 23, 49, 30)
-)
-
-print(answer)
-# Output: "Joaquin Phoenix won the Best Actor Oscar in 2020 for his role in Joker."
-```
-
-## Integration with Mellea
-
-This example demonstrates several Mellea framework patterns and modern Python best practices:
-
-### 🔄 Refactored Architecture
-
-The codebase has been completely refactored to follow Mellea's design patterns:
-
-**✅ Pydantic Models for Type Safety**
-```python
-from kg.kg_qa_models import QAConfig, QASessionConfig
-
-# Type-safe configuration with automatic validation
-session_config = QASessionConfig(
-    api_base="http://localhost:7878/v1",
-    model_name="gpt-4",
-    timeout=1800  # Validated: must be 1-3600
-)
-
-qa_config = QAConfig(
-    num_workers=128,  # Validated: must be 1-512
-    queue_size=128,   # Validated: must be 1-1024
-    eval_batch_size=64
-)
-```
-
-**✅ Modern Async Patterns**
-```python
-# Old pattern (deprecated)
-loop = asyncio.get_event_loop()
-loop.run_until_complete(main())
-
-# New pattern (Python 3.7+)
-async def main() -> int:
-    try:
-        # Your async code
-        return 0
-    except KeyboardInterrupt:
-        return 130
-    except Exception:
-        return 1
-
-if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
-```
-
-**✅ Factory Functions for Session Creation**
-```python
-def create_mellea_session(session_config: QASessionConfig) -> MelleaSession:
-    """Create Mellea session with intelligent defaults."""
-    logger.info(f"Creating session with model: {session_config.model_name}")
-
-    headers = {}
-    if session_config.rits_api_key:
-        headers['RITS_API_KEY'] = session_config.rits_api_key
-
-    return MelleaSession(
-        backend=OpenAIBackend(
-            model_id=session_config.model_name,
-            formatter=TemplateFormatter(model_id=session_config.model_name),
-            base_url=session_config.api_base,
-            api_key=session_config.api_key,
-            timeout=session_config.timeout,
-            default_headers=headers if headers else None
-        )
-    )
-
-# Intelligent fallbacks for evaluation session
-def create_eval_session(session_config: QASessionConfig) -> MelleaSession:
-    """Create eval session with fallback to main config."""
-    eval_api_base = session_config.eval_api_base or session_config.api_base
-    eval_model_name = session_config.eval_model_name or session_config.model_name
-    # ... create session with fallback values
-```
-
-**✅ Comprehensive CLI with argparse**
-```python
-def parse_arguments() -> argparse.Namespace:
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Run QA evaluation on knowledge graph",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  %(prog)s --dataset data/crag_movie_dev.jsonl
-  %(prog)s --num-workers 256 --queue-size 256
-  %(prog)s --config route=5 width=30 depth=3
-  %(prog)s --verbose --keep
-        """
-    )
-    # ... comprehensive argument definitions
-    return parser.parse_args()
-```
-
-**✅ Better Error Handling**
-```python
-async def main() -> int:
-    """Main async entry point with proper error handling."""
-    try:
-        # Pre-flight validation
-        if not Path(dataset_config.dataset_path).exists():
-            logger.error(f"Dataset not found: {dataset_config.dataset_path}")
-            return 1
-
-        # ... processing
-
-        logger.info("✅ QA evaluation completed successfully!")
-        return 0
-
-    except KeyboardInterrupt:
-        logger.warning("\n⚠️  QA evaluation interrupted by user")
-        return 130
-    except Exception as e:
-        logger.error(f"❌ QA evaluation failed: {e}")
-        if args.verbose:
-            import traceback
-            traceback.print_exc()
-        return 1
-```
-
-### Backend Configuration
-```python
-from mellea import MelleaSession
-from mellea.backends.openai import OpenAIBackend
-
-session = MelleaSession(backend=OpenAIBackend(
-    model_id=MODEL_NAME,
-    formatter=TemplateFormatter(model_id=MODEL_NAME),
-    base_url=API_BASE,
-    api_key=API_KEY,
-    timeout=TIME_OUT
-))
-```
-
 ### LLM-Powered Functions
 The system extensively uses LLM calls for:
 - Question decomposition
@@ -602,60 +433,10 @@ The system extensively uses LLM calls for:
 - Relation pruning and scoring
 - Answer synthesis and validation
 
-### Retry Logic
-All LLM calls use retry decorators for robustness:
-```python
-@llm_retry(max_retries=MAX_RETRIES, default_output=[])
-async def extract_entity(self, query: Query) -> List[str]:
-    # LLM call with automatic retries
-    pass
-```
-
-### 📚 Refactoring Documentation
-
-For detailed information about the refactoring work:
-- **[REFACTORING_GUIDE.md](REFACTORING_GUIDE.md)**: Comprehensive guide to Mellea patterns
-- **[REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md)**: Summary of all refactoring work
-- **[PREPROCESSOR_REFACTORING.md](PREPROCESSOR_REFACTORING.md)**: Preprocessing refactoring details
-- **[EMBEDDING_REFACTORING.md](EMBEDDING_REFACTORING.md)**: Embedding generation refactoring
-- **[UPDATER_REFACTORING.md](UPDATER_REFACTORING.md)**: Graph updater refactoring
-- **[QA_REFACTORING.md](QA_REFACTORING.md)**: QA evaluation refactoring
-- **[CLEANUP_SUMMARY.md](CLEANUP_SUMMARY.md)**: File cleanup and consolidation
-
-## Evaluation
-
-The system includes an LLM-as-a-judge evaluation framework:
-
-```python
-from eval import evaluate_predictions
-
-stats, history = evaluate_predictions(
-    queries=queries,
-    ground_truths_list=ground_truths,
-    predictions=predictions,
-    model_type='llama',
-    batch_size=64
-)
-
-print(f"Accuracy: {stats['accuracy']}")
-print(f"Average Score: {stats['average_score']}")
-```
-
 ## Performance Optimization
 
 ### Parallel Processing
-The system supports parallel processing at multiple levels:
-
-```python
-# Parallel route exploration
-tasks = [explore_one_route(route) for route in queries[:3]]
-results = await asyncio.gather(*tasks)
-
-# Parallel relation search
-tasks = [self.relation_search_prune(route, entity)
-         for entity in entities]
-results = await asyncio.gather(*tasks)
-```
+The system supports parallel processing with configurable workers for efficient batch processing. See `run/run_qa.py` for the production implementation.
 
 ### Caching
 - Neo4j vector indices for fast similarity search
@@ -705,66 +486,8 @@ ModuleNotFoundError: No module named 'kg'
 ## Limitations
 
 - **Domain-Specific**: Currently optimized for movie domain; requires prompt adaptation for other domains
-- **Cold Start**: Requires pre-built knowledge graph; cannot answer questions about entities not in the graph
+- **Cold Start**: Requires pre-built knowledge graph or documents to update the knowledge graph; cannot answer questions about entities not in the graph
 - **Computational Cost**: Multi-hop graph traversal and multiple LLM calls can be expensive
 - **English-Only**: Prompts and evaluation are in English
 
-## Future Enhancements
 
-See [TODO.md](TODO.md) for planned improvements:
-- Dockerization for easier deployment
-- Support for additional domains (finance, scientific literature, etc.)
-- Integration with more Mellea patterns (Requirements, Sampling Strategies)
-- Improved prompt templates using Jinja2
-- Web UI for interactive querying
-- Benchmark comparisons with vanilla RAG
-
-## Citation
-
-If you use this example in your research, please cite:
-
-```bibtex
-@software{mellea_kgrag_2024,
-  title={KGRag: Knowledge Graph-Enhanced RAG with Mellea},
-  author={Mellea Team},
-  year={2024},
-  url={https://github.com/IBM/mellea}
-}
-```
-
-This implementation is adapted from the Bidirection project for temporal knowledge graph reasoning.
-
-### CRAG Benchmark
-
-This example uses the CRAG (Comprehensive RAG Benchmark) dataset:
-
-```bibtex
-@article{yang2024crag,
-  title={CRAG -- Comprehensive RAG Benchmark},
-  author={Yang, Xiao and Yue, Kai and Zhang, Haotian and Fan, Zhiyuan and Xu, Wenhao and others},
-  journal={arXiv preprint arXiv:2406.04744},
-  year={2024},
-  url={https://github.com/facebookresearch/CRAG}
-}
-```
-
-For more information about the CRAG benchmark, visit: https://github.com/facebookresearch/CRAG
-
-## Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Submit a pull request
-
-## License
-
-This example is provided under the same license as the Mellea framework.
-
-## Support
-
-For questions and issues:
-- Open an issue on GitHub
-- Check the Mellea documentation
-- Join the Mellea community discussions

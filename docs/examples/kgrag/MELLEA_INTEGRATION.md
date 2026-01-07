@@ -4,29 +4,34 @@ This document explains the Mellea-native implementation of KG-RAG and how it sho
 
 ## Overview
 
-The KG-RAG example now includes **parallel implementations** for all major pipeline components:
+The KG-RAG example has been **fully migrated to Mellea patterns**. All pipeline components now use Mellea's best practices:
 
-1. **KG Preprocessing Pipeline**:
-   - Traditional: `run/run_kg_preprocess.py` - Basic preprocessing with Neo4j
-   - Mellea-Native: `run/run_kg_preprocess_mellea.py` - Enhanced with statistics tracking, concurrent processing, and detailed reporting
+1. **KG Preprocessing Pipeline** (`run/run_kg_preprocess.py`):
+   - Statistics tracking with Pydantic models
+   - Sequential and concurrent processing modes
+   - Enhanced error handling and graceful failure recovery
 
-2. **KG Embedding Pipeline**:
-   - Traditional: `run/run_kg_embed.py` - Direct embedding API calls
-   - Mellea-Native: `run/run_kg_embed_mellea.py` - Uses kg_utils_mellea with enhanced error handling
+2. **KG Embedding Pipeline** (`run/run_kg_embed.py`):
+   - Mellea session-based embedding generation
+   - Supports both API-based and local embeddings
+   - Type-safe configuration with Pydantic `EmbeddingConfig`
 
-3. **KG Update Pipeline**:
-   - Traditional: `run/run_kg_update.py` - Manual extraction and validation
-   - Mellea-Native: `run/run_kg_update_mellea.py` - Uses @generative for extraction, alignment, and merging
+3. **KG Update Pipeline** (`run/run_kg_update.py`):
+   - Uses @generative for extraction, alignment, and merging
+   - Component-based architecture with `KGUpdaterComponent`
+   - Requirements validation and RejectionSamplingStrategy
 
-4. **QA Pipeline**:
-   - Traditional: `run/run_qa.py` - Direct LLM API calls with manual validation
-   - Mellea-Native: `run/run_qa_mellea.py` - Uses Mellea's @generative, Requirements, and Components
+4. **QA Pipeline** (`run/run_qa.py`):
+   - Uses Mellea's @generative, Requirements, and Components
+   - `KGRagComponent` for multi-hop graph reasoning
+   - Worker-local session isolation for parallel processing
 
-5. **Evaluation Pipeline**:
-   - Traditional: `run/run_eval.py` - Manual evaluation with direct LLM calls
-   - Mellea-Native: `run/run_eval_mellea.py` - Uses @generative for LLM-as-judge evaluation
+5. **Evaluation Pipeline** (`run/run_eval.py`):
+   - @generative-based LLM-as-judge evaluation
+   - Type-safe `EvaluationResult` with Pydantic
+   - Async batch processing with progress bars
 
-Both implementations produce the same results, but the Mellea-native versions demonstrate best practices for building robust, composable LLM applications.
+All implementations follow Mellea best practices for building robust, composable LLM applications.
 
 ## Key Benefits
 
@@ -41,32 +46,25 @@ Both implementations produce the same results, but the Mellea-native versions de
 ```bash
 cd docs/examples/kgrag
 
-# Run Mellea-native preprocessing
+# Run preprocessing
 uv run --with mellea run/run_kg_preprocess.py --domain movie --verbose
 
-# Run Mellea-native KG embedding
+# Run KG embedding
 uv run --with mellea run/run_kg_embed.py --batch-size 8192 --verbose
 
-# Run Mellea-native KG update
-uv run --with mellea run/run_kg_update.py --num-workers 64
+# Run KG update
+uv run --with mellea run/run_kg_update.py --num-workers 4 --queue-size 10
 
-# Run Mellea-native QA
-uv run --with mellea run/run_qa.py --num-workers 1 --prefix mellea
+# Run QA evaluation
+uv run --with mellea run/run_qa.py --num-workers 4 --queue-size 10
 
-# Run Mellea-native evaluation
-uv run --with mellea run/run_eval.py --prefix mellea --verbose
-
-# Compare with traditional versions
-uv run --with mellea run/run_kg_preprocess.py --domain movie
-uv run --with mellea run/run_kg_embed.py
-uv run --with mellea run/run_kg_update.py --num-workers 64
-uv run --with mellea run/run_qa.py --num-workers 1 --prefix traditional
-uv run --with mellea run/run_eval.py --prefix traditional
+# Run evaluation
+uv run --with mellea run/run_eval.py --result-path results/_results.json --verbose
 ```
 
 ## Architecture
 
-### 1. KG Preprocessing (run_kg_preprocess_mellea.py)
+### 1. KG Preprocessing (run/run_kg_preprocess.py)
 
 The Mellea-native preprocessing implementation showcases:
 
@@ -97,14 +95,14 @@ print_summary([stats])
 - ✅ Type-safe stats with dataclasses
 - ✅ Better observability into preprocessing operations
 
-### 2. KG Embedding (run_kg_embed_mellea.py)
+### 2. KG Embedding (run/run_kg_embed.py)
 
-The Mellea-native embedding implementation showcases:
+The embedding implementation showcases:
 
 **Key Features:**
-- Uses `kg_utils_mellea.generate_embedding_mellea()` for consistent embedding generation
-- Extends `KGEmbedder` with `MelleaKGEmbedder` class for enhanced functionality
-- Adds embedding session testing with `test_embedding_session()`
+- Uses `utils/utils_mellea.py` for consistent embedding generation
+- `MelleaKGEmbedder` class in `kg/kg_embedder.py` for enhanced functionality
+- Embedding session testing with `test_embedding_session()`
 - Type-safe configuration using Pydantic `EmbeddingConfig`
 - Enhanced error handling and retry logic
 - Supports both OpenAI-compatible APIs and local SentenceTransformer models
@@ -118,6 +116,7 @@ emb_session = create_embedding_session(config)
 await test_embedding_session(emb_session, config)
 
 # Create Mellea-native embedder
+from kg.kg_embedder import MelleaKGEmbedder
 embedder = MelleaKGEmbedder(emb_session, config)
 
 # Generate embeddings
@@ -133,7 +132,7 @@ embeddings = await embedder.generate_embeddings_mellea(
 - ✅ Better logging and progress tracking
 - ✅ Type-safe configuration prevents errors
 
-### 3. KG Update (run_kg_update_mellea.py)
+### 3. KG Update (run/run_kg_update.py)
 
 The Mellea-native KG update implementation demonstrates:
 
@@ -181,7 +180,7 @@ stats = await kg_updater.update_kg_from_document(
 - ✅ Composable architecture with Component pattern
 - ✅ Clear separation of concerns
 
-### 4. QA Pipeline (run_qa_mellea.py)
+### 4. QA Pipeline (run/run_qa.py)
 
 The Mellea-native QA implementation showcases:
 
@@ -220,7 +219,7 @@ prediction = await kg_rag.generate_answer(q)
 - ✅ Easy to test individual components
 - ✅ Composable and reusable
 
-### 5. Evaluation Pipeline (run_eval_mellea.py)
+### 5. Evaluation Pipeline (run/run_eval.py)
 
 The Mellea-native evaluation implementation showcases:
 
