@@ -15,7 +15,10 @@ This codebase has been **completely refactored** to follow Mellea's design patte
 - ✅ **Clean File Structure**: Removed `_refactored` suffixes, single source of truth
 - ✅ **Full Documentation**: Detailed refactoring guides for each component
 
-See [CLEANUP_SUMMARY.md](CLEANUP_SUMMARY.md) for details on the cleanup and [REFACTORING_GUIDE.md](REFACTORING_GUIDE.md) for comprehensive patterns.
+**Documentation:**
+- [MELLEA_INTEGRATION.md](MELLEA_INTEGRATION.md) - Mellea patterns showcase with code examples for all pipeline components
+- [DEVELOPMENT_SUMMARY.md](DEVELOPMENT_SUMMARY.md) - Complete development history, bug fixes, and migration details
+- [REFACTORING_GUIDE.md](REFACTORING_GUIDE.md) - Comprehensive refactoring patterns and best practices
 
 ## Overview
 
