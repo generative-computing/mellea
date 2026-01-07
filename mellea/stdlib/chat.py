@@ -60,14 +60,15 @@ class Message(Component):
 
     def parts(self):
         """Returns all of the constituent parts of an Instruction."""
-        assert self._images is None, (
+        FancyLogger.get_logger().error(
             "TODO: images are not handled correctly in the mellea core."
         )
         parts = [self._content_cblock]
         if self._docs is not None:
             parts.extend(self._docs)
-        if self._images is not None:
-            parts.extend(self._images)
+        # TODO: we need to do this but images are not currently cblocks. This is captured in an issue on Jan 26 sprint. Leaving this code commented out for now.
+        # if self._images is not None:
+        #     parts.extend(self._images)
         return parts
 
     def format_for_llm(self) -> TemplateRepresentation:
