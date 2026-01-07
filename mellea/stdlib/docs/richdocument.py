@@ -98,7 +98,7 @@ class TableQuery(Query):
 
     def parts(self):
         """The list of cblocks/components on which TableQuery depends."""
-        return [self.obj]
+        return [self._obj]
 
     def format_for_llm(self) -> TemplateRepresentation:
         """Template arguments for Formatter."""
@@ -128,7 +128,7 @@ class TableTransform(Transform):
 
     def parts(self):
         """The parts for this component."""
-        return [self.obj]
+        return [self._obj]
 
     def format_for_llm(self) -> TemplateRepresentation:
         """Template arguments for Formatter."""

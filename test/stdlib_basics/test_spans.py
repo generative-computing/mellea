@@ -51,7 +51,7 @@ async def test_kv(m_session):
     )
 
     backend: LocalHFBackend = backend
-    response, _ = await backend._generate_from_context_with_kv_cache(
+    response = await backend._generate_from_context_with_kv_cache(
         action=CBlock("What is Nathan's work address?"), ctx=ctx, model_options=dict()
     )
     result = await response.avalue()
