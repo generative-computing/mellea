@@ -12,8 +12,6 @@ from sentence_transformers import SentenceTransformer
 from mellea import generative, start_session
 from mellea.backends import model_ids
 
-
-
 docs = [
     "The capital of France is Paris. Paris is known for its Eiffel Tower.",
     "The Amazon River is the largest river by discharge volume of water in the world.",
