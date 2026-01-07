@@ -13,6 +13,12 @@ from mellea.stdlib.base import ChatContext, Document
 from mellea.stdlib.chat import Message
 from mellea.stdlib.intrinsics import rag
 
+# Skip entire module in CI since all 7 tests are qualitative
+pytestmark = pytest.mark.skipif(
+    int(os.environ.get("CICD", 0)) == 1,
+    reason="Skipping RAG tests in CI - all qualitative tests",
+)
+
 DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 """Location of data files for the tests in this file."""
 

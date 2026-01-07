@@ -4,6 +4,12 @@ import pydantic
 import pytest
 from typing_extensions import Annotated
 
+# Skip entire module in CI since all 8 tests are qualitative
+pytestmark = pytest.mark.skipif(
+    int(os.environ.get("CICD", 0)) == 1,
+    reason="Skipping vLLM tests in CI - all qualitative tests",
+)
+
 from mellea import MelleaSession
 from mellea.backends.vllm import LocalVLLMBackend
 from mellea.backends.types import ModelOption
