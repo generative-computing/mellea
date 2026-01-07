@@ -184,6 +184,7 @@ def test_answer_relevance(backend):
     assert result == answer
 
 
+@pytest.mark.qualitative
 def test_answer_relevance_classifier(backend):
     """Verify that the first phase of the answer relevance flow behaves as expectee."""
     context, answer, docs = _read_input_json("answer_relevance.json")

@@ -204,7 +204,17 @@ def bind_function_arguments(
         Dictionary mapping parameter names to bound values with defaults applied.
     """
     signature = inspect.signature(func)
-    bound_arguments = signature.bind(*args, **kwargs)
+    try:
+        bound_arguments = signature.bind(*args, **kwargs)
+    except TypeError as e:
+        # Provide a clear error message when parameters from the original function are missing
+        if "missing" in str(e) and "required" in str(e):
+            raise TypeError(
+                f"generative slot is missing required parameter(s) from the original function '{func.__name__}': {e}"
+            ) from e
+
+        # Else re-raise the error if it's not the expected error.
+        raise e
     bound_arguments.apply_defaults()
     return dict(bound_arguments.arguments)
 
@@ -346,10 +356,22 @@ class GenerativeSlot(Component, Generic[P, R]):
             using_session_overload = True
 
         # Call the appropriate function and let python handle the arg/kwarg extraction.
-        if using_session_overload:
-            extracted = _session_extract_args_and_kwargs(*args, **kwargs)
-        else:
-            extracted = _context_backend_extract_args_and_kwargs(*args, **kwargs)
+        try:
+            if using_session_overload:
+                extracted = _session_extract_args_and_kwargs(*args, **kwargs)
+            else:
+                extracted = _context_backend_extract_args_and_kwargs(*args, **kwargs)
+        except TypeError as e:
+            # Provide a clear error message when required mellea parameters are missing
+            if "missing" in str(e) and (
+                "context" in str(e) or "backend" in str(e) or "m" in str(e)
+            ):
+                raise TypeError(
+                    "generative slot requires either a MelleaSession (m=...) or both a Context and Backend (context=..., backend=...) to be provided as the first argument(s)"
+                ) from e
+
+            # If it's not the expected err, simply re-raise it.
+            raise e
 
         if len(extracted.f_args) > 0:
             raise TypeError(
@@ -717,6 +739,7 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         PreconditionException: (raised when calling the generative slot) if the precondition validation of the args fails; catch the exception to get the validation results
 
     Examples:
+        ```python
         >>> from mellea import generative, start_session
         >>> session = start_session()
         >>> @generative
@@ -791,6 +814,7 @@ def generative(func: Callable[P, R]) -> GenerativeSlot[P, R]:
         ...     ...
         >>>
         >>> reasoning = generate_chain_of_thought(session, problem="How to optimize a slow database query?")
+        ```
     """
     if inspect.iscoroutinefunction(func):
         return AsyncGenerativeSlot(func)

@@ -1,3 +1,35 @@
+## [v0.2.2](https://github.com/generative-computing/mellea/releases/tag/v0.2.2) - 2025-12-18
+
+### Feature
+
+* Add langchain / message interop example ([#257](https://github.com/generative-computing/mellea/issues/257)) ([`9b1f299`](https://github.com/generative-computing/mellea/commit/9b1f29961aa15bcc2cad2181d2c598e668b4f383))
+* Add better error messages for incorrect genslot args ([#248](https://github.com/generative-computing/mellea/issues/248)) ([`9d875d6`](https://github.com/generative-computing/mellea/commit/9d875d669979f58bc574853837b8b51bacd7f0db))
+
+### Fix
+
+* Uv-lock package changes ([#261](https://github.com/generative-computing/mellea/issues/261)) ([`cb0623f`](https://github.com/generative-computing/mellea/commit/cb0623f12a23c1e567bcc2c4f6659adb571738cb))
+* Lock granite-common version to avoid arg changes ([#260](https://github.com/generative-computing/mellea/issues/260)) ([`03716c1`](https://github.com/generative-computing/mellea/commit/03716c1c6ce37be921ba47ae07ec9191021d6e49))
+* Docstrings to have code blocks ([#256](https://github.com/generative-computing/mellea/issues/256)) ([`94a7b40`](https://github.com/generative-computing/mellea/commit/94a7b40950b8c25882f8acf5106d08e353e13d21))
+
+## [v0.2.1](https://github.com/generative-computing/mellea/releases/tag/v0.2.1) - 2025-12-10
+
+### Feature
+
+* Test-based Evaluation with LLM-as-a-judge ([#225](https://github.com/generative-computing/mellea/issues/225)) ([`0f1f0f8`](https://github.com/generative-computing/mellea/commit/0f1f0f8eb12e60f7940e3ad5b40ce91ded73fc88))
+* Add a `code_interpreter` tool ([#232](https://github.com/generative-computing/mellea/issues/232)) ([`b03c964`](https://github.com/generative-computing/mellea/commit/b03c96439501146965cd123ce5046f2c5907acfb))
+
+### Fix
+
+* Add simple lock to hf generation to prevent using incorrect weights ([#237](https://github.com/generative-computing/mellea/issues/237)) ([`6b2a527`](https://github.com/generative-computing/mellea/commit/6b2a5276a426be87ce02fa89f49818535f211fa6))
+* Collection of small fixes ([#238](https://github.com/generative-computing/mellea/issues/238)) ([`2120112`](https://github.com/generative-computing/mellea/commit/2120112ee807da4e980eabc0df54b3aae12d2cd2))
+* Fix unused litellm import ([#246](https://github.com/generative-computing/mellea/issues/246)) ([`633bfd7`](https://github.com/generative-computing/mellea/commit/633bfd7198eac45f8c163fefcc910d9bf8a76151))
+* Minor updates to answer relevance ([#245](https://github.com/generative-computing/mellea/issues/245)) ([`bde9b4d`](https://github.com/generative-computing/mellea/commit/bde9b4dd91ab92af0f7a661e321bb9d701da0589))
+* Pre-commit file selection ([#243](https://github.com/generative-computing/mellea/issues/243)) ([`e70d307`](https://github.com/generative-computing/mellea/commit/e70d3075f92152f8bb1a519687575fc7f30ffe1b))
+
+### Documentation
+
+* Fixed copyright in LICENSE ([#210](https://github.com/generative-computing/mellea/issues/210)) ([`3087051`](https://github.com/generative-computing/mellea/commit/3087051f5fc102bb8e0319af6baf9d7a0222e6ef))
+
 ## [v0.2.0](https://github.com/generative-computing/mellea/releases/tag/v0.2.0) - 2025-11-19
 
 ### Feature

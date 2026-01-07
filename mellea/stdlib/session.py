@@ -110,38 +110,27 @@ def start_session(
         MelleaSession: A session object that can be used as a context manager
         or called directly with session methods.
 
-    Usage:
-        # As a context manager (sets global session):
-        with start_session("ollama", "granite3.3:8b") as session:
-            result = instruct("Generate a story")  # Uses current session
-            # session is also available directly
-            other_result = session.chat("Hello")
-
-        # Direct usage (no global session set):
-        session = start_session("ollama", "granite3.3:8b")
-        result = session.instruct("Generate a story")
-        # Remember to call session.cleanup() when done
-        session.cleanup()
-
     Examples:
+        ```python
         # Basic usage with default settings
         with start_session() as session:
-            response = instruct("Explain quantum computing")
+            response = session.instruct("Explain quantum computing")
 
         # Using OpenAI with custom model options
         with start_session("openai", "gpt-4", model_options={"temperature": 0.7}):
-            response = chat("Write a poem")
+            response = session.chat("Write a poem")
 
         # Using HuggingFace with ChatContext for conversations
         from mellea.stdlib.base import ChatContext
         with start_session("hf", "microsoft/DialoGPT-medium", ctx=ChatContext()):
-            chat("Hello!")
-            chat("How are you?")  # Remembers previous message
+            session.chat("Hello!")
+            session.chat("How are you?")  # Remembers previous message
 
-        # Direct usage without context manager
+        # Direct usage.
         session = start_session()
         response = session.instruct("Explain quantum computing")
         session.cleanup()
+        ```
     """
     backend_class = backend_name_to_class(backend_name)
     if backend_class is None:
@@ -211,6 +200,7 @@ class MelleaSession:
             a copy of the current session. Keeps the context, backend, and session logger.
 
         Examples:
+            ```python
             >>> from mellea import start_session
             >>> m = start_session()
             >>> m.instruct("What is 2x2?")
@@ -224,6 +214,7 @@ class MelleaSession:
             >>> out = m2.instruct("Multiply that by 3")
             >>> print(out)
             ... 12
+            ```
         """
         return copy(self)
 
