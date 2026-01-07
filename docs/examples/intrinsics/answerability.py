@@ -13,7 +13,7 @@ from mellea.stdlib.chat import Message
 from mellea.stdlib.intrinsics import rag
 
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-3.3-2b-instruct")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 context = ChatContext().add(Message("assistant", "Hello there, how can I help you?"))
 next_user_turn = "What is the square root of 4?"
 documents_answerable = [Document("The square root of 4 is 2.")]
