@@ -121,9 +121,17 @@ class Instruction(Component):
 
     def parts(self):
         """Returns all of the constituent parts of an Instruction."""
-        raise Exception(
-            "Disallowing use of `parts` until we figure out exactly what it's supposed to be for"
-        )
+        # Add all of the optionally defined CBlocks/Components then filter Nones at the end.
+        cs = [self._description, self._prefix, self._output_prefix]
+        match self._grounding_context:
+            case CBlock():
+                cs.append(self._grounding_context)
+            case _:
+                cs.extend(list(self._grounding_context.values()))
+        cs.extend(self._requirements)
+        cs.extend(self._icl_examples)
+        cs = list(filter(lambda x: x is not None, cs))
+        return cs
 
     def format_for_llm(self) -> TemplateRepresentation:
         """Formats the instruction for Formatter use."""

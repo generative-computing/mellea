@@ -23,7 +23,7 @@ DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 """Location of data files for the tests in this file."""
 
 
-BASE_MODEL = "ibm-granite/granite-3.3-2b-instruct"
+BASE_MODEL = "ibm-granite/granite-4.0-micro"
 
 
 @pytest.fixture(name="backend")
@@ -88,11 +88,11 @@ def test_answerability(backend):
 
     # First call triggers adapter loading
     result = rag.check_answerability(next_user_turn, documents, context, backend)
-    assert pytest.approx(result) == 1.0
+    assert pytest.approx(result, rel=0.01) == 1.0
 
     # Second call hits a different code path from the first one
     result = rag.check_answerability(next_user_turn, documents, context, backend)
-    assert pytest.approx(result) == 1.0
+    assert pytest.approx(result, rel=0.01) == 1.0
 
 
 @pytest.mark.qualitative
@@ -100,8 +100,7 @@ def test_query_rewrite(backend):
     """Verify that the answerability intrinsic functions properly."""
     context, next_user_turn, _ = _read_input_json("query_rewrite.json")
     expected = (
-        "Is Rex, the dog, more likely to get fleas because he spends a lot of "
-        "time outdoors?"
+        "Is Rex more likely to get fleas because he spends a lot of time outdoors?"
     )
 
     # First call triggers adapter loading
@@ -138,11 +137,11 @@ def test_context_relevance(backend):
 
     # First call triggers adapter loading
     result = rag.check_context_relevance(question, document, context, backend)
-    assert pytest.approx(result, abs=2e-2) == 0.45
+    assert pytest.approx(result, abs=1e-2) == 0.0
 
     # Second call hits a different code path from the first one
     result = rag.check_context_relevance(question, document, context, backend)
-    assert pytest.approx(result, abs=2e-2) == 0.45
+    assert pytest.approx(result, abs=1e-2) == 0.0
 
 
 @pytest.mark.qualitative
@@ -171,9 +170,7 @@ def test_answer_relevance(backend):
     # Note that this is not the optimal answer. This test is currently using an
     # outdated LoRA adapter. Releases of new adapters will come after the Mellea
     # integration has stabilized.
-    expected_rewrite = (
-        "The documents do not provide information about the attendees of the meeting."
-    )
+    expected_rewrite = "The meeting attendees were Alice, Bob, and Carol."
 
     # First call triggers adapter loading
     result = rag.rewrite_answer_for_relevance(answer, docs, context, backend)

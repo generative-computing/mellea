@@ -329,6 +329,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk, Context]:
         """Generates a new completion from the provided Context using this backend's `Formatter`."""
+        await self.do_generate_walk(action)
+
         # Requirements can be automatically rerouted to a requirement adapter.
         if isinstance(action, Requirement):
             # See docs/dev/requirement_aLoRA_rerouting.md
@@ -829,6 +831,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
+        await self.do_generate_walks(actions)
+
         extra_body = {}
         if format is not None:
             FancyLogger.get_logger().warning(
