@@ -248,6 +248,8 @@ class LocalVLLMBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk, Context]:
         """Generate using the huggingface model."""
+        await self.do_generate_walk(action)
+
         # Upsert model options.
         model_options = self._simplify_and_merge(model_options)
 
@@ -322,9 +324,9 @@ class LocalVLLMBackend(FormatterBackend):
                 # We however want to keep it as a json string for later storing it in ModelOutputThunk
                 schema: dict[str, Any] = _format.model_json_schema()
                 schema_json: str = json.dumps(schema)
-                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(
-                    schema_json
-                )
+                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
+                    schema_json  # type: ignore
+                )  # type: ignore
 
                 from outlines.processors import RegexLogitsProcessor
 
@@ -437,6 +439,8 @@ class LocalVLLMBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
+        await self.do_generate_walks(actions)
+
         if tool_calls:
             FancyLogger.get_logger().warning(
                 "The completion endpoint does not support tool calling at the moment."
@@ -456,9 +460,9 @@ class LocalVLLMBackend(FormatterBackend):
         if format is not None:
             schema: dict[str, Any] = format.model_json_schema()
             schema_json: str = json.dumps(schema)
-            regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(
-                schema_json
-            )
+            regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
+                schema_json  # type: ignore
+            )  # type: ignore
 
             from outlines.processors import RegexLogitsProcessor
 

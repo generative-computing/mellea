@@ -13,7 +13,7 @@ from mellea.stdlib.chat import Message
 from mellea.stdlib.intrinsics import rag
 
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-3.3-2b-instruct")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 context = ChatContext()
 question = "Who is the CEO of Microsoft?"
 document = Document(
@@ -28,4 +28,4 @@ document = Document(
 )
 
 result = rag.check_context_relevance(question, document, context, backend)
-print(f"Result of context relevance check: {result}")
+print(f"Result of context relevance check with irrelevant document: {result}")

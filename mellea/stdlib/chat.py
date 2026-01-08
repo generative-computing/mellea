@@ -17,7 +17,11 @@ from mellea.stdlib.base import (
 
 
 class Message(Component):
-    """A single Message in a Chat history."""
+    """A single Message in a Chat history.
+
+    TODO: we may want to deprecate this Component entirely.
+    The fact that some Component gets rendered as a chat message is `Formatter` miscellania.
+    """
 
     Role = Literal["system", "user", "assistant", "tool"]
 
@@ -38,22 +42,31 @@ class Message(Component):
             documents (list[Document]): documents associated with the message if any.
         """
         self.role = role
-        self.content = content
+        self.content = content  # TODO this should be private.
+        self._content_cblock = CBlock(self.content)
         self._images = images
+        # TODO this should replace _images.
+        self._images_cblocks: list[CBlock] | None = None
+        if self._images is not None:
+            self._images_cblocks = [CBlock(str(i)) for i in self._images]
         self._docs = documents
 
     @property
     def images(self) -> None | list[str]:
         """Returns the images associated with this message as list of base 64 strings."""
-        if self._images is not None:
-            return [str(i) for i in self._images]
+        if self._images_cblocks is not None:
+            return [str(i.value) for i in self._images_cblocks]
         return None
 
     def parts(self):
         """Returns all of the constituent parts of an Instruction."""
-        raise Exception(
-            "Disallowing use of `parts` until we figure out exactly what it's supposed to be for"
-        )
+        parts = [self._content_cblock]
+        if self._docs is not None:
+            parts.extend(self._docs)
+        # TODO: we need to do this but images are not currently cblocks. This is captured in an issue on Jan 26 sprint. Leaving this code commented out for now.
+        # if self._images is not None:
+        #     parts.extend(self._images)
+        return parts
 
     def format_for_llm(self) -> TemplateRepresentation:
         """Formats the content for a Language Model.
@@ -65,8 +78,8 @@ class Message(Component):
             obj=self,
             args={
                 "role": self.role,
-                "content": self.content,
-                "images": self.images,
+                "content": self._content_cblock,
+                "images": self._images_cblocks,
                 "documents": self._docs,
             },
             template_order=["*", "Message"],

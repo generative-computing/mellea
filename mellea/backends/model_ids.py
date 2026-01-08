@@ -17,6 +17,7 @@ class ModelIdentifier:
     ollama_name: str | None = None
     watsonx_name: str | None = None
     mlx_name: str | None = None
+    openai_name: str | None = None
 
     hf_tokenizer_name: str | None = None  # if None, is the same as hf_model_name
 
@@ -134,9 +135,9 @@ QWEN3_8B = ModelIdentifier(hf_model_name="Qwen/Qwen3-8B", ollama_name="qwen3:8b"
 
 QWEN3_14B = ModelIdentifier(hf_model_name="Qwen/Qwen3-14B", ollama_name="qwen3:14b")
 
-######################
-#### OpenAI models ###
-######################
+###########################
+#### OpenAI open models ###
+###########################
 
 OPENAI_GPT_OSS_20B = ModelIdentifier(
     hf_model_name="openai/gpt-oss-20b", ollama_name="gpt-oss:20b"
@@ -144,6 +145,12 @@ OPENAI_GPT_OSS_20B = ModelIdentifier(
 OPENAI_GPT_OSS_120B = ModelIdentifier(
     hf_model_name="openai/gpt-oss-120b", ollama_name="gpt-oss:120b"
 )
+
+###########################
+#### OpenAI prop models ###
+###########################
+
+OPENAI_GPT_5_1 = ModelIdentifier(openai_name="gpt-5.1")
 
 #####################
 #### Misc models ####
