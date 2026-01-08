@@ -114,7 +114,8 @@ class Instruction(Component):
 
         # Map all string values to CBlocks in the grounding context.
         self._grounding_context: dict[str, CBlock | Component] = {
-            k: blockify(v) if isinstance(v, str) else v for k, v in grounding_context.items()
+            k: blockify(v) if isinstance(v, str) else v
+            for k, v in grounding_context.items()
         }
         self._prefix = blockify(prefix) if prefix is not None else None
         self._output_prefix = (
