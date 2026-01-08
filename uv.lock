@@ -1740,15 +1740,15 @@ wheels = [
 
 [[package]]
 name = "granite-common"
-version = "0.3.5"
+version = "0.3.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonschema" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4d/b8/cba7a2399079838f793cc138c5b341df965c82e7cdaaf4c37deeffa0a14c/granite_common-0.3.5.tar.gz", hash = "sha256:80d4251b9294b6ec234d5aa4e273801b66f7cc4c5bc77151e5c22e7d7f5a19cd", size = 273710, upload-time = "2025-11-15T01:32:38.761Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/20/6f/9278b41402e4d93dc22e4796ab68fa4f0e20ae0718499d6c65f767f1a09e/granite_common-0.3.6.tar.gz", hash = "sha256:58b2608dc5c71e8a169cc5f8e5fb2faedca035a3c92629ae1e396c8724e28397", size = 672587, upload-time = "2025-12-12T21:18:15.446Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4c/f4/79d121e4192cf7871122995f060f891c6dbcb91b9b4753e4dd27852704c4/granite_common-0.3.5-py3-none-any.whl", hash = "sha256:fca8fdb7caff7f5714bfda9c81438f4a6df974e0b01631421cd6ca1a19bbb07e", size = 77551, upload-time = "2025-11-15T01:32:37.186Z" },
+    { url = "https://files.pythonhosted.org/packages/10/b5/376d80040d424533f2d6c1232922672cf52c7bfffd8a2a1503603ede34e8/granite_common-0.3.6-py3-none-any.whl", hash = "sha256:dd3363b618abce5888f5b2b041f1a875dd8598f739e7cac087bdabd4791af5a2", size = 84690, upload-time = "2025-12-12T21:18:13.977Z" },
 ]
 
 [[package]]
@@ -3211,7 +3211,7 @@ wheels = [
 
 [[package]]
 name = "mellea"
-version = "0.2.2"
+version = "0.2.3"
 source = { editable = "." }
 dependencies = [
     { name = "ansicolors" },
@@ -3314,7 +3314,7 @@ requires-dist = [
     { name = "datasets", marker = "extra == 'hf'", specifier = ">=4.0.0" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.45.0" },
     { name = "fastapi" },
-    { name = "granite-common", specifier = "==0.3.5" },
+    { name = "granite-common", specifier = ">=0.3.6" },
     { name = "huggingface-hub", specifier = ">=0.33.4" },
     { name = "ibm-watsonx-ai", marker = "extra == 'watsonx'", specifier = ">=1.3.31" },
     { name = "jinja2" },

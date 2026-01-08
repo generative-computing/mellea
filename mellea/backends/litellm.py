@@ -242,6 +242,8 @@ class LiteLLMBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk:
+        await self.do_generate_walk(action)
+
         model_opts = self._simplify_and_merge(model_options)
         linearized_context = ctx.view_for_generation()
         assert linearized_context is not None, (
@@ -490,6 +492,7 @@ class LiteLLMBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
+        await self.do_generate_walks(actions)
         extra_body = {}
         if format is not None:
             FancyLogger.get_logger().warning(

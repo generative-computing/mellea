@@ -51,7 +51,7 @@ class Intrinsic(Component):
         Will need to be implemented by subclasses since not all intrinsics are output
         as text / messages.
         """
-        raise NotImplementedError("parts isn't implemented by default")
+        return []  # TODO revisit this.
 
     def format_for_llm(self) -> TemplateRepresentation | str:
         """`Intrinsic` doesn't implement `format_for_default`.

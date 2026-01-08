@@ -13,7 +13,7 @@ from mellea.stdlib.chat import Message
 from mellea.stdlib.intrinsics import rag
 
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-3.3-2b-instruct")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 context = (
     ChatContext()
     .add(Message("assistant", "Welcome to pet questions!"))
