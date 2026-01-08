@@ -39,7 +39,7 @@ from mellea.stdlib.requirement import (
 def backend():
     """Shared HuggingFace backend for all tests in this module."""
     backend = LocalHFBackend(
-        model_id="ibm-granite/granite-3.3-8b-instruct",
+        model_id="ibm-granite/granite-3.3-2b-instruct",
         formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
         cache=SimpleLRUCache(5),
     )
