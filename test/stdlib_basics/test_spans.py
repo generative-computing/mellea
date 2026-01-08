@@ -25,7 +25,7 @@ def m_session(gh_run):
 
 
 @pytest.mark.qualitative
-async def test_lazt_spans(m_session):
+async def test_lazy_spans(m_session):
     m: MelleaSession = m_session
     backend, ctx = m.backend, m.ctx
 
