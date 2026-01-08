@@ -119,3 +119,7 @@ def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputT
         case Component():
             parts_walk = [generate_walk(p) for p in c.parts()]
             return list(itertools.chain.from_iterable(parts_walk))  # aka flatten
+        case _:
+            raise ValueError(
+                f"parts should only contain CBlocks, Components, or ModelOutputThunks; found `{c!s:.10}{'...' if len(str(c)) > 10 else ''}` (type: {type(c)})"
+            )

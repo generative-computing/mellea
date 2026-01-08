@@ -24,7 +24,8 @@ def m_session(gh_run):
     del m
 
 
-async def test_blah(m_session):
+@pytest.mark.qualitative
+async def test_lazy_spans(m_session):
     m: MelleaSession = m_session
     backend, ctx = m.backend, m.ctx
 
@@ -39,6 +40,7 @@ async def test_blah(m_session):
     assert "6" in result, f"Expected 6 ( 1+1 + 2+2 ) but found {result}"
 
 
+@pytest.mark.qualitative
 async def test_kv(m_session):
     m: MelleaSession = m_session
     backend, ctx = m.backend, m.ctx

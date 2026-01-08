@@ -60,9 +60,6 @@ class Message(Component):
 
     def parts(self):
         """Returns all of the constituent parts of an Instruction."""
-        FancyLogger.get_logger().error(
-            "TODO: images are not handled correctly in the mellea core."
-        )
         parts = [self._content_cblock]
         if self._docs is not None:
             parts.extend(self._docs)

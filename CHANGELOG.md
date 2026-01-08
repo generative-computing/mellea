@@ -1,3 +1,23 @@
+## [v0.2.4](https://github.com/generative-computing/mellea/releases/tag/v0.2.4) - 2026-01-08
+
+### Fix
+
+* Fix gc in instructions and add exception to generate walk ([#295](https://github.com/generative-computing/mellea/issues/295)) ([`5fc7df0`](https://github.com/generative-computing/mellea/commit/5fc7df0a0680ced342575fc4cc8787385334c7a4))
+* Marks span tests as qualitative & removes chat error message. ([#294](https://github.com/generative-computing/mellea/issues/294)) ([`5ce6360`](https://github.com/generative-computing/mellea/commit/5ce63604da385550b0781e7429599b5f64a8b2b8))
+
+## [v0.2.3](https://github.com/generative-computing/mellea/releases/tag/v0.2.3) - 2026-01-07
+
+### Feature
+
+* Allow forcing a release through test failures ([#292](https://github.com/generative-computing/mellea/issues/292)) ([`14b55a3`](https://github.com/generative-computing/mellea/commit/14b55a38550581e5b0e0ea05cf5cc8b45a2cd5e5))
+* Lazy Spans and KV Blocks ([#249](https://github.com/generative-computing/mellea/issues/249)) ([`b9e4a33`](https://github.com/generative-computing/mellea/commit/b9e4a33d4a7c79bfe3655aaf10a957947e78d04f))
+* Switch to new RAG intrinsics repo ([#289](https://github.com/generative-computing/mellea/issues/289)) ([`94c35ad`](https://github.com/generative-computing/mellea/commit/94c35adff9d44376a9357e06b20dafd09314b29b))
+
+### Fix
+
+* OpenAI `base_url` default and reasoning effort model option. ([#271](https://github.com/generative-computing/mellea/issues/271)) ([`9733df8`](https://github.com/generative-computing/mellea/commit/9733df8fc2e3a81a0f5ba7c35e1cf468d9eb622f))
+* Unpin granite_commons version from 0.3.5 ([#287](https://github.com/generative-computing/mellea/issues/287)) ([`0b402bd`](https://github.com/generative-computing/mellea/commit/0b402bdc8f73d7543ff56bdbe1a5c304182fcbb5))
+
 ## [v0.2.2](https://github.com/generative-computing/mellea/releases/tag/v0.2.2) - 2025-12-18
 
 ### Feature
