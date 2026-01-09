@@ -1,4 +1,5 @@
 import copy
+
 import pytest
 
 from mellea.backends.types import ModelOption
@@ -10,18 +11,7 @@ from mellea.stdlib.session import MelleaSession, start_session
 # backend, but it simplifies test setup.
 @pytest.fixture(scope="module")
 def m_session(gh_run):
-    if gh_run == 1:
-        m = start_session(
-            "ollama",
-            model_id="llama3.2:1b",
-            model_options={ModelOption.MAX_NEW_TOKENS: 5},
-        )
-    else:
-        m = start_session(
-            "ollama",
-            model_id="granite3.3:8b",
-            model_options={ModelOption.MAX_NEW_TOKENS: 5},
-        )
+    m = start_session(model_options={ModelOption.MAX_NEW_TOKENS: 5})
     yield m
     del m
 

@@ -1,7 +1,8 @@
 import pytest
+
 from mellea import start_session
 from mellea.backends import ModelOption
-from mellea.stdlib.base import ChatContext, ModelOutputThunk, Context
+from mellea.stdlib.base import ChatContext, Context, ModelOutputThunk
 from mellea.stdlib.requirement import Requirement
 from mellea.stdlib.sampling import (
     MultiTurnStrategy,

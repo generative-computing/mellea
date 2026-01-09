@@ -4,7 +4,7 @@
 # import pytest
 #
 # from mellea import chat, generative, instruct, query, start_session, transform, validate
-# from mellea.backends.model_ids import IBM_GRANITE_3_3_8B, META_LLAMA_3_2_1B
+# from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 # from mellea.stdlib.base import ModelOutputThunk
 # from mellea.stdlib.mify import MifiedProtocol, mify
 # from mellea.stdlib.requirement import req
@@ -13,10 +13,7 @@
 #
 # @pytest.fixture(scope="module")
 # def model_id(gh_run: int):
-#     if gh_run == 1:
-#         return META_LLAMA_3_2_1B
-#     else:
-#         return IBM_GRANITE_3_3_8B
+#     return IBM_GRANITE_4_MICRO_3B
 #
 #
 # @generative
