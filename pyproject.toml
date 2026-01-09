@@ -87,6 +87,13 @@ vllm = [
     "vllm>=0.9.1",
 ]
 
+sglang = [
+    "sglang<0.5",
+    "sgl-kernel<0.3",
+    "torchao",                  # quantization
+    "nest-asyncio",
+]
+
 litellm = [
     "litellm>=1.76"
 ]
@@ -98,7 +105,7 @@ docling = [
     "docling>=2.45.0",
 ]
 
-all = ["mellea[watsonx,docling,hf,vllm,litellm]"]
+all = ["mellea[watsonx,docling,hf,vllm,sglang,litellm]"]
 
 [dependency-groups]
 # Use these like:
