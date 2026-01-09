@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextvars
 import inspect
 from copy import copy
-from typing import Any, Literal, overload
+from typing import Any, Literal, TypeVar, overload
 
 from PIL import Image as PILImage
 
@@ -26,6 +26,7 @@ from mellea.stdlib.base import (
     GenerateLog,
     ImageBlock,
     ModelOutputThunk,
+    S,
     SimpleContext,
 )
 from mellea.stdlib.chat import Message
@@ -231,7 +232,7 @@ class MelleaSession:
     @overload
     def act(
         self,
-        action: Component,
+        action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -239,12 +240,12 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk: ...
+    ) -> ModelOutputThunk[S]: ...
 
     @overload
     def act(
         self,
-        action: Component,
+        action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -252,11 +253,11 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> SamplingResult: ...
+    ) -> SamplingResult[S]: ...
 
     def act(
         self,
-        action: Component,
+        action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -264,7 +265,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk | SamplingResult:
+    ) -> ModelOutputThunk[S] | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
         Args:
@@ -316,7 +317,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk: ...
+    ) -> ModelOutputThunk[str]: ...
 
     @overload
     def instruct(
@@ -335,7 +336,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> SamplingResult: ...
+    ) -> SamplingResult[str]: ...
 
     def instruct(
         self,
@@ -353,7 +354,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk | SamplingResult:
+    ) -> ModelOutputThunk[str] | SamplingResult:
         """Generates from an instruction.
 
         Args:
@@ -515,7 +516,7 @@ class MelleaSession:
     @overload
     async def aact(
         self,
-        action: Component,
+        action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -523,12 +524,12 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk: ...
+    ) -> ModelOutputThunk[S]: ...
 
     @overload
     async def aact(
         self,
-        action: Component,
+        action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -536,11 +537,11 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> SamplingResult: ...
+    ) -> SamplingResult[S]: ...
 
     async def aact(
         self,
-        action: Component,
+        action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -548,7 +549,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk | SamplingResult:
+    ) -> ModelOutputThunk[S] | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
         Args:
@@ -600,7 +601,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk: ...
+    ) -> ModelOutputThunk[str]: ...
 
     @overload
     async def ainstruct(
@@ -619,7 +620,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> SamplingResult: ...
+    ) -> SamplingResult[str]: ...
 
     async def ainstruct(
         self,
@@ -637,7 +638,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk | SamplingResult:
+    ) -> ModelOutputThunk[str] | SamplingResult[str]:
         """Generates from an instruction.
 
         Args:

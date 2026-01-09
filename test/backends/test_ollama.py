@@ -29,6 +29,8 @@ def test_simple_instruct(session):
     assert "chat_response" in result._meta
     assert result._meta["chat_response"].message.role == "assistant"
 
+    assert isinstance(result.parsed_repr, str)
+
 
 @pytest.mark.qualitative
 def test_instruct_with_requirement(session):

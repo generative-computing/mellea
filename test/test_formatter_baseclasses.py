@@ -2,7 +2,7 @@ import importlib
 import os
 import sys
 import tempfile
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import pytest
 
@@ -70,44 +70,6 @@ def test_to_chat_messages(tf: TemplateFormatter):
     )
     assert all(isinstance(msg, Message) for msg in msgs), (
         "to_chat_messages had a non-message item returned"
-    )
-
-
-def test_parse(tf: TemplateFormatter):
-    class _ChatResponse:
-        def __init__(self, msg: Message) -> None:
-            self.message = msg
-
-    source = Message(role="user", content="source message")
-    result = ModelOutputThunk(
-        value="result value",
-        meta={
-            "chat_response": _ChatResponse(
-                Message(role="assistant", content="assistant reply")
-            )
-        },
-    )
-    tf.parse(source, result)
-    assert isinstance(result.parsed_repr, Message), (
-        "result's parsed repr should be a message when meta includes a chat_response"
-    )
-    assert result.parsed_repr.role == "assistant", (
-        "result's parsed repr role should be assistant"
-    )
-    assert result.parsed_repr.content == "assistant reply"
-
-    result = ModelOutputThunk(value="result value")
-    tf.parse(source, result)
-    assert isinstance(result.parsed_repr, Message), (
-        "result's parsed repr should be a message when source component is a message"
-    )
-    assert result.parsed_repr.content == "result value"
-
-    cblock_source = CBlock("cblock source")
-    result = ModelOutputThunk(value="result value from cblock")
-    tf.parse(cblock_source, result)
-    assert result.parsed_repr is result, (
-        "parse should set the result object to result.parsed_repr if it's not parsing a message"
     )
 
 
@@ -203,12 +165,15 @@ def test_no_module(tf: TemplateFormatter):
 
 
 def test_no_template(tf: TemplateFormatter):
-    class _NoTemplate(Component):
+    class _NoTemplate(Component[str]):
         def parts(self) -> List[Component | CBlock]:
             return []
 
         def format_for_llm(self) -> TemplateRepresentation:
             return TemplateRepresentation(self, {})
+
+        def parse(self, computed: ModelOutputThunk) -> str:
+            return ""
 
     with pytest.raises(Exception):
         tf._load_template(_NoTemplate().format_for_llm())
@@ -280,8 +245,8 @@ def test_custom_component_external_package(tf: TemplateFormatter):
     Ensures template loading works for custom components defined in other packages."""
 
     new_component_content = """
-from mellea.stdlib.base import Component, TemplateRepresentation
-class NewComponent(Component):
+from mellea.stdlib.base import Component, TemplateRepresentation, ModelOutputThunk
+class NewComponent(Component[str]):
     def parts(self):
         raise NotImplementedError(
             "Disallowing use of `parts` until we figure out exactly what it's supposed to be for"
@@ -292,6 +257,9 @@ class NewComponent(Component):
             self,
             {"text": "template arg version of new component"}
         )
+
+    def parse(self, computed: ModelOutputThunk) -> str:
+        return ""
 """
 
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:

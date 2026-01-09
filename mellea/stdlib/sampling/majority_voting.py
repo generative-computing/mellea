@@ -11,6 +11,7 @@ from mellea.backends import Backend, BaseModelSubclass
 from mellea.stdlib.requirement import Requirement
 from mellea.stdlib.sampling import RejectionSamplingStrategy, SamplingResult
 from mellea.stdlib.sampling.base import Component, Context
+from mellea.stdlib.sampling.types import S
 
 
 class BaseMBRDSampling(RejectionSamplingStrategy):
@@ -64,7 +65,7 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
 
     async def sample(
         self,
-        action: Component,
+        action: Component[S],
         context: Context,
         backend: Backend,
         requirements: list[Requirement] | None,
@@ -74,7 +75,7 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
         model_options: dict | None = None,
         tool_calls: bool = False,
         show_progress: bool = True,
-    ) -> SamplingResult:
+    ) -> SamplingResult[S]:
         """Samples using majority voting.
 
         Args:
