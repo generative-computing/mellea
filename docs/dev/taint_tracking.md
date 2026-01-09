@@ -1,4 +1,4 @@
-# Taint Analysis - Backend Security
+# Taint Tracking - Backend Security
 
 Mellea backends implement thread security using the **SecLevel** model with capability-based access control and taint tracking. Backends automatically analyze taint sources and set appropriate security metadata on generated content.
 
