@@ -883,18 +883,19 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         for response, action, prompt in zip(
             completion_response.choices, actions, prompts
         ):
-            output = ModelOutputThunk(response.text)
+            output = ModelOutputThunk.from_generation(
+                value=response.text,
+                taint_sources=taint_sources(action, None),
+                meta={
+                    "oai_completion_response": response.model_dump(),
+                    "usage": completion_response.usage.model_dump()
+                    if completion_response.usage
+                    else None,
+                },
+            )
             output._context = None  # There is no context for generate_from_raw for now
             output._action = action
-            # TODO: add taint sources to the ModelOutputThunk
-            # output._taint_sources = taint_sources(action, None)
             output._model_options = model_opts
-            output._meta = {
-                "oai_completion_response": response.model_dump(),
-                "usage": completion_response.usage.model_dump()
-                if completion_response.usage
-                else None,
-            }
 
             self.formatter.parse(action, output)
 

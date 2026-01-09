@@ -534,16 +534,19 @@ class LiteLLMBackend(FormatterBackend):
             )
 
         for res, action, prompt in zip(responses, actions, prompts):
-            output = ModelOutputThunk(res.text)  # type: ignore
+            output = ModelOutputThunk.from_generation(
+                value=res.text,  # type: ignore
+                taint_sources=taint_sources(action, None),
+                meta={
+                    "litellm_chat_response": res.model_dump(),
+                    "usage": completion_response.usage.model_dump()
+                    if completion_response.usage
+                    else None,
+                },
+            )
             output._context = None  # There is no context for generate_from_raw for now
             output._action = action
             output._model_options = model_opts
-            output._meta = {
-                "litellm_chat_response": res.model_dump(),
-                "usage": completion_response.usage.model_dump()
-                if completion_response.usage
-                else None,
-            }
 
             self.formatter.parse(action, output)
 
