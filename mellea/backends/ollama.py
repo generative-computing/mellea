@@ -25,6 +25,7 @@ from mellea.helpers.async_helpers import (
 )
 from mellea.helpers.event_loop_helper import _run_async_in_thread
 from mellea.helpers.fancy_logger import FancyLogger
+from mellea.security import taint_sources
 from mellea.stdlib.base import (
     CBlock,
     Component,
@@ -357,7 +358,12 @@ class OllamaModelBackend(FormatterBackend):
             format=_format.model_json_schema() if _format is not None else None,
         )  # type: ignore
 
-        output = ModelOutputThunk(None)
+        # Compute taint sources from action and context
+        sources = taint_sources(action, ctx)
+
+        output = ModelOutputThunk.from_generation(
+            value=None, taint_sources=sources, meta={}
+        )
         output._context = linearized_context
         output._action = action
         output._model_options = model_opts
@@ -443,11 +449,14 @@ class OllamaModelBackend(FormatterBackend):
             result = None
             error = None
             if isinstance(response, BaseException):
-                result = ModelOutputThunk(value="")
+                result = ModelOutputThunk.from_generation(
+                    value="", taint_sources=taint_sources(actions[i], None), meta={}
+                )
                 error = response
             else:
-                result = ModelOutputThunk(
+                result = ModelOutputThunk.from_generation(
                     value=response.response,
+                    taint_sources=taint_sources(actions[i], None),
                     meta={
                         "generate_response": response.model_dump(),
                         "usage": {
