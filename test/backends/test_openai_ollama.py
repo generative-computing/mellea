@@ -10,7 +10,7 @@ from typing_extensions import Annotated
 
 from mellea import MelleaSession
 from mellea.backends.formatter import TemplateFormatter
-from mellea.backends.model_ids import META_LLAMA_3_2_1B
+from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.backends.openai import OpenAIBackend
 from mellea.backends.types import ModelOption
 from mellea.stdlib.base import CBlock, ChatContext, ModelOutputThunk, SimpleContext
@@ -19,20 +19,12 @@ from mellea.stdlib.base import CBlock, ChatContext, ModelOutputThunk, SimpleCont
 @pytest.fixture(scope="module")
 def backend(gh_run: int):
     """Shared OpenAI backend configured for Ollama."""
-    if gh_run == 1:
-        return OpenAIBackend(
-            model_id=META_LLAMA_3_2_1B.ollama_name,  # type: ignore
-            formatter=TemplateFormatter(model_id=META_LLAMA_3_2_1B.hf_model_name),  # type: ignore
-            base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
-            api_key="ollama",
-        )
-    else:
-        return OpenAIBackend(
-            model_id="granite3.3:8b",
-            formatter=TemplateFormatter(model_id="ibm-granite/granite-3.2-8b-instruct"),
-            base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
-            api_key="ollama",
-        )
+    return OpenAIBackend(
+        model_id=IBM_GRANITE_4_MICRO_3B.ollama_name,  # type: ignore
+        formatter=TemplateFormatter(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name),  # type: ignore
+        base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
+        api_key="ollama",
+    )
 
 
 @pytest.fixture(scope="function")
