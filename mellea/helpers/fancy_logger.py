@@ -100,10 +100,12 @@ class FancyLogger:
         """Returns a FancyLogger.logger and sets level based upon env vars."""
         if FancyLogger.logger is None:
             logger = logging.getLogger("fancy_logger")
-            if os.environ.get("DEBUG"):
-                logger.setLevel(FancyLogger.DEBUG)
-            else:
-                logger.setLevel(FancyLogger.INFO)
+            # Only set default level if user hasn't already configured it
+            if logger.level == logging.NOTSET:
+                if os.environ.get("DEBUG"):
+                    logger.setLevel(FancyLogger.DEBUG)
+                else:
+                    logger.setLevel(FancyLogger.INFO)
 
             # Define REST API endpoint
             api_url = "http://localhost:8000/api/receive"
