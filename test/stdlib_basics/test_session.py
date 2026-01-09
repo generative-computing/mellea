@@ -33,7 +33,7 @@ def test_start_session_openai_with_kwargs(m_session):
     response = m_session.instruct("testing")
     assert isinstance(response, ModelOutputThunk)
     assert response.value is not None
-    assert initial_ctx is not m.ctx
+    assert initial_ctx is not m_session.ctx
 
 
 async def test_aact(m_session):

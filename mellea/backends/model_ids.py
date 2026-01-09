@@ -29,6 +29,7 @@ class ModelIdentifier:
 IBM_GRANITE_4_MICRO_3B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.0-micro",
     ollama_name="granite4:micro",
+    openai_name="granite4:micro",  # setting this just for testing purposes.
     watsonx_name="ibm/granite-4-h-small",
 )
 # todo: watsonx model is different from ollama model - should be same.
