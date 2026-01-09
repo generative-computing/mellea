@@ -20,7 +20,7 @@ from mellea.stdlib.base import (
     ModelOutputThunk,
     TemplateRepresentation,
 )
-from mellea.stdlib.chat import Message, ToolMessage
+from mellea.stdlib.chat import Message
 
 
 class Formatter(abc.ABC):
@@ -29,16 +29,6 @@ class Formatter(abc.ABC):
     @abc.abstractmethod
     def print(self, c: Component | CBlock) -> str:
         """Renders a component for input to a model."""
-        ...
-
-    @abc.abstractmethod
-    def parse(
-        self, source_component: Component | CBlock, result: ModelOutputThunk
-    ) -> ModelOutputThunk:
-        """Parses the output from a model and sets the parsed_repr of the result ModelOutputThunk.
-
-        Returns the ModelOutputThunk that was passed in.
-        """
         ...
 
     def to_chat_messages(self, cs: list[Component | CBlock]) -> list[Message]:
@@ -58,7 +48,12 @@ class Formatter(abc.ABC):
                 )  # This is already entailed by c.is_computed(); the line is included here to satisfy the type-checker.
 
                 if c.parsed_repr is not None:
-                    c = c.parsed_repr  # This might be a message.
+                    if isinstance(c.parsed_repr, Component):
+                        # Only use the parsed_repr if it's something that we know how to print.
+                        c = c.parsed_repr  # This might be a message.
+                    else:
+                        # Otherwise, explicitly stringify it.
+                        c = Message(role=role, content=str(c.parsed_repr))
                 else:
                     c = Message(role=role, content=c.value)  # type: ignore
 
@@ -103,64 +98,6 @@ class TemplateFormatter(Formatter, abc.ABC):
 
         # Key: obj.__class__.__name___ -> Value: jinja2.Template
         self._template_cache = SimpleLRUCache(10) if self._use_template_cache else None
-
-    def parse(
-        self, source_component: Component | CBlock, result: ModelOutputThunk
-    ) -> ModelOutputThunk:
-        """Parses the output and updates the result's parsed_repr."""
-        parsed = self._parse(source_component=source_component, result=result)
-        result.parsed_repr = parsed
-        return result
-
-    def _parse(
-        self, source_component: Component | CBlock, result: ModelOutputThunk
-    ) -> CBlock | Component:
-        """Parses the output from a model."""
-        if result.tool_calls is not None:
-            # A tool was successfully requested.
-            # Assistant responses for tool calling differ by backend. For the default formatter,
-            # we put all of the function data into the content field in the same format we received it.
-
-            # Chat backends should provide an openai-like object in the _meta chat response, which we can use to properly format this output.
-            if "chat_response" in result._meta:
-                # Ollama.
-                return Message(
-                    role=result._meta["chat_response"].message.role,
-                    content=str(result._meta["chat_response"].message.tool_calls),
-                )
-            elif "oai_chat_response" in result._meta:
-                # OpenAI and Watsonx.
-                return Message(
-                    role=result._meta["oai_chat_response"]["message"]["role"],
-                    content=str(
-                        result._meta["oai_chat_response"]["message"].get(
-                            "tool_calls", []
-                        )
-                    ),
-                )
-            else:
-                # HuggingFace (or others). There are no guarantees on how the model represented the function calls.
-                # Output it in the same format we received the tool call request.
-                assert result.value is not None
-                return Message(role="assistant", content=result.value)
-
-        if type(source_component) is Message:
-            if "chat_response" in result._meta:
-                # chat backends should provide an openai-like object in the _meta chat response, which we can use to properly format this output.
-                return Message(
-                    role=result._meta["chat_response"].message.role,
-                    content=result._meta["chat_response"].message.content,
-                )
-            elif "oai_chat_response" in result._meta:
-                return Message(
-                    role=result._meta["oai_chat_response"]["message"]["role"],
-                    content=result._meta["oai_chat_response"]["message"]["content"],
-                )
-            else:
-                assert result.value is not None
-                return Message(role="assistant", content=result.value)
-        else:
-            return result
 
     def _stringify(
         self,

@@ -12,6 +12,7 @@ from mellea.stdlib.base import ModelOutputThunk
 from mellea.stdlib.requirement import Requirement, ValidationResult
 from mellea.stdlib.sampling import RejectionSamplingStrategy, SamplingResult
 from mellea.stdlib.sampling.base import Component, Context
+from mellea.stdlib.sampling.types import S
 from mellea.stdlib.sampling_algos.budget_forcing_alg import think_budget_forcing
 
 
@@ -72,7 +73,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
 
     async def sample(
         self,
-        action: Component,
+        action: Component[S],
         context: Context,
         backend: Backend,
         requirements: list[Requirement] | None,
@@ -82,7 +83,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
         model_options: dict | None = None,
         tool_calls: bool = False,
         show_progress: bool = True,
-    ) -> SamplingResult:
+    ) -> SamplingResult[S]:
         """This method performs a sampling operation based on the given instruction.
 
         Args:
@@ -163,6 +164,11 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                 model_options=model_options,
             )
             result_ctx = next_context
+
+            # Sampling strategies may use different components from the original
+            # action. This might cause discrepancies in the expected parsed_repr
+            # type / value. Explicitly overwrite that here.
+            result.parsed_repr = action.parse(result)
 
             # validation pass
             val_scores_co = mfuncs.avalidate(

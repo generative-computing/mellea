@@ -13,9 +13,9 @@ import functools
 import inspect
 import json
 import threading
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Sequence
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 import granite_common
 import outlines
@@ -42,7 +42,6 @@ from mellea.backends.adapters.adapter import (
     LocalHFAdapter,
     get_adapter_for_intrinsic,
 )
-from mellea.backends.adapters.catalog import fetch_intrinsic_metadata
 from mellea.backends.cache import Cache, SimpleLRUCache
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier
@@ -57,13 +56,13 @@ from mellea.backends.types import ModelOption
 from mellea.helpers.async_helpers import send_to_queue
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
+    C,
     CBlock,
     Component,
     Context,
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
-    ModelToolCall,
 )
 from mellea.stdlib.chat import Message
 from mellea.stdlib.intrinsics.intrinsic import Intrinsic
@@ -201,13 +200,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     async def generate_from_context(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ):
+    ) -> tuple[ModelOutputThunk[C], Context]:
         """Generate using the huggingface model."""
         await self.do_generate_walk(action)
 
@@ -558,13 +557,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     async def _generate_from_context_with_kv_cache(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass] | None = None,
         model_options: dict[str, Any],
         tool_calls: bool = False,
-    ) -> ModelOutputThunk:
+    ) -> ModelOutputThunk[C]:
         # Construct input.
         # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
         # Otherwise, we will linearize the context and treat it as a raw input.
@@ -598,7 +597,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             if _format:
                 # outlines.generate.json always parses the resulting json into a python dict.
                 # We however want to keep it as a json string for later storing it in ModelOutputThunk
-                schema: dict[str, Any] = _format.model_json_schema()
+                schema: dict[str, Any] = _format.model_json_schema()  # type: ignore
                 schema_json: str = json.dumps(schema)
                 regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
                     schema_json
@@ -765,7 +764,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             if _format:
                 # outlines.generate.json always parses the resulting json into a python dict.
                 # We however want to keep it as a json string for later storing it in ModelOutputThunk
-                schema: dict[str, Any] = _format.model_json_schema()
+                schema: dict[str, Any] = _format.model_json_schema()  # type: ignore
                 schema_json: str = json.dumps(schema)
                 regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
                     schema_json
@@ -931,8 +930,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
-        self.formatter.parse(mot._action, mot)
-
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
         generate_log.prompt = conversation
@@ -951,9 +948,31 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         mot._generate_log = generate_log
 
+    @overload
     async def generate_from_raw(
         self,
-        actions: list[Component | CBlock],
+        actions: list[Component[C]],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C]]: ...
+
+    @overload
+    async def generate_from_raw(
+        self,
+        actions: list[Component[C] | CBlock],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C | str]]: ...
+
+    async def generate_from_raw(
+        self,
+        actions: Sequence[Component[C] | CBlock],
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -961,7 +980,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(actions)
+        await self.do_generate_walks(list(actions))
 
         if tool_calls:
             FancyLogger.get_logger().warning(
@@ -992,7 +1011,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if format:
             # outlines.generate.json always parses the resulting json into a python dict.
             # We however want to keep it as a json string for later storing it in ModelOutputThunk
-            schema: dict[str, Any] = format.model_json_schema()
+            schema: dict[str, Any] = format.model_json_schema()  # type: ignore
             schema_json: str = json.dumps(schema)
             regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
                 schema_json
@@ -1046,8 +1065,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     }
                 },
             )
-
-            self.formatter.parse(actions[i], result)
+            action = actions[i]
+            result.parsed_repr = (
+                action.parse(result) if isinstance(action, Component) else result.value
+            )
 
             generate_log = GenerateLog()
             generate_log.prompt = self.formatter.print(actions[i])
@@ -1056,7 +1077,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             generate_log.date = datetime.datetime.now()
             generate_log.model_output = decoded_result
             generate_log.extra = {"format": format, "seed": seed}
-            generate_log.action = actions[i]
+            generate_log.action = action
 
             result._generate_log = generate_log
             results.append(result)
