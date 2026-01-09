@@ -96,7 +96,7 @@ class ValidationResult:
         return self.as_bool()
 
 
-class Requirement(Component):
+class Requirement(Component[str]):
     """Requirements are a special type of Component used as input to the Validate step in Instruct/Validate/Repair patterns."""
 
     def __init__(
@@ -176,6 +176,10 @@ class Requirement(Component):
             tools=None,
             template_order=["*", "Requirement"],
         )
+
+    def parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the model output. Returns string value for now."""
+        return computed.value if computed.value is not None else ""
 
 
 class LLMaJRequirement(Requirement):

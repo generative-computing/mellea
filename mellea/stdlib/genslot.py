@@ -139,12 +139,12 @@ class PreconditionException(Exception):
         self.validation = validation_results
 
 
-class Function:
+class Function(Generic[P, R]):
     """A Function."""
 
-    def __init__(self, func: Callable):
+    def __init__(self, func: Callable[P, R]):
         """A Function."""
-        self._func: Callable = func
+        self._func: Callable[P, R] = func
         self._function_dict: FunctionDict = describe_function(func)
 
 
@@ -254,7 +254,7 @@ _disallowed_param_names = [field.name for field in fields(ExtractedArgs())]
 """A list of parameter names used by Mellea. Cannot use these in functions decorated with @generative."""
 
 
-class GenerativeSlot(Component, Generic[P, R]):
+class GenerativeSlot(Component[R], Generic[P, R]):
     """A generative slot component."""
 
     def __init__(self, func: Callable[P, R]):
@@ -280,6 +280,8 @@ class GenerativeSlot(Component, Generic[P, R]):
         self._function = Function(func)
         self._arguments: Arguments | None = None
         functools.update_wrapper(self, func)
+
+        self._response_model = create_response_format(self._function._func)
 
         # Set when calling the decorated func.
         self.precondition_requirements: list[Requirement] = []
@@ -407,6 +409,16 @@ class GenerativeSlot(Component, Generic[P, R]):
             template_order=["*", "GenerativeSlot"],
         )
 
+    def parse(self, computed: ModelOutputThunk) -> R:
+        """Parse the model output. Returns the original function's return type."""
+        function_response: FunctionResponse[R] = (
+            self._response_model.model_validate_json(
+                computed.value  # type: ignore
+            )
+        )
+
+        return function_response.result
+
 
 class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
     @overload
@@ -474,8 +486,6 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                 slot_args.append(get_argument(slot_copy._function._func, key, val))
             slot_copy._arguments = Arguments(slot_args)
 
-        response_model = create_response_format(self._function._func)
-
         # Do precondition validation first.
         if slot_copy._arguments is not None:
             if extracted.m is not None:
@@ -517,7 +527,7 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                 slot_copy,
                 requirements=slot_copy.requirements,
                 strategy=extracted.strategy,
-                format=response_model,
+                format=self._response_model,
                 model_options=extracted.model_options,
             )
         else:
@@ -530,18 +540,15 @@ class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                 extracted.backend,
                 requirements=slot_copy.requirements,
                 strategy=extracted.strategy,
-                format=response_model,
+                format=self._response_model,
                 model_options=extracted.model_options,
             )
 
-        function_response: FunctionResponse[R] = response_model.model_validate_json(
-            response.value  # type: ignore
-        )
-
+        assert response.parsed_repr is not None
         if context is None:
-            return function_response.result
+            return response.parsed_repr
         else:
-            return function_response.result, context
+            return response.parsed_repr, context
 
 
 class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
@@ -612,8 +619,6 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                 slot_args.append(get_argument(slot_copy._function._func, key, val))
             slot_copy._arguments = Arguments(slot_args)
 
-        response_model = create_response_format(self._function._func)
-
         # AsyncGenerativeSlots are used with async functions. In order to support that behavior,
         # they must return a coroutine object.
         async def __async_call__() -> tuple[R, Context] | R:
@@ -660,7 +665,7 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                     slot_copy,
                     requirements=slot_copy.requirements,
                     strategy=extracted.strategy,
-                    format=response_model,
+                    format=self._response_model,
                     model_options=extracted.model_options,
                 )
             else:
@@ -673,18 +678,15 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                     extracted.backend,
                     requirements=slot_copy.requirements,
                     strategy=extracted.strategy,
-                    format=response_model,
+                    format=self._response_model,
                     model_options=extracted.model_options,
                 )
 
-            function_response: FunctionResponse[R] = response_model.model_validate_json(
-                response.value  # type: ignore
-            )
-
+            assert response.parsed_repr is not None
             if context is None:
-                return function_response.result
+                return response.parsed_repr
             else:
-                return function_response.result, context
+                return response.parsed_repr, context
 
         return __async_call__()
 

@@ -10,13 +10,14 @@ from mellea.stdlib.base import (
     CBlock,
     Component,
     ImageBlock,
+    ModelOutputThunk,
     TemplateRepresentation,
     blockify,
 )
 from mellea.stdlib.requirement import Requirement, reqify
 
 
-class Instruction(Component):
+class Instruction(Component[str]):
     """The Instruction in an instruct/validate/repair loop."""
 
     def __init__(
@@ -180,3 +181,7 @@ class Instruction(Component):
         res = deepcopy(self)
         res._repair_string = repair_string
         return res
+
+    def parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the model output. Returns string value for now."""
+        return computed.value if computed.value is not None else ""

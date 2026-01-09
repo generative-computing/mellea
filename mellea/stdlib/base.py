@@ -12,13 +12,20 @@ from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, Protocol, TypeVar, runtime_checkable
+from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
 
+import typing_extensions
 from PIL import Image as PILImage
 
-from mellea.helpers.fancy_logger import FancyLogger
+S = typing_extensions.TypeVar("S", default=Any, covariant=True)
+"""Used for class definitions for Component and ModelOutputThunk; also used for functions that don't accept CBlocks. Defaults to `Any`."""
+
+C = typing_extensions.TypeVar("C", default=str)
+"""Used for component typing in function parameters where the function takes a Component[C] and/or CBlock and can return a ModelOutputThunk[C]. Defaults to `str`."""
 
 
+# For ModelOutputThunk return types to be typed correctly, CBlocks must be defined
+# using generics and a type var that defaults to str. CBlocks should never be initialized with [type].
 class CBlock:
     """A `CBlock` is a block of content that can serve as input to or output from an LLM."""
 
@@ -128,7 +135,7 @@ class ImageBlock:
 
 
 @runtime_checkable
-class Component(Protocol):
+class Component(Protocol, Generic[S]):
     """A `Component` is a composite data structure that is intended to be represented to an LLM."""
 
     def parts(self) -> list[Component | CBlock]:
@@ -141,6 +148,10 @@ class Component(Protocol):
         Returns: a `TemplateRepresentation` or string
         """
         raise NotImplementedError("format_for_llm isn't implemented by default")
+
+    def parse(self, computed: ModelOutputThunk) -> S:
+        """Components can define a return type that is parsed from the text output of an LLM."""
+        raise NotImplementedError("parse isn't implemented by default")
 
 
 def get_images_from_component(c: Component) -> None | list[ImageBlock]:
@@ -163,7 +174,7 @@ def get_images_from_component(c: Component) -> None | list[ImageBlock]:
 
 
 # TODO: Add support for passing in docs as model options.
-class Document(Component):
+class Document(Component[str]):
     """Documents should typically be used in a Message object."""
 
     def __init__(self, text: str, title: str | None = None, doc_id: str | None = None):
@@ -190,6 +201,10 @@ class Document(Component):
 
         return doc
 
+    def parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the model output. Returns string value for now."""
+        return computed.value if computed.value is not None else ""
+
 
 class GenerateType(enum.Enum):
     """Used to track what functions can be used to extract a value from a ModelOutputThunk."""
@@ -199,19 +214,21 @@ class GenerateType(enum.Enum):
     SYNC = 2
 
 
-class ModelOutputThunk(CBlock):
+class ModelOutputThunk(CBlock, Generic[S]):
     """A `ModelOutputThunk` is a special type of `CBlock` that we know came from a model's output. It is possible to instantiate one without the output being computed yet."""
 
     def __init__(
         self,
         value: str | None,
         meta: dict[str, Any] | None = None,
-        parsed_repr: CBlock | Component | Any | None = None,
+        parsed_repr: S | None = None,
         tool_calls: dict[str, ModelToolCall] | None = None,
     ):
         """Initializes as a cblock, optionally also with a parsed representation from an output formatter."""
         super().__init__(value, meta)
-        self.parsed_repr: CBlock | Component | Any | None = parsed_repr
+
+        self.parsed_repr: S | None = parsed_repr
+        """Will be non-`None` once computed."""
 
         # Set computed to True if a value is passed in.
         self._computed: bool = True if value is not None else False
@@ -266,7 +283,7 @@ class ModelOutputThunk(CBlock):
             RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible.
         """
         if self._computed:
-            assert self.value  # If computed, the value cannot be None.
+            assert self.value is not None  # If computed, the value cannot be None.
             return self.value
 
         if not self._generate_type == GenerateType.ASYNC:
@@ -355,6 +372,22 @@ class ModelOutputThunk(CBlock):
             assert self._post_process is not None
             await self._post_process(self)
 
+            match self._action:
+                case Component():
+                    self.parsed_repr = self._action.parse(self)
+                case CBlock():
+                    assert self.value is not None, (
+                        "value must be non-None since this thunk is computed"
+                    )
+                    self.parsed_repr = self.value  # type: ignore
+                case _:
+                    raise ValueError(
+                        "attempted to astream from a model output thunk with no ._action set"
+                    )
+            assert self.parsed_repr is not None, (
+                "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
+            )
+
         return self._underlying_value  # type: ignore
 
     def __repr__(self):
@@ -374,7 +407,7 @@ class ModelOutputThunk(CBlock):
         # itself if the parsing didn't result in a new representation. It makes sense to update the
         # parsed_repr to the copied ModelOutputThunk in that case.
         if self.parsed_repr is self:
-            copied.parsed_repr = copied
+            copied.parsed_repr = copied  # type: ignore
 
         copied._computed = self._computed
         copied._thinking = self._thinking
@@ -671,7 +704,7 @@ class ModelToolCall:
         return self.func(**self.args)
 
 
-class SimpleComponent(Component):
+class SimpleComponent(Component[str]):
     """A Component that is make up of named spans."""
 
     def __init__(self, **kwargs):
@@ -719,3 +752,7 @@ class SimpleComponent(Component):
     def format_for_llm(self):
         """Uses a string rep."""
         return SimpleComponent.make_json_string(self._kwargs)
+
+    def parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the model output. Returns string value for now."""
+        return computed.value if computed.value is not None else ""

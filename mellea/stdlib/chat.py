@@ -16,7 +16,7 @@ from mellea.stdlib.base import (
 )
 
 
-class Message(Component):
+class Message(Component["Message"]):
     """A single Message in a Chat history.
 
     TODO: we may want to deprecate this Component entirely.
@@ -95,6 +95,53 @@ class Message(Component):
         if self._docs is not None:
             docs = [f"{doc.format_for_llm()[:10]}..." for doc in self._docs]
         return f'mellea.Message(role="{self.role}", content="{self.content}", images="{images}", documents="{docs}")'
+
+    def parse(self, computed: ModelOutputThunk) -> "Message":
+        """Parse the model output into a Message."""
+        # TODO: There's some specific logic for tool calls. Storing that here for now.
+        # We may eventually need some generic parsing logic that gets run for all Component types...
+        if computed.tool_calls is not None:
+            # A tool was successfully requested.
+            # Assistant responses for tool calling differ by backend. For the default formatter,
+            # we put all of the function data into the content field in the same format we received it.
+
+            # Chat backends should provide an openai-like object in the _meta chat response, which we can use to properly format this output.
+            if "chat_response" in computed._meta:
+                # Ollama.
+                return Message(
+                    role=computed._meta["chat_response"].message.role,
+                    content=str(computed._meta["chat_response"].message.tool_calls),
+                )
+            elif "oai_chat_response" in computed._meta:
+                # OpenAI and Watsonx.
+                return Message(
+                    role=computed._meta["oai_chat_response"]["message"]["role"],
+                    content=str(
+                        computed._meta["oai_chat_response"]["message"].get(
+                            "tool_calls", []
+                        )
+                    ),
+                )
+            else:
+                # HuggingFace (or others). There are no guarantees on how the model represented the function calls.
+                # Output it in the same format we received the tool call request.
+                assert computed.value is not None
+                return Message(role="assistant", content=computed.value)
+
+        if "chat_response" in computed._meta:
+            # Chat backends should provide an openai-like object in the _meta chat response, which we can use to properly format this output.
+            return Message(
+                role=computed._meta["chat_response"].message.role,
+                content=computed._meta["chat_response"].message.content,
+            )
+        elif "oai_chat_response" in computed._meta:
+            return Message(
+                role=computed._meta["oai_chat_response"]["message"]["role"],
+                content=computed._meta["oai_chat_response"]["message"]["content"],
+            )
+        else:
+            assert computed.value is not None
+            return Message(role="assistant", content=computed.value)
 
 
 class ToolMessage(Message):

@@ -6,10 +6,15 @@ import inspect
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
-from mellea.stdlib.base import CBlock, Component, TemplateRepresentation
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    ModelOutputThunk,
+    TemplateRepresentation,
+)
 
 
-class Query(Component):
+class Query(Component[str]):
     """A Query component."""
 
     def __init__(self, obj: Component, query: str) -> None:
@@ -48,8 +53,12 @@ class Query(Component):
             template_order=["Query"],
         )
 
+    def parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the model output. Returns string value for now."""
+        return computed.value if computed.value is not None else ""
 
-class Transform(Component):
+
+class Transform(Component[str]):
     """A Transform component."""
 
     def __init__(self, obj: Component, transformation: str) -> None:
@@ -87,6 +96,10 @@ class Transform(Component):
             ),
             template_order=["Transform"],
         )
+
+    def parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the model output. Returns string value for now."""
+        return computed.value if computed.value is not None else ""
 
 
 @runtime_checkable
@@ -137,8 +150,12 @@ class MObjectProtocol(Protocol):
         """
         ...
 
+    def parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the model output."""
+        ...
 
-class MObject(Component):
+
+class MObject(Component[str]):
     """An extension of `Component` for adding query and transform operations."""
 
     def __init__(
@@ -218,3 +235,7 @@ class MObject(Component):
             fields=[],
             template_order=["*", "MObject"],
         )
+
+    def parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the model output. Returns string value for now."""
+        return computed.value if computed.value is not None else ""
