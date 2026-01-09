@@ -124,7 +124,7 @@ class Instruction(Component):
         self._images = images
         self._repair_string: str | None = None
 
-    def parts(self) -> list[Component | CBlock]:
+    def parts(self):
         """Returns all of the constituent parts of an Instruction."""
         # Add all of the optionally defined CBlocks/Components then filter Nones at the end.
         cs = [self._description, self._prefix, self._output_prefix]
