@@ -23,9 +23,9 @@ S = typing_extensions.TypeVar("S", default=Any, covariant=True)
 C = typing_extensions.TypeVar("C", default=str)
 """Used for component typing in function parameters where the function takes a Component[C] and/or CBlock and can return a ModelOutputThunk[C]. Defaults to `str`."""
 
+
 class ComponentParseError(Exception):
     """Raised by `Component.parse()` when the underlying parsing method throws an exception."""
-    pass
 
 
 # For ModelOutputThunk return types to be typed correctly, CBlocks must be defined
@@ -154,6 +154,10 @@ class Component(Protocol, Generic[S]):
         raise NotImplementedError("format_for_llm isn't implemented by default")
 
     def parse(self, computed: ModelOutputThunk) -> S:
+        """Parse the expected type from a given `ModelOutputThunk`.
+
+        Calls the Component's underlying `._parse` function.
+        """
         try:
             return self._parse(computed)
         except Exception as e:

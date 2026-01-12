@@ -48,6 +48,7 @@ class IntComp(FloatComp, Component[int]):
         except:
             return -2
 
+
 class ExceptionRaisingComp(Component[int]):
     def parts(self) -> list[Component | CBlock]:
         return []
@@ -102,12 +103,14 @@ def test_subclassed_component_parsing():
     mot = ModelOutputThunk[float](value="1")
     assert ic.parse(mot) == 1
 
+
 def test_component_parsing_fails():
     erc = ExceptionRaisingComp()
     mot = ModelOutputThunk[float](value="1")
 
     with pytest.raises(ComponentParseError):
         _ = erc.parse(mot) == 1
+
 
 def test_incorrect_type_override():
     with pytest.raises(TypeError):
