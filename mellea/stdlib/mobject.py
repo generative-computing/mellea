@@ -150,7 +150,7 @@ class MObjectProtocol(Protocol):
         """
         ...
 
-    def parse(self, computed: ModelOutputThunk) -> str:
+    def _parse(self, computed: ModelOutputThunk) -> str:
         """Parse the model output."""
         ...
 
