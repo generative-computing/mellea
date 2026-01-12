@@ -11,11 +11,16 @@ from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc.document import DoclingDocument, TableItem
 from docling_core.types.io import DocumentStream
 
-from mellea.stdlib.base import CBlock, Component, TemplateRepresentation
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    ModelOutputThunk,
+    TemplateRepresentation,
+)
 from mellea.stdlib.mobject import MObject, Query, Transform
 
 
-class RichDocument(Component):
+class RichDocument(Component[str]):
     """A `RichDocument` is a block of content with an underlying DoclingDocument.
 
     It has helper functions for working with the document and extracting parts of it.
@@ -40,6 +45,10 @@ class RichDocument(Component):
         No template needed here.
         """
         return self.to_markdown()
+
+    def _parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the model output. Returns string value for now."""
+        return computed.value if computed.value is not None else ""
 
     def docling(self) -> DoclingDocument:
         """Get the underlying Docling Document."""

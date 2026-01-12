@@ -3,8 +3,8 @@
 import asyncio
 import datetime
 import functools
-from collections.abc import AsyncIterator, Callable, Coroutine
-from typing import Any
+from collections.abc import AsyncIterator, Callable, Coroutine, Sequence
+from typing import Any, overload
 
 import ollama
 from tqdm import tqdm
@@ -26,6 +26,7 @@ from mellea.helpers.async_helpers import (
 from mellea.helpers.event_loop_helper import _run_async_in_thread
 from mellea.helpers.fancy_logger import FancyLogger
 from mellea.stdlib.base import (
+    C,
     CBlock,
     Component,
     Context,
@@ -254,13 +255,13 @@ class OllamaModelBackend(FormatterBackend):
 
     async def generate_from_context(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ):
+    ) -> tuple[ModelOutputThunk[C], Context]:
         """See `generate_from_chat_context`."""
         assert ctx.is_chat_context, (
             "The ollama backend only supports chat-like contexts."
@@ -277,13 +278,13 @@ class OllamaModelBackend(FormatterBackend):
 
     async def generate_from_chat_context(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk:
+    ) -> ModelOutputThunk[C]:
         """Generates a ModelOutputThunk. The final value for this object can be awaited.
 
         The new completion is generated from the provided Context using this backend's `Formatter`.
@@ -354,7 +355,7 @@ class OllamaModelBackend(FormatterBackend):
             think=model_opts.get(ModelOption.THINKING, None),
             stream=model_opts.get(ModelOption.STREAM, False),
             options=self._make_backend_specific_and_remove(model_opts),
-            format=_format.model_json_schema() if _format is not None else None,
+            format=_format.model_json_schema() if _format is not None else None,  # type: ignore
         )  # type: ignore
 
         output = ModelOutputThunk(None)
@@ -390,9 +391,31 @@ class OllamaModelBackend(FormatterBackend):
 
         return output
 
+    @overload
     async def generate_from_raw(
         self,
-        actions: list[Component | CBlock],
+        actions: list[Component[C]],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C]]: ...
+
+    @overload
+    async def generate_from_raw(
+        self,
+        actions: list[Component[C] | CBlock],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C | str]]: ...
+
+    async def generate_from_raw(
+        self,
+        actions: Sequence[Component[C] | CBlock],
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -430,7 +453,7 @@ class OllamaModelBackend(FormatterBackend):
                 prompt=prompt,
                 raw=True,
                 think=model_opts.get(ModelOption.THINKING, None),
-                format=format.model_json_schema() if format is not None else None,
+                format=format.model_json_schema() if format is not None else None,  # type: ignore
                 options=self._make_backend_specific_and_remove(model_opts),
             )
             coroutines.append(co)
@@ -462,8 +485,10 @@ class OllamaModelBackend(FormatterBackend):
                         },
                     },
                 )
-
-            self.formatter.parse(actions[i], result)
+            action = actions[i]
+            result.parsed_repr = (
+                action.parse(result) if isinstance(action, Component) else result.value
+            )
 
             generate_log = GenerateLog()
             generate_log.prompt = prompts[i]
@@ -476,7 +501,7 @@ class OllamaModelBackend(FormatterBackend):
                 "thinking": model_opts.get(ModelOption.THINKING, None),
                 "seed": model_opts.get(ModelOption.SEED, None),
             }
-            generate_log.action = actions[i]
+            generate_log.action = action
 
             if error:
                 generate_log.extra["error"] = error
@@ -555,7 +580,6 @@ class OllamaModelBackend(FormatterBackend):
         assert mot._model_options is not None, (
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
-        self.formatter.parse(mot._action, mot)
 
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()

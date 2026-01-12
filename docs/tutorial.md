@@ -334,6 +334,8 @@ Mellea's core abstraction is called a `Component`. A `Component` is a structured
 
 Components are composite data structures; that is, a `Component` can be made up of many other parts. Each of those parts is either a `CBlock` or another `Component`. `CBlock`s, or "content blocks", are an atomic unit of text or data. CBlocks hold raw text (or sometimes parsed representations) and can be used as leaves in the Component DAG.
 
+Components can also specify an expected output type along with a parse function to extract that type from the LLM's output. By default, this type is a string; but by defining a Component's expected type, you can get type hinting for outputs in the standard library.
+
 Backends are the engine that actually run the LLM. Backends consume Components, format the Component, pass the formatted input to an LLM, and return model outputs, which are then parsed back into CBlocks or Components.
 
 During the course of an interaction with an LLM, several Components and CBlocks may be created. Logic for handling this trace of interactions is provided by a `Context` object. Some book-keeping needs to be done in order for Contexts to appropriately handle a trace of Components and CBlocks. The `MelleaSession` class, which is created by `mellea.start_session()`, does this book-keeping a simple wrapper around Contexts and Backends.
