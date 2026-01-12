@@ -197,7 +197,7 @@ class MifiedProtocol(MObjectProtocol, Protocol):
             template=self._template,
             template_order=template_order,
         )
-    
+
     def _parse(self, computed: ModelOutputThunk) -> str:
         """Parse the model output. Returns string value for now.
 
