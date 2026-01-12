@@ -10,13 +10,14 @@ from mellea.stdlib.base import (
     CBlock,
     Component,
     ImageBlock,
+    ModelOutputThunk,
     TemplateRepresentation,
     blockify,
 )
 from mellea.stdlib.requirement import Requirement, reqify
 
 
-class Instruction(Component):
+class Instruction(Component[str]):
     """The Instruction in an instruct/validate/repair loop."""
 
     def __init__(
@@ -111,7 +112,12 @@ class Instruction(Component):
         self._icl_examples: list[CBlock | Component] = [
             blockify(e) for e in icl_examples
         ]
-        self._grounding_context: dict[str, str | CBlock | Component] = grounding_context
+
+        # Map all string values to CBlocks in the grounding context.
+        self._grounding_context: dict[str, CBlock | Component] = {
+            k: blockify(v) if isinstance(v, str) else v
+            for k, v in grounding_context.items()
+        }
         self._prefix = blockify(prefix) if prefix is not None else None
         self._output_prefix = (
             blockify(output_prefix) if output_prefix is not None else None
@@ -175,3 +181,7 @@ class Instruction(Component):
         res = deepcopy(self)
         res._repair_string = repair_string
         return res
+
+    def _parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the model output. Returns string value for now."""
+        return computed.value if computed.value is not None else ""

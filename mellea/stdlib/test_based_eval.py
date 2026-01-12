@@ -6,7 +6,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from mellea.stdlib.base import CBlock, Component, TemplateRepresentation
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    ModelOutputThunk,
+    TemplateRepresentation,
+)
 
 
 class Message(BaseModel):
@@ -42,7 +47,7 @@ class TestData(BaseModel):
         return v
 
 
-class TestBasedEval(Component):
+class TestBasedEval(Component[str]):
     """Each TestBasedEval represents a single unit test."""
 
     def __init__(
@@ -75,6 +80,10 @@ class TestBasedEval(Component):
             args=self._judge_context if hasattr(self, "_judge_context") else {},
             template_order=["*"],
         )
+
+    def _parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the model output. Returns string value for now."""
+        return computed.value if computed.value is not None else ""
 
     def set_judge_context(
         self, input_text: str, prediction: str, targets_for_input: list[str]

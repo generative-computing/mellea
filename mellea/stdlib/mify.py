@@ -5,7 +5,13 @@ import types
 from collections.abc import Callable
 from typing import Any, Protocol, TypeVar, overload, runtime_checkable
 
-from mellea.stdlib.base import CBlock, Component, TemplateRepresentation
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    ComponentParseError,
+    ModelOutputThunk,
+    TemplateRepresentation,
+)
 from mellea.stdlib.mobject import MObjectProtocol, Query, Transform
 
 
@@ -191,6 +197,23 @@ class MifiedProtocol(MObjectProtocol, Protocol):
             template=self._template,
             template_order=template_order,
         )
+
+    def _parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the model output. Returns string value for now.
+
+        [no-index]
+        """
+        return computed.value if computed.value is not None else ""
+
+    def parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the model output. Returns string value for now.
+
+        [no-index]
+        """
+        try:
+            return self._parse(computed)
+        except Exception as e:
+            raise ComponentParseError(f"component parsing failed: {e}")
 
 
 T = TypeVar("T")

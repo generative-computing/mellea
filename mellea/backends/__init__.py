@@ -5,17 +5,24 @@ from __future__ import annotations
 import abc
 import asyncio
 import itertools
-from typing import TypeVar
+from collections.abc import Sequence
+from typing import Any, overload
 
 import pydantic
+import typing_extensions
 
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.types import ModelOption
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import CBlock, Component, Context, GenerateLog, ModelOutputThunk
+from mellea.stdlib.base import C, CBlock, Component, Context, ModelOutputThunk
 
-BaseModelSubclass = TypeVar(
-    "BaseModelSubclass", bound=pydantic.BaseModel
+# Necessary to define a type that supports `None` so that the BaseModelSubclass
+# can have a default value. Otherwise, Python complains about typed-components
+# since types with default values must come after those without default values in
+# function signatures (which is incompatible with our function parameter formatting).
+pydantic_model_or_none = pydantic.BaseModel | None
+BaseModelSubclass = typing_extensions.TypeVar(
+    "BaseModelSubclass", bound=pydantic_model_or_none, default=None
 )  # must be a subclass of BaseModel
 
 
@@ -39,13 +46,13 @@ class Backend(abc.ABC):
     @abc.abstractmethod
     async def generate_from_context(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> tuple[ModelOutputThunk, Context]:
+    ) -> tuple[ModelOutputThunk[C], Context]:
         """Generates a model output from a context. May not mutate the context. This must be called from a running event loop as it creates a task to run the generation request.
 
         Args:
@@ -60,10 +67,32 @@ class Backend(abc.ABC):
         """
         ...
 
+    @overload
+    async def generate_from_raw(
+        self,
+        actions: list[Component[C]],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C]]: ...
+
+    @overload
+    async def generate_from_raw(
+        self,
+        actions: list[Component[C] | CBlock],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C | str]]: ...
+
     @abc.abstractmethod
     async def generate_from_raw(
         self,
-        actions: list[Component | CBlock],
+        actions: Sequence[Component[C] | CBlock],
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -119,3 +148,7 @@ def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputT
         case Component():
             parts_walk = [generate_walk(p) for p in c.parts()]
             return list(itertools.chain.from_iterable(parts_walk))  # aka flatten
+        case _:
+            raise ValueError(
+                f"parts should only contain CBlocks, Components, or ModelOutputThunks; found `{c!s:.10}{'...' if len(str(c)) > 10 else ''}` (type: {type(c)})"
+            )
