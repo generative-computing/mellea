@@ -14,37 +14,36 @@ from ibm_watsonx_ai import APIClient, Credentials
 from ibm_watsonx_ai.foundation_models import ModelInference
 from ibm_watsonx_ai.foundation_models.schema import TextChatParameters
 
-from mellea.backends import BaseModelSubclass, model_ids
-from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
-from mellea.backends.model_ids import ModelIdentifier
-from mellea.backends.tools import (
-    add_tools_from_context_actions,
-    add_tools_from_model_options,
-    convert_tools_to_json,
-)
-from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import (
-    ClientCache,
-    get_current_event_loop,
-    send_to_queue,
-)
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.helpers.openai_compatible_helpers import (
-    chat_completion_delta_merge,
-    extract_model_tool_requests,
-)
-from mellea.stdlib.base import (
+from ..backends import ModelIdentifier, model_ids
+from ..core import (
+    BaseModelSubclass,
     C,
     CBlock,
     Component,
     Context,
+    FancyLogger,
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
     ModelToolCall,
 )
-from mellea.stdlib.chat import Message
-from mellea.stdlib.requirement import ALoraRequirement  # type: ignore
+from ..formatters import ChatFormatter, TemplateFormatter
+from ..helpers import (
+    ClientCache,
+    chat_completion_delta_merge,
+    extract_model_tool_requests,
+    get_current_event_loop,
+    send_to_queue,
+)
+from ..stdlib.components import Message
+from ..stdlib.requirements import ALoraRequirement
+from .backend import FormatterBackend
+from .model_options import ModelOption
+from .tools import (
+    add_tools_from_context_actions,
+    add_tools_from_model_options,
+    convert_tools_to_json,
+)
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
@@ -55,7 +54,7 @@ class WatsonxAIBackend(FormatterBackend):
     def __init__(
         self,
         model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_3_3_8B,
-        formatter: Formatter | None = None,
+        formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
         *,

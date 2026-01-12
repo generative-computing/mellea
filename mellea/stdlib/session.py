@@ -5,34 +5,31 @@ from __future__ import annotations
 import contextvars
 import inspect
 from copy import copy
-from typing import Any, Literal, TypeVar, overload
+from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
 
-import mellea.stdlib.functional as mfuncs
-from mellea.backends import Backend, BaseModelSubclass
-from mellea.backends.model_ids import (
-    IBM_GRANITE_3_3_8B,
-    IBM_GRANITE_4_MICRO_3B,
-    ModelIdentifier,
-)
-from mellea.backends.ollama import OllamaModelBackend
-from mellea.backends.openai import OpenAIBackend
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import (
+from ..backends.model_ids import IBM_GRANITE_4_MICRO_3B, ModelIdentifier
+from ..core import (
+    Backend,
+    BaseModelSubclass,
     CBlock,
     Component,
     Context,
+    FancyLogger,
     GenerateLog,
     ImageBlock,
     ModelOutputThunk,
+    Requirement,
     S,
-    SimpleContext,
+    SamplingResult,
+    SamplingStrategy,
+    ValidationResult,
 )
-from mellea.stdlib.chat import Message
-from mellea.stdlib.requirement import Requirement, ValidationResult
-from mellea.stdlib.sampling import SamplingResult, SamplingStrategy
-from mellea.stdlib.sampling.base import RejectionSamplingStrategy
+from ..stdlib import functional as mfuncs
+from .components import Message
+from .context import SimpleContext
+from .sampling import RejectionSamplingStrategy
 
 # Global context variable for the context session
 _context_session: contextvars.ContextVar[MelleaSession | None] = contextvars.ContextVar(
@@ -57,19 +54,23 @@ def get_session() -> MelleaSession:
 def backend_name_to_class(name: str) -> Any:
     """Resolves backend names to Backend classes."""
     if name == "ollama":
+        from ..backends.ollama import OllamaModelBackend
+
         return OllamaModelBackend
     elif name == "hf" or name == "huggingface":
         from mellea.backends.huggingface import LocalHFBackend
 
         return LocalHFBackend
     elif name == "openai":
+        from ..backends.openai import OpenAIBackend
+
         return OpenAIBackend
     elif name == "watsonx":
-        from mellea.backends.watsonx import WatsonxAIBackend
+        from ..backends.watsonx import WatsonxAIBackend
 
         return WatsonxAIBackend
     elif name == "litellm":
-        from mellea.backends.litellm import LiteLLMBackend
+        from ..backends.litellm import LiteLLMBackend
 
         return LiteLLMBackend
     else:

@@ -6,12 +6,7 @@ import inspect
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
-from mellea.stdlib.base import (
-    CBlock,
-    Component,
-    ModelOutputThunk,
-    TemplateRepresentation,
-)
+from ..core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 
 
 class Query(Component[str]):

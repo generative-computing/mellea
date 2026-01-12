@@ -1,7 +1,14 @@
 """This module holds shim backends used for smoke tests."""
 
-from mellea.backends import Backend, BaseModelSubclass
-from mellea.stdlib.base import C, CBlock, Component, Context, ModelOutputThunk
+from ..core import (
+    Backend,
+    BaseModelSubclass,
+    C,
+    CBlock,
+    Component,
+    Context,
+    ModelOutputThunk,
+)
 
 
 class DummyBackend(Backend):

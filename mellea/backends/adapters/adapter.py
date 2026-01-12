@@ -7,9 +7,9 @@ from typing import TypeVar
 import granite_common.intrinsics
 import yaml
 
-from mellea.backends import Backend
-from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata
-from mellea.backends.types import _ServerType
+from ...core import Backend
+from ..backend import _ServerType
+from .catalog import AdapterType, fetch_intrinsic_metadata
 
 
 class Adapter(abc.ABC):

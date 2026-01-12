@@ -5,14 +5,14 @@ import types
 from collections.abc import Callable
 from typing import Any, Protocol, TypeVar, overload, runtime_checkable
 
-from mellea.stdlib.base import (
+from ..core import (
     CBlock,
     Component,
     ComponentParseError,
     ModelOutputThunk,
     TemplateRepresentation,
 )
-from mellea.stdlib.mobject import MObjectProtocol, Query, Transform
+from ..stdlib.components import MObjectProtocol, Query, Transform
 
 
 @runtime_checkable

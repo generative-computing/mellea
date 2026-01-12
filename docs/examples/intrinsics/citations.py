@@ -10,7 +10,7 @@ uv run python docs/examples/intrinsics/citations.py
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.base import ChatContext, Document
 from mellea.stdlib.chat import Message
-from mellea.stdlib.intrinsics import rag
+from mellea.stdlib.intrinsic import rag
 import json
 
 

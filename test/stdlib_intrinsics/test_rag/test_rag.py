@@ -11,7 +11,7 @@ import torch
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.base import ChatContext, Document
 from mellea.stdlib.chat import Message
-from mellea.stdlib.intrinsics import rag
+from mellea.stdlib.intrinsic import rag
 
 DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 """Location of data files for the tests in this file."""

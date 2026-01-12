@@ -2,6 +2,7 @@ import pytest
 from mellea.backends.openai import OpenAIBackend
 from mellea.stdlib.base import Document
 from mellea.stdlib.chat import Message
+from mellea.helpers import messages_to_docs
 
 
 def test_message_with_docs():
@@ -11,7 +12,7 @@ def test_message_with_docs():
     assert msg._docs is not None
     assert doc in msg._docs
 
-    docs = OpenAIBackend.messages_to_docs([msg])
+    docs = messages_to_docs([msg])
     assert len(docs) == 1
     assert docs[0]["text"] == doc.text
     assert docs[0]["title"] == doc.title

@@ -25,7 +25,7 @@ from mellea.stdlib.base import (
     SimpleContext,
 )
 from mellea.stdlib.chat import Message
-from mellea.stdlib.intrinsics.intrinsic import Intrinsic
+from mellea.stdlib.intrinsic.intrinsic import Intrinsic
 from mellea.stdlib.requirement import (
     ALoraRequirement,
     LLMaJRequirement,

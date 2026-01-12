@@ -4,34 +4,31 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
-from typing import Any, Literal, TypeVar, overload
+from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
 
-from mellea.backends import Backend, BaseModelSubclass
-from mellea.backends.formatter import FormatterBackend
-from mellea.helpers.event_loop_helper import _run_async_in_thread
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import (
+from ..backends import FormatterBackend
+from ..core import (
+    Backend,
+    BaseModelSubclass,
     CBlock,
     Component,
     Context,
+    FancyLogger,
     GenerateLog,
     ImageBlock,
     ModelOutputThunk,
+    Requirement,
     S,
-    SimpleContext,
-)
-from mellea.stdlib.chat import Message, ToolMessage
-from mellea.stdlib.instruction import Instruction
-from mellea.stdlib.mify import mify
-from mellea.stdlib.mobject import MObjectProtocol
-from mellea.stdlib.requirement import Requirement, ValidationResult
-from mellea.stdlib.sampling import (
-    RejectionSamplingStrategy,
     SamplingResult,
     SamplingStrategy,
+    ValidationResult,
 )
+from ..helpers import _run_async_in_thread
+from .components import Instruction, Message, MObjectProtocol, ToolMessage, mify
+from .context import SimpleContext
+from .sampling import RejectionSamplingStrategy
 
 
 @overload

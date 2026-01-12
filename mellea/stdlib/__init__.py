@@ -1,1 +1,0 @@
-"""The mellea standard library."""

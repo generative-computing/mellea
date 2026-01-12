@@ -6,4 +6,3 @@ from .base import (
     RejectionSamplingStrategy,
     RepairTemplateStrategy,
 )
-from .types import S, SamplingResult, SamplingStrategy
