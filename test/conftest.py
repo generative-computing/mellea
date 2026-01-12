@@ -23,32 +23,8 @@ def pytest_runtest_setup(item):
         )
 
 
-@pytest.fixture(autouse=True, scope="function")
-def aggressive_cleanup():
-    """Aggressive memory cleanup after each test to prevent OOM on CI runners."""
-    yield
-    # Only run aggressive cleanup in CI where memory is constrained
-    if int(os.environ.get("CICD", 0)) != 1:
-        return
-
-    # Cleanup after each test
-    gc.collect()
-    gc.collect()
-
-    # If torch is available, clear CUDA cache
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-    except ImportError:
-        pass
-
-
-@pytest.fixture(autouse=True, scope="module")
-def cleanup_module_fixtures():
-    """Cleanup module-scoped fixtures to free memory between test modules."""
+def memory_cleaner():
+    """Aggressive memory cleanup function."""
     yield
     # Only run aggressive cleanup in CI where memory is constrained
     if int(os.environ.get("CICD", 0)) != 1:
@@ -68,3 +44,15 @@ def cleanup_module_fixtures():
             torch.cuda.synchronize()
     except ImportError:
         pass
+
+
+@pytest.fixture(autouse=True, scope="function")
+def aggressive_cleanup():
+    """Aggressive memory cleanup after each test to prevent OOM on CI runners."""
+    memory_cleaner()
+
+
+@pytest.fixture(autouse=True, scope="module")
+def cleanup_module_fixtures():
+    """Cleanup module-scoped fixtures to free memory between test modules."""
+    memory_cleaner()
