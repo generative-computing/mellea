@@ -54,7 +54,7 @@ m = "cli.m:cli"
 [project.optional-dependencies]
 # Use these like:
 # uv pip install "mellea[hf]"
-# uv pip install -e .[hf, watsonx]
+# uv pip install -e ".[hf, watsonx]"
 # if you want to install all dependencies, use uv sync --all-extras
 
 
