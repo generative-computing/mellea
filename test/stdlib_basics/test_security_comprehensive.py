@@ -1,12 +1,11 @@
 """Comprehensive security tests for mellea thread security features."""
 
 import pytest
-from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext
+from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext, SimpleComponent
 from mellea.stdlib.instruction import Instruction
 from mellea.security import (
     AccessType,
     SecLevel,
-    SecurityMetadata,
     SecurityError,
     privileged,
     declassify,
@@ -57,7 +56,7 @@ class TestSecLevel:
         assert sec_level.level_type == SecLevelType.TAINTED_BY
         assert sec_level.is_tainted()
         assert not sec_level.is_classified()
-        assert sec_level.get_taint_source() is source
+        assert sec_level.get_taint_sources() == [source]
         assert sec_level.get_access_type() is None
 
     def test_sec_level_classified(self):
@@ -87,7 +86,6 @@ class TestCBlockSecurity:
         cblock = CBlock("test content", sec_level=SecLevel.tainted_by(None))
 
         assert cblock.sec_level is not None
-        assert isinstance(cblock.sec_level, SecurityMetadata)
         assert cblock.sec_level.is_tainted()
         assert not cblock.sec_level.is_classified()
         assert cblock.sec_level.get_access_type() is None
@@ -98,7 +96,7 @@ class TestCBlockSecurity:
         cblock = CBlock("test content", sec_level=SecLevel.tainted_by(source))
 
         assert cblock.sec_level.is_tainted()
-        assert cblock.sec_level.get_taint_source() is source
+        assert cblock.sec_level.get_taint_sources() == [source]
 
     def test_cblock_default_safe(self):
         """Test that CBlock defaults to safe when no security metadata."""
@@ -149,7 +147,7 @@ class TestDeclassify:
         assert original.sec_level.is_tainted()
         assert not declassified.sec_level.is_tainted()
         assert not declassified.sec_level.is_classified()
-        assert declassified.sec_level.sec_level.level_type == SecLevelType.NONE
+        assert declassified.sec_level.level_type == SecLevelType.NONE
 
         # Original is unchanged
         assert original.sec_level.is_tainted()
@@ -168,7 +166,7 @@ class TestDeclassify:
 
         assert declassified._meta["custom"] == "value"
         assert declassified._meta["other"] == 123
-        assert declassified.sec_level.sec_level.level_type == SecLevelType.NONE
+        assert declassified.sec_level.level_type == SecLevelType.NONE
 
 
 class TestPrivilegedDecorator:
@@ -225,11 +223,8 @@ class TestPrivilegedDecorator:
 
         access = TestAccess()
         sec_level = SecLevel.classified(access)
-        security_meta = SecurityMetadata(sec_level)
 
-        classified_cblock = CBlock(
-            "classified content", meta={"_security": security_meta}
-        )
+        classified_cblock = CBlock("classified content", sec_level=sec_level)
 
         with pytest.raises(SecurityError, match="requires safe input"):
             safe_function(classified_cblock)
@@ -315,6 +310,35 @@ class TestTaintSources:
         assert len(sources) == 1
         assert sources[0] is tainted_desc
 
+    def test_taint_sources_from_nested_component_with_tainted_cblocks(self):
+        """Test taint sources from nested Components containing tainted CBlocks."""
+        # Create tainted CBlocks
+        tainted_data = CBlock(
+            "sensitive user data", sec_level=SecLevel.tainted_by(None)
+        )
+        tainted_config = CBlock("secret config", sec_level=SecLevel.tainted_by(None))
+        safe_info = CBlock("public info")  # Safe CBlock
+
+        # Create a SimpleComponent with mixed tainted and safe CBlocks
+        nested_component = SimpleComponent(
+            data=tainted_data, config=tainted_config, info=safe_info
+        )
+
+        # Create an Instruction with the nested Component in grounding_context
+        instruction = Instruction(
+            description="Process the data",
+            grounding_context={"context": nested_component},
+        )
+
+        # taint_sources should find both tainted CBlocks through the nested Component
+        sources = taint_sources(instruction, None)
+
+        # Should find both tainted CBlocks
+        assert len(sources) == 2
+        assert tainted_data in sources
+        assert tainted_config in sources
+        assert safe_info not in sources  # Safe CBlock should not be included
+
     def test_taint_sources_shallow_search_limit(self):
         """Test that shallow search only checks last 5 components."""
         action = CBlock("safe action")
@@ -344,15 +368,12 @@ class TestModelOutputThunkSecurity:
     """Test ModelOutputThunk security functionality."""
 
     def test_from_generation_with_taint_sources(self):
-        """Test ModelOutputThunk.from_generation with taint sources."""
-        from mellea.security.core import SecLevelType
-
+        """Test ModelOutputThunk creation with taint sources."""
         taint_source = CBlock("taint source", sec_level=SecLevel.tainted_by(None))
 
-        mot = ModelOutputThunk.from_generation(
-            value="generated content",
-            taint_sources=[taint_source],
-            meta={"custom": "value"},
+        sec_level = SecLevel.tainted_by([taint_source])
+        mot = ModelOutputThunk(
+            value="generated content", sec_level=sec_level, meta={"custom": "value"}
         )
 
         assert mot.value == "generated content"
@@ -360,32 +381,36 @@ class TestModelOutputThunkSecurity:
         assert mot.sec_level is not None
         assert mot.sec_level.is_tainted()
         assert not mot.sec_level.is_classified()
-        assert mot.sec_level.get_taint_source() is taint_source
+        assert mot.sec_level.get_taint_sources() == [taint_source]
 
     def test_from_generation_without_taint_sources(self):
-        """Test ModelOutputThunk.from_generation without taint sources."""
+        """Test ModelOutputThunk creation without taint sources."""
         from mellea.security.core import SecLevelType
 
-        mot = ModelOutputThunk.from_generation(
-            value="generated content", taint_sources=None, meta={"custom": "value"}
+        mot = ModelOutputThunk(
+            value="generated content",
+            sec_level=SecLevel.none(),
+            meta={"custom": "value"},
         )
 
         assert mot.value == "generated content"
         assert mot._meta["custom"] == "value"
         assert mot.sec_level is not None
-        assert mot.sec_level.sec_level.level_type == SecLevelType.NONE
+        assert mot.sec_level.level_type == SecLevelType.NONE
         assert not mot.sec_level.is_tainted()
         assert not mot.sec_level.is_classified()
 
     def test_from_generation_empty_taint_sources(self):
-        """Test ModelOutputThunk.from_generation with empty taint sources."""
+        """Test ModelOutputThunk creation with empty taint sources."""
         from mellea.security.core import SecLevelType
 
-        mot = ModelOutputThunk.from_generation(
-            value="generated content", taint_sources=[], meta={"custom": "value"}
+        mot = ModelOutputThunk(
+            value="generated content",
+            sec_level=SecLevel.none(),
+            meta={"custom": "value"},
         )
 
-        assert mot.sec_level.sec_level.level_type == SecLevelType.NONE
+        assert mot.sec_level.level_type == SecLevelType.NONE
         assert not mot.sec_level.is_tainted()
         assert not mot.sec_level.is_classified()
 
@@ -402,9 +427,8 @@ class TestSecurityIntegration:
 
         # Simulate generation with taint sources
         sources = taint_sources(tainted_input, None)
-        mot = ModelOutputThunk.from_generation(
-            value="model response", taint_sources=sources
-        )
+        sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+        mot = ModelOutputThunk(value="model response", sec_level=sec_level)
 
         # Verify output is tainted
         assert mot.sec_level.is_tainted()
@@ -413,7 +437,7 @@ class TestSecurityIntegration:
         safe_mot = declassify(mot)
         assert not safe_mot.sec_level.is_tainted()
         assert not safe_mot.sec_level.is_classified()
-        assert safe_mot.sec_level.sec_level.level_type == SecLevelType.NONE
+        assert safe_mot.sec_level.level_type == SecLevelType.NONE
 
         # Verify original is unchanged
         assert mot.sec_level.is_tainted()
@@ -428,9 +452,8 @@ class TestSecurityIntegration:
         # Generate tainted content
         taint_source = CBlock("taint source", sec_level=SecLevel.tainted_by(None))
 
-        mot = ModelOutputThunk.from_generation(
-            value="tainted response", taint_sources=[taint_source]
-        )
+        sec_level = SecLevel.tainted_by([taint_source])
+        mot = ModelOutputThunk(value="tainted response", sec_level=sec_level)
 
         # Privileged function should reject tainted content
         with pytest.raises(SecurityError):

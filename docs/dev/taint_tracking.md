@@ -7,31 +7,46 @@ Mellea backends implement thread security using the **SecLevel** model with capa
 The security system uses three types of security levels:
 
 ```python
-SecLevel := None | Classified of AccessType | TaintedBy of (CBlock | Component | None)
+SecLevel := None | Classified of AccessType | TaintedBy of (list[CBlock | Component] | None)
 ```
 
 - **SecLevel.none()**: Safe content with no restrictions
 - **SecLevel.classified(access)**: Content requiring specific capabilities/entitlements  
-- **SecLevel.tainted_by(source)**: Content tainted by a specific CBlock, Component, or None for root tainted nodes
+- **SecLevel.tainted_by(sources)**: Content tainted by one or more CBlocks/Components (list), or None for root tainted nodes
 
 ## Backend Implementation
 
-All backends follow the same pattern using `ModelOutputThunk.from_generation()`:
+All backends follow the same pattern when creating `ModelOutputThunk`:
 
 ```python
 # Compute taint sources from action and context
 sources = taint_sources(action, ctx)
 
-output = ModelOutputThunk.from_generation(
+# Set security level based on taint sources
+from mellea.security import SecLevel
+sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+
+output = ModelOutputThunk(
     value=None,
-    taint_sources=sources,
+    sec_level=sec_level,
     meta={}
 )
 ```
 
-This method automatically sets the security level:
-- If taint sources are found -> `SecLevel.tainted_by(first_source)`
+The security level is set as follows:
+- If taint sources are found -> `SecLevel.tainted_by(sources)` (all sources are tracked)
 - If no taint sources -> `SecLevel.none()`
+
+### Handling Multiple Taint Sources
+
+When `taint_sources()` returns multiple sources (e.g., both the action and context contain tainted content), backends pass the entire list to `SecLevel.tainted_by()`. This ensures all taint sources are tracked, providing comprehensive taint attribution.
+
+**Benefits of Multiple Source Tracking**:
+- **Complete attribution**: All sources that influenced the generation are tracked
+- **Better debugging**: Can identify all tainted inputs that contributed to output
+- **More accurate security**: No information loss about taint origins
+
+**Note**: The implementation focuses on **taint preservation** and **complete attribution**. All taint sources are tracked, ensuring the security model has full visibility into what influenced the generated content.
 
 ## Taint Source Analysis
 
@@ -70,8 +85,8 @@ class SecurityMetadata:
     def is_tainted(self) -> bool:
         return self.sec_level.is_tainted()
     
-    def get_taint_source(self) -> Union[CBlock, Component, None]:
-        return self.sec_level.get_taint_source()
+    def get_taint_sources(self) -> list[CBlock | Component]:
+        return self.sec_level.get_taint_sources()
 ```
 
 Content can be marked as tainted at construction time:
@@ -82,7 +97,8 @@ from mellea.security import SecLevel
 c = CBlock("user input", sec_level=SecLevel.tainted_by(None))
 
 if c.sec_level and c.sec_level.is_tainted():
-    print(f"Content tainted by: {c.sec_level.get_taint_source()}")
+    taint_sources = c.sec_level.get_taint_sources()
+    print(f"Content tainted by: {taint_sources}")
 ```
 
 ## Key Features

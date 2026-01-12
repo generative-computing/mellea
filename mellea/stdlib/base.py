@@ -17,6 +17,7 @@ from typing import Any, Protocol, TypeVar, Union, runtime_checkable
 from PIL import Image as PILImage
 
 from mellea.helpers.fancy_logger import FancyLogger
+from mellea.security import SecLevel, TaintChecking
 
 
 class CBlock:
@@ -46,11 +47,8 @@ class CBlock:
             meta = {}
         self._meta = meta
 
-        # Set security metadata if sec_level is provided
-        if sec_level is not None:
-            from mellea.security import SecurityMetadata
-
-            self._meta["_security"] = SecurityMetadata(sec_level)
+        # Store security level directly
+        self._sec_level: SecLevel | None = sec_level
 
     @property
     def value(self) -> str | None:
@@ -71,22 +69,13 @@ class CBlock:
         return f"CBlock({self.value}, {self._meta.__repr__()})"
 
     @property
-    def sec_level(self) -> Any | None:
-        """Get the security metadata for this CBlock.
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this CBlock.
 
         Returns:
-            SecurityMetadata if present, None otherwise
+            SecLevel if present, None otherwise
         """
-        from mellea.security import SecurityMetadata
-
-        if self._meta is None or "_security" not in self._meta:
-            return None
-
-        security_meta = self._meta["_security"]
-        if isinstance(security_meta, SecurityMetadata):
-            return security_meta
-
-        return None
+        return self._sec_level
 
 
 class ImageBlock:
@@ -154,7 +143,7 @@ class ImageBlock:
 
 
 @runtime_checkable
-class Component(Protocol):
+class Component(TaintChecking, Protocol):
     """A `Component` is a composite data structure that is intended to be represented to an LLM."""
 
     def parts(self) -> list[Component | CBlock]:
@@ -167,6 +156,15 @@ class Component(Protocol):
         Returns: a `TemplateRepresentation` or string
         """
         raise NotImplementedError("format_for_llm isn't implemented by default")
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        ...
 
 
 def get_images_from_component(c: Component) -> None | list[ImageBlock]:
@@ -197,6 +195,12 @@ class Document(Component):
         self.text = text
         self.title = title
         self.doc_id = doc_id
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component."""
+        return self._sec_level
 
     def parts(self) -> list[Component | CBlock]:
         """The set of all the constituent parts of the `Component`."""
@@ -234,9 +238,10 @@ class ModelOutputThunk(CBlock):
         meta: dict[str, Any] | None = None,
         parsed_repr: CBlock | Component | Any | None = None,
         tool_calls: dict[str, ModelToolCall] | None = None,
+        sec_level: Any = None,
     ):
         """Initializes as a cblock, optionally also with a parsed representation from an output formatter."""
-        super().__init__(value, meta)
+        super().__init__(value, meta, sec_level=sec_level)
         self.parsed_repr: CBlock | Component | Any | None = parsed_repr
 
         # Set computed to True if a value is passed in.
@@ -389,42 +394,6 @@ class ModelOutputThunk(CBlock):
         Differs from CBlock because `._meta` can be very large for ModelOutputThunks.
         """
         return f"ModelOutputThunk({self.value})"
-
-    @classmethod
-    def from_generation(
-        cls,
-        value: str | None,
-        taint_sources: list[CBlock | Component] | None = None,
-        meta: dict[str, Any] | None = None,
-        parsed_repr: CBlock | Component | Any | None = None,
-        tool_calls: dict[str, ModelToolCall] | None = None,
-    ) -> ModelOutputThunk:
-        """Create a ModelOutputThunk from generation with security metadata.
-
-        Args:
-            value: The generated content
-            taint_sources: List of tainted CBlocks or Components from the generation context
-            meta: Additional metadata for the thunk
-            parsed_repr: Parsed representation of the output
-            tool_calls: Tool calls made during generation
-
-        Returns:
-            A new ModelOutputThunk with appropriate security metadata
-        """
-        if meta is None:
-            meta = {}
-
-        # Add security metadata based on taint sources
-        from mellea.security import SecLevel, SecurityMetadata
-
-        if taint_sources:
-            # If there are taint sources, mark as tainted by the first source
-            meta["_security"] = SecurityMetadata(SecLevel.tainted_by(taint_sources[0]))
-        else:
-            # If no taint sources, mark as safe
-            meta["_security"] = SecurityMetadata(SecLevel.none())
-
-        return cls(value, meta, parsed_repr, tool_calls)
 
     def __copy__(self):
         """Returns a shallow copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generating."""
@@ -743,6 +712,12 @@ class SimpleComponent(Component):
                 kwargs[key] = CBlock(value=kwargs[key])
         self._kwargs_type_check(kwargs)
         self._kwargs = kwargs
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component."""
+        return self._sec_level
 
     def parts(self):
         """Returns the values of the kwargs."""
@@ -751,9 +726,9 @@ class SimpleComponent(Component):
     def _kwargs_type_check(self, kwargs):
         for key in kwargs.keys():
             value = kwargs[key]
-            assert issubclass(type(value), Component) or issubclass(
-                type(value), CBlock
-            ), f"Expected span but found {type(value)} of value: {value}"
+            assert isinstance(value, Component) or isinstance(value, CBlock), (
+                f"Expected span but found {type(value)} of value: {value}"
+            )
             assert type(key) is str
         return True
 

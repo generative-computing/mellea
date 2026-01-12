@@ -38,7 +38,7 @@ from mellea.backends.types import ModelOption
 from mellea.helpers.async_helpers import get_current_event_loop, send_to_queue
 from mellea.helpers.event_loop_helper import _run_async_in_thread
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.security import taint_sources
+from mellea.security import SecLevel, taint_sources
 from mellea.stdlib.base import (
     CBlock,
     Component,
@@ -344,10 +344,9 @@ class LocalVLLMBackend(FormatterBackend):
 
             # Compute taint sources from action and context
             sources = taint_sources(action, ctx)
+            sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
 
-            output = ModelOutputThunk.from_generation(
-                value=None, taint_sources=sources, meta={}
-            )
+            output = ModelOutputThunk(value=None, sec_level=sec_level, meta={})
 
             generator = self._model.generate(  # type: ignore
                 request_id=str(id(output)),
@@ -490,12 +489,11 @@ class LocalVLLMBackend(FormatterBackend):
         tasks = [generate(p, f"{id(prompts)}-{i}") for i, p in enumerate(prompts)]
         decoded_results = await asyncio.gather(*tasks)
 
-        results = [
-            ModelOutputThunk.from_generation(
-                value=text, taint_sources=taint_sources(actions[i], ctx), meta={}
-            )
-            for i, text in enumerate(decoded_results)
-        ]
+        results = []
+        for i, text in enumerate(decoded_results):
+            sources = taint_sources(actions[i], ctx)
+            sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+            results.append(ModelOutputThunk(value=text, sec_level=sec_level, meta={}))
 
         for i, result in enumerate(results):
             self.formatter.parse(actions[i], result)

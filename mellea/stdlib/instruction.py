@@ -6,6 +6,7 @@ from copy import deepcopy
 
 import jinja2
 
+from mellea.security import SecLevel
 from mellea.stdlib.base import (
     CBlock,
     Component,
@@ -123,6 +124,12 @@ class Instruction(Component):
         )
         self._images = images
         self._repair_string: str | None = None
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component."""
+        return self._sec_level
 
     def parts(self):
         """Returns all of the constituent parts of an Instruction."""

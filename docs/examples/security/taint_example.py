@@ -23,8 +23,8 @@ print(
     f"Result is tainted: {result.sec_level.is_tainted() if result.sec_level else False}"
 )
 if result.sec_level and result.sec_level.is_tainted():
-    taint_source = result.sec_level.get_taint_source()
-    print(f"Taint source: {taint_source}")
+    taint_sources = result.sec_level.get_taint_sources()
+    print(f"Taint sources: {taint_sources}")
     print("✅ SUCCESS: Taint preserved!")
 else:
     print("❌ FAIL: Result should be tainted but isn't!")
