@@ -28,7 +28,7 @@ class FakeToolComponent(Component[str]):
             obj=self, args={"arg": None}, tools={self.tool1.__name__: self.tool1}
         )
 
-    def parse(self, computed: ModelOutputThunk) -> str:
+    def _parse(self, computed: ModelOutputThunk) -> str:
         return ""
 
 

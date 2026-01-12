@@ -409,7 +409,7 @@ class GenerativeSlot(Component[R], Generic[P, R]):
             template_order=["*", "GenerativeSlot"],
         )
 
-    def parse(self, computed: ModelOutputThunk) -> R:
+    def _parse(self, computed: ModelOutputThunk) -> R:
         """Parse the model output. Returns the original function's return type."""
         function_response: FunctionResponse[R] = (
             self._response_model.model_validate_json(

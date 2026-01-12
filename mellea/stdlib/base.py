@@ -23,6 +23,10 @@ S = typing_extensions.TypeVar("S", default=Any, covariant=True)
 C = typing_extensions.TypeVar("C", default=str)
 """Used for component typing in function parameters where the function takes a Component[C] and/or CBlock and can return a ModelOutputThunk[C]. Defaults to `str`."""
 
+class ComponentParseError(Exception):
+    """Raised by `Component.parse()` when the underlying parsing method throws an exception."""
+    pass
+
 
 # For ModelOutputThunk return types to be typed correctly, CBlocks must be defined
 # using generics and a type var that defaults to str. CBlocks should never be initialized with [type].
@@ -150,6 +154,12 @@ class Component(Protocol, Generic[S]):
         raise NotImplementedError("format_for_llm isn't implemented by default")
 
     def parse(self, computed: ModelOutputThunk) -> S:
+        try:
+            return self._parse(computed)
+        except Exception as e:
+            raise ComponentParseError(f"component parsing failed: {e}")
+
+    def _parse(self, computed: ModelOutputThunk) -> S:
         """Components can define a return type that is parsed from the text output of an LLM."""
         raise NotImplementedError("parse isn't implemented by default")
 
@@ -201,7 +211,7 @@ class Document(Component[str]):
 
         return doc
 
-    def parse(self, computed: ModelOutputThunk) -> str:
+    def _parse(self, computed: ModelOutputThunk) -> str:
         """Parse the model output. Returns string value for now."""
         return computed.value if computed.value is not None else ""
 
@@ -374,7 +384,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
             match self._action:
                 case Component():
-                    self.parsed_repr = self._action.parse(self)
+                    self.parsed_repr = self._action._parse(self)
                 case CBlock():
                     assert self.value is not None, (
                         "value must be non-None since this thunk is computed"
@@ -753,6 +763,6 @@ class SimpleComponent(Component[str]):
         """Uses a string rep."""
         return SimpleComponent.make_json_string(self._kwargs)
 
-    def parse(self, computed: ModelOutputThunk) -> str:
+    def _parse(self, computed: ModelOutputThunk) -> str:
         """Parse the model output. Returns string value for now."""
         return computed.value if computed.value is not None else ""

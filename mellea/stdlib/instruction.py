@@ -182,6 +182,6 @@ class Instruction(Component[str]):
         res._repair_string = repair_string
         return res
 
-    def parse(self, computed: ModelOutputThunk) -> str:
+    def _parse(self, computed: ModelOutputThunk) -> str:
         """Parse the model output. Returns string value for now."""
         return computed.value if computed.value is not None else ""

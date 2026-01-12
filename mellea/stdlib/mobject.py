@@ -53,7 +53,7 @@ class Query(Component[str]):
             template_order=["Query"],
         )
 
-    def parse(self, computed: ModelOutputThunk) -> str:
+    def _parse(self, computed: ModelOutputThunk) -> str:
         """Parse the model output. Returns string value for now."""
         return computed.value if computed.value is not None else ""
 
@@ -97,7 +97,7 @@ class Transform(Component[str]):
             template_order=["Transform"],
         )
 
-    def parse(self, computed: ModelOutputThunk) -> str:
+    def _parse(self, computed: ModelOutputThunk) -> str:
         """Parse the model output. Returns string value for now."""
         return computed.value if computed.value is not None else ""
 
@@ -236,6 +236,6 @@ class MObject(Component[str]):
             template_order=["*", "MObject"],
         )
 
-    def parse(self, computed: ModelOutputThunk) -> str:
+    def _parse(self, computed: ModelOutputThunk) -> str:
         """Parse the model output. Returns string value for now."""
         return computed.value if computed.value is not None else ""

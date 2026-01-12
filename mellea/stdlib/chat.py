@@ -96,7 +96,7 @@ class Message(Component["Message"]):
             docs = [f"{doc.format_for_llm()[:10]}..." for doc in self._docs]
         return f'mellea.Message(role="{self.role}", content="{self.content}", images="{images}", documents="{docs}")'
 
-    def parse(self, computed: ModelOutputThunk) -> "Message":
+    def _parse(self, computed: ModelOutputThunk) -> "Message":
         """Parse the model output into a Message."""
         # TODO: There's some specific logic for tool calls. Storing that here for now.
         # We may eventually need some generic parsing logic that gets run for all Component types...

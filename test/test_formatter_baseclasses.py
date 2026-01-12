@@ -172,7 +172,7 @@ def test_no_template(tf: TemplateFormatter):
         def format_for_llm(self) -> TemplateRepresentation:
             return TemplateRepresentation(self, {})
 
-        def parse(self, computed: ModelOutputThunk) -> str:
+        def _parse(self, computed: ModelOutputThunk) -> str:
             return ""
 
     with pytest.raises(Exception):
@@ -258,7 +258,7 @@ class NewComponent(Component[str]):
             {"text": "template arg version of new component"}
         )
 
-    def parse(self, computed: ModelOutputThunk) -> str:
+    def _parse(self, computed: ModelOutputThunk) -> str:
         return ""
 """
 

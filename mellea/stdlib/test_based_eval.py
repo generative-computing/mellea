@@ -81,7 +81,7 @@ class TestBasedEval(Component[str]):
             template_order=["*"],
         )
 
-    def parse(self, computed: ModelOutputThunk) -> str:
+    def _parse(self, computed: ModelOutputThunk) -> str:
         """Parse the model output. Returns string value for now."""
         return computed.value if computed.value is not None else ""
 

@@ -70,6 +70,6 @@ class Intrinsic(Component[str]):
             "use an `Intrinsic` as the action and not as a part of the context."
         )
 
-    def parse(self, computed: ModelOutputThunk) -> str:
+    def _parse(self, computed: ModelOutputThunk) -> str:
         """Parse the model output. Returns string value for now."""
         return computed.value if computed.value is not None else ""

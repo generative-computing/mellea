@@ -9,6 +9,7 @@ from mellea.stdlib.base import (
     CBlock,
     ChatContext,
     Component,
+    ComponentParseError,
     Context,
     ModelOutputThunk,
     SimpleContext,
@@ -32,20 +33,30 @@ class FloatComp(Component[float]):
     def format_for_llm(self) -> str:
         return self.value
 
-    def parse(self, computed: ModelOutputThunk) -> float:
+    def _parse(self, computed: ModelOutputThunk) -> float:
         if computed.value is None:
             return -1
         return float(computed.value)
 
 
 class IntComp(FloatComp, Component[int]):
-    def parse(self, computed: ModelOutputThunk) -> int:
+    def _parse(self, computed: ModelOutputThunk) -> int:
         if computed.value is None:
             return -1
         try:
             return int(computed.value)
         except:
             return -2
+
+class ExceptionRaisingComp(Component[int]):
+    def parts(self) -> list[Component | CBlock]:
+        return []
+
+    def format_for_llm(self) -> str:
+        return ""
+
+    def _parse(self, computed: ModelOutputThunk) -> int:
+        raise ValueError("random error")
 
 
 @pytest.fixture(scope="module")
@@ -91,6 +102,12 @@ def test_subclassed_component_parsing():
     mot = ModelOutputThunk[float](value="1")
     assert ic.parse(mot) == 1
 
+def test_component_parsing_fails():
+    erc = ExceptionRaisingComp()
+    mot = ModelOutputThunk[float](value="1")
+
+    with pytest.raises(ComponentParseError):
+        _ = erc.parse(mot) == 1
 
 def test_incorrect_type_override():
     with pytest.raises(TypeError):

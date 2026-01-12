@@ -25,7 +25,7 @@ def test_component():
         def format_for_llm(self) -> str:
             return ""
 
-        def parse(self, computed: ModelOutputThunk) -> str:
+        def _parse(self, computed: ModelOutputThunk) -> str:
             return ""
 
     c = _ClosuredComponent()
