@@ -12,6 +12,7 @@ from mellea.stdlib.base import CBlock, ChatContext, Component, Context, ModelOut
 from mellea.stdlib.instruction import Instruction
 from mellea.stdlib.requirement import Requirement, ScorerRequirement, ValidationResult
 from mellea.stdlib.sampling import BaseSamplingStrategy, SamplingResult
+from mellea.stdlib.sampling.types import S
 
 
 class BestofNSamplingStrategy(BaseSamplingStrategy):
@@ -19,7 +20,7 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
 
     async def sample(
         self,
-        action: Component,
+        action: Component[S],
         context: Context,
         backend: Backend,
         requirements: list[Requirement] | None,
@@ -29,7 +30,7 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
         model_options: dict | None = None,
         tool_calls: bool = False,
         show_progress: bool = True,
-    ) -> SamplingResult:
+    ) -> SamplingResult[S]:
         """This method performs a sampling operation based on the given instruction.
 
         Args:
@@ -115,6 +116,12 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
                 model_options=model_options,
                 tool_calls=tool_calls,
             )
+
+            # Sampling strategies may use different components from the original
+            # action. This might cause discrepancies in the expected parsed_repr
+            # type / value. Explicitly overwrite that here.
+            result.parsed_repr = action.parse(result)
+
             sampled_results.append(result)
             sampled_actions.append(next_action)
             sample_contexts.append(result_ctx)

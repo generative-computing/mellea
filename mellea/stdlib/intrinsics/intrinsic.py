@@ -5,10 +5,15 @@ from copy import copy
 from typing import cast
 
 from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata
-from mellea.stdlib.base import CBlock, Component, TemplateRepresentation
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    ModelOutputThunk,
+    TemplateRepresentation,
+)
 
 
-class Intrinsic(Component):
+class Intrinsic(Component[str]):
     """A component representing an intrinsic."""
 
     def __init__(
@@ -64,3 +69,7 @@ class Intrinsic(Component):
             "`Intrinsic` doesn't implement format_for_llm by default. You should only "
             "use an `Intrinsic` as the action and not as a part of the context."
         )
+
+    def _parse(self, computed: ModelOutputThunk) -> str:
+        """Parse the model output. Returns string value for now."""
+        return computed.value if computed.value is not None else ""

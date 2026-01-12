@@ -1,13 +1,14 @@
 """Base types for sampling."""
 
 import abc
+from typing import Generic, TypeVar
 
 from mellea.backends import Backend, BaseModelSubclass
-from mellea.stdlib.base import CBlock, Component, Context, ModelOutputThunk
+from mellea.stdlib.base import CBlock, Component, Context, ModelOutputThunk, S
 from mellea.stdlib.requirement import Requirement, ValidationResult
 
 
-class SamplingResult(CBlock):
+class SamplingResult(CBlock, Generic[S]):
     """Stores the results from a sampling operation. This includes successful and failed samplings."""
 
     def __init__(
@@ -15,7 +16,7 @@ class SamplingResult(CBlock):
         result_index: int,
         success: bool,
         *,
-        sample_generations: list[ModelOutputThunk] | None = None,
+        sample_generations: list[ModelOutputThunk[S]] | None = None,
         sample_validations: list[list[tuple[Requirement, ValidationResult]]]
         | None = None,
         sample_actions: list[Component] | None = None,
@@ -56,7 +57,7 @@ class SamplingResult(CBlock):
         self.sample_contexts = sample_contexts
 
     @property
-    def result(self) -> ModelOutputThunk:
+    def result(self) -> ModelOutputThunk[S]:
         """The final output or result from applying the sampling strategy."""
         return self.sample_generations[self.result_index]
 
@@ -66,7 +67,7 @@ class SamplingResult(CBlock):
         return self.sample_contexts[self.result_index]
 
     @property
-    def result_action(self) -> Component:
+    def result_action(self) -> Component[S]:
         """The action that generated the final output or result from applying the sampling strategy."""
         return self.sample_actions[self.result_index]
 
@@ -86,7 +87,7 @@ class SamplingStrategy(abc.ABC):
     @abc.abstractmethod
     async def sample(
         self,
-        action: Component,
+        action: Component[S],
         context: Context,
         backend: Backend,
         requirements: list[Requirement] | None,
@@ -95,7 +96,7 @@ class SamplingStrategy(abc.ABC):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> SamplingResult:
+    ) -> SamplingResult[S]:
         """This method is the abstract method for sampling a given component.
 
         It must be implemented by any concrete subclasses to provide specific sampling logic.
