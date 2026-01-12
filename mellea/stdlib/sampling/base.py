@@ -13,7 +13,7 @@ from mellea.stdlib.chat import Message
 from mellea.stdlib.instruction import Instruction
 from mellea.stdlib.requirement import Requirement, ValidationResult
 
-from .types import SamplingResult, SamplingStrategy
+from .types import S, SamplingResult, SamplingStrategy
 
 
 class BaseSamplingStrategy(SamplingStrategy):
@@ -61,6 +61,8 @@ class BaseSamplingStrategy(SamplingStrategy):
         Returns:
             The next action component and context to be used for the next generation attempt.
         """
+        # TODO: For Component/ModelOutputThunk-typing to work, repair strategies should always return a Component with the same parsing
+        #       as the initial action used for this sampling strategy.
         ...
 
     @staticmethod
@@ -84,7 +86,7 @@ class BaseSamplingStrategy(SamplingStrategy):
 
     async def sample(
         self,
-        action: Component,
+        action: Component[S],
         context: Context,
         backend: Backend,
         requirements: list[Requirement] | None,
@@ -94,7 +96,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         model_options: dict | None = None,
         tool_calls: bool = False,
         show_progress: bool = True,
-    ) -> SamplingResult:
+    ) -> SamplingResult[S]:
         """This method performs a sampling operation based on the given instruction.
 
         Args:
@@ -159,6 +161,13 @@ class BaseSamplingStrategy(SamplingStrategy):
                 tool_calls=tool_calls,
             )
             await result.avalue()
+
+            # Sampling strategies may use different components from the original
+            # action. This might cause discrepancies in the expected parsed_repr
+            # type / value. Explicitly overwrite that here.
+            # TODO: See if there's a more elegant way for this so that each sampling
+            # strategy doesn't have to re-implement it.
+            result.parsed_repr = action.parse(result)
 
             # validation pass
             val_scores_co = mfuncs.avalidate(
