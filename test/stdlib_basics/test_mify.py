@@ -8,8 +8,10 @@ from mellea.stdlib.mify import mify, MifiedProtocol
 
 def test_protocol_adherence():
     mobj = MObject()
-    assert isinstance(mobj, MObjectProtocol)
-    assert isinstance(mobj, Component)
+    assert isinstance(mobj, MObjectProtocol), (
+        "mobject doesn't conform to mobject protocol"
+    )
+    assert isinstance(mobj, Component), "mobject doesn't conform to component protocol"
 
     @mify
     class _Customer:
@@ -17,8 +19,12 @@ def test_protocol_adherence():
             self.name = name
 
     mified_class = _Customer("Jake")
-    assert isinstance(mified_class, MObjectProtocol)
-    assert isinstance(mified_class, Component)
+    assert isinstance(mified_class, MObjectProtocol), (
+        "mified class doesn't conform to mobject protocol"
+    )
+    assert isinstance(mified_class, Component), (
+        "mified class doesn't conform to component protocol"
+    )
 
     class _Customer2:
         def __init__(self, name: str) -> None:
@@ -26,8 +32,12 @@ def test_protocol_adherence():
 
     c = _Customer2("jake")
     mify(c)
-    assert isinstance(c, MObjectProtocol)
-    assert isinstance(c, Component)
+    assert isinstance(c, MObjectProtocol), (
+        "mified object doesn't conform to mobject protocol"
+    )
+    assert isinstance(c, Component), (
+        "mified object doesn't conform to component protocol"
+    )
 
 
 def test_mify_class():

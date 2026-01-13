@@ -6,9 +6,9 @@ import functools
 import json
 import os
 import warnings
-from collections.abc import AsyncGenerator, Callable, Coroutine
+from collections.abc import AsyncGenerator, Callable, Coroutine, Sequence
 from dataclasses import fields
-from typing import Any
+from typing import Any, overload
 
 from ibm_watsonx_ai import APIClient, Credentials
 from ibm_watsonx_ai.foundation_models import ModelInference
@@ -35,6 +35,7 @@ from mellea.helpers.openai_compatible_helpers import (
 )
 from mellea.security import SecLevel, taint_sources
 from mellea.stdlib.base import (
+    C,
     CBlock,
     Component,
     Context,
@@ -239,13 +240,13 @@ class WatsonxAIBackend(FormatterBackend):
 
     async def generate_from_context(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ):
+    ) -> tuple[ModelOutputThunk[C], Context]:
         """See `generate_from_chat_context`."""
         assert ctx.is_chat_context, NotImplementedError(
             "The watsonx.ai backend only supports chat-like contexts."
@@ -261,14 +262,14 @@ class WatsonxAIBackend(FormatterBackend):
 
     async def generate_from_chat_context(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk:
+    ) -> ModelOutputThunk[C]:
         """Generates a new completion from the provided Context using this backend's `Formatter`."""
         await self.do_generate_walk(action)
 
@@ -302,7 +303,7 @@ class WatsonxAIBackend(FormatterBackend):
                 "type": "json_schema",
                 "json_schema": {
                     "name": _format.__name__,
-                    "schema": _format.model_json_schema(),
+                    "schema": _format.model_json_schema(),  # type: ignore
                     "strict": True,
                 },
             }
@@ -468,8 +469,6 @@ class WatsonxAIBackend(FormatterBackend):
             for key, val in tool_chunk.items():
                 mot.tool_calls[key] = val
 
-        self.formatter.parse(mot._action, mot)
-
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
         generate_log.prompt = conversation
@@ -487,9 +486,31 @@ class WatsonxAIBackend(FormatterBackend):
         generate_log.action = mot._action
         mot._generate_log = generate_log
 
+    @overload
     async def generate_from_raw(
         self,
-        actions: list[Component | CBlock],
+        actions: list[Component[C]],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C]]: ...
+
+    @overload
+    async def generate_from_raw(
+        self,
+        actions: list[Component[C] | CBlock],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C | str]]: ...
+
+    async def generate_from_raw(
+        self,
+        actions: Sequence[Component[C] | CBlock],
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -497,7 +518,7 @@ class WatsonxAIBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generates a completion text. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(actions)
+        await self.do_generate_walks(list(actions))
 
         if format is not None:
             FancyLogger.get_logger().warning(
@@ -538,7 +559,10 @@ class WatsonxAIBackend(FormatterBackend):
                 },
             )
 
-            self.formatter.parse(actions[i], result)
+            action = actions[i]
+            result.parsed_repr = (
+                action.parse(result) if isinstance(action, Component) else result.value
+            )
 
             generate_log = GenerateLog()
             generate_log.prompt = prompts[i]
@@ -550,7 +574,7 @@ class WatsonxAIBackend(FormatterBackend):
                 "format": format,
                 "seed": model_opts.get(ModelOption.SEED, None),
             }
-            generate_log.action = actions[i]
+            generate_log.action = action
 
             result._generate_log = generate_log
 

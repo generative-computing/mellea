@@ -7,10 +7,10 @@ import functools
 import inspect
 import json
 import os
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Sequence
 from copy import deepcopy
 from enum import Enum
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, overload
 from urllib.parse import urlparse
 
 import granite_common
@@ -49,6 +49,7 @@ from mellea.helpers.openai_compatible_helpers import (
 )
 from mellea.security import SecLevel, taint_sources
 from mellea.stdlib.base import (
+    C,
     CBlock,
     Component,
     Context,
@@ -300,13 +301,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     async def generate_from_context(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ):
+    ) -> tuple[ModelOutputThunk[C], Context]:
         """See `generate_from_chat_context`."""
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
@@ -321,14 +322,14 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     async def generate_from_chat_context(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> tuple[ModelOutputThunk, Context]:
+    ) -> tuple[ModelOutputThunk[C], Context]:
         """Generates a new completion from the provided Context using this backend's `Formatter`."""
         await self.do_generate_walk(action)
 
@@ -624,7 +625,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 # This only addresses the additionalProperties=False constraint.
                 # Other constraints we should be checking/patching are described here:
                 # https://platform.openai.com/docs/guides/structured-outputs?api-mode=chat
-                monkey_patched_response_schema = _format.model_json_schema()
+                monkey_patched_response_schema = _format.model_json_schema()  # type: ignore
                 monkey_patched_response_schema["additionalProperties"] = False
                 extra_params["response_format"] = {
                     "type": "json_schema",
@@ -642,7 +643,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     "type": "json_schema",
                     "json_schema": {
                         "name": _format.__name__,
-                        "schema": _format.model_json_schema(),
+                        "schema": _format.model_json_schema(),  # type: ignore
                         "strict": True,
                     },
                 }
@@ -806,8 +807,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             for key, val in tool_chunk.items():
                 mot.tool_calls[key] = val
 
-        self.formatter.parse(mot._action, mot)
-
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
         generate_log.prompt = conversation
@@ -826,9 +825,31 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         generate_log.result = mot
         mot._generate_log = generate_log
 
+    @overload
     async def generate_from_raw(
         self,
-        actions: list[Component | CBlock],
+        actions: list[Component[C]],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C]]: ...
+
+    @overload
+    async def generate_from_raw(
+        self,
+        actions: list[Component[C] | CBlock],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C | str]]: ...
+
+    async def generate_from_raw(
+        self,
+        actions: Sequence[Component[C] | CBlock],
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -836,7 +857,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(actions)
+        await self.do_generate_walks(list(actions))
 
         extra_body = {}
         if format is not None:
@@ -846,7 +867,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
 
             # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
-            extra_body["guided_json"] = format.model_json_schema()
+            extra_body["guided_json"] = format.model_json_schema()  # type: ignore
         if tool_calls:
             FancyLogger.get_logger().warning(
                 "The completion endpoint does not support tool calling at the moment."
@@ -899,7 +920,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             output._action = action
             output._model_options = model_opts
 
-            self.formatter.parse(action, output)
+            output.parsed_repr = (
+                action.parse(output) if isinstance(action, Component) else output.value
+            )
 
             generate_log = GenerateLog()
             generate_log.prompt = prompt

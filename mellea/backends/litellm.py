@@ -5,8 +5,8 @@ import datetime
 import functools
 import json
 import os
-from collections.abc import Callable, Coroutine
-from typing import Any
+from collections.abc import Callable, Coroutine, Sequence
+from typing import Any, overload
 
 import litellm  # type: ignore
 import litellm.litellm_core_utils  # type: ignore
@@ -30,6 +30,7 @@ from mellea.helpers.openai_compatible_helpers import (
 )
 from mellea.security import SecLevel, taint_sources
 from mellea.stdlib.base import (
+    C,
     CBlock,
     Component,
     Context,
@@ -113,13 +114,13 @@ class LiteLLMBackend(FormatterBackend):
 
     async def generate_from_context(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ):
+    ) -> tuple[ModelOutputThunk[C], Context]:
         """See `generate_from_chat_context`."""
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
@@ -234,14 +235,14 @@ class LiteLLMBackend(FormatterBackend):
 
     async def _generate_from_chat_context_standard(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk:
+    ) -> ModelOutputThunk[C]:
         await self.do_generate_walk(action)
 
         model_opts = self._simplify_and_merge(model_options)
@@ -279,7 +280,7 @@ class LiteLLMBackend(FormatterBackend):
                 "type": "json_schema",
                 "json_schema": {
                     "name": _format.__name__,
-                    "schema": _format.model_json_schema(),
+                    "schema": _format.model_json_schema(),  # type: ignore
                     "strict": True,
                 },
             }
@@ -442,8 +443,6 @@ class LiteLLMBackend(FormatterBackend):
             for key, val in tool_chunk.items():
                 mot.tool_calls[key] = val
 
-        self.formatter.parse(mot._action, mot)
-
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
         generate_log.prompt = conversation
@@ -481,9 +480,31 @@ class LiteLLMBackend(FormatterBackend):
             FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
         return tools
 
+    @overload
     async def generate_from_raw(
         self,
-        actions: list[Component | CBlock],
+        actions: list[Component[C]],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C]]: ...
+
+    @overload
+    async def generate_from_raw(
+        self,
+        actions: list[Component[C] | CBlock],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C | str]]: ...
+
+    async def generate_from_raw(
+        self,
+        actions: Sequence[Component[C] | CBlock],
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -491,7 +512,7 @@ class LiteLLMBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(actions)
+        await self.do_generate_walks(list(actions))
         extra_body = {}
         if format is not None:
             FancyLogger.get_logger().warning(
@@ -500,7 +521,7 @@ class LiteLLMBackend(FormatterBackend):
             )
 
             # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
-            extra_body["guided_json"] = format.model_json_schema()
+            extra_body["guided_json"] = format.model_json_schema()  # type: ignore
         if tool_calls:
             FancyLogger.get_logger().warning(
                 "The completion endpoint does not support tool calling."
@@ -550,7 +571,9 @@ class LiteLLMBackend(FormatterBackend):
             output._action = action
             output._model_options = model_opts
 
-            self.formatter.parse(action, output)
+            output.parsed_repr = (
+                action.parse(output) if isinstance(action, Component) else output.value
+            )
 
             generate_log = GenerateLog()
             generate_log.prompt = prompt
