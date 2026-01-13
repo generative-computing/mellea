@@ -158,7 +158,9 @@ def start_session(
             "litellm": "hf_model_name",
         }
         attr = backend_to_attr.get(backend_name, "hf_model_name")
-        model_id_str = getattr(model_id, attr, None) or model_id.hf_model_name or str(model_id)
+        model_id_str = (
+            getattr(model_id, attr, None) or model_id.hf_model_name or str(model_id)
+        )
     else:
         model_id_str = model_id
     logger.info(
