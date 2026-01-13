@@ -1392,6 +1392,28 @@ When using `SamplingStrategy`s or during validation, Mellea can speed up the exe
 
 ## Appendix: Contributing to Mellea
 
+### Contributor Guide: Getting Started
+
+If you are going to contribute to Mellea, it is important that you use our
+pre-commit hooks. Using these hooks -- or running our test suite -- 
+requires installing `[all]` optional dependencies and also the dev group.
+
+```
+git clone git@github.com:generative-computing/mellea.git && 
+cd mellea && 
+uv venv .venv && 
+source .venv/bin/activate &&
+uv pip install -e ".[all]" --group dev
+pre-commit install
+```
+
+You can then run all tests by running `pytest`, or only the CI/CD tests by
+running `CICD=1 pytest`. 
+
+Tip: you can bypass the hooks by passing the `-n` flag to `git commit`.
+This is sometimes helpful for intermediate commits that you intend to later
+squash.
+
 ### Contributor Guide: Requirements and Verifiers
 
 Contributing new Requirements (i.e., verifiers) is an easy way to get started contributing to Mellea. Requirements can be as general or as domain-specific as you'd like, but must encapsulate a coherent and testable property. We have seen many examples of Requirements throughout this tutorial.
