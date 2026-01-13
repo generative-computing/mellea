@@ -3,7 +3,7 @@ from io import StringIO
 import pandas
 
 import mellea
-from mellea.stdlib.mify import mify
+from mellea.stdlib.components.mify import mify
 
 
 @mify(fields_include={"table"}, template="{{ table }}")

@@ -12,7 +12,7 @@ from ...core import (
     ModelToolCall,
     TemplateRepresentation,
 )
-from .document import Document
+from .docs.document import Document
 
 
 class Message(Component["Message"]):

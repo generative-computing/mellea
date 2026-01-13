@@ -4,7 +4,7 @@ from mellea.stdlib.components.docs import RichDocument
 
 rd = RichDocument.from_document_file("https://arxiv.org/pdf/1906.04043")
 
-from mellea.stdlib.docs.richdocument import Table  # noqa: E402
+from mellea.stdlib.components.docs import Table  # noqa: E402
 
 table1: Table = rd.get_tables()[0]
 print(table1.to_markdown())

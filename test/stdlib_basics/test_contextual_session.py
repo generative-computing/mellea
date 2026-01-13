@@ -6,7 +6,7 @@
 # from mellea import chat, generative, instruct, query, start_session, transform, validate
 # from mellea.backends.model_ids import IBM_GRANITE_3_3_8B, META_LLAMA_3_2_1B
 # from mellea.core import ModelOutputThunk
-# from mellea.stdlib.mify import MifiedProtocol, mify
+# from mellea.stdlib.components.mify import MifiedProtocol, mify
 # from mellea.stdlib.requirements import req
 # from mellea.stdlib.session import MelleaSession, get_session
 #

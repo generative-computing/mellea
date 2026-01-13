@@ -1,6 +1,6 @@
 """Document component."""
 
-from ...core import CBlock, Component, ModelOutputThunk
+from ....core import CBlock, Component, ModelOutputThunk
 
 
 # TODO: Add support for passing in docs as model options.

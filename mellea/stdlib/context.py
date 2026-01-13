@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from ..core import CBlock, Component, Context
+# Leave unused `ContextTurn` import for import ergonomics.
+from ..core import CBlock, Component, Context, ContextTurn
 
 
 class ChatContext(Context):

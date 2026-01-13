@@ -2,8 +2,8 @@ import pytest
 
 from mellea.formatters import TemplateFormatter
 from mellea.core import Component, TemplateRepresentation
-from mellea.stdlib.mobject import Query, MObjectProtocol, MObject
-from mellea.stdlib.mify import mify, MifiedProtocol
+from mellea.stdlib.components.mobject import Query, MObjectProtocol, MObject
+from mellea.stdlib.components.mify import mify, MifiedProtocol
 
 
 def test_protocol_adherence():

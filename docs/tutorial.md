@@ -570,7 +570,7 @@ Suppose you have a table of sales data and want to let the LLM answer questions 
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/table_mobject.py#L1-L31
 import mellea
-from mellea.stdlib.mify import mify, MifiedProtocol
+from mellea.stdlib.components.mify import mify, MifiedProtocol
 import pandas
 from io import StringIO
 
@@ -627,7 +627,7 @@ From the rich document we can extract some document content, e.g. the
 first table:
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/document_mobject.py#L5-L8
-from mellea.stdlib.docs.richdocument import Table
+from mellea.stdlib.components.docs import Table
 table1: Table = rd.get_tables()[0]
 print(table1.to_markdown())
 ```
@@ -693,7 +693,7 @@ The model has done a great job at fulfilling the task and coming back with a par
 
 When an object is `mified` all methods with a docstring get registered as tools for the LLM call. You can control if you only want a subset of these functions to be exposed by two parameters (`funcs_include` and `funcs_exclude`):
 ```python
-from mellea.stdlib.mify import mify
+from mellea.stdlib.components.mify import mify
 
 @mify(funcs_include={"from_markdown"})
 class MyDocumentLoader:

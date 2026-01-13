@@ -10,7 +10,7 @@ from mellea.formatters import TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier, IBM_GRANITE_3_2_8B
 from mellea.core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 from mellea.stdlib.components import Message, Instruction
-from mellea.stdlib.mobject import MObject
+from mellea.stdlib.components import MObject
 
 
 @pytest.fixture(scope="module")
