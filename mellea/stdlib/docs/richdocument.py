@@ -11,6 +11,7 @@ from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc.document import DoclingDocument, TableItem
 from docling_core.types.io import DocumentStream
 
+from mellea.security import SecLevel
 from mellea.stdlib.base import (
     CBlock,
     Component,
@@ -29,6 +30,16 @@ class RichDocument(Component[str]):
     def __init__(self, doc: DoclingDocument):
         """A `RichDocument` is a block of content with an underlying DoclingDocument."""
         self._doc = doc
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     def parts(self) -> list[Component | CBlock]:
         """RichDocument has no parts.

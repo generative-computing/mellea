@@ -223,7 +223,10 @@ def taint_sources(action: "Component | CBlock", ctx: Any) -> "list[CBlock | Comp
             )  # Limit to recent items for performance
             for item in context_items:
                 # Recursively check each context item (same as action check)
-                if isinstance(item, TaintChecking):
+                # Only append if item is actually a CBlock or Component (not just TaintChecking)
+                if isinstance(item, CBlock | Component) and isinstance(
+                    item, TaintChecking
+                ):
                     sec_level = item.sec_level
                     if sec_level is not None and sec_level.is_tainted():
                         sources.append(item)

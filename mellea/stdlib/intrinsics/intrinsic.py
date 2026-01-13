@@ -5,6 +5,7 @@ from copy import copy
 from typing import cast
 
 from mellea.backends.adapters.catalog import AdapterType, fetch_intrinsic_metadata
+from mellea.security import SecLevel
 from mellea.stdlib.base import (
     CBlock,
     Component,
@@ -39,6 +40,16 @@ class Intrinsic(Component[str]):
         if intrinsic_kwargs is None:
             intrinsic_kwargs = {}
         self.intrinsic_kwargs = intrinsic_kwargs
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     @property
     def intrinsic_name(self):

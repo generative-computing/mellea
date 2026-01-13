@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, create_model
 import mellea.stdlib.functional as mfuncs
 from mellea.backends import Backend
 from mellea.helpers.fancy_logger import FancyLogger
+from mellea.security import SecLevel
 from mellea.stdlib.base import (
     CBlock,
     Component,
@@ -286,6 +287,16 @@ class GenerativeSlot(Component[R], Generic[P, R]):
         # Set when calling the decorated func.
         self.precondition_requirements: list[Requirement] = []
         self.requirements: list[Requirement] = []
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     @abc.abstractmethod
     def __call__(self, *args, **kwargs) -> tuple[R, Context] | R:

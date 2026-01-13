@@ -10,6 +10,7 @@ from typing import Any, overload
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.adapters.adapter import AdapterType
 from mellea.helpers.fancy_logger import FancyLogger
+from mellea.security import SecLevel
 from mellea.stdlib.base import (
     CBlock,
     Component,
@@ -124,6 +125,16 @@ class Requirement(Component[str]):
 
         # Used for validation. Do not manually populate.
         self._output: str | None = None
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     async def validate(
         self,

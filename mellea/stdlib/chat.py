@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any, Literal
 
 from mellea.helpers.fancy_logger import FancyLogger
+from mellea.security import SecLevel
 from mellea.stdlib.base import (
     CBlock,
     Component,
@@ -50,6 +51,7 @@ class Message(Component["Message"]):
         if self._images is not None:
             self._images_cblocks = [CBlock(str(i)) for i in self._images]
         self._docs = documents
+        self._sec_level: SecLevel | None = None
 
     @property
     def images(self) -> None | list[str]:
@@ -57,6 +59,15 @@ class Message(Component["Message"]):
         if self._images_cblocks is not None:
             return [str(i.value) for i in self._images_cblocks]
         return None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     def parts(self):
         """Returns all of the constituent parts of an Instruction."""
