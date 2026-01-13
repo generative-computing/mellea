@@ -5,6 +5,7 @@ import types
 from collections.abc import Callable
 from typing import Any, Protocol, TypeVar, overload, runtime_checkable
 
+from mellea.security import SecLevel
 from mellea.stdlib.base import (
     CBlock,
     Component,
@@ -215,6 +216,15 @@ class MifiedProtocol(MObjectProtocol, Protocol):
         except Exception as e:
             raise ComponentParseError(f"component parsing failed: {e}")
 
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return getattr(self, "_sec_level", None)
+
 
 T = TypeVar("T")
 
@@ -344,6 +354,16 @@ def _mify(
                 else:
                     # For objects, have to specifically bind methods.
                     setattr(obj, name, types.MethodType(func, obj))
+
+        # Add properties from MifiedProtocol (properties are descriptors, not methods)
+        # Create sec_level property directly to ensure Component protocol compliance
+        if "sec_level" not in current_members.keys():
+            # Create a property that returns _sec_level attribute
+            sec_level_prop = property(
+                lambda self: getattr(self, "_sec_level", None),
+                doc="Get the security level for this Component.",
+            )
+            setattr(obj, "sec_level", sec_level_prop)
 
         # Set the defaults for the object/class.
         setattr(obj, "_query_type", query_type)
