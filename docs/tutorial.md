@@ -750,7 +750,7 @@ Let's see how Stembolt MFG Corporation can use tuned LoRAs to implement the Auto
 
 ### Training the aLoRA Adapter
 
-Mellea provides a command-line interface for training [LoRA](https://arxiv.org/abs/2106.09685) or [aLoRA](https://github.com/IBM/activated-lora) adapters.  Classical LoRAs must re-process our entire context, which can get expensive for quick checks happening within an inner loop (such as requirement checking). The aLoRA method allows us to adapt a base LLM to new tasks, and then run the adapter with minimal compute overhead. The adapters are fast to train and fast to switch between.
+Mellea provides a command-line interface for training [LoRA](https://arxiv.org/abs/2106.09685) or [aLoRA](https://github.com/huggingface/peft/blob/main/docs/source/developer_guides/lora.md#activated-lora-alora) adapters.  Classical LoRAs must re-process our entire context, which can get expensive for quick checks happening within an inner loop (such as requirement checking). The aLoRA method allows us to adapt a base LLM to new tasks, and then run the adapter with minimal compute overhead. The adapters are fast to train and fast to switch between.
 
 We will train a lightweight adapter with the `m alora train` command on this small dataset:
 
