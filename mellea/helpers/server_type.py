@@ -1,3 +1,5 @@
+"""Server Type Helpers."""
+
 from enum import Enum
 from urllib.parse import urlparse
 

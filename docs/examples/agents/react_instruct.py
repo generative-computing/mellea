@@ -159,7 +159,9 @@ def react(
 
         print("### Observation")
         tool_output = react_toolbox.call_tool(selected_tool, act_args_val)
-        m.ctx = m.ctx.add(mellea.stdlib.components.chat.Message(role="tool", content=tool_output))
+        m.ctx = m.ctx.add(
+            mellea.stdlib.components.chat.Message(role="tool", content=tool_output)
+        )
         print(tool_output)
 
         print("### Done Check")

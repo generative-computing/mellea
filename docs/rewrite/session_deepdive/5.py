@@ -1,8 +1,4 @@
-from mellea.core import (
-    CBlock,
-    Context,
-    Backend
-)
+from mellea.core import CBlock, Context, Backend
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.context import SimpleContext

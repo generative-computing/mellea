@@ -13,5 +13,4 @@ from .openai_compatible_helpers import (
     message_to_openai_message,
     messages_to_docs,
 )
-
-from .server_type import _ServerType, _server_type
+from .server_type import _server_type, _ServerType

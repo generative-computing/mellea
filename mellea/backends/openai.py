@@ -31,6 +31,8 @@ from ..core import (
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import (
     ClientCache,
+    _server_type,
+    _ServerType,
     chat_completion_delta_merge,
     extract_model_tool_requests,
     get_current_event_loop,
@@ -48,7 +50,6 @@ from .adapters import (
     get_adapter_for_intrinsic,
 )
 from .backend import FormatterBackend
-from ..helpers import _server_type, _ServerType
 from .model_options import ModelOption
 from .tools import (
     add_tools_from_context_actions,

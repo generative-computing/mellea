@@ -39,4 +39,3 @@ class FormatterBackend(Backend, abc.ABC):
         self.model_id = model_id
         self.model_options = model_options if model_options is not None else {}
         self.formatter: ChatFormatter = formatter
-

@@ -10,6 +10,8 @@ from typing import Any, Generic, ParamSpec, TypedDict, TypeVar, get_type_hints, 
 
 from pydantic import BaseModel, Field, create_model
 
+import mellea.stdlib.functional as mfuncs
+
 from ...core import (
     Backend,
     CBlock,
@@ -22,7 +24,6 @@ from ...core import (
     TemplateRepresentation,
     ValidationResult,
 )
-import mellea.stdlib.functional as mfuncs
 from ..requirements.requirement import reqify
 from ..session import MelleaSession
 

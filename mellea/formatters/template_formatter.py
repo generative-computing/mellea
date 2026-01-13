@@ -9,8 +9,8 @@ from typing import Any
 
 import jinja2
 
-from ..backends.model_ids import ModelIdentifier
 from ..backends.cache import SimpleLRUCache
+from ..backends.model_ids import ModelIdentifier
 from ..core import CBlock, Component, FancyLogger, TemplateRepresentation
 from .chat_formatter import ChatFormatter
 

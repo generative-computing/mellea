@@ -37,7 +37,7 @@ print()
 
 # We can see the context that created this output.
 gen_ctx = res.sample_contexts[index]
-print(f"Previous step in generating this result was: {gen_ctx.previous_node.node_data}") # type: ignore
+print(f"Previous step in generating this result was: {gen_ctx.previous_node.node_data}")  # type: ignore
 print()
 
 # We can also see what the validation context looked like.
@@ -47,4 +47,4 @@ print(
 )
 val_ctx = val_result.context
 
-print(f"Output of the validation for this requirement: {val_ctx.node_data}") # type: ignore
+print(f"Output of the validation for this requirement: {val_ctx.node_data}")  # type: ignore

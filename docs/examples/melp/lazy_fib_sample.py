@@ -1,9 +1,5 @@
 import asyncio
-from mellea.core import (
-    Context,
-    CBlock,
-    ModelOutputThunk,
-)
+from mellea.core import Context, CBlock, ModelOutputThunk
 
 from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.context import SimpleContext
