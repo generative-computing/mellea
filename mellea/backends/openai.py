@@ -47,7 +47,8 @@ from .adapters import (
     OpenAIAdapter,
     get_adapter_for_intrinsic,
 )
-from .backend import FormatterBackend, _server_type, _ServerType
+from .backend import FormatterBackend
+from ..helpers import _server_type, _ServerType
 from .model_options import ModelOption
 from .tools import (
     add_tools_from_context_actions,

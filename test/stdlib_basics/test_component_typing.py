@@ -5,20 +5,19 @@ from typing import get_args
 from mellea import start_session
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.stdlib.base import (
+from mellea.core import (
     CBlock,
-    ChatContext,
     Component,
     ComponentParseError,
     Context,
     ModelOutputThunk,
-    SimpleContext,
 )
-from mellea.stdlib.chat import Message
-from mellea.stdlib.instruction import Instruction
-from mellea.stdlib.requirement import Requirement, ValidationResult
-from mellea.stdlib.sampling.base import BaseSamplingStrategy
-from mellea.stdlib.session import MelleaSession
+from mellea.stdlib.context import ChatContext, SimpleContext
+from mellea.stdlib.components import Message
+from mellea.stdlib.components import Instruction
+from mellea.core import Requirement, ValidationResult
+from mellea.stdlib.sampling import BaseSamplingStrategy
+from mellea import MelleaSession
 
 import mellea.stdlib.functional as mfuncs
 
@@ -81,8 +80,8 @@ def test_mot_init_typing():
     assert hasattr(mot, "__orig_class__"), (
         f"mots are generics and should have this field"
     )
-    assert get_args(mot.__orig_class__)[0] == float, (
-        f"expected float, got {get_args(mot.__orig_class__)[0]} as mot type"
+    assert get_args(mot.__orig_class__)[0] == float, (  # type: ignore
+        f"expected float, got {get_args(mot.__orig_class__)[0]} as mot type"  # type: ignore
     )  # type: ignore
 
     unknown_mot = ModelOutputThunk(value="2")

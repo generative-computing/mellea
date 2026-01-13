@@ -1,6 +1,6 @@
 import os
-from mellea.stdlib.base import TemplateRepresentation
-from mellea.stdlib.docs.richdocument import RichDocument, Table
+from mellea.core import TemplateRepresentation
+from mellea.stdlib.components.docs import RichDocument, Table
 import mellea
 from docling_core.types.doc.document import DoclingDocument
 import tempfile

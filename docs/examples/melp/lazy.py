@@ -1,12 +1,14 @@
 import asyncio
-from mellea.stdlib.base import (
-    SimpleContext,
+from mellea.core import (
     Context,
     CBlock,
     ModelOutputThunk,
-    SimpleComponent,
 )
-from mellea.backends import Backend
+
+from mellea.stdlib.components import SimpleComponent
+from mellea.stdlib.context import SimpleContext
+
+from mellea.core import Backend
 from mellea.backends.ollama import OllamaModelBackend
 
 backend = OllamaModelBackend("granite4:latest")

@@ -1,5 +1,7 @@
 """Requirements for Python code generation validation."""
 
+from collections.abc import Callable
+
 from mellea.stdlib.tools.interpreter import (
     ExecutionEnvironment,
     LLMSandboxEnvironment,
@@ -185,6 +187,10 @@ class PythonExecutionReq(Requirement):
             ),
             check_only=True,
         )
+
+        # Add type hint to validation_fn here. It's always set for this requirement.
+        self.validation_fn: Callable[[Context], ValidationResult]
+        assert self.validation_fn is not None
 
 
 # endregion

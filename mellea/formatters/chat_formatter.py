@@ -7,7 +7,7 @@ from ..core import (
     ModelOutputThunk,
     TemplateRepresentation,
 )
-from ..stdlib.components import Message
+from ..stdlib.components.chat import Message
 
 
 class ChatFormatter(Formatter):

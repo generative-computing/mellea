@@ -2,20 +2,14 @@ import importlib
 import os
 import sys
 import tempfile
-from typing import Any, List, Optional
+from typing import List
 
 import pytest
 
-from mellea.backends.formatter import TemplateFormatter
+from mellea.formatters import TemplateFormatter
 from mellea.backends.model_ids import ModelIdentifier, IBM_GRANITE_3_2_8B
-from mellea.stdlib.base import (
-    CBlock,
-    Component,
-    ModelOutputThunk,
-    TemplateRepresentation,
-)
-from mellea.stdlib.chat import Message
-from mellea.stdlib.instruction import Instruction
+from mellea.core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
+from mellea.stdlib.components import Message, Instruction
 from mellea.stdlib.mobject import MObject
 
 
@@ -245,7 +239,7 @@ def test_custom_component_external_package(tf: TemplateFormatter):
     Ensures template loading works for custom components defined in other packages."""
 
     new_component_content = """
-from mellea.stdlib.base import Component, TemplateRepresentation, ModelOutputThunk
+from mellea.core import Component, TemplateRepresentation, ModelOutputThunk
 class NewComponent(Component[str]):
     def parts(self):
         raise NotImplementedError(

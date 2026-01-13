@@ -1,7 +1,7 @@
 from typing import Any
 import pytest
-from mellea.stdlib.base import CBlock, Component, ModelOutputThunk
-from mellea.stdlib.chat import Message
+from mellea.core import CBlock, Component, ModelOutputThunk
+from mellea.stdlib.components import Message
 
 
 def test_cblock():

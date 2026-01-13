@@ -9,9 +9,10 @@ import pytest
 import torch
 
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.base import ChatContext, Document
-from mellea.stdlib.chat import Message
-from mellea.stdlib.intrinsic import rag
+from mellea.stdlib.components import Document
+from mellea.stdlib.context import ChatContext
+from mellea.stdlib.components import Message
+from mellea.stdlib.components.intrinsic import rag
 
 DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 """Location of data files for the tests in this file."""
@@ -147,12 +148,12 @@ def test_hallucination_detection(backend):
     # First call triggers adapter loading
     result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
     # pytest.approx() chokes on lists of records, so we do this complicated dance.
-    for r, e in zip(result, expected, strict=True):
+    for r, e in zip(result, expected, strict=True):  # type: ignore
         assert pytest.approx(r, abs=2e-2) == e
 
     # Second call hits a different code path from the first one
     result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
-    for r, e in zip(result, expected, strict=True):
+    for r, e in zip(result, expected, strict=True):  # type: ignore
         assert pytest.approx(r, abs=2e-2) == e
 
 

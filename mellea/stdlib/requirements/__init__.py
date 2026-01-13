@@ -1,6 +1,6 @@
 """Module for working with Requirements."""
 
-from .md import is_markdown_list, is_markdown_table
+from .md import as_markdown_list, is_markdown_list, is_markdown_table
 from .python_reqs import PythonExecutionReq
 from .requirement import (
     ALoraRequirement,

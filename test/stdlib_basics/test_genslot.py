@@ -4,16 +4,17 @@ from typing import Literal
 from mellea import generative, start_session
 from mellea.backends.model_ids import META_LLAMA_3_2_1B
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.stdlib.base import ChatContext, Context
-from mellea.stdlib.genslot import (
+from mellea.core import Requirement
+from mellea.stdlib.context import ChatContext, Context
+from mellea.stdlib.components.genslot import (
     AsyncGenerativeSlot,
     GenerativeSlot,
     PreconditionException,
     SyncGenerativeSlot,
 )
-from mellea.stdlib.requirement import Requirement, simple_validate
-from mellea.stdlib.sampling.base import RejectionSamplingStrategy
-from mellea.stdlib.session import MelleaSession
+from mellea.stdlib.requirements import simple_validate
+from mellea.stdlib.sampling import RejectionSamplingStrategy
+from mellea import MelleaSession
 
 
 @pytest.fixture(scope="module")

@@ -8,10 +8,9 @@ uv run python docs/examples/intrinsics/context_relevance.py
 """
 
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.base import ChatContext, Document
-from mellea.stdlib.chat import Message
-from mellea.stdlib.intrinsic import rag
-
+from mellea.stdlib.context import ChatContext
+from mellea.stdlib.components import Document
+from mellea.stdlib.components.intrinsic import rag
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 context = ChatContext()

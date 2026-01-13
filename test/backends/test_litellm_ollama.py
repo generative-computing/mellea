@@ -5,8 +5,9 @@ import pytest
 from mellea import MelleaSession, generative
 from mellea.backends import ModelOption
 from mellea.backends.litellm import LiteLLMBackend
-from mellea.stdlib.base import CBlock, SimpleContext
-from mellea.stdlib.chat import Message
+from mellea.core import CBlock
+from mellea.stdlib.context import SimpleContext
+from mellea.stdlib.components import Message
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.backends import model_ids
 
@@ -129,6 +130,7 @@ def test_gen_slot(session):
     @generative
     def is_happy(text: str) -> bool:
         """Determine if text is of happy mood."""
+        ...
 
     h = is_happy(session, text="I'm enjoying life.")
 

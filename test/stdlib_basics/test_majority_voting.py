@@ -1,13 +1,13 @@
 from mellea.backends import ModelOption
 from mellea import start_session, MelleaSession
-from mellea.stdlib.requirement import check, req, simple_validate
+from mellea.stdlib.requirements import check, req, simple_validate
 from mellea.stdlib.sampling.majority_voting import (
     MBRDRougeLStrategy,
     MajorityVotingStrategyForMath,
 )
 import pytest
 
-from mellea.stdlib.sampling.types import SamplingResult
+from mellea.core import SamplingResult
 
 
 @pytest.fixture(scope="module")

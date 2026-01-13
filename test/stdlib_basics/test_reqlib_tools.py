@@ -1,5 +1,5 @@
 import pytest
-from mellea.stdlib.reqlib.tools import _name2str
+from mellea.stdlib.requirements.tool_reqs import _name2str
 
 
 def test_name2str():

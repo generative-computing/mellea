@@ -1,8 +1,8 @@
 import copy
 import pytest
 
-from mellea.backends.types import ModelOption
-from mellea.stdlib.base import ModelOutputThunk
+from mellea.backends import ModelOption
+from mellea.core import ModelOutputThunk
 from mellea.stdlib.session import MelleaSession, start_session
 
 

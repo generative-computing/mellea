@@ -8,7 +8,7 @@ import granite_common.intrinsics
 import yaml
 
 from ...core import Backend
-from ..backend import _ServerType
+from ...helpers import _ServerType
 from .catalog import AdapterType, fetch_intrinsic_metadata
 
 

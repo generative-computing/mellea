@@ -1,5 +1,4 @@
 import base64
-import os
 from io import BytesIO
 
 import numpy as np
@@ -8,9 +7,9 @@ import pytest
 
 from mellea import start_session, MelleaSession
 from mellea.backends import ModelOption
-from mellea.stdlib.base import ImageBlock, ModelOutputThunk
-from mellea.stdlib.chat import Message
-from mellea.stdlib.instruction import Instruction
+from mellea.core import ImageBlock, ModelOutputThunk
+from mellea.stdlib.components import Message
+from mellea.stdlib.components import Instruction
 
 
 @pytest.fixture(scope="module")
@@ -76,21 +75,21 @@ def test_image_block_in_instruction(
 
     # if not on GH
     if not gh_run == 1:
-        assert "yes" in instr.value.lower() or "no" in instr.value.lower()
+        assert "yes" in instr.value.lower() or "no" in instr.value.lower()  # type: ignore
 
     # make sure you get the last action
     turn = m_session.ctx.last_turn()
     assert turn is not None
     last_action = turn.model_input
     assert isinstance(last_action, Instruction)
-    assert len(last_action._images) > 0
+    assert len(last_action._images) > 0  # type: ignore
 
     # first image in image list should be the same as the image block
-    image0 = last_action._images[0]
+    image0 = last_action._images[0]  # type: ignore
     assert image0 == image_block
 
     # get prompt message
-    lp = turn.output._generate_log.prompt
+    lp = turn.output._generate_log.prompt  # type: ignore
     assert isinstance(lp, list)
     assert len(lp) == 1
 
@@ -130,14 +129,14 @@ def test_image_block_in_chat(
     assert turn is not None
     last_action = turn.model_input
     assert isinstance(last_action, Message)
-    assert len(last_action.images) > 0
+    assert len(last_action.images) > 0  # type: ignore
 
     # first image in image list should be the same as the image block
-    image0_str = last_action.images[0]
+    image0_str = last_action.images[0]  # type: ignore
     assert image0_str == ImageBlock.from_pil_image(pil_image)._value
 
     # get prompt message
-    lp = turn.output._generate_log.prompt
+    lp = turn.output._generate_log.prompt  # type: ignore
     assert isinstance(lp, list)
     assert len(lp) == 1
 

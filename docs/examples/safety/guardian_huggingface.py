@@ -8,9 +8,10 @@ from mellea import MelleaSession
 from mellea.backends import model_ids
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.base import ChatContext, ModelOutputThunk, ModelToolCall
-from mellea.stdlib.chat import Message
-from mellea.stdlib.safety.guardian import GuardianCheck, GuardianRisk
+from mellea.core import ModelOutputThunk, ModelToolCall
+from mellea.stdlib.context import ChatContext
+from mellea.stdlib.components import Message
+from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 
 print("=== GuardianCheck HuggingFace Backend Example ===")
 

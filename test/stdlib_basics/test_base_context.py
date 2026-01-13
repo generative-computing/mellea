@@ -1,6 +1,7 @@
 import pytest
 
-from mellea.stdlib.base import Context, CBlock, SimpleContext, ChatContext
+from mellea.core import Context, CBlock
+from mellea.stdlib.context import SimpleContext, ChatContext
 
 
 def context_construction(cls: type[Context]):
@@ -38,7 +39,7 @@ def test_render_view_for_simple_context():
     for i in range(5):
         ctx = ctx.add(CBlock(f"a {i}"))
     assert len(ctx.as_list()) == 5, "Adding 5 items to context should result in 5 items"
-    assert len(ctx.view_for_generation()) == 0, (
+    assert len(ctx.view_for_generation()) == 0, (  # type: ignore
         "Render size should be 0 -- NO HISTORY for SimpleContext"
     )
 
@@ -48,7 +49,7 @@ def test_render_view_for_chat_context():
     for i in range(5):
         ctx = ctx.add(CBlock(f"a {i}"))
     assert len(ctx.as_list()) == 5, "Adding 5 items to context should result in 5 items"
-    assert len(ctx.view_for_generation()) == 3, "Render size should be 3"
+    assert len(ctx.view_for_generation()) == 3, "Render size should be 3"  # type: ignore
 
 
 def test_actions_for_available_tools():

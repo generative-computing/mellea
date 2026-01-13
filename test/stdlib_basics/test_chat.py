@@ -1,7 +1,6 @@
 import pytest
-from mellea.backends.openai import OpenAIBackend
-from mellea.stdlib.base import Document
-from mellea.stdlib.chat import Message
+from mellea.stdlib.components import Document
+from mellea.stdlib.components import Message
 from mellea.helpers import messages_to_docs
 
 

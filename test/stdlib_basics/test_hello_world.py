@@ -1,4 +1,4 @@
-from mellea.stdlib.instruction import Instruction
+from mellea.stdlib.components import Instruction
 
 
 def test_empty_instr():

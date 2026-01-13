@@ -1,12 +1,8 @@
-import asyncio
-import os
-
 import pytest
 
-from mellea.backends.ollama import OllamaModelBackend
-from mellea.backends.types import ModelOption
-from mellea.stdlib.base import ChatContext, ModelOutputThunk, CBlock, SimpleComponent
-from mellea.stdlib.chat import Message
+from mellea.backends import ModelOption
+from mellea.core import CBlock
+from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.session import start_session, MelleaSession
 from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
 from mellea.backends.huggingface import LocalHFBackend
@@ -43,7 +39,7 @@ async def test_lazy_spans(m_session):
 @pytest.mark.qualitative
 async def test_kv(m_session):
     m: MelleaSession = m_session
-    backend, ctx = m.backend, m.ctx
+    backend, ctx = m.backend, m.ctx  # type: ignore
 
     ctx = ctx.add(
         SimpleComponent(

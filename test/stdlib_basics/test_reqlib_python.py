@@ -16,17 +16,17 @@ try:
 except ImportError:
     _llm_sandbox_available = False
 
-from mellea.stdlib.base import Context
-from mellea.stdlib.reqlib.python import (
+from mellea.core import Context, ModelOutputThunk
+from mellea.stdlib.requirements.python_reqs import (
     PythonExecutionReq,
     _has_python_code_listing,
     _python_executes_without_error,
 )
+from mellea.stdlib.context import ChatContext
 
 
 def from_model(content: str) -> Context:
     """Helper to create context from model output."""
-    from mellea.stdlib.base import ChatContext, ModelOutputThunk
 
     ctx = ChatContext()
     ctx = ctx.add(ModelOutputThunk(value=content))
@@ -101,21 +101,21 @@ def test_has_python_code_listing_valid():
     """Test extraction of valid Python code."""
     result = _has_python_code_listing(VALID_PYTHON_CTX)
     assert result.as_bool() is True
-    assert "def hello_world" in result.reason
+    assert "def hello_world" in result.reason  # type: ignore
 
 
 def test_has_python_code_listing_no_code():
     """Test handling when no Python code is present."""
     result = _has_python_code_listing(NO_PYTHON_CTX)
     assert result.as_bool() is False
-    assert "No Python code blocks found" in result.reason
+    assert "No Python code blocks found" in result.reason  # type: ignore
 
 
 def test_has_python_code_listing_simple():
     """Test extraction of simple Python code."""
     result = _has_python_code_listing(PYTHON_SIMPLE_CTX)
     assert result.as_bool() is True
-    assert "print" in result.reason
+    assert "print" in result.reason  # type: ignore
 
 
 # endregion
@@ -161,7 +161,7 @@ def test_unsafe_execution_runtime_error():
     req = PythonExecutionReq(allow_unsafe_execution=True, timeout=5)
     result = req.validation_fn(RUNTIME_ERROR_CTX)
     assert result.as_bool() is False
-    assert "error" in result.reason.lower()
+    assert "error" in result.reason.lower()  # type: ignore
 
 
 def test_unsafe_execution_timeout():
@@ -169,7 +169,7 @@ def test_unsafe_execution_timeout():
     req = PythonExecutionReq(allow_unsafe_execution=True, timeout=1)
     result = req.validation_fn(PYTHON_INFINITE_LOOP_CTX)
     assert result.as_bool() is False
-    assert "timed out" in result.reason.lower()
+    assert "timed out" in result.reason.lower()  # type: ignore
 
 
 def test_unsafe_execution_syntax_error():
@@ -189,7 +189,7 @@ def test_import_restrictions_block_forbidden():
     req = PythonExecutionReq(allow_unsafe_execution=True, allowed_imports=["os", "sys"])
     result = req.validation_fn(PYTHON_WITH_FORBIDDEN_IMPORTS_CTX)
     assert result.as_bool() is False
-    assert "Unauthorized imports" in result.reason
+    assert "Unauthorized imports" in result.reason  # type: ignore
 
 
 def test_import_restrictions_allow_permitted():
@@ -206,7 +206,7 @@ def test_import_restrictions_with_safe_mode():
     req = PythonExecutionReq(allowed_imports=["os", "sys"])
     result = req.validation_fn(PYTHON_WITH_FORBIDDEN_IMPORTS_CTX)
     assert result.as_bool() is False
-    assert "Unauthorized imports" in result.reason
+    assert "Unauthorized imports" in result.reason  # type: ignore
 
 
 # endregion
@@ -265,15 +265,15 @@ def test_sandbox_without_llm_sandbox_installed():
 def test_description_updates_based_on_mode():
     """Test that requirement description reflects execution mode."""
     safe_req = PythonExecutionReq()
-    assert "validation only" in safe_req.description
+    assert "validation only" in safe_req.description  # type: ignore
 
     unsafe_req = PythonExecutionReq(allow_unsafe_execution=True, timeout=5)
-    assert "unsafe execution" in unsafe_req.description
-    assert "timeout: 5s" in unsafe_req.description
+    assert "unsafe execution" in unsafe_req.description  # type: ignore
+    assert "timeout: 5s" in unsafe_req.description  # type: ignore
 
     sandbox_req = PythonExecutionReq(use_sandbox=True, timeout=10)
-    assert "sandbox execution" in sandbox_req.description
-    assert "timeout: 10s" in sandbox_req.description
+    assert "sandbox execution" in sandbox_req.description  # type: ignore
+    assert "timeout: 10s" in sandbox_req.description  # type: ignore
 
 
 def test_parameter_combinations():
@@ -322,7 +322,7 @@ def test_no_code_extraction():
     req = PythonExecutionReq()
     result = req.validation_fn(NO_PYTHON_CTX)
     assert result.as_bool() is False
-    assert "Could not extract Python code" in result.reason
+    assert "Could not extract Python code" in result.reason  # type: ignore
 
 
 # endregion

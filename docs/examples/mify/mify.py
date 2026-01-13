@@ -1,4 +1,4 @@
-from mellea.stdlib.docs.richdocument import TableQuery
+from mellea.stdlib.components.docs import TableQuery
 from mellea.stdlib.mify import MifiedProtocol, mify
 from mellea.stdlib.session import start_session
 

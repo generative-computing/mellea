@@ -22,7 +22,7 @@ from ...core import (
     TemplateRepresentation,
     ValidationResult,
 )
-from ...stdlib import functional as mfuncs
+import mellea.stdlib.functional as mfuncs
 from ..requirements.requirement import reqify
 from ..session import MelleaSession
 

@@ -1,5 +1,5 @@
 import pytest
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption
 
 
 def test_model_option_remove():

@@ -1,7 +1,7 @@
 import pytest
 
-from mellea.backends.formatter import TemplateFormatter
-from mellea.stdlib.base import Component, TemplateRepresentation
+from mellea.formatters import TemplateFormatter
+from mellea.core import Component, TemplateRepresentation
 from mellea.stdlib.mobject import Query, MObjectProtocol, MObject
 from mellea.stdlib.mify import mify, MifiedProtocol
 

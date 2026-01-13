@@ -1,7 +1,7 @@
-import asyncio
 import pytest
-from mellea.stdlib.base import ChatContext, ModelOutputThunk
-from mellea.stdlib.requirement import LLMaJRequirement, Requirement, simple_validate
+from mellea.stdlib.context import ChatContext
+from mellea.core import ModelOutputThunk, Requirement
+from mellea.stdlib.requirements import LLMaJRequirement, simple_validate
 from mellea.stdlib.session import start_session
 
 ctx = ChatContext()
@@ -51,7 +51,7 @@ def test_simple_validate_bool_string():
 
 
 def test_simple_validate_invalid():
-    validation_func = simple_validate(lambda x: None)
+    validation_func = simple_validate(lambda x: None)  # type: ignore
 
     with pytest.raises(ValueError):
         val_result = validation_func(ctx)

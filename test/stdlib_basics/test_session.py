@@ -3,10 +3,10 @@ import os
 
 import pytest
 
-from mellea.backends.ollama import OllamaModelBackend
-from mellea.backends.types import ModelOption
-from mellea.stdlib.base import ChatContext, ModelOutputThunk
-from mellea.stdlib.chat import Message
+from mellea.backends import ModelOption
+from mellea.stdlib.context import ChatContext
+from mellea.core import ModelOutputThunk
+from mellea.stdlib.components import Message
 from mellea.stdlib.session import start_session, MelleaSession
 
 
@@ -88,11 +88,11 @@ async def test_async_await_with_chat_context(m_session):
 
     ctx = m_session.ctx
     for i in range(len(history)):
-        assert ctx.node_data is history[i]
-        ctx = ctx.previous_node
+        assert ctx.node_data is history[i]  # type: ignore
+        ctx = ctx.previous_node  # type: ignore
 
     # Ensure we made it back to the root.
-    assert ctx.is_root_node == True
+    assert ctx.is_root_node == True  # type: ignore
 
 
 async def test_async_without_waiting_with_chat_context(m_session):
@@ -105,7 +105,7 @@ async def test_async_without_waiting_with_chat_context(m_session):
     _, _ = await asyncio.gather(co2, co1)
 
     ctx = m_session.ctx
-    assert len(ctx.view_for_generation()) == 2
+    assert len(ctx.view_for_generation()) == 2  # type: ignore
 
 
 def test_session_copy_with_context_ops(m_session):
@@ -135,7 +135,7 @@ def test_session_copy_with_context_ops(m_session):
 
 
 class TestPowerup:
-    def hello(m: MelleaSession):
+    def hello(m: MelleaSession):  # type: ignore
         return "hello"
 
 

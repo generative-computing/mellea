@@ -5,7 +5,7 @@ import pytest
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
 from mellea.backends.model_ids import OPENAI_GPT_OSS_20B
-from mellea.stdlib.base import CBlock
+from mellea.core import CBlock
 from mellea.stdlib.sampling.budget_forcing import BudgetForcingSamplingStrategy
 
 MODEL_ID = OPENAI_GPT_OSS_20B
@@ -45,7 +45,7 @@ def test_think_big(m_session: MelleaSession, gh_run: int):
         answer_suffix="The final answer is:",
         requirements=None,
     )
-    result = m_session.instruct(action, strategy=strategy)
+    result = m_session.instruct(action, strategy=strategy)  # type: ignore
 
     print("\n******\nThink big:")
     print(str(result))
@@ -70,7 +70,7 @@ def test_think_little(m_session: MelleaSession, gh_run: int):
         answer_suffix="The final answer is: \\boxed{",
         requirements=None,
     )
-    result = m_session.instruct(action, strategy=strategy)
+    result = m_session.instruct(action, strategy=strategy)  # type: ignore
 
     print("\n******\nThink little:")
     print(str(result))

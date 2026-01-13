@@ -1,7 +1,7 @@
 import pathlib
 import pytest
 
-from mellea.backends.adapters.adapter import GraniteCommonAdapter
+from mellea.backends.adapters import GraniteCommonAdapter
 
 
 # The backend tests handle most of the adapter testing. Do a basic test here

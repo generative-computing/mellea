@@ -1,20 +1,15 @@
 import pytest
 
-from mellea.backends import Backend
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
 )
-from mellea.backends.types import ModelOption
-from mellea.stdlib.base import (
-    CBlock,
-    Component,
-    ModelOutputThunk,
-    TemplateRepresentation,
-    ChatContext,
-)
-from mellea.stdlib.docs.richdocument import Table
+from mellea.backends import ModelOption
+from mellea.core import ModelOutputThunk
+from mellea.stdlib.context import ChatContext
+
+from mellea.stdlib.components.docs import Table
 from mellea.stdlib.session import MelleaSession
 
 

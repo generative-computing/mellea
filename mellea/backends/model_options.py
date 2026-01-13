@@ -13,7 +13,7 @@ class ModelOption:
     Create a dictionary containing model options like this:
 
     ```python
-    from mellea.backends.types import ModelOption
+    from mellea.backends import ModelOption
     model_options = {
         ModelOption.TEMPERATURE : 0.0,
         ModelOption.SYSTEM_PROMPT : "You are a helpful assistant"

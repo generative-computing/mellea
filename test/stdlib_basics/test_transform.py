@@ -1,8 +1,8 @@
 import pytest
 
-from mellea.stdlib.base import TemplateRepresentation
-from mellea.stdlib.docs.richdocument import TableTransform
-from mellea.stdlib.mobject import MObject, Query, Transform
+from mellea.core import TemplateRepresentation
+from mellea.stdlib.components.docs import TableTransform
+from mellea.stdlib.components import MObject, Query, Transform
 
 custom_mobject_description = "custom mobject description"
 
