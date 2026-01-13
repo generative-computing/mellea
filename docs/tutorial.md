@@ -752,7 +752,7 @@ Let's see how Stembolt MFG Corporation can use tuned LoRAs to implement the Auto
 
 ### Training the aLoRA Adapter
 
-Mellea provides a command-line interface for training [LoRA](https://arxiv.org/abs/2106.09685) or [aLoRA](https://github.com/IBM/activated-lora) adapters.  Classical LoRAs must re-process our entire context, which can get expensive for quick checks happening within an inner loop (such as requirement checking). The aLoRA method allows us to adapt a base LLM to new tasks, and then run the adapter with minimal compute overhead. The adapters are fast to train and fast to switch between.
+Mellea provides a command-line interface for training [LoRA](https://arxiv.org/abs/2106.09685) or [aLoRA](https://github.com/huggingface/peft/blob/main/docs/source/developer_guides/lora.md#activated-lora-alora) adapters.  Classical LoRAs must re-process our entire context, which can get expensive for quick checks happening within an inner loop (such as requirement checking). The aLoRA method allows us to adapt a base LLM to new tasks, and then run the adapter with minimal compute overhead. The adapters are fast to train and fast to switch between.
 
 We will train a lightweight adapter with the `m alora train` command on this small dataset:
 
@@ -1391,6 +1391,28 @@ Mellea utilizes asynchronicity internally. When you call `m.instruct`, you are u
 When using `SamplingStrategy`s or during validation, Mellea can speed up the execution time of your program by generating multiple results and validating those results against multiple requirements simultaneously. Whether you use `m.instruct` or the asynchronous `m.ainstruct`, Mellea will attempt to speed up your requests by dispatching those requests as quickly as possible and asynchronously awaiting the results.
 
 ## Appendix: Contributing to Mellea
+
+### Contributor Guide: Getting Started
+
+If you are going to contribute to Mellea, it is important that you use our
+pre-commit hooks. Using these hooks -- or running our test suite -- 
+requires installing `[all]` optional dependencies and also the dev group.
+
+```
+git clone git@github.com:generative-computing/mellea.git && 
+cd mellea && 
+uv venv .venv && 
+source .venv/bin/activate &&
+uv pip install -e ".[all]" --group dev
+pre-commit install
+```
+
+You can then run all tests by running `pytest`, or only the CI/CD tests by
+running `CICD=1 pytest`. 
+
+Tip: you can bypass the hooks by passing the `-n` flag to `git commit`.
+This is sometimes helpful for intermediate commits that you intend to later
+squash.
 
 ### Contributor Guide: Requirements and Verifiers
 
