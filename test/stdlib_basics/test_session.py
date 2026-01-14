@@ -9,6 +9,8 @@ from mellea.stdlib.base import ChatContext, ModelOutputThunk
 from mellea.stdlib.chat import Message
 from mellea.stdlib.session import start_session, MelleaSession
 
+import time
+
 
 # We edit the context type in the async tests below. Don't change the scope here.
 @pytest.fixture(scope="function")
@@ -138,11 +140,26 @@ class TestPowerup:
     def hello(m: MelleaSession):
         return "hello"
 
+    async def ahello(m: MelleaSession):
+        time.sleep(3)
+        return "hello"
 
-def test_powerup(m_session):
+
+class TestPowerupInherit(TestPowerup):
+    def hello2(m: MelleaSession):
+        return "hello"
+
+
+async def test_powerup(m_session):
     MelleaSession.powerup(TestPowerup)
 
     assert "hello" == m_session.hello()
+    assert "hello" == await m_session.ahello()
+
+    MelleaSession.powerup(TestPowerupInherit)
+
+    assert "hello" == m_session.hello()  # check the inheritance is respected
+    assert "hello" == m_session.hello2()
 
 
 if __name__ == "__main__":
