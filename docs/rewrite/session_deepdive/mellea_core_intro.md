@@ -209,7 +209,7 @@ Let's summarize what we've learned by peeling away abstractions:
 | **mfuncs.act()** | Direct component creation | `CBlock(...)` |
 | **mfuncs.aact()** | Async execution model | `await mfuncs.aact(...)` |
 | **backend.generate_from_context()** | Lazy evaluation with thunks | `response.is_computed()`, `await response.avalue()` |
-| **ModelOutputThunks** | Computation graphs with components | `SimpleComponent(...)` with thunk dependencies |
+| **ModelOutputThunks** | Computation graphs with components | `SimpleComponent(...)` instantiated with maybe-computed thunk dependencies |
 
 The reason these layers exist is that different use cases need different levels of control:
 
