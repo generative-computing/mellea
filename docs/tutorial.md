@@ -22,7 +22,7 @@
   - [Custom  Templates](#custom-templates)
 - [Chapter 11: Tool Calling](#chapter-11-tool-calling)
 - [Chapter 12: Asynchronicity](#chapter-12-asynchronicity)
-- [Appendix: Contributing to Melles](#appendix-contributing-to-mellea)
+- [Appendix: Contributing to Mellea](#appendix-contributing-to-mellea)
 
 ## Chapter 1: What Is Generative Programming
 
