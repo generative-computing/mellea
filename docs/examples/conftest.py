@@ -1,22 +1,13 @@
-"""Allows you to use `pytest docs` to run the examples."""
+"""Allows you to use `pytest docs` to run the examples.
+
+To run notebooks, use: uv run --with 'mcp' pytest --nbmake docs/examples/notebooks/
+"""
 
 import pathlib
 import subprocess
 import sys
 
 import pytest
-
-# Enable nbmake for notebook testing when running pytest in this directory.
-# This allows `pytest docs/` to automatically run notebooks via nbmake.
-pytest_plugins = ["nbmake"]
-
-
-def pytest_configure(config):
-    """Configure nbmake to run notebooks in docs/examples/notebooks/."""
-    # Only enable nbmake if we're collecting from docs directory
-    if hasattr(config.option, "nbmake"):
-        config.option.nbmake = True
-
 
 examples_to_skip = {
     "101_example.py",
