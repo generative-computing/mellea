@@ -5,10 +5,9 @@ import spacy
 from cli.serve.models import ChatMessage
 import mellea
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
-from mellea.stdlib.base import ModelOutputThunk
-from mellea.stdlib.requirement import req, simple_validate
+from mellea.core import ModelOutputThunk, SamplingResult
+from mellea.stdlib.requirements import req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
-from mellea.stdlib.sampling.types import SamplingResult
 
 
 def has_potential_pii(text: str) -> bool:

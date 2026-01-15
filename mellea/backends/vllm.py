@@ -5,51 +5,47 @@ The purpose of the VLLM backend is to provide a locally running fast inference e
 
 from __future__ import annotations
 
-import abc
 import asyncio
 import dataclasses
 import datetime
 import functools
 import importlib
-import inspect
 import json
 import os
 import shutil
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any, Optional, overload
+from typing import Any, overload
 
-import msgspec  # type:ignore
+import msgspec
 import outlines
 import outlines_core
 import torch
-import vllm  # type:ignore
-from transformers import AutoTokenizer, PreTrainedTokenizerBase
+import vllm
+from transformers import AutoTokenizer
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
-from mellea.backends import BaseModelSubclass
-from mellea.backends._utils import to_chat, to_tool_calls
-from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
-from mellea.backends.model_ids import ModelIdentifier
-from mellea.backends.tools import (
-    add_tools_from_context_actions,
-    add_tools_from_model_options,
-    convert_tools_to_json,
-)
-from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import get_current_event_loop, send_to_queue
-from mellea.helpers.event_loop_helper import _run_async_in_thread
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import (
+from ..backends import ModelIdentifier
+from ..core import (
+    BaseModelSubclass,
     C,
     CBlock,
     Component,
     Context,
+    FancyLogger,
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
-    TemplateRepresentation,
 )
-from mellea.stdlib.chat import Message
-from mellea.stdlib.requirement import LLMaJRequirement, Requirement
+from ..formatters import ChatFormatter, TemplateFormatter
+from ..helpers import get_current_event_loop, send_to_queue
+from .backend import FormatterBackend
+from .model_options import ModelOption
+from .tools import (
+    add_tools_from_context_actions,
+    add_tools_from_model_options,
+    convert_tools_to_json,
+)
+from .utils import to_chat, to_tool_calls
 
 assert outlines, "outlines needs to be present to make outlines_core work"
 
@@ -71,7 +67,7 @@ class LocalVLLMBackend(FormatterBackend):
     def __init__(
         self,
         model_id: str | ModelIdentifier,
-        formatter: Formatter | None = None,
+        formatter: ChatFormatter | None = None,
         *,
         model_options: dict | None = None,
     ):
@@ -156,7 +152,7 @@ class LocalVLLMBackend(FormatterBackend):
                     vllm.AsyncEngineArgs(model=self._hf_model_id, **engine_args)
                 )
                 break
-            except torch._dynamo.exc.BackendCompilerFailed as e:
+            except torch._dynamo.exc.BackendCompilerFailed as e:  # type: ignore
                 # example:
                 # torch._dynamo.exc.BackendCompilerFailed: backend='<vllm.compilation.backends.VllmBackend object at 0x7f6d3f341730>' raised:
                 # RuntimeError: vLLM failed to compile the model. The most likely reason for this is that a previous compilation failed, leading to a corrupted compilation artifact. We recommend trying to remove ~/.cache/vllm/torch_compile_cache and try again to see the real issue.
@@ -313,10 +309,10 @@ class LocalVLLMBackend(FormatterBackend):
                 ),
                 output_kind=(
                     # returns results incrementally
-                    vllm.sampling_params.RequestOutputKind.DELTA
+                    vllm.sampling_params.RequestOutputKind.DELTA  # type: ignore
                     if model_options.get(ModelOption.STREAM, False)
                     # returns only the final result
-                    else vllm.sampling_params.RequestOutputKind.FINAL_ONLY
+                    else vllm.sampling_params.RequestOutputKind.FINAL_ONLY  # type: ignore
                 ),
             )
 
@@ -329,7 +325,7 @@ class LocalVLLMBackend(FormatterBackend):
                     schema_json  # type: ignore
                 )  # type: ignore
 
-                from outlines.processors import RegexLogitsProcessor
+                from outlines.processors import RegexLogitsProcessor  # type: ignore
 
                 logits_processor = RegexLogitsProcessor(
                     regex_str,
@@ -475,7 +471,7 @@ class LocalVLLMBackend(FormatterBackend):
             **self._make_backend_specific_and_remove(
                 model_options, vllm.SamplingParams
             ),
-            output_kind=vllm.sampling_params.RequestOutputKind.FINAL_ONLY,  # returns only the final results
+            output_kind=vllm.sampling_params.RequestOutputKind.FINAL_ONLY,  # returns only the final results # type: ignore
         )
 
         if format is not None:
@@ -485,7 +481,7 @@ class LocalVLLMBackend(FormatterBackend):
                 schema_json  # type: ignore
             )  # type: ignore
 
-            from outlines.processors import RegexLogitsProcessor
+            from outlines.processors import RegexLogitsProcessor  # type: ignore
 
             logits_processor = RegexLogitsProcessor(
                 regex_str,

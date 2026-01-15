@@ -1,7 +1,8 @@
 from docs.examples.helper import w
 from mellea import start_session
-from mellea.backends.types import ModelOption
-from mellea.stdlib.requirement import Requirement, simple_validate
+from mellea.backends import ModelOption
+from mellea.stdlib.requirements import simple_validate
+from mellea.core import Requirement
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 # create a session using Granite 4 Micro 3B on Ollama and a simple context [see below]

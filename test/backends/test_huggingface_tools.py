@@ -1,7 +1,6 @@
 import os
-import pydantic
+
 import pytest
-from typing_extensions import Annotated
 
 # Skip entire module in CI since the single test is qualitative
 pytestmark = pytest.mark.skipif(
@@ -12,17 +11,9 @@ pytestmark = pytest.mark.skipif(
 import mellea.backends.model_ids as model_ids
 from mellea import MelleaSession
 from mellea.backends.cache import SimpleLRUCache
-from mellea.backends.formatter import TemplateFormatter
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock, ChatContext
-from mellea.stdlib.requirement import (
-    ALoraRequirement,
-    LLMaJRequirement,
-    Requirement,
-    ValidationResult,
-    default_output_to_bool,
-)
+from mellea.backends import ModelOption
+from mellea.stdlib.context import ChatContext
 
 
 @pytest.fixture(scope="module")

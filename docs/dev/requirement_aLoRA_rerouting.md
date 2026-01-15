@@ -33,7 +33,8 @@ Suppose that the user creates a backend and then adds a generic constraint check
 
 ```python
 from mellea import start_session
-from mellea.stdlib.requirement import Requirement
+from mellea.core import Requirement
+from mellea.backends.adapters import GraniteCommonAdapter
 
 m = start_session(
     "huggingface.LocalHFBackend:ibm-granite/granite-3.2-8b-instruct")

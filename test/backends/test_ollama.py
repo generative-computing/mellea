@@ -7,9 +7,10 @@ from typing_extensions import Annotated
 
 from mellea import start_session
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock, SimpleContext
-from mellea.stdlib.requirement import Requirement, simple_validate
+from mellea.backends import ModelOption
+from mellea.core import CBlock, Requirement
+from mellea.stdlib.context import SimpleContext
+from mellea.stdlib.requirements import simple_validate
 
 
 @pytest.fixture(scope="function")
@@ -45,7 +46,7 @@ def test_instruct_with_requirement(session):
 
     happy_tone_req = Requirement(
         "The email should sound happy in tone.",
-        output_to_bool=lambda x: "happy" in x.value,
+        output_to_bool=lambda x: "happy" in x.value,  # type: ignore
     )
 
     sad_tone_req = Requirement("The email should sound sad in tone.")

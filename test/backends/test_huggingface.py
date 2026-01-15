@@ -19,27 +19,23 @@ pytestmark = pytest.mark.skipif(
 )
 
 from mellea import MelleaSession
-from mellea.backends.adapters.adapter import GraniteCommonAdapter
+from mellea.backends.adapters import GraniteCommonAdapter
 from mellea.backends.cache import SimpleLRUCache
-from mellea.backends.formatter import TemplateFormatter
+from mellea.formatters import TemplateFormatter
 from mellea.backends.huggingface import LocalHFBackend, _assert_correct_adapters
-from mellea.backends.types import ModelOption
-from mellea.stdlib.base import (
+from mellea.backends import ModelOption
+from mellea.core import (
     CBlock,
-    ChatContext,
     Context,
     ModelOutputThunk,
-    SimpleContext,
-)
-from mellea.stdlib.chat import Message
-from mellea.stdlib.intrinsics.intrinsic import Intrinsic
-from mellea.stdlib.requirement import (
-    ALoraRequirement,
-    LLMaJRequirement,
-    Requirement,
     ValidationResult,
     default_output_to_bool,
 )
+from mellea.stdlib.context import ChatContext, SimpleContext
+
+from mellea.stdlib.components import Message
+from mellea.stdlib.components import Intrinsic
+from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement
 
 
 @pytest.fixture(scope="module")
@@ -149,7 +145,7 @@ def test_constraint_lora_override_does_not_override_alora(session, backend):
     # the correct actions / results in it.
     assert isinstance(val_result.context, Context)
     assert isinstance(val_result.thunk, ModelOutputThunk)
-    assert isinstance(val_result.context.previous_node.node_data, ALoraRequirement)
+    assert isinstance(val_result.context.previous_node.node_data, ALoraRequirement)  # type: ignore
     assert val_result.context.node_data is val_result.thunk
 
     backend.default_to_constraint_checking_alora = True

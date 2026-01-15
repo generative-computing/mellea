@@ -5,8 +5,8 @@ from typing import TypedDict, TypeVar, cast, final
 from typing_extensions import Unpack
 
 from mellea import MelleaSession
-from mellea.backends.types import ModelOption
-from mellea.stdlib.chat import Message
+from mellea.backends import ModelOption
+from mellea.stdlib.components import Message
 
 from .._prompt_modules import PromptModule, PromptModuleString
 from ._exceptions import BackendGenerationError, TagExtractionError

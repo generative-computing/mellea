@@ -12,15 +12,10 @@ pytestmark = pytest.mark.skipif(
 
 from mellea import MelleaSession
 from mellea.backends.vllm import LocalVLLMBackend
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption
 import mellea.backends.model_ids as model_ids
-from mellea.stdlib.base import CBlock, ChatContext, SimpleContext
-from mellea.stdlib.requirement import (
-    LLMaJRequirement,
-    Requirement,
-    ValidationResult,
-    default_output_to_bool,
-)
+from mellea.core import CBlock
+from mellea.stdlib.context import ChatContext, SimpleContext
 
 
 @pytest.fixture(scope="module")

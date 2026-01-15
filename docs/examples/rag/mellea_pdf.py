@@ -1,5 +1,5 @@
 import mellea
-from mellea.stdlib.docs.richdocument import RichDocument
+from mellea.stdlib.components.docs import RichDocument
 
 m = mellea.start_session()
 

@@ -1,16 +1,16 @@
 from mellea.backends import model_ids
 from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
-from mellea.stdlib.docs.richdocument import RichDocument
+from mellea.stdlib.components.docs import RichDocument
 
 rd = RichDocument.from_document_file("https://arxiv.org/pdf/1906.04043")
 
-from mellea.stdlib.docs.richdocument import Table  # noqa: E402
+from mellea.stdlib.components.docs import Table  # noqa: E402
 
 table1: Table = rd.get_tables()[0]
 print(table1.to_markdown())
 
 from mellea import start_session  # noqa: E402
-from mellea.backends.types import ModelOption  # noqa: E402
+from mellea.backends import ModelOption  # noqa: E402
 
 m = start_session(model_id=model_ids.META_LLAMA_3_2_3B)
 for seed in [x * 12 for x in range(5)]:

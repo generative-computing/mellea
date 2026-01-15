@@ -8,7 +8,7 @@ from PIL import Image
 from mellea import MelleaSession, start_session
 from mellea.backends.litellm import LiteLLMBackend
 from mellea.backends.openai import OpenAIBackend
-from mellea.stdlib.base import ImageBlock
+from mellea.core import ImageBlock
 import pathlib
 
 # use LiteLLM to talk to Ollama or anthropic or.....

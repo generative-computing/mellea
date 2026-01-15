@@ -12,10 +12,11 @@ pytestmark = pytest.mark.skipif(
 )
 
 from mellea import MelleaSession
-from mellea.backends.formatter import TemplateFormatter
-from mellea.backends.types import ModelOption
+from mellea.formatters import TemplateFormatter
+from mellea.backends import ModelOption
 from mellea.backends.watsonx import WatsonxAIBackend
-from mellea.stdlib.base import CBlock, ModelOutputThunk, ChatContext, SimpleContext
+from mellea.core import CBlock, ModelOutputThunk
+from mellea.stdlib.context import ChatContext, SimpleContext
 
 
 @pytest.fixture(scope="module")
@@ -124,7 +125,7 @@ def test_format(session: MelleaSession):
     )
     print("Formatted output:")
     email = Email.model_validate_json(
-        output.value
+        output.value  # type: ignore
     )  # this should succeed because the output should be JSON because we passed in a format= argument...
     print(email)
 

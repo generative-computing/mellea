@@ -6,7 +6,7 @@
 from docling_core.types.doc.document import DoclingDocument
 
 import mellea
-from mellea.stdlib.base import ModelOutputThunk, TemplateRepresentation
+from mellea.core import ModelOutputThunk, TemplateRepresentation
 
 # Use a `SimpleContext` so that each LLM call is independent.
 m = mellea.start_session(backend_name="hf")
@@ -35,7 +35,7 @@ print(response.content)  # > The paper introduces...
 
 # 4. `Mellea` also provides a basic wrapper around this functionality to make
 # basic processing of documents easier.
-from mellea.stdlib.docs.richdocument import RichDocument
+from mellea.stdlib.components.docs import RichDocument
 
 # This creates a new `Mellea` RichDocument component that encapsulates all
 # the logic above along with some convenient helpers.

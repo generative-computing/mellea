@@ -4,8 +4,8 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import ModelToolCall
+from ..core import FancyLogger, ModelToolCall
+from ..stdlib.components import Document, Message
 
 
 def extract_model_tool_requests(
@@ -115,3 +115,53 @@ def chat_completion_delta_merge(
                     current_tool["function"]["arguments"] += fx_info["arguments"]
 
     return merged
+
+
+def message_to_openai_message(msg: Message):
+    """Serializes a mellea Message object to the message format required by OpenAI compatible api providers."""
+    if msg.images is not None:
+        img_list = [
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}}
+            for img in msg.images
+        ]
+
+        return {
+            "role": msg.role,
+            "content": [{"type": "text", "text": msg.content}, *img_list],
+        }
+    else:
+        return {"role": msg.role, "content": msg.content}
+        # Target format:
+        # {
+        #     "role": "user",
+        #     "content": [
+        #       {
+        #         "type": "text",
+        #         "text": "What's in this picture?"
+        #       },
+        #       {
+        #         "type": "image_url",
+        #         "image_url": {
+        #           "url": "data:image/jpeg;base64,<base64_string>"
+        #         }
+        #       }
+        #     ]
+        #   }
+
+
+def messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]:
+    """Extracts the docs from a list of messages."""
+    docs: list[Document] = []
+    for message in msgs:
+        if message._docs is not None:
+            docs.extend(message._docs)
+
+    json_docs: list[dict[str, str]] = []
+    for doc in docs:
+        json_doc = {"text": doc.text}
+        if doc.title is not None:
+            json_doc["title"] = doc.title
+        if doc.doc_id is not None:
+            json_doc["doc_id"] = doc.doc_id
+        json_docs.append(json_doc)
+    return json_docs

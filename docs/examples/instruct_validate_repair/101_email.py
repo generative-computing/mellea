@@ -2,7 +2,7 @@
 # helper function to wrap text
 from docs.examples.helper import w
 from mellea import start_session
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption
 
 with start_session(model_options={ModelOption.MAX_NEW_TOKENS: 200}) as m:
     # write an email
