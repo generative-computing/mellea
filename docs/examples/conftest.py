@@ -6,6 +6,18 @@ import sys
 
 import pytest
 
+# Enable nbmake for notebook testing when running pytest in this directory.
+# This allows `pytest docs/` to automatically run notebooks via nbmake.
+pytest_plugins = ["nbmake"]
+
+
+def pytest_configure(config):
+    """Configure nbmake to run notebooks in docs/examples/notebooks/."""
+    # Only enable nbmake if we're collecting from docs directory
+    if hasattr(config.option, "nbmake"):
+        config.option.nbmake = True
+
+
 examples_to_skip = {
     "101_example.py",
     "__init__.py",
@@ -42,14 +54,6 @@ def pytest_collect_file(parent: pytest.Dir, file_path: pathlib.PosixPath):
             return
 
         return ExampleFile.from_parent(parent, path=file_path)
-
-    # TODO: Support running jupyter notebooks:
-    #       - use nbmake or directly use nbclient as documented below
-    #       - install the nbclient package
-    #           - run either using python api or jupyter execute
-    #           - must replace background processes
-    # if file_path.suffix == ".ipynb":
-    #     return ExampleFile.from_parent(parent, path=file_path)
 
 
 class ExampleFile(pytest.File):
