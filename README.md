@@ -63,10 +63,10 @@ pip install mellea
 > `mellea` comes with some additional packages as defined in our `pyproject.toml`. If you would like to install all the extra optional dependencies, please run the following commands:
 >
 > ```bash
-> uv pip install mellea[hf] # for Huggingface extras and Alora capabilities.
-> uv pip install mellea[watsonx] # for watsonx backend
-> uv pip install mellea[docling] # for docling
-> uv pip install mellea[all] # for all the optional dependencies
+> uv pip install "mellea[hf]" # for Huggingface extras and Alora capabilities.
+> uv pip install "mellea[watsonx]" # for watsonx backend
+> uv pip install "mellea[docling]" # for docling
+> uv pip install "mellea[all]" # for all the optional dependencies
 > ```
 >
 > You can also install all the optional dependencies with `uv sync --all-extras`
@@ -128,13 +128,13 @@ uv venv .venv && source .venv/bin/activate
 Use `uv pip` to install from source with the editable flag:
 
 ```bash
-uv pip install -e '.[all]'
+uv pip install -e ".[all]"
 ```
 
 If you are planning to contribute to the repo, it would be good to have all the development requirements installed:
 
 ```bash
-uv pip install '.[all]' --group dev --group notebook --group docs
+uv pip install ".[all]" --group dev --group notebook --group docs
 ```
 
 or
@@ -174,7 +174,7 @@ the output is checked against the constraints using (in this case) LLM-as-a-judg
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/instruct_validate_repair/101_email_with_validate.py
 from mellea import MelleaSession
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends import model_ids
 from mellea.stdlib.sampling import RejectionSamplingStrategy

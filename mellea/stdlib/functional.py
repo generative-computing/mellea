@@ -8,35 +8,32 @@ from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
 
-from mellea.backends import Backend, BaseModelSubclass
-from mellea.backends.formatter import FormatterBackend
-from mellea.helpers.event_loop_helper import _run_async_in_thread
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import (
+from ..backends import FormatterBackend
+from ..core import (
+    Backend,
+    BaseModelSubclass,
     CBlock,
-    ChatContext,
     Component,
     Context,
+    FancyLogger,
     GenerateLog,
     ImageBlock,
     ModelOutputThunk,
-    SimpleContext,
-)
-from mellea.stdlib.chat import Message, ToolMessage
-from mellea.stdlib.instruction import Instruction
-from mellea.stdlib.mify import mify
-from mellea.stdlib.mobject import MObjectProtocol
-from mellea.stdlib.requirement import Requirement, ValidationResult
-from mellea.stdlib.sampling import (
-    RejectionSamplingStrategy,
+    Requirement,
+    S,
     SamplingResult,
     SamplingStrategy,
+    ValidationResult,
 )
+from ..helpers import _run_async_in_thread
+from .components import Instruction, Message, MObjectProtocol, ToolMessage, mify
+from .context import SimpleContext
+from .sampling import RejectionSamplingStrategy
 
 
 @overload
 def act(
-    action: Component,
+    action: Component[S],
     context: Context,
     backend: Backend,
     *,
@@ -46,12 +43,12 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ModelOutputThunk, Context]: ...
+) -> tuple[ModelOutputThunk[S], Context]: ...
 
 
 @overload
 def act(
-    action: Component,
+    action: Component[S],
     context: Context,
     backend: Backend,
     *,
@@ -61,11 +58,11 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> SamplingResult: ...
+) -> SamplingResult[S]: ...
 
 
 def act(
-    action: Component,
+    action: Component[S],
     context: Context,
     backend: Backend,
     *,
@@ -75,7 +72,7 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ModelOutputThunk, Context] | SamplingResult:
+) -> tuple[ModelOutputThunk[S], Context] | SamplingResult[S]:
     """Runs a generic action, and adds both the action and the result to the context.
 
     Args:
@@ -129,7 +126,7 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ModelOutputThunk, Context]: ...
+) -> tuple[ModelOutputThunk[str], Context]: ...
 
 
 @overload
@@ -150,7 +147,7 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> SamplingResult: ...
+) -> SamplingResult[str]: ...
 
 
 def instruct(
@@ -170,7 +167,7 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ModelOutputThunk, Context] | SamplingResult:
+) -> tuple[ModelOutputThunk[str], Context] | SamplingResult[str]:
     """Generates from an instruction.
 
     Args:
@@ -418,7 +415,7 @@ def transform(
 
 @overload
 async def aact(
-    action: Component,
+    action: Component[S],
     context: Context,
     backend: Backend,
     *,
@@ -429,12 +426,12 @@ async def aact(
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
-) -> tuple[ModelOutputThunk, Context]: ...
+) -> tuple[ModelOutputThunk[S], Context]: ...
 
 
 @overload
 async def aact(
-    action: Component,
+    action: Component[S],
     context: Context,
     backend: Backend,
     *,
@@ -445,11 +442,11 @@ async def aact(
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
-) -> SamplingResult: ...
+) -> SamplingResult[S]: ...
 
 
 async def aact(
-    action: Component,
+    action: Component[S],
     context: Context,
     backend: Backend,
     *,
@@ -460,7 +457,7 @@ async def aact(
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
-) -> tuple[ModelOutputThunk, Context] | SamplingResult:
+) -> tuple[ModelOutputThunk[S], Context] | SamplingResult:
     """Asynchronous version of .act; runs a generic action, and adds both the action and the result to the context.
 
     Args:
@@ -567,7 +564,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ModelOutputThunk, Context]: ...
+) -> tuple[ModelOutputThunk[str], Context]: ...
 
 
 @overload
@@ -588,7 +585,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> SamplingResult: ...
+) -> SamplingResult[S]: ...
 
 
 async def ainstruct(
@@ -608,7 +605,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ModelOutputThunk, Context] | SamplingResult:
+) -> tuple[ModelOutputThunk[str], Context] | SamplingResult:
     """Generates from an instruction.
 
     Args:

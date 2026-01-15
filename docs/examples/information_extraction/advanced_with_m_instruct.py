@@ -6,8 +6,9 @@ from pydantic import BaseModel, ValidationError
 
 from mellea import start_session
 from mellea.backends import model_ids
-from mellea.stdlib.requirement import check, simple_validate
-from mellea.stdlib.sampling import RejectionSamplingStrategy, SamplingResult
+from mellea.stdlib.requirements import check, simple_validate
+from mellea.stdlib.sampling import RejectionSamplingStrategy
+from mellea.core import SamplingResult
 
 # ref: https://www.nytimes.com/2012/05/20/world/world-leaders-at-us-meeting-urge-growth-not-austerity.html
 NYTimes_text = "CAMP DAVID, Md. — Leaders of the world's richest countries banded together on Saturday to press Germany to back more pro-growth policies to halt the deepening debt crisis in Europe, as President Obama for the first time gained widespread support for his argument that Europe, and the United States by extension, cannot afford Chancellor Angela Merkel's one-size-fits-all approach emphasizing austerity."

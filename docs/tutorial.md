@@ -191,7 +191,7 @@ Let's look on how we can customize requirement definitions:
 
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/instruct_validate_repair.py#L1-L10
-from mellea.stdlib.requirement import req, check, simple_validate
+from mellea.stdlib.requirements import req, check, simple_validate
 
 requirements = [
     req("The email should have a salutation"),  # == r1
@@ -218,7 +218,7 @@ Now, we bring it all together into a first generative program using the **instru
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/instruct_validate_repair.py#L13-L37
 import mellea
-from mellea.stdlib.requirement import req, check, simple_validate
+from mellea.stdlib.requirements import req, check, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 def write_email(m: mellea.MelleaSession, name: str, notes: str) -> str:
@@ -262,7 +262,7 @@ You can add any key-value pair supported by the backend to the `model_options` d
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/model_options_example.py#L1-L16
 import mellea
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends import model_ids
 
@@ -333,6 +333,8 @@ Before going any further, we need to overview the architecture of Mellea.
 Mellea's core abstraction is called a `Component`. A `Component` is a structured object that represents a unit of interaction with an LLM. The Mellea `stdlib` contains a set of useful components, but you can also define your own.  We have already seen some components -- `Instruction` and `Requirement` are both `Component`s.
 
 Components are composite data structures; that is, a `Component` can be made up of many other parts. Each of those parts is either a `CBlock` or another `Component`. `CBlock`s, or "content blocks", are an atomic unit of text or data. CBlocks hold raw text (or sometimes parsed representations) and can be used as leaves in the Component DAG.
+
+Components can also specify an expected output type along with a parse function to extract that type from the LLM's output. By default, this type is a string; but by defining a Component's expected type, you can get type hinting for outputs in the standard library.
 
 Backends are the engine that actually run the LLM. Backends consume Components, format the Component, pass the formatted input to an LLM, and return model outputs, which are then parsed back into CBlocks or Components.
 
@@ -568,7 +570,7 @@ Suppose you have a table of sales data and want to let the LLM answer questions 
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/table_mobject.py#L1-L31
 import mellea
-from mellea.stdlib.mify import mify, MifiedProtocol
+from mellea.stdlib.components.mify import mify, MifiedProtocol
 import pandas
 from io import StringIO
 
@@ -615,7 +617,7 @@ Let's create a RichDocument from an arxiv paper:
 
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/document_mobject.py#L1-L3
-from mellea.stdlib.docs.richdocument import RichDocument
+from mellea.stdlib.components.docs import RichDocument
 rd = RichDocument.from_document_file("https://arxiv.org/pdf/1906.04043")
 ```
 this loads the PDF file and parses it using the Docling parser into an
@@ -625,7 +627,7 @@ From the rich document we can extract some document content, e.g. the
 first table:
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/document_mobject.py#L5-L8
-from mellea.stdlib.docs.richdocument import Table
+from mellea.stdlib.components.docs import Table
 table1: Table = rd.get_tables()[0]
 print(table1.to_markdown())
 ```
@@ -644,7 +646,7 @@ The `Table` object is Mellea-ready and can be used immediately with LLMs.
 Let's just get it to work:
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/document_mobject.py#L10-L24
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption
 from mellea import start_session
 
 m = start_session()
@@ -691,7 +693,7 @@ The model has done a great job at fulfilling the task and coming back with a par
 
 When an object is `mified` all methods with a docstring get registered as tools for the LLM call. You can control if you only want a subset of these functions to be exposed by two parameters (`funcs_include` and `funcs_exclude`):
 ```python
-from mellea.stdlib.mify import mify
+from mellea.stdlib.components.mify import mify
 
 @mify(funcs_include={"from_markdown"})
 class MyDocumentLoader:
@@ -750,7 +752,7 @@ Let's see how Stembolt MFG Corporation can use tuned LoRAs to implement the Auto
 
 ### Training the aLoRA Adapter
 
-Mellea provides a command-line interface for training [LoRA](https://arxiv.org/abs/2106.09685) or [aLoRA](https://github.com/IBM/activated-lora) adapters.  Classical LoRAs must re-process our entire context, which can get expensive for quick checks happening within an inner loop (such as requirement checking). The aLoRA method allows us to adapt a base LLM to new tasks, and then run the adapter with minimal compute overhead. The adapters are fast to train and fast to switch between.
+Mellea provides a command-line interface for training [LoRA](https://arxiv.org/abs/2106.09685) or [aLoRA](https://github.com/huggingface/peft/blob/main/docs/source/developer_guides/lora.md#activated-lora-alora) adapters.  Classical LoRAs must re-process our entire context, which can get expensive for quick checks happening within an inner loop (such as requirement checking). The aLoRA method allows us to adapt a base LLM to new tasks, and then run the adapter with minimal compute overhead. The adapters are fast to train and fast to switch between.
 
 We will train a lightweight adapter with the `m alora train` command on this small dataset:
 
@@ -1317,7 +1319,7 @@ For examples on adding tools to the template representation of a component, see 
 
 Here's an example of adding a tool through model options. This can be useful when you want to add a tool like web search that should almost always be available:
 ```python
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption
 
 def web_search(query: str) -> str:
     ...
@@ -1389,6 +1391,28 @@ Mellea utilizes asynchronicity internally. When you call `m.instruct`, you are u
 When using `SamplingStrategy`s or during validation, Mellea can speed up the execution time of your program by generating multiple results and validating those results against multiple requirements simultaneously. Whether you use `m.instruct` or the asynchronous `m.ainstruct`, Mellea will attempt to speed up your requests by dispatching those requests as quickly as possible and asynchronously awaiting the results.
 
 ## Appendix: Contributing to Mellea
+
+### Contributor Guide: Getting Started
+
+If you are going to contribute to Mellea, it is important that you use our
+pre-commit hooks. Using these hooks -- or running our test suite -- 
+requires installing `[all]` optional dependencies and also the dev group.
+
+```
+git clone git@github.com:generative-computing/mellea.git && 
+cd mellea && 
+uv venv .venv && 
+source .venv/bin/activate &&
+uv pip install -e ".[all]" --group dev
+pre-commit install
+```
+
+You can then run all tests by running `pytest`, or only the CI/CD tests by
+running `CICD=1 pytest`. 
+
+Tip: you can bypass the hooks by passing the `-n` flag to `git commit`.
+This is sometimes helpful for intermediate commits that you intend to later
+squash.
 
 ### Contributor Guide: Requirements and Verifiers
 

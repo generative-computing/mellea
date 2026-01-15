@@ -1,3 +1,10 @@
+## [v0.2.4](https://github.com/generative-computing/mellea/releases/tag/v0.2.4) - 2026-01-08
+
+### Fix
+
+* Fix gc in instructions and add exception to generate walk ([#295](https://github.com/generative-computing/mellea/issues/295)) ([`5fc7df0`](https://github.com/generative-computing/mellea/commit/5fc7df0a0680ced342575fc4cc8787385334c7a4))
+* Marks span tests as qualitative & removes chat error message. ([#294](https://github.com/generative-computing/mellea/issues/294)) ([`5ce6360`](https://github.com/generative-computing/mellea/commit/5ce63604da385550b0781e7429599b5f64a8b2b8))
+
 ## [v0.2.3](https://github.com/generative-computing/mellea/releases/tag/v0.2.3) - 2026-01-07
 
 ### Feature

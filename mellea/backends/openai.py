@@ -1,17 +1,12 @@
 """A generic OpenAI compatible backend that wraps around the openai python sdk."""
 
-import abc
 import asyncio
 import datetime
 import functools
 import inspect
-import json
 import os
-from collections.abc import Callable, Coroutine
-from copy import deepcopy
-from enum import Enum
-from typing import TYPE_CHECKING, Any, cast
-from urllib.parse import urlparse
+from collections.abc import Callable, Coroutine, Sequence
+from typing import TYPE_CHECKING, Any, overload
 
 import granite_common
 import openai
@@ -20,45 +15,47 @@ from openai.types.chat import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.completion import Completion
 
-import mellea.backends.model_ids as model_ids
-from mellea.backends import BaseModelSubclass
-from mellea.backends.adapters.adapter import (
+from ..backends import ModelIdentifier, model_ids
+from ..core import (
+    BaseModelSubclass,
+    C,
+    CBlock,
+    Component,
+    Context,
+    FancyLogger,
+    GenerateLog,
+    GenerateType,
+    ModelOutputThunk,
+    Requirement,
+)
+from ..formatters import ChatFormatter, TemplateFormatter
+from ..helpers import (
+    ClientCache,
+    _server_type,
+    _ServerType,
+    chat_completion_delta_merge,
+    extract_model_tool_requests,
+    get_current_event_loop,
+    message_to_openai_message,
+    messages_to_docs,
+    send_to_queue,
+)
+from ..stdlib.components import Intrinsic, Message
+from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
+from .adapters import (
     AdapterMixin,
     AdapterType,
     GraniteCommonAdapter,
     OpenAIAdapter,
     get_adapter_for_intrinsic,
 )
-from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
-from mellea.backends.model_ids import ModelIdentifier
-from mellea.backends.tools import (
+from .backend import FormatterBackend
+from .model_options import ModelOption
+from .tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
 )
-from mellea.backends.types import ModelOption, _server_type, _ServerType
-from mellea.helpers.async_helpers import (
-    ClientCache,
-    get_current_event_loop,
-    send_to_queue,
-)
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.helpers.openai_compatible_helpers import (
-    chat_completion_delta_merge,
-    extract_model_tool_requests,
-)
-from mellea.stdlib.base import (
-    CBlock,
-    Component,
-    Context,
-    Document,
-    GenerateLog,
-    GenerateType,
-    ModelOutputThunk,
-)
-from mellea.stdlib.chat import Message
-from mellea.stdlib.intrinsics.intrinsic import Intrinsic
-from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
 
 if TYPE_CHECKING:
     from transformers.tokenization_utils import PreTrainedTokenizer
@@ -74,7 +71,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     def __init__(
         self,
         model_id: str | ModelIdentifier = model_ids.OPENAI_GPT_5_1,
-        formatter: Formatter | None = None,
+        formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
         *,
@@ -299,13 +296,13 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     async def generate_from_context(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ):
+    ) -> tuple[ModelOutputThunk[C], Context]:
         """See `generate_from_chat_context`."""
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
@@ -320,14 +317,14 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
     async def generate_from_chat_context(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass]
         | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> tuple[ModelOutputThunk, Context]:
+    ) -> tuple[ModelOutputThunk[C], Context]:
         """Generates a new completion from the provided Context using this backend's `Formatter`."""
         await self.do_generate_walk(action)
 
@@ -412,8 +409,8 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
-        conversation.extend([self.message_to_openai_message(m) for m in messages])
-        docs = self.messages_to_docs(messages)
+        conversation.extend([message_to_openai_message(m) for m in messages])
+        docs = messages_to_docs(messages)
 
         if model_opts.get(ModelOption.STREAM, None) is not None:
             # Intrinsics don't support streaming because of their post-processing step.
@@ -524,59 +521,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         return output
 
-    @staticmethod
-    def message_to_openai_message(msg: Message):
-        """Serializes a mellea Message object to the message format required by OpenAI compatible api providers."""
-        if msg.images is not None:
-            img_list = [
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{img}"},
-                }
-                for img in msg.images
-            ]
-
-            return {
-                "role": msg.role,
-                "content": [{"type": "text", "text": msg.content}, *img_list],
-            }
-        else:
-            return {"role": msg.role, "content": msg.content}
-            # Target format:
-            # {
-            #     "role": "user",
-            #     "content": [
-            #       {
-            #         "type": "text",
-            #         "text": "What's in this picture?"
-            #       },
-            #       {
-            #         "type": "image_url",
-            #         "image_url": {
-            #           "url": "data:image/jpeg;base64,<base64_string>"
-            #         }
-            #       }
-            #     ]
-            #   }
-
-    @staticmethod
-    def messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]:
-        """Extracts the docs from a list of messages."""
-        docs: list[Document] = []
-        for message in msgs:
-            if message._docs is not None:
-                docs.extend(message._docs)
-
-        json_docs: list[dict[str, str]] = []
-        for doc in docs:
-            json_doc = {"text": doc.text}
-            if doc.title is not None:
-                json_doc["title"] = doc.title
-            if doc.doc_id is not None:
-                json_doc["doc_id"] = doc.doc_id
-            json_docs.append(json_doc)
-        return json_docs
-
     async def _generate_from_chat_context_standard(
         self,
         action: Component | CBlock,
@@ -609,7 +553,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
-        conversation.extend([self.message_to_openai_message(m) for m in messages])
+        conversation.extend([message_to_openai_message(m) for m in messages])
 
         extra_params: dict[str, Any] = {}
         if _format is not None:
@@ -623,7 +567,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 # This only addresses the additionalProperties=False constraint.
                 # Other constraints we should be checking/patching are described here:
                 # https://platform.openai.com/docs/guides/structured-outputs?api-mode=chat
-                monkey_patched_response_schema = _format.model_json_schema()
+                monkey_patched_response_schema = _format.model_json_schema()  # type: ignore
                 monkey_patched_response_schema["additionalProperties"] = False
                 extra_params["response_format"] = {
                     "type": "json_schema",
@@ -641,7 +585,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                     "type": "json_schema",
                     "json_schema": {
                         "name": _format.__name__,
-                        "schema": _format.model_json_schema(),
+                        "schema": _format.model_json_schema(),  # type: ignore
                         "strict": True,
                     },
                 }
@@ -801,8 +745,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             for key, val in tool_chunk.items():
                 mot.tool_calls[key] = val
 
-        self.formatter.parse(mot._action, mot)
-
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
         generate_log.prompt = conversation
@@ -821,9 +763,31 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         generate_log.result = mot
         mot._generate_log = generate_log
 
+    @overload
     async def generate_from_raw(
         self,
-        actions: list[Component | CBlock],
+        actions: list[Component[C]],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C]]: ...
+
+    @overload
+    async def generate_from_raw(
+        self,
+        actions: list[Component[C] | CBlock],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C | str]]: ...
+
+    async def generate_from_raw(
+        self,
+        actions: Sequence[Component[C] | CBlock],
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -831,7 +795,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(actions)
+        await self.do_generate_walks(list(actions))
 
         extra_body = {}
         if format is not None:
@@ -841,7 +805,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
 
             # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
-            extra_body["guided_json"] = format.model_json_schema()
+            extra_body["guided_json"] = format.model_json_schema()  # type: ignore
         if tool_calls:
             FancyLogger.get_logger().warning(
                 "The completion endpoint does not support tool calling at the moment."
@@ -888,7 +852,9 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 else None,
             }
 
-            self.formatter.parse(action, output)
+            output.parsed_repr = (
+                action.parse(output) if isinstance(action, Component) else output.value
+            )
 
             generate_log = GenerateLog()
             generate_log.prompt = prompt

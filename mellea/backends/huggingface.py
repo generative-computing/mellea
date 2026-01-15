@@ -5,69 +5,62 @@ The purpose of the Hugginface backend is to provide a setting for implementing e
 
 from __future__ import annotations
 
-import abc
 import asyncio
 import dataclasses
 import datetime
 import functools
-import inspect
 import json
 import threading
-from collections.abc import Callable, Coroutine
-from copy import deepcopy
-from typing import TYPE_CHECKING, Any, cast
+from collections.abc import Callable, Coroutine, Sequence
+from typing import Any, overload
 
 import granite_common
 import outlines
 import outlines_core
 import peft
 import torch
-from transformers import (
-    AsyncTextIteratorStreamer,
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    DynamicCache,
-    PreTrainedModel,
-    PreTrainedTokenizer,
-    set_seed,
-)
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.cache_utils import DynamicCache
+from transformers.generation.streamers import AsyncTextIteratorStreamer
 from transformers.generation.utils import GenerateDecoderOnlyOutput
+from transformers.modeling_utils import PreTrainedModel
+from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.trainer_utils import set_seed
 
-from mellea.backends import BaseModelSubclass, kv_block_helpers
-from mellea.backends._utils import to_chat, to_tool_calls
-from mellea.backends.adapters.adapter import (
+from ..backends import kv_block_helpers
+from ..core import (
+    BaseModelSubclass,
+    C,
+    CBlock,
+    Component,
+    Context,
+    FancyLogger,
+    GenerateLog,
+    GenerateType,
+    ModelOutputThunk,
+    Requirement,
+)
+from ..formatters import ChatFormatter, TemplateFormatter
+from ..helpers import message_to_openai_message, messages_to_docs, send_to_queue
+from ..stdlib.components import Intrinsic, Message
+from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
+from .adapters import (
     AdapterMixin,
     AdapterType,
     GraniteCommonAdapter,
     LocalHFAdapter,
     get_adapter_for_intrinsic,
 )
-from mellea.backends.adapters.catalog import fetch_intrinsic_metadata
-from mellea.backends.cache import Cache, SimpleLRUCache
-from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
-from mellea.backends.model_ids import ModelIdentifier
-from mellea.backends.openai import OpenAIBackend
-from mellea.backends.process_reward_models import PRM
-from mellea.backends.tools import (
+from .backend import FormatterBackend
+from .cache import Cache, SimpleLRUCache
+from .model_ids import ModelIdentifier
+from .model_options import ModelOption
+from .tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
 )
-from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import send_to_queue
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import (
-    CBlock,
-    Component,
-    Context,
-    GenerateLog,
-    GenerateType,
-    ModelOutputThunk,
-    ModelToolCall,
-)
-from mellea.stdlib.chat import Message
-from mellea.stdlib.intrinsics.intrinsic import Intrinsic
-from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
+from .utils import to_chat, to_tool_calls
 
 assert outlines, "outlines needs to be present to make outlines_core work"
 
@@ -103,7 +96,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     def __init__(
         self,
         model_id: str | ModelIdentifier,
-        formatter: Formatter | None = None,
+        formatter: ChatFormatter | None = None,
         *,
         use_caches: bool = True,
         cache: Cache | None = None,
@@ -201,13 +194,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     async def generate_from_context(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ):
+    ) -> tuple[ModelOutputThunk[C], Context]:
         """Generate using the huggingface model."""
         await self.do_generate_walk(action)
 
@@ -314,11 +307,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
 
-        conversation.extend(
-            [OpenAIBackend.message_to_openai_message(m) for m in ctx_as_message_list]
-        )
+        conversation.extend([message_to_openai_message(m) for m in ctx_as_message_list])
 
-        docs = OpenAIBackend.messages_to_docs(ctx_as_message_list)
+        docs = messages_to_docs(ctx_as_message_list)
 
         seed = model_options.get(ModelOption.SEED, None)
         if seed is not None:
@@ -374,7 +365,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         #       us having specific caching for each Component/Message.
 
         generate_input, other_input = (
-            granite_common.util.chat_completion_request_to_transformers_inputs(
+            granite_common.util.chat_completion_request_to_transformers_inputs(  # type: ignore
                 rewritten, self._tokenizer, self._model
             )
         )
@@ -382,7 +373,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         chat_response = asyncio.to_thread(
             self._generate_with_adapter_lock,
             adapter.qualified_name,
-            granite_common.util.generate_with_transformers,
+            granite_common.util.generate_with_transformers,  # type: ignore
             # Passed as args/kwargs to generate.
             self._tokenizer,
             self._model,
@@ -558,13 +549,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     async def _generate_from_context_with_kv_cache(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass] | None = None,
         model_options: dict[str, Any],
         tool_calls: bool = False,
-    ) -> ModelOutputThunk:
+    ) -> ModelOutputThunk[C]:
         # Construct input.
         # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
         # Otherwise, we will linearize the context and treat it as a raw input.
@@ -598,7 +589,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             if _format:
                 # outlines.generate.json always parses the resulting json into a python dict.
                 # We however want to keep it as a json string for later storing it in ModelOutputThunk
-                schema: dict[str, Any] = _format.model_json_schema()
+                schema: dict[str, Any] = _format.model_json_schema()  # type: ignore
                 schema_json: str = json.dumps(schema)
                 regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
                     schema_json
@@ -606,7 +597,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
                 from outlines.models.transformers import TransformerTokenizer
                 from outlines.processors.structured import RegexLogitsProcessor
-                from transformers import LogitsProcessorList
+                from transformers import LogitsProcessorList  # type: ignore
 
                 format_kwargs["logits_processor"] = LogitsProcessorList(
                     [
@@ -765,7 +756,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             if _format:
                 # outlines.generate.json always parses the resulting json into a python dict.
                 # We however want to keep it as a json string for later storing it in ModelOutputThunk
-                schema: dict[str, Any] = _format.model_json_schema()
+                schema: dict[str, Any] = _format.model_json_schema()  # type: ignore
                 schema_json: str = json.dumps(schema)
                 regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
                     schema_json
@@ -773,7 +764,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
                 from outlines.models.transformers import TransformerTokenizer
                 from outlines.processors.structured import RegexLogitsProcessor
-                from transformers import LogitsProcessorList
+                from transformers import LogitsProcessorList  # type: ignore
 
                 format_kwargs["logits_processor"] = LogitsProcessorList(
                     [
@@ -931,8 +922,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
-        self.formatter.parse(mot._action, mot)
-
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
         generate_log.prompt = conversation
@@ -951,9 +940,31 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         mot._generate_log = generate_log
 
+    @overload
     async def generate_from_raw(
         self,
-        actions: list[Component | CBlock],
+        actions: list[Component[C]],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C]]: ...
+
+    @overload
+    async def generate_from_raw(
+        self,
+        actions: list[Component[C] | CBlock],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C | str]]: ...
+
+    async def generate_from_raw(
+        self,
+        actions: Sequence[Component[C] | CBlock],
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -961,7 +972,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(actions)
+        await self.do_generate_walks(list(actions))
 
         if tool_calls:
             FancyLogger.get_logger().warning(
@@ -992,7 +1003,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if format:
             # outlines.generate.json always parses the resulting json into a python dict.
             # We however want to keep it as a json string for later storing it in ModelOutputThunk
-            schema: dict[str, Any] = format.model_json_schema()
+            schema: dict[str, Any] = format.model_json_schema()  # type: ignore
             schema_json: str = json.dumps(schema)
             regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
                 schema_json
@@ -1000,7 +1011,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             from outlines.models.transformers import TransformerTokenizer
             from outlines.processors.structured import RegexLogitsProcessor
-            from transformers import LogitsProcessorList
+            from transformers import LogitsProcessorList  # type: ignore
 
             format_kwargs["logits_processor"] = LogitsProcessorList(
                 [
@@ -1046,8 +1057,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     }
                 },
             )
-
-            self.formatter.parse(actions[i], result)
+            action = actions[i]
+            result.parsed_repr = (
+                action.parse(result) if isinstance(action, Component) else result.value
+            )
 
             generate_log = GenerateLog()
             generate_log.prompt = self.formatter.print(actions[i])
@@ -1056,7 +1069,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             generate_log.date = datetime.datetime.now()
             generate_log.model_output = decoded_result
             generate_log.extra = {"format": format, "seed": seed}
-            generate_log.action = actions[i]
+            generate_log.action = action
 
             result._generate_log = generate_log
             results.append(result)
@@ -1260,56 +1273,3 @@ def _assert_correct_adapters(expected_state: str, model: PreTrainedModel):
             )
         else:
             raise e
-
-
-class HFProcessRewardModel(PRM, abc.ABC):
-    """A Process Reward Model that works with a huggingface backend."""
-
-    def __init__(
-        self, model_name_or_path: str, score_token: str, device: str | None = None
-    ):
-        """Initialize an PRM that works with a huggingface backend. Currently supports and tested with IBM Process Reward Models.
-
-        Args:
-            model_name_or_path (str): A local path to PRM or a huggingface PRM
-            score_token (str): token who's logits correspond to the PRM score. Can be a step demarker (for non-generative PRMs) or a correctness indicator (for generative PRMs)
-            device (str): device: The computational device to use ("cuda" for GPU, "mps" for Apple Silicon, or "cpu"), defaults to None. If not specified, the best available device will be automatically selected.
-        """
-        super().__init__(model_name_or_path)
-
-        # auto-device if not more specific
-        self._device = device
-        if device is None:
-            device_name: str = (
-                "cuda"
-                if torch.cuda.is_available()
-                else "mps"
-                if torch.backends.mps.is_available()
-                else "cpu"
-            )
-            assert device_name is not None
-            self._device = torch.device(device_name)  # type: ignore
-
-        self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-            self.model_name_or_path, torch_dtype=torch.bfloat16
-        )
-        self.model.eval()
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path)
-
-        self._score_token = score_token
-        self._score_token_id = self.tokenizer.encode(
-            self._score_token, add_special_tokens=False
-        )[0]
-
-    def stepify(self, content: str, step_separator: str) -> list[str]:
-        """Splits the assistant response into steps to score.
-
-        Args:
-            content: assistant response to score
-            step_separator: string on which to separate the content into steps
-        """
-        # convert assistant message into a list of steps
-        list_of_steps = [
-            step.strip() for step in content.split(step_separator) if step.strip != ""
-        ]
-        return list_of_steps

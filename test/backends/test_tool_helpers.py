@@ -3,11 +3,11 @@ from mellea.backends.tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
 )
-from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock, Component, TemplateRepresentation
+from mellea.backends import ModelOption
+from mellea.core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 
 
-class FakeToolComponent(Component):
+class FakeToolComponent(Component[str]):
     def __init__(self) -> None:
         super().__init__()
 
@@ -21,6 +21,9 @@ class FakeToolComponent(Component):
         return TemplateRepresentation(
             obj=self, args={"arg": None}, tools={self.tool1.__name__: self.tool1}
         )
+
+    def _parse(self, computed: ModelOutputThunk) -> str:
+        return ""
 
 
 class FakeToolComponentWithExtraTool(FakeToolComponent):

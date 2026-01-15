@@ -5,50 +5,47 @@ The purpose of the VLLM backend is to provide a locally running fast inference e
 
 from __future__ import annotations
 
-import abc
 import asyncio
 import dataclasses
 import datetime
 import functools
 import importlib
-import inspect
 import json
 import os
 import shutil
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Optional
+from collections.abc import Callable, Sequence
+from typing import Any, overload
 
-import msgspec  # type:ignore
+import msgspec
 import outlines
 import outlines_core
 import torch
-import vllm  # type:ignore
-from transformers import AutoTokenizer, PreTrainedTokenizerBase
+import vllm
+from transformers import AutoTokenizer
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
-from mellea.backends import BaseModelSubclass
-from mellea.backends._utils import to_chat, to_tool_calls
-from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
-from mellea.backends.model_ids import ModelIdentifier
-from mellea.backends.tools import (
+from ..backends import ModelIdentifier
+from ..core import (
+    BaseModelSubclass,
+    C,
+    CBlock,
+    Component,
+    Context,
+    FancyLogger,
+    GenerateLog,
+    GenerateType,
+    ModelOutputThunk,
+)
+from ..formatters import ChatFormatter, TemplateFormatter
+from ..helpers import get_current_event_loop, send_to_queue
+from .backend import FormatterBackend
+from .model_options import ModelOption
+from .tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
 )
-from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import get_current_event_loop, send_to_queue
-from mellea.helpers.event_loop_helper import _run_async_in_thread
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import (
-    CBlock,
-    Component,
-    Context,
-    GenerateLog,
-    GenerateType,
-    ModelOutputThunk,
-    TemplateRepresentation,
-)
-from mellea.stdlib.chat import Message
-from mellea.stdlib.requirement import LLMaJRequirement, Requirement
+from .utils import to_chat, to_tool_calls
 
 assert outlines, "outlines needs to be present to make outlines_core work"
 
@@ -70,7 +67,7 @@ class LocalVLLMBackend(FormatterBackend):
     def __init__(
         self,
         model_id: str | ModelIdentifier,
-        formatter: Formatter | None = None,
+        formatter: ChatFormatter | None = None,
         *,
         model_options: dict | None = None,
     ):
@@ -155,7 +152,7 @@ class LocalVLLMBackend(FormatterBackend):
                     vllm.AsyncEngineArgs(model=self._hf_model_id, **engine_args)
                 )
                 break
-            except torch._dynamo.exc.BackendCompilerFailed as e:
+            except torch._dynamo.exc.BackendCompilerFailed as e:  # type: ignore
                 # example:
                 # torch._dynamo.exc.BackendCompilerFailed: backend='<vllm.compilation.backends.VllmBackend object at 0x7f6d3f341730>' raised:
                 # RuntimeError: vLLM failed to compile the model. The most likely reason for this is that a previous compilation failed, leading to a corrupted compilation artifact. We recommend trying to remove ~/.cache/vllm/torch_compile_cache and try again to see the real issue.
@@ -239,14 +236,14 @@ class LocalVLLMBackend(FormatterBackend):
 
     async def generate_from_context(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
-    ) -> tuple[ModelOutputThunk, Context]:
+    ) -> tuple[ModelOutputThunk[C], Context]:
         """Generate using the huggingface model."""
         await self.do_generate_walk(action)
 
@@ -267,14 +264,14 @@ class LocalVLLMBackend(FormatterBackend):
 
     async def _generate_from_context_standard(
         self,
-        action: Component | CBlock,
+        action: Component[C] | CBlock,
         ctx: Context,
         *,
         _format: type[BaseModelSubclass] | None = None,
         model_options: dict[str, Any],
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk:
+    ) -> ModelOutputThunk[C]:
         # Construct input.
         # If the Context is a ChatHistory then we will pretty-print each content as a message and then use apply_chat_template.
         # Otherwise, we will linearize the context and treat it as a raw input.
@@ -312,23 +309,23 @@ class LocalVLLMBackend(FormatterBackend):
                 ),
                 output_kind=(
                     # returns results incrementally
-                    vllm.sampling_params.RequestOutputKind.DELTA
+                    vllm.sampling_params.RequestOutputKind.DELTA  # type: ignore
                     if model_options.get(ModelOption.STREAM, False)
                     # returns only the final result
-                    else vllm.sampling_params.RequestOutputKind.FINAL_ONLY
+                    else vllm.sampling_params.RequestOutputKind.FINAL_ONLY  # type: ignore
                 ),
             )
 
             if _format is not None:
                 # outlines.generate.json always parses the resulting json into a python dict.
                 # We however want to keep it as a json string for later storing it in ModelOutputThunk
-                schema: dict[str, Any] = _format.model_json_schema()
+                schema: dict[str, Any] = _format.model_json_schema()  # type: ignore
                 schema_json: str = json.dumps(schema)
                 regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
                     schema_json  # type: ignore
                 )  # type: ignore
 
-                from outlines.processors import RegexLogitsProcessor
+                from outlines.processors import RegexLogitsProcessor  # type: ignore
 
                 logits_processor = RegexLogitsProcessor(
                     regex_str,
@@ -409,8 +406,6 @@ class LocalVLLMBackend(FormatterBackend):
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
-        self.formatter.parse(mot._action, mot)
-
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
         generate_log.prompt = conversation
@@ -429,9 +424,31 @@ class LocalVLLMBackend(FormatterBackend):
 
         mot._generate_log = generate_log
 
+    @overload
     async def generate_from_raw(
         self,
-        actions: list[Component | CBlock],
+        actions: list[Component[C]],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C]]: ...
+
+    @overload
+    async def generate_from_raw(
+        self,
+        actions: list[Component[C] | CBlock],
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> list[ModelOutputThunk[C | str]]: ...
+
+    async def generate_from_raw(
+        self,
+        actions: Sequence[Component[C] | CBlock],
         ctx: Context,
         *,
         format: type[BaseModelSubclass] | None = None,
@@ -439,7 +456,7 @@ class LocalVLLMBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(actions)
+        await self.do_generate_walks(list(actions))
 
         if tool_calls:
             FancyLogger.get_logger().warning(
@@ -454,17 +471,17 @@ class LocalVLLMBackend(FormatterBackend):
             **self._make_backend_specific_and_remove(
                 model_options, vllm.SamplingParams
             ),
-            output_kind=vllm.sampling_params.RequestOutputKind.FINAL_ONLY,  # returns only the final results
+            output_kind=vllm.sampling_params.RequestOutputKind.FINAL_ONLY,  # returns only the final results # type: ignore
         )
 
         if format is not None:
-            schema: dict[str, Any] = format.model_json_schema()
+            schema: dict[str, Any] = format.model_json_schema()  # type: ignore
             schema_json: str = json.dumps(schema)
             regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
                 schema_json  # type: ignore
             )  # type: ignore
 
-            from outlines.processors import RegexLogitsProcessor
+            from outlines.processors import RegexLogitsProcessor  # type: ignore
 
             logits_processor = RegexLogitsProcessor(
                 regex_str,
@@ -487,8 +504,12 @@ class LocalVLLMBackend(FormatterBackend):
         results = [ModelOutputThunk(value=text) for text in decoded_results]
 
         for i, result in enumerate(results):
-            self.formatter.parse(actions[i], result)
             date = datetime.datetime.now()
+
+            action = actions[i]
+            result.parsed_repr = (
+                action.parse(result) if isinstance(action, Component) else result.value
+            )
 
             generate_log = GenerateLog()
             generate_log.prompt = prompts[i]
@@ -500,7 +521,7 @@ class LocalVLLMBackend(FormatterBackend):
                 "format": format,
                 "seed": model_options.get(ModelOption.SEED, None),
             }
-            generate_log.action = actions[i]
+            generate_log.action = action
             generate_log.result = results[i]
             result._generate_log = generate_log
 

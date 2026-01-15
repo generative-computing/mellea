@@ -9,29 +9,27 @@ from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
 
-import mellea.stdlib.functional as mfuncs
-from mellea.backends import Backend, BaseModelSubclass
-from mellea.backends.model_ids import (
-    IBM_GRANITE_3_3_8B,
-    IBM_GRANITE_4_MICRO_3B,
-    ModelIdentifier,
-)
-from mellea.backends.ollama import OllamaModelBackend
-from mellea.backends.openai import OpenAIBackend
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import (
+from ..backends.model_ids import IBM_GRANITE_4_MICRO_3B, ModelIdentifier
+from ..core import (
+    Backend,
+    BaseModelSubclass,
     CBlock,
     Component,
     Context,
+    FancyLogger,
     GenerateLog,
     ImageBlock,
     ModelOutputThunk,
-    SimpleContext,
+    Requirement,
+    S,
+    SamplingResult,
+    SamplingStrategy,
+    ValidationResult,
 )
-from mellea.stdlib.chat import Message
-from mellea.stdlib.requirement import Requirement, ValidationResult
-from mellea.stdlib.sampling import SamplingResult, SamplingStrategy
-from mellea.stdlib.sampling.base import RejectionSamplingStrategy
+from ..stdlib import functional as mfuncs
+from .components import Message
+from .context import SimpleContext
+from .sampling import RejectionSamplingStrategy
 
 # Global context variable for the context session
 _context_session: contextvars.ContextVar[MelleaSession | None] = contextvars.ContextVar(
@@ -56,19 +54,23 @@ def get_session() -> MelleaSession:
 def backend_name_to_class(name: str) -> Any:
     """Resolves backend names to Backend classes."""
     if name == "ollama":
+        from ..backends.ollama import OllamaModelBackend
+
         return OllamaModelBackend
     elif name == "hf" or name == "huggingface":
         from mellea.backends.huggingface import LocalHFBackend
 
         return LocalHFBackend
     elif name == "openai":
+        from ..backends.openai import OpenAIBackend
+
         return OpenAIBackend
     elif name == "watsonx":
-        from mellea.backends.watsonx import WatsonxAIBackend
+        from ..backends.watsonx import WatsonxAIBackend
 
         return WatsonxAIBackend
     elif name == "litellm":
-        from mellea.backends.litellm import LiteLLMBackend
+        from ..backends.litellm import LiteLLMBackend
 
         return LiteLLMBackend
     else:
@@ -231,7 +233,7 @@ class MelleaSession:
     @overload
     def act(
         self,
-        action: Component,
+        action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -239,12 +241,12 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk: ...
+    ) -> ModelOutputThunk[S]: ...
 
     @overload
     def act(
         self,
-        action: Component,
+        action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -252,11 +254,11 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> SamplingResult: ...
+    ) -> SamplingResult[S]: ...
 
     def act(
         self,
-        action: Component,
+        action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -264,7 +266,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk | SamplingResult:
+    ) -> ModelOutputThunk[S] | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
         Args:
@@ -316,7 +318,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk: ...
+    ) -> ModelOutputThunk[str]: ...
 
     @overload
     def instruct(
@@ -335,7 +337,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> SamplingResult: ...
+    ) -> SamplingResult[str]: ...
 
     def instruct(
         self,
@@ -353,7 +355,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk | SamplingResult:
+    ) -> ModelOutputThunk[str] | SamplingResult:
         """Generates from an instruction.
 
         Args:
@@ -515,7 +517,7 @@ class MelleaSession:
     @overload
     async def aact(
         self,
-        action: Component,
+        action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -523,12 +525,12 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk: ...
+    ) -> ModelOutputThunk[S]: ...
 
     @overload
     async def aact(
         self,
-        action: Component,
+        action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -536,11 +538,11 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> SamplingResult: ...
+    ) -> SamplingResult[S]: ...
 
     async def aact(
         self,
-        action: Component,
+        action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
         strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
@@ -548,7 +550,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk | SamplingResult:
+    ) -> ModelOutputThunk[S] | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
         Args:
@@ -600,7 +602,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk: ...
+    ) -> ModelOutputThunk[str]: ...
 
     @overload
     async def ainstruct(
@@ -619,7 +621,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> SamplingResult: ...
+    ) -> SamplingResult[str]: ...
 
     async def ainstruct(
         self,
@@ -637,7 +639,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk | SamplingResult:
+    ) -> ModelOutputThunk[str] | SamplingResult[str]:
         """Generates from an instruction.
 
         Args:

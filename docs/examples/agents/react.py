@@ -8,14 +8,9 @@ import pydantic
 from jinja2 import Template
 
 import mellea
-import mellea.backends
-import mellea.backends.types
-import mellea.stdlib
-import mellea.stdlib.base
-import mellea.stdlib.chat
-from mellea.backends import model_ids
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import ChatContext
+import mellea.stdlib.components.chat
+from mellea.core import FancyLogger
+from mellea.stdlib.context import ChatContext
 
 FancyLogger.get_logger().setLevel("ERROR")
 
@@ -120,8 +115,8 @@ def react(
 
     # Add the system prompt and the goal to the chat history.
     m.ctx = m.ctx.add(
-        mellea.stdlib.chat.Message(role="system", content=_sys_prompt)
-    ).add(mellea.stdlib.chat.Message(role="user", content=f"{goal}"))
+        mellea.stdlib.components.chat.Message(role="system", content=_sys_prompt)
+    ).add(mellea.stdlib.components.chat.Message(role="user", content=f"{goal}"))
 
     # The main ReACT loop as a dynamic program:
     # (  ?(not done) ;
@@ -162,7 +157,9 @@ def react(
 
         print("### Observation")
         tool_output = react_toolbox.call_tool(selected_tool, act_args.content)
-        m.ctx = m.ctx.add(mellea.stdlib.chat.Message(role="tool", content=tool_output))
+        m.ctx = m.ctx.add(
+            mellea.stdlib.components.chat.Message(role="tool", content=tool_output)
+        )
         print(tool_output)
 
         print("### Done Check")
