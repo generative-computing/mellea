@@ -1,14 +1,19 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#   "mellea[hf]",
+# ]
+# ///
 import torch
 
-from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.kv_block_helpers import DynamicCache, merge_dynamic_caches
-from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
+from transformers import AutoModelForCausalLM, PreTrainedTokenizer, AutoTokenizer
+import torch
 
-backend = LocalHFBackend(model_id=IBM_GRANITE_3_3_8B)
-
-model = backend._model
-tokenizer = backend._tokenizer
-device = backend._device
+model_id = "ibm-granite/granite-3.3-8b-instruct"
+device = torch.device("mps")
+model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
+tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(model_id)
 
 
 def cache(toks) -> DynamicCache:
@@ -50,4 +55,3 @@ result = model.generate(
 result_decoded = tokenizer.decode(
     result.sequences[0, merged_toks.shape[1] :], skip_special_tokens=True
 )
-print(result_decoded)
