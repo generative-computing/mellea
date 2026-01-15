@@ -1,6 +1,6 @@
 from mellea import start_session
-from mellea.stdlib.base import CBlock
-from mellea.backends.types import ModelOption
+from mellea.core.base import CBlock
+from mellea.backends.model_options import ModelOption
 
 import asyncio
 
