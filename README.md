@@ -231,9 +231,47 @@ if __name__ == "__main__":
 
 See the [tutorial](docs/tutorial.md)
 
-## Contributing
+## Contributing to Mellea
 
-Please refer to the [Contributor Guide](docs/tutorial.md#appendix-contributing-to-mellea) for detailed instructions on how to contribute.
+Not all Mellea code lives in this repository.
+There are three pathways for contributing to Mellea:
+1. Contributing applications, tools, and libraries. These can be hosted in
+   your own repository. For observability, use a `mellea-` prefix. Examples:
+   `github.com/my-company/mellea-legal-utils` or `github.com/my-username/mellea-swe-agent`.
+2. Contributing stand-alone and general purpose Components, Requirements, or
+   Sampling Strategies. Please **open an issue** describing your proposed
+   feature and get feedback from the core team on whether the contribution
+   should go in our standard library (this repository) or our
+   [mellea-contribs](https://github.com/generative-computing/mellea-contribs)
+   library. After your issue is triaged, open a PR on the relevant repository.
+3. Contributing new features to the Mellea core, or fixing bugs in the Mellea
+   core or standard library. Please **open an issue** describing the bug
+   or feature. After your issue is triaged, open a PR on this repository and follow the instructions in our
+   automated PR workflow.
+
+### Contributing to this repository
+
+If you are going to contribute to Mellea, it is important that you use our
+pre-commit hooks. Using these hooks -- or running our test suite -- 
+requires installing `[all]` optional dependencies and also the dev group.
+
+```
+git clone git@github.com:generative-computing/mellea.git && 
+cd mellea && 
+uv venv .venv && 
+source .venv/bin/activate &&
+uv pip install -e ".[all]" --group dev
+pre-commit install
+```
+
+You can then run all tests by running `pytest`, or only the CI/CD tests by
+running `CICD=1 pytest`. 
+
+Tip: you can bypass the hooks by passing the `-n` flag to `git commit`.
+This is sometimes helpful for intermediate commits that you intend to later
+squash.
+
+Please refer to the [Contributor Guide](docs/tutorial.md#appendix-contributing-to-mellea) for additional detailed instructions on how to contribute.
 
 ### IBM ❤️ Open Source AI
 
