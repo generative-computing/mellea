@@ -2,7 +2,7 @@
 
 This module implements a two-solver sampling strategy that uses:
 1. S1 Solver (fast model) - Iterative solving with feedback-based repair
-2. S2 Solver (slow model) - Single attempt fallback when S1 fails or shows no improvement
+2. S2 Solver (slow model) - Single attempt escalation when S1 fails or shows no improvement
 
 The strategy leverages ValidationResult.reason fields to provide targeted
 feedback for repair, enabling more effective iterative improvement.
@@ -38,7 +38,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
 
     Uses S1 Solver (fast model) in a loop with targeted feedback from validation results.
     If S1 Solver fails after exhausting the budget or shows no improvement,
-    falls back to a single attempt with S2 Solver (slow model).
+    escalates to a single attempt with S2 Solver (slow model).
 
     The strategy leverages ValidationResult.reason fields to provide targeted
     feedback for repair, enabling more effective iterative improvement.
@@ -60,7 +60,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
 
         Args:
             s1_solver_backend: Backend for S1 Solver (fast model for iterative solving).
-            s2_solver_backend: Backend for S2 Solver (slow model for fallback).
+            s2_solver_backend: Backend for S2 Solver (slow model for escalation).
             s2_solver_mode: How to invoke S2 Solver:
                 - "fresh_start": Same prompt as S1 solver (clean slate)
                 - "continue_chat": Fresh start input + S1 iteration/feedback history
@@ -576,7 +576,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
            - If failure: generate repair feedback and iterate
            - If no improvement detected: early exit to Phase 2
 
-        2. PHASE 2 - S2 Solver Fallback:
+        2. PHASE 2 - S2 Solver Escalation:
            - Prepare context based on s2_solver_mode:
              * fresh_start: clean slate with original prompt
              * continue_chat: full S1 conversation history
@@ -633,6 +633,8 @@ class SOFAISamplingStrategy(SamplingStrategy):
             else range(self.loop_budget)
         )
 
+        # Exit conditions: success returns immediately; no-improvement breaks
+        # early to S2 escalation; loop budget exhaustion flows to S2 escalation.
         for _ in loop_iterator:
             loop_count += 1
             if not show_progress:
@@ -662,6 +664,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
                 assert result._generate_log is not None
                 result._generate_log.is_final_result = True
 
+                # Exit with success
                 return SamplingResult(
                     result_index=len(sampled_results) - 1,
                     success=True,
@@ -687,8 +690,9 @@ class SOFAISamplingStrategy(SamplingStrategy):
             if loop_count > 1 and current_failed_set == previous_failed_set:
                 flog.warning(
                     f"SOFAI S1: No improvement detected between attempt "
-                    f"{loop_count - 1} and {loop_count}. Failing over to S2 Solver."
+                    f"{loop_count - 1} and {loop_count}. Escalating to S2 Solver."
                 )
+                # Exit with no improvement
                 break
             previous_failed_set = current_failed_set
 
@@ -701,13 +705,14 @@ class SOFAISamplingStrategy(SamplingStrategy):
                     sampled_results,
                     sampled_scores,
                 )
+        # Exit due to loop budget exhaustion or no improvement
 
         # ---------------------------------------------------------------------
-        # PHASE 2: S2 Solver Fallback
+        # PHASE 2: S2 Solver Escalation
         # ---------------------------------------------------------------------
         flog.info(
             f"SOFAI: S1 Solver completed {loop_count} attempts. "
-            f"Falling back to S2 Solver ({getattr(self.s2_solver_backend, 'model_id', 'unknown')})."
+            f"Escalating to S2 Solver ({getattr(self.s2_solver_backend, 'model_id', 'unknown')})."
         )
 
         # Prepare S2 context based on mode

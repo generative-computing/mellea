@@ -659,8 +659,8 @@ class TestSOFAIS2ModesGraphColoring:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("mode", ["fresh_start", "continue_chat", "best_attempt"])
-    async def test_s2_mode_fallback(self, mock_s1_backend, mock_s2_backend, mode):
-        """Test S2 fallback works correctly in each mode."""
+    async def test_s2_mode_escalation(self, mock_s1_backend, mock_s2_backend, mode):
+        """Test S2 escalation works correctly in each mode."""
         strategy = SOFAISamplingStrategy(
             s1_solver_backend=mock_s1_backend,
             s2_solver_backend=mock_s2_backend,

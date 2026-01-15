@@ -6,7 +6,7 @@ sampling strategy using a graph coloring constraint satisfaction problem.
 In this example, we use the SOFAI sampling strategy. Because we wrote this
 example to run on consumer grade hardware, each model is still relatively small:
 1. S1 Solver (phi:2.7b) - Fast model with iterative feedback loop
-2. S2 Solver (qwen3-4b-thinking) - Slow model, called once as fallback
+2. S2 Solver (qwen3-4b-thinking) - Slow model, called once on escalation
 3. Custom validator - Provides detailed feedback for constraint violations
 
 Note: This example uses a custom validator (check_graph_coloring). To use the
