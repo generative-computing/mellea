@@ -43,7 +43,7 @@ with structured, maintainable, robust, and efficient AI workflows.
 
 You can get started with a local install, or by using Colab notebooks.
 
-### Getting Started with Local Infernece
+### Getting Started with Local Inference
 
 <img src="https://github.com/generative-computing/mellea/raw/main/docs/GetStarted_py.png" style="max-width:800px">
 
@@ -113,7 +113,7 @@ uv run --with mellea docs/examples/tutorial/example.py
 
 ### `uv`-based installation from source
 
-Fork and clone the repositoy:
+Fork and clone the repository:
 
 ```bash
 git clone ssh://git@github.com/<my-username>/mellea.git && cd mellea/
@@ -151,7 +151,7 @@ pre-commit install
 
 ### `conda`/`mamba`-based installation from source
 
-Fork and clone the repositoy:
+Fork and clone the repository:
 
 ```bash
 git clone ssh://git@github.com/<my-username>/mellea.git && cd mellea/

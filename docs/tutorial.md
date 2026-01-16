@@ -44,7 +44,7 @@ As the Mellea developers built this library for generative programming, we found
 
  * **circumscribe LLM calls with requirement verifiers.** We will see variations on this principle throughout the tutorial.
  * **Generative programs should use simple and composable prompting styles.** Mellea takes a middle-ground between the "framework chooses the prompt" and "client code chooses the prompt" paradigms. By keeping prompts small and self-contained, then chaining together many such prompts, we can usually get away with one of a few prompt styles. When a new prompt style is needed, that prompt should be co-designed with the software that will use the prompt. In Mellea, we encourage this by decomposing generative programs into *Components*; more on this in [Chapter 3](#chapter-3-overview-of-the-standard-library).
- * **Generative models and infererence-time programs should be co-designed.** Ideally, the style and domain of prompting used at inference time should match the style and domain of prompting using in pretraining, mid-training, and/or post-training. And, similarly, models should be built with runtime components and use-patterns in mind. We will see some early examples of this in [Chapter 6](#chapter-6-tuning-requirements-and-components).
+ * **Generative models and inference-time programs should be co-designed.** Ideally, the style and domain of prompting used at inference time should match the style and domain of prompting using in pretraining, mid-training, and/or post-training. And, similarly, models should be built with runtime components and use-patterns in mind. We will see some early examples of this in [Chapter 6](#chapter-6-tuning-requirements-and-components).
  * **Generative programs should carefully manage context.** Each Component manages context of a single call, as we see in Chapters [2](#chapter-2-getting-started-with-generative-programming-in-mellea), [3](#chapter-3-overview-of-the-standard-library), [4](#chapter-4-generative-slots), and [5](#chapter-5-mobjects). Additionally, Mellea provides some useful mechanisms for re-using context across multiple calls ([Chapter 7](#chapter-7-on-context-management)).
 
 Although good generative programs can be written in any language and framework, getting it right is not trivial. Mellea is just one point in the design space of LLM libraries, but we think it is a good one. Our hope is that Mellea will help you write generative programs that are robust, performant, and fit-for-purpose.
@@ -208,7 +208,7 @@ Checks aim to avoid the "do not think about B" effect that often primes models (
 to do the opposite and "think" about B.
 
 > [!NOTE]
-> LLMaJ is not presumtively robust. Whenever possible, implement requirement validation using plain old Python code. When a model is necessary, it can often be a good idea to train a **calibrated** model specifically for your validation problem. [Chapter 6](#chapter-6-tuning-requirements-and-components) explains how to use Mellea's `m tune` subcommand to train your own LoRAs for requirement checking (and for other types of Mellea components as well).
+> LLMaJ is not presumptively robust. Whenever possible, implement requirement validation using plain old Python code. When a model is necessary, it can often be a good idea to train a **calibrated** model specifically for your validation problem. [Chapter 6](#chapter-6-tuning-requirements-and-components) explains how to use Mellea's `m tune` subcommand to train your own LoRAs for requirement checking (and for other types of Mellea components as well).
 
 
 ### Instruct - Validate - Repair
@@ -322,7 +322,7 @@ We have now worked up from a simple "Hello, World" example to our first generati
 
 When LLMs work well, the software developer experiences the LLM as a sort of oracle that can handle most any input and produce a sufficiently desirable output. When LLMs do not work at all, the software developer experiences the LLM as a naive markov chain that produces junk. In both cases, the LLM is just sampling from a distribution.
 
-The crux of generative programming is that most applications find themselves somewhere in-between these two extremes -- the LLM mostly works, enough to demo a tantilizing MVP. But failure modes are common enough and severe enough that complete automation is beyond the developer's grasp.
+The crux of generative programming is that most applications find themselves somewhere in-between these two extremes -- the LLM mostly works, enough to demo a tantalizing MVP. But failure modes are common enough and severe enough that complete automation is beyond the developer's grasp.
 
 Traditional software deals with failure modes by carefully describing what can go wrong and then providing precise error handling logic. When working with LLMs, however, this approach suffers a Sysiphean curse. There is always one more failure mode, one more special case, one more new feature request. In the next chapter, we will explore how to build generative programs that are compositional and that grow gracefully.
 
@@ -338,7 +338,7 @@ Components can also specify an expected output type along with a parse function 
 
 Backends are the engine that actually run the LLM. Backends consume Components, format the Component, pass the formatted input to an LLM, and return model outputs, which are then parsed back into CBlocks or Components.
 
-During the course of an interaction with an LLM, several Components and CBlocks may be created. Logic for handling this trace of interactions is provided by a `Context` object. Some book-keeping needs to be done in order for Contexts to approporiately handle a trace of Components and CBlocks. The `MelleaSession` class, which is created by `mellea.start_session()`, does this book-keeping a simple wrapper around Contexts and Backends.
+During the course of an interaction with an LLM, several Components and CBlocks may be created. Logic for handling this trace of interactions is provided by a `Context` object. Some book-keeping needs to be done in order for Contexts to appropriately handle a trace of Components and CBlocks. The `MelleaSession` class, which is created by `mellea.start_session()`, does this book-keeping a simple wrapper around Contexts and Backends.
 
 When we call `m.instruct()`, the `MelleaSession.instruct` method creates a component called an `Instruction`. Instructions are part of the Mellea standard library.
 
@@ -411,7 +411,7 @@ Many more examples of generative slots are provided in the `docs/examples` direc
 
 Instruct-validate-repair provides compositionality within a given module. As the examples listed above demonstrate, generative slots can do the same. But generative slots are not just about local validity; their real power comes from safe interoperability between independently designed systems.
 
-Consider the following two independently developed libraries: a **Summarizer** library that contains a set of functions for summarizing various types of documents, and a **Decision Aides** library that aides in decision making for particular situations.
+Consider the following two independently developed libraries: a **Summarizer** library that contains a set of functions for summarizing various types of documents, and a **Decision Aids** library that aids in decision making for particular situations.
 
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/compositionality_with_generative_slots.py#L1-L18
@@ -982,9 +982,9 @@ The core idea of ReACT is to alternate between reasoning ("Thought") and acting 
 # Pseudocode
 while not done:
     get the model's next thought
-    take an action based upon the though
-    choose arguments for the selection action
-    observe the toll output
+    take an action based upon the thought
+    choose arguments for the selected action
+    observe the tool output
     check if a final answer can be obtained
 return the final answer
 ```

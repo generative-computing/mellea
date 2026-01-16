@@ -61,7 +61,7 @@ mify(c)
 
 meetings_summary = m.query(c, "Summarize the last three interactions with this customer.")
 
-email_body = ctx.instruct("Based upon the summary of notes from recent meetings, write an email body encouraging the customer to purchase three cases of self-sealing stembolts", grouning_context={"meetings_summary": meetings_summary})
+email_body = ctx.instruct("Based upon the summary of notes from recent meetings, write an email body encouraging the customer to purchase three cases of self-sealing stembolts", grounding_context={"meetings_summary": meetings_summary})
 
 email_subject = ctx.instruct("Write a subject for this sales email.", grounding_context={"email_body": email_body})
 
