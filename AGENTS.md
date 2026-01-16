@@ -9,10 +9,10 @@ AGENTS.md — Instructions for AI coding assistants (Claude, Cursor, Copilot, Co
 ## 1. Quick Reference
 ```bash
 pre-commit install                  # Required: install git hooks
-uv sync                             # Install deps & fix lockfile
-uv run pytest -m "not qualitative"  # Fast loop (unit tests only)
-uv run pytest                       # Full suite (includes LLM tests)
-uv run pytest -m integration        # Tests requiring API keys
+uv sync --all-extras --all-groups   # Install all deps (required for tests)
+ollama serve                        # Start Ollama (required for most tests)
+uv run pytest -m "not qualitative"  # Skips LLM quality tests (~2 min)
+uv run pytest                       # Full suite (includes LLM quality tests)
 uv run ruff format . && uv run ruff check .  # Lint & format
 ```
 **Branches**: `feat/topic`, `fix/issue-id`, `docs/topic`
@@ -24,13 +24,12 @@ uv run ruff format . && uv run ruff check .  # Lint & format
 | `mellea/backends` | Providers: HF, OpenAI, Ollama, Watsonx, LiteLLM |
 | `mellea/helpers` | Utilities, logging, model ID tables |
 | `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`) |
-| `test/` | All tests. Unmarked = unit tests (no network/API keys) |
+| `test/` | All tests (run from repo root) |
 | `scratchpad/` | Experiments (git-ignored) |
 
 ## 3. Test Markers
-- `@pytest.mark.qualitative` — LLM output quality tests (skipped in CI)
-- `@pytest.mark.integration` — Requires API keys
-- **Unmarked** — Pure unit tests: no network, deterministic
+- `@pytest.mark.qualitative` — LLM output quality tests (skipped in CI via `CICD=1`)
+- **Unmarked** — Unit tests (may still require Ollama running locally)
 
 ⚠️ Don't add `qualitative` to trivial tests—keep the fast loop fast.
 
@@ -67,8 +66,8 @@ Pre-commit runs: ruff, mypy, uv-lock, codespell
 ## 9. Writing Tests
 - Place tests in `test/` mirroring source structure
 - Name files `test_*.py` (required for pydocstyle)
-- Use `gh_run` fixture for CI-aware tests (see `conftest.py`)
-- **No LLM calls** in unmarked tests—mock or mark `qualitative`
+- Use `gh_run` fixture for CI-aware tests (see `test/conftest.py`)
+- Mark tests checking LLM output quality with `@pytest.mark.qualitative`
 - If a test fails, fix the **code**, not the test (unless the test was wrong)
 
 ## 10. Feedback Loop
