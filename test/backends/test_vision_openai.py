@@ -18,7 +18,7 @@ def m_session(gh_run):
     if gh_run == 1:
         m = start_session(
             "openai",
-            model_id=IBM_GRANITE_4_MICRO_3B,
+            model_id=IBM_GRANITE_4_MICRO_3B.ollama_name,  # type: ignore
             base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
             api_key="ollama",
             model_options={ModelOption.MAX_NEW_TOKENS: 5},
