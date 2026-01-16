@@ -617,7 +617,7 @@ Let's create a RichDocument from an arxiv paper:
 
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/document_mobject.py#L1-L3
-from mellea.stdlib.components.docs import RichDocument
+from mellea.stdlib.components.docs.richdocument import RichDocument
 rd = RichDocument.from_document_file("https://arxiv.org/pdf/1906.04043")
 ```
 this loads the PDF file and parses it using the Docling parser into an
@@ -627,7 +627,7 @@ From the rich document we can extract some document content, e.g. the
 first table:
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/document_mobject.py#L5-L8
-from mellea.stdlib.components.docs import Table
+from mellea.stdlib.components.docs.richdocument import Table
 table1: Table = rd.get_tables()[0]
 print(table1.to_markdown())
 ```
