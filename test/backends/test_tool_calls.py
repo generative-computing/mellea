@@ -9,7 +9,7 @@ from mellea.backends import ModelOption
 from mellea.core import ModelOutputThunk
 from mellea.stdlib.context import ChatContext
 
-from mellea.stdlib.components.docs import Table
+from mellea.stdlib.components.docs.richdocument import Table
 from mellea.stdlib.session import MelleaSession
 
 
