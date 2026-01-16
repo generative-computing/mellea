@@ -6,17 +6,13 @@ import pytest
 from typing_extensions import Annotated
 
 from mellea import MelleaSession
-from mellea.backends.adapters.adapter import GraniteCommonAdapter
-from mellea.backends.formatter import TemplateFormatter
+from mellea.backends.adapters import GraniteCommonAdapter
+from mellea.formatters import TemplateFormatter
 from mellea.backends.openai import OpenAIBackend
-from mellea.backends.types import ModelOption, _ServerType
-from mellea.stdlib.base import CBlock, ChatContext, Context, ModelOutputThunk
-from mellea.stdlib.requirement import (
-    ALoraRequirement,
-    LLMaJRequirement,
-    Requirement,
-    req,
-)
+from mellea.backends import ModelOption
+from mellea.core import CBlock, Context, ModelOutputThunk
+from mellea.stdlib.context import ChatContext
+from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement
 
 # The vllm tests are disabled by default, because we need a test environment with the vLLM server running.
 # We use an env var VLLM_TESTS_ENABLED to enable these tests.
@@ -91,7 +87,7 @@ class TestOpenAIBackend:
         )
         print("Formatted output:")
         email = Email.model_validate_json(
-            output.value
+            output.value  # type: ignore
         )  # this should succeed because the output should be JSON because we passed in a format= argument...
         print(email)
 
@@ -128,7 +124,7 @@ class TestOpenAIBackend:
 
         random_result = results[0]
         try:
-            answer = Answer.model_validate_json(random_result.value)
+            answer = Answer.model_validate_json(random_result.value)  # type: ignore
         except pydantic.ValidationError as e:
             assert False, (
                 f"formatting directive failed for {random_result.value}: {e.json()}"
@@ -225,7 +221,8 @@ class TestOpenAIALoraStuff:
         assert isinstance(non_alora_output.context, Context)
         assert isinstance(non_alora_output.thunk, ModelOutputThunk)
         assert isinstance(
-            non_alora_output.context.previous_node.node_data, ALoraRequirement
+            non_alora_output.context.previous_node.node_data,
+            ALoraRequirement,  # type: ignore
         )
         assert non_alora_output.context.node_data is non_alora_output.thunk
 
@@ -284,7 +281,7 @@ class TestOpenAIALoraStuff:
         )
         print("Formatted output:")
         email = Email.model_validate_json(
-            output.value
+            output.value  # type: ignore
         )  # this should succeed because the output should be JSON because we passed in a format= argument...
         print(email)
 

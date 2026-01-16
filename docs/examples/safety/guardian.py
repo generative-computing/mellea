@@ -3,9 +3,10 @@
 from mellea import MelleaSession
 from mellea.backends import model_ids
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.stdlib.base import ContextTurn, ModelOutputThunk, ChatContext
-from mellea.stdlib.chat import Message
-from mellea.stdlib.safety.guardian import GuardianCheck, GuardianRisk
+from mellea.core import ContextTurn, ModelOutputThunk
+from mellea.stdlib.context import ChatContext
+from mellea.stdlib.components import Message
+from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 
 # Enhanced GuardianCheck with Granite Guardian 3.3 8B support
 print("=== Enhanced GuardianCheck Examples ===")
@@ -99,7 +100,7 @@ if groundedness_valid[0]._reason:
 
 print("\n=== Test 5: Function Call Hallucination Detection ===")
 # Test function calling hallucination using IBM video example
-from mellea.stdlib.base import ModelOutputThunk, ModelToolCall
+from mellea.core import ModelOutputThunk, ModelToolCall
 
 tools = [
     {

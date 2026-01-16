@@ -1,8 +1,9 @@
 from typing import Literal
 
 from mellea import generative, start_session
-from mellea.stdlib.genslot import PreconditionException
-from mellea.stdlib.requirement import Requirement, simple_validate
+from mellea.stdlib.components.genslot import PreconditionException
+from mellea.stdlib.requirements import simple_validate
+from mellea.core import Requirement
 from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 
 

@@ -191,7 +191,7 @@ Let's look on how we can customize requirement definitions:
 
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/instruct_validate_repair.py#L1-L10
-from mellea.stdlib.requirement import req, check, simple_validate
+from mellea.stdlib.requirements import req, check, simple_validate
 
 requirements = [
     req("The email should have a salutation"),  # == r1
@@ -218,7 +218,7 @@ Now, we bring it all together into a first generative program using the **instru
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/instruct_validate_repair.py#L13-L37
 import mellea
-from mellea.stdlib.requirement import req, check, simple_validate
+from mellea.stdlib.requirements import req, check, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 def write_email(m: mellea.MelleaSession, name: str, notes: str) -> str:
@@ -262,7 +262,7 @@ You can add any key-value pair supported by the backend to the `model_options` d
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/model_options_example.py#L1-L16
 import mellea
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends import model_ids
 
@@ -570,7 +570,7 @@ Suppose you have a table of sales data and want to let the LLM answer questions 
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/table_mobject.py#L1-L31
 import mellea
-from mellea.stdlib.mify import mify, MifiedProtocol
+from mellea.stdlib.components.mify import mify, MifiedProtocol
 import pandas
 from io import StringIO
 
@@ -617,7 +617,7 @@ Let's create a RichDocument from an arxiv paper:
 
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/document_mobject.py#L1-L3
-from mellea.stdlib.docs.richdocument import RichDocument
+from mellea.stdlib.components.docs import RichDocument
 rd = RichDocument.from_document_file("https://arxiv.org/pdf/1906.04043")
 ```
 this loads the PDF file and parses it using the Docling parser into an
@@ -627,7 +627,7 @@ From the rich document we can extract some document content, e.g. the
 first table:
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/document_mobject.py#L5-L8
-from mellea.stdlib.docs.richdocument import Table
+from mellea.stdlib.components.docs import Table
 table1: Table = rd.get_tables()[0]
 print(table1.to_markdown())
 ```
@@ -646,7 +646,7 @@ The `Table` object is Mellea-ready and can be used immediately with LLMs.
 Let's just get it to work:
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/document_mobject.py#L10-L24
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption
 from mellea import start_session
 
 m = start_session()
@@ -693,7 +693,7 @@ The model has done a great job at fulfilling the task and coming back with a par
 
 When an object is `mified` all methods with a docstring get registered as tools for the LLM call. You can control if you only want a subset of these functions to be exposed by two parameters (`funcs_include` and `funcs_exclude`):
 ```python
-from mellea.stdlib.mify import mify
+from mellea.stdlib.components.mify import mify
 
 @mify(funcs_include={"from_markdown"})
 class MyDocumentLoader:
@@ -1319,7 +1319,7 @@ For examples on adding tools to the template representation of a component, see 
 
 Here's an example of adding a tool through model options. This can be useful when you want to add a tool like web search that should almost always be available:
 ```python
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption
 
 def web_search(query: str) -> str:
     ...

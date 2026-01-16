@@ -5,68 +5,62 @@ The purpose of the Hugginface backend is to provide a setting for implementing e
 
 from __future__ import annotations
 
-import abc
 import asyncio
 import dataclasses
 import datetime
 import functools
-import inspect
 import json
 import threading
 from collections.abc import Callable, Coroutine, Sequence
-from copy import deepcopy
-from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
+from typing import Any, overload
 
 import granite_common
 import outlines
 import outlines_core
 import peft
 import torch
-from transformers import (
-    AsyncTextIteratorStreamer,
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    DynamicCache,
-    PreTrainedModel,
-    PreTrainedTokenizer,
-    set_seed,
-)
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.cache_utils import DynamicCache
+from transformers.generation.streamers import AsyncTextIteratorStreamer
 from transformers.generation.utils import GenerateDecoderOnlyOutput
+from transformers.modeling_utils import PreTrainedModel
+from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.trainer_utils import set_seed
 
-from mellea.backends import BaseModelSubclass, kv_block_helpers
-from mellea.backends._utils import to_chat, to_tool_calls
-from mellea.backends.adapters.adapter import (
+from ..backends import kv_block_helpers
+from ..core import (
+    BaseModelSubclass,
+    C,
+    CBlock,
+    Component,
+    Context,
+    FancyLogger,
+    GenerateLog,
+    GenerateType,
+    ModelOutputThunk,
+    Requirement,
+)
+from ..formatters import ChatFormatter, TemplateFormatter
+from ..helpers import message_to_openai_message, messages_to_docs, send_to_queue
+from ..stdlib.components import Intrinsic, Message
+from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
+from .adapters import (
     AdapterMixin,
     AdapterType,
     GraniteCommonAdapter,
     LocalHFAdapter,
     get_adapter_for_intrinsic,
 )
-from mellea.backends.cache import Cache, SimpleLRUCache
-from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
-from mellea.backends.model_ids import ModelIdentifier
-from mellea.backends.openai import OpenAIBackend
-from mellea.backends.process_reward_models import PRM
-from mellea.backends.tools import (
+from .backend import FormatterBackend
+from .cache import Cache, SimpleLRUCache
+from .model_ids import ModelIdentifier
+from .model_options import ModelOption
+from .tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
 )
-from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import send_to_queue
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import (
-    C,
-    CBlock,
-    Component,
-    Context,
-    GenerateLog,
-    GenerateType,
-    ModelOutputThunk,
-)
-from mellea.stdlib.chat import Message
-from mellea.stdlib.intrinsics.intrinsic import Intrinsic
-from mellea.stdlib.requirement import ALoraRequirement, LLMaJRequirement, Requirement
+from .utils import to_chat, to_tool_calls
 
 assert outlines, "outlines needs to be present to make outlines_core work"
 
@@ -102,7 +96,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     def __init__(
         self,
         model_id: str | ModelIdentifier,
-        formatter: Formatter | None = None,
+        formatter: ChatFormatter | None = None,
         *,
         use_caches: bool = True,
         cache: Cache | None = None,
@@ -313,11 +307,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
 
-        conversation.extend(
-            [OpenAIBackend.message_to_openai_message(m) for m in ctx_as_message_list]
-        )
+        conversation.extend([message_to_openai_message(m) for m in ctx_as_message_list])
 
-        docs = OpenAIBackend.messages_to_docs(ctx_as_message_list)
+        docs = messages_to_docs(ctx_as_message_list)
 
         seed = model_options.get(ModelOption.SEED, None)
         if seed is not None:
@@ -373,7 +365,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         #       us having specific caching for each Component/Message.
 
         generate_input, other_input = (
-            granite_common.util.chat_completion_request_to_transformers_inputs(
+            granite_common.util.chat_completion_request_to_transformers_inputs(  # type: ignore
                 rewritten, self._tokenizer, self._model
             )
         )
@@ -381,7 +373,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         chat_response = asyncio.to_thread(
             self._generate_with_adapter_lock,
             adapter.qualified_name,
-            granite_common.util.generate_with_transformers,
+            granite_common.util.generate_with_transformers,  # type: ignore
             # Passed as args/kwargs to generate.
             self._tokenizer,
             self._model,
@@ -605,7 +597,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
                 from outlines.models.transformers import TransformerTokenizer
                 from outlines.processors.structured import RegexLogitsProcessor
-                from transformers import LogitsProcessorList
+                from transformers import LogitsProcessorList  # type: ignore
 
                 format_kwargs["logits_processor"] = LogitsProcessorList(
                     [
@@ -772,7 +764,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
                 from outlines.models.transformers import TransformerTokenizer
                 from outlines.processors.structured import RegexLogitsProcessor
-                from transformers import LogitsProcessorList
+                from transformers import LogitsProcessorList  # type: ignore
 
                 format_kwargs["logits_processor"] = LogitsProcessorList(
                     [
@@ -1019,7 +1011,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             from outlines.models.transformers import TransformerTokenizer
             from outlines.processors.structured import RegexLogitsProcessor
-            from transformers import LogitsProcessorList
+            from transformers import LogitsProcessorList  # type: ignore
 
             format_kwargs["logits_processor"] = LogitsProcessorList(
                 [
@@ -1281,56 +1273,3 @@ def _assert_correct_adapters(expected_state: str, model: PreTrainedModel):
             )
         else:
             raise e
-
-
-class HFProcessRewardModel(PRM, abc.ABC):
-    """A Process Reward Model that works with a huggingface backend."""
-
-    def __init__(
-        self, model_name_or_path: str, score_token: str, device: str | None = None
-    ):
-        """Initialize an PRM that works with a huggingface backend. Currently supports and tested with IBM Process Reward Models.
-
-        Args:
-            model_name_or_path (str): A local path to PRM or a huggingface PRM
-            score_token (str): token who's logits correspond to the PRM score. Can be a step demarker (for non-generative PRMs) or a correctness indicator (for generative PRMs)
-            device (str): device: The computational device to use ("cuda" for GPU, "mps" for Apple Silicon, or "cpu"), defaults to None. If not specified, the best available device will be automatically selected.
-        """
-        super().__init__(model_name_or_path)
-
-        # auto-device if not more specific
-        self._device = device
-        if device is None:
-            device_name: str = (
-                "cuda"
-                if torch.cuda.is_available()
-                else "mps"
-                if torch.backends.mps.is_available()
-                else "cpu"
-            )
-            assert device_name is not None
-            self._device = torch.device(device_name)  # type: ignore
-
-        self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-            self.model_name_or_path, torch_dtype=torch.bfloat16
-        )
-        self.model.eval()
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path)
-
-        self._score_token = score_token
-        self._score_token_id = self.tokenizer.encode(
-            self._score_token, add_special_tokens=False
-        )[0]
-
-    def stepify(self, content: str, step_separator: str) -> list[str]:
-        """Splits the assistant response into steps to score.
-
-        Args:
-            content: assistant response to score
-            step_separator: string on which to separate the content into steps
-        """
-        # convert assistant message into a list of steps
-        list_of_steps = [
-            step.strip() for step in content.split(step_separator) if step.strip != ""
-        ]
-        return list_of_steps

@@ -3,9 +3,9 @@
 import asyncio
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Coroutine
-from typing import Any, TypeVar
+from typing import Any
 
-from mellea.stdlib.base import ModelOutputThunk
+from ..core import ModelOutputThunk
 
 
 async def send_to_queue(

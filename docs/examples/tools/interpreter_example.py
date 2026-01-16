@@ -1,8 +1,7 @@
 from mellea.stdlib.tools import code_interpreter, local_code_interpreter
 from mellea import start_session, MelleaSession
-from mellea.backends.types import ModelOption
-from mellea.backends.model_ids import OPENAI_GPT_OSS_20B
-from mellea.stdlib.reqlib.tools import uses_tool, tool_arg_validator
+from mellea.backends import ModelOption
+from mellea.stdlib.requirements import uses_tool, tool_arg_validator
 
 
 def example_1(m: MelleaSession):

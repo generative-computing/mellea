@@ -8,10 +8,8 @@ import pydantic
 from jinja2 import Template
 
 import mellea
-import mellea.stdlib
-import mellea.stdlib.base
-import mellea.stdlib.chat
-from mellea.stdlib.base import ChatContext
+import mellea.stdlib.components.chat
+from mellea.stdlib.context import ChatContext
 
 react_system_template: Template = Template(
     """Answer the user's question as best you can.
@@ -114,8 +112,8 @@ def react(
 
     # Add the system prompt and the goal to the chat history.
     m.ctx = m.ctx.add(
-        mellea.stdlib.chat.Message(role="system", content=_sys_prompt)
-    ).add(mellea.stdlib.chat.Message(role="user", content=f"{goal}"))
+        mellea.stdlib.components.chat.Message(role="system", content=_sys_prompt)
+    ).add(mellea.stdlib.components.chat.Message(role="user", content=f"{goal}"))
 
     # The main ReACT loop as a dynamic program:
     # (  ?(not done) ;
@@ -161,7 +159,9 @@ def react(
 
         print("### Observation")
         tool_output = react_toolbox.call_tool(selected_tool, act_args_val)
-        m.ctx = m.ctx.add(mellea.stdlib.chat.Message(role="tool", content=tool_output))
+        m.ctx = m.ctx.add(
+            mellea.stdlib.components.chat.Message(role="tool", content=tool_output)
+        )
         print(tool_output)
 
         print("### Done Check")
