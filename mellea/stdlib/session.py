@@ -134,6 +134,8 @@ def start_session(
         session.cleanup()
         ```
     """
+    logger = FancyLogger.get_logger()
+
     backend_class = backend_name_to_class(backend_name)
     if backend_class is None:
         raise Exception(
@@ -144,6 +146,30 @@ def start_session(
 
     if ctx is None:
         ctx = SimpleContext()
+
+    # Log session configuration
+    if isinstance(model_id, ModelIdentifier):
+        # Get the backend-specific model name
+        backend_to_attr = {
+            "ollama": "ollama_name",
+            "hf": "hf_model_name",
+            "huggingface": "hf_model_name",
+            "openai": "openai_name",
+            "watsonx": "watsonx_name",
+            "litellm": "hf_model_name",
+        }
+        attr = backend_to_attr.get(backend_name, "hf_model_name")
+        model_id_str = (
+            getattr(model_id, attr, None) or model_id.hf_model_name or str(model_id)
+        )
+    else:
+        model_id_str = model_id
+    logger.info(
+        f"Starting Mellea session: backend={backend_name}, model={model_id_str}, "
+        f"context={ctx.__class__.__name__}"
+        + (f", model_options={model_options}" if model_options else "")
+    )
+
     return MelleaSession(backend, ctx)
 
 
