@@ -4,9 +4,10 @@ from typing import Any
 
 import mellea
 from cli.serve.models import ChatMessage
-from mellea.stdlib.base import ChatContext, ModelOutputThunk
-from mellea.stdlib.requirement import Requirement, simple_validate
-from mellea.stdlib.sampling import RejectionSamplingStrategy, SamplingResult
+from mellea.stdlib.context import ChatContext
+from mellea.core import ModelOutputThunk, SamplingResult, Requirement
+from mellea.stdlib.requirements import simple_validate
+from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 session = mellea.start_session(ctx=ChatContext())
 

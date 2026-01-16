@@ -5,7 +5,7 @@ import threading
 from collections.abc import Coroutine
 from typing import Any, TypeVar
 
-from mellea.helpers.async_helpers import get_current_event_loop
+from .async_helpers import get_current_event_loop
 
 R = TypeVar("R")
 
@@ -19,7 +19,7 @@ class _EventLoopHandler:
         Do not instantiate this class. Rely on the exported `_run_async_in_thread` function.
         """
         self._event_loop = asyncio.new_event_loop()
-        self._thread: threading.Thread = threading.Thread(
+        self._thread: threading.Thread = threading.Thread(  # type: ignore[annotation-unchecked]
             target=self._event_loop.run_forever,
             daemon=True,  # type: ignore
         )

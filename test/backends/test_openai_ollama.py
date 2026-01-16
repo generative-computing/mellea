@@ -6,14 +6,14 @@ from unittest.mock import patch
 import openai
 import pydantic
 import pytest
-from typing_extensions import Annotated
 
 from mellea import MelleaSession
-from mellea.backends.formatter import TemplateFormatter
+from mellea.formatters import TemplateFormatter
 from mellea.backends.model_ids import META_LLAMA_3_2_1B
 from mellea.backends.openai import OpenAIBackend
-from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock, ChatContext, ModelOutputThunk, SimpleContext
+from mellea.backends import ModelOption
+from mellea.core import CBlock, ModelOutputThunk
+from mellea.stdlib.context import ChatContext, SimpleContext
 
 
 @pytest.fixture(scope="module")

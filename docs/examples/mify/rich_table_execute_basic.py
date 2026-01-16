@@ -3,9 +3,9 @@ import os
 
 from mellea import start_session
 from mellea.backends import model_ids
-from mellea.backends.types import ModelOption
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.docs.richdocument import RichDocument, Table
+from mellea.backends import ModelOption
+from mellea.core import FancyLogger
+from mellea.stdlib.components.docs import RichDocument, Table
 
 FancyLogger.get_logger().setLevel("ERROR")
 

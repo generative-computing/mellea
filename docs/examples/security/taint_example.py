@@ -1,4 +1,4 @@
-from mellea.stdlib.base import CBlock
+from mellea.stdlib.components import CBlock
 from mellea.stdlib.session import start_session
 from mellea.security import SecLevel, privileged, SecurityError
 

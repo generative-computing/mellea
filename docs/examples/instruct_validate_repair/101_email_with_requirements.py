@@ -1,6 +1,6 @@
 from docs.examples.helper import w
 from mellea import start_session
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption
 
 # create a session using Granite 4 Micro 3B on Ollama and a simple context [see below]
 m = start_session(model_options={ModelOption.MAX_NEW_TOKENS: 200})

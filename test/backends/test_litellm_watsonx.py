@@ -3,7 +3,7 @@ import pytest
 
 from mellea import MelleaSession
 from mellea.backends.litellm import LiteLLMBackend
-from mellea.stdlib.base import CBlock
+from mellea.core import CBlock
 
 
 @pytest.fixture(scope="function")

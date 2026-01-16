@@ -19,7 +19,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from mellea.stdlib.base import CBlock, Component
+    from ..core.base import CBlock, Component
 
 T = TypeVar("T")
 
@@ -180,7 +180,7 @@ def taint_sources(action: "Component | CBlock", ctx: Any) -> "list[CBlock | Comp
     Returns:
         List of tainted CBlocks or Components
     """
-    from mellea.stdlib.base import (
+    from ..core.base import (
         CBlock,
         Component,
     )  # Import here to avoid circular dependency
@@ -327,7 +327,7 @@ def declassify(cblock: "CBlock") -> "CBlock":
     Returns:
         A new CBlock with safe security level
     """
-    from mellea.stdlib.base import CBlock  # Import here to avoid circular dependency
+    from ..core.base import CBlock  # Import here to avoid circular dependency
 
     # Return new CBlock with same content but safe security metadata
     return CBlock(

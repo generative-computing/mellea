@@ -4,43 +4,44 @@ import asyncio
 import datetime
 import functools
 import json
-import os
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, overload
 
-import litellm  # type: ignore
-import litellm.litellm_core_utils  # type: ignore
-import litellm.litellm_core_utils.get_supported_openai_params  # type: ignore
+import litellm
+import litellm.litellm_core_utils
+import litellm.litellm_core_utils.get_supported_openai_params
 
-import mellea.backends.model_ids as model_ids
-from mellea.backends import BaseModelSubclass
-from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
-from mellea.backends.openai import OpenAIBackend
-from mellea.backends.tools import (
-    add_tools_from_context_actions,
-    add_tools_from_model_options,
-    convert_tools_to_json,
-)
-from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import get_current_event_loop, send_to_queue
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.helpers.openai_compatible_helpers import (
-    chat_completion_delta_merge,
-    extract_model_tool_requests,
-)
-from mellea.security import SecLevel, taint_sources
-from mellea.stdlib.base import (
+from ..backends import model_ids
+from ..core import (
+    BaseModelSubclass,
     C,
     CBlock,
     Component,
     Context,
+    FancyLogger,
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
     ModelToolCall,
 )
-from mellea.stdlib.chat import Message
-from mellea.stdlib.requirement import ALoraRequirement
+from ..formatters import ChatFormatter, TemplateFormatter
+from ..helpers import (
+    chat_completion_delta_merge,
+    extract_model_tool_requests,
+    get_current_event_loop,
+    message_to_openai_message,
+    send_to_queue,
+)
+from ..security import SecLevel, taint_sources
+from ..stdlib.components import Message
+from ..stdlib.requirements import ALoraRequirement
+from .backend import FormatterBackend
+from .model_options import ModelOption
+from .tools import (
+    add_tools_from_context_actions,
+    add_tools_from_model_options,
+    convert_tools_to_json,
+)
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
@@ -52,7 +53,7 @@ class LiteLLMBackend(FormatterBackend):
         self,
         model_id: str = "ollama_chat/"
         + str(model_ids.IBM_GRANITE_4_MICRO_3B.ollama_name),
-        formatter: Formatter | None = None,
+        formatter: ChatFormatter | None = None,
         base_url: str | None = "http://localhost:11434",
         model_options: dict | None = None,
     ):
@@ -270,9 +271,7 @@ class LiteLLMBackend(FormatterBackend):
         system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
-        conversation.extend(
-            [OpenAIBackend.message_to_openai_message(m) for m in messages]
-        )
+        conversation.extend([message_to_openai_message(m) for m in messages])
 
         extra_params: dict[str, Any] = {}
         if _format is not None:

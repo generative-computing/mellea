@@ -3,8 +3,8 @@ from collections.abc import Callable
 from typing import Any, TypeVar, final
 
 from mellea import MelleaSession
-from mellea.backends.types import ModelOption
-from mellea.stdlib.chat import Message
+from mellea.backends import ModelOption
+from mellea.stdlib.components import Message
 
 from .._prompt_modules import PromptModule, PromptModuleString
 from ._exceptions import BackendGenerationError, TagExtractionError

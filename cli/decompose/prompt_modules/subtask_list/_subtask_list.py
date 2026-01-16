@@ -3,8 +3,8 @@ from collections.abc import Callable
 from typing import Any, TypeVar, final
 
 from mellea import MelleaSession
-from mellea.backends.types import ModelOption
-from mellea.stdlib.chat import Message
+from mellea.backends import ModelOption
+from mellea.stdlib.components import Message
 
 from .._prompt_modules import PromptModule, PromptModuleString
 from ._exceptions import (
@@ -15,7 +15,7 @@ from ._exceptions import (
 from ._prompt import get_system_prompt, get_user_prompt
 from ._types import SubtaskItem
 
-# from mellea.stdlib.requirement import Requirement
+# from mellea.stdlib.requirements import requirement
 
 T = TypeVar("T")
 

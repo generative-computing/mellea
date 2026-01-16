@@ -174,7 +174,7 @@ the output is checked against the constraints using (in this case) LLM-as-a-judg
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/instruct_validate_repair/101_email_with_validate.py
 from mellea import MelleaSession
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends import model_ids
 from mellea.stdlib.sampling import RejectionSamplingStrategy

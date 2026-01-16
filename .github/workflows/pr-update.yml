@@ -1,0 +1,73 @@
+name: PR Bot
+
+on:
+  pull_request_target:
+    types: [opened, edited]
+
+jobs:
+  update-pr-body:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.pull_request.body, 'mellea-pr-edited-marker') }}
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Checkout code # Checks out the base branch, not PR branch.
+        uses: actions/checkout@v4
+
+      - name: Detect PR type from checkboxes
+        id: detect-type
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          PR_TYPE=""
+
+          # Check for checked boxes (supports [x] and [X])
+          if echo "$PR_BODY" | grep -qi '\[x\] Component'; then
+            PR_TYPE="component"
+          elif echo "$PR_BODY" | grep -qi '\[x\] Requirement'; then
+            PR_TYPE="requirement"
+          elif echo "$PR_BODY" | grep -qi '\[x\] Sampling Strategy'; then
+            PR_TYPE="sampling"
+          elif echo "$PR_BODY" | grep -qi '\[x\] Tool'; then
+            PR_TYPE="tool"
+          elif echo "$PR_BODY" | grep -qi '\[x\] Misc'; then
+            PR_TYPE="misc"
+          fi
+
+          if [ -z "$PR_TYPE" ]; then
+            echo "::error::No PR type selected. Please check one of of the boxes from the original pr template."
+            exit 1
+          fi
+
+          echo "pr_type=$PR_TYPE" >> "$GITHUB_OUTPUT"
+          echo "Detected PR type: $PR_TYPE"
+
+      - name: Update PR body with checklist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TYPE: ${{ steps.detect-type.outputs.pr_type }}
+        run: |
+          TEMPLATE_FILE=".github/PULL_REQUEST_TEMPLATE/${PR_TYPE}.md"
+
+          if [ -f "$TEMPLATE_FILE" ]; then
+            MARKER="<!-- mellea-pr-edited-marker: do not remove this marker -->"
+            TEMPLATE_CONTENT=$(cat "$TEMPLATE_FILE")
+
+            NEW_BODY="${MARKER}
+            ${TEMPLATE_CONTENT}"
+
+            gh pr edit ${{ github.event.pull_request.number }} --body "$NEW_BODY"
+            echo "Updated PR body with ${PR_TYPE} checklist"
+          else
+            echo "::error::Template file not found: $TEMPLATE_FILE"
+            echo "Something as gone wrong. Contact a maintainer."
+            exit 1
+          fi
+
+      - name: Comment on PR
+        uses: mshick/add-pr-comment@b8f338c590a895d50bcbfa6c5859251edc8952fc
+        with:
+          message: |
+            The PR description has been updated. Please fill out the template for your PR to be reviewed. 

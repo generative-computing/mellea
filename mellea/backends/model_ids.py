@@ -1,7 +1,6 @@
-"""Utilities for model identifiers."""
+"""Dataclasses for ModelIdentifiers."""
 
 import dataclasses
-from typing import Optional
 
 
 @dataclasses.dataclass(frozen=True)
