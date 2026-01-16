@@ -1,7 +1,7 @@
 from textwrap import fill
 from typing import Any
 
-from mellea.stdlib.requirement import Requirement, ValidationResult
+from mellea.core import Requirement, ValidationResult
 
 
 # Just for printing stuff nicely...

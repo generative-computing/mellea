@@ -1,6 +1,7 @@
 from mellea import generative, start_session
-from mellea.backends.types import ModelOption
-from mellea.stdlib.base import CBlock, ChatContext
+from mellea.backends import ModelOption
+from mellea.core import CBlock
+from mellea.stdlib.context import ChatContext
 
 # Generative slots can be used with sessions that have context.
 # By utilizing context, you can change the results of several

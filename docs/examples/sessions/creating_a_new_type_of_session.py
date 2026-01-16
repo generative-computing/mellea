@@ -2,18 +2,13 @@ from typing import Literal
 from PIL import Image as PILImage
 
 from mellea import MelleaSession
-from mellea.backends import Backend, BaseModelSubclass
+from mellea.core import Backend, BaseModelSubclass
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.stdlib.base import (
-    CBlock,
-    ChatContext,
-    Context,
-    ImageBlock,
-    ModelOutputThunk,
-)
-from mellea.stdlib.chat import Message
-from mellea.stdlib.requirement import Requirement, reqify
-from mellea.stdlib.safety.guardian import GuardianCheck, GuardianRisk
+from mellea.core import CBlock, Context, ImageBlock, Requirement
+from mellea.stdlib.context import ChatContext
+from mellea.stdlib.components import Message
+from mellea.stdlib.requirements import reqify
+from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 
 # This example shows how you might go about creating a new type of session.
 # Here, we want to filter out potentially harmful chat messages from the user.

@@ -4,9 +4,9 @@ from pathlib import Path
 from typing import List
 
 import mellea
-from mellea.stdlib.base import ModelOutputThunk
+from mellea.core import ModelOutputThunk
 from mellea.stdlib.test_based_eval import TestBasedEval
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption
 
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn

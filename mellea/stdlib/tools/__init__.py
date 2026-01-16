@@ -1,3 +1,5 @@
 """Implementations of tools."""
 
-from mellea.stdlib.tools.interpreter import code_interpreter, local_code_interpreter
+from .interpreter import code_interpreter, local_code_interpreter
+
+__all__ = ["code_interpreter", "local_code_interpreter"]

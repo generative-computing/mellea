@@ -5,15 +5,22 @@ from copy import deepcopy
 
 import tqdm
 
-import mellea.stdlib.functional as mfuncs
-from mellea.backends import Backend, BaseModelSubclass
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import CBlock, ChatContext, Component, Context, ModelOutputThunk
-from mellea.stdlib.chat import Message
-from mellea.stdlib.instruction import Instruction
-from mellea.stdlib.requirement import Requirement, ValidationResult
-
-from .types import S, SamplingResult, SamplingStrategy
+from ...core import (
+    Backend,
+    BaseModelSubclass,
+    Component,
+    Context,
+    FancyLogger,
+    ModelOutputThunk,
+    Requirement,
+    S,
+    SamplingResult,
+    SamplingStrategy,
+    ValidationResult,
+)
+from ...stdlib import functional as mfuncs
+from ..components import Instruction, Message
+from ..context import ChatContext
 
 
 class BaseSamplingStrategy(SamplingStrategy):

@@ -1,4 +1,4 @@
-from mellea.stdlib.requirement import check, req, simple_validate
+from mellea.stdlib.requirements import check, req, simple_validate
 
 requirements = [
     req("The email should have a salutation"),  # == r1

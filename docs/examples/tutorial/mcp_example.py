@@ -12,8 +12,8 @@ from mcp.server.fastmcp import FastMCP
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.stdlib.base import ModelOutputThunk
-from mellea.stdlib.requirement import Requirement, simple_validate
+from mellea.core import ModelOutputThunk
+from mellea.stdlib.requirements import requirement, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 # #################

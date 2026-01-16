@@ -1,5 +1,6 @@
 import mellea.stdlib.functional as mfuncs
-from mellea.stdlib.base import SimpleContext, CBlock
+from mellea.stdlib.context import SimpleContext
+from mellea.core import CBlock
 from mellea.backends.ollama import OllamaModelBackend
 
 response, next_context = mfuncs.act(

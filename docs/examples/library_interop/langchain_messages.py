@@ -15,9 +15,9 @@ from langchain_core.messages import convert_to_openai_messages
 messages = convert_to_openai_messages(messages=messages)
 
 # Import Mellea.
-from mellea.stdlib.chat import Message
-from mellea.stdlib.base import ChatContext
-from mellea.backends.types import ModelOption
+from mellea.stdlib.components import Message
+from mellea.stdlib.context import ChatContext
+from mellea.backends import ModelOption
 from mellea import start_session
 
 # Mellea uses explicit contexts. Cast the OpenAI formatted messages into

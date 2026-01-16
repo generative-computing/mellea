@@ -5,7 +5,7 @@ Demonstrates how RepairTemplateStrategy repairs responses using actual function 
 
 from mellea import MelleaSession
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.stdlib.safety.guardian import GuardianCheck, GuardianRisk
+from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 from mellea.stdlib.sampling import RepairTemplateStrategy
 
 

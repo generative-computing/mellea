@@ -9,34 +9,26 @@ from typing import Any, overload
 import ollama
 from tqdm import tqdm
 
-import mellea.backends.model_ids as model_ids
-from mellea.backends import BaseModelSubclass, generate_walk
-from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
-from mellea.backends.model_ids import ModelIdentifier
-from mellea.backends.tools import (
-    add_tools_from_context_actions,
-    add_tools_from_model_options,
-)
-from mellea.backends.types import ModelOption
-from mellea.helpers.async_helpers import (
-    ClientCache,
-    get_current_event_loop,
-    send_to_queue,
-)
-from mellea.helpers.event_loop_helper import _run_async_in_thread
-from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import (
+from ..backends import ModelIdentifier, model_ids
+from ..core import (
+    BaseModelSubclass,
     C,
     CBlock,
     Component,
     Context,
+    FancyLogger,
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
     ModelToolCall,
 )
-from mellea.stdlib.chat import Message
-from mellea.stdlib.requirement import ALoraRequirement
+from ..formatters import ChatFormatter, TemplateFormatter
+from ..helpers import ClientCache, get_current_event_loop, send_to_queue
+from ..stdlib.components import Message
+from ..stdlib.requirements import ALoraRequirement
+from .backend import FormatterBackend
+from .model_options import ModelOption
+from .tools import add_tools_from_context_actions, add_tools_from_model_options
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
@@ -47,7 +39,7 @@ class OllamaModelBackend(FormatterBackend):
     def __init__(
         self,
         model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_MICRO_3B,
-        formatter: Formatter | None = None,
+        formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
     ):
@@ -434,12 +426,7 @@ class OllamaModelBackend(FormatterBackend):
 
         model_opts = self._simplify_and_merge(model_options)
 
-        _to_compute = []
-        for act in actions:
-            _to_compute.extend(generate_walk(act))
-        parts_coroutines = [x.avalue() for x in _to_compute]
-        await asyncio.gather(*parts_coroutines)
-
+        await self.do_generate_walks(list(actions))
         prompts = [self.formatter.print(action) for action in actions]
 
         # Ollama doesn't support "batching". There's some ability for concurrency. Use that here.

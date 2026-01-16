@@ -4,7 +4,7 @@ import pathlib
 from PIL import Image
 
 from mellea import start_session
-from mellea.stdlib.base import ChatContext, ImageBlock
+from mellea.stdlib.context import ChatContext
 
 m = start_session(model_id="granite3.2-vision", ctx=ChatContext())
 # m = start_session(model_id="llava", ctx=ChatContext())

@@ -5,7 +5,8 @@ from functools import reduce
 from typing import Any
 
 import torch
-from transformers import BatchEncoding, DynamicCache
+from transformers.cache_utils import DynamicCache
+from transformers.tokenization_utils_base import BatchEncoding
 
 TokenizedCacheIterleaving = Iterable[BatchEncoding | DynamicCache]
 LegacyCache = Any
