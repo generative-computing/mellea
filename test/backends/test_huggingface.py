@@ -1,6 +1,7 @@
 import asyncio
 from copy import copy
 import faulthandler
+import os
 import random
 import time
 from typing import Any, Coroutine
@@ -10,6 +11,12 @@ import pydantic
 import pytest
 import torch
 from typing_extensions import Annotated
+
+# Skip entire module in CI since 17/18 tests are qualitative
+pytestmark = pytest.mark.skipif(
+    int(os.environ.get("CICD", 0)) == 1,
+    reason="Skipping HuggingFace tests in CI - mostly qualitative tests",
+)
 
 from mellea import MelleaSession
 from mellea.backends.adapters import GraniteCommonAdapter

@@ -2,10 +2,10 @@ import base64
 from io import BytesIO
 
 import numpy as np
-from PIL import Image
 import pytest
+from PIL import Image
 
-from mellea import start_session, MelleaSession
+from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
 from mellea.core import ImageBlock, ModelOutputThunk
 from mellea.stdlib.components import Message
@@ -15,11 +15,7 @@ from mellea.stdlib.components import Instruction
 @pytest.fixture(scope="module")
 def m_session(gh_run):
     if gh_run == 1:
-        m = start_session(
-            "ollama",
-            model_id="llama3.2:1b",
-            model_options={ModelOption.MAX_NEW_TOKENS: 5},
-        )
+        m = start_session(model_options={ModelOption.MAX_NEW_TOKENS: 5})
     else:
         m = start_session(
             "ollama",

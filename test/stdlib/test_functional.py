@@ -3,25 +3,14 @@ import pytest
 from mellea.backends import ModelOption
 from mellea.core import ModelOutputThunk
 from mellea.stdlib.components import Message
-from mellea.stdlib.functional import instruct, aact, avalidate, ainstruct
+from mellea.stdlib.functional import aact, ainstruct, avalidate, instruct
 from mellea.stdlib.requirements import req
 from mellea.stdlib.session import start_session
 
 
 @pytest.fixture(scope="module")
 def m_session(gh_run):
-    if gh_run == 1:
-        m = start_session(
-            "ollama",
-            model_id="llama3.2:1b",
-            model_options={ModelOption.MAX_NEW_TOKENS: 5},
-        )
-    else:
-        m = start_session(
-            "ollama",
-            model_id="granite3.3:8b",
-            model_options={ModelOption.MAX_NEW_TOKENS: 5},
-        )
+    m = start_session(model_options={ModelOption.MAX_NEW_TOKENS: 5})
     yield m
     del m
 

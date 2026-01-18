@@ -1,25 +1,18 @@
-from mellea.backends import ModelOption
-from mellea import start_session, MelleaSession
-from mellea.stdlib.requirements import check, req, simple_validate
-from mellea.stdlib.sampling.majority_voting import (
-    MBRDRougeLStrategy,
-    MajorityVotingStrategyForMath,
-)
 import pytest
 
+from mellea import MelleaSession, start_session
+from mellea.backends import ModelOption
 from mellea.core import SamplingResult
+from mellea.stdlib.requirements import check, req, simple_validate
+from mellea.stdlib.sampling.majority_voting import (
+    MajorityVotingStrategyForMath,
+    MBRDRougeLStrategy,
+)
 
 
 @pytest.fixture(scope="module")
 def m_session(gh_run):
-    if gh_run == 1:
-        m = start_session(
-            "ollama",
-            model_id="llama3.2:1b",
-            model_options={ModelOption.MAX_NEW_TOKENS: 5},
-        )
-    else:
-        m = start_session("ollama", model_id="llama3.2:1b")
+    m = start_session(model_options={ModelOption.MAX_NEW_TOKENS: 5})
     yield m
     del m
 
