@@ -46,13 +46,13 @@ def test_image_block_construction(pil_image: Image.Image):
 
     image_block = ImageBlock(img_str)
     assert isinstance(image_block, ImageBlock)
-    assert isinstance(image_block._value, str)
+    assert isinstance(image_block.value, str)
 
 
 def test_image_block_construction_from_pil(pil_image: Image.Image):
     image_block = ImageBlock.from_pil_image(pil_image)
     assert isinstance(image_block, ImageBlock)
-    assert isinstance(image_block._value, str)
+    assert isinstance(image_block.value, str)
     assert ImageBlock.is_valid_base64_png(str(image_block))
 
 
@@ -129,7 +129,7 @@ def test_image_block_in_chat(
 
     # first image in image list should be the same as the image block
     image0_str = last_action.images[0]  # type: ignore
-    assert image0_str == ImageBlock.from_pil_image(pil_image)._value
+    assert image0_str == ImageBlock.from_pil_image(pil_image).value
 
     # get prompt message
     lp = turn.output._generate_log.prompt  # type: ignore

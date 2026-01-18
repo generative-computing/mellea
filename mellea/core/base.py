@@ -62,7 +62,7 @@ class CBlock:
         return f"CBlock({self.value}, {self._meta.__repr__()})"
 
 
-class ImageBlock:
+class ImageBlock(CBlock):
     """A `ImageBlock` represents an image (as base64 PNG)."""
 
     def __init__(self, value: str, meta: dict[str, Any] | None = None):
@@ -70,8 +70,7 @@ class ImageBlock:
         assert self.is_valid_base64_png(value), (
             "Invalid base64 string representation of image."
         )
-        self._value = value
-        self._meta = {} if meta is None else meta
+        super().__init__(value, meta)
 
     @staticmethod
     def is_valid_base64_png(s: str) -> bool:
@@ -117,13 +116,9 @@ class ImageBlock:
         image_base64 = cls.pil_to_base64(image)
         return cls(image_base64, meta)
 
-    def __str__(self):
-        """Stringifies the block."""
-        return self._value
-
     def __repr__(self):
         """Provides a python-parsable representation of the block (usually)."""
-        return f"ImageBlock({self._value}, {self._meta.__repr__()})"
+        return f"ImageBlock({self.value}, {self._meta.__repr__()})"
 
 
 S = typing_extensions.TypeVar("S", default=Any, covariant=True)
