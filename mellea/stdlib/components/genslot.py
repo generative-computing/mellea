@@ -24,6 +24,7 @@ from ...core import (
     TemplateRepresentation,
     ValidationResult,
 )
+from ...security import SecLevel
 from ..requirements.requirement import reqify
 from ..session import MelleaSession
 
@@ -289,6 +290,16 @@ class GenerativeSlot(Component[R], Generic[P, R]):
         # Set when calling the decorated func.
         self.precondition_requirements: list[Requirement] = []
         self.requirements: list[Requirement] = []
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     @abc.abstractmethod
     def __call__(self, *args, **kwargs) -> tuple[R, Context] | R:
