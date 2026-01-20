@@ -27,7 +27,11 @@ except ImportError:
 
 
 def _check_ollama_available():
-    """Check if Ollama is available by checking if port 11434 is listening."""
+    """Check if Ollama is available by checking if port 11434 is listening.
+
+    Note: This only checks if Ollama is running, not which models are loaded.
+    Tests may still fail if required models (e.g., granite4:micro) are not pulled.
+    """
     import socket
 
     try:
@@ -270,6 +274,34 @@ def memory_cleaner():
             torch.cuda.synchronize()
     except ImportError:
         pass
+
+
+@pytest.fixture(autouse=True, scope="session")
+def normalize_ollama_host():
+    """Normalize OLLAMA_HOST to work with client libraries.
+
+    If OLLAMA_HOST is set to 0.0.0.0 (server bind address), change it to
+    127.0.0.1:11434 for client connections. This prevents connection errors
+    when tests try to connect to Ollama.
+    """
+    original_host = os.environ.get("OLLAMA_HOST")
+
+    # If OLLAMA_HOST starts with 0.0.0.0, replace with 127.0.0.1
+    if original_host and original_host.startswith("0.0.0.0"):
+        # Extract port if present, default to 11434
+        if ":" in original_host:
+            port = original_host.split(":", 1)[1]
+        else:
+            port = "11434"
+        os.environ["OLLAMA_HOST"] = f"127.0.0.1:{port}"
+
+    yield
+
+    # Restore original value
+    if original_host is not None:
+        os.environ["OLLAMA_HOST"] = original_host
+    elif "OLLAMA_HOST" in os.environ:
+        del os.environ["OLLAMA_HOST"]
 
 
 @pytest.fixture(autouse=True, scope="function")

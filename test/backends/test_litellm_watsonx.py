@@ -1,5 +1,14 @@
 import asyncio
+
 import pytest
+
+# Mark all tests in this module as requiring Watsonx via LiteLLM
+pytestmark = [
+    pytest.mark.litellm,
+    pytest.mark.watsonx,
+    pytest.mark.llm,
+    pytest.mark.requires_api_key,
+]
 
 from mellea import MelleaSession
 from mellea.backends.litellm import LiteLLMBackend
@@ -16,7 +25,6 @@ def session():
 
 def test_has_potential_event_loop_errors(session):
     """This test is specific to litellm backends that use watsonx/. It can be removed once that bug is fixed."""
-
     backend: LiteLLMBackend = session.backend
     potential_err = backend._has_potential_event_loop_errors()
     assert not potential_err, "first invocation in an event loop shouldn't flag errors"

@@ -6,6 +6,9 @@ import numpy as np
 import pytest
 from PIL import Image
 
+# Mark all tests in this module as requiring OpenAI API with vision support
+pytestmark = [pytest.mark.openai, pytest.mark.llm, pytest.mark.requires_api_key]
+
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
