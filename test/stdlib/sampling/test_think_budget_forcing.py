@@ -13,6 +13,7 @@ MODEL_ID = OPENAI_GPT_OSS_20B
 # Module-level markers: gpt-oss:20b is a 20B model requiring heavy resources
 pytestmark = [
     pytest.mark.ollama,
+    pytest.mark.requires_gpu,
     pytest.mark.requires_heavy_ram,
     pytest.mark.llm,
     pytest.mark.qualitative,
