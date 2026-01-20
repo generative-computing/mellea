@@ -1,4 +1,7 @@
-"""Allows you to use `pytest docs` to run the examples."""
+"""Allows you to use `pytest docs` to run the examples.
+
+To run notebooks, use: uv run --with 'mcp' pytest --nbmake docs/examples/notebooks/
+"""
 
 import pathlib
 import subprocess
@@ -42,14 +45,6 @@ def pytest_collect_file(parent: pytest.Dir, file_path: pathlib.PosixPath):
             return
 
         return ExampleFile.from_parent(parent, path=file_path)
-
-    # TODO: Support running jupyter notebooks:
-    #       - use nbmake or directly use nbclient as documented below
-    #       - install the nbclient package
-    #           - run either using python api or jupyter execute
-    #           - must replace background processes
-    # if file_path.suffix == ".ipynb":
-    #     return ExampleFile.from_parent(parent, path=file_path)
 
 
 class ExampleFile(pytest.File):

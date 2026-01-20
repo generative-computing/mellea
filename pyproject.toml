@@ -114,6 +114,7 @@ dev = [
     "pytest-asyncio",
     "mypy>=1.17.0",
     "python-semantic-release~=7.32",
+    "nbmake>=1.5.5",
 ]
 
 notebook = [

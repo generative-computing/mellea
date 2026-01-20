@@ -1,8 +1,10 @@
 import asyncio
-import pytest
 from typing import Literal
+
+import pytest
+
 from mellea import generative, start_session
-from mellea.backends.model_ids import META_LLAMA_3_2_1B
+from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import Requirement
 from mellea.stdlib.context import ChatContext, Context
@@ -22,7 +24,7 @@ def backend(gh_run: int):
     """Shared backend."""
     if gh_run == 1:
         return OllamaModelBackend(
-            model_id=META_LLAMA_3_2_1B.ollama_name  # type: ignore
+            model_id=IBM_GRANITE_4_MICRO_3B.ollama_name  # type: ignore
         )
     else:
         return OllamaModelBackend(model_id="granite3.3:8b")

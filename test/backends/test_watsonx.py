@@ -5,6 +5,12 @@ import os
 import pydantic
 import pytest
 
+# Skip entire module in CI since 8/9 tests are qualitative
+pytestmark = pytest.mark.skipif(
+    int(os.environ.get("CICD", 0)) == 1,
+    reason="Skipping Watsonx tests in CI - mostly qualitative tests",
+)
+
 from mellea import MelleaSession
 from mellea.formatters import TemplateFormatter
 from mellea.backends import ModelOption
