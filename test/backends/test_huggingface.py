@@ -1,29 +1,35 @@
 import asyncio
-from copy import copy
 import faulthandler
 import os
 import random
 import time
-from typing import Any, Coroutine
+from collections.abc import Coroutine
+from copy import copy
+from typing import Annotated, Any
 from unittest.mock import Mock
 
 import pydantic
 import pytest
 import torch
-from typing_extensions import Annotated
 
-# Skip entire module in CI since 17/18 tests are qualitative
-pytestmark = pytest.mark.skipif(
-    int(os.environ.get("CICD", 0)) == 1,
-    reason="Skipping HuggingFace tests in CI - mostly qualitative tests",
-)
+# Mark all tests in this module with backend and resource requirements
+pytestmark = [
+    pytest.mark.huggingface,
+    pytest.mark.llm,
+    pytest.mark.requires_gpu,
+    pytest.mark.requires_heavy_ram,
+    # Skip entire module in CI since 17/18 tests are qualitative
+    pytest.mark.skipif(
+        int(os.environ.get("CICD", 0)) == 1,
+        reason="Skipping HuggingFace tests in CI - mostly qualitative tests",
+    ),
+]
 
 from mellea import MelleaSession
+from mellea.backends import ModelOption
 from mellea.backends.adapters import GraniteCommonAdapter
 from mellea.backends.cache import SimpleLRUCache
-from mellea.formatters import TemplateFormatter
 from mellea.backends.huggingface import LocalHFBackend, _assert_correct_adapters
-from mellea.backends import ModelOption
 from mellea.core import (
     CBlock,
     Context,
@@ -31,10 +37,9 @@ from mellea.core import (
     ValidationResult,
     default_output_to_bool,
 )
+from mellea.formatters import TemplateFormatter
+from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext, SimpleContext
-
-from mellea.stdlib.components import Message
-from mellea.stdlib.components import Intrinsic
 from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement
 
 

@@ -2,27 +2,54 @@
 
 ## Table of Contents
 
-- [Chapter 1: What Is Generative Programming?](#chapter-1-what-is-generative-programming)
-- [Chapter 2: Getting Started with Generative Programming in Mellea](#chapter-2-getting-started-with-generative-programming-in-mellea)
-  - [Requirements](#requirements)
-  - [Validating Requirements](#validating-requirements)
-  - [Instruct - Validate - Repair](#instruct---validate---repair)
-  - [Model Options](#modeloptions)
-- [Chapter 3: Overview of the Standard Library](#chapter-3-overview-of-the-standard-library)
-- [Chapter 4: Generative Slots](#chapter-4-generative-slots)
-- [Chapter 5: MObjects](#chapter-5-mobjects)
-  - [Case Study: Working with Documents](#case-study-working-with-documents)
-- [Chapter 6: Tuning for Requirements and Components](#chapter-6-tuning-requirements-and-components)
-- [Chapter 7: Context Management](#chapter-7-on-context-management)
-- [Chapter 8: Implementing Agents](#chapter-8-implementing-agents)
-  - [Case Study: ReACT](#case-study-implementing-react-in-mellea)
-  - [The Guarded Nondeterminism Pattern](#guarded-nondeterminism)
-- [Chapter 9: Interoperability with Other Frameworks](#chapter-9-interoperability-with-other-frameworks)
-- [Chapter 10: Prompt Engineering for Mellea](#chapter-10-prompt-engineering-for-m)
-  - [Custom  Templates](#custom-templates)
-- [Chapter 11: Tool Calling](#chapter-11-tool-calling)
-- [Chapter 12: Asynchronicity](#chapter-12-asynchronicity)
-- [Appendix: Contributing to Mellea](#appendix-contributing-to-mellea)
+- [Principles of Generative Programming: The Mellea Approach](#principles-of-generative-programming-the-mellea-approach)
+  - [Table of Contents](#table-of-contents)
+  - [Chapter 1: What Is Generative Programming](#chapter-1-what-is-generative-programming)
+  - [Chapter 2: Getting Started with Generative Programming in Mellea](#chapter-2-getting-started-with-generative-programming-in-mellea)
+    - [Requirements](#requirements)
+    - [Validating Requirements](#validating-requirements)
+    - [Instruct - Validate - Repair](#instruct---validate---repair)
+    - [ModelOptions](#modeloptions)
+      - [System Messages](#system-messages)
+    - [Conclusion](#conclusion)
+  - [Chapter 3: Overview of the Standard Library](#chapter-3-overview-of-the-standard-library)
+  - [Chapter 4: Generative Slots](#chapter-4-generative-slots)
+      - [Example: Sentiment Classifier](#example-sentiment-classifier)
+      - [Using Generative slots to Provide Compositionality Across Module Boundaries](#using-generative-slots-to-provide-compositionality-across-module-boundaries)
+  - [Chapter 5: MObjects](#chapter-5-mobjects)
+    - [Example: A Table as an MObject](#example-a-table-as-an-mobject)
+    - [Case Study: Working with Documents](#case-study-working-with-documents)
+    - [MObject methods are tools](#mobject-methods-are-tools)
+  - [Chapter 6: Tuning Requirements and Components](#chapter-6-tuning-requirements-and-components)
+    - [Problem Statement](#problem-statement)
+    - [Training the aLoRA Adapter](#training-the-alora-adapter)
+      - [Parameters](#parameters)
+    - [Upload to Hugging Face (Optional)](#upload-to-hugging-face-optional)
+    - [Integrating the Tuned Model into Mellea](#integrating-the-tuned-model-into-mellea)
+  - [Chapter 7: On Context Management](#chapter-7-on-context-management)
+  - [Chapter 8: Implementing Agents](#chapter-8-implementing-agents)
+    - [Case Study: Implementing ReACT in Mellea](#case-study-implementing-react-in-mellea)
+    - [Guarded Nondeterminism](#guarded-nondeterminism)
+  - [Chapter 9: Interoperability with Other Frameworks](#chapter-9-interoperability-with-other-frameworks)
+    - [Simple mcp server running Mellea](#simple-mcp-server-running-mellea)
+    - [Running Mellea programs as an openai compatible server (Experimental)](#running-mellea-programs-as-an-openai-compatible-server-experimental)
+      - [Example `m serve` application](#example-m-serve-application)
+  - [Chapter 10: Prompt Engineering for M](#chapter-10-prompt-engineering-for-m)
+    - [Templates](#templates)
+    - [Template Representations](#template-representations)
+    - [Customization](#customization)
+      - [Choosing a Template](#choosing-a-template)
+      - [Editing an Existing Class](#editing-an-existing-class)
+  - [Chapter 11: Tool Calling](#chapter-11-tool-calling)
+  - [Chapter 12: Asynchronicity](#chapter-12-asynchronicity)
+    - [Asynchronous Functions:](#asynchronous-functions)
+    - [Asynchronicity in Synchronous Functions](#asynchronicity-in-synchronous-functions)
+  - [Appendix: Contributing to Mellea](#appendix-contributing-to-mellea)
+    - [Contributor Guide: Getting Started](#contributor-guide-getting-started)
+    - [Contributor Guide: Requirements and Verifiers](#contributor-guide-requirements-and-verifiers)
+    - [Contributor Guide: Components](#contributor-guide-components)
+    - [Contributor Guide: Specialized Mify](#contributor-guide-specialized-mify)
+    - [Contributor Guide: Sessions](#contributor-guide-sessions)
 
 ## Chapter 1: What Is Generative Programming
 
@@ -1410,7 +1437,8 @@ pre-commit install
 ```
 
 You can then run all tests by running `pytest`, or only the CI/CD tests by
-running `CICD=1 pytest`. 
+running `CICD=1 pytest`. See [test/MARKERS_GUIDE.md](../test/MARKERS_GUIDE.md) for
+details on running specific test categories (e.g., by backend, resource requirements).
 
 Tip: you can bypass the hooks by passing the `-n` flag to `git commit`.
 This is sometimes helpful for intermediate commits that you intend to later
