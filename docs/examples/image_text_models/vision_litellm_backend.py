@@ -24,17 +24,19 @@ ch = m.chat("What's 1+1?")
 print(str(ch.content))
 
 # test with PIL image
-res = m.instruct(
+res_instruct = m.instruct(
     "Is there a person on the image? Is the subject in the image smiling?",
     images=[test_pil],
 )
-print(str(res))
+print(f"Test with PIL and instruct: \n{str(res_instruct)}\n-----")
 # print(m.last_prompt())
 
 # with PIL image and using m.chat
-res = m.chat("How many eyes can you identify in the image? Explain.", images=[test_pil])
-print(str(res.content))
+res_chat = m.chat(
+    "How many eyes can you identify in the image? Explain.", images=[test_pil]
+)
+print(f"Test with PIL and chat: \n{str(res_chat.content)}\n-----")
 
 # and now without images again...
-res = m.instruct("How many eyes can you identify in the image?", images=[])
-print(str(res))
+res_empty = m.instruct("How many eyes can you identify in the image?", images=[])
+print(f"Test without image: \n{str(res_empty)}\n-----")
