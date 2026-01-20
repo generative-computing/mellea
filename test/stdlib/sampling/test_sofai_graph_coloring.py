@@ -13,8 +13,7 @@ from mellea.backends import Backend
 from mellea.core import GenerateLog, Requirement, ValidationResult
 from mellea.stdlib.components import Instruction, Message, ModelOutputThunk
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.sampling import SOFAISamplingStrategy, SamplingResult
-
+from mellea.stdlib.sampling import SamplingResult, SOFAISamplingStrategy
 
 # =============================================================================
 # Graph Coloring Test Domain
@@ -709,10 +708,13 @@ class TestSOFAIS2ModesGraphColoring:
 
 
 @pytest.mark.qualitative
+@pytest.mark.ollama
+@pytest.mark.llm
 class TestSOFAIGraphColoringIntegration:
     """Integration tests with actual LLM backends.
 
     These tests are marked qualitative and skipped in CI.
+    Uses llama3.2:1b (lightweight, no heavy RAM needed).
     """
 
     def test_graph_coloring_fresh_start(self):
