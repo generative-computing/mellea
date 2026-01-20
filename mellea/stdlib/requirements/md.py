@@ -1,14 +1,32 @@
 """This file contains various requirements for Markdown-formatted files."""
 
-import mistletoe
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from ...core import Context, Requirement
+
+if TYPE_CHECKING:
+    import mistletoe
+
+_mistletoe = None
+
+
+def _get_mistletoe():
+    global _mistletoe
+    if _mistletoe is None:
+        import mistletoe as mt
+
+        _mistletoe = mt
+    return _mistletoe
+
 
 # region lists
 
 
 def as_markdown_list(ctx: Context) -> list[str] | None:
     """Attempts to format the last_output of the given context as a markdown list."""
+    mistletoe = _get_mistletoe()
     xs = list()
     raw_output = ctx.last_output()
     assert raw_output is not None
@@ -44,6 +62,7 @@ is_markdown_list = Requirement(
 
 
 def _md_table(ctx: Context):
+    mistletoe = _get_mistletoe()
     raw_output = ctx.last_output()
     assert raw_output is not None
     try:

@@ -3,14 +3,14 @@ import os
 from io import BytesIO
 
 import numpy as np
-from PIL import Image
 import pytest
+from PIL import Image
 
-from mellea import start_session, MelleaSession
+from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
+from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.core import ImageBlock, ModelOutputThunk
-from mellea.stdlib.components import Message
-from mellea.stdlib.components import Instruction
+from mellea.stdlib.components import Instruction, Message
 
 
 @pytest.fixture(scope="module")
@@ -18,7 +18,7 @@ def m_session(gh_run):
     if gh_run == 1:
         m = start_session(
             "openai",
-            model_id="llama3.2:1b",
+            model_id=IBM_GRANITE_4_MICRO_3B.ollama_name,  # type: ignore
             base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
             api_key="ollama",
             model_options={ModelOption.MAX_NEW_TOKENS: 5},

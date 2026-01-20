@@ -1,4 +1,12 @@
+import os
+
 import pytest
+
+# Skip entire module in CI since the single test is qualitative
+pytestmark = pytest.mark.skipif(
+    int(os.environ.get("CICD", 0)) == 1,
+    reason="Skipping HuggingFace tools tests in CI - qualitative test",
+)
 
 import mellea.backends.model_ids as model_ids
 from mellea import MelleaSession
