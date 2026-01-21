@@ -2,10 +2,10 @@ import base64
 from io import BytesIO
 
 import numpy as np
-from PIL import Image
 import pytest
+from PIL import Image
 
-from mellea import start_session, MelleaSession
+from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
 from mellea.core import ImageBlock, ModelOutputThunk
 from mellea.stdlib.components import Message
@@ -15,11 +15,7 @@ from mellea.stdlib.components import Instruction
 @pytest.fixture(scope="module")
 def m_session(gh_run):
     if gh_run == 1:
-        m = start_session(
-            "ollama",
-            model_id="llama3.2:1b",
-            model_options={ModelOption.MAX_NEW_TOKENS: 5},
-        )
+        m = start_session(model_options={ModelOption.MAX_NEW_TOKENS: 5})
     else:
         m = start_session(
             "ollama",
@@ -50,13 +46,13 @@ def test_image_block_construction(pil_image: Image.Image):
 
     image_block = ImageBlock(img_str)
     assert isinstance(image_block, ImageBlock)
-    assert isinstance(image_block._value, str)
+    assert isinstance(image_block.value, str)
 
 
 def test_image_block_construction_from_pil(pil_image: Image.Image):
     image_block = ImageBlock.from_pil_image(pil_image)
     assert isinstance(image_block, ImageBlock)
-    assert isinstance(image_block._value, str)
+    assert isinstance(image_block.value, str)
     assert ImageBlock.is_valid_base64_png(str(image_block))
 
 
@@ -133,7 +129,7 @@ def test_image_block_in_chat(
 
     # first image in image list should be the same as the image block
     image0_str = last_action.images[0]  # type: ignore
-    assert image0_str == ImageBlock.from_pil_image(pil_image)._value
+    assert image0_str == ImageBlock.from_pil_image(pil_image).value
 
     # get prompt message
     lp = turn.output._generate_log.prompt  # type: ignore

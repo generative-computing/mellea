@@ -491,7 +491,7 @@ async def aact(
 
     if strategy is None:
         # Only use the strategy if one is provided. Add a warning if requirements were passed in though.
-        if requirements is not None and len(requirements) >= 0:
+        if requirements is not None and len(requirements) > 0:
             FancyLogger.get_logger().warning(
                 "Calling the function with NO strategy BUT requirements. No requirement is being checked!"
             )

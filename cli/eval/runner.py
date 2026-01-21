@@ -5,7 +5,7 @@ from typing import List
 
 import mellea
 from mellea.core import ModelOutputThunk
-from mellea.stdlib.test_based_eval import TestBasedEval
+from mellea.stdlib.components.unit_test_eval import TestBasedEval
 from mellea.backends import ModelOption
 
 from rich.console import Console
@@ -140,7 +140,7 @@ def create_session(
             )
 
         # create session with backend instance
-        from mellea.stdlib.base import SimpleContext
+        from mellea.stdlib.context import SimpleContext
 
         session = mellea.MelleaSession(backend=backend_instance, ctx=SimpleContext())
         return session

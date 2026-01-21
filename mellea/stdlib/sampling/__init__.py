@@ -8,3 +8,13 @@ from .base import (
     RejectionSamplingStrategy,
     RepairTemplateStrategy,
 )
+from .sofai import SOFAISamplingStrategy
+
+__all__ = [
+    "BaseSamplingStrategy",
+    "MultiTurnStrategy",
+    "RejectionSamplingStrategy",
+    "RepairTemplateStrategy",
+    "SamplingResult",
+    "SamplingStrategy",
+]

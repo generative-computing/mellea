@@ -3,14 +3,14 @@ import os
 from io import BytesIO
 
 import numpy as np
-from PIL import Image
 import pytest
+from PIL import Image
 
-from mellea import start_session, MelleaSession
+from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
+from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.core import ImageBlock, ModelOutputThunk
-from mellea.stdlib.components import Message
-from mellea.stdlib.components import Instruction
+from mellea.stdlib.components import Instruction, Message
 
 
 @pytest.fixture(scope="module")
@@ -18,7 +18,7 @@ def m_session(gh_run):
     if gh_run == 1:
         m = start_session(
             "openai",
-            model_id="llama3.2:1b",
+            model_id=IBM_GRANITE_4_MICRO_3B.ollama_name,  # type: ignore
             base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
             api_key="ollama",
             model_options={ModelOption.MAX_NEW_TOKENS: 5},
@@ -55,13 +55,13 @@ def test_image_block_construction(pil_image: Image.Image):
 
     image_block = ImageBlock(img_str)
     assert isinstance(image_block, ImageBlock)
-    assert isinstance(image_block._value, str)
+    assert isinstance(image_block.value, str)
 
 
 def test_image_block_construction_from_pil(pil_image: Image.Image):
     image_block = ImageBlock.from_pil_image(pil_image)
     assert isinstance(image_block, ImageBlock)
-    assert isinstance(image_block._value, str)
+    assert isinstance(image_block.value, str)
     assert ImageBlock.is_valid_base64_png(str(image_block))
 
 
@@ -120,7 +120,7 @@ def test_image_block_in_instruction(
     assert "url" in image_url
 
     # check that the image is in the url content
-    assert image_block._value[:100] in image_url["url"]
+    assert image_block.value[:100] in image_url["url"]
 
 
 def test_image_block_in_chat(
@@ -144,7 +144,7 @@ def test_image_block_in_chat(
 
     # first image in image list should be the same as the image block
     image0_str = last_action.images[0]  # type: ignore
-    assert image0_str == ImageBlock.from_pil_image(pil_image)._value
+    assert image0_str == ImageBlock.from_pil_image(pil_image).value
 
     # get prompt message
     lp = turn.output._generate_log.prompt  # type: ignore
@@ -173,7 +173,7 @@ def test_image_block_in_chat(
     assert "url" in image_url
 
     # check that the image is in the url content
-    assert ImageBlock.from_pil_image(pil_image)._value[:100] in image_url["url"]
+    assert ImageBlock.from_pil_image(pil_image).value[:100] in image_url["url"]
 
 
 if __name__ == "__main__":
