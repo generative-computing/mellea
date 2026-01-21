@@ -76,6 +76,7 @@ hf = [
     "peft>=0.18.0", # aLoRA support was added in Peft 0.18.0
     "transformers>=4.53.2",
     "trl==0.19.1",
+    "granite-common[transformers]",
 ]
 
 vllm = [
