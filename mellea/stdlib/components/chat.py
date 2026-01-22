@@ -79,7 +79,7 @@ class Message(Component["Message"]):
             template_order=["*", "Message"],
         )
 
-    def __str__(self):
+    def __repr__(self) -> str:
         """Pretty representation of messages, because they are a special case."""
         images = []
         if self.images is not None:
@@ -176,9 +176,9 @@ class ToolMessage(Message):
             obj=self, args=args, template_order=["*", "Message"]
         )
 
-    def __str__(self):
+    def __repr__(self) -> str:
         """Pretty representation of messages, because they are a special case."""
-        return f'mellea.Message(role="{self.role}", content="{self.content}", name="{self.name}")'
+        return f'mellea.ToolMessage(role="{self.role}", content="{self.content}", name="{self.name}")'
 
 
 def as_chat_history(ctx: Context) -> list[Message]:
