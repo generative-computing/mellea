@@ -242,9 +242,10 @@ def pytest_runtest_setup(item):
             )
 
     # Backend-specific skipping
-    if item.get_closest_marker("openai") and not ignore_api_key:
-        if not capabilities["has_api_keys"].get("openai"):
-            pytest.skip("Skipping test: OPENAI_API_KEY not found in environment")
+    # Leaving OpenAI commented since our current OpenAI tests don't require OpenAI apikeys.
+    # if item.get_closest_marker("openai") and not ignore_api_key:
+    #     if not capabilities["has_api_keys"].get("openai"):
+    #         pytest.skip("Skipping test: OPENAI_API_KEY not found in environment")
 
     if item.get_closest_marker("watsonx") and not ignore_api_key:
         if not capabilities["has_api_keys"].get("watsonx"):
