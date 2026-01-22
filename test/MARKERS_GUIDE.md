@@ -9,7 +9,7 @@ This guide explains the pytest marker system for categorizing and running mellea
 ### ✅ Automatic (No Configuration Needed)
 When you run `pytest`, the system **automatically detects** and skips tests based on:
 - **Ollama availability** - Checks if port 11434 is listening
-- **API keys** - Checks environment variables (`OPENAI_API_KEY`, `WATSONX_APIKEY`, etc.)
+- **API keys** - Checks environment variables (`OPENAI_API_KEY`, `WATSONX_API_KEY`, etc.)
 - **GPU availability** - Checks for CUDA (NVIDIA) or MPS (Apple Silicon) via torch
 - **System RAM** - Checks via `psutil.virtual_memory()` (if psutil installed)
 
@@ -44,6 +44,9 @@ pytest --ignore-ollama-check test/backends/test_ollama.py
 
 # Try without API keys (will fail at API call)
 pytest --ignore-api-key-check test/backends/test_openai.py
+
+# Ignore all checks at once (convenience flag)
+pytest --ignore-all-checks
 
 # Combine multiple overrides
 pytest --ignore-gpu-check --ignore-ram-check -m "huggingface"
@@ -97,7 +100,7 @@ Specify which backend the test uses:
   - Example: `test/backends/test_vision_openai.py`
 
 - **`@pytest.mark.watsonx`**: Tests requiring Watsonx API
-  - Requires `WATSONX_APIKEY` or `IBM_CLOUD_API_KEY` environment variable
+  - Requires `WATSONX_API_KEY`, `WATSONX_URL`, and `WATSONX_PROJECT_ID` environment variables
   - Light resources (API calls only)
   - Incurs API costs
   - Example: `test/backends/test_watsonx.py`
@@ -106,7 +109,7 @@ Specify which backend the test uses:
   - Local execution
   - Heavy resources (GPU recommended, 16-32GB RAM, ~8GB VRAM)
   - Downloads models (~3-8GB)
-  - No API key required (unless using gated models)
+  - No API key required
   - Example: `test/backends/test_huggingface.py`
 
 - **`@pytest.mark.vllm`**: Tests requiring vLLM backend
@@ -154,9 +157,9 @@ The test suite automatically detects your system capabilities and skips tests th
 ```python
 # Automatically checks for:
 OPENAI_API_KEY          # For OpenAI tests
-WATSONX_APIKEY          # For Watsonx tests
-IBM_CLOUD_API_KEY       # Alternative for Watsonx
-HF_TOKEN                # For gated HuggingFace models
+WATSONX_API_KEY         # For Watsonx tests
+WATSONX_URL             # For Watsonx tests
+WATSONX_PROJECT_ID      # For Watsonx tests
 ```
 
 ### Backend Availability Detection
@@ -174,8 +177,11 @@ HF_TOKEN                # For gated HuggingFace models
 ```
 
 ### Skip Messages
-When a test is skipped, you'll see helpful messages:
-```
+When a test is skipped, you'll see helpful messages (use `-rs` flag to show skip reasons):
+```bash
+pytest -rs
+
+# Output:
 SKIPPED [1] test/conftest.py:120: Skipping test: OPENAI_API_KEY not found in environment
 SKIPPED [1] test/conftest.py:125: Skipping test: GPU not available
 SKIPPED [1] test/conftest.py:130: Skipping test: Insufficient RAM (16.0GB < 32GB)
@@ -399,27 +405,6 @@ pytest -m "ollama" -v
 3. **Keep qualitative marker** for non-deterministic tests
 4. **Test locally** before pushing to ensure markers work correctly
 5. **Document special requirements** in test docstrings
-
-## Migration from Old System
-
-### Before (Old System)
-```python
-# Only qualitative marker
-@pytest.mark.qualitative
-def test_ollama_instruct(session):
-    ...
-```
-
-### After (New System)
-```python
-# Module-level backend markers
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
-
-# Keep qualitative for quality tests
-@pytest.mark.qualitative
-def test_ollama_instruct(session):
-    ...
-```
 
 ## Related Files
 

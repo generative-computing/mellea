@@ -77,14 +77,13 @@ def get_system_capabilities():
     # Detect API keys
     api_key_vars = {
         "openai": "OPENAI_API_KEY",
-        "watsonx": ["WATSONX_APIKEY", "IBM_CLOUD_API_KEY"],
-        "huggingface": "HF_TOKEN",
+        "watsonx": ["WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID"],
     }
 
     for backend, env_vars in api_key_vars.items():
         if isinstance(env_vars, str):
             env_vars = [env_vars]
-        capabilities["has_api_keys"][backend] = any(
+        capabilities["has_api_keys"][backend] = all(
             os.environ.get(var) for var in env_vars
         )
 
@@ -135,6 +134,12 @@ def pytest_addoption(parser):
         action="store_true",
         default=False,
         help="Ignore API key checks (tests will fail without valid API keys)",
+    )
+    parser.addoption(
+        "--ignore-all-checks",
+        action="store_true",
+        default=False,
+        help="Ignore all requirement checks (GPU, RAM, Ollama, API keys)",
     )
 
 
@@ -191,12 +196,17 @@ def pytest_runtest_setup(item):
     config = item.config
 
     # Check for override flags from CLI
-    ignore_gpu = config.getoption("--ignore-gpu-check", default=False)
-    ignore_ram = config.getoption("--ignore-ram-check", default=False)
-    ignore_ollama = config.getoption("--ignore-ollama-check", default=False)
-    ignore_api_key = config.getoption("--ignore-api-key-check", default=False)
+    ignore_all = config.getoption("--ignore-all-checks", default=False)
+    ignore_gpu = config.getoption("--ignore-gpu-check", default=False) or ignore_all
+    ignore_ram = config.getoption("--ignore-ram-check", default=False) or ignore_all
+    ignore_ollama = (
+        config.getoption("--ignore-ollama-check", default=False) or ignore_all
+    )
+    ignore_api_key = (
+        config.getoption("--ignore-api-key-check", default=False) or ignore_all
+    )
 
-    # Skip qualitative tests in CI (existing behavior)
+    # Skip qualitative tests in CI
     if item.get_closest_marker("qualitative") and gh_run == 1:
         pytest.skip(
             reason="Skipping qualitative test: got env variable CICD == 1. Used only in gh workflows."

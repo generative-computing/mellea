@@ -21,14 +21,6 @@ from mellea.stdlib.components import Instruction, Message
 from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.sampling import BaseSamplingStrategy
 
-# Module-level markers: Uses granite3.3:8b (8B, heavy) in local mode
-pytestmark = [
-    pytest.mark.ollama,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.llm,
-]
-
 
 class FloatComp(Component[float]):
     def __init__(self, value: str) -> None:
@@ -125,7 +117,12 @@ def test_incorrect_type_override():
 
 
 # Marking as qualitative for now since there's so much generation required for this.
+# Uses granite3.3:8b (8B, heavy) in local mode
 @pytest.mark.qualitative
+@pytest.mark.ollama
+@pytest.mark.requires_gpu
+@pytest.mark.requires_heavy_ram
+@pytest.mark.llm
 async def test_generating(session):
     m = session
     ic = IntComp("generate an int")
@@ -166,6 +163,10 @@ async def test_generating(session):
 
 
 @pytest.mark.qualitative
+@pytest.mark.ollama
+@pytest.mark.requires_gpu
+@pytest.mark.requires_heavy_ram
+@pytest.mark.llm
 def test_message_typing(session):
     m = session
     user_message = Message("user", "Hello!")
@@ -179,6 +180,10 @@ def test_message_typing(session):
 
 
 @pytest.mark.qualitative
+@pytest.mark.ollama
+@pytest.mark.requires_gpu
+@pytest.mark.requires_heavy_ram
+@pytest.mark.llm
 async def test_generating_with_sampling(session):
     m = session
     m = start_session()
