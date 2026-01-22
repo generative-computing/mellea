@@ -1,11 +1,19 @@
 import pytest
 
 from mellea.backends import ModelOption
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
 from mellea.core import CBlock
 from mellea.stdlib.components import SimpleComponent
-from mellea.stdlib.session import start_session, MelleaSession
-from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
-from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.session import MelleaSession, start_session
+
+# Module-level markers for all tests using granite-3.3-8b (8B model)
+pytestmark = [
+    pytest.mark.huggingface,
+    pytest.mark.requires_gpu,
+    pytest.mark.requires_heavy_ram,
+    pytest.mark.llm,
+]
 
 
 # We edit the context type in the async tests below. Don't change the scope here.

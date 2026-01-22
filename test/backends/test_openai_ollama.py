@@ -7,6 +7,9 @@ import openai
 import pydantic
 import pytest
 
+# Mark all tests in this module as requiring Ollama via OpenAI-compatible API
+pytestmark = [pytest.mark.openai, pytest.mark.ollama, pytest.mark.llm]
+
 from mellea import MelleaSession
 from mellea.backends import ModelOption
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
@@ -103,7 +106,6 @@ def test_format(m_session):
     # this is not guaranteed, due to the lack of regexp pattern
     # assert "@" in email.to.email_address
     # assert email.to.email_address.endswith("example.com")
-    pass
 
 
 @pytest.mark.qualitative

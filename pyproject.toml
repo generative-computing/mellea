@@ -113,6 +113,7 @@ dev = [
     "pdm>=2.24.0",
     "pytest",
     "pytest-asyncio",
+    "psutil",  # For test infrastructure: RAM detection in conftest.py
     "mypy>=1.17.0",
     "python-semantic-release~=7.32",
     "nbmake>=1.5.5",
@@ -199,7 +200,22 @@ python_version = "3.10"
 
 [tool.pytest.ini_options]
 markers = [
-    "qualitative: Marks the test as needing an exact output from an LLM; set by an ENV variable for CICD. All tests marked with this will xfail in CI/CD"
+    # Backend markers
+    "ollama: Tests requiring Ollama backend (local, light)",
+    "openai: Tests requiring OpenAI API (requires API key)",
+    "watsonx: Tests requiring Watsonx API (requires API key)",
+    "huggingface: Tests requiring HuggingFace backend (local, heavy)",
+    "vllm: Tests requiring vLLM backend (local, GPU required)",
+    "litellm: Tests requiring LiteLLM backend",
+    
+    # Capability markers
+    "requires_api_key: Tests requiring external API keys",
+    "requires_gpu: Tests requiring GPU",
+    "requires_heavy_ram: Tests requiring 48GB+ RAM",
+    "qualitative: Non-deterministic quality tests",
+    
+    # Composite markers
+    "llm: Tests that make LLM calls (needs at least Ollama)",
 ]
 asyncio_mode = "auto"  # Don't require explicitly marking async tests.
 

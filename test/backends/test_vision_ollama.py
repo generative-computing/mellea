@@ -5,11 +5,13 @@ import numpy as np
 import pytest
 from PIL import Image
 
+# Mark all tests in this module as requiring Ollama with vision support
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
 from mellea.core import ImageBlock, ModelOutputThunk
-from mellea.stdlib.components import Message
-from mellea.stdlib.components import Instruction
+from mellea.stdlib.components import Instruction, Message
 
 
 @pytest.fixture(scope="module")

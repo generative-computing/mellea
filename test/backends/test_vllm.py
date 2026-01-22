@@ -1,19 +1,27 @@
 import asyncio
 import os
+from typing import Annotated
+
 import pydantic
 import pytest
-from typing_extensions import Annotated
 
-# Skip entire module in CI since all 8 tests are qualitative
-pytestmark = pytest.mark.skipif(
-    int(os.environ.get("CICD", 0)) == 1,
-    reason="Skipping vLLM tests in CI - all qualitative tests",
-)
+# Mark all tests in this module with backend and resource requirements
+pytestmark = [
+    pytest.mark.vllm,
+    pytest.mark.llm,
+    pytest.mark.requires_gpu,
+    pytest.mark.requires_heavy_ram,
+    # Skip entire module in CI since all 8 tests are qualitative
+    pytest.mark.skipif(
+        int(os.environ.get("CICD", 0)) == 1,
+        reason="Skipping vLLM tests in CI - all qualitative tests",
+    ),
+]
 
-from mellea import MelleaSession
-from mellea.backends.vllm import LocalVLLMBackend
-from mellea.backends import ModelOption
 import mellea.backends.model_ids as model_ids
+from mellea import MelleaSession
+from mellea.backends import ModelOption
+from mellea.backends.vllm import LocalVLLMBackend
 from mellea.core import CBlock
 from mellea.stdlib.context import ChatContext, SimpleContext
 

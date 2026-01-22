@@ -1,16 +1,18 @@
 import asyncio
 import os
+
 import pytest
 
+# Mark all tests in this module as requiring Ollama via LiteLLM
+pytestmark = [pytest.mark.litellm, pytest.mark.ollama, pytest.mark.llm]
+
 from mellea import MelleaSession, generative
-from mellea.backends import ModelOption
+from mellea.backends import ModelOption, model_ids
 from mellea.backends.litellm import LiteLLMBackend
 from mellea.core import CBlock
-from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.components import Message
+from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.sampling import RejectionSamplingStrategy
-from mellea.backends import model_ids
-
 
 _MODEL_ID = f"ollama_chat/{model_ids.IBM_GRANITE_4_MICRO_3B.ollama_name}"
 

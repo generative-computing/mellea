@@ -9,16 +9,20 @@ import pytest
 import torch
 
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.components import Document
-from mellea.stdlib.context import ChatContext
-from mellea.stdlib.components import Message
+from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
+from mellea.stdlib.context import ChatContext
 
 # Skip entire module in CI since all 7 tests are qualitative
-pytestmark = pytest.mark.skipif(
-    int(os.environ.get("CICD", 0)) == 1,
-    reason="Skipping RAG tests in CI - all qualitative tests",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        int(os.environ.get("CICD", 0)) == 1,
+        reason="Skipping RAG tests in CI - all qualitative tests",
+    ),
+    pytest.mark.huggingface,
+    pytest.mark.requires_gpu,
+    pytest.mark.llm,
+]
 
 DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 """Location of data files for the tests in this file."""
@@ -30,7 +34,6 @@ BASE_MODEL = "ibm-granite/granite-4.0-micro"
 @pytest.fixture(name="backend")
 def _backend():
     """Backend used by the tests in this file."""
-
     # Prevent thrashing if the default device is CPU
     torch.set_num_threads(4)
 
@@ -48,7 +51,8 @@ def _backend():
 
 def _read_input_json(file_name: str):
     """Shared code for reading data stored in JSON files and converting to Mellea
-    types."""
+    types.
+    """
     with open(DATA_ROOT / "input_json" / file_name, encoding="utf-8") as f:
         json_data = json.load(f)
 
@@ -70,7 +74,8 @@ def _read_input_json(file_name: str):
 
 def _read_output_json(file_name: str):
     """Shared code for reading canned outputs stored in JSON files and converting
-    to Mellea types."""
+    to Mellea types.
+    """
     with open(DATA_ROOT / "output_json" / file_name, encoding="utf-8") as f:
         json_data = json.load(f)
 

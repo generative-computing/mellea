@@ -267,10 +267,13 @@ Error 2: Y
 
 
 @pytest.mark.qualitative
+@pytest.mark.ollama
+@pytest.mark.llm
 class TestSOFAIIntegration:
     """Integration tests for SOFAISamplingStrategy.
 
     These tests require actual LLM backends and are marked as qualitative.
+    Uses llama3.2:1b (lightweight, no heavy RAM needed).
     """
 
     def test_sofai_with_ollama(self, gh_run):

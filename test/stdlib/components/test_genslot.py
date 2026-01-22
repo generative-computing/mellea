@@ -3,20 +3,27 @@ from typing import Literal
 
 import pytest
 
-from mellea import generative, start_session
+from mellea import MelleaSession, generative, start_session
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import Requirement
-from mellea.stdlib.context import ChatContext, Context
 from mellea.stdlib.components.genslot import (
     AsyncGenerativeSlot,
     GenerativeSlot,
     PreconditionException,
     SyncGenerativeSlot,
 )
+from mellea.stdlib.context import ChatContext, Context
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
-from mellea import MelleaSession
+
+# Module-level markers: Uses granite3.3:8b (8B, heavy) in local mode
+pytestmark = [
+    pytest.mark.ollama,
+    pytest.mark.requires_gpu,
+    pytest.mark.requires_heavy_ram,
+    pytest.mark.llm,
+]
 
 
 @pytest.fixture(scope="module")
@@ -161,7 +168,6 @@ def test_arg_extraction(backend, arg_choices, kwarg_choices, errs):
     Python should catch most of these issues itself. We have to manually raise an exception for
     the arguments of the original function being positional.
     """
-
     # List of all needed values.
     backend = backend
     ctx = ChatContext()
@@ -242,7 +248,6 @@ def test_with_no_args(session):
     @generative
     def generate_text() -> str:
         """Generate text!"""
-        ...
 
     generate_text(m=session)
 
