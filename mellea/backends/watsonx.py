@@ -38,6 +38,10 @@ from ..helpers import (
 )
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
+from ..telemetry.backend_instrumentation import (
+    instrument_generate_from_context,
+    instrument_generate_from_raw,
+)
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -250,14 +254,21 @@ class WatsonxAIBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The watsonx.ai backend only supports chat-like contexts."
         )
-        mot = await self.generate_from_chat_context(
-            action,
-            ctx,
-            _format=format,
-            model_options=model_options,
+        with instrument_generate_from_context(
+            backend=self,
+            action=action,
+            ctx=ctx,
+            format=format,
             tool_calls=tool_calls,
-        )
-        return mot, ctx.add(action).add(mot)
+        ):
+            mot = await self.generate_from_chat_context(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
+            return mot, ctx.add(action).add(mot)
 
     async def generate_from_chat_context(
         self,
@@ -513,24 +524,30 @@ class WatsonxAIBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generates a completion text. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(list(actions))
+        with instrument_generate_from_raw(
+            backend=self,
+            num_actions=len(actions),
+            format=format,
+            tool_calls=tool_calls,
+        ):
+            await self.do_generate_walks(list(actions))
 
-        if format is not None:
-            FancyLogger.get_logger().warning(
-                "WatsonxAI completion api does not accept response format, ignoring it for this request."
+            if format is not None:
+                FancyLogger.get_logger().warning(
+                    "WatsonxAI completion api does not accept response format, ignoring it for this request."
+                )
+
+            model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
+
+            prompts = [self.formatter.print(action) for action in actions]
+
+            responses = await asyncio.to_thread(
+                self._model.generate,
+                prompt=prompts,
+                params=self._make_backend_specific_and_remove(
+                    model_opts, is_chat_context=False
+                ),
             )
-
-        model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
-
-        prompts = [self.formatter.print(action) for action in actions]
-
-        responses = await asyncio.to_thread(
-            self._model.generate,
-            prompt=prompts,
-            params=self._make_backend_specific_and_remove(
-                model_opts, is_chat_context=False
-            ),
-        )
 
         results = []
         date = datetime.datetime.now()
