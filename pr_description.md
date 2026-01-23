@@ -1,18 +1,38 @@
-# Friendly Error Messages for Optional Dependencies
+<!-- mellea-pr-edited-marker: do not remove this marker -->
+  # Misc PR
 
-## Summary
+## Type of PR
+
+- [x] Bug Fix
+- [ ] New Feature
+- [ ] Documentation
+- [ ] Other
+
+## Description
+- [x] Link to Issue: Fixes #342
+
+### Summary
 Improves the user experience for optional backends (`hf`, `watsonx`, `litellm`) by wrapping their imports in `try/except ImportError` blocks.
 
-## Problem
+### Problem
 Previously, if a user ran `start_session(backend="hf")` without installing `mellea[hf]`, they received a raw `ModuleNotFoundError: No module named 'outlines'`. This was confusing for new users who didn't know `outlines` is an internal dependency of the HuggingFace backend.
 
-## Solution
+### Solution
 This PR catches the `ImportError` during the backend resolution phase and raises a cleaner `ImportError` that explicitly tells the user which extra to install.
 
 **New Error Message:**
 > The 'hf' backend requires extra dependencies. Please install them with: pip install 'mellea[hf]'
 
-## Verification
+### Note on Other Dependencies
+*   **vLLM**: Not used in `start_session()`, so users cannot trigger this crash. To fix this, we would first need to add "vllm" support to `backend_name_to_class`, and then wrap that new import in the same `try/except` block. That feels like a new feature so do it when adding?
+*   **Docling**: Usage is isolated to `RichDocument`, but requires refactoring top-level imports (lazy loading) to fix properly. Out of scope for this quick fix. Can add here for completeness but would mean a bigger change?
+*   **Dev dependencies**: Missing dev tools (e.g. `pytest`) will still raise standard errors.
+
+### Testing
+- [ ] Tests added to the respective file if code was changed
+- [ ] New code has 100% coverage if code as added
+- [ ] Ensure existing tests and github automation passes (a maintainer will kick off the github automation when the rest of the PR is populated)
+
 Verified in a clean virtual environment (Python 3.12) with **no** extra dependencies installed.
 
 **Test Script Output:**
@@ -60,8 +80,3 @@ SUCCESS: Friendly error message detected.
 Caught Expected ImportError: The 'litellm' backend requires extra dependencies. Please install them with: pip install 'mellea[litellm]'
 SUCCESS: Friendly error message detected.
 ```
-
-## Note on Other Dependencies
-*   **vLLM**: Not used in `start_session()`, so users cannot trigger this crash. To fix this, we would first need to add "vllm" support to `backend_name_to_class`, and then wrap that new import in the same `try/except` block. That feels like a new feature so do it when adding?
-*   **Docling**: Usage is isolated to `RichDocument`, but requires refactoring top-level imports (lazy loading) to fix properly. Out of scope for this quick fix. Can add here for completeness but would mean a bigger change?
-*   **Dev dependencies**: Missing dev tools (e.g. `pytest`) will still raise standard errors.
