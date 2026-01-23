@@ -1,16 +1,19 @@
 import asyncio
 import json
+from typing import Annotated
 
 import pydantic
 import pytest
-from typing_extensions import Annotated
 
 from mellea import start_session
-from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends import ModelOption
+from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import CBlock, Requirement
 from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.requirements import simple_validate
+
+# Mark all tests in this module as requiring Ollama
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 
 
 @pytest.fixture(scope="function")
@@ -40,7 +43,7 @@ def test_instruct_with_requirement(session):
     )
 
     email_word_count_req = Requirement(
-        f"The email should be at most 100",
+        "The email should be at most 100",
         validation_fn=simple_validate(lambda x: len(" ".split(x)) <= 100),
     )
 
@@ -96,7 +99,6 @@ def test_format(session):
     # this is not guaranteed, due to the lack of regexp pattern
     # assert "@" in email.to.email_address
     # assert email.to.email_address.endswith("example.com")
-    pass
 
 
 @pytest.mark.qualitative

@@ -1,8 +1,11 @@
 """Tests for checking the functionality of typed components, model output thunks and sampling results."""
 
-import pytest
 from typing import get_args
-from mellea import start_session
+
+import pytest
+
+import mellea.stdlib.functional as mfuncs
+from mellea import MelleaSession, start_session
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import (
@@ -11,15 +14,12 @@ from mellea.core import (
     ComponentParseError,
     Context,
     ModelOutputThunk,
+    Requirement,
+    ValidationResult,
 )
+from mellea.stdlib.components import Instruction, Message
 from mellea.stdlib.context import ChatContext, SimpleContext
-from mellea.stdlib.components import Message
-from mellea.stdlib.components import Instruction
-from mellea.core import Requirement, ValidationResult
 from mellea.stdlib.sampling import BaseSamplingStrategy
-from mellea import MelleaSession
-
-import mellea.stdlib.functional as mfuncs
 
 
 class FloatComp(Component[float]):
@@ -78,7 +78,7 @@ def session(backend) -> MelleaSession:
 def test_mot_init_typing():
     mot = ModelOutputThunk[float](value="1")
     assert hasattr(mot, "__orig_class__"), (
-        f"mots are generics and should have this field"
+        "mots are generics and should have this field"
     )
     assert get_args(mot.__orig_class__)[0] == float, (  # type: ignore
         f"expected float, got {get_args(mot.__orig_class__)[0]} as mot type"  # type: ignore
@@ -86,7 +86,7 @@ def test_mot_init_typing():
 
     unknown_mot = ModelOutputThunk(value="2")
     assert not hasattr(unknown_mot, "__orig_class__"), (
-        f"unknown mots / mots with no type defined at instantiate don't have this attribute"
+        "unknown mots / mots with no type defined at instantiate don't have this attribute"
     )
 
 
@@ -117,7 +117,12 @@ def test_incorrect_type_override():
 
 
 # Marking as qualitative for now since there's so much generation required for this.
+# Uses granite3.3:8b (8B, heavy) in local mode
 @pytest.mark.qualitative
+@pytest.mark.ollama
+@pytest.mark.requires_gpu
+@pytest.mark.requires_heavy_ram
+@pytest.mark.llm
 async def test_generating(session):
     m = session
     ic = IntComp("generate an int")
@@ -158,6 +163,10 @@ async def test_generating(session):
 
 
 @pytest.mark.qualitative
+@pytest.mark.ollama
+@pytest.mark.requires_gpu
+@pytest.mark.requires_heavy_ram
+@pytest.mark.llm
 def test_message_typing(session):
     m = session
     user_message = Message("user", "Hello!")
@@ -171,6 +180,10 @@ def test_message_typing(session):
 
 
 @pytest.mark.qualitative
+@pytest.mark.ollama
+@pytest.mark.requires_gpu
+@pytest.mark.requires_heavy_ram
+@pytest.mark.llm
 async def test_generating_with_sampling(session):
     m = session
     m = start_session()

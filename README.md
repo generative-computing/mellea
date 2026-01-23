@@ -265,7 +265,8 @@ pre-commit install
 ```
 
 You can then run all tests by running `pytest`, or only the CI/CD tests by
-running `CICD=1 pytest`. 
+running `CICD=1 pytest`. See [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md) for
+details on running specific test categories (e.g., by backend, resource requirements).
 
 Tip: you can bypass the hooks by passing the `-n` flag to `git commit`.
 This is sometimes helpful for intermediate commits that you intend to later

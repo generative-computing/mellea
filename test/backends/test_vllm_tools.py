@@ -1,16 +1,23 @@
 import os
+
 import pytest
 
 # Skip entire module in CI since the single test is qualitative
-pytestmark = pytest.mark.skipif(
-    int(os.environ.get("CICD", 0)) == 1,
-    reason="Skipping vLLM tools tests in CI - qualitative test",
-)
+pytestmark = [
+    pytest.mark.vllm,
+    pytest.mark.llm,
+    pytest.mark.requires_gpu,
+    pytest.mark.requires_heavy_ram,
+    pytest.mark.skipif(
+        int(os.environ.get("CICD", 0)) == 1,
+        reason="Skipping vLLM tools tests in CI - qualitative test",
+    ),
+]
 
-from mellea import MelleaSession
-from mellea.backends.vllm import LocalVLLMBackend
-from mellea.backends import ModelOption
 import mellea.backends.model_ids as model_ids
+from mellea import MelleaSession
+from mellea.backends import ModelOption
+from mellea.backends.vllm import LocalVLLMBackend
 from mellea.stdlib.context import ChatContext
 
 
