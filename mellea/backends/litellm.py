@@ -35,6 +35,10 @@ from ..helpers import (
 )
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
+from ..telemetry.backend_instrumentation import (
+    instrument_generate_from_context,
+    instrument_generate_from_raw,
+)
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -126,14 +130,21 @@ class LiteLLMBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
-        mot = await self._generate_from_chat_context_standard(
-            action,
-            ctx,
-            _format=format,
-            model_options=model_options,
+        with instrument_generate_from_context(
+            backend=self,
+            action=action,
+            ctx=ctx,
+            format=format,
             tool_calls=tool_calls,
-        )
-        return mot, ctx.add(action).add(mot)
+        ):
+            mot = await self._generate_from_chat_context_standard(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
+            return mot, ctx.add(action).add(mot)
 
     def _simplify_and_merge(
         self, model_options: dict[str, Any] | None
@@ -507,35 +518,41 @@ class LiteLLMBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(list(actions))
-        extra_body = {}
-        if format is not None:
-            FancyLogger.get_logger().warning(
-                "The official OpenAI completion api does not accept response format / structured decoding; "
-                "it will be passed as an extra arg."
+        with instrument_generate_from_raw(
+            backend=self,
+            num_actions=len(actions),
+            format=format,
+            tool_calls=tool_calls,
+        ):
+            await self.do_generate_walks(list(actions))
+            extra_body = {}
+            if format is not None:
+                FancyLogger.get_logger().warning(
+                    "The official OpenAI completion api does not accept response format / structured decoding; "
+                    "it will be passed as an extra arg."
+                )
+
+                # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
+                extra_body["guided_json"] = format.model_json_schema()  # type: ignore
+            if tool_calls:
+                FancyLogger.get_logger().warning(
+                    "The completion endpoint does not support tool calling."
+                )
+
+            # We don't do anything fancy for model_opts with generate from raw; litellm has too many potential options depending on provider.
+            model_opts = self._simplify_and_merge(model_options)
+            model_specific_options = self._make_backend_specific_and_remove(model_opts)
+
+            if self._has_potential_event_loop_errors():
+                FancyLogger().get_logger().warning(
+                    "There is a known bug with litellm. This generation call may fail. If it does, you should ensure that you are either running only synchronous Mellea functions or running async Mellea functions from one asyncio.run() call."
+                )
+
+            prompts = [self.formatter.print(action) for action in actions]
+
+            completion_response = await litellm.atext_completion(
+                model=self._model_id, prompt=prompts, **model_specific_options
             )
-
-            # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
-            extra_body["guided_json"] = format.model_json_schema()  # type: ignore
-        if tool_calls:
-            FancyLogger.get_logger().warning(
-                "The completion endpoint does not support tool calling."
-            )
-
-        # We don't do anything fancy for model_opts with generate from raw; litellm has too many potential options depending on provider.
-        model_opts = self._simplify_and_merge(model_options)
-        model_specific_options = self._make_backend_specific_and_remove(model_opts)
-
-        if self._has_potential_event_loop_errors():
-            FancyLogger().get_logger().warning(
-                "There is a known bug with litellm. This generation call may fail. If it does, you should ensure that you are either running only synchronous Mellea functions or running async Mellea functions from one asyncio.run() call."
-            )
-
-        prompts = [self.formatter.print(action) for action in actions]
-
-        completion_response = await litellm.atext_completion(
-            model=self._model_id, prompt=prompts, **model_specific_options
-        )
 
         # Necessary for type checker.
         assert isinstance(completion_response, litellm.TextCompletionResponse)  # type: ignore

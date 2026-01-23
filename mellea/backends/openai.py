@@ -43,6 +43,10 @@ from ..helpers import (
 )
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
+from ..telemetry.backend_instrumentation import (
+    instrument_generate_from_context,
+    instrument_generate_from_raw,
+)
 from .adapters import (
     AdapterMixin,
     AdapterType,
@@ -308,13 +312,20 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
-        return await self.generate_from_chat_context(
-            action,
-            ctx,
-            _format=format,
-            model_options=model_options,
+        with instrument_generate_from_context(
+            backend=self,
+            action=action,
+            ctx=ctx,
+            format=format,
             tool_calls=tool_calls,
-        )
+        ):
+            return await self.generate_from_chat_context(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
 
     async def generate_from_chat_context(
         self,
@@ -816,24 +827,30 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         prompts = [self.formatter.print(action) for action in actions]
 
-        try:
-            completion_response: Completion = (
-                await self._async_client.completions.create(
-                    model=self._model_id,
-                    prompt=prompts,
-                    extra_body=extra_body,
-                    **self._make_backend_specific_and_remove(
-                        model_opts, is_chat_context=False
-                    ),
-                )
-            )  # type: ignore
-        except openai.BadRequestError as e:
-            if openai_ollama_batching_error in e.message:
-                FancyLogger.get_logger().error(
-                    "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
-                    "your requests will fail since ollama doesn't support batching requests."
-                )
-            raise e
+        with instrument_generate_from_raw(
+            backend=self,
+            num_actions=len(actions),
+            format=format,
+            tool_calls=tool_calls,
+        ):
+            try:
+                completion_response: Completion = (
+                    await self._async_client.completions.create(
+                        model=self._model_id,
+                        prompt=prompts,
+                        extra_body=extra_body,
+                        **self._make_backend_specific_and_remove(
+                            model_opts, is_chat_context=False
+                        ),
+                    )
+                )  # type: ignore
+            except openai.BadRequestError as e:
+                if openai_ollama_batching_error in e.message:
+                    FancyLogger.get_logger().error(
+                        "If you are trying to call `OpenAIBackend._generate_from_raw while targeting an ollama server, "
+                        "your requests will fail since ollama doesn't support batching requests."
+                    )
+                raise e
 
         # Necessary for type checker.
         assert isinstance(completion_response, Completion)

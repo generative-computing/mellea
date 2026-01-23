@@ -27,6 +27,10 @@ from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import ClientCache, get_current_event_loop, send_to_queue
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
+from ..telemetry.backend_instrumentation import (
+    instrument_generate_from_context,
+    instrument_generate_from_raw,
+)
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import add_tools_from_context_actions, add_tools_from_model_options
@@ -256,18 +260,21 @@ class OllamaModelBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
         """See `generate_from_chat_context`."""
-        assert ctx.is_chat_context, (
-            "The ollama backend only supports chat-like contexts."
-        )
-        mot = await self.generate_from_chat_context(
-            action,
-            ctx,
-            _format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
+        with instrument_generate_from_context(
+            self, action, ctx, format, tool_calls
+        ):
+            assert ctx.is_chat_context, (
+                "The ollama backend only supports chat-like contexts."
+            )
+            mot = await self.generate_from_chat_context(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
 
-        return mot, ctx.add(action).add(mot)
+            return mot, ctx.add(action).add(mot)
 
     async def generate_from_chat_context(
         self,
