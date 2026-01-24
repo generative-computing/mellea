@@ -154,9 +154,8 @@ def set_span_error(span: Any, exception: Exception) -> None:
 __all__ = [
     "is_application_tracing_enabled",
     "is_backend_tracing_enabled",
-    "trace_application",
-    "trace_backend",
     "set_span_attribute",
     "set_span_error",
+    "trace_application",
+    "trace_backend",
 ]
-
