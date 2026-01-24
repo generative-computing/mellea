@@ -208,11 +208,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     ) -> tuple[ModelOutputThunk[C], Context]:
         """Generate using the huggingface model."""
         with instrument_generate_from_context(
-            backend=self,
-            action=action,
-            ctx=ctx,
-            format=format,
-            tool_calls=tool_calls,
+            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         ):
             await self.do_generate_walk(action)
 
@@ -265,7 +261,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 return mot, ctx.add(action).add(mot)
 
             mot = await self._generate_from_context_standard(
-                action, ctx, _format=format, model_options=model_opts, tool_calls=tool_calls
+                action,
+                ctx,
+                _format=format,
+                model_options=model_opts,
+                tool_calls=tool_calls,
             )
             return mot, ctx.add(action).add(mot)
 
@@ -985,10 +985,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
         with instrument_generate_from_raw(
-            backend=self,
-            num_actions=len(actions),
-            format=format,
-            tool_calls=tool_calls,
+            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
         ):
             await self.do_generate_walks(list(actions))
 

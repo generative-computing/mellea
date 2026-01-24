@@ -255,11 +255,7 @@ class WatsonxAIBackend(FormatterBackend):
             "The watsonx.ai backend only supports chat-like contexts."
         )
         with instrument_generate_from_context(
-            backend=self,
-            action=action,
-            ctx=ctx,
-            format=format,
-            tool_calls=tool_calls,
+            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         ):
             mot = await self.generate_from_chat_context(
                 action,
@@ -525,10 +521,7 @@ class WatsonxAIBackend(FormatterBackend):
     ) -> list[ModelOutputThunk]:
         """Generates a completion text. Gives the input provided to the model without templating."""
         with instrument_generate_from_raw(
-            backend=self,
-            num_actions=len(actions),
-            format=format,
-            tool_calls=tool_calls,
+            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
         ):
             await self.do_generate_walks(list(actions))
 
