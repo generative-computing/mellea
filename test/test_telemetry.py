@@ -217,4 +217,3 @@ def test_instrument_generate_from_raw():
     with instrument_generate_from_raw(backend, num_actions=5) as span:
         # Span will be None when tracing is disabled
         assert span is None or hasattr(span, "set_attribute")
-

@@ -537,7 +537,9 @@ async def aact(
 
             assert sampling_result.sample_generations is not None
             for result in sampling_result.sample_generations:
-                assert result._generate_log is not None  # Cannot be None after generation.
+                assert (
+                    result._generate_log is not None
+                )  # Cannot be None after generation.
                 generate_logs.append(result._generate_log)
 
             new_ctx = sampling_result.result_ctx
@@ -551,15 +553,23 @@ async def aact(
         set_span_attribute(span, "num_generate_logs", len(generate_logs))
         if sampling_result:
             set_span_attribute(span, "sampling_success", bool(sampling_result.result))
-        
+
         # Log the model response (truncated for large responses)
         try:
-            response_value = str(result.value) if hasattr(result, 'value') and result.value else str(result)
+            response_value = (
+                str(result.value)
+                if hasattr(result, "value") and result.value
+                else str(result)
+            )
             # Truncate to 500 chars to avoid overwhelming trace storage
             if len(response_value) > 500:
                 response_value = response_value[:500] + "..."
             set_span_attribute(span, "response", response_value)
-            set_span_attribute(span, "response_length", len(str(result.value) if hasattr(result, 'value') else str(result)))
+            set_span_attribute(
+                span,
+                "response_length",
+                len(str(result.value) if hasattr(result, "value") else str(result)),
+            )
         except Exception:
             # If we can't get the response, don't fail the trace
             pass

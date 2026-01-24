@@ -313,11 +313,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             "The Openai backend only supports chat-like contexts."
         )
         with instrument_generate_from_context(
-            backend=self,
-            action=action,
-            ctx=ctx,
-            format=format,
-            tool_calls=tool_calls,
+            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         ):
             return await self.generate_from_chat_context(
                 action,
@@ -828,10 +824,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         prompts = [self.formatter.print(action) for action in actions]
 
         with instrument_generate_from_raw(
-            backend=self,
-            num_actions=len(actions),
-            format=format,
-            tool_calls=tool_calls,
+            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
         ):
             try:
                 completion_response: Completion = (

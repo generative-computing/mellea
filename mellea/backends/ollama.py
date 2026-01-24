@@ -260,9 +260,7 @@ class OllamaModelBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
         """See `generate_from_chat_context`."""
-        with instrument_generate_from_context(
-            self, action, ctx, format, tool_calls
-        ):
+        with instrument_generate_from_context(self, action, ctx, format, tool_calls):
             assert ctx.is_chat_context, (
                 "The ollama backend only supports chat-like contexts."
             )

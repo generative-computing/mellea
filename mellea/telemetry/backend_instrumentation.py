@@ -42,11 +42,7 @@ def get_context_size(ctx: Any) -> int:
 
 
 def instrument_generate_from_context(
-    backend: Any,
-    action: Any,
-    ctx: Any,
-    format: Any = None,
-    tool_calls: bool = False,
+    backend: Any, action: Any, ctx: Any, format: Any = None, tool_calls: bool = False
 ):
     """Create a backend trace span for generate_from_context.
 
@@ -73,10 +69,7 @@ def instrument_generate_from_context(
 
 
 def instrument_generate_from_raw(
-    backend: Any,
-    num_actions: int,
-    format: Any = None,
-    tool_calls: bool = False,
+    backend: Any, num_actions: int, format: Any = None, tool_calls: bool = False
 ):
     """Create a backend trace span for generate_from_raw.
 
@@ -101,9 +94,8 @@ def instrument_generate_from_raw(
 
 
 __all__ = [
-    "get_model_id_str",
     "get_context_size",
+    "get_model_id_str",
     "instrument_generate_from_context",
     "instrument_generate_from_raw",
 ]
-

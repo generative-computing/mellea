@@ -70,10 +70,7 @@ def main():
         print("\n1. Simple instruction with requirements...")
         email = m.instruct(
             "Write a professional email to {{name}} about {{topic}}",
-            requirements=[
-                req("Must be formal"),
-                req("Must be under 100 words"),
-            ],
+            requirements=[req("Must be formal"), req("Must be under 100 words")],
             user_variables={"name": "Alice", "topic": "project update"},
         )
         print(f"Generated email: {str(email)[:100]}...")
@@ -109,4 +106,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
