@@ -2,7 +2,7 @@ import pytest
 
 from mellea.backends import ModelOption
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
+from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.core import CBlock
 from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.session import MelleaSession, start_session
@@ -21,7 +21,7 @@ pytestmark = [
 def m_session(gh_run):
     m = start_session(
         "hf",
-        model_id=IBM_GRANITE_3_3_8B,
+        model_id=IBM_GRANITE_4_HYBRID_MICRO,
         model_options={ModelOption.MAX_NEW_TOKENS: 64},
     )
     yield m

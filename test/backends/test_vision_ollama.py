@@ -9,7 +9,7 @@ from PIL import Image
 pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 
 from mellea import MelleaSession, start_session
-from mellea.backends import ModelOption
+from mellea.backends import ModelOption, model_ids
 from mellea.core import ImageBlock, ModelOutputThunk
 from mellea.stdlib.components import Instruction, Message
 
@@ -21,7 +21,7 @@ def m_session(gh_run):
     else:
         m = start_session(
             "ollama",
-            model_id="granite3.2-vision",
+            model_id=model_ids.IBM_GRANITE_3_3_VISION_2B,
             model_options={ModelOption.MAX_NEW_TOKENS: 5},
         )
     yield m

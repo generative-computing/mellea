@@ -18,7 +18,6 @@ pytestmark = [
     pytest.mark.huggingface,
     pytest.mark.llm,
     pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
     # Skip entire module in CI since 17/18 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -27,7 +26,7 @@ pytestmark = [
 ]
 
 from mellea import MelleaSession
-from mellea.backends import ModelOption
+from mellea.backends import ModelOption, model_ids
 from mellea.backends.adapters import GraniteCommonAdapter
 from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.huggingface import LocalHFBackend, _assert_correct_adapters
@@ -46,10 +45,23 @@ from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement
 
 @pytest.fixture(scope="module")
 def backend():
-    """Shared HuggingFace backend for all tests in this module."""
+    """Shared HuggingFace backend for all tests in this module.
+
+    Uses micro (3B) model by default for memory-constrained systems.
+    Set HF_TEST_MODEL env var to override:
+    - HF_TEST_MODEL=tiny: Use 7B model (requires 48GB+ RAM)
+    - HF_TEST_MODEL=micro: Use 3B model (default, ~16GB RAM)
+    """
+    model_choice = os.environ.get("HF_TEST_MODEL", "micro").lower()
+
+    if model_choice == "tiny":
+        model_id = model_ids.IBM_GRANITE_4_HYBRID_TINY
+    else:  # default to micro
+        model_id = model_ids.IBM_GRANITE_4_HYBRID_MICRO
+
     backend = LocalHFBackend(
-        model_id="ibm-granite/granite-3.3-8b-instruct",
-        formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
+        model_id=model_id,
+        formatter=TemplateFormatter(model_id=model_id),
         cache=SimpleLRUCache(5),
     )
     backend.add_adapter(

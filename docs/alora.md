@@ -37,7 +37,7 @@ Use the `m alora train` command to fine-tune a LoRA or aLoRA adapter requirement
 
 ```bash
 m alora train path/to/data.jsonl \
-  --basemodel ibm-granite/granite-3.2-8b-instruct \
+  --basemodel ibm-granite/granite-4.0-h-micro \
   --outfile ./checkpoints/alora_adapter \
   --adapter alora \
   --epochs 6 \
