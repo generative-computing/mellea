@@ -276,7 +276,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 f"Cannot use `ModelOutputThunk.astream()` when the generate function is using `{self._generate_type.name}`"
             )
         # Beginning value
-        beginning_value: str = self._underlying_value  # type: ignore
+        beginning_length = (
+            0 if self._underlying_value is None else len(str(self._underlying_value))
+        )  # type: ignore
 
         # Type of the chunk depends on the backend.
         chunks: list[Any | None] = []
@@ -349,8 +351,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         return (
             self._underlying_value
-            if beginning_value is None
-            else self._underlying_value[len(str(beginning_value)) :]  # type: ignore
+            if beginning_length is None
+            else self._underlying_value[beginning_length:]  # type: ignore
         )
 
     def __repr__(self):
