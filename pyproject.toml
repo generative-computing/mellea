@@ -254,8 +254,6 @@ exclude_lines = [
 [tool.coverage.html]
 directory = "htmlcov"
 
-asyncio_mode = "auto"  # Don't require explicitly marking async tests.
-
 [tool.semantic_release]
 # for default values check:
 # https://github.com/python-semantic-release/python-semantic-release/blob/v7.32.2/semantic_release/defaults.cfg
