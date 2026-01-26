@@ -222,11 +222,13 @@ asyncio_mode = "auto"  # Don't require explicitly marking async tests.
 addopts = [
     "--cov=mellea",
     "--cov=cli",
-    "--cov-report=term-missing",
+    "--cov-report=term",
     "--cov-report=html",
+    "--cov-report=json",
 ]
 
 [tool.coverage.run]
+branch = true  # Measure branch coverage, not just line coverage
 source = ["mellea", "cli"]
 omit = [
     "*/tests/*",
