@@ -1,0 +1,74 @@
+---
+title: "Model Options"
+---
+
+Most LLM apis allow you to specify options to modify the request: temperature, max_tokens, seed, etc... Mellea supports specifying these options during backend initialization and when calling session-level functions with the model_options parameter.
+
+Mellea supports many different types of inference engines (ollama, openai-compatible vllm, huggingface, etc.). These inference engines, which we call Backends, provide different and sometimes inconsistent dict keysets for specifying model options. For the most common options among model providers, Mellea provides some engine-agnostic options, which can be used by typing [`ModelOption`](https://github.com/generative-computing/mellea/blob/main/mellea/backends/types.py) in your favorite IDE; for example, temperature can be specified as `{"{ModelOption.TEMPERATURE": 0}` and this will "just work" across all inference engines.
+
+You can add any key-value pair supported by the backend to the model_options dictionary, and those options will be passed along to the inference engine \*even if a Mellea-specific ModelOption. Key is defined for that option. This means you can safely copy over model option parameters from exiting codebases as-is:
+
+```python
+import mellea
+from mellea.backends.types import ModelOption
+from mellea.backends.ollama import OllamaModelBackend
+from mellea.backends import model_ids
+
+m = mellea.MelleaSession(backend=OllamaModelBackend(
+    model_id=model_ids.IBM_GRANITE_3_2_8B,
+    model_options={ModelOption.SEED: 42}
+))
+
+answer = m.instruct(
+    "What is 2x2?",
+    model_options={
+        "temperature": 0.5,
+        "num_predict": 5,
+    },
+)
+
+print(str(answer))
+```
+
+You can always update the model options of a given backend; however, Mellea offers a few additional approaches to changing the specified options.
+
+- Specifying options during m.\* calls. Options specified here will update the model options previously specified for that call only. If you specify an already existing key (with either the ModelOption.OPTION version or the native name for that option for the given api), the value will be the one associated with the new key. If you specify the same key in different ways (ie ModelOption.TEMPERATURE and temperature), the ModelOption.OPTION key will take precedence.
+
+```python
+# options passed during backend initialization
+backend_model_options = {
+    "seed": "1",
+    ModelOption.MAX_NEW_TOKENS: 1,
+    "temperature": 1,
+}
+
+# options passed during m.*
+instruct_model_options = {
+    "seed": "2",
+    ModelOption.SEED: "3",
+    "num_predict": 2,
+}
+
+# options passed to the model provider API
+final_options = {
+    "temperature": 1,
+    "seed": 3,
+    "num_predict": 2
+}
+```
+
+- Pushing and popping model state. Sessions offer the ability to push and pop model state. This means you can temporarily change the model_options for a series of calls by pushing a new set of model_options and then revert those changes with a pop.
+
+##System Messages
+In Mellea, ModelOption.SYSTEM_PROMPT is the recommended way to add/change the system message for a prompt. Setting it at the backend/session level will use the provided message as the system prompt for all future calls (just like any other model option). Similarly, you can specify the system prompt parameter for any session-level function (like m.instruct) to replace it for just that call.
+
+Mellea recommends applying the system message this way because some model-provider apis don't properly serialize messages with the system role and expect them as a separate parameter.
+
+##Conclusion
+We have now worked up from a simple "Hello, World" example to our first generative programming design pattern: Instruct - Validate - Repair (IVR).
+
+When LLMs work well, the software developer experiences the LLM as a sort of oracle that can handle most any input and produce a sufficiently desirable output. When LLMs do not work at all, the software developer experiences the LLM as a naive markov chain that produces junk. In both cases, the LLM is just sampling from a distribution.
+
+The crux of generative programming is that most applications find themselves somewhere in-between these two extremes -- the LLM mostly works, enough to demo a tantilizing MVP. But failure modes are common enough and severe enough that complete automation is beyond the developer's grasp.
+
+Traditional software deals with failure modes by carefully describing what can go wrong and then providing precise error handling logic. When working with LLMs, however, this approach suffers a Sysiphean curse. There is always one more failure mode, one more special case, one more new feature request. In the next chapter, we will explore how to build generative programs that are compositional and that grow gracefully.

@@ -1,0 +1,53 @@
+---
+title: "mellea.backends.kv_block_helpers"
+sidebarTitle: "mellea.backends.kv_block_helpers"
+description: "Utilities for KV smashing."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `legacy_cache_smash` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/kv_block_helpers.py#L15" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+legacy_cache_smash(a: LegacyCache, b: LegacyCache) -> LegacyCache
+```
+
+
+Concatenates two LegacyCache Ks and Vs along the time axis.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `merge_dynamic_caches` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/kv_block_helpers.py#L24" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+merge_dynamic_caches(caches: Iterable[DynamicCache]) -> DynamicCache
+```
+
+
+Merges two DynamicCache Ks and Vs along the time axis.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `tokens_to_legacy_cache` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/kv_block_helpers.py#L32" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+tokens_to_legacy_cache(model, device: str, tokens_or_cache: BatchEncoding | DynamicCache) -> Iterable[LegacyCache]
+```
+
+
+Prefills and returns Ks and Vs as a LegacyCache.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

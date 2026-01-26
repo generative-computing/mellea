@@ -1,0 +1,94 @@
+---
+title: "mellea.backends.model_options"
+sidebarTitle: "mellea.backends.model_options"
+description: "Common ModelOptions for Backend Generation."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ModelOption` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/model_options.py#L8" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A type that wraps around model options.
+
+Uses sentinel values (wrapped by @@@) to provide backend and model-agnostic keys for common model options.
+
+Create a dictionary containing model options like this:
+
+```python
+from mellea.backends import ModelOption
+model_options = {
+    ModelOption.TEMPERATURE : 0.0,
+    ModelOption.SYSTEM_PROMPT : "You are a helpful assistant"
+}
+```
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `replace_keys` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/model_options.py#L36" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+replace_keys(options: dict, from_to: dict[str, str]) -> dict[str, Any]
+```
+
+Returns a new dict with the keys in `options` replaced with the corresponding value for that key in `from_to`.
+
+* Any key with value == None is treated the same as the key missing.
+
+* If the destination key already exists in `options`, the original value is kept in the output.
+
+* Regardless of the presence of the destination key in `options`,
+  the source key is always absent in the output.
+
+Example:
+```python
+>>> options = {"k1": "v1", "k2": "v2", "M1": "m1"}
+>>> from_to = {"k1": "M1", "k2": "M2"}
+
+>>> new_options = replace_keys(options, from_to)
+>>> print(new_options)
+... {"M1": "m1", "M2": "v2"}
+```
+
+* Notice that "M1" keeps the original value "m1", rather than "v1".
+* Notice that both "k1" and "k2" are absent in the output.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `remove_special_keys` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/model_options.py#L95" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+remove_special_keys(model_options) -> dict[str, Any]
+```
+
+Removes all sentiel-valued keys (i.e., those that start with @@@).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `merge_model_options` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/model_options.py#L104" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+merge_model_options(persistent_opts: dict[str, Any], overwrite_opts: dict[str, Any] | None) -> dict[str, Any]
+```
+
+Creates a new dict that contains all keys and values from persistent opts and overwrite opts. If there are duplicate keys, overwrite opts key value pairs will be used.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

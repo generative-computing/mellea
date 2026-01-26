@@ -1,0 +1,114 @@
+---
+title: "mellea.core.sampling"
+sidebarTitle: "mellea.core.sampling"
+description: "Interfaces for Sampling Strategies."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SamplingResult` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/core/sampling.py#L11" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Stores the results from a sampling operation. This includes successful and failed samplings.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `result` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/core/sampling.py#L60" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+result(self) -> ModelOutputThunk[S]
+```
+
+The final output or result from applying the sampling strategy.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `result_ctx` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/core/sampling.py#L65" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+result_ctx(self) -> Context
+```
+
+The context of the final output or result from applying the sampling strategy.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `result_action` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/core/sampling.py#L70" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+result_action(self) -> Component[S]
+```
+
+The action that generated the final output or result from applying the sampling strategy.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `result_validations` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/core/sampling.py#L75" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+result_validations(self) -> list[tuple[Requirement, ValidationResult]]
+```
+
+The validation results associated with the final output or result from applying the sampling strategy.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SamplingStrategy` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/core/sampling.py#L80" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A SamplingStrategy class defines an abstract base class for implementing various sampling strategies.
+
+This class provides a template for creating concrete sampling strategies that can be used to generate model outputs based on given instructions.
+It allows setting custom validation and generation functions through properties.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `sample` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/core/sampling.py#L88" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+sample(self, action: Component[S], context: Context, backend: Backend, requirements: list[Requirement] | None) -> SamplingResult[S]
+```
+
+This method is the abstract method for sampling a given component.
+
+It must be implemented by any concrete subclasses to provide specific sampling logic.
+
+**Args:**
+- `action `: The action object to be sampled.
+- `context`: The context to be passed to the sampling strategy.
+- `backend`: The backend used for generating samples.
+- `requirements`: List of requirements to test against (merged with global requirements).
+- `validation_ctx`: Optional context to use for validation. If None, validation_ctx = ctx.
+- `format`: output format for structured outputs.
+- `model_options`: model options to pass to the backend during generation / validation.
+- `tool_calls`: True if tool calls should be used during this sampling strategy.
+
+**Returns:**
+- A result object indicating the success or failure of the sampling process.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

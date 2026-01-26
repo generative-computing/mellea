@@ -1,0 +1,148 @@
+---
+title: "Overview"
+description: "Get up and running with Mellea"
+---
+
+Before we get started, you will need to download and install [ollama](https://ollama.com/). Mellea can work with many different types of backends, but everything in this tutorial will "just work" on a Macbook running IBM's Granite 4 Micro 3B model.
+
+We also recommend that you download and install [uv](https://docs.astral.sh/uv/#installation). You can run any of the examples in the tutorial with:
+
+```bash
+uv run example_name.py --with mellea
+```
+
+<Note>
+
+If running on an Intel mac, you may get errors related to torch/torchvision versions. Conda maintains updated versions of these packages. You will need to create a conda environment and run `conda install 'torchvision>=0.22.0'` (this should also install pytorch and torchvision-extra). Then, you should be able to run `uv pip install mellea`. To run the examples, you will need to use `python <filename>` inside the conda environment instead of `uv run --with mellea <filename>`.
+
+</Note>
+
+<Note>
+
+If you are using python >= 3.13, you may encounter an issue where outlines cannot be installed due to rust compiler issues (`error: can't find Rust compiler`). You can either downgrade to python 3.12 or install the [rust compiler](https://www.rust-lang.org/tools/install) to build the wheel for outlines locally.
+
+</Note>
+
+Once you have ollama installed and running, we can get started with our first generative piece of code:
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/simple_email.py#L1-L8
+import mellea
+
+## INFO: this line will download IBM's Granite 4 Micro 3B model.
+m = mellea.start_session()
+
+email = m.instruct("Write an email inviting interns to an office party at 3:30pm.")
+print(str(email))
+```
+
+Here, we initialized a backend running Ollama on a local machine using the granite3.3-chat model.
+We then ask the model to generate an email and print it to the console.
+
+<Note>
+
+Mellea supports many other models and backends. By default, a new Mellea session will run IBM's capable Granite 8B model on your own laptop. This is a good (and free!) way to get started. If you would like to try out other models or backends, you can explicitly specify the backend and model in the start_session method. For example, `mellea.start_session(backend_name="ollama", model_id=mellea.model_ids.IBM_GRANITE_3_3_8B)`.
+
+</Note>
+
+Before continuing, let's wrap this call into a function with some arguments:
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/simple_email.py#L13-L27
+import mellea
+
+def write_email(m: mellea.MelleaSession, name: str, notes: str) -> str:
+  email = m.instruct(
+    "Write an email to {{name}} using the notes following: {{notes}}.",
+    user_variables={"name": name, "notes": notes},
+  )
+  return email.value  # str(email) also works.
+
+m = mellea.start_session()
+print(write_email(m, "Olivia",
+                  "Olivia helped the lab over the last few weeks by organizing intern events, advertising the speaker series, and handling issues with snack delivery."))
+```
+
+Voila, we now have an email-writing function!
+
+Notice how the instruct method can take a dictionary of variables as `user_variables`. These are filled by treating the instruction description as a jinja template.
+
+The `m.instruct()` function returns a `ModelOutputThunk` per default, which has the model output string bound to the field `.value`.
+
+#
+
+## ModelOptions
+
+Most LLM apis allow you to specify options to modify the request: temperature, max_tokens, seed, etc... Mellea supports specifying these options during backend initialization and when calling session-level functions with the `model_options` parameter.
+
+Mellea supports many different types of inference engines (ollama, openai-compatible vllm, huggingface, etc.). These inference engines, which we call `Backend`s, provide different and sometimes inconsistent dict keysets for specifying model options. For the most common options among model providers, Mellea provides some engine-agnostic options, which can be used by typing [`ModelOption.<TAB>`](../mellea/backends/types.py) in your favorite IDE; for example, temperature can be specified as `{"{ModelOption.TEMPERATURE": 0}` and this will "just work" across all inference engines.
+
+You can add any key-value pair supported by the backend to the `model_options` dictionary, and those options will be passed along to the inference engine \*even if a Mellea-specific `ModelOption.<KEY>` is defined for that option. This means you can safely copy over model option parameters from exiting codebases as-is:
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/model_options_example.py#L1-L16
+import mellea
+from mellea.backends.types import ModelOption
+from mellea.backends.ollama import OllamaModelBackend
+from mellea.backends import model_ids
+
+m = mellea.MelleaSession(backend=OllamaModelBackend(
+    model_id=model_ids.IBM_GRANITE_3_2_8B,
+    model_options={ModelOption.SEED: 42}
+))
+
+answer = m.instruct(
+    "What is 2x2?",
+    model_options={
+        "temperature": 0.5,
+        "num_predict": 5,
+    },
+)
+
+print(str(answer))
+```
+
+You can always update the model options of a given backend; however, Mellea offers a few additional approaches to changing the specified options.
+
+1. **Specifying options during `m.*` calls**. Options specified here will update the model options previously specified for that call only. If you specify an already existing key (with either the `ModelOption.OPTION` version or the native name for that option for the given api), the value will be the one associated with the new key. If you specify the same key in different ways (ie `ModelOption.TEMPERATURE` and `temperature`), the `ModelOption.OPTION` key will take precedence.
+
+```python
+## options passed during backend initialization
+backend_model_options = {
+    "seed": "1",
+    ModelOption.MAX_NEW_TOKENS: 1,
+    "temperature": 1,
+}
+
+## options passed during m.*
+instruct_model_options = {
+    "seed": "2",
+    ModelOption.SEED: "3",
+    "num_predict": 2,
+}
+
+## options passed to the model provider API
+final_options = {
+    "temperature": 1,
+    "seed": 3,
+    "num_predict": 2
+}
+```
+
+2. **Pushing and popping model state**. Sessions offer the ability to push and pop model state. This means you can temporarily change the `model_options` for a series of calls by pushing a new set of `model_options` and then revert those changes with a pop.
+
+#### System Messages
+
+In Mellea, `ModelOption.SYSTEM_PROMPT` is the recommended way to add/change the system message for a prompt. Setting it at the backend/session level will use the provided message as the system prompt for all future calls (just like any other model option). Similarly, you can specify the system prompt parameter for any session-level function (like `m.instruct`) to replace it for just that call.
+
+Mellea recommends applying the system message this way because some model-provider apis don't properly serialize messages with the `system` role and expect them as a separate parameter.
+
+### Conclusion
+
+We have now worked up from a simple "Hello, World" example to our first generative programming design pattern: **Instruct - Validate - Repair (IVR)**.
+
+When LLMs work well, the software developer experiences the LLM as a sort of oracle that can handle most any input and produce a sufficiently desirable output. When LLMs do not work at all, the software developer experiences the LLM as a naive markov chain that produces junk. In both cases, the LLM is just sampling from a distribution.
+
+The crux of generative programming is that most applications find themselves somewhere in-between these two extremes -- the LLM mostly works, enough to demo a tantilizing MVP. But failure modes are common enough and severe enough that complete automation is beyond the developer's grasp.
+
+Traditional software deals with failure modes by carefully describing what can go wrong and then providing precise error handling logic. When working with LLMs, however, this approach suffers a Sysiphean curse. There is always one more failure mode, one more special case, one more new feature request. In the next chapter, we will explore how to build generative programs that are compositional and that grow gracefully.

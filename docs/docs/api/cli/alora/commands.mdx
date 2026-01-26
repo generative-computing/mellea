@@ -1,0 +1,38 @@
+---
+title: "cli.alora.commands"
+sidebarTitle: "cli.alora.commands"
+---
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `alora_train` <sup><a href="https://github.com/generative-computing/mellea/blob/main/cli/alora/commands.py#L8" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+alora_train(datafile: str = typer.Argument(..., help='JSONL file with item/label pairs'), basemodel: str = typer.Option(..., help='Base model ID or path'), outfile: str = typer.Option(..., help='Path to save adapter weights'), promptfile: str = typer.Option(None, help='Path to load the prompt format file'), adapter: str = typer.Option('alora', help='Adapter type: alora or lora'), epochs: int = typer.Option(6, help='Number of training epochs'), learning_rate: float = typer.Option(6e-06, help='Learning rate'), batch_size: int = typer.Option(2, help='Per-device batch size'), max_length: int = typer.Option(1024, help='Max sequence length'), grad_accum: int = typer.Option(4, help='Gradient accumulation steps'))
+```
+
+
+Train an aLoRA or LoRA model on your dataset.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `alora_upload` <sup><a href="https://github.com/generative-computing/mellea/blob/main/cli/alora/commands.py#L37" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+alora_upload(weightfile: str = typer.Argument(..., help='Path to saved adapter weights'), name: str = typer.Option(..., help='Destination model name (e.g., acme/carbchecker-alora)'))
+```
+
+
+Upload trained adapter to remote model registry.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

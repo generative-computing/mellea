@@ -1,0 +1,31 @@
+---
+title: "cli.alora.upload"
+sidebarTitle: "cli.alora.upload"
+---
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `upload_model` <sup><a href="https://github.com/generative-computing/mellea/blob/main/cli/alora/upload.py#L7" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+upload_model(weight_path: str, model_name: str, private: bool = True)
+```
+
+
+Upload a trained adapter (LoRA/aLoRA) to Hugging Face Hub.
+
+**Args:**
+- `weight_path`: Directory containing adapter weights (from save_pretrained).
+- `model_name`: Target model repo name (e.g., "acme/carbchecker-alora").
+- `private`: Whether the repo should be private. Default\: True.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

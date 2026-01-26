@@ -1,0 +1,53 @@
+---
+title: "Prompt Engineering"
+---
+
+Most backends operate on text. For these backends/models, Mellea has an opinionated stance on how to transform Python objects into text: the `TemplateFormatter`.
+
+In most cases, you will want to create templates when adding a new component to the standard library or when customizing an existing component for a new model.
+
+## Templates
+
+Mellea's `TemplateFormatter` uses jinja2 templates to format objects when passing them to models for generation.
+
+These templates can be stored directly in the class/object, or, more typically, the templates are stored in a directory, with each object having a specific file. For examples of the templates, see `mellea/templates/prompts/default`.
+See the [customization section](/core-concept/prompt-customization) below for a description of how the formatter chooses which template to use.
+
+## Customization
+
+By writing a new template and/or changing the TemplateRepresentation of a component you can customize the textual representation. You can also customize based on the model.
+
+#### Choosing a Template
+
+Assuming a component's TemplateRepresentation contains a `template_order` field, the default TemplateFormatter grabs the relevant template by looking at the following places in order for each template in the `template_order`:
+
+1. the formatter's cached templates if the template has been looked up recently
+2. the formatter's specified template path
+3. the package that the object getting formatted is from (either 'mellea' or some third party package)
+
+If the default formatter searches the template path or the package, it uses the following logic:
+
+- look in the `.../templates/prompts/...` directory
+- traverse sub-directories in that path that match the formatter's model id (ie `ibm-granite/granite-3.2-8b-instruct` will match `.../templates/prompts/granite/granite-3-2/instruct`) or default (ie `.../templates/prompts/default`)
+- return the template at the deepest directory path
+- the default template formatter assumes that a model will only have one match in any given directory; in other words, traversing a `templates` directory with both `prompts/granite/...` and `prompts/ibm/...` for `ibm-granite/granite-3.2-8b-instruct` should not happen
+
+#### Editing an Existing Class
+
+To customize the template and template representation of an existing class, simply create a new class that inherits from the class you want to edit. Then, override the format_for_llm function and create a new template.
+
+See [`mellea/docs/examples/mify/rich_document_advanced.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/mify/rich_document_advanced.py)
+
+## Template Representations
+
+Along with a template, each class/object needs to define the arguments that will be supplied when rendering the template. This happens in the component's `format_for_llm()` function. It returns either a string or a `TemplateRepresentation`.
+
+`string`: the simplest approach is for this method to return a string representation of the object. This avoids templating altogether.
+
+`TemplateRepresentation`: It can also return a `TemplateRepresentation` object.
+This representation contains: - a reference to the component - a dictionary of arguments that will be passed to the template renderer - a list of tools/functions that relate to the component
+
+It also contains either of the following fields
+
+- template: a string representation of a jinja2 template that can be rendered with the provided args
+- template_order: a list of strings describing the name of the template file to look up (without the ".jinja2" suffix); `*` denotes the class name.

@@ -1,0 +1,502 @@
+---
+title: "mellea.stdlib.session"
+sidebarTitle: "mellea.stdlib.session"
+description: "Mellea Sessions."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_session` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L40" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_session() -> MelleaSession
+```
+
+
+Get the current session from context.
+
+**Raises:**
+- `RuntimeError`: If no session is currently active.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `backend_name_to_class` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L54" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+backend_name_to_class(name: str) -> Any
+```
+
+
+Resolves backend names to Backend classes.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `start_session` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L80" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+start_session(backend_name: Literal['ollama', 'hf', 'openai', 'watsonx', 'litellm'] = 'ollama', model_id: str | ModelIdentifier = IBM_GRANITE_4_MICRO_3B, ctx: Context | None = None, **backend_kwargs) -> MelleaSession
+```
+
+
+Start a new Mellea session. Can be used as a context manager or called directly.
+
+This function creates and configures a new Mellea session with the specified backend
+and model. When used as a context manager (with `with` statement), it automatically
+sets the session as the current active session for use with convenience functions
+like `instruct()`, `chat()`, `query()`, and `transform()`. When called directly,
+it returns a session object that can be used directly.
+
+**Args:**
+- `backend_name`: The backend to use. Options are\:
+- "ollama"\: Use Ollama backend for local models
+- "hf" or "huggingface"\: Use HuggingFace transformers backend
+- "openai"\: Use OpenAI API backend
+- "watsonx"\: Use IBM WatsonX backend
+- "litellm"\: Use the LiteLLM backend
+- `model_id`: Model identifier or name. Can be a `ModelIdentifier` from
+mellea.backends.model_ids or a string model name.
+- `ctx`: Context manager for conversation history. Defaults to SimpleContext().
+Use ChatContext() for chat-style conversations.
+- `model_options`: Additional model configuration options that will be passed
+to the backend (e.g., temperature, max_tokens, etc.).
+- `**backend_kwargs`: Additional keyword arguments passed to the backend constructor.
+
+**Returns:**
+- A session object that can be used as a context manager
+- or called directly with session methods.
+
+**Examples:**
+
+```python
+# Basic usage with default settings
+with start_session() as session:
+    response = session.instruct("Explain quantum computing")
+
+# Using OpenAI with custom model options
+with start_session("openai", "gpt-4", model_options={"temperature": 0.7}):
+    response = session.chat("Write a poem")
+
+# Using HuggingFace with ChatContext for conversations
+from mellea.stdlib.base import ChatContext
+with start_session("hf", "microsoft/DialoGPT-medium", ctx=ChatContext()):
+    session.chat("Hello!")
+    session.chat("How are you?")  # Remembers previous message
+
+# Direct usage.
+session = start_session()
+response = session.instruct("Explain quantum computing")
+session.cleanup()
+```
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `MelleaSession` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L176" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Mellea sessions are a THIN wrapper around `m` convenience functions with NO special semantics.
+
+Using a Mellea session is not required, but it does represent the "happy path" of Mellea programming. Some nice things about ussing a `MelleaSession`:
+1. In most cases you want to keep a Context together with the Backend from which it came.
+2. You can directly run an instruction or a send a chat, instead of first creating the `Instruction` or `Chat` object and then later calling backend.generate on the object.
+3. The context is "threaded-through" for you, which allows you to issue a sequence of commands instead of first calling backend.generate on something and then appending it to your context.
+
+These are all relatively simple code hygiene and state management benefits, but they add up over time.
+If you are doing complicating programming (e.g., non-trivial inference scaling) then you might be better off forgoing `MelleaSession`s and managing your Context and Backend directly.
+
+Note: we put the `instruct`, `validate`, and other convenience functions here instead of in `Context` or `Backend` to avoid import resolution issues.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `clone` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L224" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+clone(self)
+```
+
+Useful for running multiple generation requests while keeping the context at a given point in time.
+
+**Returns:**
+- a copy of the current session. Keeps the context, backend, and session logger.
+
+**Examples:**
+
+```python
+>>> from mellea import start_session
+>>> m = start_session()
+>>> m.instruct("What is 2x2?")
+>>>
+>>> m1 = m.clone()
+>>> out = m1.instruct("Multiply that by 2")
+>>> print(out)
+... 8
+>>>
+>>> m2 = m.clone()
+>>> out = m2.instruct("Multiply that by 3")
+>>> print(out)
+... 12
+```
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `reset` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L249" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+reset(self)
+```
+
+Reset the context state.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `cleanup` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L253" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+cleanup(self) -> None
+```
+
+Clean up session resources.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `act` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L260" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+act(self, action: Component[S]) -> ModelOutputThunk[S]
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `act` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L273" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+act(self, action: Component[S]) -> SamplingResult[S]
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `act` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L285" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+act(self, action: Component[S]) -> ModelOutputThunk[S] | SamplingResult
+```
+
+Runs a generic action, and adds both the action and the result to the context.
+
+**Args:**
+- `action`: the Component from which to generate.
+- `requirements`: used as additional requirements when a sampling strategy is provided
+- `strategy`: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
+- `return_sampling_results`: attach the (successful and failed) sampling attempts to the results.
+- `format`: if set, the BaseModel to use for constrained decoding.
+- `model_options`: additional model options, which will upsert into the model/backend's defaults.
+- `tool_calls`: if true, tool calling is enabled.
+
+**Returns:**
+- A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `instruct` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L331" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+instruct(self, description: str) -> ModelOutputThunk[str]
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `instruct` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L350" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+instruct(self, description: str) -> SamplingResult[str]
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `instruct` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L368" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+instruct(self, description: str) -> ModelOutputThunk[str] | SamplingResult
+```
+
+Generates from an instruction.
+
+**Args:**
+- `description`: The description of the instruction.
+- `requirements`: A list of requirements that the instruction can be validated against.
+- `icl_examples`: A list of in-context-learning examples that the instruction can be validated against.
+- `grounding_context`: A list of grounding contexts that the instruction can use. They can bind as variables using a (key\: str, value\: str | ContentBlock) tuple.
+- `user_variables`: A dict of user-defined variables used to fill in Jinja placeholders in other parameters. This requires that all other provided parameters are provided as strings.
+- `prefix`: A prefix string or ContentBlock to use when generating the instruction.
+- `output_prefix`: A string or ContentBlock that defines a prefix for the output generation. Usually you do not need this.
+- `strategy`: A SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
+- `return_sampling_results`: attach the (successful and failed) sampling attempts to the results.
+- `format`: If set, the BaseModel to use for constrained decoding.
+- `model_options`: Additional model options, which will upsert into the model/backend's defaults.
+- `tool_calls`: If true, tool calling is enabled.
+- `images`: A list of images to be used in the instruction or None if none.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `chat` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L429" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+chat(self, content: str, role: Message.Role = 'user') -> Message
+```
+
+Sends a simple chat message and returns the response. Adds both messages to the Context.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `validate` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L456" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+validate(self, reqs: Requirement | list[Requirement]) -> list[ValidationResult]
+```
+
+Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `query` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L478" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+query(self, obj: Any, query: str) -> ModelOutputThunk
+```
+
+Query method for retrieving information from an object.
+
+**Args:**
+- `obj `: The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
+- `query`: The string representing the query to be executed against the object.
+- `format`: format for output parsing.
+- `model_options`: Model options to pass to the backend.
+- `tool_calls`: If true, the model may make tool calls. Defaults to False.
+
+**Returns:**
+- The result of the query as processed by the backend.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `transform` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L511" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+transform(self, obj: Any, transformation: str) -> ModelOutputThunk | Any
+```
+
+Transform method for creating a new object with the transformation applied.
+
+**Args:**
+- `obj `: The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
+- `transformation`: The string representing the query to be executed against the object.
+- `format`: format for output parsing; usually not needed with transform.
+- `model_options`: Model options to pass to the backend.
+
+**Returns:**
+- ModelOutputThunk|Any: The result of the transformation as processed by the backend. If no tools were called,
+- the return type will be always be ModelOutputThunk. If a tool was called, the return type will be the return type
+- of the function called, usually the type of the object passed in.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `aact` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L544" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+aact(self, action: Component[S]) -> ModelOutputThunk[S]
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `aact` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L557" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+aact(self, action: Component[S]) -> SamplingResult[S]
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `aact` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L569" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+aact(self, action: Component[S]) -> ModelOutputThunk[S] | SamplingResult
+```
+
+Runs a generic action, and adds both the action and the result to the context.
+
+**Args:**
+- `action`: the Component from which to generate.
+- `requirements`: used as additional requirements when a sampling strategy is provided
+- `strategy`: a SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
+- `return_sampling_results`: attach the (successful and failed) sampling attempts to the results.
+- `format`: if set, the BaseModel to use for constrained decoding.
+- `model_options`: additional model options, which will upsert into the model/backend's defaults.
+- `tool_calls`: if true, tool calling is enabled.
+
+**Returns:**
+- A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `ainstruct` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L615" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+ainstruct(self, description: str) -> ModelOutputThunk[str]
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `ainstruct` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L634" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+ainstruct(self, description: str) -> SamplingResult[str]
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `ainstruct` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L652" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+ainstruct(self, description: str) -> ModelOutputThunk[str] | SamplingResult[str]
+```
+
+Generates from an instruction.
+
+**Args:**
+- `description`: The description of the instruction.
+- `requirements`: A list of requirements that the instruction can be validated against.
+- `icl_examples`: A list of in-context-learning examples that the instruction can be validated against.
+- `grounding_context`: A list of grounding contexts that the instruction can use. They can bind as variables using a (key\: str, value\: str | ContentBlock) tuple.
+- `user_variables`: A dict of user-defined variables used to fill in Jinja placeholders in other parameters. This requires that all other provided parameters are provided as strings.
+- `prefix`: A prefix string or ContentBlock to use when generating the instruction.
+- `output_prefix`: A string or ContentBlock that defines a prefix for the output generation. Usually you do not need this.
+- `strategy`: A SamplingStrategy that describes the strategy for validating and repairing/retrying for the instruct-validate-repair pattern. None means that no particular sampling strategy is used.
+- `return_sampling_results`: attach the (successful and failed) sampling attempts to the results.
+- `format`: If set, the BaseModel to use for constrained decoding.
+- `model_options`: Additional model options, which will upsert into the model/backend's defaults.
+- `tool_calls`: If true, tool calling is enabled.
+- `images`: A list of images to be used in the instruction or None if none.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `achat` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L713" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+achat(self, content: str, role: Message.Role = 'user') -> Message
+```
+
+Sends a simple chat message and returns the response. Adds both messages to the Context.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `avalidate` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L740" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+avalidate(self, reqs: Requirement | list[Requirement]) -> list[ValidationResult]
+```
+
+Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `aquery` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L762" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+aquery(self, obj: Any, query: str) -> ModelOutputThunk
+```
+
+Query method for retrieving information from an object.
+
+**Args:**
+- `obj `: The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
+- `query`: The string representing the query to be executed against the object.
+- `format`: format for output parsing.
+- `model_options`: Model options to pass to the backend.
+- `tool_calls`: If true, the model may make tool calls. Defaults to False.
+
+**Returns:**
+- The result of the query as processed by the backend.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `atransform` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L795" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+atransform(self, obj: Any, transformation: str) -> ModelOutputThunk | Any
+```
+
+Transform method for creating a new object with the transformation applied.
+
+**Args:**
+- `obj`: The object to be queried. It should be an instance of MObject or can be converted to one if necessary.
+- `transformation`: The string representing the query to be executed against the object.
+- `format`: format for output parsing; usually not needed with transform.
+- `model_options`: Model options to pass to the backend.
+
+**Returns:**
+- ModelOutputThunk|Any: The result of the transformation as processed by the backend. If no tools were called,
+- the return type will be always be ModelOutputThunk. If a tool was called, the return type will be the return type
+- of the function called, usually the type of the object passed in.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `powerup` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L828" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+powerup(cls, powerup_cls: type)
+```
+
+Appends methods in a class object `powerup_cls` to MelleaSession.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `last_prompt` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/session.py#L836" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+last_prompt(self) -> str | list[dict] | None
+```
+
+Returns the last prompt that has been called from the session context.
+
+**Returns:**
+- A string if the last prompt was a raw call to the model OR a list of messages (as role-msg-dicts). Is None if none could be found.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

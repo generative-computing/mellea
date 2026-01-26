@@ -1,0 +1,156 @@
+---
+title: "mellea.backends.tools"
+sidebarTitle: "mellea.backends.tools"
+description: "Utilities for dealing with tools."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add_tools_from_model_options` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/tools.py#L16" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+add_tools_from_model_options(tools_dict: dict[str, Callable], model_options: dict[str, Any])
+```
+
+
+If model_options has tools, add those tools to the tools_dict.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add_tools_from_context_actions` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/tools.py#L48" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+add_tools_from_context_actions(tools_dict: dict[str, Callable], ctx_actions: list[Component | CBlock] | None)
+```
+
+
+If any of the actions in ctx_actions have tools in their template_representation, add those to the tools_dict.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `convert_tools_to_json` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/tools.py#L67" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+convert_tools_to_json(tools: dict[str, Callable]) -> list[dict]
+```
+
+
+Convert tools to json dict representation.
+
+Notes:
+- Huggingface transformers library lets you pass in an array of functions but doesn't like methods.
+- WatsonxAI uses `from langchain_ibm.chat_models import convert_to_openai_tool` in their demos, but it gives the same values.
+- OpenAI uses the same format / schema.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `json_extraction` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/tools.py#L87" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+json_extraction(text: str) -> Generator[dict, None, None]
+```
+
+
+Yields the next valid json object in a given string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `find_func` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/tools.py#L107" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+find_func(d) -> tuple[str | None, Mapping | None]
+```
+
+
+Find the first function in a json-like dictionary.
+
+Most llms output tool requests in the form `...{"name": string, "arguments": {}}...`
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parse_tools` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/tools.py#L135" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parse_tools(llm_response: str) -> list[tuple[str, Mapping]]
+```
+
+
+A simple parser that will scan a string for tools and attempt to extract them; only works for json based outputs.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `convert_function_to_tool` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/tools.py#L326" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+convert_function_to_tool(func: Callable) -> Tool
+```
+
+
+Imported from Ollama.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SubscriptableBaseModel` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/tools.py#L151" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Class imported from Ollama.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/tools.py#L224" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get(self, key: str, default: Any = None) -> Any
+```
+
+Get.
+
+>>> msg = Message(role='user')
+>>> msg.get('role')
+'user'
+>>> msg = Message(role='user')
+>>> msg.get('nonexistent')
+>>> msg = Message(role='user')
+>>> msg.get('nonexistent', 'default')
+'default'
+>>> msg = Message(role='user', tool_calls=[ Message.ToolCall(function=Message.ToolCall.Function(name='foo', arguments={}))])
+>>> msg.get('tool_calls')[0]['function']['name']
+'foo'
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Tool` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/tools.py#L243" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Class imported from Ollama.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,72 @@
+---
+title: "mellea.backends.adapters.catalog"
+sidebarTitle: "mellea.backends.adapters.catalog"
+description: "Catalog of available intrinsics."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Catalog of intrinsics currently known to Mellea,including metadata about where to find
+LoRA and aLoRA adapters that implement said intrinsics.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `known_intrinsic_names` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/catalog.py#L73" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+known_intrinsic_names() -> list[str]
+```
+
+
+:returns: List of all known user-visible names for intrinsics.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `fetch_intrinsic_metadata` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/catalog.py#L78" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+fetch_intrinsic_metadata(intrinsic_name: str) -> IntriniscsCatalogEntry
+```
+
+
+Retrieve information about the adapter that backs an intrinsic.
+
+:param intrinsic_name: User-visible name of the intrinsic
+
+:returns: Metadata about the adapter(s) that implement the intrinsic.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `AdapterType` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/catalog.py#L12" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Possible types of adapters for a backend.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `IntriniscsCatalogEntry` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/catalog.py#L19" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A single row in the main intrinsics catalog table.
+
+We use Pydantic for this dataclass because the rest of Mellea also uses Pydantic.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
