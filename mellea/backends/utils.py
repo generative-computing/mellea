@@ -8,7 +8,7 @@ from collections.abc import Callable
 from ..core import CBlock, Component, Context, FancyLogger, ModelToolCall
 from ..formatters import ChatFormatter
 from ..stdlib.components import Message
-from .tools import parse_tools
+from .tools import parse_tools, validate_tool_arguments
 
 # Chat = dict[Literal["role", "content"], str] # external apply_chat_template type hint is weaker
 # Chat = dict[str, str | list[dict[str, Any]] ] # for multi-modal models
@@ -74,7 +74,9 @@ def to_tool_calls(
         if len(sig.parameters) == 0:
             tool_args = {}
 
-        model_tool_calls[tool_name] = ModelToolCall(tool_name, func, tool_args)
+        # Validate and coerce argument types
+        validated_args = validate_tool_arguments(func, tool_args, strict=False)
+        model_tool_calls[tool_name] = ModelToolCall(tool_name, func, validated_args)
 
     if len(model_tool_calls) > 0:
         return model_tool_calls
