@@ -18,6 +18,7 @@ pytestmark = [
     pytest.mark.huggingface,
     pytest.mark.llm,
     pytest.mark.requires_gpu,
+    pytest.mark.requires_heavy_ram,
     # Skip entire module in CI since 17/18 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -47,26 +48,13 @@ from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement
 def backend():
     """Shared HuggingFace backend for all tests in this module.
 
-    Uses Granite 3.3 models for aLoRA adapter compatibility.
+    Uses Granite 3.3-8b for aLoRA adapter compatibility.
     The ibm-granite/rag-intrinsics-lib repository only has adapters for
-    Granite 3.3 models (granite-3.3-2b-instruct, granite-3.3-8b-instruct).
-    Granite 4 adapters are not yet available.
-
-    Uses 2B model by default for memory-constrained systems.
-    Set HF_TEST_MODEL env var to override:
-    - HF_TEST_MODEL=8b: Use 8B model (requires 48GB+ RAM)
-    - HF_TEST_MODEL=2b: Use 2B model (default, ~16GB RAM)
+    Granite 3.3 models. Granite 4 adapters are not yet available.
     """
-    model_choice = os.environ.get("HF_TEST_MODEL", "2b").lower()
-
-    if model_choice == "8b":
-        model_id = model_ids.IBM_GRANITE_3_3_8B
-    else:  # default to 2b
-        model_id = model_ids.IBM_GRANITE_3_2_8B
-
     backend = LocalHFBackend(
-        model_id=model_id,
-        formatter=TemplateFormatter(model_id=model_id),
+        model_id="ibm-granite/granite-3.3-8b-instruct",
+        formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
         cache=SimpleLRUCache(5),
     )
     backend.add_adapter(
