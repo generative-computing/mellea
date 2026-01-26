@@ -226,6 +226,17 @@ addopts = [
     "--cov-report=html",
     "--cov-report=json",
 ]
+filterwarnings = [
+    # Show each deprecation warning only once per session
+    "once::DeprecationWarning",
+    "once::PendingDeprecationWarning",
+    
+    # Deduplicate noisy Pydantic serialization warnings
+    "once:.*PydanticSerializationUnexpectedValue.*:UserWarning",
+    
+    # Keep Watsonx deprecation visible (important for migration)
+    "default:.*Watsonx Backend is deprecated.*:DeprecationWarning",
+]
 
 [tool.coverage.run]
 branch = true  # Measure branch coverage, not just line coverage
