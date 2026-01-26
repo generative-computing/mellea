@@ -41,6 +41,7 @@ from .tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
+    validate_tool_arguments,
 )
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
@@ -603,7 +604,12 @@ class LiteLLMBackend(FormatterBackend):
 
                 # Returns the args as a string. Parse it here.
                 args = json.loads(tool_args)
-                model_tool_calls[tool_name] = ModelToolCall(tool_name, func, args)
+
+                # Validate and coerce argument types
+                validated_args = validate_tool_arguments(func, args, strict=False)
+                model_tool_calls[tool_name] = ModelToolCall(
+                    tool_name, func, validated_args
+                )
 
         if len(model_tool_calls) > 0:
             return model_tool_calls

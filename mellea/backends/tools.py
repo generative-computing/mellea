@@ -212,7 +212,151 @@ def parse_tools(llm_response: str) -> list[tuple[str, Mapping]]:
         if tool_name is not None and tool_arguments is not None:
             tools.append((tool_name, tool_arguments))
 
-    return tools
+
+def validate_tool_arguments(
+    func: Callable,
+    args: Mapping[str, Any],
+    *,
+    coerce_types: bool = True,
+    strict: bool = False,
+) -> dict[str, Any]:
+    """Validate and optionally coerce tool arguments against function signature.
+
+    This function validates tool call arguments extracted from LLM responses against
+    the expected function signature. It can automatically coerce common type mismatches
+    (e.g., string "30" to int 30) and provides detailed error messages.
+
+    Args:
+        func: The tool function to validate against
+        args: Raw arguments from model (post-JSON parsing)
+        coerce_types: If True, attempt type coercion for common cases (default: True)
+        strict: If True, raise ValidationError on failures; if False, log warnings
+                and return original args (default: False)
+
+    Returns:
+        Validated and optionally coerced arguments dict
+
+    Raises:
+        ValidationError: If strict=True and validation fails
+
+    Examples:
+        >>> def get_weather(location: str, days: int = 1) -> dict:
+        ...     return {"location": location, "days": days}
+
+        >>> # LLM returns days as string
+        >>> args = {"location": "Boston", "days": "3"}
+        >>> validated = validate_tool_arguments(get_weather, args)
+        >>> validated
+        {'location': 'Boston', 'days': 3}
+
+        >>> # Strict mode raises on validation errors
+        >>> bad_args = {"location": "Boston", "days": "not_a_number"}
+        >>> validate_tool_arguments(get_weather, bad_args, strict=True)
+        Traceback (most recent call last):
+        ...
+        pydantic.ValidationError: ...
+    """
+    from pydantic import ValidationError, create_model
+
+    from ..core import FancyLogger
+
+    # Get function signature
+    sig = inspect.signature(func)
+
+    # Build Pydantic model from function signature
+    # This reuses the logic from convert_function_to_tool
+    field_definitions: dict[str, Any] = {}
+
+    for param_name, param in sig.parameters.items():
+        # Skip *args and **kwargs
+        if param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
+            continue
+
+        # Get type annotation
+        param_type = param.annotation
+        if param_type == inspect.Parameter.empty:
+            # No type hint, default to Any
+            param_type = Any
+
+        # Handle default values
+        if param.default == inspect.Parameter.empty:
+            # Required parameter
+            field_definitions[param_name] = (param_type, ...)
+        else:
+            # Optional parameter with default
+            field_definitions[param_name] = (param_type, param.default)
+
+    # Create dynamic Pydantic model for validation
+    ValidatorModel = create_model(f"{func.__name__}_Validator", **field_definitions)
+
+    # Configure model for type coercion if requested
+    if coerce_types:
+        # Pydantic v2 uses model_config
+        ValidatorModel.model_config = ConfigDict(
+            str_strip_whitespace=True  # Strip whitespace from strings
+            # Pydantic automatically coerces compatible types
+        )
+
+    try:
+        # Validate using Pydantic
+        validated_model = ValidatorModel(**args)
+        validated_args = validated_model.model_dump()
+
+        # Log successful validation with coercion details
+        coerced_fields = []
+        for key, original_value in args.items():
+            validated_value = validated_args.get(key)
+            if type(original_value) is not type(validated_value):
+                coerced_fields.append(
+                    f"{key}: {type(original_value).__name__} → {type(validated_value).__name__}"
+                )
+
+        if coerced_fields and coerce_types:
+            FancyLogger.get_logger().debug(
+                f"Tool '{func.__name__}' arguments coerced: {', '.join(coerced_fields)}"
+            )
+
+        return validated_args
+
+    except ValidationError as e:
+        # Format error message
+        error_details = []
+        for error in e.errors():
+            field = ".".join(str(loc) for loc in error["loc"])
+            msg = error["msg"]
+            error_details.append(f"  - {field}: {msg}")
+
+        error_msg = (
+            f"Tool argument validation failed for '{func.__name__}':\n"
+            + "\n".join(error_details)
+        )
+
+        if strict:
+            # Re-raise with enhanced message
+            FancyLogger.get_logger().error(error_msg)
+            raise
+        else:
+            # Log warning and return original args
+            FancyLogger.get_logger().warning(
+                error_msg + "\nReturning original arguments without validation."
+            )
+            return dict(args)
+
+    except Exception as e:
+        # Catch any other errors during validation
+        error_msg = f"Unexpected error validating tool '{func.__name__}' arguments: {e}"
+
+        if strict:
+            FancyLogger.get_logger().error(error_msg)
+            raise
+        else:
+            FancyLogger.get_logger().warning(
+                error_msg + "\nReturning original arguments without validation."
+            )
+            return dict(args)
 
 
 # Below functions and classes extracted from Ollama Python SDK (v0.6.1)
