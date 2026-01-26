@@ -275,6 +275,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
             raise RuntimeError(
                 f"Cannot use `ModelOutputThunk.astream()` when the generate function is using `{self._generate_type.name}`"
             )
+        # Beginning value
+        beginning_value: str = self._underlying_value  # type: ignore
 
         exception_to_raise = None
         try:
@@ -350,12 +352,17 @@ class ModelOutputThunk(CBlock, Generic[S]):
                     assert self.parsed_repr is not None, (
                         "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
                     )
+                    return self._underlying_value  # type: ignore
 
         # Re-raise exception after cleanup if one occurred
         if exception_to_raise is not None:
             raise exception_to_raise
 
-        return self._underlying_value  # type: ignore
+        return (
+            self._underlying_value
+            if beginning_value is None
+            else self._underlying_value[len(str(beginning_value)) :]  # type: ignore
+        )
 
     def __repr__(self):
         """Provides a python-parsable representation (usually).
