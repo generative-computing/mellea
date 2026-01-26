@@ -113,6 +113,7 @@ dev = [
     "pdm>=2.24.0",
     "pytest",
     "pytest-asyncio",
+    "pytest-cov>=6.0.0",
     "psutil",  # For test infrastructure: RAM detection in conftest.py
     "mypy>=1.17.0",
     "python-semantic-release~=7.32",
@@ -218,6 +219,51 @@ markers = [
     "llm: Tests that make LLM calls (needs at least Ollama)",
 ]
 asyncio_mode = "auto"  # Don't require explicitly marking async tests.
+addopts = [
+    "--cov=mellea",
+    "--cov=cli",
+    "--cov-report=term",
+    "--cov-report=html",
+    "--cov-report=json",
+]
+filterwarnings = [
+    # Show each deprecation warning only once per session
+    "once::DeprecationWarning",
+    "once::PendingDeprecationWarning",
+    
+    # Deduplicate noisy Pydantic serialization warnings
+    "once:.*PydanticSerializationUnexpectedValue.*:UserWarning",
+    
+    # Keep Watsonx deprecation visible (important for migration)
+    "default:.*Watsonx Backend is deprecated.*:DeprecationWarning",
+]
+
+[tool.coverage.run]
+branch = true  # Measure branch coverage, not just line coverage
+source = ["mellea", "cli"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/scratchpad/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+precision = 2
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "\\.\\.\\.",  # Ellipsis in function bodies
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
 
 [tool.semantic_release]
 # for default values check:
