@@ -21,7 +21,7 @@ def m_session(gh_run):
     else:
         m = start_session(
             "ollama",
-            model_id=model_ids.IBM_GRANITE_3_3_VISION_2B,
+            model_id="granite3.2-vision",
             model_options={ModelOption.MAX_NEW_TOKENS: 5},
         )
     yield m
