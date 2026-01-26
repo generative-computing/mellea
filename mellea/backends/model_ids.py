@@ -59,9 +59,9 @@ IBM_GRANITE_3_3_8B = ModelIdentifier(
     watsonx_name="ibm/granite-3-3-8b-instruct",
 )
 
-# Deprecated: Use IBM_GRANITE_4_HYBRID_MICRO instead
-# Kept for backward compatibility
-IBM_GRANITE_4_MICRO_3B = IBM_GRANITE_4_HYBRID_MICRO
+# Deprecated: Use IBM_GRANITE_4_HYBRID_SMALL instead
+# Kept for backward compatibility - maps to SMALL because it needs watsonx support
+IBM_GRANITE_4_MICRO_3B = IBM_GRANITE_4_HYBRID_SMALL
 
 # Granite 3.3 Vision Model (2B)
 IBM_GRANITE_3_3_VISION_2B = ModelIdentifier(
