@@ -65,7 +65,7 @@ The backend tracer (`mellea.backend`) instruments:
 ```bash
 export MELLEA_TRACE_APPLICATION=true
 export MELLEA_TRACE_BACKEND=false
-python your_script.py
+python docs/examples/instruct_validate_repair/101_email.py
 ```
 
 This traces user-facing operations like `@generative` function calls, session lifecycle, and sampling strategies, but not the underlying LLM API calls.
@@ -75,7 +75,7 @@ This traces user-facing operations like `@generative` function calls, session li
 ```bash
 export MELLEA_TRACE_APPLICATION=false
 export MELLEA_TRACE_BACKEND=true
-python your_script.py
+python docs/examples/instruct_validate_repair/101_email.py
 ```
 
 This traces only the LLM backend interactions, showing model calls, token usage, and API latency.
@@ -85,7 +85,7 @@ This traces only the LLM backend interactions, showing model calls, token usage,
 ```bash
 export MELLEA_TRACE_APPLICATION=true
 export MELLEA_TRACE_BACKEND=true
-python your_script.py
+python docs/examples/instruct_validate_repair/101_email.py
 ```
 
 This provides complete observability across both application logic and backend interactions.
@@ -105,7 +105,7 @@ export MELLEA_TRACE_BACKEND=true
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 export OTEL_SERVICE_NAME=my-mellea-app
 
-python your_script.py
+python docs/examples/instruct_validate_repair/101_email.py
 
 # View traces at http://localhost:16686
 ```
@@ -115,7 +115,7 @@ python your_script.py
 ```bash
 export MELLEA_TRACE_APPLICATION=true
 export MELLEA_TRACE_CONSOLE=true
-python your_script.py
+python docs/examples/instruct_validate_repair/101_email.py
 ```
 
 This prints trace spans to the console, useful for local debugging without setting up a trace backend.
