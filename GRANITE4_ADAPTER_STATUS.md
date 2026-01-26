@@ -3,13 +3,16 @@
 ## Summary
 **Finding**: HuggingFace tests CANNOT be migrated to Granite 4 because `requirement_check` adapter is not available for Granite 4 models.
 
-## Adapter Repositories
+**Comprehensive Search**: Searched all 180+ ibm-granite repositories on HuggingFace. Found 22 standalone adapter repositories, ALL for Granite 3.x. Zero Granite 4 standalone adapters exist.
 
-### ibm-granite/rag-intrinsics-lib (Core Intrinsics)
+## Adapter Repository Types
+
+### 1. Consolidated Libraries (Multi-Intrinsic)
+**ibm-granite/rag-intrinsics-lib** (Core Intrinsics):
 - `requirement_check`: ❌ Granite 3.3 only (2b, 8b)
 - `uncertainty`: ❌ Granite 3.3 only
 
-### ibm-granite/granite-lib-rag-r1.0 (RAG Intrinsics)
+**ibm-granite/granite-lib-rag-r1.0** (RAG Intrinsics):
 Granite 4.0-micro support:
 - `answerability`: ✅ alora, lora
 - `context_relevance`: ✅ alora, lora
@@ -18,6 +21,18 @@ Granite 4.0-micro support:
 - `answer_relevance_rewriter`: ✅ lora only
 - `citations`: ✅ lora only
 - `hallucination_detection`: ✅ lora only
+
+### 2. Standalone Adapter Repositories (Single-Intrinsic)
+All 22 standalone adapter repos are Granite 3.x only:
+- `ibm-granite/granite-3.2-8b-alora-requirement-check` ✅
+- `ibm-granite/granite-3.3-8b-alora-requirement-check` ✅
+- `ibm-granite/granite-3.2-8b-alora-uncertainty`
+- `ibm-granite/granite-3.3-8b-alora-uncertainty`
+- `ibm-granite/granite-3.2-8b-alora-rag-answerability-prediction`
+- `ibm-granite/granite-3.2-8b-alora-rag-query-rewrite`
+- ... (18 more Granite 3.x adapters)
+
+**No Granite 4 standalone adapters found.**
 
 ## HuggingFace Test Requirements
 
