@@ -25,7 +25,7 @@ class ModelIdentifier:
 #### IBM models ####
 ####################
 
-# Granite 4 Hybrid Models (Recommended)
+# Granite 4 Hybrid Models (Recommended for general use)
 IBM_GRANITE_4_HYBRID_MICRO = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.0-h-micro",
     ollama_name="granite4:micro-h",
@@ -43,6 +43,7 @@ IBM_GRANITE_4_HYBRID_SMALL = ModelIdentifier(
     ollama_name="granite4:small-h",
     watsonx_name="ibm/granite-4-h-small",
 )
+
 
 # Deprecated Granite 3 models - kept for backward compatibility
 # These maintain their original model references (not upgraded to Granite 4)
