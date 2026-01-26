@@ -1,5 +1,6 @@
 """Risk checking with Granite Guardian models via existing backends."""
 
+import warnings
 from enum import Enum
 from typing import Literal
 
@@ -67,7 +68,10 @@ def _parse_safety_result(result: str | None, logger) -> str:
 
 
 class GuardianCheck(Requirement):
-    """Enhanced risk checking using Granite Guardian 3.3 8B with multiple backend support."""
+    """Enhanced risk checking using Granite Guardian 3.3 8B with multiple backend support.
+
+    [DEPRECATED as of V 0.4 -- Use Intrinsics instead]
+    """
 
     def __init__(
         self,
@@ -98,6 +102,13 @@ class GuardianCheck(Requirement):
             backend: Pre-initialized backend to reuse (avoids loading model multiple times)
         """
         super().__init__(check_only=True)
+
+        warnings.warn(
+            "GuardianCheck is deprecated as of version 0.4. "
+            "Use the Guardian Intrinsics instead ",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
         # Handle risk specification with custom criteria priority
         if custom_criteria:

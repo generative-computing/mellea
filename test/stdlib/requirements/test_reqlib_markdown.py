@@ -1,13 +1,12 @@
 import pytest
 
-from mellea.core import CBlock, ModelOutputThunk
-from mellea.stdlib.context import Context, ChatContext
+from mellea.core import CBlock, ModelOutputThunk, default_output_to_bool
+from mellea.stdlib.context import ChatContext, Context
 from mellea.stdlib.requirements import (
+    as_markdown_list,
     is_markdown_list,
     is_markdown_table,
-    as_markdown_list,
 )
-from mellea.core import default_output_to_bool
 
 
 def from_model(s: str) -> Context:
@@ -45,16 +44,19 @@ MARKDOWN_TABLE_CONTEXT: Context = from_model(
 )
 
 
-def test_markdown_list():
-    assert is_markdown_list.validate(None, MARKDOWN_LIST_CTX)  # type: ignore
+async def test_markdown_list():
+    result = await is_markdown_list.validate(None, MARKDOWN_LIST_CTX)  # type: ignore
+    assert result
     assert len(as_markdown_list(MARKDOWN_LIST_CTX)) == 3  # type: ignore
     assert len(as_markdown_list(MARKDOWN_OL_LIST_CTX)) == 4  # type: ignore
     assert type(as_markdown_list(MARKDOWN_OL_LIST_CTX)[0]) is str  # type: ignore
-    assert is_markdown_list.validate(None, MARKDOWN_OL_LIST_CTX)  # type: ignore
+    result = await is_markdown_list.validate(None, MARKDOWN_OL_LIST_CTX)  # type: ignore
+    assert result
 
 
-def test_markdown_table():
-    assert is_markdown_table.validate(None, MARKDOWN_TABLE_CONTEXT)  # type: ignore
+async def test_markdown_table():
+    result = await is_markdown_table.validate(None, MARKDOWN_TABLE_CONTEXT)  # type: ignore
+    assert result
 
 
 def test_default_output_to_bool_yes():
