@@ -59,9 +59,15 @@ IBM_GRANITE_3_3_8B = ModelIdentifier(
     watsonx_name="ibm/granite-3-3-8b-instruct",
 )
 
-# Deprecated: Use IBM_GRANITE_4_HYBRID_SMALL instead
-# Kept for backward compatibility - maps to SMALL because it needs watsonx support
-IBM_GRANITE_4_MICRO_3B = IBM_GRANITE_4_HYBRID_SMALL
+# Deprecated: Use IBM_GRANITE_4_HYBRID_MICRO or IBM_GRANITE_4_HYBRID_SMALL instead
+# Kept for backward compatibility with per-backend model selection:
+# - Ollama/HF: Uses MICRO (fits in CI memory constraints)
+# - Watsonx: Uses SMALL (required for watsonx support)
+IBM_GRANITE_4_MICRO_3B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.0-h-micro",
+    ollama_name="granite4:micro-h",
+    watsonx_name="ibm/granite-4-h-small",
+)
 
 # Granite 3.3 Vision Model (2B)
 IBM_GRANITE_3_3_VISION_2B = ModelIdentifier(
