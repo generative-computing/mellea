@@ -184,7 +184,8 @@ async def test_async_avalue(session):
 
 def test_multiple_asyncio_runs(session):
     async def test():
-        session.achat("hello")
+        result = await session.achat("hello")
+        assert result is not None
 
     asyncio.run(test())
     asyncio.run(test())
