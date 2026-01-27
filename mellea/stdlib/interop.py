@@ -25,7 +25,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeGuard
 
-from ..core import Backend, CBlock, ModelOutputThunk, Requirement, ValidationResult
+from ..core import Backend, ModelOutputThunk, Requirement, ValidationResult
 from ..helpers import _run_async_in_thread
 from .components import Message
 from .components.chat_converters import (
@@ -279,16 +279,16 @@ async def aexternal_validate(
     output_str = _extract_output_string(output)
     reqs = _normalize_requirements(requirements)
 
-    # Wrap output in a CBlock for validation
-    output_block = CBlock(output_str)
+    # Add output to context as ModelOutputThunk
+    # Note: We add it to the context rather than passing it separately to avalidate,
+    # because avalidate ignores the context parameter when output is provided.
+    # This ensures the conversation history is available for validation.
+    output_thunk = ModelOutputThunk(value=output_str)
+    ctx = ctx.add(output_thunk)
 
-    # Run validation
+    # Run validation (output=None so avalidate uses the full context)
     return await mfuncs.avalidate(
-        reqs=reqs,
-        context=ctx,
-        backend=backend,
-        output=output_block,
-        model_options=model_options,
+        reqs=reqs, context=ctx, backend=backend, model_options=model_options
     )
 
 
@@ -606,12 +606,14 @@ async def aexternal_ivr(
         output_str = generate_fn(mellea_messages)
         all_outputs.append(output_str)
 
-        # Add output to context for validation
-        output_block = CBlock(output_str)
+        # Add output to a copy of context for validation
+        # We use a copy so the original ctx isn't modified until after validation
+        output_thunk = ModelOutputThunk(value=output_str)
+        validation_ctx = ctx.add(output_thunk)
 
-        # Validate
+        # Validate (don't pass output separately so avalidate uses full context)
         validation_results = await mfuncs.avalidate(
-            reqs=reqs, context=ctx, backend=backend, output=output_block
+            reqs=reqs, context=validation_ctx, backend=backend
         )
 
         # Check if all passed
