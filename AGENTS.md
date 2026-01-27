@@ -11,20 +11,26 @@ AGENTS.md — Instructions for AI coding assistants (Claude, Cursor, Copilot, Co
 pre-commit install                  # Required: install git hooks
 uv sync --all-extras --all-groups   # Install all deps (required for tests)
 ollama serve                        # Start Ollama (required for most tests)
-uv run pytest -m "not qualitative"  # Skips LLM quality tests (~2 min)
-uv run pytest                       # Full suite (includes LLM quality tests)
-uv run ruff format . && uv run ruff check .  # Lint & format
+uv run pytest test/ -m "not qualitative"  # Fast: tests only, skip quality checks (~2 min)
+uv run pytest                       # Full suite (tests + examples + quality checks)
+uv run ruff format .                # Format code
+uv run ruff check .                 # Lint code
+uv run mypy .                       # Type check
 ```
 **Branches**: `feat/topic`, `fix/issue-id`, `docs/topic`
 
 ## 2. Directory Structure
 | Path | Contents |
 |------|----------|
-| `mellea/stdlib` | Core: Sessions, Genslots, Requirements, Sampling, Context |
-| `mellea/backends` | Providers: HF, OpenAI, Ollama, Watsonx, LiteLLM |
-| `mellea/helpers` | Utilities, logging, model ID tables |
+| `mellea/core/` | Core abstractions: Backend, Base, Formatter, Requirement, Sampling |
+| `mellea/stdlib/` | Standard library: Sessions, Components, Context |
+| `mellea/backends/` | Providers: HF, OpenAI, Ollama, Watsonx, LiteLLM |
+| `mellea/formatters/` | Output formatters for different types |
+| `mellea/templates/` | Jinja2 templates |
+| `mellea/helpers/` | Utilities, logging, model ID tables |
 | `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`) |
 | `test/` | All tests (run from repo root) |
+| `docs/examples/` | Example code (run as tests via pytest) |
 | `scratchpad/` | Experiments (git-ignored) |
 
 ## 3. Test Markers
@@ -57,7 +63,7 @@ Pre-commit runs: ruff, mypy, uv-lock, codespell
 | Ollama refused | Run `ollama serve` |
 
 ## 8. Self-Review (before notifying user)
-1. `uv run pytest -m "not qualitative"` passes?
+1. `uv run pytest test/ -m "not qualitative"` passes?
 2. `ruff format` and `ruff check` clean?
 3. New functions typed with concise docstrings?
 4. Unit tests added for new functionality?
