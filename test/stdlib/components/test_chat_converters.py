@@ -226,5 +226,143 @@ class TestEdgeCases:
         assert result.content == content
 
 
+class TestOpenAIFormatConverters:
+    """Tests for OpenAI format converters (core converters)."""
+
+    def test_openai_message_to_mellea_user(self):
+        """Test converting OpenAI user message to Mellea."""
+        from mellea.stdlib.components.chat_converters import openai_message_to_mellea
+
+        oai_msg = {"role": "user", "content": "Hello!"}
+        result = openai_message_to_mellea(oai_msg)
+
+        assert isinstance(result, Message)
+        assert result.role == "user"
+        assert result.content == "Hello!"
+
+    def test_openai_message_to_mellea_assistant(self):
+        """Test converting OpenAI assistant message to Mellea."""
+        from mellea.stdlib.components.chat_converters import openai_message_to_mellea
+
+        oai_msg = {"role": "assistant", "content": "Hi there!"}
+        result = openai_message_to_mellea(oai_msg)
+
+        assert result.role == "assistant"
+        assert result.content == "Hi there!"
+
+    def test_openai_message_to_mellea_system(self):
+        """Test converting OpenAI system message to Mellea."""
+        from mellea.stdlib.components.chat_converters import openai_message_to_mellea
+
+        oai_msg = {"role": "system", "content": "You are helpful."}
+        result = openai_message_to_mellea(oai_msg)
+
+        assert result.role == "system"
+        assert result.content == "You are helpful."
+
+    def test_openai_message_to_mellea_missing_role(self):
+        """Test that missing role raises ValueError."""
+        from mellea.stdlib.components.chat_converters import openai_message_to_mellea
+
+        with pytest.raises(ValueError, match="missing 'role' field"):
+            openai_message_to_mellea({"content": "No role"})
+
+    def test_openai_message_to_mellea_invalid_role(self):
+        """Test that invalid role raises ValueError."""
+        from mellea.stdlib.components.chat_converters import openai_message_to_mellea
+
+        with pytest.raises(ValueError, match="Invalid OpenAI message role"):
+            openai_message_to_mellea({"role": "invalid", "content": "Bad role"})
+
+    def test_openai_messages_to_mellea_list(self):
+        """Test converting a list of OpenAI messages."""
+        from mellea.stdlib.components.chat_converters import openai_messages_to_mellea
+
+        oai_msgs = [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "content": "Hi!"},
+        ]
+        results = openai_messages_to_mellea(oai_msgs)
+
+        assert len(results) == 3
+        assert [m.role for m in results] == ["system", "user", "assistant"]
+
+    def test_mellea_message_to_openai(self):
+        """Test converting Mellea message to OpenAI format."""
+        from mellea.stdlib.components.chat_converters import mellea_message_to_openai
+
+        mellea_msg = Message(role="user", content="Hello!")
+        result = mellea_message_to_openai(mellea_msg)
+
+        assert result["role"] == "user"
+        assert result["content"] == "Hello!"
+
+    def test_mellea_messages_to_openai_list(self):
+        """Test converting a list of Mellea messages to OpenAI format."""
+        from mellea.stdlib.components.chat_converters import mellea_messages_to_openai
+
+        mellea_msgs = [
+            Message(role="system", content="You are helpful."),
+            Message(role="user", content="Hello!"),
+        ]
+        results = mellea_messages_to_openai(mellea_msgs)
+
+        assert len(results) == 2
+        assert results[0]["role"] == "system"
+        assert results[1]["role"] == "user"
+
+
+class TestLangchainViaOpenAI:
+    """Tests for LangChain conversion via OpenAI intermediate format."""
+
+    def test_langchain_to_mellea_via_openai(
+        self, sample_system_message, sample_human_message, sample_ai_message
+    ):
+        """Test converting LangChain messages via OpenAI format."""
+        from mellea.stdlib.components.chat_converters import (
+            langchain_messages_to_mellea_via_openai,
+        )
+
+        messages = [sample_system_message, sample_human_message, sample_ai_message]
+        results = langchain_messages_to_mellea_via_openai(messages)
+
+        assert len(results) == 3
+        assert results[0].role == "system"
+        assert results[1].role == "user"
+        assert results[2].role == "assistant"
+
+    def test_mellea_to_langchain_roundtrip(self):
+        """Test round-trip conversion: Mellea -> LangChain -> Mellea."""
+        from mellea.stdlib.components.chat_converters import (
+            langchain_messages_to_mellea,
+            mellea_messages_to_langchain,
+        )
+
+        # Start with Mellea messages
+        original = [
+            Message(role="system", content="You are helpful."),
+            Message(role="user", content="Hello!"),
+            Message(role="assistant", content="Hi there!"),
+        ]
+
+        # Convert to LangChain
+        lc_messages = mellea_messages_to_langchain(original)
+
+        # Verify LangChain types
+        assert lc_messages[0].type == "system"
+        assert lc_messages[1].type == "human"
+        assert lc_messages[2].type == "ai"
+
+        # Convert back to Mellea
+        roundtrip = langchain_messages_to_mellea(lc_messages)
+
+        # Verify content preserved
+        assert len(roundtrip) == 3
+        assert roundtrip[0].content == "You are helpful."
+        assert roundtrip[1].content == "Hello!"
+        assert roundtrip[2].content == "Hi there!"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
