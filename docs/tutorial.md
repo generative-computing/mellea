@@ -1335,6 +1335,16 @@ For large prompts Mellea offers a decompose function to break down the initial p
 
 See [`mellea/docs/examples/m_decompose/`](./examples/m_decompose/) for an input example prompt, intermdiary json and python representations, and the final output.
 
+To run the example locally use the following command:
+```bash
+m decompose run --out-dir ./ --prompt-file ./docs/examples/m_decomposeexample_decompose_prompt.txt
+```
+
+To run the generated intermediary use the following command:
+```bash
+python ./m_decomp_result.py > final_output.txt
+```
+
 ## Chapter 11: Tool Calling
 Mellea supports tool calling for providers/models that support it. Most session level functions support setting a tool_calls boolean. Setting this to true allows tools to be called, but there's no guarantee that a model will call them.
 
