@@ -1240,6 +1240,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         :returns: list of adapter names that are currently registered with this backend
         """
+        # TODO: JAL. This might be wrong. Check if should be _added_adapters? or something like that.
         return list(self._loaded_adapters.keys())
 
 

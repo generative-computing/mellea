@@ -15,7 +15,8 @@ class Document(Component[str]):
 
     def parts(self) -> list[Component | CBlock]:
         """The set of all the constituent parts of the `Component`."""
-        raise NotImplementedError("parts isn't implemented by default")
+        # TODO: JAL. Text should be a cblock here. And it should be able to passed in as one too during initialization.
+        return []
 
     def format_for_llm(self) -> str:
         """Formats the `Document` into a string.

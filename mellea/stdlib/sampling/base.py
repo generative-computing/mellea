@@ -181,7 +181,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 reqs=reqs,
                 context=result_ctx,
                 backend=backend,
-                output=result,
+                output=result, # TODO: JAL. Remove the output here? need to be careful here to make sure the context contains the output? or doesn't?
                 format=None,
                 model_options=model_options,
                 # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.

@@ -712,6 +712,26 @@ async def avalidate(
     reqs = [reqs] if not isinstance(reqs, list) else reqs
     reqs = [Requirement(req) if type(req) is str else req for req in reqs]
 
+    # TODO: JAL. The question here is: do we want default behavior of our sampling strategies to use context (ie with potentially other things in it
+    # ) or if we want it to default to output/input having to be defined and only having that in the context?
+    # or in other words:
+    """
+        def validate_test(
+                ctx: Context
+        ):
+            ...
+
+        def validate_test(
+                output: Any,
+                input: Any,
+        ):
+            ...
+    """
+    # We can force users to construct a context if desired to use input/output. Does this conflict with view for generation?
+    # TODO: JAL. Change this to remove output / input. Requirement.validate by default operates over only the last turn; all new requirements should get the full context and then decide for themselves...
+    # Helper functions like last turn that actually create a new context.
+    # Good thing to give to Paul's team...
+
     if output is None:
         validation_target_ctx = context
     else:
