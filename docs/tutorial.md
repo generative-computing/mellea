@@ -40,6 +40,7 @@
     - [Customization](#customization)
       - [Choosing a Template](#choosing-a-template)
       - [Editing an Existing Class](#editing-an-existing-class)
+    - [Large Prompts and Decompose](#decompose)
   - [Chapter 11: Tool Calling](#chapter-11-tool-calling)
   - [Chapter 12: Asynchronicity](#chapter-12-asynchronicity)
     - [Asynchronous Functions:](#asynchronous-functions)
@@ -1328,6 +1329,11 @@ If the default formatter searches the template path or the package, it uses the 
 To customize the template and template representation of an existing class, simply create a new class that inherits from the class you want to edit. Then, override the format_for_llm function and create a new template.
 
 See [`mellea/docs/examples/mify/rich_document_advanced.py`](./examples/mify/rich_document_advanced.py)
+
+#### Decompose
+For large prompts Mellea offers a decompose function to break down the initial prompt into a series of smaller ones.  In addition, the intermediary output allows for constraints and validation to be applied to the output of each step.  The final output is done by composing these intermediate steps.
+
+See [`mellea/docs/examples/m_decompose/`](./examples/m_decompose/) for an input example prompt, intermdiary json and python representations, and the final output.
 
 ## Chapter 11: Tool Calling
 Mellea supports tool calling for providers/models that support it. Most session level functions support setting a tool_calls boolean. Setting this to true allows tools to be called, but there's no guarantee that a model will call them.
