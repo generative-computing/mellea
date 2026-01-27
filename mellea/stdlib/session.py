@@ -58,21 +58,39 @@ def backend_name_to_class(name: str) -> Any:
 
         return OllamaModelBackend
     elif name == "hf" or name == "huggingface":
-        from mellea.backends.huggingface import LocalHFBackend
+        try:
+            from mellea.backends.huggingface import LocalHFBackend
 
-        return LocalHFBackend
+            return LocalHFBackend
+        except ImportError as e:
+            raise ImportError(
+                "The 'hf' backend requires extra dependencies. "
+                "Please install them with: pip install 'mellea[hf]'"
+            ) from e
     elif name == "openai":
         from ..backends.openai import OpenAIBackend
 
         return OpenAIBackend
     elif name == "watsonx":
-        from ..backends.watsonx import WatsonxAIBackend
+        try:
+            from ..backends.watsonx import WatsonxAIBackend
 
-        return WatsonxAIBackend
+            return WatsonxAIBackend
+        except ImportError as e:
+            raise ImportError(
+                "The 'watsonx' backend requires extra dependencies. "
+                "Please install them with: pip install 'mellea[watsonx]'"
+            ) from e
     elif name == "litellm":
-        from ..backends.litellm import LiteLLMBackend
+        try:
+            from ..backends.litellm import LiteLLMBackend
 
-        return LiteLLMBackend
+            return LiteLLMBackend
+        except ImportError as e:
+            raise ImportError(
+                "The 'litellm' backend requires extra dependencies. "
+                "Please install them with: pip install 'mellea[litellm]'"
+            ) from e
     else:
         return None
 
