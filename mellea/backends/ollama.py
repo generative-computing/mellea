@@ -24,6 +24,7 @@ from ..core import (
 )
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import ClientCache, get_current_event_loop, send_to_queue
+from ..security import SecLevel, taint_sources
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
 from .backend import FormatterBackend
@@ -350,7 +351,11 @@ class OllamaModelBackend(FormatterBackend):
             format=_format.model_json_schema() if _format is not None else None,  # type: ignore
         )  # type: ignore
 
-        output = ModelOutputThunk(None)
+        # Compute taint sources from action and context
+        sources = taint_sources(action, ctx)
+        sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+
+        output = ModelOutputThunk(value=None, sec_level=sec_level, meta={})
         output._context = linearized_context
         output._action = action
         output._model_options = model_opts
@@ -452,12 +457,16 @@ class OllamaModelBackend(FormatterBackend):
         for i, response in enumerate(responses):
             result = None
             error = None
+            sources = taint_sources(actions[i], None)
+            sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+
             if isinstance(response, BaseException):
-                result = ModelOutputThunk(value="")
+                result = ModelOutputThunk(value="", sec_level=sec_level, meta={})
                 error = response
             else:
                 result = ModelOutputThunk(
                     value=response.response,
+                    sec_level=sec_level,
                     meta={
                         "generate_response": response.model_dump(),
                         "usage": {

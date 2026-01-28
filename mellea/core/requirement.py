@@ -4,6 +4,7 @@ import re
 from collections.abc import Callable
 from copy import copy
 
+from ..security import SecLevel
 from .backend import Backend, BaseModelSubclass
 from .base import CBlock, Component, Context, ModelOutputThunk, TemplateRepresentation
 
@@ -112,6 +113,7 @@ class Requirement(Component[str]):
 
         # Used for validation. Do not manually populate.
         self._output: str | None = None
+        self._sec_level: SecLevel | None = None
 
     async def validate(
         self,
@@ -148,6 +150,15 @@ class Requirement(Component[str]):
                 thunk=llm_as_a_judge_result,
                 context=val_ctx,
             )
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     def parts(self):
         """Returns all of the constituent parts of a Requirement."""
