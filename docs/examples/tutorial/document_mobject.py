@@ -4,13 +4,13 @@ from mellea.stdlib.components.docs.richdocument import RichDocument
 
 rd = RichDocument.from_document_file("https://arxiv.org/pdf/1906.04043")
 
-from mellea.stdlib.components.docs.richdocument import Table  # noqa: E402
+from mellea.stdlib.components.docs.richdocument import Table
 
 table1: Table = rd.get_tables()[0]
 print(table1.to_markdown())
 
-from mellea import start_session  # noqa: E402
-from mellea.backends import ModelOption  # noqa: E402
+from mellea import start_session
+from mellea.backends import ModelOption
 
 m = start_session(model_id=model_ids.META_LLAMA_3_2_3B)
 for seed in [x * 12 for x in range(5)]:

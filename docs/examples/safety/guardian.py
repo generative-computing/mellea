@@ -4,8 +4,8 @@ from mellea import MelleaSession
 from mellea.backends import model_ids
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import ContextTurn, ModelOutputThunk
-from mellea.stdlib.context import ChatContext
 from mellea.stdlib.components import Message
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 
 # Enhanced GuardianCheck with Granite Guardian 3.3 8B support
@@ -66,7 +66,7 @@ print(f"\nConfigured guardians: {len(guardians)} total")
 
 # Show Ollama backend configuration
 ollama_guardian = GuardianCheck(GuardianRisk.HARM, backend_type="ollama")
-print(f"  Ollama backend: {ollama_guardian._backend.model_version}")
+print(f"  Ollama backend: {ollama_guardian._backend.model_version}")  # type: ignore[attr-defined]
 
 print("\n=== Test 4: Groundedness Detection ===")
 # Test groundedness - detecting when responses lack factual grounding

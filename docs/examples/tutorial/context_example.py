@@ -1,5 +1,6 @@
-from mellea import start_session
 from mellea.stdlib.base import ChatContext
+
+from mellea import start_session
 
 m = start_session(ctx=ChatContext())
 m.chat("Make up a math problem.")

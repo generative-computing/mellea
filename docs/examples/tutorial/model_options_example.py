@@ -1,7 +1,6 @@
 import mellea
-from mellea.backends import model_ids
+from mellea.backends import ModelOption, model_ids
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.backends import ModelOption
 
 m = mellea.MelleaSession(
     backend=OllamaModelBackend(model_options={ModelOption.SEED: 42})

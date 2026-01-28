@@ -1,10 +1,9 @@
+import mellea.stdlib.functional as mfuncs
+from mellea.backends.adapters.adapter import AdapterType, GraniteCommonAdapter
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.openai import OpenAIBackend, _ServerType
-from mellea.backends.adapters.adapter import AdapterType, GraniteCommonAdapter
+from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.components import Message
-import mellea.stdlib.functional as mfuncs
-from mellea.stdlib.components import Intrinsic
 
 # This is an example for how you would directly use intrinsics. See `mellea/stdlib/intrinsics/rag.py`
 # for helper functions.

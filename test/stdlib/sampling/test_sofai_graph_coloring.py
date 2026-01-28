@@ -409,7 +409,7 @@ class TestSOFAIPrepareS2ContextGraphColoring:
             ]
         ]
 
-        s2_action, s2_context = strategy._prepare_s2_context(
+        s2_action, _s2_context = strategy._prepare_s2_context(
             s2_mode="best_attempt",
             original_action=original_action,
             original_context=original_context,

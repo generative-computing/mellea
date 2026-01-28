@@ -55,7 +55,7 @@ def session(backend):
 
 
 @pytest.mark.qualitative
-def test_system_prompt(session):
+def test_system_prompt(session) -> None:
     result = session.chat(
         "Where are we going?",
         model_options={ModelOption.SYSTEM_PROMPT: "Talk like a pirate."},
@@ -64,15 +64,15 @@ def test_system_prompt(session):
 
 
 @pytest.mark.qualitative
-def test_instruct(session):
+def test_instruct(session) -> None:
     result = session.instruct("Compute 1+1.")
     print(result)
 
 
 @pytest.mark.qualitative
-def test_multiturn(session):
+def test_multiturn(session) -> None:
     session.instruct("Compute 1+1")
-    beta = session.instruct(
+    session.instruct(
         "Take the result of the previous sum and find the corresponding letter in the greek alphabet."
     )
     words = session.instruct("Now list five English words that start with that letter.")
@@ -80,7 +80,7 @@ def test_multiturn(session):
 
 
 @pytest.mark.qualitative
-def test_format(session):
+def test_format(session) -> None:
     class Person(pydantic.BaseModel):
         name: str
         email_address: Annotated[
@@ -111,7 +111,7 @@ def test_format(session):
 
 
 @pytest.mark.qualitative
-async def test_generate_from_raw(session):
+async def test_generate_from_raw(session) -> None:
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
     results = await session.backend.generate_from_raw(
@@ -123,7 +123,7 @@ async def test_generate_from_raw(session):
 
 
 @pytest.mark.qualitative
-async def test_generate_from_raw_with_format(session):
+async def test_generate_from_raw_with_format(session) -> None:
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
     class Answer(pydantic.BaseModel):
@@ -140,7 +140,7 @@ async def test_generate_from_raw_with_format(session):
 
     random_result = results[0]
     try:
-        answer = Answer.model_validate_json(random_result.value)
+        Answer.model_validate_json(random_result.value)
     except pydantic.ValidationError as e:
         assert False, (
             f"formatting directive failed for {random_result.value}: {e.json()}"
@@ -148,7 +148,7 @@ async def test_generate_from_raw_with_format(session):
 
 
 @pytest.mark.qualitative
-def test_async_parallel_requests(session):
+def test_async_parallel_requests(session) -> None:
     async def parallel_requests():
         model_opts = {ModelOption.STREAM: True}
         mot1, _ = await session.backend.generate_from_context(
@@ -187,7 +187,7 @@ def test_async_parallel_requests(session):
 
 
 @pytest.mark.qualitative
-def test_async_avalue(session):
+def test_async_avalue(session) -> None:
     async def avalue():
         mot1, _ = await session.backend.generate_from_context(
             CBlock("Say Hello."), SimpleContext()

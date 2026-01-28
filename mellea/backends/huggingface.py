@@ -634,7 +634,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             linearized_ctx = ctx.view_for_generation()
             assert linearized_ctx is not None
-            input_text, input_ids, merged_cache, attention_mask = (
+            _input_text, input_ids, merged_cache, attention_mask = (
                 self._make_merged_kv_cache(
                     linearized_ctx=linearized_ctx,
                     ctx_as_conversation=ctx_as_chat,
