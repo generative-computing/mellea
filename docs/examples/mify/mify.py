@@ -1,3 +1,9 @@
+try:
+    import pytest
+
+    pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
 from mellea.stdlib.components.docs.richdocument import TableQuery
 from mellea.stdlib.components.mify import MifiedProtocol, mify
 from mellea.stdlib.session import start_session

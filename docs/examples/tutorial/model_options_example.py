@@ -1,3 +1,9 @@
+try:
+    import pytest
+
+    pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
 import mellea
 from mellea.backends import model_ids
 from mellea.backends.ollama import OllamaModelBackend

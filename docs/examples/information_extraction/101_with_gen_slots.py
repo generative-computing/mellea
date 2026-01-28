@@ -9,7 +9,10 @@ m = start_session()
 @generative
 def extract_all_person_names(doc: str) -> list[str]:
     """
-    Given a document, extract names of ALL mentioned persons. Return these names as list of strings.
+    import pytest
+
+    pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+        Given a document, extract names of ALL mentioned persons. Return these names as list of strings.
     """
 
 

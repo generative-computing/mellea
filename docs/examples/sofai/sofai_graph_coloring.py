@@ -16,6 +16,13 @@ optional judge_backend feature for LLM-as-Judge validation, you can:
 - feedback_strategy options: "simple", "first_error", "all_errors"
 """
 
+try:
+    import pytest
+
+    pytestmark = [pytest.mark.ollama, pytest.mark.qualitative, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
+
 import json
 import logging
 

@@ -1,9 +1,14 @@
+try:
+    import pytest
+
+    pytestmark = [pytest.mark.ollama, pytest.mark.qualitative, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
 # This is an example of using the RichDocument class.
 import os
 
 from mellea import start_session
-from mellea.backends import model_ids
-from mellea.backends import ModelOption
+from mellea.backends import ModelOption, model_ids
 from mellea.core import FancyLogger
 from mellea.stdlib.components.docs.richdocument import RichDocument, Table
 

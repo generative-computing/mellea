@@ -126,6 +126,7 @@ def test_image_block_in_instruction(
     assert image_block.value[:100] in image_url["url"]
 
 
+@pytest.mark.qualitative
 def test_image_block_in_chat(
     m_session: MelleaSession, pil_image: Image.Image, gh_run: int
 ):

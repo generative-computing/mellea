@@ -1,3 +1,9 @@
+try:
+    import pytest
+
+    pytestmark = [pytest.mark.ollama, pytest.mark.qualitative, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
 from collections.abc import Callable
 from functools import cache
 
@@ -9,9 +15,9 @@ from docs.examples.mini_researcher import RAGDocument
 from mellea import MelleaSession
 from mellea.backends import model_ids
 from mellea.backends.ollama import OllamaModelBackend
+from mellea.core import Requirement, SamplingResult
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
-from mellea.core import SamplingResult, Requirement
 
 # #############################
 # Helper functions

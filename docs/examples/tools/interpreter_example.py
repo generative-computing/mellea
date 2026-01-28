@@ -1,3 +1,9 @@
+try:
+    import pytest
+
+    pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
 from mellea.stdlib.tools import code_interpreter, local_code_interpreter
 from mellea import start_session, MelleaSession
 from mellea.backends import ModelOption

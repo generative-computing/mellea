@@ -1,12 +1,25 @@
+try:
+    import pytest
+
+    pytestmark = [pytest.mark.ollama, pytest.mark.qualitative, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
 from typing import Literal
+
 from PIL import Image as PILImage
 
 from mellea import MelleaSession
-from mellea.core import Backend, BaseModelSubclass
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.core import CBlock, Context, ImageBlock, Requirement
-from mellea.stdlib.context import ChatContext
+from mellea.core import (
+    Backend,
+    BaseModelSubclass,
+    CBlock,
+    Context,
+    ImageBlock,
+    Requirement,
+)
 from mellea.stdlib.components import Message
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import reqify
 from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 

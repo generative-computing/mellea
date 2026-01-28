@@ -1,3 +1,9 @@
+try:
+    import pytest
+
+    pytestmark = [pytest.mark.litellm, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
 """Examples of using vision models with LiteLLM backend."""
 
 import os

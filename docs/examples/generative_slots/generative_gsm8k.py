@@ -3,6 +3,13 @@
 This demonstrates that generative decorators are sufficient for complex reasoning tasks: not only do they maintain or improve performance, but they also significantly enhance observability and control. For instance, the structured Thought titles can be easily surfaced in a UI, providing instant insight into the model's reasoning process.
 """
 
+try:
+    import pytest
+
+    pytestmark = [pytest.mark.ollama, pytest.mark.qualitative, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
+
 from datasets import load_dataset
 from pydantic import BaseModel
 

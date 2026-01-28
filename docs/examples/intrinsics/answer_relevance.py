@@ -7,20 +7,34 @@ uv run python docs/examples/intrinsics/answer_relevance.py
 ```
 """
 
+try:
+    import pytest
+
+    pytestmark = [
+        pytest.mark.huggingface,
+        pytest.mark.requires_heavy_ram,
+        pytest.mark.llm,
+    ]
+except ImportError:
+    pass  # Running standalone, pytest not available
+
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.components import Message, Document
 from mellea.stdlib.components.intrinsic import rag
 
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-context = ChatContext().add(Message("user", "Who attended the meeting?"))
-documents = [
-    Document("Meeting attendees: Alice, Bob, Carol."),
-    Document("Meeting time: 9:00 am to 11:00 am."),
-]
-original_result = "Many people attended the meeting."
+if __name__ == "__main__":
+    backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+    context = ChatContext().add(Message("user", "Who attended the meeting?"))
+    documents = [
+        Document("Meeting attendees: Alice, Bob, Carol."),
+        Document("Meeting time: 9:00 am to 11:00 am."),
+    ]
+    original_result = "Many people attended the meeting."
 
-print(f"Result before relevance intrinsic: {original_result}")
-result = rag.rewrite_answer_for_relevance(original_result, documents, context, backend)
-print(f"Result after relevance intrinsic: {result}")
+    print(f"Result before relevance intrinsic: {original_result}")
+    result = rag.rewrite_answer_for_relevance(
+        original_result, documents, context, backend
+    )
+    print(f"Result after relevance intrinsic: {result}")

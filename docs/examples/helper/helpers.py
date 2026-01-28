@@ -1,3 +1,9 @@
+try:
+    import pytest
+
+    pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
 from textwrap import fill
 from typing import Any
 

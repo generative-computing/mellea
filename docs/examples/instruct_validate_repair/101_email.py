@@ -1,3 +1,9 @@
+try:
+    import pytest
+
+    pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
 # This is the 101 example for using `session` and `instruct`.
 # helper function to wrap text
 from docs.examples.helper import w

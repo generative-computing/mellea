@@ -1,4 +1,21 @@
-"""Examples using vision models with OpenAI backend."""
+try:
+    import pytest
+
+    pytestmark = [
+        pytest.mark.ollama,
+        pytest.mark.llm,
+        pytest.mark.requires_heavy_ram,  # qwen2.5vl:7b requires ~14GB RAM
+    ]  # Uses Ollama via OpenAI-compatible API
+except ImportError:
+    pass  # Running standalone, pytest not available
+
+"""Examples using vision models with OpenAI backend.
+
+Requirements:
+    - Ollama running locally
+    - Vision model pulled: ollama pull qwen2.5vl:7b
+    - Heavy RAM: Model requires ~14GB RAM when loaded
+"""
 
 import pathlib
 
@@ -6,8 +23,8 @@ from PIL import Image
 
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
-from mellea.stdlib.context import ChatContext
 from mellea.core import ImageBlock
+from mellea.stdlib.context import ChatContext
 
 # # using anthropic AI model ...
 # anth_key = os.environ.get("ANTHROPIC_API_KEY")
