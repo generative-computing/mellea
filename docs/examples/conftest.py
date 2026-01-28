@@ -26,8 +26,9 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 
     terminalreporter.ensure_newline()
     terminalreporter.section("Skipped Examples", sep="=", blue=True, bold=True)
+    newline = "\n"
     terminalreporter.line(
-        f"Examples with the following names were skipped because they cannot be easily run in the pytest framework; please run them manually:\n{'\n'.join(examples_to_skip)}"
+        f"Examples with the following names were skipped because they cannot be easily run in the pytest framework; please run them manually:\n{newline.join(examples_to_skip)}"
     )
 
 
@@ -83,7 +84,7 @@ class ExampleItem(pytest.Item):
 
         if retcode != 0:
             raise ExampleTestException(
-                (f"Example failed with exit code {retcode}.\nStderr: {stderr}\n")
+                f"Example failed with exit code {retcode}.\nStderr: {stderr}\n"
             )
 
     def repr_failure(self, excinfo, style=None):

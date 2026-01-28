@@ -1,5 +1,6 @@
 """Use the eval command for LLM-as-a-judge evaluation, given a (set of) test file(s) consisting of prompts, instructions, and optionally, targets.
-Instantiate a generator model to produce candidate responses, and a judge model to determine whether the instructions have been followed."""
+Instantiate a generator model to produce candidate responses, and a judge model to determine whether the instructions have been followed.
+"""
 
 import typer
 

@@ -1,13 +1,14 @@
-import mellea.stdlib.functional as mfuncs
-from mellea.core import CBlock, Context, Backend
-from mellea.stdlib.context import SimpleContext
-from mellea.backends.ollama import OllamaModelBackend
 import asyncio
+
+import mellea.stdlib.functional as mfuncs
+from mellea.backends.ollama import OllamaModelBackend
+from mellea.core import Backend, CBlock, Context
+from mellea.stdlib.context import SimpleContext
 
 
 async def main(backend: Backend, ctx: Context):
-    response, next_context = await mfuncs.aact(
-        CBlock("What is 1+1?"), context=ctx, backend=backend
+    response, _next_context = await mfuncs.aact(
+        action=CBlock("What is 1+1?"), context=ctx, backend=backend
     )
 
     print(response.value)

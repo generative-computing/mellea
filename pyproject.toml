@@ -174,7 +174,7 @@ ignore = [
 #   "UP006",  # List vs list, etc
 #   "UP007",  # Option and Union
 #   "UP035",  # `typing.Set` is deprecated, use `set` instead"
-  "PD901",  # Avoid using the generic variable name `df` for DataFrames
+  "PD901",  # Generic variable name 'df' for DataFrames (deprecated rule, but needed while PD is enabled)
   "C901", # Complexity warnings
 ]
 
@@ -187,6 +187,34 @@ max-complexity = 20
 [tool.ruff.lint.isort]
 combine-as-imports = true
 split-on-trailing-comma = false
+
+[tool.ruff.lint.per-file-ignores]
+# E402: Module level import not at top of file
+# Intentional in examples (pedagogical structure) and tests (pytestmark before imports)
+# D: Docstring errors
+# TODO: Add docstrings to cli/ (94 errors across 16 files)
+# Not required in examples, tests, and notebooks (core mellea/ has complete docstrings)
+"docs/**/*.py" = ["E402", "D"]
+"docs/**/*.ipynb" = ["D"]
+"test/**/*.py" = ["E402", "D"]
+"cli/**/*.py" = ["D"]
+
+[[tool.mypy.overrides]]
+# TODO: Fix type errors in docs/ examples (25 errors across 15 files)
+# Temporarily relaxed type checking for docs/ to allow examples to focus on
+# demonstrating functionality rather than perfect type correctness.
+# Main issues: Optional/None handling, CBlock vs Component confusion, type mismatches
+module = "docs.*"
+disable_error_code = [
+    "import-not-found",
+    "arg-type",
+    "attr-defined",
+    "assignment",
+    "operator",
+    "call-overload",
+    "index",
+    "return-value",
+]
 
 [tool.codespell]
 ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat'

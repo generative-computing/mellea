@@ -1,13 +1,12 @@
 import asyncio
-from mellea.core import Context, CBlock, ModelOutputThunk, Backend
+
 from mellea.backends.ollama import OllamaModelBackend
+from mellea.core import Backend, CBlock, Context, ModelOutputThunk
 from mellea.stdlib.context import SimpleContext
 
 
 async def main(backend: Backend, ctx: Context):
-    """
-    In this example, we show how executing multiple MOTs in parallel should work.
-    """
+    """In this example, we show how executing multiple MOTs in parallel should work."""
     m_states = "Missouri", "Minnesota", "Montana", "Massachusetts"
 
     poem_thunks = []
@@ -19,7 +18,7 @@ async def main(backend: Backend, ctx: Context):
 
     # Notice that what we have now is a list of ModelOutputThunks, none of which are computed.
     for poem_thunk in poem_thunks:
-        assert type(poem_thunk) == ModelOutputThunk
+        assert isinstance(poem_thunk, ModelOutputThunk)
         print(f"Computed: {poem_thunk.is_computed()}")
 
     # Let's run all of these in parallel.

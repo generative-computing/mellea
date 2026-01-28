@@ -1,5 +1,4 @@
-"""
-Example usage of the context relevance intrinsic for RAG applications.
+"""Example usage of the context relevance intrinsic for RAG applications.
 
 To run this script from the root of the Mellea source tree, use the command:
 ```
@@ -8,9 +7,9 @@ uv run python docs/examples/intrinsics/context_relevance.py
 """
 
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.context import ChatContext
 from mellea.stdlib.components import Document
 from mellea.stdlib.components.intrinsic import rag
+from mellea.stdlib.context import ChatContext
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 context = ChatContext()

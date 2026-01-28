@@ -1,12 +1,9 @@
 import asyncio
-from mellea.core import Context, CBlock, ModelOutputThunk
 
+from mellea.backends.ollama import OllamaModelBackend
+from mellea.core import Backend, CBlock, Context, ModelOutputThunk
 from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.context import SimpleContext
-
-from mellea.core import Backend
-from mellea.backends.ollama import OllamaModelBackend
-from typing import Tuple
 
 backend = OllamaModelBackend("granite4:latest")
 
@@ -26,7 +23,7 @@ async def _fib_sample(
     try:
         int(value)
         return answer_mot
-    except:
+    except Exception:
         return None
 
 

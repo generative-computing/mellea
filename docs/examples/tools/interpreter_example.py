@@ -1,7 +1,7 @@
-from mellea.stdlib.tools import code_interpreter, local_code_interpreter
-from mellea import start_session, MelleaSession
+from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
-from mellea.stdlib.requirements import uses_tool, tool_arg_validator
+from mellea.stdlib.requirements import tool_arg_validator, uses_tool
+from mellea.stdlib.tools import code_interpreter, local_code_interpreter
 
 
 def example_1(m: MelleaSession):

@@ -49,7 +49,9 @@ messages = [
     {"role": "user", "content": c_blocks[1]},
     {"role": "user", "content": "Also no cash"},
 ]
-templatized_input = tokenizer.apply_chat_template(conversation=messages, tokenize=False)
+templatized_input: str = tokenizer.apply_chat_template(
+    conversation=messages, tokenize=False
+)
 
 str_parts = []
 tok_parts = []

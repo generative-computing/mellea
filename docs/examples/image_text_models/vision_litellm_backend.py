@@ -1,6 +1,7 @@
 """Examples of using vision models with LiteLLM backend."""
 
 import os
+import pathlib
 
 import litellm
 from PIL import Image
@@ -9,7 +10,6 @@ from mellea import MelleaSession, start_session
 from mellea.backends.litellm import LiteLLMBackend
 from mellea.backends.openai import OpenAIBackend
 from mellea.core import ImageBlock
-import pathlib
 
 # use LiteLLM to talk to Ollama or anthropic or.....
 m = MelleaSession(LiteLLMBackend("ollama/granite3.2-vision"))
@@ -28,15 +28,15 @@ res_instruct = m.instruct(
     "Is there a person on the image? Is the subject in the image smiling?",
     images=[test_pil],
 )
-print(f"Test with PIL and instruct: \n{str(res_instruct)}\n-----")
+print(f"Test with PIL and instruct: \n{res_instruct!s}\n-----")
 # print(m.last_prompt())
 
 # with PIL image and using m.chat
 res_chat = m.chat(
     "How many eyes can you identify in the image? Explain.", images=[test_pil]
 )
-print(f"Test with PIL and chat: \n{str(res_chat.content)}\n-----")
+print(f"Test with PIL and chat: \n{res_chat.content!s}\n-----")
 
 # and now without images again...
 res_empty = m.instruct("How many eyes can you identify in the image?", images=[])
-print(f"Test without image: \n{str(res_empty)}\n-----")
+print(f"Test without image: \n{res_empty!s}\n-----")

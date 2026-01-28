@@ -6,8 +6,8 @@ from PIL import Image
 
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
-from mellea.stdlib.context import ChatContext
 from mellea.core import ImageBlock
+from mellea.stdlib.context import ChatContext
 
 # # using anthropic AI model ...
 # anth_key = os.environ.get("ANTHROPIC_API_KEY")

@@ -9,8 +9,8 @@ requirements = [
     check("Do not mention purple elephants."),  # == r3
 ]
 
-import mellea  # noqa: E402
-from mellea.stdlib.sampling import RejectionSamplingStrategy  # noqa: E402
+import mellea
+from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 
 def write_email(m: mellea.MelleaSession, name: str, notes: str) -> str:

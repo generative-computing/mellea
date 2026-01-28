@@ -1,16 +1,15 @@
 from typing import Literal
 
 from mellea import generative, start_session
+from mellea.core import Requirement
 from mellea.stdlib.components.genslot import PreconditionException
 from mellea.stdlib.requirements import simple_validate
-from mellea.core import Requirement
 from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 
 
 @generative
 def classify_sentiment(text: str) -> Literal["positive", "negative", "unknown"]:
     """Classify the sentiment of the text."""
-    ...
 
 
 if __name__ == "__main__":
@@ -63,7 +62,7 @@ if __name__ == "__main__":
             ],
         )
     except PreconditionException as e:
-        print(f"exception: {str(e)}")
+        print(f"exception: {e!s}")
 
         # Look at why the precondition validation failed.
         print("Failure reasons:")

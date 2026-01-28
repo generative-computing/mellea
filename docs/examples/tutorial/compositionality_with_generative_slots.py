@@ -34,7 +34,7 @@ def generate_novel_recommendations(summary: str) -> str:
 
 
 # Compose the libraries.
-from typing import Literal  # noqa: E402
+from typing import Literal
 
 
 @generative
@@ -52,7 +52,7 @@ def has_theme_and_plot(summary: str) -> Literal["yes", "no"]:
     """Check whether the summary contains both a plot and thematic elements."""
 
 
-from mellea import start_session  # noqa: E402
+from mellea import start_session
 
 m = start_session()
 transcript = """Meeting Transcript: Market Risk Review -- Self-Sealing Stembolts Division

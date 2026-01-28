@@ -1,6 +1,7 @@
 """Example of using Ollama with vision models with linear context."""
 
 import pathlib
+
 from PIL import Image
 
 from mellea import start_session

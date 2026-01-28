@@ -17,17 +17,16 @@ except ImportError:
     _llm_sandbox_available = False
 
 from mellea.core import Context, ModelOutputThunk
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.python_reqs import (
     PythonExecutionReq,
     _has_python_code_listing,
     _python_executes_without_error,
 )
-from mellea.stdlib.context import ChatContext
 
 
 def from_model(content: str) -> Context:
     """Helper to create context from model output."""
-
     ctx = ChatContext()
     ctx = ctx.add(ModelOutputThunk(value=content))
     return ctx

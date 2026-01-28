@@ -1,10 +1,10 @@
 import mellea.stdlib.functional as mfuncs
-from mellea.stdlib.context import SimpleContext
-from mellea.core import CBlock
 from mellea.backends.ollama import OllamaModelBackend
+from mellea.core import CBlock
+from mellea.stdlib.context import SimpleContext
 
 response, next_context = mfuncs.act(
-    CBlock("What is 1+1?"),
+    action=CBlock("What is 1+1?"),
     context=SimpleContext(),
     backend=OllamaModelBackend("granite4:latest"),
 )
