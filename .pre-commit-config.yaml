@@ -7,9 +7,11 @@ repos:
       - id: ruff-format
         name: "Ruff formatter"
         args: [--config=pyproject.toml]
+        types_or: [python, jupyter]
       - id: ruff
         name: "Ruff linter"
         args: [--exit-non-zero-on-fix, --fix, --config=pyproject.toml]
+        types_or: [python, jupyter]
 
   - repo: local
     hooks:
@@ -18,6 +20,7 @@ repos:
         entry: uv run --no-sync mypy .
         pass_filenames: false
         language: system
+        types_or: [python, jupyter]
 
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.7.8
