@@ -3453,7 +3453,7 @@ requires-dist = [
     { name = "pydantic" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "rouge-score" },
-    { name = "transformers", marker = "extra == 'hf'", specifier = ">=4.53.2" },
+    { name = "transformers", marker = "extra == 'hf'", specifier = ">=4.53.2,<5" },
     { name = "transformers", marker = "extra == 'vllm'", specifier = "<4.54.0" },
     { name = "trl", marker = "extra == 'hf'", specifier = "==0.19.1" },
     { name = "typer" },
