@@ -11,7 +11,7 @@ from mellea.stdlib.context import ChatContext
 # Create the backend. Example for a VLLM Server. Commented out in favor of the hugging face code for now.
 # # Assumes a locally running VLLM server.
 # backend = OpenAIBackend(
-#     model_id="ibm-granite/granite-4.0-tiny-preview",
+#     model_id="ibm-granite/granite-3.3-2b-instruct",
 #     base_url="http://0.0.0.0:8000/v1",
 #     api_key="EMPTY",
 # )
@@ -21,7 +21,7 @@ from mellea.stdlib.context import ChatContext
 # # adapters on the server.
 # backend._server_type = _ServerType.REMOTE_VLLM
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-tiny-preview")
+backend = LocalHFBackend(model_id="ibm-granite/granite-3.3-2b-instruct")
 
 # Create the Adapter. GraniteCommonAdapter's default to ALORAs.
 req_adapter = GraniteCommonAdapter(

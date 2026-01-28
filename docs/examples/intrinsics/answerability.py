@@ -1,5 +1,4 @@
-"""
-Example usage of the answerability intrinsic for RAG applications.
+"""Example usage of the answerability intrinsic for RAG applications.
 
 To run this script from the root of the Mellea source tree, use the command:
 ```
@@ -8,11 +7,11 @@ uv run python docs/examples/intrinsics/answerability.py
 """
 
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.context import ChatContext
-from mellea.stdlib.components import Message, Document
+from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
+from mellea.stdlib.context import ChatContext
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+backend = LocalHFBackend(model_id="ibm-granite/granite-3.3-2b-instruct")
 context = ChatContext().add(Message("assistant", "Hello there, how can I help you?"))
 next_user_turn = "What is the square root of 4?"
 documents_answerable = [Document("The square root of 4 is 2.")]
