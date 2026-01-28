@@ -1,4 +1,4 @@
-"""Utilities for dealing with tools."""
+"""Utilities for dealing with LLM tools."""
 
 import inspect
 import json
@@ -11,6 +11,67 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..core import CBlock, Component, TemplateRepresentation
 from .model_options import ModelOption
+
+
+# Tool is what we pass as a model option / as input
+# Our ModelToolCall is the class that has a reference to the tool and actually calls with arguments
+class Tool:
+    """Tool class to represent a tool."""
+
+    name: str
+    _as_json_tool: dict[str, Any]
+    _call_tool: Callable[..., Any]
+
+    def __init__(
+        self, name: str, tool_call: Callable, as_json_tool: dict[str, Any]
+    ) -> None:
+        """Initialize the tool with a name, tool call and as_json_tool dict."""
+        self.name = name
+        self._as_json_tool = as_json_tool
+        self._call_tool = tool_call
+
+    def run(self, *args, **kwargs) -> Any:
+        """Run the tool with the given arguments."""
+        return self._call_tool(*args, **kwargs)
+
+    @property
+    def as_json_tool(self):
+        """Return the tool converted to a OpenAI compatible JSON object."""
+        return self._as_json_tool
+
+    @classmethod
+    def from_langchain(cls, tool: Any):
+        """Create a Tool from a langchain tool object."""
+        try:
+            from langchain_core.tools import BaseTool
+            from langchain_core.utils.function_calling import convert_to_openai_tool
+
+            if isinstance(tool, BaseTool):
+                tool_name = tool.name
+                as_json = convert_to_openai_tool(tool)
+                tool_call = tool.run
+                return Tool(tool_name, tool_call, as_json)
+            else:
+                raise ValueError(
+                    f"tool parameter must be a langchain tool type; got: {type(tool)}"
+                )
+
+        except ImportError as e:
+            raise ImportError(
+                f"It appears you are attempting to utilize a langchain tool '{type(tool)}'"
+                "Please install langchain core: pip install 'langchain_core'."
+            ) from e
+
+    @classmethod
+    def from_callable(cls, func: Callable, name: str | None = None):
+        """Create a Tool from a callable."""
+        # Use the function name if the name is '' or None.
+        tool_name = name or func.__name__
+        as_json = convert_function_to_tool(func, tool_name).model_dump(
+            exclude_none=True
+        )
+        tool_call = func
+        return Tool(tool_name, tool_call, as_json)
 
 
 def add_tools_from_model_options(
