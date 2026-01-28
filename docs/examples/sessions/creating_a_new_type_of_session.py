@@ -1,6 +1,9 @@
-import pytest
+try:
+    import pytest
 
-pytestmark = [pytest.mark.ollama, pytest.mark.qualitative, pytest.mark.llm]
+    pytestmark = [pytest.mark.ollama, pytest.mark.qualitative, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
 from typing import Literal
 
 from PIL import Image as PILImage

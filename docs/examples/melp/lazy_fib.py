@@ -1,6 +1,9 @@
-import pytest
+try:
+    import pytest
 
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+    pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
 import asyncio
 from mellea.core import Context, CBlock, ModelOutputThunk
 

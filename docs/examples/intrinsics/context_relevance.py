@@ -7,9 +7,16 @@ uv run python docs/examples/intrinsics/context_relevance.py
 ```
 """
 
-import pytest
+try:
+    import pytest
 
-pytestmark = [pytest.mark.huggingface, pytest.mark.requires_heavy_ram, pytest.mark.llm]
+    pytestmark = [
+        pytest.mark.huggingface,
+        pytest.mark.requires_heavy_ram,
+        pytest.mark.llm,
+    ]
+except ImportError:
+    pass  # Running standalone, pytest not available
 
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.context import ChatContext

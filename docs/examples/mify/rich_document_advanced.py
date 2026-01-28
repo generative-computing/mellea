@@ -1,6 +1,13 @@
-import pytest
+try:
+    import pytest
 
-pytestmark = [pytest.mark.huggingface, pytest.mark.requires_heavy_ram, pytest.mark.llm]
+    pytestmark = [
+        pytest.mark.huggingface,
+        pytest.mark.requires_heavy_ram,
+        pytest.mark.llm,
+    ]
+except ImportError:
+    pass  # Running standalone, pytest not available
 # ruff: noqa E402
 # Example: Rich Documents and Templating
 # Lets look at how to pass documents to a model using `Mellea`.

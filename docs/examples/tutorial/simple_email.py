@@ -1,6 +1,9 @@
-import pytest
+try:
+    import pytest
 
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+    pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
 import mellea
 
 # INFO: this line will download IBM's Granite 4 Micro 3B model.

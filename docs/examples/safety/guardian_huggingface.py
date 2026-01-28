@@ -4,9 +4,16 @@ This example shows how to reuse the Guardian backend across multiple validators
 to avoid reloading the model multiple times.
 """
 
-import pytest
+try:
+    import pytest
 
-pytestmark = [pytest.mark.huggingface, pytest.mark.requires_heavy_ram, pytest.mark.llm]
+    pytestmark = [
+        pytest.mark.huggingface,
+        pytest.mark.requires_heavy_ram,
+        pytest.mark.llm,
+    ]
+except ImportError:
+    pass  # Running standalone, pytest not available
 
 from mellea import MelleaSession
 from mellea.backends import model_ids

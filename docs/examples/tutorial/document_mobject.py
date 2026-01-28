@@ -1,6 +1,9 @@
-import pytest
+try:
+    import pytest
 
-pytestmark = [pytest.mark.ollama, pytest.mark.qualitative, pytest.mark.llm]
+    pytestmark = [pytest.mark.ollama, pytest.mark.qualitative, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
 from mellea.backends import model_ids
 from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
 from mellea.stdlib.components.docs.richdocument import RichDocument

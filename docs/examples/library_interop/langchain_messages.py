@@ -1,9 +1,24 @@
-import pytest
+try:
+    import pytest
 
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+    pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+except ImportError:
+    pass  # Running standalone, pytest not available
+
 # Installing langchain is necessary for this example, but it works for any library
 # you may want to use Mellea with.
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+try:
+    from langchain_core.messages import (
+        AIMessage,
+        HumanMessage,
+        SystemMessage,
+        convert_to_openai_messages,
+    )
+except ImportError:
+    pytest.skip(
+        "langchain_core not installed. Install with: pip install langchain-core",
+        allow_module_level=True,
+    )
 
 # Messages from a different library.
 messages = [
@@ -13,15 +28,13 @@ messages = [
 ]
 
 # Some libraries have conversion functions that make it easier to ingest into Mellea.
-from langchain_core.messages import convert_to_openai_messages
-
 messages = convert_to_openai_messages(messages=messages)
 
 # Import Mellea.
+from mellea import start_session
+from mellea.backends import ModelOption
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext
-from mellea.backends import ModelOption
-from mellea import start_session
 
 # Mellea uses explicit contexts. Cast the OpenAI formatted messages into
 # Mellea messages and add them to the context.
@@ -43,3 +56,5 @@ response = m.chat(
 ).content
 
 assert "Hi there!" in response
+
+# Made with Bob

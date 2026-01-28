@@ -1,6 +1,13 @@
-import pytest
+try:
+    import pytest
 
-pytestmark = [pytest.mark.huggingface, pytest.mark.requires_heavy_ram, pytest.mark.llm]
+    pytestmark = [
+        pytest.mark.huggingface,
+        pytest.mark.requires_heavy_ram,
+        pytest.mark.llm,
+    ]
+except ImportError:
+    pass  # Running standalone, pytest not available
 """Example of using the Enhanced Guardian Requirement with Granite Guardian 3.3 8B"""
 
 from mellea import MelleaSession
