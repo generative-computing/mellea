@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 import mellea
 from mellea.stdlib.components.docs.richdocument import RichDocument
 

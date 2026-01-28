@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 from docs.examples.helper import req_print, w
 from mellea import start_session
 from mellea.backends.model_ids import IBM_GRANITE_3_3_8B

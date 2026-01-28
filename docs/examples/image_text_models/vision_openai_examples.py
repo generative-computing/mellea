@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 """Examples using vision models with OpenAI backend."""
 
 import pathlib

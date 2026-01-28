@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 from textwrap import fill
 from typing import Any
 

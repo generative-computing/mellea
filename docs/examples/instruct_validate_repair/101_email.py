@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 # This is the 101 example for using `session` and `instruct`.
 # helper function to wrap text
 from docs.examples.helper import w

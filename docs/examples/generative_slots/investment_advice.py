@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 from typing import Literal
 
 from mellea import MelleaSession, generative, start_session

@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 """Advanced Example of information extraction with Mellea using m.instruct() and constraints."""
 
 from collections.abc import Callable

@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 from mellea import start_session
 from mellea.stdlib.base import ChatContext
 

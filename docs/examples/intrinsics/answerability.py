@@ -7,21 +7,30 @@ uv run python docs/examples/intrinsics/answerability.py
 ```
 """
 
+import pytest
+
+pytestmark = [pytest.mark.huggingface, pytest.mark.requires_heavy_ram, pytest.mark.llm]
+
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.components import Message, Document
 from mellea.stdlib.components.intrinsic import rag
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-context = ChatContext().add(Message("assistant", "Hello there, how can I help you?"))
-next_user_turn = "What is the square root of 4?"
-documents_answerable = [Document("The square root of 4 is 2.")]
-documents_unanswerable = [Document("The square root of 8 is not 2.")]
+if __name__ == "__main__":
+    backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+    context = ChatContext().add(
+        Message("assistant", "Hello there, how can I help you?")
+    )
+    next_user_turn = "What is the square root of 4?"
+    documents_answerable = [Document("The square root of 4 is 2.")]
+    documents_unanswerable = [Document("The square root of 8 is not 2.")]
 
-result = rag.check_answerability(next_user_turn, documents_answerable, context, backend)
-print(f"Result of answerability check when answer is in documents: {result}")
+    result = rag.check_answerability(
+        next_user_turn, documents_answerable, context, backend
+    )
+    print(f"Result of answerability check when answer is in documents: {result}")
 
-result = rag.check_answerability(
-    next_user_turn, documents_unanswerable, context, backend
-)
-print(f"Result of answerability check when answer is not in documents: {result}")
+    result = rag.check_answerability(
+        next_user_turn, documents_unanswerable, context, backend
+    )
+    print(f"Result of answerability check when answer is not in documents: {result}")

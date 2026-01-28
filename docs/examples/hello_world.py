@@ -1,3 +1,7 @@
+import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+
 import mellea
 
 m = mellea.start_session()

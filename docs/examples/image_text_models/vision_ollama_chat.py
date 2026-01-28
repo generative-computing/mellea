@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 """Example of using Ollama with vision models with linear context."""
 
 import pathlib

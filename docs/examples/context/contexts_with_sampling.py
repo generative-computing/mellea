@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.stdlib.session import start_session
 

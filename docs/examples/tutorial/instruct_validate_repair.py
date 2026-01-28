@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 from mellea.stdlib.requirements import check, req, simple_validate
 
 requirements = [

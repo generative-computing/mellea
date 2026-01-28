@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = [pytest.mark.litellm, pytest.mark.llm]
 """Examples of using vision models with LiteLLM backend."""
 
 import os

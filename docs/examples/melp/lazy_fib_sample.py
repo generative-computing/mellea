@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 import asyncio
 from mellea.core import Context, CBlock, ModelOutputThunk
 

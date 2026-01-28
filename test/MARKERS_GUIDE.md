@@ -62,8 +62,11 @@ pytest --ignore-gpu-check --ignore-ram-check -m "huggingface"
 ## Quick Start
 
 ```bash
-# Run all tests (auto-skips based on your system)
+# Fast tests (default, excludes slow qualitative tests)
 pytest
+
+# Full test suite (includes qualitative tests)
+pytest -m ""
 
 # Run only fast unit tests (no LLM calls)
 pytest -m "not llm"
@@ -74,12 +77,11 @@ pytest -m "ollama"
 # Run tests that don't require API keys
 pytest -m "not requires_api_key"
 
-# Run infrastructure tests only (skip quality tests)
-pytest -m "not qualitative"
-
 # Run quality tests for Ollama
 pytest -m "ollama and qualitative"
 ```
+
+**Note:** By default, `pytest` excludes qualitative tests (configured in `pyproject.toml`). Use `pytest -m ""` to run all tests including qualitative ones.
 
 ## Marker Categories
 
@@ -140,8 +142,10 @@ Specify resource or authentication requirements:
 
 - **`@pytest.mark.qualitative`**: Non-deterministic quality tests
   - Tests LLM output quality rather than infrastructure
+  - **Excluded by default** (configured in `pyproject.toml` addopts)
   - Skipped in CI (when `CICD=1`)
   - May be flaky due to model variability
+  - Use `pytest -m ""` to include these tests
 
 ### Composite Markers
 

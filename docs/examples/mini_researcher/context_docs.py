@@ -1,3 +1,6 @@
+import pytest
+
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 from dataclasses import dataclass
 
 from docs.examples.mini_researcher import RAGDocument

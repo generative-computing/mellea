@@ -3,6 +3,10 @@ RepairTemplateStrategy Example with Actual Function Call Validation
 Demonstrates how RepairTemplateStrategy repairs responses using actual function calls.
 """
 
+import pytest
+
+pytestmark = [pytest.mark.huggingface, pytest.mark.requires_heavy_ram, pytest.mark.llm]
+
 from mellea import MelleaSession
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk

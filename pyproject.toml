@@ -220,6 +220,7 @@ markers = [
 ]
 asyncio_mode = "auto"  # Don't require explicitly marking async tests.
 addopts = [
+    "-m", "not qualitative",  # Exclude slow quality tests by default
     "--cov=mellea",
     "--cov=cli",
     "--cov-report=term",
