@@ -59,20 +59,19 @@ m = "cli.m:cli"
 
 
 # note on outlines versions:
-# outlines>=1.2.0 requires outlines-core==0.2.11
+# outlines>=1.2.0 requires outlines-core==0.2.11+
 # outlines<=1.1.* requires outlines-core==0.1.26
-# vllm==0.10.0    requires outlines-core==0.2.10
+# vllm>=0.10.0    requires outlines-core==0.2.11 (and fixes transformers 4.57.6 aimv2 config conflict)
 # vllm==0.9.*     requires outlines-core==0.1.26
 #
-# thus the following version combination allows installing vllm and outlines
-# (main library) at the same time.
+# Both hf and vllm extras now use outlines-core==0.2.11 for compatibility.
 
 hf = [
     "accelerate>=1.9.0",
     "alora==0.2.0",
     "datasets>=4.0.0",
-    "outlines-core==0.1.26",
-    "outlines",                 # intentionally un-versioned, expecting a minor update. coutlines-core version should be enough to specify it
+    "outlines-core==0.2.11",
+    "outlines>=1.2.0",          # outlines>=1.2.0 requires outlines-core==0.2.11+
     "peft>=0.18.0", # aLoRA support was added in Peft 0.18.0
     "transformers==4.57.6",
     "trl==0.19.1",
@@ -83,8 +82,8 @@ vllm = [
     "transformers==4.57.6",
     "numpy<2.0.0",              # patching incorrect dependencies in vllm and outlines.
     # see https://github.com/vllm-project/vllm/issues/5587
-    "outlines-core==0.1.26",
-    "vllm>=0.9.1",
+    "outlines-core==0.2.11",
+    "vllm>=0.10.0",             # 0.10.0+ required for transformers 4.57.6 compatibility (aimv2 config fix)
 ]
 
 litellm = [
