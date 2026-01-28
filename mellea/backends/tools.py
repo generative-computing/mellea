@@ -209,7 +209,7 @@ class SubscriptableBaseModel(BaseModel):
         >>> msg['tool_calls'] = None
         >>> 'tool_calls' in msg
         True
-        >>> tool = Tool()
+        >>> tool = OllamaTool()
         >>> 'type' in tool
         True
         """
@@ -240,7 +240,7 @@ class SubscriptableBaseModel(BaseModel):
 
 
 # https://github.com/ollama/ollama-python/blob/60e7b2f9ce710eeb57ef2986c46ea612ae7516af/ollama/_types.py#L337-L363
-class Tool(SubscriptableBaseModel):
+class OllamaTool(SubscriptableBaseModel):
     """Class imported from Ollama."""
 
     type: str | None = "function"
@@ -323,7 +323,7 @@ def _parse_docstring(doc_string: str | None) -> dict[str, str]:
 
 
 # https://github.com/ollama/ollama-python/blob/60e7b2f9ce710eeb57ef2986c46ea612ae7516af/ollama/_utils.py#L56-L90
-def convert_function_to_tool(func: Callable, name: str | None = None) -> Tool:
+def convert_function_to_tool(func: Callable, name: str | None = None) -> OllamaTool:
     """Imported from Ollama."""
     doc_string_hash = str(hash(inspect.getdoc(func)))
     parsed_docstring = _parse_docstring(inspect.getdoc(func))
@@ -356,13 +356,13 @@ def convert_function_to_tool(func: Callable, name: str | None = None) -> Tool:
             "type": ", ".join(types),
         }
 
-    tool = Tool(
+    tool = OllamaTool(
         type="function",
-        function=Tool.Function(
+        function=OllamaTool.Function(
             name=name or func.__name__,
             description=schema.get("description", ""),
-            parameters=Tool.Function.Parameters(**schema),
+            parameters=OllamaTool.Function.Parameters(**schema),
         ),
     )
 
-    return Tool.model_validate(tool)
+    return OllamaTool.model_validate(tool)
