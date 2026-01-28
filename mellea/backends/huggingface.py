@@ -46,8 +46,8 @@ from ..helpers import message_to_openai_message, messages_to_docs, send_to_queue
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_context,
     instrument_generate_from_raw,
+    start_generate_span,
 )
 from .adapters import (
     AdapterMixin,
@@ -207,67 +207,74 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
         """Generate using the huggingface model."""
-        with instrument_generate_from_context(
+        span = start_generate_span(
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
-        ):
-            await self.do_generate_walk(action)
+        )
+        await self.do_generate_walk(action)
 
-            # Upsert model options.
-            model_opts = self._simplify_and_merge(model_options)
+        # Upsert model options.
+        model_opts = self._simplify_and_merge(model_options)
 
-            # Requirements can be automatically rerouted to a requirement adapter.
-            if isinstance(action, Requirement):
-                # See docs/dev/requirement_aLoRA_rerouting.md
-                reroute_to_alora = self.default_to_constraint_checking_alora
-                adapter_name = "requirement_check"
+        # Requirements can be automatically rerouted to a requirement adapter.
+        if isinstance(action, Requirement):
+            # See docs/dev/requirement_aLoRA_rerouting.md
+            reroute_to_alora = self.default_to_constraint_checking_alora
+            adapter_name = "requirement_check"
 
-                if isinstance(action, ALoraRequirement):
-                    reroute_to_alora = True
-                    adapter_name = action.intrinsic_name
-                    alora_action = action
-                else:
-                    assert action.description is not None, (
-                        "must have a description when generating from a requirement"
-                    )
-                    alora_action = ALoraRequirement(action.description, adapter_name)
-
-                # Check if a requirement_check (or AloraRequirement specified) adapter
-                # exists.
-                alora_req_adapter = get_adapter_for_intrinsic(
-                    adapter_name, [AdapterType.ALORA], self._added_adapters
+            if isinstance(action, ALoraRequirement):
+                reroute_to_alora = True
+                adapter_name = action.intrinsic_name
+                alora_action = action
+            else:
+                assert action.description is not None, (
+                    "must have a description when generating from a requirement"
                 )
-                if alora_req_adapter is None:
-                    # Log a warning if using an AloraRequirement but no adapter fit.
-                    if reroute_to_alora and isinstance(action, ALoraRequirement):
-                        FancyLogger.get_logger().warning(
-                            f"attempted to use an AloraRequirement but backend {self} doesn't have the specified adapter added {adapter_name}; defaulting to regular generation"
-                        )
-                    reroute_to_alora = False
+                alora_action = ALoraRequirement(action.description, adapter_name)
 
-                if issubclass(type(action), LLMaJRequirement):
-                    reroute_to_alora = False
-
-                if reroute_to_alora:
-                    # Keep the alora requirement handling separate for now.
-                    mot = await self._generate_from_intrinsic(
-                        alora_action, ctx, model_options=model_opts
-                    )
-                    return mot, ctx.add(alora_action).add(mot)
-
-            elif isinstance(action, Intrinsic):
-                mot = await self._generate_from_intrinsic(
-                    action, ctx, model_options=model_opts
-                )
-                return mot, ctx.add(action).add(mot)
-
-            mot = await self._generate_from_context_standard(
-                action,
-                ctx,
-                _format=format,
-                model_options=model_opts,
-                tool_calls=tool_calls,
+            # Check if a requirement_check (or AloraRequirement specified) adapter
+            # exists.
+            alora_req_adapter = get_adapter_for_intrinsic(
+                adapter_name, [AdapterType.ALORA], self._added_adapters
             )
+            if alora_req_adapter is None:
+                # Log a warning if using an AloraRequirement but no adapter fit.
+                if reroute_to_alora and isinstance(action, ALoraRequirement):
+                    FancyLogger.get_logger().warning(
+                        f"attempted to use an AloraRequirement but backend {self} doesn't have the specified adapter added {adapter_name}; defaulting to regular generation"
+                    )
+                reroute_to_alora = False
+
+            if issubclass(type(action), LLMaJRequirement):
+                reroute_to_alora = False
+
+            if reroute_to_alora:
+                # Keep the alora requirement handling separate for now.
+                mot = await self._generate_from_intrinsic(
+                    alora_action, ctx, model_options=model_opts
+                )
+                # Store span for telemetry
+                if span is not None:
+                    mot._meta["_telemetry_span"] = span
+                return mot, ctx.add(alora_action).add(mot)
+
+        elif isinstance(action, Intrinsic):
+            mot = await self._generate_from_intrinsic(
+                action, ctx, model_options=model_opts
+            )
+            # Store span for telemetry
+            if span is not None:
+                mot._meta["_telemetry_span"] = span
             return mot, ctx.add(action).add(mot)
+
+        mot = await self._generate_from_context_standard(
+            action, ctx, _format=format, model_options=model_opts, tool_calls=tool_calls
+        )
+
+        # Store span in metadata for post_processing to record telemetry
+        if span is not None:
+            mot._meta["_telemetry_span"] = span
+
+        return mot, ctx.add(action).add(mot)
 
     def _generate_with_adapter_lock(
         self, adapter_name: str, generate_func: Callable, *args, **kwargs
@@ -933,6 +940,23 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         assert mot._model_options is not None, (
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
+
+        # Record telemetry if span is available
+        span = mot._meta.get("_telemetry_span")
+        if span is not None:
+            from ..telemetry import end_backend_span
+            from ..telemetry.backend_instrumentation import record_response_metadata
+
+            # HuggingFace local models don't typically provide token counts
+            # but we can record response metadata if available
+            hf_output = mot._meta.get("hf_output")
+            if hf_output is not None:
+                record_response_metadata(span, hf_output)
+
+            # Close the span now that async operation is complete
+            end_backend_span(span)
+            # Clean up span reference
+            del mot._meta["_telemetry_span"]
 
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()

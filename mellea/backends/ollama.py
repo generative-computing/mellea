@@ -260,19 +260,27 @@ class OllamaModelBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
         """See `generate_from_chat_context`."""
-        with instrument_generate_from_context(self, action, ctx, format, tool_calls):
-            assert ctx.is_chat_context, (
-                "The ollama backend only supports chat-like contexts."
-            )
-            mot = await self.generate_from_chat_context(
-                action,
-                ctx,
-                _format=format,
-                model_options=model_options,
-                tool_calls=tool_calls,
-            )
+        from ..telemetry.backend_instrumentation import start_generate_span
 
-            return mot, ctx.add(action).add(mot)
+        # Start span without auto-closing (will be closed in post_processing)
+        span = start_generate_span(self, action, ctx, format, tool_calls)
+
+        assert ctx.is_chat_context, (
+            "The ollama backend only supports chat-like contexts."
+        )
+        mot = await self.generate_from_chat_context(
+            action,
+            ctx,
+            _format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )
+
+        # Store span for telemetry recording and closing in post_processing
+        if span is not None:
+            mot._meta["_telemetry_span"] = span
+
+        return mot, ctx.add(action).add(mot)
 
     async def generate_from_chat_context(
         self,
@@ -593,6 +601,33 @@ class OllamaModelBackend(FormatterBackend):
 
         mot._generate_log = generate_log
         mot._generate = None
+
+        # Record telemetry and close span now that response is available
+        span = mot._meta.get("_telemetry_span")
+        if span is not None:
+            from ..telemetry import end_backend_span
+            from ..telemetry.backend_instrumentation import (
+                record_response_metadata,
+                record_token_usage,
+            )
+
+            response = mot._meta.get("chat_response")
+            if response:
+                # Ollama responses may have usage information
+                usage = (
+                    response.get("usage")
+                    if isinstance(response, dict)
+                    else getattr(response, "usage", None)
+                )
+                if usage:
+                    record_token_usage(span, usage)
+                record_response_metadata(span, response)
+
+            # Close the span now that telemetry is recorded
+            end_backend_span(span)
+
+            # Clean up the span reference
+            del mot._meta["_telemetry_span"]
 
 
 def chat_response_delta_merge(mot: ModelOutputThunk, delta: ollama.ChatResponse):

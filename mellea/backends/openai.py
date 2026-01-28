@@ -309,19 +309,29 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
         """See `generate_from_chat_context`."""
+        from ..telemetry.backend_instrumentation import start_generate_span
+
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
-        with instrument_generate_from_context(
+
+        # Start span without auto-closing (will be closed in post_processing)
+        span = start_generate_span(
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
-        ):
-            return await self.generate_from_chat_context(
-                action,
-                ctx,
-                _format=format,
-                model_options=model_options,
-                tool_calls=tool_calls,
-            )
+        )
+
+        result = await self.generate_from_chat_context(
+            action,
+            ctx,
+            _format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )
+        # Store span in ModelOutputThunk for later use in post_processing
+        mot, new_ctx = result
+        if span is not None:
+            mot._meta["_telemetry_span"] = span
+        return mot, new_ctx
 
     async def generate_from_chat_context(
         self,
@@ -699,7 +709,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
 
-            mot._meta["oai_chat_response"] = chunk.choices[0].model_dump()
+            # Store the full response (includes usage) as a dict
+            mot._meta["oai_chat_response"] = chunk.model_dump()
+            # Also store just the choice for backward compatibility
+            mot._meta["oai_chat_response_choice"] = chunk.choices[0].model_dump()
 
         elif isinstance(chunk, ChatCompletionChunk):
             message_delta = chunk.choices[0].delta
@@ -745,7 +758,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         # OpenAI streamed responses give you chunks of tool calls.
         # As a result, we have to store data between calls and only then
         # check for complete tool calls in the post_processing step.
-        tool_chunk = extract_model_tool_requests(tools, mot._meta["oai_chat_response"])
+        # Use the choice format for tool extraction (backward compatibility)
+        choice_response = mot._meta.get(
+            "oai_chat_response_choice", mot._meta["oai_chat_response"]
+        )
+        tool_chunk = extract_model_tool_requests(tools, choice_response)
         if tool_chunk is not None:
             if mot.tool_calls is None:
                 mot.tool_calls = {}
@@ -759,6 +776,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         generate_log.backend = f"openai::{self.model_id!s}"
         generate_log.model_options = mot._model_options
         generate_log.date = datetime.datetime.now()
+        # Store the full response (includes usage info)
         generate_log.model_output = mot._meta["oai_chat_response"]
         generate_log.extra = {
             "format": _format,
@@ -770,6 +788,26 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         generate_log.action = mot._action
         generate_log.result = mot
         mot._generate_log = generate_log
+
+        # Record telemetry now that response is available
+        span = mot._meta.get("_telemetry_span")
+        if span is not None:
+            from ..telemetry import end_backend_span
+            from ..telemetry.backend_instrumentation import (
+                record_response_metadata,
+                record_token_usage,
+            )
+
+            response = mot._meta["oai_chat_response"]
+            # response is a dict from model_dump(), extract usage if present
+            usage = response.get("usage") if isinstance(response, dict) else None
+            if usage:
+                record_token_usage(span, usage)
+            record_response_metadata(span, response)
+            # Close the span now that async operation is complete
+            end_backend_span(span)
+            # Clean up the span reference
+            del mot._meta["_telemetry_span"]
 
     @overload
     async def generate_from_raw(
