@@ -4,6 +4,7 @@ try:
     pytestmark = [
         pytest.mark.ollama,
         pytest.mark.llm,
+        pytest.mark.requires_heavy_ram,  # qwen2.5vl:7b requires ~14GB RAM
     ]  # Uses Ollama via OpenAI-compatible API
 except ImportError:
     pass  # Running standalone, pytest not available
@@ -13,6 +14,7 @@ except ImportError:
 Requirements:
     - Ollama running locally
     - Vision model pulled: ollama pull qwen2.5vl:7b
+    - Heavy RAM: Model requires ~14GB RAM when loaded
 """
 
 import pathlib
