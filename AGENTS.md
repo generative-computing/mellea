@@ -39,7 +39,9 @@ uv run ruff format . && uv run ruff check .  # Lint & format
 - **Google-style docstrings**
 - **Ruff** for linting/formatting
 - Use `...` in `@generative` function bodies
+- Use `...` in `@generative` function bodies
 - Prefer primitives over classes
+- **Friendly Dependency Errors**: Wraps optional backend imports in `try/except ImportError` with a helpful message (e.g., "Please pip install mellea[hf]"). See `mellea/stdlib/session.py` for examples.
 
 ## 5. Commits & Hooks
 [Angular format](https://github.com/angular/angular/blob/main/CONTRIBUTING.md#commit): `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `release:`
