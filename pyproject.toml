@@ -192,7 +192,6 @@ split-on-trailing-comma = false
 # E402: Module level import not at top of file
 # Intentional in examples (pedagogical structure) and tests (pytestmark before imports)
 # D: Docstring errors
-# TODO: Add docstrings to cli/ (94 errors across 16 files)
 # Not required in examples, tests, and notebooks (core mellea/ has complete docstrings)
 "docs/**/*.py" = ["E402", "D"]
 "docs/**/*.ipynb" = ["D"]
