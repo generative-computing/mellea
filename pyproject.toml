@@ -74,14 +74,13 @@ hf = [
     "outlines-core==0.1.26",
     "outlines",                 # intentionally un-versioned, expecting a minor update. coutlines-core version should be enough to specify it
     "peft>=0.18.0", # aLoRA support was added in Peft 0.18.0
-    "transformers>=4.53.2",
+    "transformers==4.57.6",
     "trl==0.19.1",
     "granite-common[transformers]",
 ]
 
 vllm = [
-    "transformers<4.54.0",
-    # see https://github.com/vllm-project/vllm-ascend/issues/2046
+    "transformers==4.57.6",
     "numpy<2.0.0",              # patching incorrect dependencies in vllm and outlines.
     # see https://github.com/vllm-project/vllm/issues/5587
     "outlines-core==0.1.26",
