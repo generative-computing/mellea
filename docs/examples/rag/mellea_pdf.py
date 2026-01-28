@@ -1,7 +1,7 @@
 try:
     import pytest
 
-    pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+    pytestmark = [pytest.mark.ollama, pytest.mark.llm, pytest.mark.qualitative]
 except ImportError:
     pass  # Running standalone, pytest not available
 import mellea
