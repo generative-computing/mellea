@@ -27,8 +27,8 @@ if __name__ == "__main__":
     )
 
     print(
-        f"Prompt to the model looked like:\n```\n{m.last_prompt()[0]['content']}\n```"
-    )  # type: ignore
+        f"Prompt to the model looked like:\n```\n{m.last_prompt()[0]['content']}\n```"  # type: ignore[index]
+    )
     # Prompt to the model looked like:
     # ```
     # Your task is to imitate the output of the following function for the given arguments.

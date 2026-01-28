@@ -26,14 +26,15 @@ print(str(ch.content))
 # test with PIL image
 res_instruct = m.instruct(
     "Is there a person on the image? Is the subject in the image smiling?",
-    images=[test_pil],
+    images=[test_pil],  # type: ignore[arg-type]
 )
 print(f"Test with PIL and instruct: \n{res_instruct!s}\n-----")
 # print(m.last_prompt())
 
 # with PIL image and using m.chat
 res_chat = m.chat(
-    "How many eyes can you identify in the image? Explain.", images=[test_pil]
+    "How many eyes can you identify in the image? Explain.",
+    images=[test_pil],  # type: ignore[arg-type]
 )
 print(f"Test with PIL and chat: \n{res_chat.content!s}\n-----")
 

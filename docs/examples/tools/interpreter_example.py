@@ -32,6 +32,9 @@ def example_3(m: MelleaSession):
         tool_calls=True,
     )
 
+    if plot_output.tool_calls is None:
+        raise ValueError("Expected tool_calls but got None")
+
     code = plot_output.tool_calls["local_code_interpreter"].args["code"]
     print(f"Going to execute the following code:\n```python\n{code}\n```")
 
@@ -61,6 +64,9 @@ def example_4(m: MelleaSession):
         model_options={ModelOption.TOOLS: [local_code_interpreter]},
         tool_calls=True,
     )
+
+    if plot_output.tool_calls is None:
+        raise ValueError("Expected tool_calls but got None")
 
     code = plot_output.tool_calls["local_code_interpreter"].args["code"]
     print(f"Going to execute the following code:\n```python\n{code}\n```")

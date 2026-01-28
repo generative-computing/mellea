@@ -47,8 +47,11 @@ print(str(res))
 # print(m.last_prompt())
 
 # and now with PIL image and using m.chat
-res = m.chat("How many eyes can you identify in the image? Explain.", images=[test_pil])
-print(str(res.content))
+chat_res = m.chat(
+    "How many eyes can you identify in the image? Explain.",
+    images=[test_pil],  # type: ignore[arg-type]
+)
+print(str(chat_res.content))
 
 # and now without images again...
 res = m.instruct("How many eyes can you identify in the image?", images=[])

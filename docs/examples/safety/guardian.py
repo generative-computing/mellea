@@ -66,7 +66,7 @@ print(f"\nConfigured guardians: {len(guardians)} total")
 
 # Show Ollama backend configuration
 ollama_guardian = GuardianCheck(GuardianRisk.HARM, backend_type="ollama")
-print(f"  Ollama backend: {ollama_guardian._backend.model_version}")
+print(f"  Ollama backend: {ollama_guardian._backend.model_version}")  # type: ignore[attr-defined]
 
 print("\n=== Test 4: Groundedness Detection ===")
 # Test groundedness - detecting when responses lack factual grounding

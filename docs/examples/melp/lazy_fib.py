@@ -25,7 +25,7 @@ async def fib_main(backend: Backend, ctx: Context):
             mot = await fib(backend, ctx, fibs[i - 1], fibs[i - 2])
             fibs.append(mot)
 
-    print(await fibs[-1].avalue())
+    print(await fibs[-1].avalue())  # type: ignore[attr-defined]
     # for x in fibs:
     #     match x:
     #         case ModelOutputThunk():

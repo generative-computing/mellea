@@ -79,7 +79,7 @@ def serve(
     model_options: None | dict = None,
 ) -> ModelOutputThunk | SamplingResult | str:
     """Simple serve example to do PII stuff."""
-    message = input[-1].content
+    message = input[-1].content or ""
     result = pii_remove_validate(
         session, message, requirements=requirements, model_options=model_options
     )

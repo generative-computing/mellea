@@ -20,7 +20,7 @@ custom_stembolt_failure_constraint = HFConstraintAlora(
     backend=backend,
 )
 
-backend.add_alora(custom_stembolt_failure_constraint)
+backend.add_alora(custom_stembolt_failure_constraint)  # type: ignore[attr-defined]
 
 # Create M session
 m = MelleaSession(backend, ctx=ChatContext())

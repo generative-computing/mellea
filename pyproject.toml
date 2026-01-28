@@ -200,20 +200,10 @@ split-on-trailing-comma = false
 "cli/**/*.py" = ["D"]
 
 [[tool.mypy.overrides]]
-# TODO: Fix type errors in docs/ examples (25 errors across 15 files)
-# Temporarily relaxed type checking for docs/ to allow examples to focus on
-# demonstrating functionality rather than perfect type correctness.
-# Main issues: Optional/None handling, CBlock vs Component confusion, type mismatches
+# Keep import-not-found suppressed for optional dependencies
 module = "docs.*"
 disable_error_code = [
     "import-not-found",
-    "arg-type",
-    "attr-defined",
-    "assignment",
-    "operator",
-    "call-overload",
-    "index",
-    "return-value",
 ]
 
 [tool.codespell]

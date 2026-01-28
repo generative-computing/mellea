@@ -40,13 +40,14 @@ async def fib_sampling_version(
 
 
 async def fib_sampling_version_main(backend: Backend, ctx: Context):
-    fibs = []
+    fibs: list[CBlock | ModelOutputThunk] = []
     for i in range(20):
         if i == 0 or i == 1:
             fibs.append(CBlock(f"{i}"))
         else:
             mot = await fib_sampling_version(backend, ctx, fibs[i - 1], fibs[i - 2])
-            fibs.append(mot)
+            if mot is not None:
+                fibs.append(mot)
 
     for x_i, x in enumerate(fibs):
         match x:
