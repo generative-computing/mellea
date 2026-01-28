@@ -14,12 +14,7 @@ Contribute to the Mellea core, standard library, or fix bugs. This includes:
 - Documentation and examples
 - Tests and CI/CD improvements
 
-**Process:**
-1. **Open an issue** describing the bug or feature
-2. **Wait for triage** from the core team
-3. **Fork and follow the setup instructions** below
-4. **Make your changes** following our coding standards
-5. **Open a PR** and follow the automated workflow
+**Process:** See the [Pull Request Process](#pull-request-process) section below for detailed steps.
 
 ### 2. Applications & Libraries
 Build tools and applications using Mellea. These can be hosted in your own repository. For observability, use a `mellea-` prefix.
@@ -39,7 +34,7 @@ Contribute experimental or specialized components to [mellea-contribs](https://g
 
 - Python 3.10 or higher (3.13+ requires [Rust compiler](https://www.rust-lang.org/tools/install) for outlines)
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended) or conda/mamba
-- [Ollama](https://ollama.com/) (for local testing)
+- [Ollama](https://ollama.com/download) (for local testing)
 
 ### Installation with `uv` (Recommended)
 
@@ -125,7 +120,7 @@ def process_text(text: str, max_length: int = 100) -> str:
 
 **Docstrings are prompts** - the LLM reads them, so be specific.
 
-Use **Google-style docstrings**:
+Use **[Google-style docstrings](https://google.github.io/styleguide/pyguide.html#381-docstrings)**:
 
 ```python
 def extract_entities(text: str, entity_types: list[str]) -> dict[str, list[str]]:
@@ -170,15 +165,6 @@ uv run mypy .
 ```
 
 ## Development Workflow
-
-### Branch Naming
-
-Use descriptive branch names with prefixes:
-- `feat/topic` - New features
-- `fix/issue-id` - Bug fixes
-- `docs/topic` - Documentation updates
-- `test/topic` - Test additions/fixes
-- `refactor/topic` - Code refactoring
 
 ### Commit Messages
 

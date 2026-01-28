@@ -1423,7 +1423,7 @@ When using `SamplingStrategy`s or during validation, Mellea can speed up the exe
 
 ### Contributor Guide: Getting Started
 
-For detailed instructions on setting up your development environment, installing dependencies, configuring pre-commit hooks, and running tests, please see our **[Contributing Guide](../CONTRIBUTING.md)**.
+For detailed instructions on setting up your development environment, installing dependencies, configuring pre-commit hooks, and running tests, please see our **[Contributing Guide](../CONTRIBUTING.md#getting-started)**.
 
 The Contributing Guide includes:
 - Installation instructions (uv and conda)
