@@ -39,8 +39,8 @@ from ..helpers import (
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
 from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_context,
     instrument_generate_from_raw,
+    start_generate_span,
 )
 from .backend import FormatterBackend
 from .model_options import ModelOption
@@ -254,17 +254,22 @@ class WatsonxAIBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The watsonx.ai backend only supports chat-like contexts."
         )
-        with instrument_generate_from_context(
+        span = start_generate_span(
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
-        ):
-            mot = await self.generate_from_chat_context(
-                action,
-                ctx,
-                _format=format,
-                model_options=model_options,
-                tool_calls=tool_calls,
-            )
-            return mot, ctx.add(action).add(mot)
+        )
+        mot = await self.generate_from_chat_context(
+            action,
+            ctx,
+            _format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )
+
+        # Store span in metadata for post_processing to record telemetry
+        if span is not None:
+            mot._meta["_telemetry_span"] = span
+
+        return mot, ctx.add(action).add(mot)
 
     async def generate_from_chat_context(
         self,
@@ -470,6 +475,32 @@ class WatsonxAIBackend(FormatterBackend):
             # Merge the tool_chunk dict.
             for key, val in tool_chunk.items():
                 mot.tool_calls[key] = val
+
+        # Record telemetry if span is available
+        span = mot._meta.get("_telemetry_span")
+        if span is not None:
+            from ..telemetry import end_backend_span
+            from ..telemetry.backend_instrumentation import (
+                record_response_metadata,
+                record_token_usage,
+            )
+
+            response = mot._meta.get("oai_chat_response")
+            if response is not None:
+                # Watsonx responses may have usage information
+                usage = (
+                    response.get("usage")
+                    if isinstance(response, dict)
+                    else getattr(response, "usage", None)
+                )
+                if usage:
+                    record_token_usage(span, usage)
+                record_response_metadata(span, response)
+
+            # Close the span now that async operation is complete
+            end_backend_span(span)
+            # Clean up span reference
+            del mot._meta["_telemetry_span"]
 
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()

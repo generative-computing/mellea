@@ -1,9 +1,23 @@
 ## OpenTelemetry Instrumentation in Mellea
 
-Mellea provides built-in OpenTelemetry instrumentation with two independent trace scopes that can be enabled separately:
+Mellea provides built-in OpenTelemetry instrumentation with two independent trace scopes that can be enabled separately. The instrumentation follows the [OpenTelemetry Gen-AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) for standardized observability across LLM applications.
+
+**Note**: OpenTelemetry is an optional dependency. If not installed, telemetry features are automatically disabled with no impact on functionality.
 
 1. **Application Trace** (`mellea.application`) - Tracks user-facing operations
-2. **Backend Trace** (`mellea.backend`) - Tracks LLM backend interactions
+2. **Backend Trace** (`mellea.backend`) - Tracks LLM backend interactions with Gen-AI semantic conventions
+
+### Installation
+
+To use telemetry features, install Mellea with OpenTelemetry support:
+
+```bash
+pip install mellea[telemetry]
+# or
+uv pip install mellea[telemetry]
+```
+
+Without the `[telemetry]` extra, Mellea works normally but telemetry features are disabled.
 
 ### Configuration
 
@@ -42,21 +56,31 @@ The application tracer (`mellea.application`) instruments:
 
 ### Backend Trace Scope
 
-The backend tracer (`mellea.backend`) instruments:
+The backend tracer (`mellea.backend`) instruments LLM interactions following [OpenTelemetry Gen-AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/):
 
-- **Backend.generate_from_context()**: Context-based generation
-- **Backend.generate_from_raw()**: Raw generation without context
+- **Backend.generate_from_context()**: Context-based generation (chat operations)
+- **Backend.generate_from_raw()**: Raw generation without context (text completions)
 - **Backend-specific implementations**: Ollama, OpenAI, HuggingFace, Watsonx, LiteLLM
 
-**Span attributes include:**
-- `backend`: Backend class name (e.g., `OllamaModelBackend`)
-- `model_id`: Model identifier string
-- `action_type`: Component type
-- `context_size`: Number of items in context
-- `has_format`: Whether structured output format is specified
-- `format_type`: Response format class name
-- `tool_calls`: Whether tool calling is enabled
-- `num_actions`: Number of actions in batch (for `generate_from_raw`)
+**Gen-AI Semantic Convention Attributes:**
+- `gen_ai.system`: LLM system name (e.g., `openai`, `ollama`, `huggingface`)
+- `gen_ai.request.model`: Model identifier used for the request
+- `gen_ai.response.model`: Actual model used in the response (may differ from request)
+- `gen_ai.operation.name`: Operation type (`chat` or `text_completion`)
+- `gen_ai.usage.input_tokens`: Number of input tokens consumed
+- `gen_ai.usage.output_tokens`: Number of output tokens generated
+- `gen_ai.usage.total_tokens`: Total tokens consumed
+- `gen_ai.response.id`: Response ID from the LLM provider
+- `gen_ai.response.finish_reasons`: List of finish reasons (e.g., `["stop"]`, `["length"]`)
+
+**Mellea-Specific Attributes:**
+- `mellea.backend`: Backend class name (e.g., `OpenAIBackend`)
+- `mellea.action_type`: Component type being executed
+- `mellea.context_size`: Number of items in context
+- `mellea.has_format`: Whether structured output format is specified
+- `mellea.format_type`: Response format class name
+- `mellea.tool_calls_enabled`: Whether tool calling is enabled
+- `mellea.num_actions`: Number of actions in batch (for `generate_from_raw`)
 
 ### Usage Examples
 
@@ -164,13 +188,19 @@ When both traces are enabled, you'll see a hierarchy like:
 ```
 session_context (application)
 ├── aact (application)
-│   ├── generate_from_context (backend)
-│   │   └── ollama.chat (backend)
+│   ├── chat (backend) [gen_ai.system=ollama, gen_ai.request.model=llama3.2]
+│   │   └── [gen_ai.usage.input_tokens=150, gen_ai.usage.output_tokens=50]
 │   └── requirement_validation (application)
 ├── aact (application)
-│   └── generate_from_context (backend)
-│       └── ollama.chat (backend)
+│   └── chat (backend) [gen_ai.system=openai, gen_ai.request.model=gpt-4]
+│       └── [gen_ai.usage.input_tokens=200, gen_ai.usage.output_tokens=75]
 ```
+
+The Gen-AI semantic conventions make it easy to:
+- Track token usage across different LLM providers
+- Compare performance between models
+- Monitor costs based on token consumption
+- Identify which operations consume the most tokens
 
 ### Troubleshooting
 

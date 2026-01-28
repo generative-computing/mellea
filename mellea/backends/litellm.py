@@ -36,8 +36,8 @@ from ..helpers import (
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
 from ..telemetry.backend_instrumentation import (
-    instrument_generate_from_context,
     instrument_generate_from_raw,
+    start_generate_span,
 )
 from .backend import FormatterBackend
 from .model_options import ModelOption
@@ -130,17 +130,22 @@ class LiteLLMBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
-        with instrument_generate_from_context(
+        span = start_generate_span(
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
-        ):
-            mot = await self._generate_from_chat_context_standard(
-                action,
-                ctx,
-                _format=format,
-                model_options=model_options,
-                tool_calls=tool_calls,
-            )
-            return mot, ctx.add(action).add(mot)
+        )
+        mot = await self._generate_from_chat_context_standard(
+            action,
+            ctx,
+            _format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )
+
+        # Store span for telemetry recording in post_processing
+        if span is not None:
+            mot._meta["_telemetry_span"] = span
+
+        return mot, ctx.add(action).add(mot)
 
     def _simplify_and_merge(
         self, model_options: dict[str, Any] | None
@@ -461,6 +466,31 @@ class LiteLLMBackend(FormatterBackend):
         generate_log.action = mot._action
         generate_log.result = mot
         mot._generate_log = generate_log
+
+        # Record telemetry now that response is available
+        span = mot._meta.get("_telemetry_span")
+        if span is not None:
+            from ..telemetry import end_backend_span
+            from ..telemetry.backend_instrumentation import (
+                record_response_metadata,
+                record_token_usage,
+            )
+
+            response = mot._meta.get("litellm_chat_response")
+            if response:
+                # LiteLLM responses have usage information
+                usage = (
+                    response.get("usage")
+                    if isinstance(response, dict)
+                    else getattr(response, "usage", None)
+                )
+                if usage:
+                    record_token_usage(span, usage)
+                record_response_metadata(span, response)
+            # Close the span now that async operation is complete
+            end_backend_span(span)
+            # Clean up the span reference
+            del mot._meta["_telemetry_span"]
 
     @staticmethod
     def _extract_tools(
