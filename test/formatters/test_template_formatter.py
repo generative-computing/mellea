@@ -6,11 +6,10 @@ from typing import List
 
 import pytest
 
-from mellea.formatters import TemplateFormatter
-from mellea.backends.model_ids import ModelIdentifier, IBM_GRANITE_3_2_8B
+from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO, ModelIdentifier
 from mellea.core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
-from mellea.stdlib.components import Message, Instruction
-from mellea.stdlib.components import MObject
+from mellea.formatters import TemplateFormatter
+from mellea.stdlib.components import Instruction, Message, MObject
 
 
 @pytest.fixture(scope="module")
@@ -100,7 +99,8 @@ def test_user_path(instr: Instruction):
     """Ensures that paths with no templates don't prevent default template lookups.
 
     Also creates a temporary dir to use as a user-specified dir and ensures template lookup
-    logic is correct."""
+    logic is correct.
+    """
     tf = TemplateFormatter(
         "granite3.3", template_path="/fake/path", use_template_cache=False
     )
@@ -160,7 +160,7 @@ def test_no_module(tf: TemplateFormatter):
 
 def test_no_template(tf: TemplateFormatter):
     class _NoTemplate(Component[str]):
-        def parts(self) -> List[Component | CBlock]:
+        def parts(self) -> list[Component | CBlock]:
             return []
 
         def format_for_llm(self) -> TemplateRepresentation:
@@ -174,7 +174,7 @@ def test_no_template(tf: TemplateFormatter):
 
 
 def test_load_with_model_id(instr: Instruction):
-    tf = TemplateFormatter(IBM_GRANITE_3_2_8B)
+    tf = TemplateFormatter(IBM_GRANITE_4_HYBRID_MICRO)
     tmpl = tf._load_template(instr.format_for_llm())
     assert tmpl.name is not None
     assert "granite" in tmpl.name, (
@@ -214,7 +214,8 @@ def test_empty_model_id(instr: Instruction):
 def test_template_caching(instr: Instruction):
     """Caching shouldn't be interacted with this way by users.
 
-    Only toggling these internal variables to test code paths."""
+    Only toggling these internal variables to test code paths.
+    """
     tf = TemplateFormatter("default", use_template_cache=True)
     assert tf._template_cache is not None
 
@@ -236,8 +237,8 @@ def test_template_caching(instr: Instruction):
 
 def test_custom_component_external_package(tf: TemplateFormatter):
     """Creates a fake package with a custom component and loads the package.
-    Ensures template loading works for custom components defined in other packages."""
-
+    Ensures template loading works for custom components defined in other packages.
+    """
     new_component_content = """
 from mellea.core import Component, TemplateRepresentation, ModelOutputThunk
 class NewComponent(Component[str]):

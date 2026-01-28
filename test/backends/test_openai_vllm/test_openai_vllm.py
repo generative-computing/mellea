@@ -1,16 +1,16 @@
 # test/rits_backend_tests/test_openai_integration.py
 import os
+from typing import Annotated
 
 import pydantic
 import pytest
-from typing_extensions import Annotated
 
 from mellea import MelleaSession
-from mellea.backends.adapters import GraniteCommonAdapter
-from mellea.formatters import TemplateFormatter
-from mellea.backends.openai import OpenAIBackend
 from mellea.backends import ModelOption
+from mellea.backends.adapters import GraniteCommonAdapter
+from mellea.backends.openai import OpenAIBackend
 from mellea.core import CBlock, Context, ModelOutputThunk
+from mellea.formatters import TemplateFormatter
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement
 
@@ -30,8 +30,8 @@ if not _vllm_tests_enabled:
 
 class TestOpenAIBackend:
     backend = OpenAIBackend(
-        model_id="ibm-granite/granite-3.3-8b-instruct",
-        formatter=TemplateFormatter(model_id="ibm-granite/granite-3.3-8b-instruct"),
+        model_id="ibm-granite/granite-4.0-h-tiny",
+        formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-h-tiny"),
         base_url="http://0.0.0.0:8000/v1",
         api_key="EMPTY",
     )
@@ -95,7 +95,6 @@ class TestOpenAIBackend:
         # this is not guaranteed, due to the lack of regexp pattern
         # assert "@" in email.to.email_address
         # assert email.to.email_address.endswith("example.com")
-        pass
 
     async def test_generate_from_raw(self):
         prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
@@ -133,8 +132,8 @@ class TestOpenAIBackend:
 
 class TestOpenAIALoraStuff:
     backend = OpenAIBackend(
-        model_id="ibm-granite/granite-3.3-8b-instruct",
-        formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
+        model_id="ibm-granite/granite-4.0-h-tiny",
+        formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-h-tiny"),
         base_url="http://localhost:8000/v1",
         api_key="EMPTY",
     )
