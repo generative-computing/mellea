@@ -5,11 +5,12 @@ from collections.abc import Callable
 from typing import Any
 
 from ..core import FancyLogger, ModelToolCall
+from ..core.base import AbstractMelleaTool
 from ..stdlib.components import Document, Message
 
 
 def extract_model_tool_requests(
-    tools: dict[str, Callable], response: dict[str, Any]
+    tools: dict[str, AbstractMelleaTool], response: dict[str, Any]
 ) -> dict[str, ModelToolCall] | None:
     """Extracts tool calls from the dict representation of an OpenAI-like chat response object."""
     model_tool_calls: dict[str, ModelToolCall] = {}

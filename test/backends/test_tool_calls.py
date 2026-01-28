@@ -4,6 +4,7 @@ from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
+    MelleaTool,
 )
 from mellea.backends import ModelOption
 from mellea.core import ModelOutputThunk
@@ -42,7 +43,9 @@ def test_tool_called_from_context_action(m: MelleaSession, table: Table):
     def test1(): ...
     def test2(): ...
 
-    model_opts = {ModelOption.TOOLS: [test1, test2]}
+    model_opts = {
+        ModelOption.TOOLS: [MelleaTool.from_callable(t) for t in [test1, test2]]
+    }
 
     tools = {}
 

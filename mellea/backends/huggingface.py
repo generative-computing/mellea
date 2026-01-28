@@ -40,6 +40,7 @@ from ..core import (
     ModelOutputThunk,
     Requirement,
 )
+from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import message_to_openai_message, messages_to_docs, send_to_queue
 from ..stdlib.components import Intrinsic, Message
@@ -564,7 +565,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             ctx_as_chat = to_chat(action, ctx, self.formatter, system_prompt)
 
             # Append tool call information if applicable.
-            tools: dict[str, Callable] = dict()
+            tools: dict[str, AbstractMelleaTool] = dict()
             if tool_calls:
                 if _format:
                     FancyLogger.get_logger().warning(
@@ -723,7 +724,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             ctx_as_chat = to_chat(action, ctx, self.formatter, system_prompt)
 
             # Append tool call information if applicable.
-            tools: dict[str, Callable] = dict()
+            tools: dict[str, AbstractMelleaTool] = dict()
             if tool_calls:
                 if _format:
                     FancyLogger.get_logger().warning(
@@ -883,7 +884,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         conversation: list[dict],
         _format: type[BaseModelSubclass] | None,
         tool_calls: bool,
-        tools: dict[str, Callable],
+        tools: dict[str, AbstractMelleaTool],
         seed,
         input_ids,
     ):

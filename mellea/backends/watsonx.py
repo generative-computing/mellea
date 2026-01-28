@@ -27,6 +27,7 @@ from ..core import (
     ModelOutputThunk,
     ModelToolCall,
 )
+from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import (
     ClientCache,
@@ -309,7 +310,7 @@ class WatsonxAIBackend(FormatterBackend):
             model_opts["response_format"] = {"type": "text"}
 
         # Append tool call information if applicable.
-        tools: dict[str, Callable] = {}
+        tools: dict[str, AbstractMelleaTool] = {}
         if tool_calls:
             if _format:
                 FancyLogger.get_logger().warning(
@@ -433,7 +434,7 @@ class WatsonxAIBackend(FormatterBackend):
         self,
         mot: ModelOutputThunk,
         conversation: list[dict],
-        tools: dict[str, Callable],
+        tools: dict[str, AbstractMelleaTool],
         seed,
         _format,
     ):
@@ -573,7 +574,7 @@ class WatsonxAIBackend(FormatterBackend):
         return results
 
     def _extract_model_tool_requests(
-        self, tools: dict[str, Callable], chat_response: dict
+        self, tools: dict[str, AbstractMelleaTool], chat_response: dict
     ) -> dict[str, ModelToolCall] | None:
         model_tool_calls: dict[str, ModelToolCall] = {}
         for tool_call in chat_response["choices"][0]["message"].get("tool_calls", []):
