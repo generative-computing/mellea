@@ -1,10 +1,19 @@
-import pytest
+try:
+    import pytest
 
-pytestmark = [
-    pytest.mark.ollama,
-    pytest.mark.llm,
-]  # Uses Ollama via OpenAI-compatible API
-"""Examples using vision models with OpenAI backend."""
+    pytestmark = [
+        pytest.mark.ollama,
+        pytest.mark.llm,
+    ]  # Uses Ollama via OpenAI-compatible API
+except ImportError:
+    pass  # Running standalone, pytest not available
+
+"""Examples using vision models with OpenAI backend.
+
+Requirements:
+    - Ollama running locally
+    - Vision model pulled: ollama pull qwen2.5vl:7b
+"""
 
 import pathlib
 

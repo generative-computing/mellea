@@ -200,6 +200,7 @@ disable_error_code = ["empty-body", "import-untyped"]
 python_version = "3.10"
 
 [tool.pytest.ini_options]
+testpaths = ["test", "docs"]  # Run test/ first (fail fast), then docs/
 markers = [
     # Backend markers
     "ollama: Tests requiring Ollama backend (local, light)",

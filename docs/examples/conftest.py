@@ -122,9 +122,19 @@ class ExampleItem(pytest.Item):
             stderr = process.stderr.read()
 
         if retcode != 0:
-            raise ExampleTestException(
-                f"Example failed with exit code {retcode}.\nStderr: {stderr}\n"
-            )
+            # Check if this is a pytest.skip() call (indicated by "Skipped:" in stderr)
+            if "Skipped:" in stderr or "_pytest.outcomes.Skipped" in stderr:
+                # Extract skip reason from stderr
+                skip_reason = "Example skipped"
+                for line in stderr.split("\n"):
+                    if line.startswith("Skipped:"):
+                        skip_reason = line.replace("Skipped:", "").strip()
+                        break
+                pytest.skip(skip_reason)
+            else:
+                raise ExampleTestException(
+                    f"Example failed with exit code {retcode}.\nStderr: {stderr}\n"
+                )
 
     def repr_failure(self, excinfo, style=None):
         """Called when self.runtest() raises an exception."""
