@@ -323,7 +323,7 @@ def _parse_docstring(doc_string: str | None) -> dict[str, str]:
 
 
 # https://github.com/ollama/ollama-python/blob/60e7b2f9ce710eeb57ef2986c46ea612ae7516af/ollama/_utils.py#L56-L90
-def convert_function_to_tool(func: Callable) -> Tool:
+def convert_function_to_tool(func: Callable, name: str | None = None) -> Tool:
     """Imported from Ollama."""
     doc_string_hash = str(hash(inspect.getdoc(func)))
     parsed_docstring = _parse_docstring(inspect.getdoc(func))
@@ -359,7 +359,7 @@ def convert_function_to_tool(func: Callable) -> Tool:
     tool = Tool(
         type="function",
         function=Tool.Function(
-            name=func.__name__,
+            name=name or func.__name__,
             description=schema.get("description", ""),
             parameters=Tool.Function.Parameters(**schema),
         ),

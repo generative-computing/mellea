@@ -607,7 +607,7 @@ class ModelToolCall:
     """
 
     name: str
-    func: Callable
+    func: Callable # TODO: JAL. To support non-Callable / langchain / smolagent tools, we would need to change how it's called here. OR, we can change how we add tools to the list we pass to the model.
     args: Mapping[str, Any]
 
     def call_func(self) -> Any:
