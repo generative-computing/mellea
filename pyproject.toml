@@ -98,8 +98,11 @@ watsonx = [
 docling = [
     "docling>=2.45.0",
 ]
+langchain = [
+    "langchain-core>=0.3.0",
+]
 
-all = ["mellea[watsonx,docling,hf,vllm,litellm]"]
+all = ["mellea[watsonx,docling,hf,vllm,litellm,langchain]"]
 
 [dependency-groups]
 # Use these like:
