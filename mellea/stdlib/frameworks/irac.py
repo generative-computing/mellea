@@ -33,7 +33,7 @@ class IRACQuery(Component):
                 "scenario": self.scenario,
                 "issue": self.issue,
                 "rules": self.rules,
-                "analysis": self.analysis
+                "analysis": self.analysis,
                 "conclusion": self.conclusion
             }
         )
