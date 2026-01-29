@@ -290,21 +290,38 @@ def validate_tool_arguments(
             # Optional parameter with default
             field_definitions[param_name] = (param_type, param.default)
 
-    # Create dynamic Pydantic model for validation
-    ValidatorModel = create_model(f"{func.__name__}_Validator", **field_definitions)
-
     # Configure model for type coercion if requested
     if coerce_types:
-        # Pydantic v2 uses model_config
-        ValidatorModel.model_config = ConfigDict(
-            str_strip_whitespace=True  # Strip whitespace from strings
-            # Pydantic automatically coerces compatible types
+        model_config = ConfigDict(
+            str_strip_whitespace=True,
+            strict=False,  # Allow type coercion
+            extra="forbid" if strict else "allow",  # Handle extra fields
+            # Enable coercion modes for common LLM output issues
+            coerce_numbers_to_str=True,  # Allow int/float -> str
         )
+    else:
+        model_config = ConfigDict(
+            strict=True,  # No coercion
+            extra="forbid" if strict else "allow",
+        )
+
+    # Create dynamic Pydantic model for validation
+    ValidatorModel = create_model(
+        f"{func.__name__}_Validator", __config__=model_config, **field_definitions
+    )
 
     try:
         # Validate using Pydantic
         validated_model = ValidatorModel(**args)
         validated_args = validated_model.model_dump()
+
+        # In lenient mode with extra="allow", Pydantic includes extra fields
+        # but we need to preserve them from the original args
+        if not strict:
+            # Add back any extra fields that weren't in the model
+            for key, value in args.items():
+                if key not in field_definitions:
+                    validated_args[key] = value
 
         # Log successful validation with coercion details
         coerced_fields = []
