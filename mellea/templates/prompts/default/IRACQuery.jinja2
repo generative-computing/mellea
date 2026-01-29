@@ -1,0 +1,104 @@
+{# irac_step_prompt.jinja2 #}
+{# Expected context variables:
+   - scenario: string | none
+   - issue: string | none
+   - rules: list[string] | none
+   - analysis: string | none
+   - conclusion: string | none
+#}
+You are drafting an IRAC legal write-up.
+
+IRAC is a structured legal reasoning format:
+- Scenario: the relevant facts (only what matters to the legal question).
+- Issue: the precise legal question presented by the facts.
+- Rules: the controlling legal standards/tests (statutes, cases, elements, factors).
+- Analysis: apply the rules to the facts step-by-step, addressing counterarguments.
+- Conclusion: a clear, direct answer to the issue, consistent with the analysis.
+
+Your job is to write exactly the next missing IRAC section in order:
+Scenario → Issue → Rules → Analysis → Conclusion.
+
+{% set has_scenario = scenario is defined and scenario|trim|length > 0 %}
+{% set has_issue = issue is defined and issue|trim|length > 0 %}
+{% set has_rules = rules is defined and rules is not none and rules|length > 0 %}
+{% set has_analysis = analysis is defined and analysis|trim|length > 0 %}
+{% set has_conclusion = conclusion is defined and conclusion|trim|length > 0 %}
+
+Already completed sections (for context):
+
+{% if has_scenario %}
+SCENARIO:
+{{ scenario|trim }}
+{% else %}
+SCENARIO: (not provided yet)
+{% endif %}
+
+{% if has_issue %}
+ISSUE:
+{{ issue|trim }}
+{% else %}
+ISSUE: (not provided yet)
+{% endif %}
+
+{% if has_rules %}
+RULES:
+{% if rules|length == 1 %}
+- {{ rules[0]|trim }}
+{% else %}
+{% for r in rules %}
+- {{ r|trim }}
+{% endfor %}
+{% endif %}
+{% else %}
+RULES: (not provided yet)
+{% endif %}
+
+{% if has_analysis %}
+ANALYSIS:
+{{ analysis|trim }}
+{% else %}
+ANALYSIS: (not provided yet)
+{% endif %}
+
+{% if has_conclusion %}
+CONCLUSION:
+{{ conclusion|trim }}
+{% else %}
+CONCLUSION: (not provided yet)
+{% endif %}
+
+{# Determine next section to write #}
+{% if not has_scenario %}
+NEXT SECTION TO WRITE: SCENARIO
+Write a concise scenario paragraph summarizing only legally relevant facts. Do not add legal conclusions.
+
+Output format requirements:
+- Output ONLY the Scenario text (no header, no bullets unless necessary).
+{% elif not has_issue %}
+NEXT SECTION TO WRITE: ISSUE
+Write the issue as a single, precise question that can be answered yes/no or with a clear legal determination. Keep it tightly tied to the scenario.
+
+Output format requirements:
+- Output ONLY the Issue question text (no header).
+{% elif not has_rules %}
+NEXT SECTION TO WRITE: RULES
+Provide the controlling legal rules/tests as a list. Prefer element/factor-style phrasing. Keep each rule to 1–3 sentences. If jurisdiction or authority is unknown, write generally and flag assumptions minimally. If jurisdiction is known, prefer to cite statute or case-law from 
+
+Output format requirements:
+- Output ONLY a JSON array of strings (e.g., [{"summary": "rule 1", "authority": "citation to statute"}, {"summary": "rule 2", "authority": "citation to caselaw"}, {"summary": "rule 3", "authority": "commonlaw"}]).
+{% elif not has_analysis %}
+NEXT SECTION TO WRITE: ANALYSIS
+Apply each rule to the scenario step-by-step. Use the given rules in order. Address obvious counterarguments and uncertainty explicitly. Avoid inventing new facts.
+
+Output format requirements:
+- Output ONLY the Analysis text (no header).
+{% elif not has_conclusion %}
+NEXT SECTION TO WRITE: CONCLUSION
+Give a clear bottom-line answer to the issue, consistent with the analysis. Keep it brief (1–3 sentences). Note key uncertainty if present.
+
+Output format requirements:
+- Output ONLY the Conclusion text (no header).
+{% else %}
+All IRAC sections are complete. Do not generate additional text.
+Output EXACTLY: COMPLETE
+{% endif %}
