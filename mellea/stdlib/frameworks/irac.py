@@ -151,9 +151,10 @@ async def summarize_irac_findings_using_everything(ctx: Context, backend: Backen
             return computed.value
         
         def parts(self):
-            # _parts = [self.scenario, self.issue, self.rules, self.analysis, self.conclusion]
-            # return [part for part in _parts if part is not None]
-            return [] # TODO: finish implementing this
+            _parts = [self.scenario, self.issue, self.analysis, self.conclusion]
+            if self.rules is not None:
+                _parts.extend(self.rules)
+            return _parts
         
         def format_for_llm(self):
             return TemplateRepresentation(

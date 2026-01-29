@@ -11,8 +11,10 @@ async def main():
 
     scenario = "Suzanne is renting an apartment in Sprinfield, Massachusetts. Her lease stipulates that she will be charged charged a non-refundable fee for the installation of a new lock and key upon signing the lease. Is this charge permissible?"
 
-    result = await irac.irac(ctx, backend, scenario)
-    print(result)
+    results = await irac.irac(ctx, backend, scenario)
+    for result in results:
+        print(result[-1].value)
+        print("-"*80)
 
 
 
