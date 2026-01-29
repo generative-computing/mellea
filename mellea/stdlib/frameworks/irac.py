@@ -1,6 +1,8 @@
+"""IRAC (Issue, Rule, Analysis, Conclusion) legal reasoning framework."""
+
 import asyncio
 import json
-from typing import Literal, TypedDict
+from typing import Literal, TypeAlias, TypedDict
 
 import mellea.stdlib.functional as mfuncs
 from mellea.core import (
@@ -16,10 +18,10 @@ from mellea.core import (
 from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.components.chat import Message
 
-type Issue = CBlock | ModelOutputThunk
-type RuleType = Literal["statute", "regulation", "caselaw"]
-type Analysis = CBlock | ModelOutputThunk
-type IRACAnswer = CBlock | ModelOutputThunk
+Issue: TypeAlias = CBlock | ModelOutputThunk
+RuleType: TypeAlias = Literal["statute", "regulation", "caselaw"]
+Analysis: TypeAlias = CBlock | ModelOutputThunk
+IRACAnswer: TypeAlias = CBlock | ModelOutputThunk
 
 
 def _model_output_json_loads(x: str) -> dict:
@@ -51,6 +53,7 @@ class Rule(SimpleComponent):
         rule_contents: str | None = None,
         summary: str | None = None,
     ):
+        """Initialize a legal rule with citation and content."""
         super().__init__(
             citation=citation,
             rule_type=rule_type,
@@ -60,6 +63,8 @@ class Rule(SimpleComponent):
 
 
 class IRACQuery(Component):
+    """Query component for IRAC analysis."""
+
     def __init__(
         self,
         scenario: str | CBlock,
@@ -68,6 +73,7 @@ class IRACQuery(Component):
         analysis: Analysis | None = None,
         conclusion: IRACAnswer | None = None,
     ):
+        """Initialize an IRAC query with scenario and optional analysis components."""
         match scenario:
             case str():
                 self.scenario = CBlock(scenario)
@@ -84,12 +90,14 @@ class IRACQuery(Component):
         return computed.value
 
     def parts(self):
+        """Return list of non-None components in this query."""
         _parts = [self.scenario, self.issue, self.analysis, self.conclusion]
         if self.rules is not None:
             _parts.extend(self.rules)
         return [part for part in _parts if part is not None]
 
     def format_for_llm(self):
+        """Format this query for LLM consumption."""
         return TemplateRepresentation(
             obj=self,
             template_order=["*", "IRACQuery"],
@@ -103,7 +111,8 @@ class IRACQuery(Component):
         )
 
 
-async def identifiy_issue(ctx: Context, backend: Backend, scenario: CBlock) -> Issue:
+async def identify_issue(ctx: Context, backend: Backend, scenario: CBlock) -> Issue:
+    """Identify the legal issue from a given scenario."""
     query = IRACQuery(scenario=scenario)
     issue_mot, _ = await mfuncs.aact(query, ctx, backend)
     return issue_mot
@@ -113,12 +122,15 @@ async def identifiy_issue(ctx: Context, backend: Backend, scenario: CBlock) -> I
 
 
 class RuleFormatRequirement(Requirement):
+    """Requirement for validating rule format from model output."""
+
     def validate(self, backend, ctx, *, format=None, model_options=None):
+        """Validate that model output contains properly formatted rules."""
         output = ctx.last_output()
         parsed_rules = _model_output_json_loads(output.value)
         try:
-            rules = [Rule(rule) for rule in parsed_rules]
-            return ValidationResult(reuslt=True)
+            _rules = [Rule(rule) for rule in parsed_rules]
+            return ValidationResult(result=True)
         except Exception as e:
             msg = f"{e}\n\nRules were: {output.value}"
             return ValidationResult(result=False, reason=msg)
@@ -132,7 +144,7 @@ async def discover_rule_candidates(
     rule_cites_mot, _ = await mfuncs.aact(
         IRACQuery(scenario, issue), ctx, backend
     )  # , requirements=[RuleFormatRequirement("", check_only=True)])
-    parsed_rules = _model_output_json_loads(rule_cites_mot.value)
+    parsed_rules = _model_output_json_loads(str(rule_cites_mot.value))
     rules = [Rule(**rule) for rule in parsed_rules]
     return rules
 
@@ -164,6 +176,7 @@ async def reach_conclusion(
     rules: list[Rule],
     analysis: Analysis,
 ) -> ModelOutputThunk:
+    """Reach a legal conclusion based on issue, rules, and analysis."""
     query = IRACQuery(scenario=scenario, issue=issue, rules=rules, analysis=analysis)
     conclusion, _ = await mfuncs.aact(query, ctx, backend)
     return conclusion
@@ -178,6 +191,7 @@ async def summarize_irac_finding(
     analysis: Analysis,
     conclusion: ModelOutputThunk,
 ):
+    """Summarize the complete IRAC finding."""
     query = IRACQuery(
         scenario=scenario,
         issue=issue,
@@ -253,17 +267,28 @@ async def summarize_irac_findings_using_everything(
                 },
             )
 
-    final_answer, _ = await mfuncs.aact(IRACFinalQuery(), ctx, backend)
+    final_answer, _ = await mfuncs.aact(
+        IRACFinalQuery(
+            scenario=scenario,
+            issue=issue,
+            rules=rules,
+            analyses=analyses,
+            conclusions=conclusions,
+            summaries=[],
+        ),
+        ctx,
+        backend,
+    )
     return final_answer
 
 
 async def irac(
     ctx: Context, backend: Backend, scenario: str | CBlock
-) -> list[Issue, list[Rule], Analysis, ModelOutputThunk, ModelOutputThunk]:
+) -> tuple[Issue, list[Rule], Analysis, ModelOutputThunk, ModelOutputThunk]:
     """Performs an [IRAC](https://en.wikipedia.org/wiki/IRAC) analysis, step-by-step."""
     scenario = CBlock(scenario) if isinstance(scenario, str) else scenario
 
-    issue = await identifiy_issue(ctx, backend, scenario)
+    issue = await identify_issue(ctx, backend, scenario)
     rules = await discover_rule_candidates(ctx, backend, scenario, issue)
     analysis = await analyze_issue_using_rules(ctx, backend, scenario, issue, rules)
     conclusion = await reach_conclusion(ctx, backend, scenario, issue, rules, analysis)
