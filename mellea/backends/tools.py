@@ -211,6 +211,7 @@ def parse_tools(llm_response: str) -> list[tuple[str, Mapping]]:
         tool_name, tool_arguments = find_func(possible_tool)
         if tool_name is not None and tool_arguments is not None:
             tools.append((tool_name, tool_arguments))
+    return tools
 
 
 def validate_tool_arguments(
