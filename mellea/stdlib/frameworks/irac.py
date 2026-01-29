@@ -4,7 +4,12 @@ import asyncio
 import json
 from typing import Literal, TypeAlias, TypedDict
 
+import pydantic
+from langchain_community.tools import DuckDuckGoSearchResults
+
 import mellea.stdlib.functional as mfuncs
+from mellea.backends.model_options import ModelOption
+from mellea.backends.tools import MelleaTool  # TODO-nrf move this to stdlib.tools?
 from mellea.core import (
     Backend,
     CBlock,
@@ -15,8 +20,23 @@ from mellea.core import (
     TemplateRepresentation,
     ValidationResult,
 )
-from mellea.stdlib.components import SimpleComponent
+from mellea.stdlib.components import (
+    Instruction,
+    SimpleComponent,
+)  # TODO-nrf SimpleComponent should make all of the kwargs public ro properties for easier use.
 from mellea.stdlib.components.chat import Message
+
+# TODO-nrf should ook something like:
+# from mellea.stdlib.tools import SearchTool # could be the langchain wrapper idc.
+# search_result = mfuncs.act(f"search for relevant statute for this issue: {issue}", tools=[SearchTool(fetch=True)])
+# the_result = SearchTool.parsed_repr(search_result.tool_calls[SearchTool.name].run())
+# OR
+# the_result = search_result.tool_calls[SearchTool.name].run().parsed_repr()
+# -> this is saying that MelleaTools should be able to define an output type that is a MelleaComponent so that results can be threaded back into act / instruct /etc... much easier.
+# relevant_stattue = mfuncs.act(Instruction("review the search results and extract relevant statute citations, summaries, and contents (if available)", grounding_context={"search_results": the_result})
+# This requires a few changes:
+# 1. It should be easier to construction ad-hoc components that aren't messages.
+# 2.
 
 Issue: TypeAlias = CBlock | ModelOutputThunk
 RuleType: TypeAlias = Literal["statute", "regulation", "caselaw"]
@@ -146,6 +166,70 @@ async def discover_rule_candidates(
     )  # , requirements=[RuleFormatRequirement("", check_only=True)])
     parsed_rules = _model_output_json_loads(str(rule_cites_mot.value))
     rules = [Rule(**rule) for rule in parsed_rules]
+    return rules
+
+
+async def discover_rule_candidates_using_tool(
+    ctx: Context, backend: Backend, scenario: CBlock, issue: Issue
+) -> list[Rule]:
+    """Find all possibly relevant rules using ddg."""
+    try:
+        lc_ddg_search = DuckDuckGoSearchResults(output_format="list")
+    except Exception:
+        raise Exception("You must install langchain-community to use this method.")
+
+    mellea_search_tool = MelleaTool.from_langchain(lc_ddg_search)
+    search_result_mot, _ = await mfuncs.aact(
+        SimpleComponent(  # TODO-nrf maybe should be an instruction with a grounding_context?
+            instruction="Search for statute, case-law, or common-law that might help address the legal issue identified in this scenario.",
+            scenario=scenario,
+            issue=issue,
+        ),
+        ctx,
+        backend,
+        model_options={
+            ModelOption.TOOLS: [
+                mellea_search_tool
+            ]  # TODO-nrf should we have a tools kwarg to make this easier for mfuncs and session?
+        },
+        tool_calls=True,  # TODO-nrf: If we explicitly pass tools or ModelOption.TOOLS *at callsite* this should be True. Only need to explicitly set when we're using the context/backend's default tool box. Argues for renaming this to use_global_tools=True. And a warning if you give both tools and set use_global_tools (because users will pattern-match and not understand they're requesting a merge, probably)
+    )  # TODO-nrf we should probably add reuiqrements here that the tool is actually called. Natham to import tool calling requirement lib stuff from weekend project.
+
+    # Returns in the format of: list[{"snippet": "", "title": "", "link": ""}, ...]
+    assert (
+        search_result_mot.tool_calls is not None
+    )  # TODO-nrf this is a dependent type I think, so we always have to do the check. Confirm when less tired.
+    search_result = search_result_mot.tool_calls[mellea_search_tool.name].call_func()
+
+    stringified_search_result = "\n".join(
+        [f"#{x['title']}\n\n{x['snippet']}\n(url: {x['link']})" for x in search_result]
+    )
+
+    class _Rule(pydantic.BaseModel):
+        citation: str
+        rule_type: RuleType
+        rule_contents: str | None = None
+        summary: str | None = None
+
+    class _RuleList(pydantic.BaseModel):
+        rules: list[_Rule]
+
+    search_results_to_rules_instruction = Instruction(
+        description="Use the search results to identify relevant statutes or case-law for the issue and scenario.",
+        grounding_context={
+            "scenario": scenario,
+            "issue": issue,
+            "search_results": stringified_search_result,
+        },
+    )
+
+    result, _ = await mfuncs.aact(
+        search_results_to_rules_instruction, ctx, backend, format=_RuleList
+    )
+
+    assert result.value is not None  # known, helping type checker.
+    rules_args: dict = json.loads(result.value)
+    rules: list[Rule] = [Rule(**args) for args in rules_args["rules"]]
     return rules
 
 
@@ -289,7 +373,8 @@ async def irac(
     scenario = CBlock(scenario) if isinstance(scenario, str) else scenario
 
     issue = await identify_issue(ctx, backend, scenario)
-    rules = await discover_rule_candidates(ctx, backend, scenario, issue)
+    # rules = await discover_rule_candidates(ctx, backend, scenario, issue)
+    rules = await discover_rule_candidates_using_tool(ctx, backend, scenario, issue)
     analysis = await analyze_issue_using_rules(ctx, backend, scenario, issue, rules)
     conclusion = await reach_conclusion(ctx, backend, scenario, issue, rules, analysis)
     summary = await summarize_irac_finding(
