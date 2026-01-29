@@ -2,6 +2,7 @@ from mellea.core import Component, Backend, Context, ModelOutputThunk, CBlock, T
 from mellea.stdlib.components import SimpleComponent
 import mellea.stdlib.functional as mfuncs
 from typing import Literal, TypedDict
+import asyncio
 
 
 type Issue = CBlock | ModelOutputThunk
@@ -19,12 +20,22 @@ class Rule(TypedDict):
 
 
 class IRACQuery(Component):
-    def __init__(self, scenario: CBlock, issue: Issue | None = None, rules: list[Rule] | None = None, analysis: Analysis | None = None, conclusion: IRACAnswer | None = None):
-        self.scenario = scenario
+    def __init__(self, scenario: str | CBlock, issue: Issue | None = None, rules: list[Rule] | None = None, analysis: Analysis | None = None, conclusion: IRACAnswer | None = None):
+        match scenario:
+            case str():
+                self.scenario = CBlock(scenario)
+            case CBlock():
+                self.scenarioq = scenario
+            case _:
+                raise TypeError()
         self.issue = issue
         self.rules = rules
         self.analysis = analysis
         self.conclusion = conclusion
+    
+    def parts(self):
+        _parts = [self.scenario, self.issue, self.rules, self.analysis, self.conclusion]
+        return [part for part in _parts if part is not None]
     
     def format_for_llm(self):
         return TemplateRepresentation(
@@ -37,7 +48,6 @@ class IRACQuery(Component):
                 "conclusion": self.conclusion
             }
         )
-
 
 
 async def identifiy_issue(ctx: Context, backend: Backend, scenario: CBlock) -> Issue:
@@ -97,3 +107,16 @@ async def irac(ctx: Context, backend: Backend, scenario: str | CBlock) -> IRACAn
     final_answer = summarize_irac_findings(conclusions)
     return final_answer
     
+
+async def main():
+    from mellea.backends.ollama import OllamaModelBackend
+    from mellea.stdlib.context import SimpleContext
+
+    backend = OllamaModelBackend(model_id="granite4:latest")
+    ctx = SimpleContext()
+
+    issue = await identifiy_issue(ctx, backend, "Suzanne is renting an apartment in Sprinfield, Massachusetts. Her lease stipulates that she will be charged charged a non-refundable fee for the installation of a new lock and key upon signing the lease. Is this charge permissible?")
+    print(issue)
+
+if __name__ == "__main__":
+    asyncio.run(main())

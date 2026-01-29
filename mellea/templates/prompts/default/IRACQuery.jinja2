@@ -85,7 +85,11 @@ NEXT SECTION TO WRITE: RULES
 Provide the controlling legal rules/tests as a list. Prefer element/factor-style phrasing. Keep each rule to 1–3 sentences. If jurisdiction or authority is unknown, write generally and flag assumptions minimally. If jurisdiction is known, prefer to cite statute or case-law from 
 
 Output format requirements:
-- Output ONLY a JSON array of strings (e.g., [{"summary": "rule 1", "authority": "citation to statute"}, {"summary": "rule 2", "authority": "citation to caselaw"}, {"summary": "rule 3", "authority": "commonlaw"}]).
+- Output ONLY a JSON array of rules dictionaries. Each dictionary should have:
+    * "summary": summarizes the rule
+    * "rule_type": MUST be one of: "statute", "regulation", "caselaw", "commonlaw"
+    * "citation": a citation to the rule_type. MUST be specified unless "rule_type" is "commonlaw".
+E.g., [{"summary": "rule 1", "citation": "citation to statute", "rule_type": "statute"}, {"summary": "rule 2", "citation": "citation to caselaw", "rule_type": "caselaw"}, {"summary": "rule 3", "rule_type": "commonlaw"}]).
 {% elif not has_analysis %}
 NEXT SECTION TO WRITE: ANALYSIS
 Apply each rule to the scenario step-by-step. Use the given rules in order. Address obvious counterarguments and uncertainty explicitly. Avoid inventing new facts.
