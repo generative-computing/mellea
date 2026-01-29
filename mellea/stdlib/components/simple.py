@@ -12,7 +12,7 @@ class SimpleComponent(Component[str]):
             if type(kwargs[key]) is str:
                 kwargs[key] = CBlock(value=kwargs[key])
         # Filter out all None-valued arguments by default as a convienance wrapper.
-        kwargs = dict([(key, value) for (key,value) in kwargs.items() if value is not None])
+        kwargs = {key: value for (key, value) in kwargs.items() if value is not None}
         self._kwargs_type_check(kwargs)
         self._kwargs = kwargs
 
@@ -32,12 +32,18 @@ class SimpleComponent(Component[str]):
                 return all
             case dict():
                 raise ValueError("TODO")
-    
+
     def parts(self):
+        """Returns the parts of a SimpleComponent."""
         all_parts = []
         for value in self._kwargs.values():
             all_parts.extend(self._parts(value))
-        assert all([type(part) in [CBlock, Component, ModelOutputThunk] for part in all_parts])
+        for part in all_parts:
+            assert (
+                type(part) is CBlock
+                or type(part) is Component
+                or type(part) is ModelOutputThunk
+            )
         return all_parts
 
     def _kwargs_type_check(self, kwargs):
