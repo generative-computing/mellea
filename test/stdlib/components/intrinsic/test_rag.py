@@ -31,9 +31,9 @@ DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 BASE_MODEL = "ibm-granite/granite-4.0-micro"
 
 
-@pytest.fixture(name="backend")
+@pytest.fixture(name="backend", scope="module")
 def _backend():
-    """Backend used by the tests in this file."""
+    """Backend used by the tests in this file. Module-scoped to avoid reloading the 3B model for each test."""
     # Prevent thrashing if the default device is CPU
     torch.set_num_threads(4)
 
