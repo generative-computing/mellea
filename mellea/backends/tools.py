@@ -1,4 +1,4 @@
-"""Utilities for dealing with tools."""
+"""Utilities for dealing with LLM tools."""
 
 import inspect
 import json
@@ -9,12 +9,88 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from mellea.core.utils import FancyLogger
+
 from ..core import CBlock, Component, TemplateRepresentation
+from ..core.base import AbstractMelleaTool
 from .model_options import ModelOption
 
 
+class MelleaTool(AbstractMelleaTool):
+    """Tool class to represent a tool."""
+
+    # Tool is what we pass as a model option / as input
+    # Our ModelToolCall is the class that has a reference to the tool and actually calls with arguments
+
+    name: str
+    _as_json_tool: dict[str, Any]
+    _call_tool: Callable[..., Any]
+
+    def __init__(
+        self, name: str, tool_call: Callable, as_json_tool: dict[str, Any]
+    ) -> None:
+        """Initialize the tool with a name, tool call and as_json_tool dict."""
+        self.name = name
+        self._as_json_tool = as_json_tool
+        self._call_tool = tool_call
+
+    def run(self, *args, **kwargs) -> Any:
+        """Run the tool with the given arguments."""
+        return self._call_tool(*args, **kwargs)
+
+    @property
+    def as_json_tool(self) -> dict[str, Any]:
+        """Return the tool converted to a OpenAI compatible JSON object."""
+        return self._as_json_tool
+
+    @classmethod
+    def from_langchain(cls, tool: Any):
+        """Create a Tool from a langchain tool object."""
+        try:
+            from langchain_core.tools import BaseTool
+            from langchain_core.utils.function_calling import convert_to_openai_tool
+
+            if isinstance(tool, BaseTool):
+                tool_name = tool.name
+                as_json = convert_to_openai_tool(tool)
+
+                def parameter_remapper(*args, **kwargs):
+                    """Langchain tools expect their first argument to be 'tool_input'."""
+                    if args is not None or len(args) != 0:
+                        # This shouldn't happen. Our ModelToolCall.call_func actually passes in everything as kwargs.
+                        FancyLogger.get_logger().warning(
+                            f"ignoring unexpected args while calling langchain tool ({tool_name}): ({args})"
+                        )
+
+                    return tool.run(tool_input={**kwargs})
+
+                tool_call = parameter_remapper
+                return MelleaTool(tool_name, tool_call, as_json)
+            else:
+                raise ValueError(
+                    f"tool parameter must be a langchain tool type; got: {type(tool)}"
+                )
+
+        except ImportError as e:
+            raise ImportError(
+                f"It appears you are attempting to utilize a langchain tool '{type(tool)}'"
+                "Please install langchain core: pip install 'langchain_core'."
+            ) from e
+
+    @classmethod
+    def from_callable(cls, func: Callable, name: str | None = None):
+        """Create a Tool from a callable."""
+        # Use the function name if the name is '' or None.
+        tool_name = name or func.__name__
+        as_json = convert_function_to_ollama_tool(func, tool_name).model_dump(
+            exclude_none=True
+        )
+        tool_call = func
+        return MelleaTool(tool_name, tool_call, as_json)
+
+
 def add_tools_from_model_options(
-    tools_dict: dict[str, Callable], model_options: dict[str, Any]
+    tools_dict: dict[str, AbstractMelleaTool], model_options: dict[str, Any]
 ):
     """If model_options has tools, add those tools to the tools_dict."""
     model_opts_tools = model_options.get(ModelOption.TOOLS, None)
@@ -23,30 +99,31 @@ def add_tools_from_model_options(
 
     # Mappings are iterable.
     assert isinstance(model_opts_tools, Iterable), (
-        "ModelOption.TOOLS must be a list of Callables or dict[str, Callable]"
+        "ModelOption.TOOLS must be a list of Tool or dict[str, Tool]"
     )
 
     if isinstance(model_opts_tools, Mapping):
         # Handle the dict case.
-        for func_name, func in model_opts_tools.items():
-            assert isinstance(func_name, str), (
-                f"If ModelOption.TOOLS is a dict, it must be a dict of [str, Callable]; found {type(func_name)} as the key instead"
+        for tool_name, tool_instance in model_opts_tools.items():
+            assert isinstance(tool_name, str), (
+                f"If ModelOption.TOOLS is a dict, it must be a dict of [str, Tool]; found {type(tool_name)} as the key instead"
             )
-            assert callable(func), (
-                f"If ModelOption.TOOLS is a dict, it must be a dict of [str, Callable]; found {type(func)} as the value instead"
+            assert isinstance(tool_instance, MelleaTool), (
+                f"If ModelOption.TOOLS is a dict, it must be a dict of [str, Tool]; found {type(tool_instance)} as the value instead"
             )
-            tools_dict[func_name] = func
+            tools_dict[tool_name] = tool_instance
     else:
         # Handle any other iterable / list here.
-        for func in model_opts_tools:
-            assert callable(func), (
-                f"If ModelOption.TOOLS is a list, it must be a list of Callables; found {type(func)}"
+        for tool_instance in model_opts_tools:
+            assert isinstance(tool_instance, MelleaTool), (
+                f"If ModelOption.TOOLS is a list, it must be a list of Tool; found {type(tool_instance)}"
             )
-            tools_dict[func.__name__] = func
+            tools_dict[tool_instance.name] = tool_instance
 
 
 def add_tools_from_context_actions(
-    tools_dict: dict[str, Callable], ctx_actions: list[Component | CBlock] | None
+    tools_dict: dict[str, AbstractMelleaTool],
+    ctx_actions: list[Component | CBlock] | None,
 ):
     """If any of the actions in ctx_actions have tools in their template_representation, add those to the tools_dict."""
     if ctx_actions is None:
@@ -64,7 +141,7 @@ def add_tools_from_context_actions(
             tools_dict[tool_name] = func
 
 
-def convert_tools_to_json(tools: dict[str, Callable]) -> list[dict]:
+def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
     """Convert tools to json dict representation.
 
     Notes:
@@ -72,16 +149,7 @@ def convert_tools_to_json(tools: dict[str, Callable]) -> list[dict]:
     - WatsonxAI uses `from langchain_ibm.chat_models import convert_to_openai_tool` in their demos, but it gives the same values.
     - OpenAI uses the same format / schema.
     """
-    converted: list[dict[str, Any]] = []
-    for tool in tools.values():
-        try:
-            converted.append(
-                convert_function_to_tool(tool).model_dump(exclude_none=True)
-            )
-        except Exception:
-            pass
-
-    return converted
+    return [t.as_json_tool for t in tools.values()]
 
 
 def json_extraction(text: str) -> Generator[dict, None, None]:
@@ -209,7 +277,7 @@ class SubscriptableBaseModel(BaseModel):
         >>> msg['tool_calls'] = None
         >>> 'tool_calls' in msg
         True
-        >>> tool = Tool()
+        >>> tool = OllamaTool()
         >>> 'type' in tool
         True
         """
@@ -240,7 +308,7 @@ class SubscriptableBaseModel(BaseModel):
 
 
 # https://github.com/ollama/ollama-python/blob/60e7b2f9ce710eeb57ef2986c46ea612ae7516af/ollama/_types.py#L337-L363
-class Tool(SubscriptableBaseModel):
+class OllamaTool(SubscriptableBaseModel):
     """Class imported from Ollama."""
 
     type: str | None = "function"
@@ -323,7 +391,9 @@ def _parse_docstring(doc_string: str | None) -> dict[str, str]:
 
 
 # https://github.com/ollama/ollama-python/blob/60e7b2f9ce710eeb57ef2986c46ea612ae7516af/ollama/_utils.py#L56-L90
-def convert_function_to_tool(func: Callable) -> Tool:
+def convert_function_to_ollama_tool(
+    func: Callable, name: str | None = None
+) -> OllamaTool:
     """Imported from Ollama."""
     doc_string_hash = str(hash(inspect.getdoc(func)))
     parsed_docstring = _parse_docstring(inspect.getdoc(func))
@@ -356,13 +426,13 @@ def convert_function_to_tool(func: Callable) -> Tool:
             "type": ", ".join(types),
         }
 
-    tool = Tool(
+    tool = OllamaTool(
         type="function",
-        function=Tool.Function(
-            name=func.__name__,
+        function=OllamaTool.Function(
+            name=name or func.__name__,
             description=schema.get("description", ""),
-            parameters=Tool.Function.Parameters(**schema),
+            parameters=OllamaTool.Function.Parameters(**schema),
         ),
     )
 
-    return Tool.model_validate(tool)
+    return OllamaTool.model_validate(tool)

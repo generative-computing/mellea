@@ -74,7 +74,7 @@ hf = [
     "outlines-core==0.1.26",
     "outlines",                 # intentionally un-versioned, expecting a minor update. coutlines-core version should be enough to specify it
     "peft>=0.18.0", # aLoRA support was added in Peft 0.18.0
-    "transformers>=4.53.2",
+    "transformers>=4.53.2,<5",
     "trl==0.19.1",
     "granite-common[transformers]",
 ]
@@ -118,6 +118,7 @@ dev = [
     "mypy>=1.17.0",
     "python-semantic-release~=7.32",
     "nbmake>=1.5.5",
+    "langchain-core>=1.2.7", # Necessary for mypy and some tool tests
 ]
 
 notebook = [
