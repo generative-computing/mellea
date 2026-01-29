@@ -1,0 +1,46 @@
+IRAC is a structured legal reasoning format:
+- Scenario: the relevant facts (only what matters to the legal question).
+- Issue: the precise legal question presented by the facts.
+- Rules: the controlling legal standards/tests (statutes, cases, elements, factors).
+- Analysis: apply the rules to the facts step-by-step, addressing counterarguments.
+- Conclusion: a clear, direct answer to the issue, consistent with the analysis.
+
+You are a legal analyst tasked with synthesizing multiple IRAC analyses into a final, cohesive conclusion.
+
+## Scenario
+{{ scenario }}
+
+## Issue
+{{ issue }}
+
+## Analyses by Rule Set
+{% for i in range(rules|length) %}
+### Rule Set {{ i + 1 }}
+
+#### Applicable Rules
+{% for rule in rules[i] %}
+- {{ rule }}
+{% endfor %}
+
+#### Analysis
+{{ analyses[i] }}
+
+#### Conclusion
+{{ conclusions[i] }}
+
+#### Summary
+{{ summaries[i] }}
+
+{% endfor %}
+
+## Task
+Based on the scenario and issue presented above, along with the {{ rules|length }} separate rule-based analyses provided:
+
+1. Identify any areas of agreement or consistency across the different conclusions
+2. Identify any areas of conflict or tension between the conclusions
+3. Weigh the relative strength and applicability of each rule set to this specific scenario
+4. Synthesize the above into a final, unified conclusion that addresses the original issue
+
+## Final Conclusion
+Provide your comprehensive final conclusion below. This should reconcile any differences between the rule sets, weigh their relative applicability, and give a clear,
+definitive answer to the issue presented.

@@ -1,4 +1,5 @@
-from mellea.core import Component, Backend, Context, ModelOutputThunk, CBlock, TemplateRepresentation
+from mellea.core import Component, Backend, Context, ModelOutputThunk, CBlock, TemplateRepresentation, Requirement, ValidationResult
+from mellea.stdlib.components.chat import Message
 from mellea.stdlib.components import SimpleComponent
 import mellea.stdlib.functional as mfuncs
 from typing import Literal, TypedDict
@@ -31,12 +32,10 @@ def model_output_json_loads(x: str) -> dict:
     return json.loads(x)
 
 
-class Rule(TypedDict):
+class Rule(SimpleComponent):
     """A legal rule."""
-    citation: str
-    rule_type: RuleType
-    rule_contents: str | None
-    rule_summary : str | None
+    def __init__(self, citation: str, rule_type: RuleType, rule_contents: str | None=None, summary: str|None=None):
+        super().__init__(citation=citation, rule_type=rule_type, rule_contents=rule_contents, summary=summary)
 
 
 class IRACQuery(Component):
@@ -45,7 +44,7 @@ class IRACQuery(Component):
             case str():
                 self.scenario = CBlock(scenario)
             case CBlock():
-                self.scenarioq = scenario
+                self.scenario = scenario
             case _:
                 raise TypeError()
         self.issue = issue
@@ -57,7 +56,9 @@ class IRACQuery(Component):
         return computed.value        
     
     def parts(self):
-        _parts = [self.scenario, self.issue, self.rules, self.analysis, self.conclusion]
+        _parts = [self.scenario, self.issue, self.analysis, self.conclusion]
+        if self.rules is not None:
+            _parts.extend(self.rules)
         return [part for part in _parts if part is not None]
     
     def format_for_llm(self):
@@ -80,13 +81,28 @@ async def identifiy_issue(ctx: Context, backend: Backend, scenario: CBlock) -> I
     return issue_mot
 
 
+# region rule discovery
+
+class RuleFormatRequirement(Requirement):
+    def validate(self, backend, ctx, *, format = None, model_options = None):
+        output = ctx.last_output()
+        parsed_rules = model_output_json_loads(output.value)
+        try:
+            rules = [Rule(rule) for rule in parsed_rules]
+            return ValidationResult(reuslt=True)
+        except Exception as e:
+            msg = f"{e}\n\nRules were: {output.value}"
+            return ValidationResult(result=False, reason=msg)
+
 async def discover_rule_candidates(ctx: Context, backend: Backend, scenario: CBlock, issue: Issue) -> list[Rule]:
     """Find all possibly relevant rules."""
     # Simple prompt for now, but this should be expanded to a RAG pipeline.
-    rule_cites_mot, _ = await mfuncs.aact(IRACQuery(scenario, issue), ctx, backend)
-    rules = model_output_json_loads(rule_cites_mot.value)
+    rule_cites_mot, _ = await mfuncs.aact(IRACQuery(scenario, issue), ctx, backend) #, requirements=[RuleFormatRequirement("", check_only=True)])
+    parsed_rules = model_output_json_loads(rule_cites_mot.value)
+    rules = [Rule(**rule) for rule in parsed_rules]
     return rules
 
+# endregion
 
 async def construct_rule_subsets(ctx: Context, backend: Backend, scenario: CBlock, issue: Issue, rules: list[Rule]) -> list[list[Rule]]:
     """Group similar rules by category."""
@@ -96,28 +112,77 @@ async def construct_rule_subsets(ctx: Context, backend: Backend, scenario: CBloc
 async def analyze_issue_using_rules(ctx: Context, backend: Backend, scenario: CBlock, issue: Issue, rules: list[Rule]) -> Analysis:
     """Analyze the issue in terms of the rules."""
     query = IRACQuery(scenario=scenario, issue=issue, rules=rules)
-    analysis = await mfuncs.aact(query, ctx, backend)
+    analysis, _ = await mfuncs.aact(query, ctx, backend)
+    return analysis
 
 
-async def reach_conclusion(ctx: Context, backend: Backend, scenario: CBlock, issue: Issue, rules: list[Rule], analysis: Analysis):
-    ...
+async def reach_conclusion(ctx: Context, backend: Backend, scenario: CBlock, issue: Issue, rules: list[Rule], analysis: Analysis) -> ModelOutputThunk:
+    query = IRACQuery(scenario=scenario, issue=issue, rules=rules, analysis=analysis)
+    conclusion, _ = await mfuncs.aact(query, ctx, backend)
+    return conclusion
 
+async def summarize_irac_finding(ctx: Context, backend: Backend, scenario: CBlock, issue: Issue, rules: list[Rule], analysis: Analysis, conclusion: ModelOutputThunk):
+    query = IRACQuery(scenario=scenario, issue=issue, rules=rules, analysis=analysis, conclusion=conclusion)
+    summary, _ = await mfuncs.aact(query, ctx, backend)
+    return summary
 
 async def summarize_irac_findings(conclusions: list[tuple[str, Issue, list[Rule], Analysis]]) -> IRACAnswer:
     """Construct an IRACAnswer object and add a generated summary."""
+    # use the better of the two functions below.
     ...
 
+async def summarize_irac_findings_using_summaries(summaries: list[ModelOutputThunk]) -> IRACAnswer:
+    """Construct an IRACAnswer object and add a generated summary."""
+    ...
 
-async def irac(ctx: Context, backend: Backend, scenario: str | CBlock) -> IRACAnswer:
+async def summarize_irac_findings_using_everything(ctx: Context, backend: Backend, scenario: CBlock, issue: Issue, rules: list[list[Rule]], analyses: list[Analysis], conclusions: list[ModelOutputThunk]) -> IRACAnswer:
+    """Construct an IRACAnswer object and add a generated summary."""
+
+    class IRACFinalQuery(Component):
+        def __init__(self, scenario: CBlock, issue: Issue, rules: list[list[Rule]], analyses: list[Analysis], conclusions: list[ModelOutputThunk], summaries: list[ModelOutputThunk]):
+            self.scenario = scenario
+            self.issue = issue
+            self.rules = rules
+            self.analyses = analyses
+            self.conclusions = conclusions
+            self.summaries = summaries
+        
+        def _parse(self, computed: ModelOutputThunk):
+            return computed.value
+        
+        def parts(self):
+            # _parts = [self.scenario, self.issue, self.rules, self.analysis, self.conclusion]
+            # return [part for part in _parts if part is not None]
+            return [] # TODO: finish implementing this
+        
+        def format_for_llm(self):
+            return TemplateRepresentation(
+                obj=self,
+                template_order=["*", "IRACFinalQuery"],
+                args={
+                    "scenario": self.scenario,
+                    "issue": self.issue,
+                    "rules": self.rules,
+                    "analyses": self.analyses,
+                    "conclusions": self.conclusions,
+                    "summaries": self.summaries
+                }
+            )
+    
+    final_answer, _ = await mfuncs.aact(IRACFinalQuery(), ctx, backend)
+    return final_answer
+
+
+async def irac(ctx: Context, backend: Backend, scenario: str | CBlock) -> list[IRACAnswer]:
     scenario = CBlock(scenario) if isinstance(scenario, str) else scenario
 
-    issue = identifiy_issue(ctx, backend, scenario)
-    rule_candidates = discover_rule_candidates(ctx, backend, scenario, issue)
-    rule_subsets = construct_rule_subsets(ctx, backend, scenario, issue, rule_candidates)
+    issue = await identifiy_issue(ctx, backend, scenario)
+    rule_candidates = await discover_rule_candidates(ctx, backend, scenario, issue)
+    rule_subsets = await construct_rule_subsets(ctx, backend, scenario, issue, rule_candidates)
     conclusions = []
     for subset in rule_subsets:
-        analysis = analyze_issue_using_rules(ctx, backend, scenario, issue, subset)
-        conclusion = reach_conclusion(ctx, backend, scenario, issue, subset, analysis)
-        conclusions.append((scenario, issue, subset, analysis, conclusion))
-    final_answer = summarize_irac_findings(conclusions)
-    return final_answer
+        analysis = await analyze_issue_using_rules(ctx, backend, scenario, issue, subset)
+        conclusion = await reach_conclusion(ctx, backend, scenario, issue, subset, analysis)
+        final_answer = await summarize_irac_finding(ctx, backend, scenario, issue, subset, analysis, conclusion)
+        conclusions.append((scenario, issue, subset, analysis, conclusion, final_answer))
+    return conclusions # TODO summarize the full set of analysis and returnt hat instead.

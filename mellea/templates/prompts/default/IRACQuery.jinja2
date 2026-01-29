@@ -87,8 +87,8 @@ Provide the controlling legal rules/tests as a list. Prefer element/factor-style
 Output format requirements:
 - Output ONLY a JSON array of rules dictionaries. Each dictionary should have:
     * "summary": summarizes the rule
-    * "rule_type": MUST be one of: "statute", "regulation", "caselaw", "commonlaw"
     * "citation": a citation to the rule_type. MUST be specified unless "rule_type" is "commonlaw".
+    * "rule_type": The type of citation provided. MUST be one of: "statute", "regulation", "caselaw", "commonlaw"
 E.g., [{"summary": "rule 1", "citation": "citation to statute", "rule_type": "statute"}, {"summary": "rule 2", "citation": "citation to caselaw", "rule_type": "caselaw"}, {"summary": "rule 3", "rule_type": "commonlaw"}]).
 {% elif not has_analysis %}
 NEXT SECTION TO WRITE: ANALYSIS
@@ -103,6 +103,8 @@ Give a clear bottom-line answer to the issue, consistent with the analysis. Keep
 Output format requirements:
 - Output ONLY the Conclusion text (no header).
 {% else %}
-All IRAC sections are complete. Do not generate additional text.
-Output EXACTLY: COMPLETE
+All IRAC sections are complete. Restate the final analysis for presentation to the stakeholder.
+
+Output format requirements:
+ - Output the completed IRAC analysis for presentation to the stakeholder.
 {% endif %}
