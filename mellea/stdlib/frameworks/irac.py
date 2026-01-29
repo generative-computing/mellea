@@ -33,6 +33,9 @@ class IRACQuery(Component):
         self.analysis = analysis
         self.conclusion = conclusion
     
+    def _parse(self, computed: ModelOutputThunk):
+        return computed.value        
+    
     def parts(self):
         _parts = [self.scenario, self.issue, self.rules, self.analysis, self.conclusion]
         return [part for part in _parts if part is not None]
@@ -40,6 +43,7 @@ class IRACQuery(Component):
     def format_for_llm(self):
         return TemplateRepresentation(
             obj=self,
+            template_order=["*", "IRACQuery"],
             args={
                 "scenario": self.scenario,
                 "issue": self.issue,
@@ -106,17 +110,3 @@ async def irac(ctx: Context, backend: Backend, scenario: str | CBlock) -> IRACAn
         conclusions.append((scenario, issue, subset, analysis, conclusion))
     final_answer = summarize_irac_findings(conclusions)
     return final_answer
-    
-
-async def main():
-    from mellea.backends.ollama import OllamaModelBackend
-    from mellea.stdlib.context import SimpleContext
-
-    backend = OllamaModelBackend(model_id="granite4:latest")
-    ctx = SimpleContext()
-
-    issue = await identifiy_issue(ctx, backend, "Suzanne is renting an apartment in Sprinfield, Massachusetts. Her lease stipulates that she will be charged charged a non-refundable fee for the installation of a new lock and key upon signing the lease. Is this charge permissible?")
-    print(issue)
-
-if __name__ == "__main__":
-    asyncio.run(main())
