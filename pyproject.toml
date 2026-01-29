@@ -118,6 +118,7 @@ dev = [
     "mypy>=1.17.0",
     "python-semantic-release~=7.32",
     "nbmake>=1.5.5",
+    "langchain-core>=1.2.7", # Necessary for mypy and some tool tests
 ]
 
 notebook = [

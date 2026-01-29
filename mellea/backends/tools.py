@@ -9,6 +9,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from mellea.core.utils import FancyLogger
+
 from ..core import CBlock, Component, TemplateRepresentation
 from ..core.base import AbstractMelleaTool
 from .model_options import ModelOption
@@ -37,7 +39,7 @@ class MelleaTool(AbstractMelleaTool):
         return self._call_tool(*args, **kwargs)
 
     @property
-    def as_json_tool(self):
+    def as_json_tool(self) -> dict[str, Any]:
         """Return the tool converted to a OpenAI compatible JSON object."""
         return self._as_json_tool
 
@@ -51,7 +53,18 @@ class MelleaTool(AbstractMelleaTool):
             if isinstance(tool, BaseTool):
                 tool_name = tool.name
                 as_json = convert_to_openai_tool(tool)
-                tool_call = tool.run
+
+                def parameter_remapper(*args, **kwargs):
+                    """Langchain tools expect their first argument to be 'tool_input'."""
+                    if args is not None or len(args) != 0:
+                        # This shouldn't happen. Our ModelToolCall.call_func actually passes in everything as kwargs.
+                        FancyLogger.get_logger().warning(
+                            f"ignoring unexpected args while calling langchain tool ({tool_name}): ({args})"
+                        )
+
+                    return tool.run(tool_input={**kwargs})
+
+                tool_call = parameter_remapper
                 return MelleaTool(tool_name, tool_call, as_json)
             else:
                 raise ValueError(

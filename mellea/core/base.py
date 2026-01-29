@@ -571,7 +571,7 @@ class AbstractMelleaTool(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def as_json_tool(self):
+    def as_json_tool(self) -> dict[str, Any]:
         """Provides a JSON description for Mellea Tool."""
 
 
@@ -620,7 +620,7 @@ class ModelToolCall:
     """
 
     name: str
-    func: AbstractMelleaTool  # TODO: JAL. To support non-Callable / langchain / smolagent tools, we would need to change how it's called here. OR, we can change how we add tools to the list we pass to the model.
+    func: AbstractMelleaTool
     args: Mapping[str, Any]
 
     def call_func(self) -> Any:
