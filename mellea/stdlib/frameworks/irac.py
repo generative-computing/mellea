@@ -3,12 +3,32 @@ from mellea.stdlib.components import SimpleComponent
 import mellea.stdlib.functional as mfuncs
 from typing import Literal, TypedDict
 import asyncio
-
+import json
 
 type Issue = CBlock | ModelOutputThunk
 type RuleType = Literal["statute", "regulation", "caselaw"]
 type Analysis = CBlock | ModelOutputThunk
 type IRACAnswer = CBlock | ModelOutputThunk
+
+
+
+def model_output_json_loads(x: str) -> dict:
+    """This function can parse either actual JSON, or JSON surrounded by a docstring that looks like: ```json.*```."""
+    if "```json" in x:
+        # If we start and end with ```json ... ``` then return the entire middle.
+        if x.startswith("```json") and x.endswith("```"):
+            x_parsed = x[len("```json") : -len("```") ]
+            return json.loads(x_parsed)
+        # Sometimes GPT-OSS-20B will start with ```json and not finish
+        elif x.startswith("```json") and x.count("```") == 1:
+            x_parsed = x[len("```json") : ]
+            return json.loads(x_parsed)
+        # Sometimes we have the pattern ```json ... ``` don't start with ```json. Handle that case.
+        elif x.count("```") > 1:
+            x_parsed = x[x.find("```json") + len("```json") : ]
+            x_parsed = x_parsed.split("```")[0]
+            return json.loads(x_parsed)
+    return json.loads(x)
 
 
 class Rule(TypedDict):
@@ -63,17 +83,8 @@ async def identifiy_issue(ctx: Context, backend: Backend, scenario: CBlock) -> I
 async def discover_rule_candidates(ctx: Context, backend: Backend, scenario: CBlock, issue: Issue) -> list[Rule]:
     """Find all possibly relevant rules."""
     # Simple prompt for now, but this should be expanded to a RAG pipeline.
-    class RuleList(Component):
-        ... # TODO we probably want a specific parsed repr and maybe constrained decoding to get the rule list.
-    
-    rule_cites_mot, _ = await mfuncs.aact(..., ctx, backend)
-
-    rules = []
-    for rule_cite in rule_cites_mot.parsed_repr():
-        type = "what type of rule is this?"
-        contents = "what does the rule say verbatim?"
-        summary = "summarize the rule with resepect to this issue..."
-        rules.append(Rule(rule_cite.value, type.value, contents.value, summary.value))
+    rule_cites_mot, _ = await mfuncs.aact(IRACQuery(scenario, issue), ctx, backend)
+    rules = model_output_json_loads(rule_cites_mot.value)
     return rules
 
 
