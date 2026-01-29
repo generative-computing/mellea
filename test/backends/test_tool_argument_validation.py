@@ -587,27 +587,5 @@ class TestParseToolsFunction:
         assert len(tools) == 2
 
 
-# ============================================================================
-# Integration Test Markers
-# ============================================================================
-
-
-@pytest.mark.integration
-class TestToolValidationIntegration:
-    """Integration tests that would use actual validation function."""
-
-    @pytest.mark.skip(reason="Validation function not yet implemented")
-    def test_validation_with_coercion(self):
-        """Test validation with type coercion enabled."""
-        # This test will be enabled once validation is implemented
-        pass
-
-    @pytest.mark.skip(reason="Validation function not yet implemented")
-    def test_validation_strict_mode(self):
-        """Test validation in strict mode."""
-        # This test will be enabled once validation is implemented
-        pass
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
