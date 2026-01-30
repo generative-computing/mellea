@@ -9,7 +9,7 @@ from typing import Any, Optional, Union
 
 from pydantic import ValidationError
 
-from mellea.backends.tools import validate_tool_arguments
+from mellea.backends.tools import MelleaTool, validate_tool_arguments
 from mellea.core import ModelToolCall
 
 
@@ -94,7 +94,8 @@ class TestTypeCoercion:
     def test_string_to_int_coercion(self):
         """Test that string "30" is coerced to int 30."""
         args = {"name": "Test", "age": "30", "score": 95.5, "active": True}
-        validated = validate_tool_arguments(typed_tool, args, coerce_types=True)
+        tool = MelleaTool.from_callable(typed_tool)
+        validated = validate_tool_arguments(tool, args, coerce_types=True)
 
         assert validated["age"] == 30
         assert isinstance(validated["age"], int)
@@ -102,7 +103,8 @@ class TestTypeCoercion:
     def test_string_to_float_coercion(self):
         """Test that string "95.5" is coerced to float 95.5."""
         args = {"name": "Test", "age": 30, "score": "95.5", "active": True}
-        validated = validate_tool_arguments(typed_tool, args, coerce_types=True)
+        tool = MelleaTool.from_callable(typed_tool)
+        validated = validate_tool_arguments(tool, args, coerce_types=True)
 
         assert validated["score"] == 95.5
         assert isinstance(validated["score"], float)
@@ -110,7 +112,8 @@ class TestTypeCoercion:
     def test_int_to_float_coercion(self):
         """Test that int 95 is coerced to float 95.0."""
         args = {"name": "Test", "age": 30, "score": 95, "active": True}
-        validated = validate_tool_arguments(typed_tool, args, coerce_types=True)
+        tool = MelleaTool.from_callable(typed_tool)
+        validated = validate_tool_arguments(tool, args, coerce_types=True)
 
         assert validated["score"] == 95.0
         assert isinstance(validated["score"], float)
@@ -118,7 +121,8 @@ class TestTypeCoercion:
     def test_int_to_string_coercion(self):
         """Test that int 123 is coerced to string "123"."""
         args = {"message": 123}
-        validated = validate_tool_arguments(simple_tool, args, coerce_types=True)
+        tool = MelleaTool.from_callable(simple_tool)
+        validated = validate_tool_arguments(tool, args, coerce_types=True)
 
         assert validated["message"] == "123"
         assert isinstance(validated["message"], str)
@@ -126,13 +130,14 @@ class TestTypeCoercion:
     def test_bool_coercion_from_int(self):
         """Test that int 1/0 is coerced to bool True/False."""
         args = {"name": "Test", "age": 30, "score": 95.5, "active": 1}
-        validated = validate_tool_arguments(typed_tool, args, coerce_types=True)
+        tool = MelleaTool.from_callable(typed_tool)
+        validated = validate_tool_arguments(tool, args, coerce_types=True)
 
         assert validated["active"] is True
         assert isinstance(validated["active"], bool)
 
         args["active"] = 0
-        validated = validate_tool_arguments(typed_tool, args, coerce_types=True)
+        validated = validate_tool_arguments(tool, args, coerce_types=True)
         assert validated["active"] is False
 
 
@@ -142,7 +147,8 @@ class TestValidationModes:
     def test_lenient_mode_with_invalid_type(self):
         """Test that lenient mode returns original args on validation failure."""
         args = {"name": "Test", "age": "not_a_number", "score": 95.5, "active": True}
-        validated = validate_tool_arguments(typed_tool, args, strict=False)
+        tool = MelleaTool.from_callable(typed_tool)
+        validated = validate_tool_arguments(tool, args, strict=False)
 
         # Should return original args
         assert validated == args
@@ -151,14 +157,16 @@ class TestValidationModes:
     def test_strict_mode_with_invalid_type(self):
         """Test that strict mode raises ValidationError on failure."""
         args = {"name": "Test", "age": "not_a_number", "score": 95.5, "active": True}
+        tool = MelleaTool.from_callable(typed_tool)
 
         with pytest.raises(ValidationError):
-            validate_tool_arguments(typed_tool, args, strict=True)
+            validate_tool_arguments(tool, args, strict=True)
 
     def test_lenient_mode_with_missing_required(self):
         """Test lenient mode with missing required parameter."""
         args = {"optional": "value"}  # Missing 'required'
-        validated = validate_tool_arguments(optional_tool, args, strict=False)
+        tool = MelleaTool.from_callable(optional_tool)
+        validated = validate_tool_arguments(tool, args, strict=False)
 
         # Should return original args
         assert validated == args
@@ -166,9 +174,10 @@ class TestValidationModes:
     def test_strict_mode_with_missing_required(self):
         """Test strict mode with missing required parameter."""
         args = {"optional": "value"}  # Missing 'required'
+        tool = MelleaTool.from_callable(optional_tool)
 
         with pytest.raises(ValidationError):
-            validate_tool_arguments(optional_tool, args, strict=True)
+            validate_tool_arguments(tool, args, strict=True)
 
 
 class TestWithModelToolCall:
@@ -178,12 +187,13 @@ class TestWithModelToolCall:
         """Test that validated args work correctly with ModelToolCall."""
         # LLM returns age as string
         args = {"name": "Alice", "age": "30", "score": "95.5", "active": True}
+        tool = MelleaTool.from_callable(typed_tool)
 
         # Validate and coerce
-        validated_args = validate_tool_arguments(typed_tool, args, coerce_types=True)
+        validated_args = validate_tool_arguments(tool, args, coerce_types=True)
 
         # Create tool call with validated args
-        tool_call = ModelToolCall("typed_tool", typed_tool, validated_args)
+        tool_call = ModelToolCall("typed_tool", tool, validated_args)
         result = tool_call.call_func()
 
         # Verify result has correct types
@@ -195,15 +205,16 @@ class TestWithModelToolCall:
     def test_unvalidated_vs_validated_comparison(self):
         """Compare behavior with and without validation."""
         args = {"name": "Bob", "age": "25", "score": "88.7", "active": True}
+        tool = MelleaTool.from_callable(typed_tool)
 
         # Without validation - types stay as strings
-        unvalidated_call = ModelToolCall("typed_tool", typed_tool, args)
+        unvalidated_call = ModelToolCall("typed_tool", tool, args)
         unvalidated_result = unvalidated_call.call_func()
         assert isinstance(unvalidated_result["age"], str)  # Still string!
 
         # With validation - types are coerced
-        validated_args = validate_tool_arguments(typed_tool, args, coerce_types=True)
-        validated_call = ModelToolCall("typed_tool", typed_tool, validated_args)
+        validated_args = validate_tool_arguments(tool, args, coerce_types=True)
+        validated_call = ModelToolCall("typed_tool", tool, validated_args)
         validated_result = validated_call.call_func()
         assert isinstance(validated_result["age"], int)  # Correctly coerced!
 
@@ -214,14 +225,16 @@ class TestOptionalParameters:
     def test_optional_param_provided(self):
         """Test validation when optional parameter is provided."""
         args = {"required": "value1", "optional": "value2"}
-        validated = validate_tool_arguments(optional_tool, args)
+        tool = MelleaTool.from_callable(optional_tool)
+        validated = validate_tool_arguments(tool, args)
 
         assert validated == args
 
     def test_optional_param_omitted(self):
         """Test validation when optional parameter is omitted."""
         args = {"required": "value1"}
-        validated = validate_tool_arguments(optional_tool, args)
+        tool = MelleaTool.from_callable(optional_tool)
+        validated = validate_tool_arguments(tool, args)
 
         assert validated["required"] == "value1"
         assert "optional" not in validated or validated.get("optional") is None
@@ -229,7 +242,8 @@ class TestOptionalParameters:
     def test_optional_param_none(self):
         """Test validation when optional parameter is explicitly None."""
         args = {"required": "value1", "optional": None}
-        validated = validate_tool_arguments(optional_tool, args)
+        tool = MelleaTool.from_callable(optional_tool)
+        validated = validate_tool_arguments(tool, args)
 
         assert validated["required"] == "value1"
         assert validated["optional"] is None
@@ -241,7 +255,8 @@ class TestComplexTypes:
     def test_list_parameter(self):
         """Test validation with list parameter."""
         args = {"items": ["apple", "banana", "cherry"]}
-        validated = validate_tool_arguments(list_tool, args)
+        tool = MelleaTool.from_callable(list_tool)
+        validated = validate_tool_arguments(tool, args)
 
         assert validated["items"] == ["apple", "banana", "cherry"]
         assert isinstance(validated["items"], list)
@@ -249,7 +264,8 @@ class TestComplexTypes:
     def test_dict_parameter(self):
         """Test validation with dict parameter."""
         args = {"config": {"key1": "value1", "key2": 42, "key3": True}}
-        validated = validate_tool_arguments(dict_tool, args)
+        tool = MelleaTool.from_callable(dict_tool)
+        validated = validate_tool_arguments(tool, args)
 
         assert validated["config"] == args["config"]
         assert isinstance(validated["config"], dict)
@@ -257,7 +273,8 @@ class TestComplexTypes:
     def test_empty_list(self):
         """Test validation with empty list."""
         args = {"items": []}
-        validated = validate_tool_arguments(list_tool, args)
+        tool = MelleaTool.from_callable(list_tool)
+        validated = validate_tool_arguments(tool, args)
 
         assert validated["items"] == []
 
@@ -268,7 +285,8 @@ class TestUnionTypes:
     def test_union_with_string(self):
         """Test union type with string value."""
         args = {"value": "hello"}
-        validated = validate_tool_arguments(union_tool, args)
+        tool = MelleaTool.from_callable(union_tool)
+        validated = validate_tool_arguments(tool, args)
 
         assert validated["value"] == "hello"
         assert isinstance(validated["value"], str)
@@ -276,7 +294,8 @@ class TestUnionTypes:
     def test_union_with_int(self):
         """Test union type with integer value."""
         args = {"value": 42}
-        validated = validate_tool_arguments(union_tool, args)
+        tool = MelleaTool.from_callable(union_tool)
+        validated = validate_tool_arguments(tool, args)
 
         assert validated["value"] == 42
         assert isinstance(validated["value"], int)
@@ -284,7 +303,8 @@ class TestUnionTypes:
     def test_union_with_string_number(self):
         """Test union type with string that looks like number."""
         args = {"value": "42"}
-        validated = validate_tool_arguments(union_tool, args, coerce_types=True)
+        tool = MelleaTool.from_callable(union_tool)
+        validated = validate_tool_arguments(tool, args, coerce_types=True)
 
         # Pydantic will try to coerce to the first matching type
         # Result depends on Union order and Pydantic's coercion rules
@@ -297,33 +317,37 @@ class TestEdgeCases:
     def test_no_parameters_tool(self):
         """Test validation with no-parameter tool."""
         args = {}
-        validated = validate_tool_arguments(no_params_tool, args)
+        tool = MelleaTool.from_callable(no_params_tool)
+        validated = validate_tool_arguments(tool, args)
 
         assert validated == {}
 
     def test_no_parameters_with_extra_args(self):
         """Test that extra args for no-param tool are handled."""
         args = {"fake_param": "should_be_ignored"}
+        tool = MelleaTool.from_callable(no_params_tool)
 
         # In lenient mode, returns original args
-        validated = validate_tool_arguments(no_params_tool, args, strict=False)
+        validated = validate_tool_arguments(tool, args, strict=False)
         assert validated == args
 
         # In strict mode, should raise
         with pytest.raises(ValidationError):
-            validate_tool_arguments(no_params_tool, args, strict=True)
+            validate_tool_arguments(tool, args, strict=True)
 
     def test_whitespace_stripping(self):
         """Test that whitespace is stripped from strings."""
         args = {"message": "  hello world  "}
-        validated = validate_tool_arguments(simple_tool, args, coerce_types=True)
+        tool = MelleaTool.from_callable(simple_tool)
+        validated = validate_tool_arguments(tool, args, coerce_types=True)
 
         assert validated["message"] == "hello world"
 
     def test_empty_string(self):
         """Test validation with empty string."""
         args = {"message": ""}
-        validated = validate_tool_arguments(simple_tool, args)
+        tool = MelleaTool.from_callable(simple_tool)
+        validated = validate_tool_arguments(tool, args)
 
         assert validated["message"] == ""
 
@@ -334,9 +358,10 @@ class TestErrorMessages:
     def test_missing_required_error_message(self):
         """Test error message for missing required parameter."""
         args = {}
+        tool = MelleaTool.from_callable(simple_tool)
 
         try:
-            validate_tool_arguments(simple_tool, args, strict=True)
+            validate_tool_arguments(tool, args, strict=True)
             pytest.fail("Should have raised ValidationError")
         except ValidationError as e:
             error_str = str(e)
@@ -346,9 +371,10 @@ class TestErrorMessages:
     def test_type_mismatch_error_message(self):
         """Test error message for type mismatch."""
         args = {"name": "Test", "age": "not_a_number", "score": 95.5, "active": True}
+        tool = MelleaTool.from_callable(typed_tool)
 
         try:
-            validate_tool_arguments(typed_tool, args, strict=True)
+            validate_tool_arguments(tool, args, strict=True)
             pytest.fail("Should have raised ValidationError")
         except ValidationError as e:
             error_str = str(e)
