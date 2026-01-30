@@ -91,10 +91,107 @@ class MelleaTool(AbstractMelleaTool):
         return MelleaTool(tool_name, tool_call, as_json)
 
 
+def tool(func: Callable | None = None, *, name: str | None = None) -> Any:
+    """Decorator to mark a function as a Mellea tool.
+
+    This decorator wraps a function to make it usable as a tool without
+    requiring explicit MelleaTool.from_callable() calls. The decorated
+    function can be used both as a normal callable and as a MelleaTool.
+
+    Args:
+        func: The function to decorate (when used without arguments)
+        name: Optional custom name for the tool (defaults to function name)
+
+    Returns:
+        A callable that behaves like both the original function and a MelleaTool
+
+    Examples:
+        Basic usage:
+        >>> @tool
+        ... def get_weather(location: str, days: int = 1) -> dict:
+        ...     '''Get weather forecast.
+        ...
+        ...     Args:
+        ...         location: City name
+        ...         days: Number of days to forecast
+        ...     '''
+        ...     return {"location": location, "forecast": "sunny"}
+        >>> # Can be used directly in tools list
+        >>> tools = [get_weather]
+        >>> # Can still be called normally
+        >>> result = get_weather("Boston")
+
+        With custom name:
+        >>> @tool(name="weather_api")
+        ... def get_weather(location: str) -> dict:
+        ...     return {"location": location}
+    """
+
+    def decorator(f: Callable) -> Any:
+        # Create the MelleaTool instance
+        mellea_tool = MelleaTool.from_callable(f, name=name)
+
+        # Create a wrapper that preserves the original function behavior
+        # but also acts as a MelleaTool
+        class ToolWrapper:
+            """Wrapper that makes a function behave like both a callable and a MelleaTool."""
+
+            def __init__(self, func: Callable, tool: MelleaTool):
+                self._func = func
+                self._tool = tool
+                self._mellea_tool = tool  # Store for direct access
+                # Copy function metadata
+                self.__name__ = func.__name__
+                self.__doc__ = func.__doc__
+                self.__module__ = func.__module__
+                self.__qualname__ = func.__qualname__
+                self.__annotations__ = func.__annotations__
+                self.__dict__.update(func.__dict__)
+
+            def __call__(self, *args, **kwargs) -> Any:
+                """Allow the wrapper to be called like the original function."""
+                return self._func(*args, **kwargs)
+
+            def __repr__(self) -> str:
+                return f"<tool {self._tool.name}>"
+
+            # Expose MelleaTool interface
+            @property
+            def name(self) -> str:
+                """Get the tool name."""
+                return self._tool.name
+
+            @property
+            def as_json_tool(self) -> dict[str, Any]:
+                """Get the tool as JSON schema."""
+                return self._tool.as_json_tool
+
+            def run(self, *args, **kwargs) -> Any:
+                """Run the tool (same as calling it)."""
+                return self._tool.run(*args, **kwargs)
+
+            # Make it work with isinstance checks
+            def __instancecheck__(self, instance) -> bool:
+                return isinstance(instance, MelleaTool | AbstractMelleaTool)
+
+        return ToolWrapper(f, mellea_tool)
+
+    # Handle both @tool and @tool() syntax
+    if func is None:
+        # Called with arguments: @tool(name="custom")
+        return decorator
+    else:
+        # Called without arguments: @tool
+        return decorator(func)
+
+
 def add_tools_from_model_options(
     tools_dict: dict[str, AbstractMelleaTool], model_options: dict[str, Any]
 ):
-    """If model_options has tools, add those tools to the tools_dict."""
+    """If model_options has tools, add those tools to the tools_dict.
+
+    Accepts MelleaTool instances or @tool decorated functions.
+    """
     model_opts_tools = model_options.get(ModelOption.TOOLS, None)
     if model_opts_tools is None:
         return
@@ -110,6 +207,9 @@ def add_tools_from_model_options(
             assert isinstance(tool_name, str), (
                 f"If ModelOption.TOOLS is a dict, it must be a dict of [str, Tool]; found {type(tool_name)} as the key instead"
             )
+            # Extract MelleaTool from decorated functions
+            if hasattr(tool_instance, "_mellea_tool"):
+                tool_instance = tool_instance._mellea_tool
             assert isinstance(tool_instance, MelleaTool), (
                 f"If ModelOption.TOOLS is a dict, it must be a dict of [str, Tool]; found {type(tool_instance)} as the value instead"
             )
@@ -117,6 +217,9 @@ def add_tools_from_model_options(
     else:
         # Handle any other iterable / list here.
         for tool_instance in model_opts_tools:
+            # Extract MelleaTool from decorated functions
+            if hasattr(tool_instance, "_mellea_tool"):
+                tool_instance = tool_instance._mellea_tool
             assert isinstance(tool_instance, MelleaTool), (
                 f"If ModelOption.TOOLS is a list, it must be a list of Tool; found {type(tool_instance)}"
             )
