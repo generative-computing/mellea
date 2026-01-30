@@ -3388,10 +3388,6 @@ dependencies = [
     { name = "mistletoe" },
     { name = "ollama" },
     { name = "openai" },
-    { name = "opentelemetry-api" },
-    { name = "opentelemetry-distro" },
-    { name = "opentelemetry-exporter-otlp" },
-    { name = "opentelemetry-sdk" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "requests" },
@@ -3413,6 +3409,10 @@ all = [
     { name = "ibm-watsonx-ai", version = "1.4.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "litellm" },
     { name = "numpy" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-distro" },
+    { name = "opentelemetry-exporter-otlp" },
+    { name = "opentelemetry-sdk" },
     { name = "outlines" },
     { name = "outlines-core" },
     { name = "peft" },
@@ -3436,6 +3436,12 @@ hf = [
 ]
 litellm = [
     { name = "litellm" },
+]
+telemetry = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-distro" },
+    { name = "opentelemetry-exporter-otlp" },
+    { name = "opentelemetry-sdk" },
 ]
 vllm = [
     { name = "numpy" },
@@ -3496,15 +3502,15 @@ requires-dist = [
     { name = "litellm", marker = "extra == 'litellm'", specifier = ">=1.76" },
     { name = "llm-sandbox", extras = ["docker"], specifier = ">=0.3.23" },
     { name = "math-verify" },
-    { name = "mellea", extras = ["watsonx", "docling", "hf", "vllm", "litellm"], marker = "extra == 'all'" },
+    { name = "mellea", extras = ["watsonx", "docling", "hf", "vllm", "litellm", "telemetry"], marker = "extra == 'all'" },
     { name = "mistletoe", specifier = ">=1.4.0" },
     { name = "numpy", marker = "extra == 'vllm'", specifier = "<2.0.0" },
     { name = "ollama", specifier = ">=0.5.1" },
     { name = "openai" },
-    { name = "opentelemetry-api", specifier = ">=1.20.0" },
-    { name = "opentelemetry-distro", specifier = ">=0.59b0" },
-    { name = "opentelemetry-exporter-otlp", specifier = ">=1.20.0" },
-    { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
+    { name = "opentelemetry-api", marker = "extra == 'telemetry'", specifier = ">=1.20.0" },
+    { name = "opentelemetry-distro", marker = "extra == 'telemetry'", specifier = ">=0.59b0" },
+    { name = "opentelemetry-exporter-otlp", marker = "extra == 'telemetry'", specifier = ">=1.20.0" },
+    { name = "opentelemetry-sdk", marker = "extra == 'telemetry'", specifier = ">=1.20.0" },
     { name = "outlines", marker = "extra == 'hf'" },
     { name = "outlines-core", marker = "extra == 'hf'", specifier = "==0.1.26" },
     { name = "outlines-core", marker = "extra == 'vllm'", specifier = "==0.1.26" },
@@ -3522,7 +3528,7 @@ requires-dist = [
     { name = "uvicorn" },
     { name = "vllm", marker = "extra == 'vllm'", specifier = ">=0.9.1" },
 ]
-provides-extras = ["hf", "vllm", "litellm", "watsonx", "docling", "all"]
+provides-extras = ["hf", "vllm", "litellm", "watsonx", "docling", "telemetry", "all"]
 
 [package.metadata.requires-dev]
 dev = [

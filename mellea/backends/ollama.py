@@ -446,20 +446,23 @@ class OllamaModelBackend(FormatterBackend):
         # Ollama doesn't support "batching". There's some ability for concurrency. Use that here.
         # See https://github.com/ollama/ollama/blob/main/docs/faq.md#how-does-ollama-handle-concurrent-requests.
 
-        # Run async so that we can make use of Ollama's concurrency.
-        coroutines: list[Coroutine[Any, Any, ollama.GenerateResponse]] = []
-        for prompt in prompts:
-            co = self._async_client.generate(
-                model=self._get_ollama_model_id(),
-                prompt=prompt,
-                raw=True,
-                think=model_opts.get(ModelOption.THINKING, None),
-                format=format.model_json_schema() if format is not None else None,  # type: ignore
-                options=self._make_backend_specific_and_remove(model_opts),
-            )
-            coroutines.append(co)
+        with instrument_generate_from_raw(
+            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
+        ):
+            # Run async so that we can make use of Ollama's concurrency.
+            coroutines: list[Coroutine[Any, Any, ollama.GenerateResponse]] = []
+            for prompt in prompts:
+                co = self._async_client.generate(
+                    model=self._get_ollama_model_id(),
+                    prompt=prompt,
+                    raw=True,
+                    think=model_opts.get(ModelOption.THINKING, None),
+                    format=format.model_json_schema() if format is not None else None,  # type: ignore
+                    options=self._make_backend_specific_and_remove(model_opts),
+                )
+                coroutines.append(co)
 
-        responses = await asyncio.gather(*coroutines, return_exceptions=True)
+            responses = await asyncio.gather(*coroutines, return_exceptions=True)
 
         results = []
         date = datetime.datetime.now()
