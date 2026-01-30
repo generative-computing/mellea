@@ -215,20 +215,20 @@ def parse_tools(llm_response: str) -> list[tuple[str, Mapping]]:
 
 
 def validate_tool_arguments(
-    func: Callable,
+    tool: AbstractMelleaTool,
     args: Mapping[str, Any],
     *,
     coerce_types: bool = True,
     strict: bool = False,
 ) -> dict[str, Any]:
-    """Validate and optionally coerce tool arguments against function signature.
+    """Validate and optionally coerce tool arguments against tool's JSON schema.
 
     This function validates tool call arguments extracted from LLM responses against
-    the expected function signature. It can automatically coerce common type mismatches
-    (e.g., string "30" to int 30) and provides detailed error messages.
+    the tool's JSON schema from as_json_tool. It can automatically coerce common type
+    mismatches (e.g., string "30" to int 30) and provides detailed error messages.
 
     Args:
-        func: The tool function to validate against
+        tool: The MelleaTool instance to validate against
         args: Raw arguments from model (post-JSON parsing)
         coerce_types: If True, attempt type coercion for common cases (default: True)
         strict: If True, raise ValidationError on failures; if False, log warnings
@@ -243,16 +243,17 @@ def validate_tool_arguments(
     Examples:
         >>> def get_weather(location: str, days: int = 1) -> dict:
         ...     return {"location": location, "days": days}
+        >>> tool = MelleaTool.from_callable(get_weather)
 
         >>> # LLM returns days as string
         >>> args = {"location": "Boston", "days": "3"}
-        >>> validated = validate_tool_arguments(get_weather, args)
+        >>> validated = validate_tool_arguments(tool, args)
         >>> validated
         {'location': 'Boston', 'days': 3}
 
         >>> # Strict mode raises on validation errors
         >>> bad_args = {"location": "Boston", "days": "not_a_number"}
-        >>> validate_tool_arguments(get_weather, bad_args, strict=True)
+        >>> validate_tool_arguments(tool, bad_args, strict=True)
         Traceback (most recent call last):
         ...
         pydantic.ValidationError: ...
@@ -261,34 +262,45 @@ def validate_tool_arguments(
 
     from ..core import FancyLogger
 
-    # Get function signature
-    sig = inspect.signature(func)
+    # Extract JSON schema from tool
+    tool_schema = tool.as_json_tool.get("function", {})
+    tool_name = tool_schema.get("name", "unknown_tool")
+    parameters = tool_schema.get("parameters", {})
+    properties = parameters.get("properties", {})
+    required_fields = parameters.get("required", [])
 
-    # Build Pydantic model from function signature
-    # This reuses the logic from convert_function_to_tool
+    # Map JSON schema types to Python types
+    JSON_TYPE_TO_PYTHON = {
+        "string": str,
+        "integer": int,
+        "number": float,
+        "boolean": bool,
+        "array": list,
+        "object": dict,
+    }
+
+    # Build Pydantic model from JSON schema
     field_definitions: dict[str, Any] = {}
 
-    for param_name, param in sig.parameters.items():
-        # Skip *args and **kwargs
-        if param.kind in (
-            inspect.Parameter.VAR_POSITIONAL,
-            inspect.Parameter.VAR_KEYWORD,
-        ):
-            continue
+    for param_name, param_schema in properties.items():
+        # Get type from JSON schema
+        json_type = param_schema.get("type", "string")
 
-        # Get type annotation
-        param_type = param.annotation
-        if param_type == inspect.Parameter.empty:
-            # No type hint, default to Any
-            param_type = Any
+        # Handle comma-separated types (e.g., "string, integer")
+        if isinstance(json_type, str) and "," in json_type:
+            # Take the first type for simplicity
+            json_type = json_type.split(",")[0].strip()
 
-        # Handle default values
-        if param.default == inspect.Parameter.empty:
+        # Map to Python type
+        param_type = JSON_TYPE_TO_PYTHON.get(json_type, Any)
+
+        # Determine if parameter is required
+        if param_name in required_fields:
             # Required parameter
             field_definitions[param_name] = (param_type, ...)
         else:
-            # Optional parameter with default
-            field_definitions[param_name] = (param_type, param.default)
+            # Optional parameter (default to None)
+            field_definitions[param_name] = (param_type, None)
 
     # Configure model for type coercion if requested
     if coerce_types:
@@ -307,7 +319,7 @@ def validate_tool_arguments(
 
     # Create dynamic Pydantic model for validation
     ValidatorModel = create_model(
-        f"{func.__name__}_Validator", __config__=model_config, **field_definitions
+        f"{tool_name}_Validator", __config__=model_config, **field_definitions
     )
 
     try:
@@ -334,7 +346,7 @@ def validate_tool_arguments(
 
         if coerced_fields and coerce_types:
             FancyLogger.get_logger().debug(
-                f"Tool '{func.__name__}' arguments coerced: {', '.join(coerced_fields)}"
+                f"Tool '{tool_name}' arguments coerced: {', '.join(coerced_fields)}"
             )
 
         return validated_args
@@ -347,9 +359,8 @@ def validate_tool_arguments(
             msg = error["msg"]
             error_details.append(f"  - {field}: {msg}")
 
-        error_msg = (
-            f"Tool argument validation failed for '{func.__name__}':\n"
-            + "\n".join(error_details)
+        error_msg = f"Tool argument validation failed for '{tool_name}':\n" + "\n".join(
+            error_details
         )
 
         if strict:
@@ -365,7 +376,7 @@ def validate_tool_arguments(
 
     except Exception as e:
         # Catch any other errors during validation
-        error_msg = f"Unexpected error validating tool '{func.__name__}' arguments: {e}"
+        error_msg = f"Unexpected error validating tool '{tool_name}' arguments: {e}"
 
         if strict:
             FancyLogger.get_logger().error(error_msg)
