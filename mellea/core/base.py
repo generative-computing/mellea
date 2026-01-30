@@ -428,6 +428,70 @@ class ModelOutputThunk(CBlock, Generic[S]):
         return deepcopied
 
 
+class ComputedModelOutputThunk(ModelOutputThunk[S]):
+    """A `ComputedModelOutputThunk` is a `ModelOutputThunk` that is guaranteed to be computed.
+
+    This subclass provides a clear type distinction between thunks that may need awaiting
+    and those that are already computed. It should be returned from synchronous functions
+    and sampling strategies to indicate that no awaiting is needed.
+
+    Key differences from ModelOutputThunk:
+    - Always initialized with a value (cannot be None)
+    - _computed is always True
+    - Cannot be used for streaming (generation fields are not set)
+    - Provides type safety to indicate "already computed"
+    """
+
+    def __init__(
+        self,
+        value: str,
+        meta: dict[str, Any] | None = None,
+        parsed_repr: S | None = None,
+        tool_calls: dict[str, ModelToolCall] | None = None,
+    ):
+        """Initializes a computed ModelOutputThunk with a required value.
+
+        Args:
+            value: The computed string value (required, cannot be None)
+            meta: Optional metadata dictionary
+            parsed_repr: Optional parsed representation
+            tool_calls: Optional tool calls dictionary
+        """
+        if value is None:
+            raise ValueError("ComputedModelOutputThunk requires a non-None value")
+
+        super().__init__(value, meta, parsed_repr, tool_calls)
+
+        # Ensure computed flag is set
+        assert self._computed, "ComputedModelOutputThunk must be computed"
+
+        # Clear generation-related fields since this is already computed
+        self._generate = None
+        self._generate_type = GenerateType.NONE
+        self._generate_extra = None
+        self._process = None
+        self._post_process = None
+
+    async def avalue(self) -> str:
+        """Returns the value immediately since it's already computed.
+
+        Overrides the parent method to avoid unnecessary async operations.
+        """
+        assert self.value is not None, "ComputedModelOutputThunk value cannot be None"
+        return self.value
+
+    async def astream(self) -> str:
+        """Returns the value immediately since streaming is not applicable.
+
+        Raises:
+            RuntimeError: Always, since ComputedModelOutputThunk cannot stream.
+        """
+        raise RuntimeError(
+            "Cannot stream from a ComputedModelOutputThunk. "
+            "This thunk is already fully computed and does not support streaming."
+        )
+
+
 @dataclass
 class ContextTurn:
     """A turn of model input and model output."""
