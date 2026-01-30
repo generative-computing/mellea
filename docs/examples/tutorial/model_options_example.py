@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 import mellea
 from mellea.backends import ModelOption, model_ids
 from mellea.backends.ollama import OllamaModelBackend

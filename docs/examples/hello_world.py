@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 import mellea
 
 m = mellea.start_session()

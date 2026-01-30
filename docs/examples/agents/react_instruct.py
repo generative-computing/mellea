@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 import datetime
 import inspect
 import json

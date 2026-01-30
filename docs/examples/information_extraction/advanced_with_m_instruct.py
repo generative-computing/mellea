@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 """Advanced Example of information extraction with Mellea using m.instruct() and constraints."""
 
 from collections.abc import Callable

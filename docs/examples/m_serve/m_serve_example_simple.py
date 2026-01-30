@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 """Example to run m serve."""
 
 from typing import Any

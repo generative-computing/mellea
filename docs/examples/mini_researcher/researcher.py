@@ -1,3 +1,5 @@
+# pytest: ollama, qualitative, llm
+
 from collections.abc import Callable
 from functools import cache
 from typing import Any

@@ -74,7 +74,7 @@ hf = [
     "outlines-core==0.1.26",
     "outlines",                 # intentionally un-versioned, expecting a minor update. coutlines-core version should be enough to specify it
     "peft>=0.18.0", # aLoRA support was added in Peft 0.18.0
-    "transformers>=4.53.2",
+    "transformers>=4.53.2,<5",
     "trl==0.19.1",
     "granite-common[transformers]",
 ]
@@ -114,10 +114,12 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "pytest-cov>=6.0.0",
+    "pytest-timeout",  # For test suite timeout configuration
     "psutil",  # For test infrastructure: RAM detection in conftest.py
     "mypy>=1.17.0",
     "python-semantic-release~=7.32",
     "nbmake>=1.5.5",
+    "langchain-core>=1.2.7", # Necessary for mypy and some tool tests
 ]
 
 notebook = [
@@ -217,6 +219,7 @@ disable_error_code = ["empty-body", "import-untyped"]
 python_version = "3.10"
 
 [tool.pytest.ini_options]
+testpaths = ["test", "docs"]  # Run test/ first (fail fast), then docs/
 markers = [
     # Backend markers
     "ollama: Tests requiring Ollama backend (local, light)",
@@ -231,17 +234,23 @@ markers = [
     "requires_gpu: Tests requiring GPU",
     "requires_heavy_ram: Tests requiring 48GB+ RAM",
     "qualitative: Non-deterministic quality tests",
+    "slow: Tests taking >5 minutes (e.g., dataset loading)",
     
     # Composite markers
     "llm: Tests that make LLM calls (needs at least Ollama)",
 ]
 asyncio_mode = "auto"  # Don't require explicitly marking async tests.
 addopts = [
+    # Skip slow tests by default (use pytest without -m to include them)
+    "-m", "not slow",
+    # Run qualitative tests by default (use -m "not qualitative" for fast tests)
     "--cov=mellea",
     "--cov=cli",
     "--cov-report=term",
     "--cov-report=html",
     "--cov-report=json",
+    # Set timeout to 15 minutes for full test suite
+    "--timeout=900",
 ]
 filterwarnings = [
     # Show each deprecation warning only once per session

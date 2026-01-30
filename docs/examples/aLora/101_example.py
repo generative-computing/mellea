@@ -1,3 +1,5 @@
+# pytest: huggingface, requires_heavy_ram, llm
+
 import time
 
 from mellea.backends.aloras.huggingface.granite_aloras import HFConstraintAlora

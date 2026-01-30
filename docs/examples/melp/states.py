@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 import asyncio
 
 from mellea.backends.ollama import OllamaModelBackend

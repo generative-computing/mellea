@@ -1,9 +1,12 @@
+# pytest: huggingface, requires_heavy_ram, llm
+
 """Example of using the Enhanced Guardian Requirement with Granite Guardian 3.3 8B"""
 
 from mellea import MelleaSession
 from mellea.backends import model_ids
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.core import ContextTurn, ModelOutputThunk
+from mellea.backends.tools import MelleaTool
+from mellea.core import ContextTurn, ModelOutputThunk, ModelToolCall
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
@@ -129,7 +132,9 @@ def dummy_func(**kwargs):
 
 hallucinated_tool_calls = {
     "comments_list": ModelToolCall(
-        name="comments_list", func=dummy_func, args={"video_id": 456789123, "count": 15}
+        name="comments_list",
+        func=MelleaTool.from_callable(dummy_func),
+        args={"video_id": 456789123, "count": 15},
     )
 }
 

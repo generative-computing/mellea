@@ -1,3 +1,5 @@
+# pytest: huggingface, requires_heavy_ram, llm
+
 import mellea.stdlib.functional as mfuncs
 from mellea.backends.adapters.adapter import AdapterType, GraniteCommonAdapter
 from mellea.backends.huggingface import LocalHFBackend

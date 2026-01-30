@@ -1,11 +1,10 @@
-from collections.abc import Callable
-from typing import Any
-
 import pytest
 
 from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.tools import (
+    AbstractMelleaTool,
+    MelleaTool,
     add_tools_from_context_actions,
     add_tools_from_model_options,
 )
@@ -44,9 +43,11 @@ def test_tool_called_from_context_action(m: MelleaSession, table: Table):
     def test1(): ...
     def test2(): ...
 
-    model_opts = {ModelOption.TOOLS: [test1, test2]}
+    model_opts = {
+        ModelOption.TOOLS: [MelleaTool.from_callable(t) for t in [test1, test2]]
+    }
 
-    tools: dict[str, Callable[..., Any]] = {}
+    tools: dict[str, AbstractMelleaTool] = {}
 
     add_tools_from_model_options(tools, model_opts)
     assert "test1" in tools

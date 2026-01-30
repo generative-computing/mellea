@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 from docs.examples.helper import req_print, w
 from mellea import start_session
 from mellea.backends import ModelOption
