@@ -2,16 +2,17 @@
 
 import time
 
-from mellea import MelleaSession
 from mellea.backends.aloras.huggingface.granite_aloras import HFConstraintAlora
-from mellea.backends.cache import SimpleLRUCache
-from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.base import ChatContext, GenerateLog
 from mellea.stdlib.requirement import ALoraRequirement, Requirement
 
+from mellea import MelleaSession
+from mellea.backends.cache import SimpleLRUCache
+from mellea.backends.huggingface import LocalHFBackend
+
 # Define a backend and add the constraint aLora
 backend = LocalHFBackend(
-    model_id="ibm-granite/granite-3.2-8b-instruct", cache=SimpleLRUCache(5)
+    model_id="ibm-granite/granite-4.0-h-micro", cache=SimpleLRUCache(5)
 )
 
 custom_stembolt_failure_constraint = HFConstraintAlora(

@@ -14,7 +14,7 @@ from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
-_MODEL_ID = f"ollama_chat/{model_ids.IBM_GRANITE_4_MICRO_3B.ollama_name}"
+_MODEL_ID = f"ollama_chat/{model_ids.IBM_GRANITE_4_HYBRID_MICRO.ollama_name}"
 
 
 @pytest.fixture(scope="function")
@@ -132,7 +132,6 @@ def test_gen_slot(session):
     @generative
     def is_happy(text: str) -> bool:
         """Determine if text is of happy mood."""
-        ...
 
     h = is_happy(session, text="I'm enjoying life.")
 

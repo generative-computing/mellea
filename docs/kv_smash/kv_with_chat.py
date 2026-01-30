@@ -2,9 +2,9 @@ import torch
 
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.kv_block_helpers import DynamicCache, merge_dynamic_caches
-from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
+from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 
-backend = LocalHFBackend(model_id=IBM_GRANITE_3_3_8B)
+backend = LocalHFBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO)
 
 model = backend._model
 tokenizer = backend._tokenizer
