@@ -502,6 +502,8 @@ class OllamaModelBackend(FormatterBackend):
     def _extract_model_tool_requests(
         self, tools: dict[str, AbstractMelleaTool], chat_response: ollama.ChatResponse
     ) -> dict[str, ModelToolCall] | None:
+        from .tools import validate_tool_arguments
+
         model_tool_calls: dict[str, ModelToolCall] = {}
 
         if chat_response.message.tool_calls:
@@ -514,8 +516,11 @@ class OllamaModelBackend(FormatterBackend):
                     continue  # skip this function if we can't find it.
 
                 args = tool.function.arguments
+
+                # Validate and coerce argument types
+                validated_args = validate_tool_arguments(func, args, strict=False)
                 model_tool_calls[tool.function.name] = ModelToolCall(
-                    tool.function.name, func, args
+                    tool.function.name, func, validated_args
                 )
 
         if len(model_tool_calls) > 0:
