@@ -120,6 +120,7 @@ def test_image_block_in_instruction(
     # image url
     image_url = content_img.get("image_url")
     assert image_url is not None
+    assert isinstance(image_url, dict)
     assert "url" in image_url
     assert isinstance(image_url, dict)
 
@@ -178,6 +179,7 @@ def test_image_block_in_chat(
     # image url
     image_url = content_img.get("image_url")
     assert image_url is not None
+    assert isinstance(image_url, dict)
     assert "url" in image_url
     assert isinstance(image_url, dict)
 

@@ -150,6 +150,66 @@ If you want to contribute, ensure that you install the precommit hooks:
 pre-commit install
 ```
 
+
+## Configuration
+
+Mellea supports configuration files to set default backends, models, and credentials without hardcoding them in your code.
+
+### Quick Start
+
+Create a user configuration file:
+
+```bash
+m config init
+```
+
+This creates `~/.config/mellea/config.toml` (Linux/macOS) or `%APPDATA%\mellea\config.toml` (Windows) with example settings.
+
+For project-specific settings:
+
+```bash
+m config init-project
+```
+
+### Example Configuration
+
+```toml
+# ~/.config/mellea/config.toml
+[backend]
+name = "ollama"
+model_id = "granite-4-micro:3b"
+
+[backend.model_options]
+temperature = 0.7
+max_tokens = 2048
+
+[credentials]
+# API keys (environment variables take precedence)
+# openai_api_key = "sk-..."
+
+context_type = "simple"  # or "chat"
+log_level = "INFO"
+```
+
+### Configuration Hierarchy
+
+Configuration files are searched in this order:
+1. Project config: `./mellea.toml` (current directory and parents)
+2. User config: `~/.config/mellea/config.toml`
+
+Values are applied with precedence: **explicit parameters > project config > user config > defaults**
+
+### CLI Commands
+
+```bash
+m config show          # Display current configuration
+m config path          # Show which config file is loaded
+m config where         # Show all config file locations
+```
+
+For detailed configuration options and security best practices, see the [Configuration Guide](docs/configuration.md).
+
+
 ### `conda`/`mamba`-based installation from source
 
 Fork and clone the repository:

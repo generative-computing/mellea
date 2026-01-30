@@ -34,11 +34,55 @@ uv run ruff format . && uv run ruff check .  # Lint & format
 | `mellea/stdlib` | Core: Sessions, Genslots, Requirements, Sampling, Context |
 | `mellea/backends` | Providers: HF, OpenAI, Ollama, Watsonx, LiteLLM |
 | `mellea/helpers` | Utilities, logging, model ID tables |
-| `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`) |
+| `mellea/config.py` | Configuration file support (TOML) |
+| `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`, `m config`) |
 | `test/` | All tests (run from repo root) |
 | `scratchpad/` | Experiments (git-ignored) |
 
-## 3. Test Markers
+## 3. Configuration Files
+Mellea supports TOML configuration files for setting default backends, models, and credentials.
+
+**Config Locations (precedence order):**
+1. Project config: `./mellea.toml` (current dir and parents)
+2. User config: `~/.config/mellea/config.toml` (Linux/macOS) or `%APPDATA%\mellea\config.toml` (Windows)
+
+**Value Precedence:** Explicit params > Project config > User config > Defaults
+
+**CLI Commands:**
+```bash
+m config init              # Create user config
+m config init-project      # Create project config
+m config show              # Display effective config
+m config path              # Show loaded config file
+m config where             # Show all config locations
+```
+
+**Development Usage:**
+- Set your preferred backend/model in user config for convenience
+- Use project config for project-specific settings (safe to commit without credentials)
+- Store credentials in user config or environment variables (never commit)
+- Config files with credentials are git-ignored by default (`mellea.toml`, `.mellea.toml`)
+
+**Example User Config** (`~/.config/mellea/config.toml`):
+```toml
+[backend]
+name = "ollama"
+model_id = "llama3.2:1b"
+
+[backend.model_options]
+temperature = 0.7
+max_tokens = 2048
+
+[credentials]
+# openai_api_key = "sk-..."  # Better: use env vars
+```
+
+**Testing with Config:**
+- Tests use temporary config directories (see `test/config/test_config.py`)
+- Integration tests verify config precedence (see `test/config/test_config_integration.py`)
+- Clear config cache in tests with `clear_config_cache()` from `mellea.config`
+
+## 4. Test Markers
 All tests and examples use markers to indicate requirements. The test infrastructure automatically skips tests based on system capabilities.
 
 **Backend Markers:**

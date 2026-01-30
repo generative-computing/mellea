@@ -76,7 +76,7 @@ class TestEvalResult:
 
 
 def create_session(
-    backend: str, model: str | None, max_tokens: int | None
+    backend: str | None, model: str | None, max_tokens: int | None
 ) -> mellea.MelleaSession:
     """Create a mellea session with the specified backend and model."""
     model_id = None
@@ -92,6 +92,11 @@ def create_session(
         model_id = mellea.model_ids.IBM_GRANITE_4_MICRO_3B
 
     try:
+        from mellea.core.backend import Backend
+
+        if backend is None:
+            raise ValueError("Backend must be specified")
+
         backend_lower = backend.lower()
         backend_instance: Backend
 

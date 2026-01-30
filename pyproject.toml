@@ -46,6 +46,7 @@ dependencies = [
     "math_verify", # Needed for Majority Voting Sampling Strategies.
     "rouge_score", # Needed for Majority Voting Sampling Strategies.
     "llm-sandbox[docker]>=0.3.23",
+    "tomli>=2.0.0; python_version < '3.11'", # TOML parser for Python 3.10
 ]
 
 [project.scripts]
