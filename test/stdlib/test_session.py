@@ -18,6 +18,8 @@ def m_session(gh_run):
     del m
 
 
+@pytest.mark.watsonx
+@pytest.mark.requires_api_key
 def test_start_session_watsonx(gh_run):
     if gh_run == 1:
         pytest.skip("Skipping watsonx tests.")

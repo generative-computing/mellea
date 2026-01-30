@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 import mellea
 
 # INFO: this line will download IBM's Granite 4 Micro 3B model.

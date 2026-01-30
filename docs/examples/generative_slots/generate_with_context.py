@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 from mellea import generative, start_session
 from mellea.backends import ModelOption
 from mellea.core import CBlock
