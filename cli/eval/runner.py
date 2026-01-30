@@ -75,7 +75,7 @@ class TestEvalResult:
 
 
 def create_session(
-    backend: str, model: str | None, max_tokens: int | None
+    backend: str | None, model: str | None, max_tokens: int | None
 ) -> mellea.MelleaSession:
     """Create a mellea session with the specified backend and model."""
 
@@ -92,7 +92,13 @@ def create_session(
         model_id = mellea.model_ids.IBM_GRANITE_4_MICRO_3B
 
     try:
+        from mellea.core.backend import Backend
+
+        if backend is None:
+            raise ValueError("Backend must be specified")
+
         backend_lower = backend.lower()
+        backend_instance: Backend
 
         if backend_lower == "ollama":
             from mellea.backends.ollama import OllamaModelBackend
@@ -130,7 +136,7 @@ def create_session(
             from mellea.backends.litellm import LiteLLMBackend
 
             backend_instance = LiteLLMBackend(
-                model_id=model_id,
+                model_id=str(model_id),
                 model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
             )
 
@@ -245,7 +251,7 @@ def execute_test_eval(
 
     # for all inputs, generate responses with generator
     for idx, input_text in enumerate(test_eval.inputs):
-        result: ModelOutputThunk = generation_session.act(input_text)
+        result = generation_session.chat(input_text)
         model_output = str(result)
 
         targets_for_input = (

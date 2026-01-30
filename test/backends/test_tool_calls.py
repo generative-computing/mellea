@@ -6,6 +6,7 @@ from mellea.backends.tools import (
     add_tools_from_model_options,
     MelleaTool,
 )
+from mellea.core.base import AbstractMelleaTool
 from mellea.backends import ModelOption
 from mellea.core import ModelOutputThunk
 from mellea.stdlib.context import ChatContext
@@ -47,7 +48,7 @@ def test_tool_called_from_context_action(m: MelleaSession, table: Table):
         ModelOption.TOOLS: [MelleaTool.from_callable(t) for t in [test1, test2]]
     }
 
-    tools = {}
+    tools: dict[str, AbstractMelleaTool] = {}
 
     add_tools_from_model_options(tools, model_opts)
     assert "test1" in tools
