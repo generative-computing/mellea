@@ -1,0 +1,40 @@
+---
+title: "mellea.formatters.chat_formatter"
+sidebarTitle: "mellea.formatters.chat_formatter"
+description: "ChatFormatter."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ChatFormatter` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/formatters/chat_formatter.py#L13" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Formatter used by Legacy backends to format Contexts as Messages.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `to_chat_messages` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/formatters/chat_formatter.py#L16" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+to_chat_messages(self, cs: list[Component | CBlock]) -> list[Message]
+```
+
+Helper method that converts a linearized chat history into a list of messages. The purpose of this helper is to prepare a sequence of Messages for input to a chat endpoint.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
