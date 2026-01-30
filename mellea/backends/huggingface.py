@@ -45,6 +45,10 @@ from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import message_to_openai_message, messages_to_docs, send_to_queue
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
+from ..telemetry.backend_instrumentation import (
+    instrument_generate_from_raw,
+    start_generate_span,
+)
 from .adapters import (
     AdapterMixin,
     AdapterType,
@@ -203,6 +207,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
         """Generate using the huggingface model."""
+        span = start_generate_span(
+            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
+        )
         await self.do_generate_walk(action)
 
         # Upsert model options.
@@ -245,17 +252,28 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 mot = await self._generate_from_intrinsic(
                     alora_action, ctx, model_options=model_opts
                 )
+                # Store span for telemetry
+                if span is not None:
+                    mot._meta["_telemetry_span"] = span
                 return mot, ctx.add(alora_action).add(mot)
 
         elif isinstance(action, Intrinsic):
             mot = await self._generate_from_intrinsic(
                 action, ctx, model_options=model_opts
             )
+            # Store span for telemetry
+            if span is not None:
+                mot._meta["_telemetry_span"] = span
             return mot, ctx.add(action).add(mot)
 
         mot = await self._generate_from_context_standard(
             action, ctx, _format=format, model_options=model_opts, tool_calls=tool_calls
         )
+
+        # Store span in metadata for post_processing to record telemetry
+        if span is not None:
+            mot._meta["_telemetry_span"] = span
+
         return mot, ctx.add(action).add(mot)
 
     def _generate_with_adapter_lock(
@@ -923,6 +941,23 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
+        # Record telemetry if span is available
+        span = mot._meta.get("_telemetry_span")
+        if span is not None:
+            from ..telemetry import end_backend_span
+            from ..telemetry.backend_instrumentation import record_response_metadata
+
+            # HuggingFace local models don't typically provide token counts
+            # but we can record response metadata if available
+            hf_output = mot._meta.get("hf_output")
+            if hf_output is not None:
+                record_response_metadata(span, hf_output)
+
+            # Close the span now that async operation is complete
+            end_backend_span(span)
+            # Clean up span reference
+            del mot._meta["_telemetry_span"]
+
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
         generate_log.prompt = conversation
@@ -973,67 +1008,70 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(list(actions))
+        with instrument_generate_from_raw(
+            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
+        ):
+            await self.do_generate_walks(list(actions))
 
-        if tool_calls:
-            FancyLogger.get_logger().warning(
-                "The raw endpoint does not support tool calling at the moment."
+            if tool_calls:
+                FancyLogger.get_logger().warning(
+                    "The raw endpoint does not support tool calling at the moment."
+                )
+
+            if self._model.device.type == "mps":
+                # TODO: Remove this when we are able to update the torch package.
+                #       Test this by ensuring all outputs from this call are populated when running on mps.
+                #       https://github.com/pytorch/pytorch/pull/157727
+                FancyLogger.get_logger().warning(
+                    "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a huggingface backend; ensure all ModelOutputThunks have non-empty values."
+                )
+
+            model_opts = self._simplify_and_merge(model_options)
+            seed = model_opts.get(ModelOption.SEED, None)
+            if seed is not None:
+                set_seed(seed)
+
+            prompts = [self.formatter.print(action) for action in actions]
+
+            # batch-encoding call is deprecated in favor of this
+            inputs = self._tokenizer(prompts, return_tensors="pt", padding=True).to(
+                self._device
             )
 
-        if self._model.device.type == "mps":
-            # TODO: Remove this when we are able to update the torch package.
-            #       Test this by ensuring all outputs from this call are populated when running on mps.
-            #       https://github.com/pytorch/pytorch/pull/157727
-            FancyLogger.get_logger().warning(
-                "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a huggingface backend; ensure all ModelOutputThunks have non-empty values."
+            format_kwargs = {}
+            if format:
+                # outlines.generate.json always parses the resulting json into a python dict.
+                # We however want to keep it as a json string for later storing it in ModelOutputThunk
+                schema: dict[str, Any] = format.model_json_schema()  # type: ignore
+                schema_json: str = json.dumps(schema)
+                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
+                    schema_json
+                )
+
+                from outlines.models.transformers import TransformerTokenizer
+                from outlines.processors.structured import RegexLogitsProcessor
+                from transformers import LogitsProcessorList  # type: ignore
+
+                format_kwargs["logits_processor"] = LogitsProcessorList(
+                    [
+                        RegexLogitsProcessor(
+                            regex_str, tokenizer=TransformerTokenizer(self._tokenizer)
+                        )
+                    ]
+                )
+
+            outputs = await asyncio.to_thread(
+                self._generate_with_adapter_lock,
+                "",  # Empty for no adapter.
+                self._model.generate,  # type: ignore
+                # Passed as args/kwargs to generate.
+                input_ids=inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                return_dict_in_generate=True,
+                output_scores=True,
+                **self._make_backend_specific_and_remove(model_opts),
+                **format_kwargs,
             )
-
-        model_opts = self._simplify_and_merge(model_options)
-        seed = model_opts.get(ModelOption.SEED, None)
-        if seed is not None:
-            set_seed(seed)
-
-        prompts = [self.formatter.print(action) for action in actions]
-
-        # batch-encoding call is deprecated in favor of this
-        inputs = self._tokenizer(prompts, return_tensors="pt", padding=True).to(
-            self._device
-        )
-
-        format_kwargs = {}
-        if format:
-            # outlines.generate.json always parses the resulting json into a python dict.
-            # We however want to keep it as a json string for later storing it in ModelOutputThunk
-            schema: dict[str, Any] = format.model_json_schema()  # type: ignore
-            schema_json: str = json.dumps(schema)
-            regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
-                schema_json
-            )
-
-            from outlines.models.transformers import TransformerTokenizer
-            from outlines.processors.structured import RegexLogitsProcessor
-            from transformers import LogitsProcessorList  # type: ignore
-
-            format_kwargs["logits_processor"] = LogitsProcessorList(
-                [
-                    RegexLogitsProcessor(
-                        regex_str, tokenizer=TransformerTokenizer(self._tokenizer)
-                    )
-                ]
-            )
-
-        outputs = await asyncio.to_thread(
-            self._generate_with_adapter_lock,
-            "",  # Empty for no adapter.
-            self._model.generate,  # type: ignore
-            # Passed as args/kwargs to generate.
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            return_dict_in_generate=True,
-            output_scores=True,
-            **self._make_backend_specific_and_remove(model_opts),
-            **format_kwargs,
-        )
 
         sequences_to_decode = [
             sequence[inputs["input_ids"][i].size(0) :]  # type: ignore
