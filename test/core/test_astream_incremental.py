@@ -1,7 +1,6 @@
 """Tests for ModelOutputThunk.astream() incremental return behavior.
 
-Tests the changes around lines 278-281 and 352-356 in mellea/core/base.py
-that ensure astream() returns only new content added since the beginning of
+Tests that astream() returns only new content added since the beginning of
 each astream() call, not the entire accumulated value.
 """
 
