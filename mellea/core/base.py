@@ -362,7 +362,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         return (
             self._underlying_value
-            if beginning_length is None
+            if beginning_length == 0
             else self._underlying_value[beginning_length:]  # type: ignore
         )
 
