@@ -1,9 +1,9 @@
-from mellea.core import CBlock, Context, Backend
+import asyncio
+
 from mellea.backends.ollama import OllamaModelBackend
+from mellea.core import Backend, CBlock, Context
 from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.context import SimpleContext
-
-import asyncio
 
 
 async def main(backend: Backend, ctx: Context):

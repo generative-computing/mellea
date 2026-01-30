@@ -1,8 +1,8 @@
-from mellea import start_session
-from mellea.core.base import CBlock
-from mellea.backends.model_options import ModelOption
-
 import asyncio
+
+from mellea import start_session
+from mellea.backends.model_options import ModelOption
+from mellea.core.base import CBlock
 
 
 async def stream_chat(prompt: str) -> str:

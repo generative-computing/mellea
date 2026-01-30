@@ -39,14 +39,14 @@ def m_session(backend):
 
 
 @pytest.mark.qualitative
-def test_instruct(m_session):
+def test_instruct(m_session) -> None:
     result = m_session.instruct("Compute 1+1.")
     assert isinstance(result, ModelOutputThunk)
     assert "2" in result.value  # type: ignore
 
 
 @pytest.mark.qualitative
-def test_multiturn(m_session):
+def test_multiturn(m_session) -> None:
     m_session.instruct("What is the capital of France?")
     answer = m_session.instruct("Tell me the answer to the previous question.")
     assert "Paris" in answer.value  # type: ignore
@@ -68,7 +68,7 @@ def test_multiturn(m_session):
 
 
 @pytest.mark.qualitative
-def test_chat(m_session):
+def test_chat(m_session) -> None:
     output_message = m_session.chat("What is 1+1?")
     assert "2" in output_message.content, (
         f"Expected a message with content containing 2 but found {output_message}"
@@ -76,7 +76,7 @@ def test_chat(m_session):
 
 
 @pytest.mark.qualitative
-def test_format(m_session):
+def test_format(m_session) -> None:
     class Person(pydantic.BaseModel):
         name: str
         # it does not support regex patterns in json schema
@@ -109,11 +109,11 @@ def test_format(m_session):
 
 
 @pytest.mark.qualitative
-async def test_generate_from_raw(m_session):
+async def test_generate_from_raw(m_session) -> None:
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
     with pytest.raises(openai.BadRequestError):
-        results = await m_session.backend.generate_from_raw(
+        await m_session.backend.generate_from_raw(
             actions=[CBlock(value=prompt) for prompt in prompts], ctx=m_session.ctx
         )
 
@@ -141,7 +141,7 @@ async def test_generate_from_raw(m_session):
 #         assert False, f"formatting directive failed for {random_result.value}: {e.json()}"
 
 
-async def test_async_parallel_requests(m_session):
+async def test_async_parallel_requests(m_session) -> None:
     model_opts = {ModelOption.STREAM: True}
     mot1, _ = await m_session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext(), model_options=model_opts
@@ -176,7 +176,7 @@ async def test_async_parallel_requests(m_session):
     assert m2_final_val == mot2.value
 
 
-async def test_async_avalue(m_session):
+async def test_async_avalue(m_session) -> None:
     mot1, _ = await m_session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext()
     )
@@ -185,7 +185,7 @@ async def test_async_avalue(m_session):
     assert m1_final_val == mot1.value
 
 
-def test_client_cache(backend):
+def test_client_cache(backend) -> None:
     first_client = backend._async_client
 
     async def get_client_async():
@@ -211,7 +211,7 @@ def test_client_cache(backend):
     assert len(backend._client_cache.cache.values()) == 2
 
 
-async def test_reasoning_effort_conditional_passing(backend):
+async def test_reasoning_effort_conditional_passing(backend) -> None:
     """Test that reasoning_effort is only passed to API when not None."""
     from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -251,7 +251,7 @@ async def test_reasoning_effort_conditional_passing(backend):
         )
 
 
-def test_api_key_and_base_url_from_parameters():
+def test_api_key_and_base_url_from_parameters() -> None:
     """Test that API key and base URL can be set via parameters."""
     backend = OpenAIBackend(
         model_id="gpt-4", api_key="test-api-key", base_url="https://api.test.com/v1"
@@ -260,7 +260,7 @@ def test_api_key_and_base_url_from_parameters():
     assert backend._base_url == "https://api.test.com/v1"
 
 
-def test_parameter_overrides_env_variable():
+def test_parameter_overrides_env_variable() -> None:
     """Test that explicit parameters override environment variables."""
     with patch.dict(
         os.environ,
@@ -275,7 +275,7 @@ def test_parameter_overrides_env_variable():
         assert backend._base_url == "https://api.param.com/v1"
 
 
-def test_missing_api_key_raises_error():
+def test_missing_api_key_raises_error() -> None:
     """Test that missing API key raises ValueError with helpful message."""
     with patch.dict(os.environ, {}, clear=True):
         with pytest.raises(ValueError) as exc_info:

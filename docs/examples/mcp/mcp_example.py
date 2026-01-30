@@ -4,7 +4,7 @@ You need to install the mcp package:
 uv pip install "mcp[cli]"
 
 and run the example in MCP debug UI:
-uv run mcp dev docs/examples/tutorial/mcp_example.py
+uv run mcp dev docs/examples/mcp/mcp_example.py
 """
 
 from mcp.server.fastmcp import FastMCP

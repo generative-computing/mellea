@@ -1,10 +1,11 @@
+import asyncio
+
+from mellea.backends import ModelOption
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
-from mellea.backends import ModelOption
 from mellea.core import CBlock
-from mellea.stdlib.context import ChatContext
 from mellea.stdlib.components import Message
-import asyncio
+from mellea.stdlib.context import ChatContext
 
 
 async def example():

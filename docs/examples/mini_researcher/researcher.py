@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from functools import cache
+from typing import Any
 
 from openai import BaseModel
 from pydantic import ValidationError
@@ -11,9 +12,9 @@ from docs.examples.mini_researcher import RAGDocument
 from mellea import MelleaSession
 from mellea.backends import model_ids
 from mellea.backends.ollama import OllamaModelBackend
+from mellea.core import CBlock, Component, Requirement, SamplingResult
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
-from mellea.core import SamplingResult, Requirement
 
 # #############################
 # Helper functions
@@ -128,7 +129,7 @@ def step_generate_outline(
         validation_fn=simple_validate(max_sub_sections),
     )
 
-    outline_context = {
+    outline_context: dict[str, str | CBlock | Component] = {
         f"Document {i + 1}": f"## Title: {d.title}, ## Source: {d.source}"
         for i, d in enumerate(context)
     }
@@ -138,14 +139,14 @@ def step_generate_outline(
         description="Create an outline for a report on how {{current_subtopic}} impacts {{main_topic}}. Use the Context Documents provided as guideline for the sections.",
         # output_prefix="# Introduction",
         requirements=[req_outline, req_num_sections],
-        user_variables=user_args,
         grounding_context=outline_context,
+        user_variables=user_args,
         strategy=RejectionSamplingStrategy(loop_budget=2),
         return_sampling_results=True,
         format=SectionTitles,
     )
 
-    st = SectionTitles.model_validate_json(outline_result.value)
+    st = SectionTitles.model_validate_json(outline_result.value or "")
 
     if isinstance(outline_result, SamplingResult):
         if not outline_result.success:
@@ -203,12 +204,12 @@ def step_write_full_report(
                         print(f"\t{v[1]} <- {v[0].description}")
 
     print("done.")
-    return report_result.value
+    return report_result.value or ""
 
 
 def research_subtopic(main_topic: str, subtopic: str, context: list[RAGDocument]):
     """Start MiniResearcher here."""
-    user_args = {
+    user_args: dict[str, Any] = {
         "context_docs": context,
         "current_subtopic": subtopic,
         "main_topic": main_topic,

@@ -2,8 +2,8 @@
 
 from docs.examples.helper import req_print, w
 from mellea import start_session
-from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
 from mellea.backends import ModelOption
+from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 # create a session using Granite 4 Micro (3B) on Ollama and a simple context [see below]

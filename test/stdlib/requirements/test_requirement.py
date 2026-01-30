@@ -1,6 +1,7 @@
 import pytest
-from mellea.stdlib.context import ChatContext
+
 from mellea.core import ModelOutputThunk, Requirement
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import LLMaJRequirement, simple_validate
 from mellea.stdlib.session import start_session
 
@@ -54,7 +55,7 @@ def test_simple_validate_invalid():
     validation_func = simple_validate(lambda x: None)  # type: ignore
 
     with pytest.raises(ValueError):
-        val_result = validation_func(ctx)
+        validation_func(ctx)
 
 
 if __name__ == "__main__":

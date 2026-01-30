@@ -1,16 +1,16 @@
 # test/rits_backend_tests/test_openai_integration.py
 import os
+from typing import Annotated
 
 import pydantic
 import pytest
-from typing_extensions import Annotated
 
 from mellea import MelleaSession
-from mellea.backends.adapters import GraniteCommonAdapter
-from mellea.formatters import TemplateFormatter
-from mellea.backends.openai import OpenAIBackend
 from mellea.backends import ModelOption
+from mellea.backends.adapters import GraniteCommonAdapter
+from mellea.backends.openai import OpenAIBackend
 from mellea.core import CBlock, Context, ModelOutputThunk
+from mellea.formatters import TemplateFormatter
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement
 
@@ -37,14 +37,14 @@ class TestOpenAIBackend:
     )
     m = MelleaSession(backend, ctx=ChatContext())
 
-    def test_instruct(self):
+    def test_instruct(self) -> None:
         self.m.reset()
         result = self.m.instruct("Compute 1+1.")
         assert isinstance(result, ModelOutputThunk)
         assert "2" in result.value  # type: ignore
         self.m.reset()
 
-    def test_multiturn(self):
+    def test_multiturn(self) -> None:
         self.m.instruct("What is the capital of France?")
         answer = self.m.instruct("Tell me the answer to the previous question.")
         assert "Paris" in answer.value  # type: ignore
@@ -65,7 +65,7 @@ class TestOpenAIBackend:
     #     assert "granite3.3:8b" in result.value
     #     self.m.reset()
 
-    def test_format(self):
+    def test_format(self) -> None:
         class Person(pydantic.BaseModel):
             name: str
             # it does not support regex patterns in json schema
@@ -95,9 +95,8 @@ class TestOpenAIBackend:
         # this is not guaranteed, due to the lack of regexp pattern
         # assert "@" in email.to.email_address
         # assert email.to.email_address.endswith("example.com")
-        pass
 
-    async def test_generate_from_raw(self):
+    async def test_generate_from_raw(self) -> None:
         prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
         results = await self.m.backend.generate_from_raw(
@@ -107,7 +106,7 @@ class TestOpenAIBackend:
         assert len(results) == len(prompts)
         assert results[0].value is not None
 
-    async def test_generate_from_raw_with_format(self):
+    async def test_generate_from_raw_with_format(self) -> None:
         prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
         class Answer(pydantic.BaseModel):
@@ -124,7 +123,7 @@ class TestOpenAIBackend:
 
         random_result = results[0]
         try:
-            answer = Answer.model_validate_json(random_result.value)  # type: ignore
+            Answer.model_validate_json(random_result.value)  # type: ignore
         except pydantic.ValidationError as e:
             assert False, (
                 f"formatting directive failed for {random_result.value}: {e.json()}"
@@ -146,7 +145,7 @@ class TestOpenAIALoraStuff:
 
     m = MelleaSession(backend, ctx=ChatContext())
 
-    def test_adapters(self):
+    def test_adapters(self) -> None:
         assert len(self.backend._added_adapters.items()) > 0
 
         adapter = self.backend._added_adapters["requirement_check_alora"]
@@ -161,7 +160,7 @@ class TestOpenAIALoraStuff:
         self.backend.unload_adapter(adapter.qualified_name)
         assert adapter.qualified_name not in self.backend._loaded_adapters
 
-    def test_system_prompt(self):
+    def test_system_prompt(self) -> None:
         self.m.reset()
         result = self.m.chat(
             "Where are we going?",
@@ -169,9 +168,9 @@ class TestOpenAIALoraStuff:
         )
         print(result)
 
-    def test_constraint_lora_with_requirement(self):
+    def test_constraint_lora_with_requirement(self) -> None:
         self.m.reset()
-        answer = self.m.instruct(
+        self.m.instruct(
             "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
         )
         validation_outputs = self.m.validate(
@@ -184,10 +183,10 @@ class TestOpenAIALoraStuff:
         assert "requirement_likelihood" in str(val_result.reason)
         self.m.reset()
 
-    def test_constraint_lora_override(self):
+    def test_constraint_lora_override(self) -> None:
         self.m.reset()
         self.backend.default_to_constraint_checking_alora = False  # type: ignore
-        answer = self.m.instruct(
+        self.m.instruct(
             "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
         )
         validation_outputs = self.m.validate(
@@ -201,10 +200,10 @@ class TestOpenAIALoraStuff:
         self.backend.default_to_constraint_checking_alora = True
         self.m.reset()
 
-    def test_constraint_lora_override_does_not_override_alora(self):
+    def test_constraint_lora_override_does_not_override_alora(self) -> None:
         self.m.reset()
         self.backend.default_to_constraint_checking_alora = False  # type: ignore
-        answer = self.m.instruct(
+        self.m.instruct(
             "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
         )
         validation_outputs = self.m.validate(
@@ -220,6 +219,7 @@ class TestOpenAIALoraStuff:
         # the correct actions / results in it.
         assert isinstance(non_alora_output.context, Context)
         assert isinstance(non_alora_output.thunk, ModelOutputThunk)
+        assert non_alora_output.context.previous_node is not None
         assert isinstance(
             non_alora_output.context.previous_node.node_data,
             ALoraRequirement,  # type: ignore
@@ -229,10 +229,10 @@ class TestOpenAIALoraStuff:
         self.backend.default_to_constraint_checking_alora = True
         self.m.reset()
 
-    def test_llmaj_req_does_not_use_alora(self):
+    def test_llmaj_req_does_not_use_alora(self) -> None:
         self.m.reset()
         self.backend.default_to_constraint_checking_alora = True  # type: ignore
-        answer = self.m.instruct(
+        self.m.instruct(
             "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
         )
         validation_outputs = self.m.validate(
@@ -245,15 +245,15 @@ class TestOpenAIALoraStuff:
         assert str(non_alora_output.reason) not in ["Y", "N"]
         self.m.reset()
 
-    def test_instruct(self):
+    def test_instruct(self) -> None:
         self.m.reset()
         result = self.m.instruct("Compute 1+1.")
         print(result)
         self.m.reset()
 
-    def test_multiturn(self):
+    def test_multiturn(self) -> None:
         self.m.instruct("Compute 1+1")
-        beta = self.m.instruct(
+        self.m.instruct(
             "Let n be the result of the previous sum. Find the n-th letter in the greek alphabet."
         )
         words = self.m.instruct(
@@ -262,7 +262,7 @@ class TestOpenAIALoraStuff:
         print(words)
         self.m.reset()
 
-    def test_format(self):
+    def test_format(self) -> None:
         class Person(pydantic.BaseModel):
             name: str
             email_address: Annotated[
