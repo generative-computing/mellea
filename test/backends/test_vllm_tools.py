@@ -2,6 +2,8 @@ import os
 
 import pytest
 
+from mellea.backends.tools import MelleaTool
+
 # Skip entire module in CI since the single test is qualitative
 pytestmark = [
     pytest.mark.vllm,
@@ -64,7 +66,7 @@ def test_tool(session):
     output = session.instruct(
         "What is today's temperature in Boston? Answer in Celsius. Reply the number only.",
         model_options={
-            ModelOption.TOOLS: [get_temperature],
+            ModelOption.TOOLS: [MelleaTool.from_callable(get_temperature)],
             ModelOption.MAX_NEW_TOKENS: 1000,
         },
         tool_calls=True,

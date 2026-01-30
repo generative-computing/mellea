@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 from mellea.stdlib.tools import code_interpreter, local_code_interpreter
 from mellea import start_session, MelleaSession
 from mellea.backends import ModelOption

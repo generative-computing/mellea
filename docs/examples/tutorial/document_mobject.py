@@ -1,3 +1,5 @@
+# pytest: ollama, qualitative, llm, requires_heavy_ram
+
 from mellea.backends import model_ids
 from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
 from mellea.stdlib.components.docs.richdocument import RichDocument

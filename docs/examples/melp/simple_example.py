@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 import asyncio
 from mellea.core import Context, CBlock, ModelOutputThunk, Backend
 from mellea.backends.ollama import OllamaModelBackend

@@ -1,3 +1,5 @@
+# pytest: litellm, llm
+
 """Examples of using vision models with LiteLLM backend."""
 
 import os
