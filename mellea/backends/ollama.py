@@ -22,6 +22,7 @@ from ..core import (
     ModelOutputThunk,
     ModelToolCall,
 )
+from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import ClientCache, get_current_event_loop, send_to_queue
 from ..stdlib.components import Message
@@ -322,7 +323,7 @@ class OllamaModelBackend(FormatterBackend):
         )
 
         # Append tool call information if applicable.
-        tools: dict[str, Callable] = dict()
+        tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
             if _format:
                 FancyLogger.get_logger().warning(
@@ -343,7 +344,7 @@ class OllamaModelBackend(FormatterBackend):
         ] = self._async_client.chat(
             model=self._get_ollama_model_id(),
             messages=conversation,
-            tools=list(tools.values()),
+            tools=[t.as_json_tool for t in tools.values()],
             think=model_opts.get(ModelOption.THINKING, None),
             stream=model_opts.get(ModelOption.STREAM, False),
             options=self._make_backend_specific_and_remove(model_opts),
@@ -499,7 +500,7 @@ class OllamaModelBackend(FormatterBackend):
         return results
 
     def _extract_model_tool_requests(
-        self, tools: dict[str, Callable], chat_response: ollama.ChatResponse
+        self, tools: dict[str, AbstractMelleaTool], chat_response: ollama.ChatResponse
     ) -> dict[str, ModelToolCall] | None:
         model_tool_calls: dict[str, ModelToolCall] = {}
 
@@ -525,7 +526,7 @@ class OllamaModelBackend(FormatterBackend):
         self,
         mot: ModelOutputThunk,
         chunk: ollama.ChatResponse,
-        tools: dict[str, Callable],
+        tools: dict[str, AbstractMelleaTool],
     ):
         """Called during generation to add information from a single ChatResponse to the ModelOutputThunk."""
         if mot._thinking is None:
@@ -557,7 +558,7 @@ class OllamaModelBackend(FormatterBackend):
         self,
         mot: ModelOutputThunk,
         conversation: list[dict],
-        tools: dict[str, Callable],
+        tools: dict[str, AbstractMelleaTool],
         _format,
     ):
         """Called when generation is done."""

@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 from mellea import generative
 
 

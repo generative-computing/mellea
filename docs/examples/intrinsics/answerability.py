@@ -1,3 +1,5 @@
+# pytest: huggingface, requires_heavy_ram, llm
+
 """
 Example usage of the answerability intrinsic for RAG applications.
 

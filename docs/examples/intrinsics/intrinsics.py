@@ -1,3 +1,5 @@
+# pytest: huggingface, requires_heavy_ram, llm
+
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.openai import OpenAIBackend, _ServerType
 from mellea.backends.adapters.adapter import AdapterType, GraniteCommonAdapter

@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 """Simple Example of information extraction with Mellea using generative slots."""
 
 from mellea import generative, start_session

@@ -1,3 +1,5 @@
+# pytest: huggingface, requires_heavy_ram, llm
+
 """Example of using the Enhanced Guardian Requirement with Granite Guardian 3.3 8B"""
 
 from mellea import MelleaSession

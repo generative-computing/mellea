@@ -11,8 +11,10 @@ AGENTS.md — Instructions for AI coding assistants (Claude, Cursor, Copilot, Co
 pre-commit install                  # Required: install git hooks
 uv sync --all-extras --all-groups   # Install all deps (required for tests)
 ollama serve                        # Start Ollama (required for most tests)
-uv run pytest test/ -m "not qualitative"  # Fast: tests only, skip quality checks (~2 min)
-uv run pytest                       # Full suite (tests + examples + quality checks)
+uv run pytest                       # Default: qualitative tests, skip slow tests
+uv run pytest -m "not qualitative"  # Fast tests only (~2 min)
+uv run pytest -m slow               # Run only slow tests (>5 min)
+uv run pytest --co -q               # Run ALL tests including slow (bypass config)
 uv run ruff format .                # Format code
 uv run ruff check .                 # Lint code
 uv run mypy .                       # Type check
@@ -34,10 +36,41 @@ uv run mypy .                       # Type check
 | `scratchpad/` | Experiments (git-ignored) |
 
 ## 3. Test Markers
+All tests and examples use markers to indicate requirements. The test infrastructure automatically skips tests based on system capabilities.
+
+**Backend Markers:**
+- `@pytest.mark.ollama` — Requires Ollama running (local, lightweight)
+- `@pytest.mark.huggingface` — Requires HuggingFace backend (local, heavy)
+- `@pytest.mark.vllm` — Requires vLLM backend (local, GPU required)
+- `@pytest.mark.openai` — Requires OpenAI API (requires API key)
+- `@pytest.mark.watsonx` — Requires Watsonx API (requires API key)
+- `@pytest.mark.litellm` — Requires LiteLLM backend
+
+**Capability Markers:**
+- `@pytest.mark.requires_gpu` — Requires GPU
+- `@pytest.mark.requires_heavy_ram` — Requires 48GB+ RAM
+- `@pytest.mark.requires_api_key` — Requires external API keys
 - `@pytest.mark.qualitative` — LLM output quality tests (skipped in CI via `CICD=1`)
-- **Unmarked** — Unit tests (may still require Ollama running locally)
+- `@pytest.mark.llm` — Makes LLM calls (needs at least Ollama)
+- `@pytest.mark.slow` — Tests taking >5 minutes (skipped via `SKIP_SLOW=1`)
+
+**Examples in `docs/examples/`** use comment-based markers for clean code:
+```python
+# pytest: ollama, llm, requires_heavy_ram
+"""Example description..."""
+
+# Your clean example code here
+```
+
+Tests/examples automatically skip if system lacks required resources. Heavy examples (e.g., HuggingFace) are skipped during collection to prevent memory issues.
+
+**Default behavior:**
+- `uv run pytest` skips slow tests (>5 min) but runs qualitative tests
+- Use `pytest -m "not qualitative"` for fast tests only (~2 min)
+- Use `pytest -m slow` or `pytest` (without config) to include slow tests
 
 ⚠️ Don't add `qualitative` to trivial tests—keep the fast loop fast.
+⚠️ Mark tests taking >5 minutes with `slow` (e.g., dataset loading, extensive evaluations).
 
 ## 4. Coding Standards
 - **Types required** on all core functions
