@@ -1,5 +1,4 @@
 """Dataclasses for ModelIdentifiers."""
-# fmt: off
 
 import dataclasses
 
@@ -107,8 +106,8 @@ META_LLAMA_3_2_1B = ModelIdentifier(
 ########################
 
 MISTRALAI_MISTRAL_0_3_7B = ModelIdentifier(
-    hf_model_name="mistralai/Mistral-7B-Instruct-v0.3",
-    ollama_name="mistral:7b",
+    hf_model_name="mistralai/Mistral-7B-Instruct-v0.3",  # Mistral 7B v0.3
+    ollama_name="mistral:7b",  # Ollama
 )
 
 MISTRALAI_MISTRAL_SMALL_24B = ModelIdentifier(
@@ -129,23 +128,23 @@ MISTRALAI_MISTRAL_LARGE_123B = ModelIdentifier(
 #####################
 
 QWEN3_0_6B = ModelIdentifier(
-    hf_model_name="Qwen/Qwen3-0.6B",
-    ollama_name="qwen3:0.6b",
+    hf_model_name="Qwen/Qwen3-0.6B",  # Qwen 0.6B
+    ollama_name="qwen3:0.6b",  # Ollama
 )
 
 QWEN3_1_7B = ModelIdentifier(
-    hf_model_name="Qwen/Qwen3-1.7B",
-    ollama_name="qwen3:1.7b",
+    hf_model_name="Qwen/Qwen3-1.7B",  # Qwen 1.7B
+    ollama_name="qwen3:1.7b",  # Ollama
 )
 
 QWEN3_8B = ModelIdentifier(
-    hf_model_name="Qwen/Qwen3-8B",
-    ollama_name="qwen3:8b",
+    hf_model_name="Qwen/Qwen3-8B",  # Qwen 8B
+    ollama_name="qwen3:8b",  # Ollama
 )
 
 QWEN3_14B = ModelIdentifier(
-    hf_model_name="Qwen/Qwen3-14B",
-    ollama_name="qwen3:14b",
+    hf_model_name="Qwen/Qwen3-14B",  # Qwen 14B
+    ollama_name="qwen3:14b",  # Ollama
 )
 
 ###########################
@@ -153,12 +152,12 @@ QWEN3_14B = ModelIdentifier(
 ###########################
 
 OPENAI_GPT_OSS_20B = ModelIdentifier(
-    hf_model_name="openai/gpt-oss-20b",
-    ollama_name="gpt-oss:20b"
+    hf_model_name="openai/gpt-oss-20b",  # OpenAI GPT-OSS 20B
+    ollama_name="gpt-oss:20b",  # Ollama
 )
 OPENAI_GPT_OSS_120B = ModelIdentifier(
-    hf_model_name="openai/gpt-oss-120b",
-    ollama_name="gpt-oss:120b"
+    hf_model_name="openai/gpt-oss-120b",  # OpenAI GPT-OSS 120B
+    ollama_name="gpt-oss:120b",  # Ollama
 )
 
 ###########################
@@ -166,7 +165,7 @@ OPENAI_GPT_OSS_120B = ModelIdentifier(
 ###########################
 
 OPENAI_GPT_5_1 = ModelIdentifier(
-    openai_name="gpt-5.1"
+    openai_name="gpt-5.1"  # OpenAI GPT-5.1
 )
 
 #####################
@@ -174,13 +173,13 @@ OPENAI_GPT_5_1 = ModelIdentifier(
 #####################
 
 GOOGLE_GEMMA_3N_E4B = ModelIdentifier(
-    hf_model_name="google/gemma-3n-e4b-it",
-    ollama_name="gemma3n:e4b"
+    hf_model_name="google/gemma-3n-e4b-it",  # Google Gemma 3N E4B
+    ollama_name="gemma3n:e4b",  # Ollama
 )
 
 MS_PHI_4_14B = ModelIdentifier(
-    hf_model_name="microsoft/phi-4",
-    ollama_name="phi4:14b"
+    hf_model_name="microsoft/phi-4",  # Microsoft Phi-4 14B
+    ollama_name="phi4:14b",  # Ollama
 )
 
 MS_PHI_4_MINI_REASONING_4B = ModelIdentifier(
