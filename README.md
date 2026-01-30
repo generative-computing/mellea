@@ -264,9 +264,25 @@ uv pip install -e ".[all]" --group dev
 pre-commit install
 ```
 
-You can then run all tests by running `pytest`, or only the CI/CD tests by
-running `CICD=1 pytest`. See [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md) for
-details on running specific test categories (e.g., by backend, resource requirements).
+You can then run tests:
+```bash
+# Default: qualitative tests, skip slow tests
+uv run pytest
+
+# Fast tests only (no qualitative, no slow)
+uv run pytest -m "not qualitative"
+
+# Run only slow tests
+uv run pytest -m slow
+
+# Run ALL tests including slow (bypass config)
+pytest --co -q
+
+# CI/CD mode (skips qualitative tests)
+CICD=1 uv run pytest
+```
+
+See [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md) for details on running specific test categories (e.g., by backend, resource requirements).
 
 Tip: you can bypass the hooks by passing the `-n` flag to `git commit`.
 This is sometimes helpful for intermediate commits that you intend to later

@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 from io import StringIO
 
 import pandas
