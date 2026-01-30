@@ -14,6 +14,7 @@ from ..core import (
     BaseModelSubclass,
     CBlock,
     Component,
+    ComputedModelOutputThunk,
     Context,
     FancyLogger,
     GenerateLog,
@@ -510,6 +511,21 @@ async def aact(
         result._generate_log.is_final_result = True
         generate_logs.append(result._generate_log)
 
+        # Wrap in ComputedModelOutputThunk to indicate it's fully computed
+        computed_result = ComputedModelOutputThunk(
+            value=result.value,  # type: ignore
+            meta=result._meta,
+            parsed_repr=result.parsed_repr,
+            tool_calls=result.tool_calls,
+        )
+        # Copy over important fields
+        computed_result._thinking = result._thinking
+        computed_result._context = result._context
+        computed_result._action = result._action
+        computed_result._model_options = result._model_options
+        computed_result._generate_log = result._generate_log
+        result = computed_result  # type: ignore
+
     else:
         # Always sample if a strategy is provided, even if no requirements were provided.
         # Some sampling strategies don't use requirements or set them when instantiated.
@@ -526,9 +542,11 @@ async def aact(
         )
 
         assert sampling_result.sample_generations is not None
-        for result in sampling_result.sample_generations:
-            assert result._generate_log is not None  # Cannot be None after generation.
-            generate_logs.append(result._generate_log)
+        for gen_result in sampling_result.sample_generations:
+            assert (
+                gen_result._generate_log is not None
+            )  # Cannot be None after generation.
+            generate_logs.append(gen_result._generate_log)
 
         new_ctx = sampling_result.result_ctx
         result = sampling_result.result
@@ -537,13 +555,33 @@ async def aact(
             "generate logs from the final result returned by the sampling strategy must be marked as final"
         )
 
+        # Wrap sampling result in ComputedModelOutputThunk since it's always computed
+        computed_result = ComputedModelOutputThunk(
+            value=result.value,  # type: ignore
+            meta=result._meta,
+            parsed_repr=result.parsed_repr,
+            tool_calls=result.tool_calls,
+        )
+        # Copy over important fields
+        computed_result._thinking = result._thinking
+        computed_result._context = result._context
+        computed_result._action = result._action
+        computed_result._model_options = result._model_options
+        computed_result._generate_log = result._generate_log
+
+        # Update the sampling result to use the computed thunk
+        sampling_result.sample_generations[sampling_result.result_index] = (
+            computed_result  # type: ignore
+        )
+        result = computed_result  # type: ignore
+
     if return_sampling_results:
         assert (
             sampling_result is not None
         )  # Needed for the type checker but should never happen.
         return sampling_result
     else:
-        return result, new_ctx
+        return result, new_ctx  # type: ignore
 
 
 @overload
