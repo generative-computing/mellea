@@ -17,6 +17,8 @@ from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
 import typing_extensions
 from PIL import Image as PILImage
 
+from ..security import SecLevel, TaintChecking
+
 
 class CBlock:
     """A `CBlock` is a block of content that can serve as input to or output from an LLM."""
@@ -25,6 +27,7 @@ class CBlock:
         self,
         value: str | None,
         meta: dict[str, Any] | None = None,
+        sec_level: Any = None,
         *,
         cache: bool = False,
     ):
@@ -33,6 +36,7 @@ class CBlock:
         Args:
             value: the underlying value stored in this CBlock
             meta: Any meta-information about this CBlock (e.g., the inference engine's Completion object).
+            sec_level: Optional SecLevel for security metadata
             cache: If set to `True` then this CBlock's KV cache might be stored by the inference engine. Experimental.
         """
         if value is not None and not isinstance(value, str):
@@ -42,6 +46,9 @@ class CBlock:
         if meta is None:
             meta = {}
         self._meta = meta
+
+        # Store security level directly
+        self._sec_level: SecLevel | None = sec_level
 
     @property
     def value(self) -> str | None:
@@ -60,6 +67,15 @@ class CBlock:
     def __repr__(self):
         """Provides a python-parsable representation of the block (usually)."""
         return f"CBlock({self.value}, {self._meta.__repr__()})"
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this CBlock.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
 
 class ImageBlock(CBlock):
@@ -133,7 +149,7 @@ class ComponentParseError(Exception):
 
 
 @runtime_checkable
-class Component(Protocol, Generic[S]):
+class Component(TaintChecking, Protocol, Generic[S]):
     """A `Component` is a composite data structure that is intended to be represented to an LLM."""
 
     def parts(self) -> list[Component | CBlock]:
@@ -146,6 +162,15 @@ class Component(Protocol, Generic[S]):
         Returns: a `TemplateRepresentation` or string
         """
         raise NotImplementedError("format_for_llm isn't implemented by default")
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        ...
 
     def parse(self, computed: ModelOutputThunk) -> S:
         """Parse the expected type from a given `ModelOutputThunk`.
@@ -179,9 +204,10 @@ class ModelOutputThunk(CBlock, Generic[S]):
         meta: dict[str, Any] | None = None,
         parsed_repr: S | None = None,
         tool_calls: dict[str, ModelToolCall] | None = None,
+        sec_level: Any = None,
     ):
         """Initializes as a cblock, optionally also with a parsed representation from an output formatter."""
-        super().__init__(value, meta)
+        super().__init__(value, meta, sec_level=sec_level)
 
         self.parsed_repr: S | None = parsed_repr
         """Will be non-`None` once computed."""
