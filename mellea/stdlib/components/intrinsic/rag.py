@@ -128,6 +128,35 @@ def rewrite_question(
     return result_json["rewritten_question"]
 
 
+def clarify_query(
+    question: str,
+    documents: collections.abc.Iterable[Document],
+    context: ChatContext,
+    backend: AdapterMixin,
+) -> str:
+    """Generate clarification for an ambiguous query.
+
+    Intrinsic function that determines if a user's question requires clarification
+    based on the retrieved documents and conversation context, and generates an
+    appropriate clarification question if needed.
+
+    :param context: Chat context containing the conversation thus far
+    :param question: Question that the user has posed
+    :param documents: Document snippets retrieved for the question
+    :param backend: Backend instance that supports the adapters that implement
+        this intrinsic
+
+    :return: Clarification question string (e.g., "Do you mean A or B?"), or
+        the string "CLEAR" if no clarification is needed
+    """
+    result_json = _call_intrinsic(
+        "query_clarification",
+        context.add(Message("user", question, documents=list(documents))),
+        backend,
+    )
+    return result_json["clarification"]
+
+
 def find_citations(
     response: str,
     documents: collections.abc.Iterable[Document],

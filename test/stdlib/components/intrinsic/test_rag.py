@@ -206,5 +206,41 @@ def test_answer_relevance_classifier(backend):
     assert result_json["answer_relevance_likelihood"] == 0.0
 
 
+@pytest.mark.qualitative
+def test_query_clarification_positive(backend):
+    """Verify that query clarification detects ambiguous queries requiring clarification."""
+    context, next_user_turn, documents = _read_input_json(
+        "query_clarification_positive.json"
+    )
+
+    # First call triggers adapter loading
+    result = rag.clarify_query(next_user_turn, documents, context, backend)
+    # The result should be a clarification question, not "CLEAR"
+    assert result != "CLEAR"
+    assert len(result) > 0
+
+    # Second call hits a different code path from the first one
+    result = rag.clarify_query(next_user_turn, documents, context, backend)
+    assert result != "CLEAR"
+    assert len(result) > 0
+
+
+@pytest.mark.qualitative
+def test_query_clarification_negative(backend):
+    """Verify that query clarification returns CLEAR for clear queries."""
+    context, next_user_turn, documents = _read_input_json(
+        "query_clarification_negative.json"
+    )
+
+    # First call triggers adapter loading
+    result = rag.clarify_query(next_user_turn, documents, context, backend)
+    # The result should be "CLEAR" for a clear query that doesn't need clarification
+    assert result == "CLEAR"
+
+    # Second call hits a different code path from the first one
+    result = rag.clarify_query(next_user_turn, documents, context, backend)
+    assert result == "CLEAR"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
