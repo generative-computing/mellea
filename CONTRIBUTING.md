@@ -86,8 +86,8 @@ This script handles environment setup, dependency installation, and pre-commit h
 # Start Ollama (required for most tests)
 ollama serve
 
-# Run fast tests (tests only, skip quality checks)
-uv run pytest test/ -m "not qualitative"
+# Run fast tests (skip qualitative tests, ~2 min)
+uv run pytest -m "not qualitative"
 ```
 
 ## Directory Structure
@@ -238,21 +238,27 @@ uv sync --all-extras --all-groups
 # Start Ollama (required for most tests)
 ollama serve
 
-# Run tests (skips LLM quality tests, ~2 min)
-uv run pytest test/ -m "not qualitative"
-
-# Run full test suite (includes LLM quality tests)
-uv run pytest test/
-
-# Run tests AND examples (includes everything)
+# Default: qualitative tests, skip slow tests
 uv run pytest
 
+# Fast tests only (no qualitative, ~2 min)
+uv run pytest -m "not qualitative"
+
+# Run only slow tests (>5 min)
+uv run pytest -m slow
+
+# Run ALL tests including slow (bypass config)
+uv run pytest --co -q
+
 # Run specific backend tests
-uv run pytest test/ -m "ollama"
-uv run pytest test/ -m "openai"
+uv run pytest -m "ollama"
+uv run pytest -m "openai"
 
 # Run tests without LLM calls (unit tests only)
-uv run pytest test/ -m "not llm"
+uv run pytest -m "not llm"
+
+# CI/CD mode (skips qualitative tests)
+CICD=1 uv run pytest
 
 # Lint and format
 uv run ruff format .
@@ -263,14 +269,29 @@ uv run ruff check .
 
 Tests are categorized using pytest markers:
 
-- `@pytest.mark.qualitative` - LLM output quality tests (skipped in CI via `CICD=1`)
-- `@pytest.mark.llm` - Tests that make LLM calls
-- `@pytest.mark.ollama` - Requires Ollama backend
-- `@pytest.mark.openai` - Requires OpenAI API
+**Backend Markers:**
+- `@pytest.mark.ollama` - Requires Ollama running (local, lightweight)
+- `@pytest.mark.huggingface` - Requires HuggingFace backend (local, heavy)
+- `@pytest.mark.vllm` - Requires vLLM backend (local, GPU required)
+- `@pytest.mark.openai` - Requires OpenAI API (requires API key)
+- `@pytest.mark.watsonx` - Requires Watsonx API (requires API key)
+- `@pytest.mark.litellm` - Requires LiteLLM backend
+
+**Capability Markers:**
 - `@pytest.mark.requires_gpu` - Requires GPU
 - `@pytest.mark.requires_heavy_ram` - Requires 48GB+ RAM
+- `@pytest.mark.requires_api_key` - Requires external API keys
+- `@pytest.mark.qualitative` - LLM output quality tests (skipped in CI via `CICD=1`)
+- `@pytest.mark.llm` - Makes LLM calls (needs at least Ollama)
+- `@pytest.mark.slow` - Tests taking >5 minutes (skipped via `SKIP_SLOW=1`)
+
+**Default behavior:**
+- `uv run pytest` skips slow tests (>5 min) but runs qualitative tests
+- Use `pytest -m "not qualitative"` for fast tests only (~2 min)
+- Use `pytest -m slow` or `pytest --co -q` to include slow tests
 
 ⚠️ **Don't add `qualitative` to trivial tests** - keep the fast loop fast.
+⚠️ **Mark tests taking >5 minutes with `slow`** (e.g., dataset loading, extensive evaluations).
 
 For detailed information about test markers, resource requirements, and running specific test categories, see [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md).
 
@@ -278,24 +299,22 @@ For detailed information about test markers, resource requirements, and running 
 
 CI runs the following checks on every pull request:
 1. **Pre-commit hooks** (`pre-commit run --all-files`) - Ruff, mypy, uv-lock, codespell
-2. **Test suite** (`pytest test/`) - All tests in test/ directory
+2. **Test suite** (`CICD=1 uv run pytest`) - Skips qualitative tests for speed
 
 To replicate CI locally:
 ```bash
 # Run pre-commit checks (same as CI)
 pre-commit run --all-files
 
-# Run tests (same as CI)
-uv run pytest test/
-
-# Or run with CICD flag to skip qualitative tests (faster)
-CICD=1 uv run pytest test/
+# Run tests with CICD flag (same as CI, skips qualitative tests)
+CICD=1 uv run pytest
 ```
 
 ### Timing Expectations
 
 - Fast tests (`-m "not qualitative"`): ~2 minutes
-- Full test suite: Several minutes
+- Default tests (qualitative, no slow): Several minutes
+- Slow tests (`-m slow`): >5 minutes
 - Pre-commit hooks: 1-5 minutes
 
 ⚠️ **Don't cancel mid-run** - canceling `pytest` or `pre-commit` can corrupt state.
