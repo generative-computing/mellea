@@ -16,7 +16,7 @@ from typing import Any, Optional, Union
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from mellea.backends.tools import parse_tools
+from mellea.backends.tools import MelleaTool, parse_tools
 from mellea.core import ModelToolCall
 
 
@@ -136,14 +136,20 @@ class TestBasicTypeValidation:
     def test_string_argument(self):
         """Test simple string argument."""
         args = {"message": "Hello, World!"}
-        tool_call = ModelToolCall("simple_string_tool", simple_string_tool, args)
+        tool_call = ModelToolCall(
+            "simple_string_tool", MelleaTool.from_callable(simple_string_tool), args
+        )
         result = tool_call.call_func()
         assert result == "Processed: Hello, World!"
 
     def test_integer_argument(self):
         """Test integer argument."""
         args = {"name": "Alice", "age": 30, "score": 95.5, "active": True}
-        tool_call = ModelToolCall("typed_primitives_tool", typed_primitives_tool, args)
+        tool_call = ModelToolCall(
+            "typed_primitives_tool",
+            MelleaTool.from_callable(typed_primitives_tool),
+            args,
+        )
         result = tool_call.call_func()
         assert result["age"] == 30
         assert isinstance(result["age"], int)
@@ -151,7 +157,11 @@ class TestBasicTypeValidation:
     def test_float_argument(self):
         """Test float argument."""
         args = {"name": "Bob", "age": 25, "score": 88.7, "active": False}
-        tool_call = ModelToolCall("typed_primitives_tool", typed_primitives_tool, args)
+        tool_call = ModelToolCall(
+            "typed_primitives_tool",
+            MelleaTool.from_callable(typed_primitives_tool),
+            args,
+        )
         result = tool_call.call_func()
         assert result["score"] == 88.7
         assert isinstance(result["score"], float)
@@ -159,7 +169,11 @@ class TestBasicTypeValidation:
     def test_boolean_argument(self):
         """Test boolean argument."""
         args = {"name": "Charlie", "age": 35, "score": 92.0, "active": True}
-        tool_call = ModelToolCall("typed_primitives_tool", typed_primitives_tool, args)
+        tool_call = ModelToolCall(
+            "typed_primitives_tool",
+            MelleaTool.from_callable(typed_primitives_tool),
+            args,
+        )
         result = tool_call.call_func()
         assert result["active"] is True
         assert isinstance(result["active"], bool)
@@ -177,7 +191,11 @@ class TestTypeCoercion:
         """Test that string "30" works without validation (Python duck typing)."""
         # Python's duck typing allows this to work in many cases
         args = {"name": "Test", "age": "30", "score": 95.5, "active": True}
-        tool_call = ModelToolCall("typed_primitives_tool", typed_primitives_tool, args)
+        tool_call = ModelToolCall(
+            "typed_primitives_tool",
+            MelleaTool.from_callable(typed_primitives_tool),
+            args,
+        )
 
         # This actually works due to Python's duck typing
         result = tool_call.call_func()
@@ -186,7 +204,11 @@ class TestTypeCoercion:
     def test_string_to_float_coercion(self):
         """Test that string "95.5" works without validation (Python duck typing)."""
         args = {"name": "Test", "age": 30, "score": "95.5", "active": True}
-        tool_call = ModelToolCall("typed_primitives_tool", typed_primitives_tool, args)
+        tool_call = ModelToolCall(
+            "typed_primitives_tool",
+            MelleaTool.from_callable(typed_primitives_tool),
+            args,
+        )
 
         # This works due to Python's duck typing
         result = tool_call.call_func()
@@ -195,7 +217,9 @@ class TestTypeCoercion:
     def test_int_to_string_coercion(self):
         """Test that int 123 can be coerced to string "123"."""
         args = {"message": 123}  # Should be string
-        tool_call = ModelToolCall("simple_string_tool", simple_string_tool, args)
+        tool_call = ModelToolCall(
+            "simple_string_tool", MelleaTool.from_callable(simple_string_tool), args
+        )
 
         # This might work due to Python's duck typing, but not guaranteed
         result = tool_call.call_func()
@@ -205,7 +229,11 @@ class TestTypeCoercion:
         """Test boolean from strings works without validation (Python duck typing)."""
         # Common LLM outputs: "true", "false", "True", "False"
         args = {"name": "Test", "age": 30, "score": 95.5, "active": "true"}
-        tool_call = ModelToolCall("typed_primitives_tool", typed_primitives_tool, args)
+        tool_call = ModelToolCall(
+            "typed_primitives_tool",
+            MelleaTool.from_callable(typed_primitives_tool),
+            args,
+        )
 
         # This works due to Python's duck typing - non-empty strings are truthy
         result = tool_call.call_func()
@@ -223,42 +251,54 @@ class TestOptionalParameters:
     def test_optional_param_provided(self):
         """Test optional parameter when provided."""
         args = {"required": "value1", "optional": "value2"}
-        tool_call = ModelToolCall("optional_params_tool", optional_params_tool, args)
+        tool_call = ModelToolCall(
+            "optional_params_tool", MelleaTool.from_callable(optional_params_tool), args
+        )
         result = tool_call.call_func()
         assert result == "value1:value2"
 
     def test_optional_param_omitted(self):
         """Test optional parameter when omitted."""
         args = {"required": "value1"}
-        tool_call = ModelToolCall("optional_params_tool", optional_params_tool, args)
+        tool_call = ModelToolCall(
+            "optional_params_tool", MelleaTool.from_callable(optional_params_tool), args
+        )
         result = tool_call.call_func()
         assert result == "value1:none"
 
     def test_optional_param_none(self):
         """Test optional parameter explicitly set to None."""
         args = {"required": "value1", "optional": None}
-        tool_call = ModelToolCall("optional_params_tool", optional_params_tool, args)
+        tool_call = ModelToolCall(
+            "optional_params_tool", MelleaTool.from_callable(optional_params_tool), args
+        )
         result = tool_call.call_func()
         assert result == "value1:none"
 
     def test_default_values_all_provided(self):
         """Test tool with all default values provided."""
         args = {"name": "test", "count": 5, "prefix": "custom"}
-        tool_call = ModelToolCall("default_values_tool", default_values_tool, args)
+        tool_call = ModelToolCall(
+            "default_values_tool", MelleaTool.from_callable(default_values_tool), args
+        )
         result = tool_call.call_func()
         assert result == "custom_test_5"
 
     def test_default_values_partial(self):
         """Test tool with some default values omitted."""
         args = {"name": "test", "count": 7}
-        tool_call = ModelToolCall("default_values_tool", default_values_tool, args)
+        tool_call = ModelToolCall(
+            "default_values_tool", MelleaTool.from_callable(default_values_tool), args
+        )
         result = tool_call.call_func()
         assert result == "item_test_7"
 
     def test_default_values_minimal(self):
         """Test tool with only required parameters."""
         args = {"name": "test"}
-        tool_call = ModelToolCall("default_values_tool", default_values_tool, args)
+        tool_call = ModelToolCall(
+            "default_values_tool", MelleaTool.from_callable(default_values_tool), args
+        )
         result = tool_call.call_func()
         assert result == "item_test_10"
 
@@ -274,7 +314,9 @@ class TestUnionTypes:
     def test_union_with_string(self):
         """Test union type with string value."""
         args = {"value": "hello"}
-        tool_call = ModelToolCall("union_type_tool", union_type_tool, args)
+        tool_call = ModelToolCall(
+            "union_type_tool", MelleaTool.from_callable(union_type_tool), args
+        )
         result = tool_call.call_func()
         assert "hello" in result
         assert "str" in result
@@ -282,7 +324,9 @@ class TestUnionTypes:
     def test_union_with_int(self):
         """Test union type with integer value."""
         args = {"value": 42}
-        tool_call = ModelToolCall("union_type_tool", union_type_tool, args)
+        tool_call = ModelToolCall(
+            "union_type_tool", MelleaTool.from_callable(union_type_tool), args
+        )
         result = tool_call.call_func()
         assert "42" in result
         assert "int" in result
@@ -291,7 +335,9 @@ class TestUnionTypes:
         """Test union type with string that looks like number."""
         # Without validation, this stays as string
         args = {"value": "42"}
-        tool_call = ModelToolCall("union_type_tool", union_type_tool, args)
+        tool_call = ModelToolCall(
+            "union_type_tool", MelleaTool.from_callable(union_type_tool), args
+        )
         result = tool_call.call_func()
         assert "42" in result
         # Type depends on whether validation coerces
@@ -308,21 +354,27 @@ class TestComplexTypes:
     def test_list_of_strings(self):
         """Test list parameter with strings."""
         args = {"items": ["apple", "banana", "cherry"]}
-        tool_call = ModelToolCall("list_param_tool", list_param_tool, args)
+        tool_call = ModelToolCall(
+            "list_param_tool", MelleaTool.from_callable(list_param_tool), args
+        )
         result = tool_call.call_func()
         assert result == 3
 
     def test_empty_list(self):
         """Test empty list parameter."""
         args = {"items": []}
-        tool_call = ModelToolCall("list_param_tool", list_param_tool, args)
+        tool_call = ModelToolCall(
+            "list_param_tool", MelleaTool.from_callable(list_param_tool), args
+        )
         result = tool_call.call_func()
         assert result == 0
 
     def test_dict_parameter(self):
         """Test dictionary parameter."""
         args = {"config": {"key1": "value1", "key2": 42, "key3": True}}
-        tool_call = ModelToolCall("dict_param_tool", dict_param_tool, args)
+        tool_call = ModelToolCall(
+            "dict_param_tool", MelleaTool.from_callable(dict_param_tool), args
+        )
         result = tool_call.call_func()
         parsed = json.loads(result)
         assert parsed["key1"] == "value1"
@@ -331,14 +383,22 @@ class TestComplexTypes:
     def test_nested_structure(self):
         """Test nested dictionary with lists."""
         args = {"data": {"group1": [1, 2, 3], "group2": [4, 5], "group3": [6]}}
-        tool_call = ModelToolCall("nested_structure_tool", nested_structure_tool, args)
+        tool_call = ModelToolCall(
+            "nested_structure_tool",
+            MelleaTool.from_callable(nested_structure_tool),
+            args,
+        )
         result = tool_call.call_func()
         assert result == 21  # Sum of all numbers
 
     def test_nested_structure_empty(self):
         """Test nested structure with empty lists."""
         args = {"data": {"group1": [], "group2": []}}
-        tool_call = ModelToolCall("nested_structure_tool", nested_structure_tool, args)
+        tool_call = ModelToolCall(
+            "nested_structure_tool",
+            MelleaTool.from_callable(nested_structure_tool),
+            args,
+        )
         result = tool_call.call_func()
         assert result == 0
 
@@ -354,7 +414,9 @@ class TestErrorConditions:
     def test_missing_required_argument(self):
         """Test that missing required argument raises error."""
         args = {}  # Missing 'message'
-        tool_call = ModelToolCall("simple_string_tool", simple_string_tool, args)
+        tool_call = ModelToolCall(
+            "simple_string_tool", MelleaTool.from_callable(simple_string_tool), args
+        )
 
         with pytest.raises(TypeError, match="missing.*required"):
             tool_call.call_func()
@@ -362,7 +424,9 @@ class TestErrorConditions:
     def test_extra_arguments(self):
         """Test that extra arguments are ignored (Python behavior)."""
         args = {"message": "test", "extra": "ignored"}
-        tool_call = ModelToolCall("simple_string_tool", simple_string_tool, args)
+        tool_call = ModelToolCall(
+            "simple_string_tool", MelleaTool.from_callable(simple_string_tool), args
+        )
 
         # Python ignores extra kwargs by default
         with pytest.raises(TypeError, match="unexpected keyword argument"):
@@ -371,7 +435,11 @@ class TestErrorConditions:
     def test_wrong_type_no_coercion(self):
         """Test that wrong types work without validation (Python duck typing)."""
         args = {"name": "Test", "age": "not_a_number", "score": 95.5, "active": True}
-        tool_call = ModelToolCall("typed_primitives_tool", typed_primitives_tool, args)
+        tool_call = ModelToolCall(
+            "typed_primitives_tool",
+            MelleaTool.from_callable(typed_primitives_tool),
+            args,
+        )
 
         # Python's duck typing allows this - the function just returns what it gets
         result = tool_call.call_func()
@@ -380,7 +448,9 @@ class TestErrorConditions:
     def test_none_for_required_param(self):
         """Test that None for required parameter fails."""
         args = {"message": None}
-        tool_call = ModelToolCall("simple_string_tool", simple_string_tool, args)
+        tool_call = ModelToolCall(
+            "simple_string_tool", MelleaTool.from_callable(simple_string_tool), args
+        )
 
         # Depends on function implementation
         result = tool_call.call_func()
@@ -399,7 +469,9 @@ class TestJSONParsing:
         """Test parsing valid JSON string."""
         json_str = '{"message": "Hello, World!"}'
         args = json.loads(json_str)
-        tool_call = ModelToolCall("simple_string_tool", simple_string_tool, args)
+        tool_call = ModelToolCall(
+            "simple_string_tool", MelleaTool.from_callable(simple_string_tool), args
+        )
         result = tool_call.call_func()
         assert "Hello, World!" in result
 
@@ -414,7 +486,9 @@ class TestJSONParsing:
         """Test JSON with escaped quotes."""
         json_str = '{"message": "He said \\"Hello\\""}'
         args = json.loads(json_str)
-        tool_call = ModelToolCall("simple_string_tool", simple_string_tool, args)
+        tool_call = ModelToolCall(
+            "simple_string_tool", MelleaTool.from_callable(simple_string_tool), args
+        )
         result = tool_call.call_func()
         assert "Hello" in result
 
@@ -422,7 +496,9 @@ class TestJSONParsing:
         """Test JSON with unicode characters."""
         json_str = '{"message": "Hello 世界 🌍"}'
         args = json.loads(json_str)
-        tool_call = ModelToolCall("simple_string_tool", simple_string_tool, args)
+        tool_call = ModelToolCall(
+            "simple_string_tool", MelleaTool.from_callable(simple_string_tool), args
+        )
         result = tool_call.call_func()
         assert "世界" in result
 
@@ -430,7 +506,9 @@ class TestJSONParsing:
         """Test JSON with nested objects."""
         json_str = '{"config": {"nested": {"key": "value"}, "list": [1, 2, 3]}}'
         args = json.loads(json_str)
-        tool_call = ModelToolCall("dict_param_tool", dict_param_tool, args)
+        tool_call = ModelToolCall(
+            "dict_param_tool", MelleaTool.from_callable(dict_param_tool), args
+        )
         result = tool_call.call_func()
         parsed = json.loads(result)
         assert parsed["nested"]["key"] == "value"
@@ -454,7 +532,9 @@ class TestPydanticModels:
         args_with_model = {"user": user}
 
         tool_call = ModelToolCall(
-            "pydantic_model_tool", pydantic_model_tool, args_with_model
+            "pydantic_model_tool",
+            MelleaTool.from_callable(pydantic_model_tool),
+            args_with_model,
         )
         result = tool_call.call_func()
         assert "Alice" in result
@@ -473,7 +553,9 @@ class TestPydanticModels:
         user = UserModel(**user_data)
         args = {"user": user}
 
-        tool_call = ModelToolCall("pydantic_model_tool", pydantic_model_tool, args)
+        tool_call = ModelToolCall(
+            "pydantic_model_tool", MelleaTool.from_callable(pydantic_model_tool), args
+        )
         result = tool_call.call_func()
         assert "Charlie" in result
 
@@ -489,7 +571,9 @@ class TestEdgeCases:
     def test_no_parameters_tool(self):
         """Test tool with no parameters."""
         args = {}
-        tool_call = ModelToolCall("no_params_tool", no_params_tool, args)
+        tool_call = ModelToolCall(
+            "no_params_tool", MelleaTool.from_callable(no_params_tool), args
+        )
         result = tool_call.call_func()
         assert result == "No params needed"
 
@@ -497,7 +581,9 @@ class TestEdgeCases:
         """Test that hallucinated args for no-param tool are handled."""
         # Models sometimes hallucinate parameters
         args = {"fake_param": "should_be_ignored"}
-        tool_call = ModelToolCall("no_params_tool", no_params_tool, args)
+        tool_call = ModelToolCall(
+            "no_params_tool", MelleaTool.from_callable(no_params_tool), args
+        )
 
         # This should fail without validation that clears args
         with pytest.raises(TypeError):
@@ -507,7 +593,9 @@ class TestEdgeCases:
         """Test with very long string argument."""
         long_string = "x" * 10000
         args = {"message": long_string}
-        tool_call = ModelToolCall("simple_string_tool", simple_string_tool, args)
+        tool_call = ModelToolCall(
+            "simple_string_tool", MelleaTool.from_callable(simple_string_tool), args
+        )
         result = tool_call.call_func()
         assert len(result) > 10000
 
@@ -515,14 +603,18 @@ class TestEdgeCases:
         """Test with special characters."""
         special = "!@#$%^&*()_+-=[]{}|;:',.<>?/~`"
         args = {"message": special}
-        tool_call = ModelToolCall("simple_string_tool", simple_string_tool, args)
+        tool_call = ModelToolCall(
+            "simple_string_tool", MelleaTool.from_callable(simple_string_tool), args
+        )
         result = tool_call.call_func()
         assert special in result
 
     def test_empty_string(self):
         """Test with empty string."""
         args = {"message": ""}
-        tool_call = ModelToolCall("simple_string_tool", simple_string_tool, args)
+        tool_call = ModelToolCall(
+            "simple_string_tool", MelleaTool.from_callable(simple_string_tool), args
+        )
         result = tool_call.call_func()
         assert result == "Processed: "
 

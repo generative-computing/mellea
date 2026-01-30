@@ -286,13 +286,30 @@ def validate_tool_arguments(
         # Get type from JSON schema
         json_type = param_schema.get("type", "string")
 
-        # Handle comma-separated types (e.g., "string, integer")
+        # Handle comma-separated types (e.g., "integer, string" for Union types)
         if isinstance(json_type, str) and "," in json_type:
-            # Take the first type for simplicity
-            json_type = json_type.split(",")[0].strip()
+            # Create Union type for multiple types
+            type_list = [t.strip() for t in json_type.split(",")]
+            python_types = [JSON_TYPE_TO_PYTHON.get(t, Any) for t in type_list]
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_types = []
+            for t in python_types:
+                if t not in seen:
+                    seen.add(t)
+                    unique_types.append(t)
 
-        # Map to Python type
-        param_type = JSON_TYPE_TO_PYTHON.get(json_type, Any)
+            if len(unique_types) == 1:
+                param_type = unique_types[0]
+            else:
+                # Use modern union syntax (Python 3.10+)
+                from functools import reduce
+                from operator import or_
+
+                param_type = reduce(or_, unique_types)
+        else:
+            # Map to Python type
+            param_type = JSON_TYPE_TO_PYTHON.get(json_type, Any)
 
         # Determine if parameter is required
         if param_name in required_fields:
