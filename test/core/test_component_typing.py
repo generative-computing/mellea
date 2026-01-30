@@ -6,7 +6,7 @@ import pytest
 
 import mellea.stdlib.functional as mfuncs
 from mellea import MelleaSession, start_session
-from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
+from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import (
     CBlock,
@@ -64,10 +64,10 @@ def backend(gh_run: int):
     """Shared backend."""
     if gh_run == 1:
         return OllamaModelBackend(
-            model_id=IBM_GRANITE_4_MICRO_3B.ollama_name  # type: ignore
+            model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name  # type: ignore
         )
     else:
-        return OllamaModelBackend(model_id="granite3.3:8b")
+        return OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
 
 
 @pytest.fixture(scope="module")
@@ -117,11 +117,10 @@ def test_incorrect_type_override():
 
 
 # Marking as qualitative for now since there's so much generation required for this.
-# Uses granite3.3:8b (8B, heavy) in local mode
+# Uses granite4:micro-h (3B hybrid, lightweight) in local mode
 @pytest.mark.qualitative
 @pytest.mark.ollama
 @pytest.mark.requires_gpu
-@pytest.mark.requires_heavy_ram
 @pytest.mark.llm
 async def test_generating(session):
     m = session

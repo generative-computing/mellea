@@ -791,7 +791,7 @@ We will train a lightweight adapter with the `m alora train` command on this sma
 ```bash
 m alora train /to/stembolts_data.jsonl \
   --promptfile ./prompt_config.json \
-  --basemodel ibm-granite/granite-3.2-8b-instruct \
+  --basemodel ibm-granite/granite-4.0-h-micro \
   --outfile ./checkpoints/alora_adapter \
   --adapter alora \
   --epochs 6 \
@@ -1321,9 +1321,9 @@ Assuming a component's TemplateRepresentation contains a `template_order` field,
 
 If the default formatter searches the template path or the package, it uses the following logic:
 - look in the `.../templates/prompts/...` directory
-- traverse sub-directories in that path that match the formatter's model id (ie `ibm-granite/granite-3.2-8b-instruct` will match `.../templates/prompts/granite/granite-3-2/instruct`) or default (ie `.../templates/prompts/default`)
+- traverse sub-directories in that path that match the formatter's model id (ie `ibm-granite/granite-4.0-h-micro` will match `.../templates/prompts/granite/granite-4-0-h/micro`) or default (ie `.../templates/prompts/default`)
 - return the template at the deepest directory path
-- the default template formatter assumes that a model will only have one match in any given directory; in other words, traversing a `templates` directory with both `prompts/granite/...` and `prompts/ibm/...` for `ibm-granite/granite-3.2-8b-instruct` should not happen
+- the default template formatter assumes that a model will only have one match in any given directory; in other words, traversing a `templates` directory with both `prompts/granite/...` and `prompts/ibm/...` for `ibm-granite/granite-4.0-h-micro` should not happen
 
 #### Editing an Existing Class
 To customize the template and template representation of an existing class, simply create a new class that inherits from the class you want to edit. Then, override the format_for_llm function and create a new template.
