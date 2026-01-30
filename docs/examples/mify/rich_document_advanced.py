@@ -1,3 +1,5 @@
+# pytest: huggingface, requires_heavy_ram, llm
+
 # ruff: noqa E402
 # Example: Rich Documents and Templating
 # Lets look at how to pass documents to a model using `Mellea`.

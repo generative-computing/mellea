@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 from mellea.stdlib.requirements import check, req, simple_validate
 
 requirements = [

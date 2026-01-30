@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 """Example of using Ollama with vision models with linear context."""
 
 import pathlib

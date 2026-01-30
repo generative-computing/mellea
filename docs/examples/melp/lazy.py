@@ -1,3 +1,5 @@
+# pytest: ollama, qualitative, llm
+
 import asyncio
 from mellea.core import Context, CBlock, ModelOutputThunk
 

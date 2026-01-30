@@ -11,6 +11,7 @@ from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc.document import DoclingDocument, TableItem
 from docling_core.types.io import DocumentStream
 
+from ....backends.tools import MelleaTool
 from ....core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 from ..mobject import MObject, Query, Transform
 
@@ -191,7 +192,10 @@ class Table(MObject):
         return TemplateRepresentation(
             args={"table": self.to_markdown()},
             obj=self,
-            tools=self._get_all_members(),
+            tools={
+                k: MelleaTool.from_callable(c)
+                for k, c in self._get_all_members().items()
+            },
             fields=[],
             template="{{table}}",
             template_order=None,
