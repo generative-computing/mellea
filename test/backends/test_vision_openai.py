@@ -120,10 +120,14 @@ def test_image_block_in_instruction(
     # image url
     image_url = content_img.get("image_url")
     assert image_url is not None
+    assert isinstance(image_url, dict)
     assert "url" in image_url
 
     # check that the image is in the url content
-    assert image_block.value[:100] in image_url["url"]
+    url = image_url["url"]
+    assert isinstance(url, str)
+    assert image_block.value is not None
+    assert image_block.value[:100] in url
 
 
 @pytest.mark.qualitative
@@ -174,10 +178,15 @@ def test_image_block_in_chat(
     # image url
     image_url = content_img.get("image_url")
     assert image_url is not None
+    assert isinstance(image_url, dict)
     assert "url" in image_url
 
     # check that the image is in the url content
-    assert ImageBlock.from_pil_image(pil_image).value[:100] in image_url["url"]
+    url = image_url["url"]
+    assert isinstance(url, str)
+    img_value = ImageBlock.from_pil_image(pil_image).value
+    assert img_value is not None
+    assert img_value[:100] in url
 
 
 if __name__ == "__main__":
