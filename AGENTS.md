@@ -7,6 +7,13 @@ AGENTS.md — Instructions for AI coding assistants (Claude, Cursor, Copilot, Co
 > **Which guide?** Modifying `mellea/`, `cli/`, or `test/` → this file. Writing code that imports Mellea → [`docs/AGENTS_TEMPLATE.md`](docs/AGENTS_TEMPLATE.md).
 
 ## 1. Quick Reference
+
+**⚠️ Always use `uv` for Python commands** — never use system Python or `pip` directly.
+- Run Python scripts: `uv run python script.py` (not `python script.py`)
+- Run tools: `uv run pytest`, `uv run ruff` (not `pytest`, `ruff`)
+- Install deps: `uv sync` (not `pip install`)
+- The virtual environment is `.venv/` — `uv run` automatically uses it
+
 ```bash
 pre-commit install                  # Required: install git hooks
 uv sync --all-extras --all-groups   # Install all deps (required for tests)
@@ -14,7 +21,7 @@ ollama serve                        # Start Ollama (required for most tests)
 uv run pytest                       # Default: qualitative tests, skip slow tests
 uv run pytest -m "not qualitative"  # Fast tests only (~2 min)
 uv run pytest -m slow               # Run only slow tests (>5 min)
-pytest                              # Run ALL tests including slow (no config)
+uv run pytest                       # Run ALL tests including slow
 uv run ruff format . && uv run ruff check .  # Lint & format
 ```
 **Branches**: `feat/topic`, `fix/issue-id`, `docs/topic`
