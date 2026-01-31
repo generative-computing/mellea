@@ -1,0 +1,40 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "the most common form of user interface used on pc's today is called a"
+    },
+    {
+      "role": "assistant",
+      "content": "The most common form of user interface used on personal computers today is the graphical user interface (GUI). It typically follows the windows, icons, menus, pointer (WIMP) paradigm, which includes visual elements like windows, icons, menus, and a pointer to interact with information stored in computers."
+    },
+    {
+      "role": "user",
+      "content": "Advantages of using command line interface"
+    },
+    {
+      "role": "assistant",
+      "content": "While I don't have specific data comparing it directly to the most common user interfaces today (which are GUIs), the command line interface (CLI) does have several advantages as described in the documents:\n1. **Efficiency**: A CLI can be faster for entering large vocabularies of commands or queries, especially when coupled with a wide range of options. This is often the case with operating system command shells.\n2. **Low resource requirements**: CLIs generally require fewer system resources to implement compared to GUIs.\n3. **Ease of accessing options**: With commands and their options given in a few characters, an experienced user might find it easier to access and remember the options in a CLI.\n4. **Automation of repetitive tasks**: CLIs often support mechanisms for storing frequently used command sequences in a disk file for re-use. This can extend to a scripting language that takes parameters and variable options.\n5. **Command history**: A command-line history can be kept, allowing review or repetition of commands.\nHowever, it's important to note that these advantages can depend on the specific use case and the user's familiarity with the CLI."
+    },
+    {
+      "role": "user",
+      "content": "Is the language that descended from Common Brittonic still spoken today, or has it become extinct?"
+    }
+  ],
+  "extra_body": {
+    "documents": [
+      {
+        "doc_id": "1",
+        "text": "Common Brittonic developed from the Insular branch of the Proto - Celtic language that developed in the British Isles after arriving from the continent in the 7th century BC . The language eventually began to diverge ; some linguists have grouped subsequent developments as Western and Southwestern Brittonic languages . Western Brittonic developed into Welsh in Wales and the Cumbric language in the Hen Ogledd or `` Old North '' of Britain ( modern northern England and southern Scotland ) , while the Southwestern dialect became Cornish in Cornwall and South West England and Breton in Armorica . Pictish is now generally accepted to descend from Common Brittonic , rather than being a separate Celtic language . Welsh and Breton survive today ; Cumbric and Pictish became extinct in the 12th century . Cornish had become extinct by the 19th century but has been the subject of language revitalization since the 20th century ."
+      },
+      {
+        "doc_id": "2",
+        "text": "Wales , Cornwall and Brittany continued to retain a distinct Brittonic culture , identity and language , which they have maintained to the present day . The Welsh language and Breton language remain widely spoken , and the Cornish language , once close to extinction , has experienced a revival since the 20th century . The vast majority of place names and names of geographical features in Wales , Cornwall and Brittany are Brittonic , and Brittonic family and personal names remain common ."
+      },
+      {
+        "doc_id": "3",
+        "text": "The Britons spoke an Insular Celtic language known as Common Brittonic . Brittonic was spoken throughout the island of Britain ( in modern terms , England , Wales and Scotland ) , as well as offshore islands such as the Isle of Man , Scilly Isles , Orkneys , Hebrides , Isle of Wight and Shetlands . According to early medieval historical tradition , such as The Dream of Macsen Wledig , the post-Roman Celtic - speakers of Armorica were colonists from Britain , resulting in the Breton language , a language related to Welsh and identical to Cornish in the early period and still used today . Thus the area today is called Brittany ( Br . Breizh , Fr . Bretagne , derived from Britannia ) ."
+      }
+    ]
+  }
+}
