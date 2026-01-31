@@ -94,8 +94,7 @@ def show_config() -> None:
             "Backend Name", config.backend.name or "[dim](default: ollama)[/dim]"
         )
         table.add_row(
-            "Model ID",
-            config.backend.model_id or "[dim](default: granite4:3b)[/dim]",
+            "Model ID", config.backend.model_id or "[dim](default: granite4:3b)[/dim]"
         )
 
         # Model options
