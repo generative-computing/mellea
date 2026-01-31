@@ -16,6 +16,7 @@ from .base import (
     S,
     TemplateRepresentation,
     blockify,
+    parts_contract,
 )
 from .formatter import Formatter
 from .requirement import Requirement, ValidationResult, default_output_to_bool
@@ -47,4 +48,5 @@ __all__ = [
     "blockify",
     "default_output_to_bool",
     "generate_walk",
+    "parts_contract",
 ]

@@ -1,6 +1,6 @@
 """SimpleComponent."""
 
-from ...core import CBlock, Component, ModelOutputThunk
+from ...core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 
 
 class SimpleComponent(Component[str]):
@@ -41,8 +41,10 @@ class SimpleComponent(Component[str]):
         for part in all_parts:
             assert (
                 type(part) is CBlock
-                or type(part) is Component
+                or isinstance(part, Component)
                 or type(part) is ModelOutputThunk
+            ), (
+                f"expected CBlock|Component|ModelOutputThunk but found {type(part)} with value {part}"
             )
         return all_parts
 
@@ -71,7 +73,15 @@ class SimpleComponent(Component[str]):
                 case ModelOutputThunk() | CBlock():
                     str_args[key] = kwargs[key].value
                 case Component():
-                    str_args[key] = kwargs[key].format_for_llm()
+                    component_fmt = kwargs[key].format_for_llm()
+                    match component_fmt:
+                        case TemplateRepresentation():
+                            raise Exception("Unimplemented.")
+                        case str():
+                            str_args[key] = component_fmt
+                        case _:
+                            raise TypeError()
+                    str_args[key]
         import json
 
         return json.dumps(str_args)

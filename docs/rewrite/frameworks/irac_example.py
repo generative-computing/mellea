@@ -13,7 +13,18 @@ async def main():
 
     i, r, a, c, s = await irac.irac(ctx, backend, scenario)
     print(s)
-    print([r.format_for_llm() for r in r])
+    print("-" * 80)
+    i, r, a, c, s = await irac.irac(ctx, backend, scenario)
+    print(s)
+    print("-" * 80)
+    i, r, a, c, s = await irac.irac(ctx, backend, scenario)
+    print(s)
+    print("-" * 80)
+    i, r, a, c, s = await irac.irac(ctx, backend, scenario)
+    print(s)
+    print("-" * 80)
+    i, r, a, c, s = await irac.irac(ctx, backend, scenario)
+    print(s)
 
 
 if __name__ == "__main__":

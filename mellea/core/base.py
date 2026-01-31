@@ -659,3 +659,17 @@ def get_images_from_component(c: Component) -> None | list[ImageBlock]:
             return None
     else:
         return None
+
+
+def parts_contract(xs: list[Any]) -> bool:
+    """Asserts that the return value of a Component.parts() call as the correct value."""
+    for x in xs:
+        correct_type = (
+            type(x) is CBlock or isinstance(x, Component) or type(x) is ModelOutputThunk
+        )
+        if not correct_type:
+            raise TypeError(
+                f"All return values from Component.parts() must be CBlock|Component|ModelOutputThunk but found {type(x)}"
+                "This is likely a but in the implementation of a Componnet. Please open a bug report issue on the repository that contains this Component implementation."
+            )
+    return True
