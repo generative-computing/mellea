@@ -16,13 +16,20 @@ import shutil
 from collections.abc import Callable, Sequence
 from typing import Any, overload
 
-import msgspec
-import outlines
-import outlines_core
-import torch
-import vllm
-from transformers import AutoTokenizer
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+try:
+    import msgspec
+    import outlines
+    import outlines_core
+    import torch
+    import vllm
+    from transformers import AutoTokenizer
+    from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+except ImportError as e:
+    raise ImportError(
+        "vLLM backend dependencies are not installed. "
+        "Please install with: pip install mellea[vllm]\n"
+        "Note: vLLM is not supported on macOS. Use other backends like Ollama or HuggingFace instead."
+    ) from e
 
 from ..backends import ModelIdentifier
 from ..core import (
