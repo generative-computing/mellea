@@ -222,7 +222,7 @@ def init_user_config(force: bool = False) -> Path:
 name = "ollama"
 
 # Default model ID
-model_id = "granite-4-micro:3b"
+model_id = "granite4:3b"
 
 # Default model options (temperature, max_tokens, etc.)
 [backend.model_options]

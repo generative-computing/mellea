@@ -176,7 +176,7 @@ m config init-project
 # ~/.config/mellea/config.toml
 [backend]
 name = "ollama"
-model_id = "granite-4-micro:3b"
+model_id = "granite4:3b"
 
 [backend.model_options]
 temperature = 0.7

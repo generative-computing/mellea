@@ -95,7 +95,7 @@ def show_config() -> None:
         )
         table.add_row(
             "Model ID",
-            config.backend.model_id or "[dim](default: granite-4-micro:3b)[/dim]",
+            config.backend.model_id or "[dim](default: granite4:3b)[/dim]",
         )
 
         # Model options

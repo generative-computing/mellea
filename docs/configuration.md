@@ -50,7 +50,7 @@ Configuration files use [TOML](https://toml.io/) format. Here's a complete examp
 name = "ollama"
 
 # Model identifier
-model_id = "granite-4-micro:3b"
+model_id = "granite4:3b"
 
 # Model options (temperature, max_tokens, etc.)
 [backend.model_options]
@@ -90,9 +90,9 @@ log_level = "INFO"       # DEBUG, INFO, WARNING, ERROR
 
 #### `backend.model_id`
 - **Type**: String
-- **Default**: `"granite-4-micro:3b"`
+- **Default**: `"granite4:3b"`
 - **Description**: Model identifier. Format depends on backend:
-  - Ollama: `"llama3.2:1b"`, `"granite-4-micro:3b"`
+  - Ollama: `"llama3.2:1b"`, `"granite4:3b"`
   - OpenAI: `"gpt-4"`, `"gpt-3.5-turbo"`
   - HuggingFace: `"microsoft/DialoGPT-medium"`
   - Watsonx: Model ID from IBM Watsonx catalog
