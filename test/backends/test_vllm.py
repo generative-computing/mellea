@@ -18,12 +18,19 @@ pytestmark = [
     ),
 ]
 
-import mellea.backends.model_ids as model_ids
-from mellea import MelleaSession
-from mellea.backends import ModelOption
-from mellea.backends.vllm import LocalVLLMBackend
-from mellea.core import CBlock
-from mellea.stdlib.context import ChatContext, SimpleContext
+# Try to import vLLM backend - skip all tests if not available
+try:
+    import mellea.backends.model_ids as model_ids
+    from mellea import MelleaSession
+    from mellea.backends import ModelOption
+    from mellea.backends.vllm import LocalVLLMBackend
+    from mellea.core import CBlock
+    from mellea.stdlib.context import ChatContext, SimpleContext
+except ImportError as e:
+    pytest.skip(
+        f"vLLM backend not available: {e}. Install with: pip install mellea[vllm]",
+        allow_module_level=True,
+    )
 
 
 @pytest.fixture(scope="module")
