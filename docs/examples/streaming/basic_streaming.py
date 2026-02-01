@@ -36,4 +36,3 @@ async def stream_story():
 if __name__ == "__main__":
     asyncio.run(stream_story())
 
-# Made with Bob
