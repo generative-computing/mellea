@@ -73,7 +73,6 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-    await_result: bool = True,
 ) -> tuple[ModelOutputThunk[S], Context] | SamplingResult[S]:
     """Runs a generic action, and adds both the action and the result to the context.
 
@@ -87,12 +86,10 @@ def act(
         format: if set, the BaseModel to use for constrained decoding.
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tool_calls: if true, tool calling is enabled.
-        await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. If True or strategy is not None, returns ComputedModelOutputThunk. Default is True for backward compatibility.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
-        When await_result=False and strategy=None, returns uncomputed ModelOutputThunk that can be streamed.
-        Otherwise returns ComputedModelOutputThunk.
+        Always returns ComputedModelOutputThunk since sync functions must await completion.
     """
     out = _run_async_in_thread(
         aact(
@@ -106,7 +103,7 @@ def act(
             model_options=model_options,
             tool_calls=tool_calls,
             silence_context_type_warning=True,  # We can safely silence this here since it's in a sync function.
-            await_result=await_result,
+            await_result=True,  # Sync functions must always await
         )  # type: ignore[call-overload]
         # Mypy doesn't like the bool for return_sampling_results.
     )
@@ -173,7 +170,6 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-    await_result: bool = True,
 ) -> tuple[ModelOutputThunk[str], Context] | SamplingResult[str]:
     """Generates from an instruction.
 
@@ -193,11 +189,10 @@ def instruct(
         model_options: Additional model options, which will upsert into the model/backend's defaults.
         tool_calls: If true, tool calling is enabled.
         images: A list of images to be used in the instruction or None if none.
-        await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. If True or strategy is not None, returns ComputedModelOutputThunk. Default is True for backward compatibility.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
-        When await_result=False and strategy=None, returns uncomputed ModelOutputThunk that can be streamed.
+        Always returns ComputedModelOutputThunk since sync functions must await completion.
     """
     requirements = [] if requirements is None else requirements
     icl_examples = [] if icl_examples is None else icl_examples
@@ -223,7 +218,6 @@ def instruct(
         backend=backend,
         requirements=i.requirements,
         strategy=strategy,
-        await_result=await_result,
         return_sampling_results=return_sampling_results,
         format=format,
         model_options=model_options,
@@ -541,7 +535,10 @@ async def aact(
             computed_result._model_options = result._model_options
             computed_result._generate_log = result._generate_log
             result = computed_result  # type: ignore
-        # else: return uncomputed ModelOutputThunk for streaming
+        else:
+            # Return uncomputed ModelOutputThunk for streaming
+            # Note: new_ctx is already set from generate_from_context
+            pass
 
     else:
         # Always sample if a strategy is provided, even if no requirements were provided.
@@ -619,6 +616,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    await_result: bool = True,
 ) -> tuple[ModelOutputThunk[str], Context]: ...
 
 
@@ -640,6 +638,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    await_result: bool = True,
 ) -> SamplingResult[S]: ...
 
 
@@ -660,6 +659,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    await_result: bool = True,
 ) -> tuple[ModelOutputThunk[str], Context] | SamplingResult:
     """Generates from an instruction.
 
@@ -679,6 +679,7 @@ async def ainstruct(
         model_options: Additional model options, which will upsert into the model/backend's defaults.
         tool_calls: If true, tool calling is enabled.
         images: A list of images to be used in the instruction or None if none.
+        await_result: If False, returns an uncomputed ModelOutputThunk for streaming. If True (default), awaits and returns a ComputedModelOutputThunk.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -711,6 +712,7 @@ async def ainstruct(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        await_result=await_result,
     )  # type: ignore[call-overload]
 
 
