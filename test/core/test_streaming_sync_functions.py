@@ -151,6 +151,3 @@ async def test_aact_function_with_await_result():
         assert isinstance(result, ModelOutputThunk)
         assert not isinstance(result, ComputedModelOutputThunk)
         assert not result.is_computed()
-
-
-# Made with Bob
