@@ -6,6 +6,7 @@ import inspect
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
+from ...backends.tools import MelleaTool
 from ...core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 from ...security import SecLevel
 
@@ -254,10 +255,13 @@ class MObject(Component[str]):
         parsing for tools and fields. The content is retrieved
         from `content_as_string()`.
         """
+        tools = {
+            k: MelleaTool.from_callable(c) for k, c in self._get_all_members().items()
+        }
         return TemplateRepresentation(
             args={"content": self.content_as_string()},
             obj=self,
-            tools=self._get_all_members(),
+            tools=tools,
             fields=[],
             template_order=["*", "MObject"],
         )

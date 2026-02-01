@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 # Installing langchain is necessary for this example, but it works for any library
 # you may want to use Mellea with.
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage

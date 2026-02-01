@@ -1,3 +1,5 @@
+# pytest: huggingface, requires_heavy_ram, llm
+
 import time
 
 from mellea import MelleaSession

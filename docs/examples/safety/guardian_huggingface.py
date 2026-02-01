@@ -1,3 +1,5 @@
+# pytest: huggingface, requires_heavy_ram, llm
+
 """Example of using GuardianCheck with HuggingFace backend for direct model inference
 
 This example shows how to reuse the Guardian backend across multiple validators

@@ -28,6 +28,7 @@ from ..core import (
     ModelOutputThunk,
     Requirement,
 )
+from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import (
     ClientCache,
@@ -592,7 +593,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
                 }
 
         # Append tool call information if applicable.
-        tools: dict[str, Callable] = dict()
+        tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
             if _format:
                 FancyLogger.get_logger().warning(
@@ -718,7 +719,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
     async def post_processing(
         self,
         mot: ModelOutputThunk,
-        tools: dict[str, Callable],
+        tools: dict[str, AbstractMelleaTool],
         conversation: list[dict],
         thinking,
         seed,

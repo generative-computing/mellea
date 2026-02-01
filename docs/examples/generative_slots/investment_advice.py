@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 from typing import Literal
 
 from mellea import MelleaSession, generative, start_session

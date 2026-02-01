@@ -5,6 +5,7 @@ import types
 from collections.abc import Callable
 from typing import Any, Protocol, TypeVar, overload, runtime_checkable
 
+from ...backends.tools import MelleaTool
 from ...core import (
     CBlock,
     Component,
@@ -193,7 +194,10 @@ class MifiedProtocol(MObjectProtocol, Protocol):
         return TemplateRepresentation(
             args=args,  # type: ignore
             obj=self,
-            tools=self._get_all_members(),
+            tools={
+                k: MelleaTool.from_callable(c)
+                for k, c in self._get_all_members().items()
+            },
             fields=[],
             template=self._template,
             template_order=template_order,

@@ -24,6 +24,7 @@ from ..core import (
     ModelOutputThunk,
     ModelToolCall,
 )
+from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import (
     chat_completion_delta_merge,
@@ -405,7 +406,7 @@ class LiteLLMBackend(FormatterBackend):
         self,
         mot: ModelOutputThunk,
         conversation: list[dict],
-        tools: dict[str, Callable],
+        tools: dict[str, AbstractMelleaTool],
         thinking,
         _format,
     ):
@@ -462,8 +463,8 @@ class LiteLLMBackend(FormatterBackend):
     @staticmethod
     def _extract_tools(
         action, _format, model_opts, tool_calls, ctx
-    ) -> dict[str, Callable]:
-        tools: dict[str, Callable] = dict()
+    ) -> dict[str, AbstractMelleaTool]:
+        tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
             if _format:
                 FancyLogger.get_logger().warning(
@@ -590,7 +591,7 @@ class LiteLLMBackend(FormatterBackend):
 
     def _extract_model_tool_requests(
         self,
-        tools: dict[str, Callable],
+        tools: dict[str, AbstractMelleaTool],
         chat_response: litellm.ModelResponse,  # type: ignore
     ) -> dict[str, ModelToolCall] | None:
         model_tool_calls: dict[str, ModelToolCall] = {}

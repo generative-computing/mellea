@@ -1,3 +1,5 @@
+# pytest: huggingface, requires_heavy_ram, llm
+
 """
 Example usage of the context relevance intrinsic for RAG applications.
 
