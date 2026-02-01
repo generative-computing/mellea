@@ -594,10 +594,18 @@ async def aact(
             computed_result._model_options = result._model_options
             computed_result._generate_log = result._generate_log
 
+
             # Update the sampling result to use the computed thunk
             sampling_result.sample_generations[sampling_result.result_index] = (
                 computed_result  # type: ignore
             )
+
+            # Update context to point to the wrapped result
+            # The context's last node contains the original result, replace it with wrapped version
+            new_ctx._data = computed_result  # type: ignore
+            sampling_result.sample_contexts[sampling_result.result_index] = new_ctx
+
+
             result = computed_result  # type: ignore
 
         # Add span attributes for the result
