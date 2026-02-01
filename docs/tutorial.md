@@ -46,6 +46,12 @@
   - [Chapter 12: Asynchronicity](#chapter-12-asynchronicity)
     - [Asynchronous Functions:](#asynchronous-functions)
     - [Asynchronicity in Synchronous Functions](#asynchronicity-in-synchronous-functions)
+  - [Chapter 13: Streaming Model Outputs](#chapter-13-streaming-model-outputs)
+    - [Streaming with Async Functions](#streaming-with-async-functions)
+    - [Understanding ModelOutputThunk Types](#understanding-modeloutputthunk-types)
+    - [Important Constraints](#important-constraints)
+    - [Practical Example: Interactive Chat](#practical-example-interactive-chat)
+    - [Best Practices](#best-practices)
   - [Appendix: Contributing to Mellea](#appendix-contributing-to-mellea)
     - [Contributor Guide: Getting Started](#contributor-guide-getting-started)
     - [Contributor Guide: Requirements and Verifiers](#contributor-guide-requirements-and-verifiers)
@@ -1437,6 +1443,129 @@ Additionally, see [Chapter 7: Context Management](#chapter-7-on-context-manageme
 Mellea utilizes asynchronicity internally. When you call `m.instruct`, you are using synchronous code that executes an asynchronous request to an LLM to generate the result. For a single request, this won't cause any differences in execution speed.
 
 When using `SamplingStrategy`s or during validation, Mellea can speed up the execution time of your program by generating multiple results and validating those results against multiple requirements simultaneously. Whether you use `m.instruct` or the asynchronous `m.ainstruct`, Mellea will attempt to speed up your requests by dispatching those requests as quickly as possible and asynchronously awaiting the results.
+
+## Chapter 13: Streaming Model Outputs
+
+Mellea supports streaming model outputs, allowing you to process tokens as they are generated rather than waiting for the complete response. This is particularly useful for:
+- Building interactive applications with real-time feedback
+- Processing long-form content incrementally
+- Reducing perceived latency in user-facing applications
+
+### Streaming with Async Functions
+
+To enable streaming, use the async versions of session functions (`ainstruct`, `aact`) with the `await_result=False` parameter:
+
+```python
+# file: https://github.com/generative-computing/mellea/blob/main/docs/examples/streaming/basic_streaming.py#L1-L35
+import asyncio
+import mellea
+
+async def stream_story():
+    m = mellea.start_session()
+    
+    # Get uncomputed thunk for streaming
+    thunk = await m.ainstruct(
+        "Write a short story about a robot learning to paint.",
+        await_result=False
+    )
+    
+    # Stream the output - astream() returns accumulated value so far
+    last_length = 0
+    while not thunk.is_computed():
+        current_value = await thunk.astream()
+        # Print only the new portion
+        new_content = current_value[last_length:]
+        print(new_content, end="", flush=True)
+        last_length = len(current_value)
+    print()
+
+asyncio.run(stream_story())
+```
+
+When `await_result=False`, the function returns a `ModelOutputThunk` that hasn't been computed yet. You can then call `astream()` in a loop to get the accumulated output so far. The method returns the full text generated up to that point, so you'll need to track what you've already displayed to show only new content.
+
+### Understanding ModelOutputThunk Types
+
+Mellea uses two types of thunks to clearly distinguish computed from uncomputed outputs:
+
+- **`ModelOutputThunk`**: A lazy evaluation container that may or may not be computed. Can be streamed with `astream()`.
+- **`ComputedModelOutputThunk`**: A subclass that guarantees the output is already computed. Attempting to stream raises an error since the content is already available via `.value`.
+
+```python
+# Sync functions always return ComputedModelOutputThunk
+result = m.instruct("Hello")  # Already computed
+print(result.value)  # Immediate access
+
+# Async with await_result=True (default) also returns ComputedModelOutputThunk
+result = await m.ainstruct("Hello")  # Already computed
+print(result.value)  # Immediate access
+
+# Async with await_result=False returns uncomputed ModelOutputThunk
+thunk = await m.ainstruct("Hello", await_result=False)  # Not computed yet
+async for chunk in thunk.astream():  # Stream the generation
+    print(chunk, end="")
+```
+
+### Important Constraints
+
+**Streaming requires async context**: You cannot stream from synchronous functions (`instruct`, `act`) because:
+1. Sync functions use `_run_async_in_thread()` which blocks the calling thread
+2. Streaming requires `await thunk.astream()` which needs an async context
+3. Attempting to return uncomputed thunks from sync functions would cause deadlock
+
+Therefore, sync functions always await the result internally and return `ComputedModelOutputThunk`.
+
+**Streaming and sampling are incompatible**: When using `SamplingStrategy` or `return_sampling_results=True`, the function must await the complete result to perform validation. In these cases, the function always returns a computed result regardless of the `await_result` parameter.
+
+### Practical Example: Interactive Chat
+
+Here's a more complete example showing streaming in an interactive application:
+
+```python
+# file: https://github.com/generative-computing/mellea/blob/main/docs/examples/streaming/interactive_chat.py#L1-L42
+import asyncio
+import mellea
+from mellea.stdlib.context import ChatContext
+
+async def interactive_chat():
+    m = mellea.start_session(ctx=ChatContext())
+    
+    print("Chat with the AI (type 'quit' to exit)")
+    print("-" * 50)
+    
+    while True:
+        user_input = input("\nYou: ")
+        if user_input.lower() == 'quit':
+            break
+        
+        print("AI: ", end="", flush=True)
+        
+        # Stream the response
+        thunk = await m.ainstruct(
+            user_input,
+            await_result=False
+        )
+        
+        last_length = 0
+        while not thunk.is_computed():
+            current_value = await thunk.astream()
+            new_content = current_value[last_length:]
+            print(new_content, end="", flush=True)
+            last_length = len(current_value)
+        
+        print()  # New line after response
+
+asyncio.run(interactive_chat())
+```
+
+### Best Practices
+
+1. **Use async functions for streaming**: Always use `ainstruct()` or `aact()` with `await_result=False`
+2. **Handle errors gracefully**: Wrap streaming in try-except blocks to handle network issues
+3. **Consider buffering**: For UI applications, you may want to buffer chunks before displaying
+4. **Avoid streaming with validation**: If you need requirement validation, use the default `await_result=True`
+
+For more examples, see the [streaming examples directory](./examples/streaming/).
 
 ## Appendix: Contributing to Mellea
 

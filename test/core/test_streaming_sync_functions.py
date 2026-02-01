@@ -1,4 +1,4 @@
-"""Tests for streaming support in sync functions via await_result parameter."""
+"""Tests for streaming support using async functions with await_result parameter."""
 
 # pytest: ollama, llm
 
@@ -10,10 +10,10 @@ from mellea.core import ComputedModelOutputThunk, ModelOutputThunk
 from mellea.stdlib.session import start_session
 
 
-def test_sync_function_with_await_result_true():
-    """Test that await_result=True returns ComputedModelOutputThunk (default behavior)."""
+def test_sync_function_returns_computed_thunk():
+    """Test that sync functions always return ComputedModelOutputThunk."""
     with start_session() as session:
-        result = session.instruct("Say 'hello'", strategy=None, await_result=True)
+        result = session.instruct("Say 'hello'", strategy=None)
 
         # Should return ComputedModelOutputThunk
         assert isinstance(result, ComputedModelOutputThunk)
@@ -21,10 +21,25 @@ def test_sync_function_with_await_result_true():
         assert result.value is not None
 
 
-def test_sync_function_with_await_result_false():
-    """Test that await_result=False returns uncomputed ModelOutputThunk."""
+async def test_async_function_with_await_result_true():
+    """Test that ainstruct with await_result=True returns ComputedModelOutputThunk."""
     with start_session() as session:
-        result = session.instruct("Say 'hello'", strategy=None, await_result=False)
+        result = await session.ainstruct(
+            "Say 'hello'", strategy=None, await_result=True
+        )
+
+        # Should return ComputedModelOutputThunk
+        assert isinstance(result, ComputedModelOutputThunk)
+        assert result.is_computed()
+        assert result.value is not None
+
+
+async def test_async_function_with_await_result_false():
+    """Test that ainstruct with await_result=False returns uncomputed ModelOutputThunk."""
+    with start_session() as session:
+        result = await session.ainstruct(
+            "Say 'hello'", strategy=None, await_result=False
+        )
 
         # Should return uncomputed ModelOutputThunk (not ComputedModelOutputThunk)
         assert isinstance(result, ModelOutputThunk)
@@ -34,9 +49,12 @@ def test_sync_function_with_await_result_false():
 
 
 async def test_streaming_uncomputed_thunk():
-    """Test that uncomputed thunk can be streamed using astream()."""
+    """Test that uncomputed thunk can be streamed using astream() with ainstruct."""
     with start_session() as session:
-        result = session.instruct("Count to 5", strategy=None, await_result=False)
+        # Use ainstruct (async) with await_result=False for streaming
+        result = await session.ainstruct(
+            "Count to 5", strategy=None, await_result=False
+        )
 
         # Should be uncomputed
         assert not result.is_computed()
@@ -54,9 +72,12 @@ async def test_streaming_uncomputed_thunk():
 
 
 async def test_streaming_with_avalue():
-    """Test that uncomputed thunk can be awaited using avalue()."""
+    """Test that uncomputed thunk can be awaited using avalue() with ainstruct."""
     with start_session() as session:
-        result = session.instruct("Say 'test'", strategy=None, await_result=False)
+        # Use ainstruct (async) with await_result=False
+        result = await session.ainstruct(
+            "Say 'test'", strategy=None, await_result=False
+        )
 
         # Should be uncomputed
         assert not result.is_computed()
@@ -77,9 +98,7 @@ def test_await_result_false_with_sampling_still_computes():
     with start_session() as session:
         # Even with await_result=False, sampling requires awaiting
         result = session.instruct(
-            "Say 'hello'",
-            strategy=RejectionSamplingStrategy(loop_budget=1),
-            await_result=False,
+            "Say 'hello'", strategy=RejectionSamplingStrategy(loop_budget=1)
         )
 
         # Should still be ComputedModelOutputThunk because sampling requires it
@@ -99,10 +118,11 @@ def test_default_behavior_unchanged():
 
 
 async def test_multiple_uncomputed_thunks():
-    """Test creating multiple uncomputed thunks and awaiting them."""
+    """Test creating multiple uncomputed thunks and awaiting them with ainstruct."""
     with start_session() as session:
-        result1 = session.instruct("Say '1'", strategy=None, await_result=False)
-        result2 = session.instruct("Say '2'", strategy=None, await_result=False)
+        # Use ainstruct (async) for both calls
+        result1 = await session.ainstruct("Say '1'", strategy=None, await_result=False)
+        result2 = await session.ainstruct("Say '2'", strategy=None, await_result=False)
 
         # Both should be uncomputed
         assert not result1.is_computed()
@@ -118,16 +138,19 @@ async def test_multiple_uncomputed_thunks():
         assert value2 is not None
 
 
-def test_act_function_with_await_result():
-    """Test that act() function also supports await_result parameter."""
+async def test_aact_function_with_await_result():
+    """Test that aact() function also supports await_result parameter."""
     from mellea.stdlib.components import Instruction
 
     with start_session() as session:
         instruction = Instruction(description="Say 'test'")
 
         # Test with await_result=False
-        result = session.act(instruction, strategy=None, await_result=False)
+        result = await session.aact(instruction, strategy=None, await_result=False)
 
         assert isinstance(result, ModelOutputThunk)
         assert not isinstance(result, ComputedModelOutputThunk)
         assert not result.is_computed()
+
+
+# Made with Bob
