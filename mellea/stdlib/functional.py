@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
+import json
 from typing import Any, Literal, overload
 
 from PIL import Image as PILImage
@@ -918,12 +919,16 @@ def _call_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]
             except Exception as e:
                 output = e
 
-            # Default to the output. Attempt to properly print it. If that doesn't result in a str,
-            # stringify it.
-            content = str(output)
-            if isinstance(backend, FormatterBackend):
+            # Default to the output. Attempt to properly print it. If that doesn't result in a str, stringify it.
+            if isinstance(output, dict):
+                # Special handling for json dicts. json.dumps is required for properly escaped json printing.
+                content = json.dumps(output)
+            elif isinstance(backend, FormatterBackend):
                 content = backend.formatter.print(output)  # type: ignore
+                # formatter.print should result in a string, but call str() to be safe.
                 content = str(content)
+            else:
+                content = str(output)
 
             outputs.append(
                 ToolMessage(

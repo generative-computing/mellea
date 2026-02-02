@@ -16,7 +16,7 @@ from mellea.stdlib.components.react import (
 )
 from mellea.stdlib.context import ChatContext
 
-
+# TODO: JAL. Change output type.
 async def react(
     goal: str,
     context: ChatContext,
@@ -67,7 +67,7 @@ async def react(
     if mo_tools is not None:
         tools.extend(mo_tools)
 
-    context = context.add(ReactInitiator(goal, tools))
+    context = context.add(ReactInitiator(goal, tools, format=format))
 
     turn_num = 0
     while (turn_num < loop_budget) or (loop_budget == -1):
@@ -100,22 +100,7 @@ async def react(
 
         if is_final:
             assert len(tool_responses) == 1, "multiple tools were called with 'final'"
-
-            if format is not None:
-                step, next_context = await mfuncs.aact(
-                    action=ReactThought(),
-                    context=context,
-                    backend=backend,
-                    requirements=[],
-                    strategy=None,
-                    model_options=model_options,
-                    format=format,
-                )
-                assert isinstance(next_context, ChatContext)
-                context = next_context
-            else:
-                # The tool has already been called above.
-                step._underlying_value = str(tool_responses[0].content)
+            step._underlying_value = str(tool_responses[0].content)
             return step, context
 
     raise RuntimeError(f"could not complete react loop in {loop_budget} iterations")

@@ -3,6 +3,8 @@
 import inspect
 from typing import Generic
 
+import pydantic
+
 from mellea.backends.tools import MelleaTool
 from mellea.core.backend import BaseModelSubclass
 from mellea.core.base import (
@@ -17,17 +19,18 @@ from mellea.core.utils import FancyLogger
 MELLEA_FINALIZER_TOOL = "final_answer"
 """Used in the react loop to symbolize the loop is done."""
 
-
-# Note: must leave answer type as str. Otherwise, must set it during the format reconfiguration done to the tool in format_for_llm.
 def _mellea_finalize_tool(answer: str) -> str:
     """Finalizer function that signals the end of the react loop and takes the final answer."""
     return answer
+
+MELLEA_FINALIZER_PARAM_NAME = next(iter(inspect.signature(_mellea_finalize_tool).parameters.keys()))
+"""Used to modify the finalizer function to set the answer parameter to the correct object type."""
 
 
 class ReactInitiator(Component[str], Generic[BaseModelSubclass]):
     """`ReactInitiator` is used at the start of the ReACT loop to prime the model."""
 
-    def __init__(self, goal: str, tools: list[AbstractMelleaTool] | None):
+    def __init__(self, goal: str, tools: list[AbstractMelleaTool] | None, format: type[BaseModelSubclass] | None = None):
         """`ReactInitiator` is used at the start of the ReACT loop to prime the model.
 
         Args:
@@ -37,6 +40,7 @@ class ReactInitiator(Component[str], Generic[BaseModelSubclass]):
         """
         self.goal = CBlock(goal)
         self.tools = tools or []
+        self.format = format
 
     def parts(self) -> list[Component | CBlock]:
         """The set of all the constituent parts of the `Component`."""
@@ -57,6 +61,17 @@ class ReactInitiator(Component[str], Generic[BaseModelSubclass]):
         finalizer_tool = MelleaTool.from_callable(
             _mellea_finalize_tool, MELLEA_FINALIZER_TOOL
         )
+
+        # Set the answer parameter type to be that of the format if format is set.
+        if self.format is not None:
+            model = self.format.model_json_schema() # type: ignore
+            finalizer_tool_json = finalizer_tool.as_json_tool
+            finalizer_tool_json["function"]["parameters"]["defs"] = {
+                self.format.__name__.title(): model
+            }
+            finalizer_tool_json["function"]["parameters"]["properties"][MELLEA_FINALIZER_PARAM_NAME]["type"] = self.format.__name__.title()
+            finalizer_tool._as_json_tool = finalizer_tool_json
+
         tools[MELLEA_FINALIZER_TOOL] = finalizer_tool
 
         return TemplateRepresentation(
