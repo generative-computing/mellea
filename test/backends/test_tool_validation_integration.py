@@ -83,6 +83,15 @@ def no_params_tool() -> str:
     return "No params needed"
 
 
+def untyped_param(message) -> str:
+    """A tool with an untyped parameter.
+
+    Args:
+        message: The message to process (no type hint)
+    """
+    return f"Processed: {message}"
+
+
 # ============================================================================
 # Test Cases: Type Coercion
 # ============================================================================
@@ -379,6 +388,72 @@ class TestErrorMessages:
         except ValidationError as e:
             error_str = str(e)
             assert "age" in error_str.lower()
+
+
+class TestUntypedParameters:
+    """Test validation with untyped parameters."""
+
+    def test_untyped_parameter_accepts_string(self):
+        """Test that untyped parameters accept string values."""
+        args = {"message": "test"}
+        tool = MelleaTool.from_callable(untyped_param)
+        validated = validate_tool_arguments(tool, args)
+
+        assert validated["message"] == "test"
+
+    def test_untyped_parameter_accepts_int(self):
+        """Test that untyped parameters accept integer values.
+
+        Note: Without type hints, validation may coerce to string for safety.
+        """
+        args = {"message": 123}
+        tool = MelleaTool.from_callable(untyped_param)
+        validated = validate_tool_arguments(tool, args)
+
+        # Validation may coerce to string when no type hint is present
+        assert validated["message"] in [123, "123"]
+
+    def test_untyped_parameter_accepts_dict(self):
+        """Test untyped parameter with complex type (dict)."""
+        args = {"message": {"key": "value", "number": 42}}
+        tool = MelleaTool.from_callable(untyped_param)
+        validated = validate_tool_arguments(tool, args)
+
+        assert validated["message"] == {"key": "value", "number": 42}
+
+    def test_untyped_parameter_accepts_list(self):
+        """Test untyped parameter with list."""
+        args = {"message": ["item1", "item2", "item3"]}
+        tool = MelleaTool.from_callable(untyped_param)
+        validated = validate_tool_arguments(tool, args)
+
+        assert validated["message"] == ["item1", "item2", "item3"]
+
+    def test_untyped_parameter_accepts_bool(self):
+        """Test untyped parameter with boolean."""
+        args = {"message": True}
+        tool = MelleaTool.from_callable(untyped_param)
+        validated = validate_tool_arguments(tool, args)
+
+        assert validated["message"] is True
+
+    def test_untyped_parameter_accepts_none(self):
+        """Test untyped parameter with None."""
+        args = {"message": None}
+        tool = MelleaTool.from_callable(untyped_param)
+        validated = validate_tool_arguments(tool, args)
+
+        assert validated["message"] is None
+
+    def test_untyped_parameter_no_coercion(self):
+        """Test that untyped parameters don't get coerced."""
+        args = {"message": "123"}
+        tool = MelleaTool.from_callable(untyped_param)
+        validated = validate_tool_arguments(tool, args, coerce_types=True)
+
+        # Should remain as string since there's no type hint to coerce to
+        assert validated["message"] == "123"
+        assert isinstance(validated["message"], str)
 
 
 if __name__ == "__main__":
