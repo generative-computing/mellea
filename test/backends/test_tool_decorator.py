@@ -115,7 +115,8 @@ class TestToolDecoratorIntegration:
     def test_decorated_tool_with_model_tool_call(self):
         """Test that decorated tools work with ModelToolCall."""
         args = {"message": "test message"}
-        tool_call = ModelToolCall("simple_tool", simple_tool._mellea_tool, args)
+        # Decorated function IS a MelleaTool, can be passed directly
+        tool_call = ModelToolCall("simple_tool", simple_tool, args)
         result = tool_call.call_func()
         assert result == "Processed: test message"
 
@@ -294,11 +295,12 @@ class TestToolDecoratorUsagePatterns:
         assert "multi_param_tool" in names
 
     def test_accessing_underlying_mellea_tool(self):
-        """Test accessing the underlying MelleaTool instance."""
-        assert hasattr(simple_tool, "_mellea_tool")
-        underlying = simple_tool._mellea_tool
-        assert isinstance(underlying, MelleaTool)
-        assert underlying.name == "simple_tool"
+        """Test that decorated function IS a MelleaTool instance."""
+        assert isinstance(simple_tool, MelleaTool)
+        assert simple_tool.name == "simple_tool"
+        # Verify it has all MelleaTool properties
+        assert hasattr(simple_tool, "as_json_tool")
+        assert hasattr(simple_tool, "run")
 
 
 if __name__ == "__main__":

@@ -6,30 +6,6 @@ from mellea.stdlib.requirements import tool_arg_validator, uses_tool
 from mellea.stdlib.tools import code_interpreter, local_code_interpreter
 
 
-# Example: Define a custom tool using the @tool decorator
-@tool
-def get_weather(location: str, days: int = 1) -> dict:
-    """Get weather forecast for a location.
-
-    Args:
-        location: City name
-        days: Number of days to forecast (default: 1)
-    """
-    # Mock implementation
-    return {"location": location, "days": days, "forecast": "sunny", "temperature": 72}
-
-
-@tool(name="custom_calculator")
-def calculate(expression: str) -> float:
-    """Evaluate a mathematical expression.
-
-    Args:
-        expression: Mathematical expression to evaluate
-    """
-    # Simple mock - in production, use safe evaluation
-    return eval(expression)
-
-
 def example_1(m: MelleaSession):
     # First, let's see how the code interpreter function works without an LLM in the loop:
     result = code_interpreter("print(1+1)")

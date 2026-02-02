@@ -49,7 +49,7 @@ def example_basic_usage():
     """Example 1: Basic usage with decorated tools."""
     print("\n=== Example 1: Basic Tool Usage ===")
 
-    # Before the decorator, you had to do:
+    # Without the decorator, you can add tools using:
     # tools = [MelleaTool.from_callable(get_weather), MelleaTool.from_callable(search_web)]
 
     # Now you can just pass the decorated functions directly:

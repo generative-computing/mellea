@@ -5,7 +5,7 @@ import json
 import re
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
-from typing import Any, Literal
+from typing import Any, Literal, overload
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -91,19 +91,31 @@ class MelleaTool(AbstractMelleaTool):
         return MelleaTool(tool_name, tool_call, as_json)
 
 
-def tool(func: Callable | None = None, *, name: str | None = None) -> Any:
+@overload
+def tool(func: Callable) -> MelleaTool: ...
+
+
+@overload
+def tool(*, name: str | None = None) -> Callable[[Callable], MelleaTool]: ...
+
+
+def tool(
+    func: Callable | None = None, *, name: str | None = None
+) -> MelleaTool | Callable[[Callable], MelleaTool]:
     """Decorator to mark a function as a Mellea tool.
 
     This decorator wraps a function to make it usable as a tool without
     requiring explicit MelleaTool.from_callable() calls. The decorated
-    function can be used both as a normal callable and as a MelleaTool.
+    function IS a MelleaTool instance (via inheritance) and can be used
+    both as a normal callable and passed directly wherever MelleaTool is expected.
 
     Args:
         func: The function to decorate (when used without arguments)
         name: Optional custom name for the tool (defaults to function name)
 
     Returns:
-        A callable that behaves like both the original function and a MelleaTool
+        A MelleaTool instance that can be called directly like the original function.
+        The returned object passes isinstance(result, MelleaTool) checks.
 
     Examples:
         Basic usage:
@@ -116,10 +128,18 @@ def tool(func: Callable | None = None, *, name: str | None = None) -> Any:
         ...         days: Number of days to forecast
         ...     '''
         ...     return {"location": location, "forecast": "sunny"}
-        >>> # Can be used directly in tools list
+        >>>
+        >>> # The decorated function IS a MelleaTool
+        >>> isinstance(get_weather, MelleaTool)  # True
+        >>>
+        >>> # Can be used directly in tools list (no extraction needed)
         >>> tools = [get_weather]
+        >>>
         >>> # Can still be called normally
         >>> result = get_weather("Boston")
+        >>>
+        >>> # Or use the .run() interface
+        >>> result = get_weather.run(location="Boston")
 
         With custom name:
         >>> @tool(name="weather_api")
@@ -127,54 +147,34 @@ def tool(func: Callable | None = None, *, name: str | None = None) -> Any:
         ...     return {"location": location}
     """
 
-    def decorator(f: Callable) -> Any:
-        # Create the MelleaTool instance
-        mellea_tool = MelleaTool.from_callable(f, name=name)
+    def decorator(f: Callable) -> MelleaTool:
+        # Create the base MelleaTool instance
+        base_tool = MelleaTool.from_callable(f, name=name)
 
-        # Create a wrapper that preserves the original function behavior
-        # but also acts as a MelleaTool
-        class ToolWrapper:
-            """Wrapper that makes a function behave like both a callable and a MelleaTool."""
+        # Create an enhanced MelleaTool subclass that supports direct calling
+        class CallableMelleaTool(MelleaTool):
+            """MelleaTool subclass that supports direct calling like the original function."""
 
-            def __init__(self, func: Callable, tool: MelleaTool):
-                self._func = func
-                self._tool = tool
-                self._mellea_tool = tool  # Store for direct access
-                # Copy function metadata
+            def __init__(self, base: MelleaTool, func: Callable):
+                # Initialize with base tool's attributes
+                super().__init__(base.name, base._call_tool, base._as_json_tool)
+                # Store original function for direct calling
+                self._original_func = func
+                # Copy function metadata for better introspection
                 self.__name__ = func.__name__
                 self.__doc__ = func.__doc__
                 self.__module__ = func.__module__
                 self.__qualname__ = func.__qualname__
                 self.__annotations__ = func.__annotations__
-                self.__dict__.update(func.__dict__)
 
             def __call__(self, *args, **kwargs) -> Any:
-                """Allow the wrapper to be called like the original function."""
-                return self._func(*args, **kwargs)
+                """Allow the tool to be called directly like the original function."""
+                return self._original_func(*args, **kwargs)
 
             def __repr__(self) -> str:
-                return f"<tool {self._tool.name}>"
+                return f"<tool {self.name}>"
 
-            # Expose MelleaTool interface
-            @property
-            def name(self) -> str:
-                """Get the tool name."""
-                return self._tool.name
-
-            @property
-            def as_json_tool(self) -> dict[str, Any]:
-                """Get the tool as JSON schema."""
-                return self._tool.as_json_tool
-
-            def run(self, *args, **kwargs) -> Any:
-                """Run the tool (same as calling it)."""
-                return self._tool.run(*args, **kwargs)
-
-            # Make it work with isinstance checks
-            def __instancecheck__(self, instance) -> bool:
-                return isinstance(instance, MelleaTool | AbstractMelleaTool)
-
-        return ToolWrapper(f, mellea_tool)
+        return CallableMelleaTool(base_tool, f)
 
     # Handle both @tool and @tool() syntax
     if func is None:
@@ -207,21 +207,19 @@ def add_tools_from_model_options(
             assert isinstance(tool_name, str), (
                 f"If ModelOption.TOOLS is a dict, it must be a dict of [str, Tool]; found {type(tool_name)} as the key instead"
             )
-            # Extract MelleaTool from decorated functions
-            if hasattr(tool_instance, "_mellea_tool"):
-                tool_instance = tool_instance._mellea_tool
-            assert isinstance(tool_instance, MelleaTool), (
+            assert isinstance(tool_instance, AbstractMelleaTool), (
                 f"If ModelOption.TOOLS is a dict, it must be a dict of [str, Tool]; found {type(tool_instance)} as the value instead"
             )
             tools_dict[tool_name] = tool_instance
     else:
         # Handle any other iterable / list here.
         for tool_instance in model_opts_tools:
-            # Extract MelleaTool from decorated functions
-            if hasattr(tool_instance, "_mellea_tool"):
-                tool_instance = tool_instance._mellea_tool
-            assert isinstance(tool_instance, MelleaTool), (
+            assert isinstance(tool_instance, AbstractMelleaTool), (
                 f"If ModelOption.TOOLS is a list, it must be a list of Tool; found {type(tool_instance)}"
+            )
+            # MelleaTool (and subclasses like CallableMelleaTool) have a name attribute
+            assert isinstance(tool_instance, MelleaTool), (
+                f"Tool must be a MelleaTool instance with a name attribute; found {type(tool_instance)}"
             )
             tools_dict[tool_instance.name] = tool_instance
 
