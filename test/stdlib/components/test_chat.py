@@ -1,7 +1,7 @@
 import pytest
-from mellea.stdlib.components import Document
-from mellea.stdlib.components import Message
+
 from mellea.helpers import messages_to_docs
+from mellea.stdlib.components import Document, Message
 
 
 def test_message_with_docs():

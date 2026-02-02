@@ -132,7 +132,6 @@ def test_gen_slot(session):
     @generative
     def is_happy(text: str) -> bool:
         """Determine if text is of happy mood."""
-        ...
 
     h = is_happy(session, text="I'm enjoying life.")
 

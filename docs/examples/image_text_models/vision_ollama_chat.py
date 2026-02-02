@@ -3,6 +3,7 @@
 """Example of using Ollama with vision models with linear context."""
 
 import pathlib
+
 from PIL import Image
 
 from mellea import start_session
@@ -16,7 +17,7 @@ image_path = pathlib.Path(__file__).parent.joinpath("pointing_up.jpg")
 test_pil = Image.open(image_path)
 
 # ask a question about the image
-res = m.instruct("Is the subject in the image smiling?", images=[test_pil])
+res = m.instruct("Is the subject in the image smiling?", images=[test_pil])  # type: ignore[arg-type]
 print(f"Result:{res!s}")
 
 # This instruction should refer to the first image.
