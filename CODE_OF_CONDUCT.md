@@ -59,7 +59,7 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported by contacting the project team via the [organization members](https://github.com/orgs/generative-computing/people) or by opening an issue on the [GitHub repository](https://github.com/generative-computing/mellea/issues).
+reported by contacting the project team at Melleaadmin@ibm.com.
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
