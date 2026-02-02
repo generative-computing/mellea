@@ -91,14 +91,22 @@ async def compare_streaming_vs_blocking():
     # Streaming
     print("\n2. Streaming mode (await_result=False):")
     print("   Tokens appear as generated: ", end="", flush=True)
-    thunk = await m.ainstruct("Write a haiku about programming.", await_result=False)
+    thunk = await m.ainstruct(
+        "Write a haiku about programming.",
+        await_result=False,
+        strategy=None,  # Must disable strategy for streaming
+    )
 
+    # Stream until complete - call astream() at least once even if already computed
     last_length = 0
-    while not thunk.is_computed():
+    while True:
         current_value = await thunk.astream()
         new_content = current_value[last_length:]
         print(new_content, end="", flush=True)
         last_length = len(current_value)
+
+        if thunk.is_computed():
+            break
     print()
 
 

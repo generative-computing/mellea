@@ -1453,7 +1453,7 @@ Mellea supports streaming model outputs, allowing you to process tokens as they 
 
 ### Streaming with Async Functions
 
-To enable streaming, use the async versions of session functions (`ainstruct`, `aact`) with the `await_result=False` parameter:
+To enable streaming, use the async versions of session functions (`ainstruct`, `aact`) with the `await_result=False` parameter and `strategy=None`:
 
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/streaming/basic_streaming.py#L1-L35
@@ -1466,7 +1466,8 @@ async def stream_story():
     # Get uncomputed thunk for streaming
     thunk = await m.ainstruct(
         "Write a short story about a robot learning to paint.",
-        await_result=False
+        await_result=False,
+        strategy=None  # Must disable strategy for streaming
     )
     
     # Stream the output - astream() returns accumulated value so far
@@ -1515,7 +1516,7 @@ async for chunk in thunk.astream():  # Stream the generation
 
 Therefore, sync functions always await the result internally and return `ComputedModelOutputThunk`.
 
-**Streaming and sampling are incompatible**: When using `SamplingStrategy` or `return_sampling_results=True`, the function must await the complete result to perform validation. In these cases, the function always returns a computed result regardless of the `await_result` parameter.
+**Streaming and sampling are incompatible**: When using `SamplingStrategy` or `return_sampling_results=True`, the function must await the complete result to perform validation. In these cases, the function always returns a computed result regardless of the `await_result` parameter. To enable streaming, you must explicitly set `strategy=None` (the default is `RejectionSamplingStrategy(loop_budget=2)`).
 
 ### Practical Example: Interactive Chat
 

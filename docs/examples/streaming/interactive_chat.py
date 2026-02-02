@@ -2,6 +2,10 @@
 
 This example shows how to build an interactive chat application where
 the AI's responses are streamed incrementally for a better user experience.
+
+Note: This example uses ChatContext which triggers a warning about async usage.
+The warning is expected but safe here because we await the result after streaming.
+For production use, consider using SimpleContext or handling the context updates manually.
 """
 
 # pytest: ollama, llm
@@ -9,12 +13,12 @@ the AI's responses are streamed incrementally for a better user experience.
 import asyncio
 
 import mellea
-from mellea.stdlib.context import ChatContext
+from mellea.stdlib.context import SimpleContext
 
 
 async def interactive_chat():
     """Run an interactive chat session with streaming responses."""
-    m = mellea.start_session(ctx=ChatContext())
+    m = mellea.start_session(ctx=SimpleContext())
 
     print("Chat with the AI (type 'quit' to exit)")
     print("-" * 50)
@@ -27,7 +31,11 @@ async def interactive_chat():
         print("AI: ", end="", flush=True)
 
         # Stream the response
-        thunk = await m.ainstruct(user_input, await_result=False)
+        thunk = await m.ainstruct(
+            user_input,
+            await_result=False,
+            strategy=None,  # Must disable strategy for streaming
+        )
 
         last_length = 0
         while not thunk.is_computed():
@@ -37,6 +45,8 @@ async def interactive_chat():
             print(new_content, end="", flush=True)
             last_length = len(current_value)
 
+        # Await the final result to update context properly
+        await thunk.avalue()
         print()  # New line after response
 
 
