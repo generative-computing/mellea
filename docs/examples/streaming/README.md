@@ -31,11 +31,11 @@ uv run --with mellea docs/examples/streaming/advanced_streaming.py
 ## Key Concepts
 
 ### Streaming Requires Async
-Streaming is only available with async functions (`ainstruct`, `aact`) using `await_result=False`:
+Streaming is only available with async functions (`ainstruct`, `aact`) using `await_result=False` and `strategy=None`:
 
 ```python
-# This works - async with await_result=False
-thunk = await m.ainstruct("Hello", await_result=False)
+# This works - async with await_result=False and strategy=None
+thunk = await m.ainstruct("Hello", await_result=False, strategy=None)
 last_length = 0
 while not thunk.is_computed():
     current_value = await thunk.astream()
@@ -54,9 +54,10 @@ result = m.instruct("Hello")  # Already computed, cannot stream
 - **`ComputedModelOutputThunk`**: Already computed, cannot be streamed
 
 ### Limitations
-- Cannot stream when using `SamplingStrategy` (validation requires complete output)
+- Cannot stream when using `SamplingStrategy` (validation requires complete output) - must set `strategy=None`
 - Cannot stream from synchronous functions (would cause deadlock)
 - Streaming requires an async context
+- Default `strategy=RejectionSamplingStrategy(loop_budget=2)` must be disabled for streaming
 
 ## See Also
 - [Tutorial Chapter 13: Streaming Model Outputs](../../tutorial.md#chapter-13-streaming-model-outputs)

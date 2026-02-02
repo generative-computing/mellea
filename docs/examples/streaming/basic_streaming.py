@@ -18,7 +18,9 @@ async def stream_story():
 
     # Get uncomputed thunk for streaming
     thunk = await m.ainstruct(
-        "Write a short story about a robot learning to paint.", await_result=False
+        "cont up 1 through 100.",
+        await_result=False,
+        strategy=None,  # Must disable strategy for streaming
     )
 
     # Stream the output - astream() returns accumulated value so far
