@@ -48,6 +48,10 @@ comments, commits, code, wiki edits, issues, and other contributions that are
 not aligned to this Code of Conduct, and will communicate reasons for moderation
 decisions when appropriate.
 
+### Who Are Community Leaders?
+
+Community leaders include project maintainers, core contributors with commit access, and individuals explicitly designated by the Mellea project team to moderate community spaces.
+
 ## Scope
 
 This Code of Conduct applies within all community spaces, and also applies when
@@ -56,14 +60,41 @@ Examples of representing our community include using an official email address,
 posting via an official social media account, or acting as an appointed
 representative at an online or offline event.
 
+### Community Spaces
+
+This Code of Conduct applies to all Mellea project spaces, including but not limited to:
+
+* GitHub repository (issues, pull requests, discussions, code reviews)
+* Discord server
+* Project mailing lists and email communications
+* Official social media accounts
+* In-person and virtual events, meetups, and conferences
+* Any other forums created by the project team which the community uses for communication
+
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported by contacting the project team at Melleaadmin@ibm.com.
+reported by contacting the project team at melleaadmin@ibm.com.
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
 reporter of any incident.
+
+### How to Report
+
+When reporting a Code of Conduct violation, please include:
+
+* **What happened**: A clear description of the incident
+* **When and where**: Date, time, and location (e.g., GitHub issue #123, Discord channel)
+* **Who was involved**: GitHub usernames, Discord handles, or other identifiers
+* **Evidence**: Links to relevant conversations or screenshots (if available)
+* **Impact**: How this affected you or others
+
+**Response Timeline**: You will receive an acknowledgment within 48 hours. The project maintainers will review your report and communicate the outcome within 5 business days, or provide an update on the expected timeline for more complex cases.
+
+**Confidentiality**: All reports are kept confidential. Information will only be shared with those who need to know to investigate and resolve the issue.
+
+**Appeals**: If you believe an enforcement decision was made in error, you may request a review by emailing melleaadmin@ibm.com with "Appeal" in the subject line. Reviews will be handled by a different maintainer where possible.
 
 ## Enforcement Guidelines
 
