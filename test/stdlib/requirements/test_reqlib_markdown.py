@@ -60,26 +60,22 @@ async def test_markdown_table():
 
 
 def test_default_output_to_bool_yes():
-    assert default_output_to_bool("yeS") == True
+    assert default_output_to_bool("yeS")
 
 
 def test_default_output_to_bool_no():
-    assert default_output_to_bool("nO") == False
+    assert not default_output_to_bool("nO")
 
 
 def test_default_output_to_bool_complicated_yes():
-    assert (
-        default_output_to_bool(
-            CBlock("The requirement is met by the output. Therefore, my answer is yes.")
-        )
-        == True
+    assert default_output_to_bool(
+        CBlock("The requirement is met by the output. Therefore, my answer is yes.")
     )
 
 
 def test_default_output_to_bool_word_with_yes_in_it():
-    assert (
-        default_output_to_bool("Here's a word that meets those requirements: ayes.")
-        == False
+    assert not default_output_to_bool(
+        "Here's a word that meets those requirements: ayes."
     )
 
 

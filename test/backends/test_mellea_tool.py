@@ -1,5 +1,5 @@
 import pytest
-from langchain_core.tools import Tool, tool
+from langchain_core.tools import Tool, tool  # type: ignore[import-not-found]
 from pydantic_core import ValidationError
 
 import mellea
