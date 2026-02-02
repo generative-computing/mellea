@@ -1,7 +1,6 @@
 # pytest: huggingface, requires_heavy_ram, llm
 
-"""
-RepairTemplateStrategy Example with Actual Function Call Validation
+"""RepairTemplateStrategy Example with Actual Function Call Validation
 Demonstrates how RepairTemplateStrategy repairs responses using actual function calls.
 """
 
@@ -80,10 +79,10 @@ def demo_repair_with_actual_function_calling():
             if hasattr(m.backend, "formatter"):
                 try:
                     rendered = m.backend.formatter.print(action)
-                    print(f"  Instruction sent to model:")
-                    print(f"  ---")
+                    print("  Instruction sent to model:")
+                    print("  ---")
                     print(f"  {rendered}")
-                    print(f"  ---")
+                    print("  ---")
                 except Exception:
                     pass
 

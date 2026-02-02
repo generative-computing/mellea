@@ -1,14 +1,11 @@
 # pytest: ollama, llm
 
 import asyncio
-from mellea.core import Context, CBlock, ModelOutputThunk
 
+from mellea.backends.ollama import OllamaModelBackend
+from mellea.core import Backend, CBlock, Context, ModelOutputThunk
 from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.context import SimpleContext
-
-from mellea.core import Backend
-from mellea.backends.ollama import OllamaModelBackend
-from typing import Tuple
 
 backend = OllamaModelBackend("granite4:latest")
 
@@ -30,7 +27,7 @@ async def fib_main(backend: Backend, ctx: Context):
             mot = await fib(backend, ctx, fibs[i - 1], fibs[i - 2])
             fibs.append(mot)
 
-    print(await fibs[-1].avalue())
+    print(await fibs[-1].avalue())  # type: ignore[attr-defined]
     # for x in fibs:
     #     match x:
     #         case ModelOutputThunk():

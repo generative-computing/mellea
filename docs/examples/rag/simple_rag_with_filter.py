@@ -44,7 +44,7 @@ def create_index(model, ds: list[str]) -> IndexFlatIP:
 
 def query_index(model, idx: IndexFlatIP, query: str, ds: list[str], k: int = 5) -> list:
     query_embedding = model.encode([query])
-    distances, indices = idx.search(query_embedding, k=k)
+    _distances, indices = idx.search(query_embedding, k=k)
     return [ds[i] for i in indices[0]]
 
 

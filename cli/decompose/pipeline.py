@@ -5,9 +5,9 @@ from typing import Literal, TypedDict
 from typing_extensions import NotRequired
 
 from mellea import MelleaSession
+from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
-from mellea.backends import ModelOption
 
 from .prompt_modules import (
     constraint_extractor,

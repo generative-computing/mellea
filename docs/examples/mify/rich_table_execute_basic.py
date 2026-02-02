@@ -4,8 +4,7 @@
 import os
 
 from mellea import start_session
-from mellea.backends import model_ids
-from mellea.backends import ModelOption
+from mellea.backends import ModelOption, model_ids
 from mellea.core import FancyLogger
 from mellea.stdlib.components.docs.richdocument import RichDocument, Table
 

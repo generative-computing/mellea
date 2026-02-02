@@ -29,7 +29,7 @@ def m_session(gh_run):
 
 
 @pytest.mark.qualitative
-async def test_lazy_spans(m_session):
+async def test_lazy_spans(m_session) -> None:
     m: MelleaSession = m_session
     backend, ctx = m.backend, m.ctx
 
@@ -45,7 +45,7 @@ async def test_lazy_spans(m_session):
 
 
 @pytest.mark.qualitative
-async def test_kv(m_session):
+async def test_kv(m_session) -> None:
     m: MelleaSession = m_session
     backend, ctx = m.backend, m.ctx  # type: ignore
 
@@ -56,7 +56,7 @@ async def test_kv(m_session):
         )
     )
 
-    backend: LocalHFBackend = backend
+    assert isinstance(backend, LocalHFBackend)
     response = await backend._generate_from_context_with_kv_cache(
         action=CBlock("What is Nathan's work address?"), ctx=ctx, model_options=dict()
     )
