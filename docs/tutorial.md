@@ -1497,14 +1497,14 @@ Mellea uses two types of thunks to clearly distinguish computed from uncomputed 
 result = m.instruct("Hello")  # Already computed
 print(result.value)  # Immediate access
 
-# Async with await_result=True (default) also returns ComputedModelOutputThunk
-result = await m.ainstruct("Hello")  # Already computed
-print(result.value)  # Immediate access
-
-# Async with await_result=False returns uncomputed ModelOutputThunk
-thunk = await m.ainstruct("Hello", await_result=False)  # Not computed yet
+# Async with await_result=False (default) returns uncomputed ModelOutputThunk for streaming
+thunk = await m.ainstruct("Hello")  # Not computed yet (default behavior)
 async for chunk in thunk.astream():  # Stream the generation
     print(chunk, end="")
+
+# Async with await_result=True returns ComputedModelOutputThunk
+result = await m.ainstruct("Hello", await_result=True)  # Already computed
+print(result.value)  # Immediate access
 ```
 
 ### Important Constraints
@@ -1561,10 +1561,10 @@ asyncio.run(interactive_chat())
 
 ### Best Practices
 
-1. **Use async functions for streaming**: Always use `ainstruct()` or `aact()` with `await_result=False`
+1. **Use async functions for streaming**: Always use `ainstruct()` or `aact()` (default behavior enables streaming)
 2. **Handle errors gracefully**: Wrap streaming in try-except blocks to handle network issues
 3. **Consider buffering**: For UI applications, you may want to buffer chunks before displaying
-4. **Avoid streaming with validation**: If you need requirement validation, use the default `await_result=True`
+4. **Avoid streaming with validation**: If you need requirement validation, set `await_result=True` explicitly
 
 For more examples, see the [streaming examples directory](./examples/streaming/).
 
