@@ -4,14 +4,13 @@ These tests verify that the validation function works correctly with
 the actual tool call flow.
 """
 
-import pytest
 from typing import Any, Optional, Union
 
+import pytest
 from pydantic import ValidationError
 
 from mellea.backends.tools import MelleaTool, validate_tool_arguments
 from mellea.core import ModelToolCall
-
 
 # ============================================================================
 # Test Fixtures - Tool Functions
@@ -39,7 +38,7 @@ def typed_tool(name: str, age: int, score: float, active: bool) -> dict:
     return {"name": name, "age": age, "score": score, "active": active}
 
 
-def optional_tool(required: str, optional: Optional[str] = None) -> str:
+def optional_tool(required: str, optional: str | None = None) -> str:
     """Tool with optional parameters.
 
     Args:
@@ -49,7 +48,7 @@ def optional_tool(required: str, optional: Optional[str] = None) -> str:
     return f"{required}:{optional or 'none'}"
 
 
-def union_tool(value: Union[str, int]) -> str:
+def union_tool(value: str | int) -> str:
     """Tool with union type parameter.
 
     Args:
