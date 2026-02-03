@@ -5,7 +5,6 @@ import pytest
 from mellea.backends import MelleaTool, tool
 from mellea.core import ModelToolCall
 
-
 # ============================================================================
 # Test Fixtures - Tool Functions
 # ============================================================================
