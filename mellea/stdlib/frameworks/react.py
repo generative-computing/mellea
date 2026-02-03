@@ -29,7 +29,7 @@ async def react(
     model_options: dict | None = None,
     tools: list[AbstractMelleaTool] | None,
     loop_budget: int = 10,
-) -> tuple[ModelOutputThunk, ChatContext]:
+) -> tuple[ModelOutputThunk[str], ChatContext]:
     """Asynchronous ReACT pattern (Think -> Act -> Observe -> Repeat Until Done); attempts to accomplish the provided goal given the provided tools.
 
     Args:
