@@ -1333,7 +1333,11 @@ See [`mellea/docs/examples/mify/rich_document_advanced.py`](./examples/mify/rich
 #### Decompose
 For large prompts Mellea offers a decompose function to break down the initial prompt into a series of smaller ones.  In addition, the intermediary output allows for constraints and validation to be applied to the output of each step.  The final output is done by composing these intermediate steps.
 
-See [`mellea/docs/examples/m_decompose/`](./examples/m_decompose/) for an input example prompt, intermdiary json and python representations, and the final output.
+See [`mellea/docs/examples/m_decompose/`](./examples/m_decompose/) for an input example prompt, intermediary json and python representations, and the final output.
+
+For a smaller example see [`mellea/docs/examples/m_decompose/small/`](./examples/m_decompose/small/)
+
+For an example within Python see [[`mellea/docs/examples/m_decompose/python/`](./examples/m_decompose/python/)]
 
 To run the example locally use the following command:
 ```bash
@@ -1452,19 +1456,9 @@ uv pip install -e ".[all]" --group dev
 pre-commit install
 ```
 
-You can then run tests:
-```bash
-# Fast tests (default, excludes slow qualitative tests)
-uv run pytest
-
-# Full test suite (includes qualitative tests)
-uv run pytest -m ""
-
-# CI/CD mode (skips qualitative tests even with -m "")
-CICD=1 uv run pytest -m ""
-```
-
-See [test/MARKERS_GUIDE.md](../test/MARKERS_GUIDE.md) for details on running specific test categories (e.g., by backend, resource requirements).
+You can then run all tests by running `pytest`, or only the CI/CD tests by
+running `CICD=1 pytest`. See [test/MARKERS_GUIDE.md](../test/MARKERS_GUIDE.md) for
+details on running specific test categories (e.g., by backend, resource requirements).
 
 Tip: you can bypass the hooks by passing the `-n` flag to `git commit`.
 This is sometimes helpful for intermediate commits that you intend to later
