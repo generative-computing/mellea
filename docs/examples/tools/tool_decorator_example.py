@@ -1,6 +1,8 @@
 # pytest: ollama, llm
 """Example demonstrating the @tool decorator for cleaner tool definitions."""
 
+import ast
+
 from mellea import start_session
 from mellea.backends import ModelOption, tool
 
@@ -38,11 +40,11 @@ def calculate(expression: str) -> str:
         expression: Mathematical expression to evaluate
     """
     try:
-        # Simple mock - in production, use safe evaluation
-        result = eval(expression)
+        # Use ast.literal_eval for safe evaluation of simple expressions
+        result = ast.literal_eval(expression)
         return f"Result: {result}"
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error: {e!s}"
 
 
 def example_basic_usage():
@@ -52,8 +54,8 @@ def example_basic_usage():
     # Without the decorator, you can add tools using:
     # tools = [MelleaTool.from_callable(get_weather), MelleaTool.from_callable(search_web)]
 
-    # Now you can just pass the decorated functions directly:
-    tools = [get_weather, search_web, calculate]
+    # Now you can just pass the decorated functions directly to model_options
+    # Example: model_options={ModelOption.TOOLS: [get_weather, search_web, calculate]}
 
     # The decorated functions still work as normal functions
     weather = get_weather("Boston", days=3)
@@ -85,7 +87,7 @@ def example_custom_name():
 
     # The calculator tool was decorated with @tool(name="calculator")
     # So its name is "calculator" instead of "calculate"
-    print(f"Function name: calculate")
+    print("Function name: calculate")
     print(f"Tool name: {calculate.name}")
 
     # Both work the same way
