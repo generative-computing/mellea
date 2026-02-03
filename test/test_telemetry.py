@@ -149,7 +149,6 @@ def test_generative_function_with_tracing(enable_app_tracing):
     @generative
     def classify(text: str) -> str:
         """Classify the text."""
-        ...
 
     with start_session() as m:
         result = classify(m, text="test")
