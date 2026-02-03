@@ -39,13 +39,11 @@ from mellea.stdlib.requirements import req
 @generative
 def classify_sentiment(text: str) -> str:
     """Classify the sentiment of the given text as positive, negative, or neutral."""
-    ...
 
 
 @generative
 def extract_entities(text: str) -> list[str]:
     """Extract named entities from the text."""
-    ...
 
 
 def main():
@@ -91,10 +89,10 @@ def main():
         # Example 4: Chat interaction
         print("\n4. Chat interaction...")
         response1 = m.chat("What is 2+2?")
-        print(f"Response 1: {str(response1)}")
+        print(f"Response 1: {response1!s}")
 
         response2 = m.chat("Multiply that by 3")
-        print(f"Response 2: {str(response2)}")
+        print(f"Response 2: {response2!s}")
 
     print("\n" + "=" * 60)
     print("Example complete!")
