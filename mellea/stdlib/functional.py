@@ -424,13 +424,48 @@ async def aact(
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
-    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+    strategy: None = None,
     return_sampling_results: Literal[False] = False,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
+    await_result: Literal[False] = False,
 ) -> tuple[ModelOutputThunk[S], Context]: ...
+
+
+@overload
+async def aact(
+    action: Component[S],
+    context: Context,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
+    strategy: None = None,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
+    await_result: Literal[True],
+) -> tuple[ComputedModelOutputThunk[S], Context]: ...
+
+
+@overload
+async def aact(
+    action: Component[S],
+    context: Context,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
+    strategy: SamplingStrategy,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
+    await_result: bool = False,
+) -> tuple[ComputedModelOutputThunk[S], Context]: ...
 
 
 @overload
@@ -446,6 +481,7 @@ async def aact(
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
+    await_result: bool = False,
 ) -> SamplingResult[S]: ...
 
 
@@ -461,7 +497,7 @@ async def aact(
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
-    await_result: bool = True,
+    await_result: bool = False,
 ) -> tuple[ModelOutputThunk[S], Context] | SamplingResult:
     """Asynchronous version of .act; runs a generic action, and adds both the action and the result to the context.
 
@@ -476,7 +512,7 @@ async def aact(
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tool_calls: if true, tool calling is enabled.
         silence_context_type_warning: if called directly from an asynchronous function, will log a warning if not using a SimpleContext
-        await_result: if False and strategy is None, returns uncomputed ModelOutputThunk. If True or strategy is not None, awaits and returns ComputedModelOutputThunk. Default is True.
+        await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. If True or strategy is not None, awaits and returns ComputedModelOutputThunk. Default is False.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -627,7 +663,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-    await_result: bool = True,
+    await_result: bool = False,
 ) -> tuple[ModelOutputThunk[str], Context]: ...
 
 
@@ -649,7 +685,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-    await_result: bool = True,
+    await_result: bool = False,
 ) -> SamplingResult[S]: ...
 
 
@@ -670,7 +706,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-    await_result: bool = True,
+    await_result: bool = False,
 ) -> tuple[ModelOutputThunk[str], Context] | SamplingResult:
     """Generates from an instruction.
 
@@ -690,7 +726,7 @@ async def ainstruct(
         model_options: Additional model options, which will upsert into the model/backend's defaults.
         tool_calls: If true, tool calling is enabled.
         images: A list of images to be used in the instruction or None if none.
-        await_result: If False, returns an uncomputed ModelOutputThunk for streaming. If True (default), awaits and returns a ComputedModelOutputThunk.
+        await_result: If False (default), returns an uncomputed ModelOutputThunk for streaming. If True, awaits and returns a ComputedModelOutputThunk.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -757,6 +793,7 @@ async def achat(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        await_result=True,  # achat always needs the computed result
     )
     parsed_assistant_message = result.parsed_repr
     assert isinstance(parsed_assistant_message, Message)

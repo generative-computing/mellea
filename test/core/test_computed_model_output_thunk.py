@@ -76,9 +76,11 @@ def test_sync_functions_with_sampling_return_computed_thunks():
 
 
 async def test_async_functions_return_computed_thunks():
-    """Test that async session functions return ComputedModelOutputThunk after awaiting."""
+    """Test that async session functions return ComputedModelOutputThunk when await_result=True."""
     with start_session() as session:
-        result = await session.ainstruct("Say 'hello'", strategy=None)
+        result = await session.ainstruct(
+            "Say 'hello'", strategy=None, await_result=True
+        )
 
         # The result should be a ComputedModelOutputThunk
         assert isinstance(result, ComputedModelOutputThunk)

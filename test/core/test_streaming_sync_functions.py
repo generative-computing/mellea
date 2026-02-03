@@ -107,11 +107,12 @@ def test_await_result_false_with_sampling_still_computes():
 
 
 def test_default_behavior_unchanged():
-    """Test that default behavior (await_result=True) is unchanged."""
+    """Test that default behavior (await_result=False) returns uncomputed thunk."""
     with start_session() as session:
-        # Default behavior should return computed thunk
+        # Default behavior should return uncomputed thunk for streaming
         result = session.instruct("Say 'hello'", strategy=None)
 
+        # Sync functions always await, so result is computed even with await_result=False
         assert isinstance(result, ComputedModelOutputThunk)
         assert result.is_computed()
         assert result.value is not None
