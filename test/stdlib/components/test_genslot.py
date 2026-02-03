@@ -78,7 +78,6 @@ def test_sentiment_output(classify_sentiment_output):
 
 
 def test_gen_slot_logs(classify_sentiment_output, session):
-    sent = classify_sentiment_output
     last_prompt = session.last_prompt()[-1]
     assert isinstance(last_prompt, dict)
     assert set(last_prompt.keys()) == {"role", "content", "images"}

@@ -41,7 +41,7 @@ class MelleaTool(AbstractMelleaTool):
     @property
     def as_json_tool(self) -> dict[str, Any]:
         """Return the tool converted to a OpenAI compatible JSON object."""
-        return self._as_json_tool
+        return self._as_json_tool.copy()
 
     @classmethod
     def from_langchain(cls, tool: Any):

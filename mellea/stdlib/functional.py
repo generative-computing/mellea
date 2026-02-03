@@ -918,9 +918,12 @@ def _call_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]
             except Exception as e:
                 output = e
 
+            # Default to the output. Attempt to properly print it. If that doesn't result in a str,
+            # stringify it.
             content = str(output)
             if isinstance(backend, FormatterBackend):
                 content = backend.formatter.print(output)  # type: ignore
+                content = str(content)
 
             outputs.append(
                 ToolMessage(

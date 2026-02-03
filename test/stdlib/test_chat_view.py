@@ -1,7 +1,7 @@
 import pytest
 
-from mellea.stdlib.context import ChatContext
 from mellea.stdlib.components import Message, as_chat_history
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.session import start_session
 
 
@@ -25,7 +25,7 @@ def test_chat_view_linear_ctx(linear_session):
     linear_session.chat("What is 1+1?")
     linear_session.chat("What is 2+2?")
     assert len(as_chat_history(linear_session.ctx)) == 4
-    assert all([type(x) == Message for x in as_chat_history(linear_session.ctx)])
+    assert all(isinstance(x, Message) for x in as_chat_history(linear_session.ctx))
     assert len(linear_session.ctx.view_for_generation()) == 4
 
 
@@ -34,7 +34,7 @@ def test_chat_view_simple_ctx(simple_session):
     simple_session.chat("What is 1+1?")
     simple_session.chat("What is 2+2?")
     assert len(as_chat_history(simple_session.ctx)) == 4
-    assert all([type(x) == Message for x in as_chat_history(simple_session.ctx)])
+    assert all(isinstance(x, Message) for x in as_chat_history(simple_session.ctx))
     assert len(simple_session.ctx.view_for_generation()) == 0
 
 

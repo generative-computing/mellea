@@ -54,7 +54,7 @@ print(
 )
 
 print("Email with rejection sampling:")
-from mellea.stdlib.sampling import RejectionSamplingStrategy  # noqa: E402
+from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 
 def write_email_with_strategy(m: mellea.MelleaSession, name: str, notes: str) -> str:

@@ -2,7 +2,9 @@
 
 # Installing langchain is necessary for this example, but it works for any library
 # you may want to use Mellea with.
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from typing import Any
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 # Messages from a different library.
 messages = [
@@ -14,18 +16,18 @@ messages = [
 # Some libraries have conversion functions that make it easier to ingest into Mellea.
 from langchain_core.messages import convert_to_openai_messages
 
-messages = convert_to_openai_messages(messages=messages)
+openai_messages: list[dict[str, Any]] = convert_to_openai_messages(messages=messages)
 
 # Import Mellea.
+from mellea import start_session
+from mellea.backends import ModelOption
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext
-from mellea.backends import ModelOption
-from mellea import start_session
 
 # Mellea uses explicit contexts. Cast the OpenAI formatted messages into
 # Mellea messages and add them to the context.
 ctx = ChatContext()
-for msg in messages:
+for msg in openai_messages:
     ctx = ctx.add(
         # NOTE: If your messages aren't in OpenAI format or have additional data like
         #       documents / images, you need to explicitly grab those fields as well.

@@ -2,12 +2,13 @@
 
 import time
 
-from mellea import MelleaSession
 from mellea.backends.aloras.huggingface.granite_aloras import HFConstraintAlora
-from mellea.backends.cache import SimpleLRUCache
-from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.base import ChatContext, GenerateLog
 from mellea.stdlib.requirement import ALoraRequirement, Requirement
+
+from mellea import MelleaSession
+from mellea.backends.cache import SimpleLRUCache
+from mellea.backends.huggingface import LocalHFBackend
 
 # Define a backend and add the constraint aLora
 backend = LocalHFBackend(
@@ -21,7 +22,7 @@ custom_stembolt_failure_constraint = HFConstraintAlora(
     backend=backend,
 )
 
-backend.add_alora(custom_stembolt_failure_constraint)
+backend.add_alora(custom_stembolt_failure_constraint)  # type: ignore[attr-defined]
 
 # Create M session
 m = MelleaSession(backend, ctx=ChatContext())
