@@ -45,7 +45,7 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ModelOutputThunk[S], Context]: ...
+) -> tuple[ComputedModelOutputThunk[S], Context]: ...
 
 
 @overload
@@ -74,7 +74,7 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ModelOutputThunk[S], Context] | SamplingResult[S]:
+) -> tuple[ComputedModelOutputThunk[S], Context] | SamplingResult[S]:
     """Runs a generic action, and adds both the action and the result to the context.
 
     Args:
@@ -130,7 +130,7 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ModelOutputThunk[str], Context]: ...
+) -> tuple[ComputedModelOutputThunk[str], Context]: ...
 
 
 @overload
@@ -171,7 +171,7 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ModelOutputThunk[str], Context] | SamplingResult[str]:
+) -> tuple[ComputedModelOutputThunk[str], Context] | SamplingResult[str]:
     """Generates from an instruction.
 
     Args:
@@ -539,6 +539,7 @@ async def aact(
         sampling_result: SamplingResult | None = None
         generate_logs: list[GenerateLog] = []
 
+<<<<<<< HEAD
         if return_sampling_results:
             assert strategy is not None, (
                 "Must provide a SamplingStrategy when return_sampling_results==True"
@@ -628,6 +629,14 @@ async def aact(
             computed_result._context = result._context
             computed_result._action = result._action
             computed_result._model_options = result._model_options
+=======
+            # ._generate_log should never be None after generation.
+            assert result._generate_log is not None
+            result._generate_log.is_final_result = True
+
+            # Wrap in ComputedModelOutputThunk to indicate it's fully computed
+            computed_result = ComputedModelOutputThunk(result)
+>>>>>>> fbdc9da (review comments)
             computed_result._generate_log = result._generate_log
 
 
@@ -671,11 +680,48 @@ async def aact(
 
         if return_sampling_results:
             assert (
+<<<<<<< HEAD
                 sampling_result is not None
             )  # Needed for the type checker but should never happen.
             return sampling_result
         else:
             return result, new_ctx
+=======
+                gen_result._generate_log is not None
+            )  # Cannot be None after generation.
+            generate_logs.append(gen_result._generate_log)
+
+        new_ctx = sampling_result.result_ctx
+        result = sampling_result.result
+        assert sampling_result.result._generate_log is not None
+        assert sampling_result.result._generate_log.is_final_result, (
+            "generate logs from the final result returned by the sampling strategy must be marked as final"
+        )
+
+        # Wrap sampling result in ComputedModelOutputThunk since it's always computed
+        computed_result = ComputedModelOutputThunk(result)
+
+        # Update the sampling result to use the computed thunk
+        sampling_result.sample_generations[sampling_result.result_index] = (
+            computed_result  # type: ignore
+        )
+
+        # Update context to point to the wrapped result
+        # The context's last node contains the original result, replace it with wrapped version
+        new_ctx._data = computed_result  # type: ignore
+        sampling_result.sample_contexts[sampling_result.result_index] = new_ctx
+
+        result = computed_result  # type: ignore
+
+    if return_sampling_results:
+        assert (
+            sampling_result is not None
+        )  # Needed for the type checker but should never happen.
+        return sampling_result
+    else:
+        return result, new_ctx  # type: ignore
+
+>>>>>>> fbdc9da (review comments)
 
 @overload
 async def ainstruct(

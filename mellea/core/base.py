@@ -435,50 +435,63 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
     and those that are already computed. It should be returned from synchronous functions
     and sampling strategies to indicate that no awaiting is needed.
 
+    Rather than creating from scratch, this wraps an existing ModelOutputThunk and ensures
+    it's fully computed. All attribute access is delegated to the wrapped thunk.
+
     Key differences from ModelOutputThunk:
-    - Always initialized with a value (cannot be None)
+    - Always initialized from a computed ModelOutputThunk
     - _computed is always True
     - Cannot be used for streaming (generation fields are not set)
     - Provides type safety to indicate "already computed"
     """
 
-    def __init__(
-        self,
-        value: str,
-        meta: dict[str, Any] | None = None,
-        parsed_repr: S | None = None,
-        tool_calls: dict[str, ModelToolCall] | None = None,
-    ):
-        """Initializes a computed ModelOutputThunk with a required value.
+    def __init__(self, thunk: ModelOutputThunk[S]):
+        """Wraps an existing ModelOutputThunk, ensuring it's computed.
 
         Args:
-            value: The computed string value (required, cannot be None)
-            meta: Optional metadata dictionary
-            parsed_repr: Optional parsed representation
-            tool_calls: Optional tool calls dictionary
+            thunk: A ModelOutputThunk that must be fully computed (value cannot be None)
+
+        Raises:
+            ValueError: If the thunk is not computed or has a None value
         """
-        if value is None:
+        if not thunk.is_computed():
+            raise ValueError(
+                "ComputedModelOutputThunk requires a computed ModelOutputThunk"
+            )
+        if thunk.value is None:
             raise ValueError("ComputedModelOutputThunk requires a non-None value")
 
-        super().__init__(value, meta, parsed_repr, tool_calls)
-
-        # Ensure computed flag is set
-        assert self._computed, "ComputedModelOutputThunk must be computed"
+        # Store the wrapped thunk and ensure it's marked as computed
+        self._wrapped_thunk = thunk
+        self._wrapped_thunk._computed = True
 
         # Clear generation-related fields since this is already computed
-        self._generate = None
-        self._generate_type = GenerateType.NONE
-        self._generate_extra = None
-        self._process = None
-        self._post_process = None
+        self._wrapped_thunk._generate = None
+        self._wrapped_thunk._generate_type = GenerateType.NONE
+        self._wrapped_thunk._generate_extra = None
+        self._wrapped_thunk._process = None
+        self._wrapped_thunk._post_process = None
+
+    def __getattr__(self, name: str) -> Any:
+        """Delegate all attribute access to the wrapped thunk."""
+        return getattr(self._wrapped_thunk, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Delegate all attribute setting to the wrapped thunk, except for _wrapped_thunk itself."""
+        if name == "_wrapped_thunk":
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._wrapped_thunk, name, value)
 
     async def avalue(self) -> str:
         """Returns the value immediately since it's already computed.
 
         Overrides the parent method to avoid unnecessary async operations.
         """
-        assert self.value is not None, "ComputedModelOutputThunk value cannot be None"
-        return self.value
+        assert self._wrapped_thunk.value is not None, (
+            "ComputedModelOutputThunk value cannot be None"
+        )
+        return self._wrapped_thunk.value
 
     async def astream(self) -> str:
         """Returns the value immediately since streaming is not applicable.

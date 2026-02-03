@@ -9,44 +9,60 @@ from mellea.stdlib.session import start_session
 
 
 def test_computed_thunk_initialization():
-    """Test that ComputedModelOutputThunk can be initialized with a value."""
-    thunk = ComputedModelOutputThunk(value="test output")
+    """Test that ComputedModelOutputThunk can be initialized from a computed thunk."""
+    base_thunk = ModelOutputThunk(value="test output")
+    computed_thunk = ComputedModelOutputThunk(base_thunk)
 
-    assert thunk.value == "test output"
-    assert thunk.is_computed()
-    assert thunk._computed is True
+    assert computed_thunk.value == "test output"
+    assert computed_thunk.is_computed()
+    assert computed_thunk._computed is True
+
+
+def test_computed_thunk_requires_computed_thunk():
+    """Test that ComputedModelOutputThunk requires a computed ModelOutputThunk."""
+    uncomputed_thunk = ModelOutputThunk(value=None)
+
+    with pytest.raises(ValueError, match="requires a computed ModelOutputThunk"):
+        ComputedModelOutputThunk(uncomputed_thunk)
 
 
 def test_computed_thunk_requires_value():
     """Test that ComputedModelOutputThunk requires a non-None value."""
+    # Create a thunk that's computed but has None value (edge case)
+    base_thunk = ModelOutputThunk(value="test")
+    base_thunk.value = None  # type: ignore
+
     with pytest.raises(ValueError, match="requires a non-None value"):
-        ComputedModelOutputThunk(value=None)  # type: ignore
+        ComputedModelOutputThunk(base_thunk)
 
 
 async def test_computed_thunk_avalue():
     """Test that avalue() returns immediately for ComputedModelOutputThunk."""
-    thunk = ComputedModelOutputThunk(value="test output")
+    base_thunk = ModelOutputThunk(value="test output")
+    computed_thunk = ComputedModelOutputThunk(base_thunk)
 
-    result = await thunk.avalue()
+    result = await computed_thunk.avalue()
     assert result == "test output"
 
 
 async def test_computed_thunk_cannot_stream():
     """Test that astream() raises an error for ComputedModelOutputThunk."""
-    thunk = ComputedModelOutputThunk(value="test output")
+    base_thunk = ModelOutputThunk(value="test output")
+    computed_thunk = ComputedModelOutputThunk(base_thunk)
 
     with pytest.raises(
         RuntimeError, match="Cannot stream from a ComputedModelOutputThunk"
     ):
-        await thunk.astream()
+        await computed_thunk.astream()
 
 
 def test_computed_thunk_with_parsed_repr():
     """Test that ComputedModelOutputThunk preserves parsed_repr."""
-    thunk = ComputedModelOutputThunk(value="test output", parsed_repr="parsed value")
+    base_thunk = ModelOutputThunk(value="test output", parsed_repr="parsed value")
+    computed_thunk = ComputedModelOutputThunk(base_thunk)
 
-    assert thunk.value == "test output"
-    assert thunk.parsed_repr == "parsed value"
+    assert computed_thunk.value == "test output"
+    assert computed_thunk.parsed_repr == "parsed value"
 
 
 def test_sync_functions_return_computed_thunks():
@@ -90,7 +106,8 @@ async def test_async_functions_return_computed_thunks():
 
 def test_computed_thunk_type_distinction():
     """Test that ComputedModelOutputThunk is distinguishable from ModelOutputThunk."""
-    computed = ComputedModelOutputThunk(value="test")
+    base_thunk = ModelOutputThunk(value="test")
+    computed = ComputedModelOutputThunk(base_thunk)
     uncomputed = ModelOutputThunk(value=None)
 
     assert isinstance(computed, ModelOutputThunk)
