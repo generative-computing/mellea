@@ -44,7 +44,7 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ModelOutputThunk[S], Context]: ...
+) -> tuple[ComputedModelOutputThunk[S], Context]: ...
 
 
 @overload
@@ -73,7 +73,7 @@ def act(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ModelOutputThunk[S], Context] | SamplingResult[S]:
+) -> tuple[ComputedModelOutputThunk[S], Context] | SamplingResult[S]:
     """Runs a generic action, and adds both the action and the result to the context.
 
     Args:
@@ -129,7 +129,7 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ModelOutputThunk[str], Context]: ...
+) -> tuple[ComputedModelOutputThunk[str], Context]: ...
 
 
 @overload
@@ -170,7 +170,7 @@ def instruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
-) -> tuple[ModelOutputThunk[str], Context] | SamplingResult[str]:
+) -> tuple[ComputedModelOutputThunk[str], Context] | SamplingResult[str]:
     """Generates from an instruction.
 
     Args:
@@ -555,20 +555,9 @@ async def aact(
             # ._generate_log should never be None after generation.
             assert result._generate_log is not None
             result._generate_log.is_final_result = True
-            generate_logs.append(result._generate_log)
 
             # Wrap in ComputedModelOutputThunk to indicate it's fully computed
-            computed_result = ComputedModelOutputThunk(
-                value=result.value,  # type: ignore
-                meta=result._meta,
-                parsed_repr=result.parsed_repr,
-                tool_calls=result.tool_calls,
-            )
-            # Copy over important fields
-            computed_result._thinking = result._thinking
-            computed_result._context = result._context
-            computed_result._action = result._action
-            computed_result._model_options = result._model_options
+            computed_result = ComputedModelOutputThunk(result)
             computed_result._generate_log = result._generate_log
 
             # Update context to point to the wrapped result instead of original
@@ -611,18 +600,7 @@ async def aact(
         )
 
         # Wrap sampling result in ComputedModelOutputThunk since it's always computed
-        computed_result = ComputedModelOutputThunk(
-            value=result.value,  # type: ignore
-            meta=result._meta,
-            parsed_repr=result.parsed_repr,
-            tool_calls=result.tool_calls,
-        )
-        # Copy over important fields
-        computed_result._thinking = result._thinking
-        computed_result._context = result._context
-        computed_result._action = result._action
-        computed_result._model_options = result._model_options
-        computed_result._generate_log = result._generate_log
+        computed_result = ComputedModelOutputThunk(result)
 
         # Update the sampling result to use the computed thunk
         sampling_result.sample_generations[sampling_result.result_index] = (
