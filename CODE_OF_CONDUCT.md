@@ -50,7 +50,9 @@ decisions when appropriate.
 
 ### Who Are Community Leaders?
 
-Community leaders include project maintainers, core contributors with commit access, and individuals explicitly designated by the Mellea project team to moderate community spaces.
+Community leaders include project maintainers, core contributors with commit access,
+and individuals explicitly designated by the Mellea project team to moderate community
+spaces.
 
 ## Scope
 
@@ -90,11 +92,16 @@ When reporting a Code of Conduct violation, please include:
 * **Evidence**: Links to relevant conversations or screenshots (if available)
 * **Impact**: How this affected you or others
 
-**Response Timeline**: You will receive an acknowledgment within 48 hours. The project maintainers will review your report and communicate the outcome within 5 business days, or provide an update on the expected timeline for more complex cases.
+**Response Timeline**: You will receive an acknowledgment within 2 business days. The project maintainers
+will review your report and communicate the outcome within 5 business days, or provide an update on
+the expected timeline for more complex cases.
 
-**Confidentiality**: All reports are kept confidential. Information will only be shared with those who need to know to investigate and resolve the issue.
+**Confidentiality**: All reports are kept confidential. Information will only be shared with those who
+need to know to investigate and resolve the issue.
 
-**Appeals**: If you believe an enforcement decision was made in error, you may request a review by emailing melleaadmin@ibm.com with "Appeal" in the subject line. Reviews will be handled by a different maintainer where possible.
+**Appeals**: If you believe an enforcement decision was made in error, you may request a review by
+emailing melleaadmin@ibm.com with "Appeal" in the subject line. Reviews will be handled by a different
+maintainer where possible.
 
 ## Enforcement Guidelines
 
