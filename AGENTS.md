@@ -6,6 +6,8 @@ AGENTS.md — Instructions for AI coding assistants (Claude, Cursor, Copilot, Co
 
 > **Which guide?** Modifying `mellea/`, `cli/`, or `test/` → this file. Writing code that imports Mellea → [`docs/AGENTS_TEMPLATE.md`](docs/AGENTS_TEMPLATE.md).
 
+> **Code of Conduct**: This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). All contributors, including AI assistants, are expected to follow these community standards when generating code, documentation, or interacting with the project.
+
 ## 1. Quick Reference
 
 **⚠️ Always use `uv` for Python commands** — never use system Python or `pip` directly.
