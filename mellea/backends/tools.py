@@ -41,14 +41,16 @@ class MelleaTool(AbstractMelleaTool):
     @property
     def as_json_tool(self) -> dict[str, Any]:
         """Return the tool converted to a OpenAI compatible JSON object."""
-        return self._as_json_tool
+        return self._as_json_tool.copy()
 
     @classmethod
     def from_langchain(cls, tool: Any):
         """Create a Tool from a langchain tool object."""
         try:
-            from langchain_core.tools import BaseTool
-            from langchain_core.utils.function_calling import convert_to_openai_tool
+            from langchain_core.tools import BaseTool  # type: ignore[import-not-found]
+            from langchain_core.utils.function_calling import (  # type: ignore[import-not-found]
+                convert_to_openai_tool,
+            )
 
             if isinstance(tool, BaseTool):
                 tool_name = tool.name

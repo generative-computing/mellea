@@ -1,11 +1,13 @@
+# pytest: ollama, llm
+
 """Example to run m serve."""
 
 from typing import Any
 
 import mellea
 from cli.serve.models import ChatMessage
+from mellea.core import ModelOutputThunk, Requirement, SamplingResult
 from mellea.stdlib.context import ChatContext
-from mellea.core import ModelOutputThunk, SamplingResult, Requirement
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 

@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 from io import StringIO
 
 import pandas
@@ -28,7 +30,7 @@ class MyCompanyDatabase:
             index_col=False,
         )
         # Remove unnamed columns and columns that don't exist.
-        table_df.drop(table_df.filter(regex="Unname").columns, axis=1, inplace=True)
+        table_df = table_df.drop(table_df.filter(regex="Unname").columns, axis=1)
 
         # Sometimes extra whitespace gets added to the column names and row values. Remove it.
         table_df.columns = table_df.columns.str.strip()
