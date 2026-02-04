@@ -7,45 +7,13 @@ from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
 
-from mellea.config import (
-    find_config_file,
-    get_config_path,
-    get_user_config_dir,
-    init_project_config,
-    init_user_config,
-    load_config,
-)
+from mellea.config import find_config_file, init_project_config, load_config
 
 config_app = typer.Typer(name="config", help="Manage Mellea configuration files")
 console = Console()
 
 
 @config_app.command("init")
-def init_user(
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Overwrite existing config file"
-    ),
-) -> None:
-    """Create a user configuration file at ~/.config/mellea/config.toml."""
-    try:
-        config_path = init_user_config(force=force)
-        console.print(f"[green]✓[/green] Created user config at: {config_path}")
-        console.print(
-            "\nEdit this file to set your default backend, model, and credentials."
-        )
-        console.print(
-            "Run [cyan]m config show[/cyan] to view the current configuration."
-        )
-    except FileExistsError as e:
-        console.print(f"[red]✗[/red] {e}")
-        console.print("Use [cyan]--force[/cyan] to overwrite the existing file.")
-        raise typer.Exit(1)
-    except Exception as e:
-        console.print(f"[red]✗[/red] Error creating config: {e}")
-        raise typer.Exit(1)
-
-
-@config_app.command("init-project")
 def init_project(
     force: bool = typer.Option(
         False, "--force", "-f", help="Overwrite existing config file"
@@ -55,9 +23,9 @@ def init_project(
     try:
         config_path = init_project_config(force=force)
         console.print(f"[green]✓[/green] Created project config at: {config_path}")
-        console.print("\nThis config will override user settings for this project.")
+        console.print("\nEdit this file to set your backend, model, and other options.")
         console.print(
-            "Run [cyan]m config show[/cyan] to view the effective configuration."
+            "Run [cyan]m config show[/cyan] to view the current configuration."
         )
     except FileExistsError as e:
         console.print(f"[red]✗[/red] {e}")
@@ -126,10 +94,6 @@ def show_config() -> None:
 
         console.print(table)
 
-        # Show search order
-        console.print("\n[bold]Configuration search order:[/bold]")
-        console.print("1. Project config: ./mellea.toml (current dir and parents)")
-        console.print(f"2. User config: {get_user_config_dir() / 'config.toml'}")
         console.print(
             "\n[dim]Explicit parameters in code override config file values.[/dim]"
         )
@@ -156,12 +120,9 @@ def show_path() -> None:
             console.print(syntax)
         else:
             console.print("[yellow]No configuration file found.[/yellow]")
-            console.print("\nSearched locations:")
-            console.print("1. ./mellea.toml (current dir and parents)")
-            console.print(f"2. {get_user_config_dir() / 'config.toml'}")
-            console.print("\nRun [cyan]m config init[/cyan] to create a user config.")
+            console.print("\nSearched: ./mellea.toml (current dir and parents)")
             console.print(
-                "Run [cyan]m config init-project[/cyan] to create a project config."
+                "\nRun [cyan]m config init[/cyan] to create a project config."
             )
     except Exception as e:
         console.print(f"[red]✗[/red] Error: {e}")
@@ -170,22 +131,10 @@ def show_path() -> None:
 
 @config_app.command("where")
 def show_locations() -> None:
-    """Show all possible configuration file locations."""
-    user_config_dir = get_user_config_dir()
-    user_config_path = user_config_dir / "config.toml"
+    """Show configuration file location."""
     project_config_path = Path.cwd() / "mellea.toml"
 
-    console.print("[bold]Configuration file locations:[/bold]\n")
-
-    # User config
-    console.print(f"[cyan]User config:[/cyan] {user_config_path}")
-    if user_config_path.exists():
-        console.print("  [green]✓ exists[/green]")
-    else:
-        console.print("  [dim]✗ not found[/dim]")
-        console.print("  Run [cyan]m config init[/cyan] to create")
-
-    console.print()
+    console.print("[bold]Configuration file location:[/bold]\n")
 
     # Project config
     console.print(f"[cyan]Project config:[/cyan] {project_config_path}")
@@ -193,14 +142,16 @@ def show_locations() -> None:
         console.print("  [green]✓ exists[/green]")
     else:
         console.print("  [dim]✗ not found[/dim]")
-        console.print("  Run [cyan]m config init-project[/cyan] to create")
+        console.print("  Run [cyan]m config init[/cyan] to create")
 
     console.print()
 
-    # Currently loaded
+    # Currently loaded (might be in parent dir)
     current = find_config_file()
     if current:
         console.print(f"[bold green]Currently loaded:[/bold green] {current}")
+        if current != project_config_path:
+            console.print("  [dim](found in parent directory)[/dim]")
     else:
         console.print(
             "[yellow]No config file currently loaded (using defaults)[/yellow]"

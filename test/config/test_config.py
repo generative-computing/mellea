@@ -1,7 +1,6 @@
 """Unit tests for Mellea configuration module."""
 
 import os
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -13,9 +12,7 @@ from mellea.config import (
     apply_credentials_to_env,
     clear_config_cache,
     find_config_file,
-    get_user_config_dir,
     init_project_config,
-    init_user_config,
     load_config,
 )
 
@@ -26,18 +23,6 @@ def clear_cache():
     clear_config_cache()
     yield
     clear_config_cache()
-
-
-@pytest.fixture
-def temp_config_dir(tmp_path, monkeypatch):
-    """Create a temporary config directory."""
-    config_dir = tmp_path / "config" / "mellea"
-    config_dir.mkdir(parents=True)
-
-    # Mock the config directory
-    monkeypatch.setattr("mellea.config.get_user_config_dir", lambda: config_dir)
-
-    return config_dir
 
 
 @pytest.fixture
@@ -100,37 +85,12 @@ class TestConfigModels:
 class TestConfigDiscovery:
     """Test configuration file discovery."""
 
-    def test_get_user_config_dir_linux(self, monkeypatch):
-        """Test user config directory on Linux."""
-        monkeypatch.setattr("sys.platform", "linux")
-        monkeypatch.setenv("HOME", "/home/testuser")
-        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
-
-        config_dir = get_user_config_dir()
-        assert config_dir == Path("/home/testuser/.config/mellea")
-
-    def test_get_user_config_dir_with_xdg(self, monkeypatch):
-        """Test user config directory with XDG_CONFIG_HOME set."""
-        monkeypatch.setattr("sys.platform", "linux")
-        monkeypatch.setenv("XDG_CONFIG_HOME", "/custom/config")
-
-        config_dir = get_user_config_dir()
-        assert config_dir == Path("/custom/config/mellea")
-
-    def test_find_config_file_none(self, temp_project_dir, temp_config_dir):
+    def test_find_config_file_none(self, temp_project_dir):
         """Test finding config when none exists."""
         config_path = find_config_file()
         assert config_path is None
 
-    def test_find_config_file_user(self, temp_project_dir, temp_config_dir):
-        """Test finding user config file."""
-        user_config = temp_config_dir / "config.toml"
-        user_config.write_text("[backend]\nname = 'ollama'")
-
-        config_path = find_config_file()
-        assert config_path == user_config
-
-    def test_find_config_file_project(self, temp_project_dir, temp_config_dir):
+    def test_find_config_file_project(self, temp_project_dir):
         """Test finding project config file."""
         project_config = temp_project_dir / "mellea.toml"
         project_config.write_text("[backend]\nname = 'openai'")
@@ -138,13 +98,16 @@ class TestConfigDiscovery:
         config_path = find_config_file()
         assert config_path == project_config
 
-    def test_find_config_file_precedence(self, temp_project_dir, temp_config_dir):
-        """Test that project config takes precedence over user config."""
-        user_config = temp_config_dir / "config.toml"
-        user_config.write_text("[backend]\nname = 'ollama'")
-
+    def test_find_config_file_parent_dir(self, temp_project_dir):
+        """Test finding config in parent directory."""
+        # Create config in project dir
         project_config = temp_project_dir / "mellea.toml"
-        project_config.write_text("[backend]\nname = 'openai'")
+        project_config.write_text("[backend]\nname = 'ollama'")
+
+        # Create and cd to subdirectory
+        subdir = temp_project_dir / "src" / "module"
+        subdir.mkdir(parents=True)
+        os.chdir(subdir)
 
         config_path = find_config_file()
         assert config_path == project_config
@@ -153,17 +116,17 @@ class TestConfigDiscovery:
 class TestConfigLoading:
     """Test configuration loading and parsing."""
 
-    def test_load_config_empty(self, temp_project_dir, temp_config_dir):
+    def test_load_config_empty(self, temp_project_dir):
         """Test loading config when no file exists."""
         config, path = load_config()
         assert isinstance(config, MelleaConfig)
         assert path is None
         assert config.backend.name is None
 
-    def test_load_config_basic(self, temp_project_dir, temp_config_dir):
+    def test_load_config_basic(self, temp_project_dir):
         """Test loading a basic config file."""
-        user_config = temp_config_dir / "config.toml"
-        user_config.write_text("""
+        project_config = temp_project_dir / "mellea.toml"
+        project_config.write_text("""
 [backend]
 name = "ollama"
 model_id = "llama3.2:1b"
@@ -174,16 +137,16 @@ max_tokens = 2048
 """)
 
         config, path = load_config()
-        assert path == user_config
+        assert path == project_config
         assert config.backend.name == "ollama"
         assert config.backend.model_id == "llama3.2:1b"
         assert config.backend.model_options["temperature"] == 0.8
         assert config.backend.model_options["max_tokens"] == 2048
 
-    def test_load_config_with_credentials(self, temp_project_dir, temp_config_dir):
+    def test_load_config_with_credentials(self, temp_project_dir):
         """Test loading config with credentials."""
-        user_config = temp_config_dir / "config.toml"
-        user_config.write_text("""
+        project_config = temp_project_dir / "mellea.toml"
+        project_config.write_text("""
 [credentials]
 openai_api_key = "sk-test123"
 watsonx_api_key = "wx-test456"
@@ -195,10 +158,10 @@ watsonx_project_id = "proj-789"
         assert config.credentials.watsonx_api_key == "wx-test456"
         assert config.credentials.watsonx_project_id == "proj-789"
 
-    def test_load_config_with_general_settings(self, temp_project_dir, temp_config_dir):
+    def test_load_config_with_general_settings(self, temp_project_dir):
         """Test loading config with general settings."""
-        user_config = temp_config_dir / "config.toml"
-        user_config.write_text("""
+        project_config = temp_project_dir / "mellea.toml"
+        project_config.write_text("""
 context_type = "chat"
 log_level = "DEBUG"
 """)
@@ -207,18 +170,18 @@ log_level = "DEBUG"
         assert config.context_type == "chat"
         assert config.log_level == "DEBUG"
 
-    def test_load_config_invalid_toml(self, temp_project_dir, temp_config_dir):
+    def test_load_config_invalid_toml(self, temp_project_dir):
         """Test loading invalid TOML raises error."""
-        user_config = temp_config_dir / "config.toml"
-        user_config.write_text("invalid toml [[[")
+        project_config = temp_project_dir / "mellea.toml"
+        project_config.write_text("invalid toml [[[")
 
         with pytest.raises(ValueError, match="Error loading config"):
             load_config()
 
-    def test_load_config_caching(self, temp_project_dir, temp_config_dir):
+    def test_load_config_caching(self, temp_project_dir):
         """Test that config is cached after first load."""
-        user_config = temp_config_dir / "config.toml"
-        user_config.write_text("[backend]\nname = 'ollama'")
+        project_config = temp_project_dir / "mellea.toml"
+        project_config.write_text("[backend]\nname = 'ollama'")
 
         # First load
         config1, path1 = load_config()
@@ -279,40 +242,66 @@ class TestCredentialApplication:
         assert "WATSONX_API_KEY" not in os.environ
 
 
+class TestBackendModelOptionsHierarchy:
+    """Test per-backend model options."""
+
+    def test_generic_options_only(self):
+        """Test that generic options are returned when no backend-specific options exist."""
+        config = BackendConfig(model_options={"temperature": 0.7, "max_tokens": 100})
+        result = config.get_model_options_for_backend("ollama")
+        assert result == {"temperature": 0.7, "max_tokens": 100}
+
+    def test_backend_specific_options(self):
+        """Test that backend-specific options are returned."""
+        config = BackendConfig(
+            model_options={"temperature": 0.7, "ollama": {"num_ctx": 4096}}
+        )
+        result = config.get_model_options_for_backend("ollama")
+        assert result == {"temperature": 0.7, "num_ctx": 4096}
+
+    def test_backend_specific_overrides_generic(self):
+        """Test that backend-specific options override generic options."""
+        config = BackendConfig(
+            model_options={
+                "temperature": 0.7,
+                "ollama": {"temperature": 0.9, "num_ctx": 4096},
+            }
+        )
+        result = config.get_model_options_for_backend("ollama")
+        assert result == {"temperature": 0.9, "num_ctx": 4096}
+
+    def test_different_backends_get_different_options(self):
+        """Test that different backends get their own specific options."""
+        config = BackendConfig(
+            model_options={
+                "temperature": 0.7,
+                "ollama": {"num_ctx": 4096},
+                "openai": {"presence_penalty": 0.5},
+            }
+        )
+        ollama_result = config.get_model_options_for_backend("ollama")
+        openai_result = config.get_model_options_for_backend("openai")
+
+        assert ollama_result == {"temperature": 0.7, "num_ctx": 4096}
+        assert openai_result == {"temperature": 0.7, "presence_penalty": 0.5}
+
+    def test_backend_without_specific_options(self):
+        """Test that a backend without specific options gets only generic options."""
+        config = BackendConfig(
+            model_options={"temperature": 0.7, "ollama": {"num_ctx": 4096}}
+        )
+        result = config.get_model_options_for_backend("openai")
+        assert result == {"temperature": 0.7}
+
+    def test_empty_model_options(self):
+        """Test with empty model options."""
+        config = BackendConfig(model_options={})
+        result = config.get_model_options_for_backend("ollama")
+        assert result == {}
+
+
 class TestConfigInitialization:
     """Test config file initialization."""
-
-    def test_init_user_config(self, temp_config_dir):
-        """Test creating user config file."""
-        config_path = init_user_config()
-
-        assert config_path.exists()
-        assert config_path == temp_config_dir / "config.toml"
-
-        # Verify content is valid TOML
-        content = config_path.read_text()
-        assert "[backend]" in content
-        assert "[credentials]" in content
-
-    def test_init_user_config_exists(self, temp_config_dir):
-        """Test that init fails if config exists without force."""
-        config_path = temp_config_dir / "config.toml"
-        config_path.write_text("existing")
-
-        with pytest.raises(FileExistsError, match="already exists"):
-            init_user_config(force=False)
-
-    def test_init_user_config_force(self, temp_config_dir):
-        """Test that force overwrites existing config."""
-        config_path = temp_config_dir / "config.toml"
-        config_path.write_text("existing")
-
-        new_path = init_user_config(force=True)
-
-        assert new_path == config_path
-        content = config_path.read_text()
-        assert "existing" not in content
-        assert "[backend]" in content
 
     def test_init_project_config(self, temp_project_dir):
         """Test creating project config file."""
@@ -344,32 +333,3 @@ class TestConfigInitialization:
         content = config_path.read_text()
         assert "existing" not in content
         assert "[backend]" in content
-
-
-class TestConfigPrecedence:
-    """Test configuration precedence rules."""
-
-    def test_project_overrides_user(self, temp_project_dir, temp_config_dir):
-        """Test that project config overrides user config."""
-        # Create user config
-        user_config = temp_config_dir / "config.toml"
-        user_config.write_text("""
-[backend]
-name = "ollama"
-model_id = "llama3.2:1b"
-""")
-
-        # Create project config
-        project_config = temp_project_dir / "mellea.toml"
-        project_config.write_text("""
-[backend]
-name = "openai"
-model_id = "gpt-4"
-""")
-
-        config, path = load_config()
-
-        # Should load project config
-        assert path == project_config
-        assert config.backend.name == "openai"
-        assert config.backend.model_id == "gpt-4"

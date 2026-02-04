@@ -3,22 +3,20 @@ r"""Configuration file support for Mellea.
 This module provides support for TOML configuration files to set default
 backends, models, credentials, and other options without hardcoding them.
 
-Configuration files are searched in the following order:
-1. Project-specific: ./mellea.toml (current dir and parents)
-2. User config: ~/.config/mellea/config.toml (Linux/macOS) or
-   %APPDATA%\mellea\config.toml (Windows)
+Configuration files are searched for in the current directory and parent
+directories (./mellea.toml). If found, the config is used; if not, defaults
+apply.
 
 Values are applied with the following precedence:
 1. Explicit parameters passed to start_session()
 2. Project config file (if exists)
-3. User config file (if exists)
-4. Built-in defaults
+3. Built-in defaults
 """
 
 import os
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -35,12 +33,63 @@ else:
 
 
 class BackendConfig(BaseModel):
-    """Configuration for backend settings."""
+    """Configuration for backend settings.
+
+    Model options can be specified generically or per-backend:
+
+    ```toml
+    [backend.model_options]
+    temperature = 0.7  # applies to all backends
+
+    [backend.model_options.ollama]
+    num_ctx = 4096  # ollama-specific
+
+    [backend.model_options.openai]
+    presence_penalty = 0.5  # openai-specific
+    ```
+    """
 
     name: str | None = None
     model_id: str | None = None
     model_options: dict[str, Any] = Field(default_factory=dict)
     kwargs: dict[str, Any] = Field(default_factory=dict)
+
+    # Known backend names for detecting per-backend options
+    _BACKEND_NAMES = {
+        "ollama",
+        "hf",
+        "huggingface",
+        "openai",
+        "watsonx",
+        "litellm",
+        "vllm",
+    }
+
+    def get_model_options_for_backend(self, backend_name: str) -> dict[str, Any]:
+        """Get merged model options for a specific backend.
+
+        Merges generic options with backend-specific options.
+        Backend-specific options override generic ones.
+
+        Args:
+            backend_name: The backend name (e.g., "ollama", "openai")
+
+        Returns:
+            Merged model options dictionary
+        """
+        result = {}
+
+        # First, add generic options (non-dict values that aren't backend names)
+        for key, value in self.model_options.items():
+            if key not in self._BACKEND_NAMES and not isinstance(value, dict):
+                result[key] = value
+
+        # Then, merge backend-specific options (overrides generic)
+        backend_specific = self.model_options.get(backend_name)
+        if isinstance(backend_specific, dict):
+            result.update(backend_specific)
+
+        return result
 
 
 class CredentialsConfig(BaseModel):
@@ -65,49 +114,20 @@ class MelleaConfig(BaseModel):
 _config_cache: tuple[MelleaConfig, Path | None] | None = None
 
 
-def get_user_config_dir() -> Path:
-    r"""Get the user configuration directory following XDG Base Directory spec.
-
-    Returns:
-        Path to user config directory (~/.config/mellea on Linux/macOS,
-        %APPDATA%\mellea on Windows)
-    """
-    if sys.platform == "win32":
-        # Windows: use APPDATA
-        appdata = os.environ.get("APPDATA")
-        if appdata:
-            return Path(appdata) / "mellea"
-        # Fallback to user home
-        return Path.home() / "AppData" / "Roaming" / "mellea"
-    else:
-        # Linux/macOS: use XDG_CONFIG_HOME or ~/.config
-        xdg_config = os.environ.get("XDG_CONFIG_HOME")
-        if xdg_config:
-            return Path(xdg_config) / "mellea"
-        return Path.home() / ".config" / "mellea"
-
-
 def find_config_file() -> Path | None:
-    """Find configuration file in standard locations.
+    """Find configuration file in current directory or parent directories.
 
-    Searches in order:
-    1. ./mellea.toml (current directory and parents)
-    2. ~/.config/mellea/config.toml (or Windows equivalent)
+    Searches for ./mellea.toml starting from current directory and walking
+    up to parent directories.
 
     Returns:
         Path to config file if found, None otherwise
     """
-    # Search for project config (current dir and parents)
     current = Path.cwd()
     for parent in [current, *current.parents]:
         project_config = parent / "mellea.toml"
         if project_config.exists():
             return project_config
-
-    # Search for user config
-    user_config = get_user_config_dir() / "config.toml"
-    if user_config.exists():
-        return user_config
 
     return None
 
@@ -189,69 +209,6 @@ def apply_credentials_to_env(config: MelleaConfig) -> None:
             os.environ[env_var] = value
 
 
-def init_user_config(force: bool = False) -> Path:
-    """Create example user configuration file.
-
-    Args:
-        force: If True, overwrite existing config file
-
-    Returns:
-        Path to created config file
-
-    Raises:
-        FileExistsError: If config file exists and force=False
-    """
-    config_dir = get_user_config_dir()
-    config_path = config_dir / "config.toml"
-
-    if config_path.exists() and not force:
-        raise FileExistsError(
-            f"Config file already exists at {config_path}. Use --force to overwrite."
-        )
-
-    # Create config directory if it doesn't exist
-    config_dir.mkdir(parents=True, exist_ok=True)
-
-    # Example config content
-    example_config = """# Mellea User Configuration
-# This file sets global defaults for all projects.
-# Project-specific configs (./mellea.toml) override these settings.
-
-[backend]
-# Default backend to use (ollama, openai, huggingface, vllm, watsonx, litellm)
-name = "ollama"
-
-# Default model ID
-model_id = "granite-4-micro:3b"
-
-# Default model options (temperature, max_tokens, etc.)
-[backend.model_options]
-temperature = 0.7
-max_tokens = 2048
-
-# Backend-specific options
-[backend.kwargs]
-# base_url = "http://localhost:11434"  # For Ollama
-
-[credentials]
-# API keys (environment variables take precedence)
-# openai_api_key = "sk-..."
-# watsonx_api_key = "..."
-# watsonx_project_id = "..."
-# watsonx_url = "https://us-south.ml.cloud.ibm.com"
-
-# General settings
-# context_type = "simple"  # or "chat"
-# log_level = "INFO"
-"""
-
-    # Write config file
-    with open(config_path, "w") as f:
-        f.write(example_config)
-
-    return config_path
-
-
 def init_project_config(force: bool = False) -> Path:
     """Create example project configuration file.
 
@@ -273,17 +230,41 @@ def init_project_config(force: bool = False) -> Path:
 
     # Example project config content
     example_config = """# Mellea Project Configuration
-# This file overrides user config (~/.config/mellea/config.toml) for this project.
+# If this file exists, it will be used to configure start_session() defaults.
+# Explicit parameters passed to start_session() override these settings.
 
 [backend]
-# Project-specific model
+# Backend to use (ollama, openai, huggingface, vllm, watsonx, litellm)
+name = "ollama"
+
+# Model ID
 model_id = "llama3.2:1b"
 
+# Generic model options (apply to all backends)
 [backend.model_options]
-temperature = 0.9
+temperature = 0.7
 
-# Project-specific context type
-context_type = "chat"
+# Per-backend model options (override generic options for that backend)
+# [backend.model_options.ollama]
+# num_ctx = 4096
+
+# [backend.model_options.openai]
+# presence_penalty = 0.5
+
+# Backend-specific constructor options
+[backend.kwargs]
+# base_url = "http://localhost:11434"  # For Ollama
+
+[credentials]
+# API keys (environment variables take precedence)
+# openai_api_key = "sk-..."
+# watsonx_api_key = "..."
+# watsonx_project_id = "..."
+# watsonx_url = "https://us-south.ml.cloud.ibm.com"
+
+# General settings
+# context_type = "simple"  # or "chat"
+# log_level = "INFO"
 """
 
     # Write config file

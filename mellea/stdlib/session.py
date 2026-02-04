@@ -31,6 +31,17 @@ from .components import Message
 from .context import SimpleContext
 from .sampling import RejectionSamplingStrategy
 
+
+# Sentinel value to detect when a parameter was not explicitly provided
+class _Unset:
+    """Sentinel class to detect unset parameters."""
+
+    def __repr__(self) -> str:
+        return "<UNSET>"
+
+
+_UNSET = _Unset()
+
 # Global context variable for the context session
 _context_session: contextvars.ContextVar[MelleaSession | None] = contextvars.ContextVar(
     "context_session", default=None
@@ -96,8 +107,9 @@ def backend_name_to_class(name: str) -> Any:
 
 
 def start_session(
-    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama",
-    model_id: str | ModelIdentifier = IBM_GRANITE_4_MICRO_3B,
+    backend_name: Literal["ollama", "hf", "openai", "watsonx", "litellm"]
+    | _Unset = _UNSET,
+    model_id: str | ModelIdentifier | _Unset = _UNSET,
     ctx: Context | None = None,
     *,
     model_options: dict | None = None,
@@ -111,12 +123,9 @@ def start_session(
     like `instruct()`, `chat()`, `query()`, and `transform()`. When called directly,
     it returns a session object that can be used directly.
 
-    Configuration files are automatically loaded from:
-    1. Project config: ./mellea.toml (current dir and parents)
-    2. User config: ~/.config/mellea/config.toml (Linux/macOS) or
-       %APPDATA%\mellea\config.toml (Windows)
-
-    Explicit parameters override config file values.
+    If a configuration file (./mellea.toml) exists in the current directory or any
+    parent directory, it will be loaded and used to set defaults. Explicit parameters
+    override config file values.
 
     Args:
         backend_name: The backend to use. Options are:
@@ -170,40 +179,35 @@ def start_session(
     logger = FancyLogger.get_logger()
 
     # Apply config values with precedence: explicit params > config > defaults
-    # Check if parameters were explicitly provided by inspecting the call frame
-    frame = inspect.currentframe()
-    if frame and frame.f_back:
-        # Get the actual arguments passed to the function
-        args_info = inspect.getargvalues(frame)
-        # backend_name has a default, so we check if it was explicitly passed
-        # by seeing if it differs from the default or if it's in the config
-        explicit_backend = (
-            args_info.locals.get("backend_name") != start_session.__defaults__[0]
-            if start_session.__defaults__
-            else True
-        )
-        explicit_model = (
-            args_info.locals.get("model_id") != start_session.__defaults__[1]
-            if start_session.__defaults__ and len(start_session.__defaults__) > 1
-            else True
+    # Use sentinel to detect if parameters were explicitly provided
+    # Resolve to properly typed variables
+    resolved_backend: str
+    if isinstance(backend_name, _Unset):
+        # Not explicitly provided - use config or default
+        resolved_backend = config.backend.name if config.backend.name else "ollama"
+    else:
+        resolved_backend = backend_name
+
+    resolved_model: str | ModelIdentifier
+    if isinstance(model_id, _Unset):
+        # Not explicitly provided - use config or default
+        resolved_model = (
+            config.backend.model_id
+            if config.backend.model_id
+            else IBM_GRANITE_4_MICRO_3B
         )
     else:
-        # Fallback: assume explicit if not default values
-        explicit_backend = backend_name != "ollama"
-        explicit_model = model_id != IBM_GRANITE_4_MICRO_3B
+        resolved_model = model_id
 
-    # Merge backend_name: explicit > config > default
-    if not explicit_backend and config.backend.name:
-        backend_name = config.backend.name  # type: ignore
-
-    # Merge model_id: explicit > config > default
-    if not explicit_model and config.backend.model_id:
-        model_id = config.backend.model_id
-
-    # Merge model_options: config base + explicit overrides
+    # Merge model_options: config base (with backend-specific) + explicit overrides
     merged_model_options = {}
-    if config.backend.model_options:
-        merged_model_options.update(config.backend.model_options)
+    # Get config model options merged for the selected backend
+    config_model_options = config.backend.get_model_options_for_backend(
+        resolved_backend
+    )
+    if config_model_options:
+        merged_model_options.update(config_model_options)
+    # Explicit options override config
     if model_options:
         merged_model_options.update(model_options)
     model_options = merged_model_options if merged_model_options else None
@@ -221,13 +225,15 @@ def start_session(
 
         logger.setLevel(getattr(logging, config.log_level.upper(), logging.INFO))
 
-    backend_class = backend_name_to_class(backend_name)
+    backend_class = backend_name_to_class(resolved_backend)
     if backend_class is None:
         raise Exception(
-            f"Backend name {backend_name} unknown. Please see the docstring for `mellea.stdlib.session.start_session` for a list of options."
+            f"Backend name {resolved_backend} unknown. Please see the docstring for `mellea.stdlib.session.start_session` for a list of options."
         )
     assert backend_class is not None
-    backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
+    backend = backend_class(
+        resolved_model, model_options=model_options, **backend_kwargs
+    )
 
     # Create context based on config if not provided
     if ctx is None:
@@ -239,7 +245,7 @@ def start_session(
             ctx = SimpleContext()
 
     # Log session configuration with config source
-    if isinstance(model_id, ModelIdentifier):
+    if isinstance(resolved_model, ModelIdentifier):
         # Get the backend-specific model name
         backend_to_attr = {
             "ollama": "ollama_name",
@@ -249,16 +255,18 @@ def start_session(
             "watsonx": "watsonx_name",
             "litellm": "hf_model_name",
         }
-        attr = backend_to_attr.get(backend_name, "hf_model_name")
+        attr = backend_to_attr.get(resolved_backend, "hf_model_name")
         model_id_str = (
-            getattr(model_id, attr, None) or model_id.hf_model_name or str(model_id)
+            getattr(resolved_model, attr, None)
+            or resolved_model.hf_model_name
+            or str(resolved_model)
         )
     else:
-        model_id_str = model_id
+        model_id_str = resolved_model
 
     config_source = f" (config: {config_path})" if config_path else ""
     logger.info(
-        f"Starting Mellea session: backend={backend_name}, model={model_id_str}, "
+        f"Starting Mellea session: backend={resolved_backend}, model={model_id_str}, "
         f"context={ctx.__class__.__name__}"
         + (f", model_options={model_options}" if model_options else "")
         + config_source
