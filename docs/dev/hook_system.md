@@ -1,6 +1,6 @@
-# Mellea Plugin Hook Points Design Document
+# Mellea Plugin Hook System Design Document
 
-This document defines the hook system for Mellea, enabling plugins to register and respond to events throughout the framework's execution lifecycle. Hooks provide extensibility points for policy enforcement, data transformation, observability, and custom behavior injection.
+Mellea's hook system provides extension points for deployed generative AI applications that need policy enforcement, observability, and customization without modifying core library code. Hooks enable plugins to register and respond to events throughout the framework's execution lifecycle — from session initialization through generation, validation, and cleanup.
 
 
 ## 1. Overview
@@ -11,6 +11,7 @@ This document defines the hook system for Mellea, enabling plugins to register a
 2. **Composable**: Multiple plugins can register for the same hook, executing in priority order
 3. **Fail-safe**: Hook failures can be handled gracefully without breaking core execution
 4. **Minimal Intrusion**: Plugins are opt-in; default Mellea behavior remains unchanged without plugins
+5. **Architecturally Aligned**: Hook categories reflect Mellea's true abstraction boundaries — Session lifecycle, Component lifecycle, and the (Backend, Context) generation pipeline
 
 ### Hook Method Signature
 
@@ -28,12 +29,29 @@ async def hook_name(
 - **`context`**: Read-only shared context with session metadata and utilities
 - **Returns**: A result object with continuation flag, modified payload, and violation/explanation
 
+### Concurrency Model
+
+Hooks use Python's `async`/`await` cooperative multitasking. Because Python's event loop only switches execution at `await` points, hook code won't be interrupted mid-logic. This means:
+
+- **Sequential when awaited**: Calling `await hook(...)` keeps control flow deterministic — the hook completes before the caller continues.
+- **Race conditions only at `await` points**: Shared state is safe to read and write between `await` calls within a single hook. Races only arise if multiple hooks modify the same shared state and are dispatched concurrently.
+- **No preemptive interruption**: Unlike threads, a hook handler runs uninterrupted until it yields control via `await`.
+
+### Execution Timing
+
+Hooks support two execution timing modes, configurable per-registration:
+
+- **Blocking** (default): The hook is awaited inline. Use for policy enforcement, payload transformation, and any hook that must complete before execution continues.
+- **Fire-and-forget**: The hook is dispatched via `asyncio.create_task()` and runs in the background. Use for logging, telemetry, and non-critical side effects where latency matters more than ordering guarantees.
+
+Fire-and-forget hooks cannot modify payloads or block execution — their `PluginResult` is ignored. Any exceptions in fire-and-forget hooks are logged but do not propagate.
+
 ### Plugin Framework
 
-To enable this extension system, we plan to leverage a lightweight, standalone plugin framework that:
-- Installs as a Python package dependency with minimum footprint
-- Exposes APIs to define hook invocation points, and base data objects for plugin payload, context, and result.
-- Exposes a base calss and decorator to implement concrete plugins and register hook functions
+The hook system is backed by a lightweight plugin framework built as a Mellea dependency (not a separate user-facing package). This framework:
+
+- Provides APIs to define hook invocation points and base data objects for plugin payload, context, and result
+- Exposes a base class and decorator to implement concrete plugins and register hook functions
 - Implements a plugin manager that loads, registers, and governs the execution of plugins
 
 ## 2. Common Payload Fields
@@ -51,33 +69,35 @@ class BasePayload(PluginPayload):
 
 ## 3. Hook Summary Table
 
-| Hook Point | Category | Description |
-|------------|----------|-------------|
-| `session_pre_init` | Session | Before session initialization |
-| `session_post_init` | Session | After session is fully initialized |
-| `session_reset` | Session | When session context is reset |
-| `session_cleanup` | Session | Before session cleanup/teardown |
-| `instruction_pre_create` | Instruction | Before Instruction component creation |
-| `instruction_post_create` | Instruction | After Instruction created, before execution |
-| `action_pre_execute` | Action | Before any action execution |
-| `action_post_success` | Action | After successful action completion |
-| `action_post_error` | Action | After action fails with error |
-| `generation_pre_call` | Generation | Before LLM backend call |
-| `generation_post_call` | Generation | After LLM response received |
-| `generation_stream_chunk` | Generation | For each streaming chunk |
-| `validation_pre_check` | Validation | Before requirement validation |
-| `validation_post_check` | Validation | After validation completes |
-| `sampling_loop_start` | Sampling | When sampling strategy begins |
-| `sampling_iteration` | Sampling | After each sampling attempt |
-| `sampling_repair` | Sampling | When repair is invoked |
-| `sampling_loop_end` | Sampling | When sampling completes |
-| `tool_pre_invoke` | Tool | Before tool/function invocation |
-| `tool_post_invoke` | Tool | After tool execution |
-| `slot_pre_call` | Generative Slot | Before generative slot invocation |
-| `slot_post_call` | Generative Slot | After generative slot returns |
-| `context_update` | Context | When context changes |
-| `context_prune` | Context | When context is trimmed |
-| `error_occurred` | Error | When an error occurs |
+| Hook Point | Category | Domain | Description |
+|------------|----------|--------|-------------|
+| `session_pre_init` | Session Lifecycle | Session | Before session initialization |
+| `session_post_init` | Session Lifecycle | Session | After session is fully initialized |
+| `session_reset` | Session Lifecycle | Session | When session context is reset |
+| `session_cleanup` | Session Lifecycle | Session | Before session cleanup/teardown |
+| `component_pre_create` | Component Lifecycle | Component / (Backend, Context) | Before component creation |
+| `component_post_create` | Component Lifecycle | Component / (Backend, Context) | After component created, before execution |
+| `component_pre_execute` | Component Lifecycle | Component / (Backend, Context) | Before component execution via `aact()` |
+| `component_post_success` | Component Lifecycle | Component / (Backend, Context) | After successful component execution |
+| `component_post_error` | Component Lifecycle | Component / (Backend, Context) | After component execution fails |
+| `generation_pre_call` | Generation Pipeline | (Backend, Context) | Before LLM backend call |
+| `generation_post_call` | Generation Pipeline | (Backend, Context) | After LLM response received |
+| `generation_stream_chunk` | Generation Pipeline | (Backend, Context) | For each streaming chunk |
+| `validation_pre_check` | Validation | (Backend, Context) | Before requirement validation |
+| `validation_post_check` | Validation | (Backend, Context) | After validation completes |
+| `sampling_loop_start` | Sampling Pipeline | (Backend, Context) | When sampling strategy begins |
+| `sampling_iteration` | Sampling Pipeline | (Backend, Context) | After each sampling attempt |
+| `sampling_repair` | Sampling Pipeline | (Backend, Context) | When repair is invoked |
+| `sampling_loop_end` | Sampling Pipeline | (Backend, Context) | When sampling completes |
+| `tool_pre_invoke` | Tool Execution | (Backend, Context) | Before tool/function invocation |
+| `tool_post_invoke` | Tool Execution | (Backend, Context) | After tool execution |
+| `adapter_pre_load` | Backend Adapter Ops | Backend | Before `backend.load_adapter()` |
+| `adapter_post_load` | Backend Adapter Ops | Backend | After adapter loaded |
+| `adapter_pre_unload` | Backend Adapter Ops | Backend | Before `backend.unload_adapter()` |
+| `adapter_post_unload` | Backend Adapter Ops | Backend | After adapter unloaded |
+| `context_update` | Context Operations | Context | When context changes |
+| `context_prune` | Context Operations | Context | When context is trimmed |
+| `error_occurred` | Error Handling | Cross-cutting | When an unrecoverable error occurs |
 
 ## 4. Hook Definitions
 
@@ -167,12 +187,14 @@ Hooks that manage session boundaries, useful for initialization, state setup, an
   - `session`: MelleaSession - Final session state
 
 
-### B. Instruction & Action Hooks
+### B. Component Lifecycle Hooks
 
-Hooks around the high-level primitives like `instruct()`, `chat()`, and action execution.
+Hooks around Component creation and execution. All Mellea primitives — Instruction, Message, Query, Transform, GenerativeSlot — are Components. These hooks cover the full Component lifecycle; there are no separate hooks per component type.
+
+All component payloads include a `component_type: str` field (e.g., `"Instruction"`, `"Message"`, `"GenerativeSlot"`, `"Query"`, `"Transform"`) so plugins can filter by type. For example, a plugin targeting only generative slots would check `component_type == "GenerativeSlot"`.
 
 
-#### `instruction_pre_create`
+#### `component_pre_create`
 
 - **Trigger**: Called when `instruct()`, `chat()`, or a generative slot is invoked, before the prompt is constructed.
 - **Use Cases**:
@@ -183,7 +205,8 @@ Hooks around the high-level primitives like `instruct()`, `chat()`, and action e
   - Enforcing content policies
 - **Payload**:
   ```python
-  class InstructionPreCreatePayload(BasePayload):
+  class ComponentPreCreatePayload(BasePayload):
+      component_type: str                        # "Instruction", "GenerativeSlot", etc.
       description: str                           # Main instruction text
       images: list[ImageBlock] | None            # Attached images
       requirements: list[Requirement | str]      # Validation requirements
@@ -194,44 +217,45 @@ Hooks around the high-level primitives like `instruct()`, `chat()`, and action e
       template_id: str | None                    # Identifier of prompt template
   ```
 - **Context**:
-  - `session`: MelleaSession
-  - `parent_context`: Context - Context instruction will be added to
+  - `backend`: Backend
+  - `context`: Context - Context the component will be added to
   - `history_snapshot`: ContextSnapshot - Conversation history
 
 
-#### `instruction_post_create`
+#### `component_post_create`
 
-- **Trigger**: After Instruction component is created and formatted, before backend call.
+- **Trigger**: After component is created and formatted, before backend call.
 - **Use Cases**:
   - Appending system prompts
   - Context stuffing (RAG injection)
-  - Logging instruction patterns
-  - Validating final instruction structure
+  - Logging component patterns
+  - Validating final component structure
 - **Payload**:
   ```python
-  class InstructionPostCreatePayload(BasePayload):
-      instruction: Instruction       # Created instruction component
+  class ComponentPostCreatePayload(BasePayload):
+      component_type: str            # "Instruction", "GenerativeSlot", etc.
+      component: Component           # The created component
       template_repr: TemplateRepresentation  # Formatted representation
-      component: Component           # The structured prompt object
   ```
 - **Context**:
-  - `session`: MelleaSession
-  - `parent_context`: Context
+  - `backend`: Backend
+  - `context`: Context
 
 
-#### `action_pre_execute`
+#### `component_pre_execute`
 
-- **Trigger**: Before any action (Instruction, Query, Transform) is executed via `act()`.
+- **Trigger**: Before any component is executed via `aact()`.
 - **Use Cases**:
   - Policy enforcement on generation requests
   - Injecting/modifying model options
   - Routing to different strategies
   - Authorization checks
-  - Logging action patterns
+  - Logging execution patterns
 - **Payload**:
   ```python
-  class ActionPreExecutePayload(BasePayload):
-      action: Component | CBlock     # The action to execute
+  class ComponentPreExecutePayload(BasePayload):
+      component_type: str            # "Instruction", "GenerativeSlot", etc.
+      action: Component | CBlock     # The component to execute
       context: Context               # Current context
       context_view: list[Component | CBlock] | None  # Linearized context
       requirements: list[Requirement]  # Attached requirements
@@ -241,14 +265,13 @@ Hooks around the high-level primitives like `instruct()`, `chat()`, and action e
       tool_calls_enabled: bool       # Whether tools are available
   ```
 - **Context**:
-  - `session`: MelleaSession
   - `backend`: Backend
-  - `action_type`: str - Type of action being executed
+  - `context`: Context
 
 
-#### `action_post_success`
+#### `component_post_success`
 
-- **Trigger**: After action execution completes successfully.
+- **Trigger**: After component execution completes successfully.
 - **Use Cases**:
   - Logging generation results
   - Output validation (hallucination check)
@@ -258,24 +281,34 @@ Hooks around the high-level primitives like `instruct()`, `chat()`, and action e
   - Collecting metrics
 - **Payload**:
   ```python
-  class ActionPostSuccessPayload(BasePayload):
-      action: Component | CBlock     # Executed action
+  class ComponentPostSuccessPayload(BasePayload):
+      component_type: str            # "Instruction", "GenerativeSlot", etc.
+      action: Component | CBlock     # Executed component
       result: ModelOutputThunk       # Generation result
-      context_before: Context        # Context before action
-      context_after: Context         # Context after action
+      context_before: Context        # Context before execution
+      context_after: Context         # Context after execution
       generate_log: GenerateLog      # Detailed execution log
       sampling_results: list[SamplingResult] | None  # If sampling was used
       latency_ms: int                # Execution time
   ```
 - **Context**:
-  - `session`: MelleaSession
+  - `backend`: Backend
+  - `context`: Context
   - `token_usage`: dict | None
   - `original_input`: dict - Input that triggered generation
 
+> **Design Decision: Separate Success/Error Hooks**
+>
+> `component_post_success` and `component_post_error` are separate hooks rather than a single `component_post` with a sum type over success/failure. The reasons are:
+>
+> 1. **Registration granularity** — Plugins subscribe to only what they need. An audit logger may only care about errors; a metrics collector may only care about successes.
+> 2. **Distinct payload shapes** — Success payloads carry `result`, `generate_log`, and `sampling_results`; error payloads carry `exception`, `error_type`, and `stack_trace`. A sum type would force nullable fields or tagged unions, adding complexity for every consumer.
+> 3. **Different execution modes** — Error hooks may be fire-and-forget (for alerting); success hooks may be blocking (for output transformation). Separate hooks allow per-hook execution timing configuration.
 
-#### `action_post_error`
 
-- **Trigger**: When action execution fails with an exception.
+#### `component_post_error`
+
+- **Trigger**: When component execution fails with an exception.
 - **Use Cases**:
   - Error logging and alerting
   - Custom error recovery
@@ -283,8 +316,9 @@ Hooks around the high-level primitives like `instruct()`, `chat()`, and action e
   - Graceful degradation
 - **Payload**:
   ```python
-  class ActionPostErrorPayload(BasePayload):
-      action: Component | CBlock     # Action that failed
+  class ComponentPostErrorPayload(BasePayload):
+      component_type: str            # "Instruction", "GenerativeSlot", etc.
+      action: Component | CBlock     # Component that failed
       error: Exception               # The exception raised
       error_type: str                # Exception class name
       stack_trace: str               # Full stack trace
@@ -292,13 +326,14 @@ Hooks around the high-level primitives like `instruct()`, `chat()`, and action e
       model_options: dict            # Options used
   ```
 - **Context**:
-  - `session`: MelleaSession
+  - `backend`: Backend
+  - `context`: Context
   - `recoverable`: bool - Can execution continue
 
 
-### C. Generation Hooks (Backend Execution)
+### C. Generation Pipeline Hooks
 
-Low-level hooks between the component abstraction and raw LLM API calls.
+Low-level hooks between the component abstraction and raw LLM API calls. These operate on the (Backend, Context) tuple — they do not require a session.
 
 
 #### `generation_pre_call`
@@ -326,6 +361,8 @@ Low-level hooks between the component abstraction and raw LLM API calls.
       estimated_tokens: int | None         # Token estimate
   ```
 - **Context**:
+  - `backend`: Backend
+  - `context`: Context
   - `backend_name`: str
   - `model_id`: str
   - `provider`: str - Provider name (e.g., "ibm/granite")
@@ -354,6 +391,8 @@ Low-level hooks between the component abstraction and raw LLM API calls.
       finish_reason: str             # Why generation stopped
   ```
 - **Context**:
+  - `backend`: Backend
+  - `context`: Context
   - `backend_name`: str
   - `model_id`: str
   - `status_code`: int | None - HTTP status from provider
@@ -378,13 +417,15 @@ Low-level hooks between the component abstraction and raw LLM API calls.
   ```
 - **Context**:
   - `thunk_id`: str
+  - `backend`: Backend
+  - `context`: Context
   - `backend_name`: str
   - `model_id`: str
 
 
 ### D. Validation Hooks
 
-Hooks around requirement verification and output validation.
+Hooks around requirement verification and output validation. These operate on the (Backend, Context) tuple.
 
 
 #### `validation_pre_check`
@@ -404,7 +445,8 @@ Hooks around requirement verification and output validation.
       model_options: dict              # Options for LLM-as-judge
   ```
 - **Context**:
-  - `session`: MelleaSession
+  - `backend`: Backend
+  - `context`: Context
   - `validation_type`: str - "python" | "llm_as_judge"
 
 
@@ -428,13 +470,14 @@ Hooks around requirement verification and output validation.
       generate_logs: list[GenerateLog | None]  # Logs from LLM-as-judge
   ```
 - **Context**:
-  - `session`: MelleaSession
+  - `backend`: Backend
+  - `context`: Context
   - `validation_duration_ms`: int
 
 
 ### E. Sampling & Repair Hooks
 
-Hooks around sampling strategies and failure recovery.
+Hooks around sampling strategies and failure recovery. These operate on the (Backend, Context) tuple — sampling strategies take explicit `(action, context, backend)` arguments and do not require a session.
 
 
 #### `sampling_loop_start`
@@ -454,7 +497,9 @@ Hooks around sampling strategies and failure recovery.
       loop_budget: int               # Maximum iterations
   ```
 - **Context**:
-  - `session`: MelleaSession
+  - `backend`: Backend
+  - `context`: Context
+  - `strategy_name`: str
   - `strategy_config`: dict
 
 
@@ -478,6 +523,8 @@ Hooks around sampling strategies and failure recovery.
       total_count: int
   ```
 - **Context**:
+  - `backend`: Backend
+  - `context`: Context
   - `strategy_name`: str
   - `remaining_budget`: int
   - `elapsed_ms`: int
@@ -485,7 +532,12 @@ Hooks around sampling strategies and failure recovery.
 
 #### `sampling_repair`
 
-- **Trigger**: When repair strategy is invoked after validation failure.
+- **Trigger**: When a repair strategy is invoked after validation failure. Behavior varies by sampling strategy.
+- **Strategy-Specific Behavior**:
+  - **RejectionSamplingStrategy**: Identity retry — same action, original context. No actual repair; simply regenerates. (`repair_type: "identity"`)
+  - **RepairTemplateStrategy**: Appends failure descriptions via `copy_and_repair()`, producing a modified context that includes what went wrong. (`repair_type: "template_repair"`)
+  - **MultiTurnStrategy**: Adds a Message describing failures to the conversation context, treating repair as a new conversational turn. (`repair_type: "multi_turn_message"`)
+  - **SOFAISamplingStrategy**: Two-solver approach with targeted feedback between attempts. (`repair_type: "sofai_feedback"`)
 - **Use Cases**:
   - Logging repair patterns
   - Injecting custom repair strategies
@@ -494,6 +546,7 @@ Hooks around sampling strategies and failure recovery.
 - **Payload**:
   ```python
   class SamplingRepairPayload(BasePayload):
+      repair_type: str               # "identity" | "template_repair" | "multi_turn_message" | "sofai_feedback" | "custom"
       failed_action: Component       # Action that failed
       failed_result: ModelOutputThunk  # Failed output
       failed_validations: list[tuple[Requirement, ValidationResult]]
@@ -504,6 +557,8 @@ Hooks around sampling strategies and failure recovery.
       repair_iteration: int          # Which repair attempt
   ```
 - **Context**:
+  - `backend`: Backend
+  - `context`: Context
   - `strategy_name`: str
   - `past_failures`: list[str]
 
@@ -529,6 +584,8 @@ Hooks around sampling strategies and failure recovery.
       all_validations: list[list[tuple[Requirement, ValidationResult]]]
   ```
 - **Context**:
+  - `backend`: Backend
+  - `context`: Context
   - `strategy_name`: str
   - `total_duration_ms`: int
   - `tokens_used`: int | None
@@ -536,7 +593,7 @@ Hooks around sampling strategies and failure recovery.
 
 ### F. Tool Calling Hooks
 
-Hooks around tool/function execution.
+Hooks around tool/function execution. These operate on the (Backend, Context) tuple.
 
 
 #### `tool_pre_invoke`
@@ -556,7 +613,8 @@ Hooks around tool/function execution.
       model_tool_call: ModelToolCall # Raw model output
   ```
 - **Context**:
-  - `session`: MelleaSession
+  - `backend`: Backend
+  - `context`: Context
   - `available_tools`: list[str]
   - `invocation_source`: str - "transform" | "action" | etc.
 
@@ -581,64 +639,95 @@ Hooks around tool/function execution.
       error: Exception | None        # Error if any
   ```
 - **Context**:
-  - `session`: MelleaSession
+  - `backend`: Backend
+  - `context`: Context
   - `invocation_source`: str
 
 
-### G. Generative Slot Hooks
+### G. Backend Adapter Operations
 
-Hooks specific to `@generative` decorated functions.
+Hooks around LoRA/aLoRA adapter loading and unloading on backends. Based on the `AdapterMixin` protocol in `mellea/backends/adapters/adapter.py`.
+
+> **Future Work: Backend Switching**
+>
+> These hooks cover adapter load/unload on a single backend. Hooks for switching the entire backend on a session (e.g., from Ollama to OpenAI mid-session) are a potential future extension and are distinct from adapter management.
 
 
-#### `slot_pre_call`
+#### `adapter_pre_load`
 
-- **Trigger**: When a generative slot function is about to be invoked.
+- **Trigger**: Before `backend.load_adapter()` is called.
 - **Use Cases**:
-  - Slot-level authorization
-  - Argument validation
-  - Profiling setup
-  - Logging slot invocations
+  - Validating adapter compatibility
+  - Enforcing adapter usage policies
+  - Logging adapter load attempts
 - **Payload**:
   ```python
-  class SlotPreCallPayload(BasePayload):
-      slot_name: str                 # Name of the generative slot function
-      slot_signature: str            # Typed signature
-      args: dict[str, Any]           # Arguments passed to the slot
-      kwargs: dict[str, Any]         # Keyword arguments
-      docstring: str | None          # Docstring / prompt template
+  class AdapterPreLoadPayload(BasePayload):
+      adapter_name: str              # Name/path of adapter
+      adapter_config: dict           # Adapter configuration
+      backend_name: str              # Backend being adapted
   ```
 - **Context**:
-  - `session`: MelleaSession
-  - `slot_module`: str - Module containing the slot
+  - `backend`: Backend
 
 
-#### `slot_post_call`
+#### `adapter_post_load`
 
-- **Trigger**: Once the slot returns (or fails).
+- **Trigger**: After adapter has been successfully loaded.
 - **Use Cases**:
-  - Measuring slot latency
-  - Recording success/failure
-  - Profiling statistics per slot
-  - Output transformation
+  - Confirming adapter activation
+  - Updating metrics/state
+  - Triggering downstream reconfiguration
 - **Payload**:
   ```python
-  class SlotPostCallPayload(BasePayload):
-      slot_name: str
-      args: dict[str, Any]
-      kwargs: dict[str, Any]
-      result: Any                    # The returned value
-      duration_ms: int
-      success: bool
-      error: Exception | None
+  class AdapterPostLoadPayload(BasePayload):
+      adapter_name: str
+      adapter_config: dict
+      backend_name: str
+      load_duration_ms: int          # Time to load adapter
   ```
 - **Context**:
-  - `session`: MelleaSession
-  - `slot_module`: str
+  - `backend`: Backend
 
 
-### H. Context Manipulation Hooks
+#### `adapter_pre_unload`
 
-Hooks around context changes and management.
+- **Trigger**: Before `backend.unload_adapter()` is called.
+- **Use Cases**:
+  - Flushing adapter-specific state
+  - Logging adapter lifecycle
+  - Preventing unload during active generation
+- **Payload**:
+  ```python
+  class AdapterPreUnloadPayload(BasePayload):
+      adapter_name: str
+      backend_name: str
+  ```
+- **Context**:
+  - `backend`: Backend
+
+
+#### `adapter_post_unload`
+
+- **Trigger**: After adapter has been unloaded.
+- **Use Cases**:
+  - Confirming adapter deactivation
+  - Cleaning up adapter-specific resources
+  - Updating metrics
+- **Payload**:
+  ```python
+  class AdapterPostUnloadPayload(BasePayload):
+      adapter_name: str
+      backend_name: str
+      unload_duration_ms: int        # Time to unload adapter
+  ```
+- **Context**:
+  - `backend`: Backend
+
+
+### H. Context Operations Hooks
+
+Hooks around context changes and management. These operate on the Context directly.
 
 
 #### `context_update`
@@ -659,7 +748,7 @@ Hooks around context changes and management.
       change_type: str               # "append" | "reset"
   ```
 - **Context**:
-  - `session`: MelleaSession
+  - `context`: Context
   - `history_length`: int
 
 
@@ -681,18 +770,26 @@ Hooks around context changes and management.
       tokens_freed: int | None       # Token estimate freed
   ```
 - **Context**:
-  - `session`: MelleaSession
+  - `context`: Context
   - `token_limit`: int | None
 
 
 ### I. Error Handling Hooks
 
-Hooks for error conditions and recovery.
+Cross-cutting hook for error conditions.
 
 
 #### `error_occurred`
 
-- **Trigger**: When an error occurs during any operation.
+- **Trigger**: When an unrecoverable error occurs during any operation.
+- **Fires for**:
+  - `ComponentParseError` — structured output parsing failures
+  - Backend communication errors — connection failures, API errors, timeouts
+  - Assertion violations — internal invariant failures
+  - Any unhandled `Exception` during component execution, validation, or tool invocation
+- **Does NOT fire for**:
+  - Validation failures within sampling loops — these are handled by `sampling_iteration` and `sampling_repair`
+  - Controlled plugin violations via `PluginResult(continue_processing=False)` — these are policy decisions, not errors
 - **Use Cases**:
   - Error logging/alerting
   - Custom error recovery
@@ -712,45 +809,130 @@ Hooks for error conditions and recovery.
   ```
 - **Context**:
   - `session`: MelleaSession | None
+  - `backend`: Backend | None
+  - `context`: Context | None
   - `operation`: str - What operation was being performed
 
 
-## 5. Plugin Context Object
+## 5. PluginContext by Domain
 
-The `PluginContext` passed to all hooks provides shared state and utilities:
+The `PluginContext` passed to hooks varies by domain, providing only the references relevant to that category:
 
-```python  
-# Session Information
+### Session Hooks
+
+```python
+# session_* hooks
+session: MelleaSession
 session_id: str
-session: MelleaSession | None
-
-# Backend Information
-backend_name: str
-model_id: str
-backend_capabilities: dict
 
 # Environment
 environment: dict[str, str]
 cwd: str
 
 # Plugin State
-shared_state: dict[str, Any]    # Shared across plugins
+shared_state: dict[str, Any]       # Shared across plugins
 
 # Utilities
 logger: Logger
 metrics: MetricsCollector
 
 # Request Metadata
-request_id: str                 # Unique ID for this execution chain
-parent_request_id: str | None   # For nested calls
+request_id: str
+parent_request_id: str | None
 timestamp: datetime
 
 # User Information
-user_id: str | None             # User reference if available
-user_metadata: dict[str, Any]   # User-specific data    
+user_id: str | None
+user_metadata: dict[str, Any]
 ```
 
-> Note: this is a suggestion. Requires discussion.
+### Component, Generation, Validation, Sampling, and Tool Hooks
+
+```python
+# component_*, generation_*, validation_*, sampling_*, tool_* hooks
+backend: Backend
+context: Context
+
+# Backend Information (generation hooks)
+backend_name: str                  # Available on generation_* hooks
+model_id: str                      # Available on generation_* hooks
+
+# Strategy Information (sampling hooks)
+strategy_name: str                 # Available on sampling_* hooks
+
+# Plugin State
+shared_state: dict[str, Any]
+
+# Utilities
+logger: Logger
+metrics: MetricsCollector
+
+# Request Metadata
+request_id: str
+parent_request_id: str | None
+timestamp: datetime
+
+# User Information
+user_id: str | None
+user_metadata: dict[str, Any]
+```
+
+### Adapter Hooks
+
+```python
+# adapter_* hooks
+backend: Backend
+
+# Plugin State
+shared_state: dict[str, Any]
+
+# Utilities
+logger: Logger
+metrics: MetricsCollector
+
+# Request Metadata
+request_id: str
+timestamp: datetime
+```
+
+### Context Hooks
+
+```python
+# context_* hooks
+context: Context
+
+# Plugin State
+shared_state: dict[str, Any]
+
+# Utilities
+logger: Logger
+metrics: MetricsCollector
+
+# Request Metadata
+request_id: str
+timestamp: datetime
+```
+
+### Error Hook
+
+```python
+# error_occurred
+session: MelleaSession | None
+backend: Backend | None
+context: Context | None
+
+# Plugin State
+shared_state: dict[str, Any]
+
+# Utilities
+logger: Logger
+metrics: MetricsCollector
+
+# Request Metadata
+request_id: str
+timestamp: datetime
+operation: str
+```
 
 ### Context Snapshot
 
@@ -758,10 +940,10 @@ When conversation history is relevant, the plugin context object may include a `
 
 ```python
 @dataclass
-class ContextSnapshot:    
+class ContextSnapshot:
     history_length: int                # Number of turns
     last_turn: dict | None             # Last user/assistant exchange
-    token_estimate: int | None         # Estimated token count    
+    token_estimate: int | None         # Estimated token count
 ```
 
 ## 6. Hook Results
@@ -773,7 +955,7 @@ Hooks can return different result types to control execution:
 ```python
 return PluginResult(
     continue_processing=True
-    modified_payload=modified_payload,    
+    modified_payload=modified_payload,
 )
 ```
 
@@ -788,7 +970,7 @@ violation = PluginViolation(
     severity="error"  # "error" | "warning"
 )
 
-return PluginResult(    
+return PluginResult(
     continue_processing=False,
     violation=violation
 )
@@ -805,9 +987,10 @@ plugins:
   - name: content-policy
     kind: mellea.plugins.ContentPolicyPlugin
     hooks:
-      - instruction_pre_create
+      - component_pre_create
       - generation_post_call
     mode: enforce
+    execution: blocking
     priority: 10
     config:
       blocked_terms: ["term1", "term2"]
@@ -815,10 +998,11 @@ plugins:
   - name: telemetry
     kind: mellea.plugins.TelemetryPlugin
     hooks:
-      - action_post_success
+      - component_post_success
       - validation_post_check
       - sampling_loop_end
     mode: permissive
+    execution: fire_and_forget
     priority: 100
     config:
       endpoint: "https://telemetry.example.com"
@@ -830,6 +1014,11 @@ plugins:
 - **`enforce_ignore_error`**: Block on violation, but tolerate plugin errors
 - **`permissive`**: Log violations without blocking
 - **`disabled`**: Skip hook execution
+
+### Execution Timing
+
+- **`blocking`** (default): Hook is awaited inline before continuing
+- **`fire_and_forget`**: Hook is dispatched as an `asyncio.create_task()` — cannot modify payloads or block execution
 
 ### Priority
 
@@ -860,7 +1049,7 @@ class PIIRedactionPlugin(Plugin):
         return "PII_Redactor"
 
     def register(self, hooks):
-        hooks.register("instruction_pre_create", self.redact_input)
+        hooks.register("component_pre_create", self.redact_input)
         hooks.register("generation_post_call", self.redact_output)
 
     async def redact_input(self, payload, context):
@@ -874,7 +1063,7 @@ class PIIRedactionPlugin(Plugin):
 m = mellea.start_session(
     ...,
     plugin_manager=pm,
-    hooks_enabled=["instruction_pre_create", "generation_post_call"]
+    hooks_enabled=["component_pre_create", "generation_post_call"]
 )
 ```
 
@@ -884,22 +1073,26 @@ m = mellea.start_session(
 
 ```python
 class ContentPolicyPlugin(MelleaPlugin):
-    async def on_instruction_pre_create(
+    async def on_component_pre_create(
         self,
-        payload: InstructionPreCreatePayload,
+        payload: ComponentPreCreatePayload,
         context: PluginContext
     ) -> PluginResult | None:
+        # Only enforce on Instructions and GenerativeSlots
+        if payload.component_type not in ("Instruction", "GenerativeSlot"):
+            return None
+
         blocked_terms = self.config.get("blocked_terms", [])
 
         for term in blocked_terms:
             if term.lower() in payload.description.lower():
                 return PluginResult(
-                    continue_processing=False, 
+                    continue_processing=False,
                     violation=PluginViolation(
                         reason="Blocked content detected",
-                        description=f"Instruction contains blocked term: {term}",
+                        description=f"Component contains blocked term: {term}",
                         code="CONTENT_POLICY_001"
-                )        
+                )
 
     async def on_generation_post_call(
         self,
@@ -918,33 +1111,34 @@ class ContentPolicyPlugin(MelleaPlugin):
 
 ```python
 class AuditLoggingPlugin(MelleaPlugin):
-    async def on_action_post_success(
+    async def on_component_post_success(
         self,
-        payload: ActionPostSuccessPayload,
+        payload: ComponentPostSuccessPayload,
         context: PluginContext
     ) -> PluginResult | None:
         self._log_audit_event({
             "event": "generation_success",
             "session_id": payload.session_id,
-            "action_type": type(payload.action).__name__,
+            "component_type": payload.component_type,
             "latency_ms": payload.latency_ms,
             "token_usage": context.get("token_usage"),
             "timestamp": payload.timestamp.isoformat()
         })
-        
 
-    async def on_action_post_error(
+
+    async def on_component_post_error(
         self,
-        payload: ActionPostErrorPayload,
+        payload: ComponentPostErrorPayload,
         context: PluginContext
     ) -> PluginResult | None:
         self._log_audit_event({
             "event": "generation_error",
             "session_id": payload.session_id,
+            "component_type": payload.component_type,
             "error_type": payload.error_type,
             "stack_trace": payload.stack_trace,
             "timestamp": payload.timestamp.isoformat()
-        })        
+        })
 ```
 
 ### Token Budget Plugin
@@ -961,13 +1155,13 @@ class TokenBudgetPlugin(MelleaPlugin):
 
         if estimated > budget:
             return PluginResult(
-                    continue_processing=False, 
-                    violation=PluginViolation(                      
+                    continue_processing=False,
+                    violation=PluginViolation(
                       reason="Token budget exceeded",
                       description=f"Estimated {estimated} tokens exceeds budget of {budget}",
                       code="TOKEN_BUDGET_001",
                       details={"estimated": estimated, "budget": budget}
-            )        
+            )
 ```
 
 ### Generative Slot Profiler
@@ -977,21 +1171,23 @@ class SlotProfilerPlugin(MelleaPlugin):
     def __init__(self):
         self._stats = defaultdict(lambda: {"calls": 0, "total_ms": 0, "errors": 0})
 
-    async def on_slot_post_call(
+    async def on_component_post_success(
         self,
-        payload: SlotPostCallPayload,
+        payload: ComponentPostSuccessPayload,
         context: PluginContext
     ) -> PluginResult | None:
-        stats = self._stats[payload.slot_name]
+        # Only profile GenerativeSlot components
+        if payload.component_type != "GenerativeSlot":
+            return None
+
+        stats = self._stats[payload.action.__name__]
         stats["calls"] += 1
-        stats["total_ms"] += payload.duration_ms
-        if not payload.success:
-            stats["errors"] += 1
+        stats["total_ms"] += payload.latency_ms
 
         context.emit_metric(
             "slot_latency_ms",
-            payload.duration_ms,
-            tags={"slot": payload.slot_name, "success": payload.success}
+            payload.latency_ms,
+            tags={"slot": payload.action.__name__, "success": True}
         )
 ```
 
@@ -1003,23 +1199,22 @@ class SlotProfilerPlugin(MelleaPlugin):
 ```mermaid
 flowchart LR
     A([Start]) --> B[Session Init]
-    B --> C[Instruction]
-    C --> D[Action]
-    D --> E[Generation]
-    E --> F[Validation]
-    F --> G{OK?}
-    G --> |Yes| H[Success]
-    G --> |No| I[Error/Retry]
-    H --> J[Cleanup]
-    I --> J
-    J --> K([End])
+    B --> C[Component]
+    C --> D[Generation]
+    D --> E[Validation]
+    E --> F{OK?}
+    F --> |Yes| G[Success]
+    F --> |No| H[Error/Retry]
+    G --> I[Cleanup]
+    H --> I
+    I --> J([End])
 
     style A fill:#e1f5fe
-    style K fill:#e1f5fe
-    style G fill:#fce4ec
+    style J fill:#e1f5fe
+    style F fill:#fce4ec
 ```
 
-### Detailed Flows
+### Detailed Flow
 
 ```mermaid
 flowchart TD
@@ -1032,20 +1227,10 @@ flowchart TD
 
     C --> D
 
-    subgraph Slot["Generative Slot (optional)"]
-        S1[slot_pre_call]
-        S1 --> S2[slot_post_call]
-    end
-
-    subgraph Instruction["Instruction Creation"]
-        D[instruction_pre_create]
-        D --> E[instruction_post_create]
-    end
-
-    E --> F
-
-    subgraph Action["Action Execution"]
-        F[action_pre_execute]
+    subgraph CompLifecycle["Component Lifecycle"]
+        D[component_pre_create]
+        D --> E[component_post_create]
+        E --> F[component_pre_execute]
     end
 
     F --> G
@@ -1082,20 +1267,27 @@ flowchart TD
 
     L --> M{Success?}
 
-    M --> |Yes| N[action_post_success]
-    M --> |No| O[action_post_error]
+    M --> |Yes| N[component_post_success]
+    M --> |No| O[component_post_error]
 
     N --> P[context_update]
     O --> Q[error_occurred]
 
-    subgraph Context["Context Operations"]
+    subgraph ContextOps["Context Operations"]
         P[context_update]
         P -.-> P2[context_prune]
     end
 
+    subgraph Adapter["Backend Adapter Operations"]
+        AD1[adapter_pre_load]
+        AD1 --> AD2[adapter_post_load]
+        AD3[adapter_pre_unload]
+        AD3 --> AD4[adapter_post_unload]
+    end
+
     subgraph Cleanup["Session End"]
-        R[session_reset]
         R2[session_cleanup]
+        R[session_reset]
     end
 
     P --> R2
@@ -1112,7 +1304,21 @@ flowchart TD
     style SL3 fill:#fce4ec
 ```
 
-## 10. Error Handling, Security & Isolation
+## 10. Observability Integration
+
+### Shallow Logging and OTel
+
+"Shallow logging" refers to OTel-instrumenting the HTTP transport layer of LLM client libraries (openai, ollama, litellm). This captures request/response spans at the network level without awareness of Mellea's semantic concepts (components, sampling strategies, validation).
+
+The hook system provides natural integration points for enriching these shallow spans with Mellea-level context:
+
+- **`generation_pre_call`**: Inject span attributes such as `component_type`, `strategy_name`, and `request_id` into the active OTel context before the HTTP call fires
+- **`generation_post_call`**: Attach result metadata — `finish_reason`, `token_usage`, validation outcome — to the span after the call completes
+- **`request_id` from `BasePayload`**: Serves as a correlation ID linking Mellea-level hook events to transport-level OTel spans
+
+> **Forward-looking**: Mellea does not currently include OTel integration. This section describes the intended design for how hooks and shallow logging would compose when OTel support is added.
+
+## 11. Error Handling, Security & Isolation
 
 ### Error Handling
 
@@ -1143,7 +1349,7 @@ plugins:
       allowed_operations: ["read_payload", "emit_metric"]
 ```
 
-## 11. Backward Compatibility & Migration
+## 12. Backward Compatibility & Migration
 
 ### Versioning
 
