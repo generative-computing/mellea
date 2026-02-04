@@ -26,7 +26,15 @@ Build tools and applications using Mellea. These can be hosted in your own repos
 ### 3. Community Components
 Contribute experimental or specialized components to [mellea-contribs](https://github.com/generative-computing/mellea-contribs).
 
-**Note:** For general-purpose Components, Requirements, or Sampling Strategies, please **open an issue** first to discuss whether they should go in the standard library (this repository) or mellea-contribs.
+**Note:** For general-purpose Components, Requirements, or Sampling Strategies, please
+**open an issue** first to discuss whether they should go in the standard library (this
+repository) or mellea-contribs.
+
+## Code of Conduct
+
+This project adheres to the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
+By participating, you are expected to uphold this code. Please report unacceptable behavior
+to melleaadmin@ibm.com.
 
 ## Getting Started
 
@@ -213,7 +221,8 @@ git commit -n -m "wip: intermediate work"
 pre-commit run --all-files
 ```
 
-⚠️ **Warning:** `pre-commit --all-files` may take several minutes. Don't cancel mid-run as it can corrupt state.
+⚠️ **Warning:** `pre-commit --all-files` may take several minutes. Don't cancel mid-run
+as it can corrupt state.
 
 ### Pull Request Process
 
@@ -293,7 +302,8 @@ Tests are categorized using pytest markers:
 ⚠️ **Don't add `qualitative` to trivial tests** - keep the fast loop fast.
 ⚠️ **Mark tests taking >5 minutes with `slow`** (e.g., dataset loading, extensive evaluations).
 
-For detailed information about test markers, resource requirements, and running specific test categories, see [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md).
+For detailed information about test markers, resource requirements, and running specific
+test categories, see [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md).
 
 ### CI/CD Tests
 

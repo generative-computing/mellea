@@ -114,7 +114,9 @@ uv run --with mellea docs/examples/tutorial/example.py
 
 ### Installing from Source
 
-If you want to contribute to Mellea or need the latest development version, see the [Getting Started](CONTRIBUTING.md#getting-started) section in our Contributing Guide for detailed installation instructions.
+If you want to contribute to Mellea or need the latest development version, see the
+[Getting Started](CONTRIBUTING.md#getting-started) section in our Contributing Guide for
+detailed installation instructions.
 
 ## Getting started with validation
 
