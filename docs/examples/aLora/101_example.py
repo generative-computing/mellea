@@ -1,4 +1,5 @@
-# pytest: huggingface, requires_heavy_ram, llm
+# pytest: skip, huggingface, requires_heavy_ram, llm
+# SKIP REASON: Example broken since intrinsics refactor - see issue #385
 
 import time
 

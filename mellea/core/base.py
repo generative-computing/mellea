@@ -565,6 +565,9 @@ class Context(abc.ABC):
 class AbstractMelleaTool(abc.ABC):
     """Abstract base class for Mellea Tool."""
 
+    name: str
+    """Name of the tool."""
+
     @abc.abstractmethod
     def run(self, *args, **kwargs) -> Any:
         """Runs the tool on the given arguments."""
