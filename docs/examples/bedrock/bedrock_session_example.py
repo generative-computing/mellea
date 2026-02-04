@@ -1,3 +1,6 @@
+import os
+import mellea
+
 try:
     import boto3
 except:
@@ -6,7 +9,11 @@ except:
         "Run `uv pip install mellea[aws]`"
     )
 
-import mellea
+assert "AWS_BEARER_TOKEN_BEDROCK" in os.environ.keys(), (
+    "Using AWS Bedrock requires setting a AWS_BEARER_TOKEN_BEDROCK environment variable. "
+    "Generate a key from the AWS console at: https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/api-keys?tab=long-term "
+    "Then run `export AWS_BEARER_TOKEN_BEDROCK=<insert your key here>"
+)
 
 MODEL_ID = "bedrock/converse/openai.gpt-oss-120b-1:0"
 
