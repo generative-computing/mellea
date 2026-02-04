@@ -40,6 +40,7 @@
     - [Customization](#customization)
       - [Choosing a Template](#choosing-a-template)
       - [Editing an Existing Class](#editing-an-existing-class)
+    - [Large Prompts and Decompose](#decompose)
   - [Chapter 11: Tool Calling](#chapter-11-tool-calling)
   - [Chapter 12: Asynchronicity](#chapter-12-asynchronicity)
     - [Asynchronous Functions:](#asynchronous-functions)
@@ -1329,6 +1330,25 @@ To customize the template and template representation of an existing class, simp
 
 See [`mellea/docs/examples/mify/rich_document_advanced.py`](./examples/mify/rich_document_advanced.py)
 
+#### Decompose
+For large prompts Mellea offers a decompose function to break down the initial prompt into a series of smaller ones.  In addition, the intermediary output allows for constraints and validation to be applied to the output of each step.  The final output is done by composing these intermediate steps.
+
+See [`mellea/docs/examples/m_decompose/`](./examples/m_decompose/) for an input example prompt, intermediary json and python representations, and the final output.
+
+For a smaller example see [`mellea/docs/examples/m_decompose/small/`](./examples/m_decompose/small/)
+
+For an example within Python see [[`mellea/docs/examples/m_decompose/python/`](./examples/m_decompose/python/)]
+
+To run the example locally use the following command:
+```bash
+m decompose run --out-dir ./ --prompt-file ./docs/examples/m_decomposeexample_decompose_prompt.txt
+```
+
+To run the generated intermediary use the following command:
+```bash
+python ./m_decomp_result.py > final_output.txt
+```
+
 ## Chapter 11: Tool Calling
 Mellea supports tool calling for providers/models that support it. Most session level functions support setting a tool_calls boolean. Setting this to true allows tools to be called, but there's no guarantee that a model will call them.
 
@@ -1423,26 +1443,13 @@ When using `SamplingStrategy`s or during validation, Mellea can speed up the exe
 
 ### Contributor Guide: Getting Started
 
-If you are going to contribute to Mellea, it is important that you use our
-pre-commit hooks. Using these hooks -- or running our test suite -- 
-requires installing `[all]` optional dependencies and also the dev group.
+For detailed instructions on setting up your development environment, installing dependencies, configuring pre-commit hooks, and running tests, please see our **[Contributing Guide](../CONTRIBUTING.md#getting-started)**.
 
-```
-git clone git@github.com:generative-computing/mellea.git && 
-cd mellea && 
-uv venv .venv && 
-source .venv/bin/activate &&
-uv pip install -e ".[all]" --group dev
-pre-commit install
-```
-
-You can then run all tests by running `pytest`, or only the CI/CD tests by
-running `CICD=1 pytest`. See [test/MARKERS_GUIDE.md](../test/MARKERS_GUIDE.md) for
-details on running specific test categories (e.g., by backend, resource requirements).
-
-Tip: you can bypass the hooks by passing the `-n` flag to `git commit`.
-This is sometimes helpful for intermediate commits that you intend to later
-squash.
+The Contributing Guide includes:
+- Installation instructions (uv and conda)
+- Development workflow and coding standards
+- Testing guidelines and markers
+- Troubleshooting common issues
 
 ### Contributor Guide: Requirements and Verifiers
 

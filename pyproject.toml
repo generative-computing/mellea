@@ -74,7 +74,7 @@ hf = [
     "outlines-core==0.1.26",
     "outlines",                 # intentionally un-versioned, expecting a minor update. coutlines-core version should be enough to specify it
     "peft>=0.18.0", # aLoRA support was added in Peft 0.18.0
-    "transformers>=4.53.2",
+    "transformers>=4.53.2,<5",
     "trl==0.19.1",
     "granite-common[transformers]",
 ]
@@ -114,10 +114,12 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "pytest-cov>=6.0.0",
+    "pytest-timeout",  # For test suite timeout configuration
     "psutil",  # For test infrastructure: RAM detection in conftest.py
     "mypy>=1.17.0",
     "python-semantic-release~=7.32",
     "nbmake>=1.5.5",
+    "langchain-core>=1.2.7", # Necessary for mypy and some tool tests
 ]
 
 notebook = [
@@ -174,7 +176,7 @@ ignore = [
 #   "UP006",  # List vs list, etc
 #   "UP007",  # Option and Union
 #   "UP035",  # `typing.Set` is deprecated, use `set` instead"
-  "PD901",  # Avoid using the generic variable name `df` for DataFrames
+  "PD901",  # Generic variable name 'df' for DataFrames (deprecated rule, but needed while PD is enabled)
   "C901", # Complexity warnings
 ]
 
@@ -188,6 +190,23 @@ max-complexity = 20
 combine-as-imports = true
 split-on-trailing-comma = false
 
+[tool.ruff.lint.per-file-ignores]
+# E402: Module level import not at top of file
+# Intentional in examples (pedagogical structure) and tests (pytestmark before imports)
+# D: Docstring errors
+# Not required in examples, tests, and notebooks (core mellea/ has complete docstrings)
+"docs/**/*.py" = ["E402", "D"]
+"docs/**/*.ipynb" = ["D"]
+"test/**/*.py" = ["E402", "D"]
+"cli/**/*.py" = ["D"]
+
+[[tool.mypy.overrides]]
+# Keep import-not-found suppressed for optional dependencies
+module = "docs.*"
+disable_error_code = [
+    "import-not-found",
+]
+
 [tool.codespell]
 ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,Wight'
 check-filenames = true
@@ -200,6 +219,7 @@ disable_error_code = ["empty-body", "import-untyped"]
 python_version = "3.10"
 
 [tool.pytest.ini_options]
+testpaths = ["test", "docs"]  # Run test/ first (fail fast), then docs/
 markers = [
     # Backend markers
     "ollama: Tests requiring Ollama backend (local, light)",
@@ -214,17 +234,23 @@ markers = [
     "requires_gpu: Tests requiring GPU",
     "requires_heavy_ram: Tests requiring 48GB+ RAM",
     "qualitative: Non-deterministic quality tests",
+    "slow: Tests taking >5 minutes (e.g., dataset loading)",
     
     # Composite markers
     "llm: Tests that make LLM calls (needs at least Ollama)",
 ]
 asyncio_mode = "auto"  # Don't require explicitly marking async tests.
 addopts = [
+    # Skip slow tests by default (use pytest without -m to include them)
+    "-m", "not slow",
+    # Run qualitative tests by default (use -m "not qualitative" for fast tests)
     "--cov=mellea",
     "--cov=cli",
     "--cov-report=term",
     "--cov-report=html",
     "--cov-report=json",
+    # Set timeout to 15 minutes for full test suite
+    "--timeout=900",
 ]
 filterwarnings = [
     # Show each deprecation warning only once per session

@@ -15,6 +15,7 @@ with structured, maintainable, robust, and efficient AI workflows.
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![GitHub License](https://img.shields.io/github/license/generative-computing/mellea)](https://img.shields.io/github/license/generative-computing/mellea)
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-3.0-4baaaa.svg)](CODE_OF_CONDUCT.md)
 [![Discord](https://img.shields.io/discord/1448407063813165219?logo=discord&logoColor=white&label=Discord&color=7289DA)](https://ibm.biz/mellea-discord)
 
 
@@ -111,57 +112,11 @@ uv run --with mellea docs/examples/tutorial/example.py
 | MCP | <a target="_blank" rel="noopener noreferrer" href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/mcp_example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Mellea + MCP |
 
 
-### `uv`-based installation from source
+### Installing from Source
 
-Fork and clone the repository:
-
-```bash
-git clone ssh://git@github.com/<my-username>/mellea.git && cd mellea/
-```
-
-Setup a virtual environment:
-
-```bash
-uv venv .venv && source .venv/bin/activate
-```
-
-Use `uv pip` to install from source with the editable flag:
-
-```bash
-uv pip install -e ".[all]"
-```
-
-If you are planning to contribute to the repo, it would be good to have all the development requirements installed:
-
-```bash
-uv pip install ".[all]" --group dev --group notebook --group docs
-```
-
-or
-
-```bash
-uv sync --all-extras --all-groups
-```
-
-If you want to contribute, ensure that you install the precommit hooks:
-
-```bash
-pre-commit install
-```
-
-### `conda`/`mamba`-based installation from source
-
-Fork and clone the repository:
-
-```bash
-git clone ssh://git@github.com/<my-username>/mellea.git && cd mellea/
-```
-
-It comes with an installation script, which does all the commands listed above:
-
-```bash
-conda/install.sh
-```
+If you want to contribute to Mellea or need the latest development version, see the
+[Getting Started](CONTRIBUTING.md#getting-started) section in our Contributing Guide for
+detailed installation instructions.
 
 ## Getting started with validation
 
@@ -231,48 +186,21 @@ if __name__ == "__main__":
 
 See the [tutorial](docs/tutorial.md)
 
-## Contributing to Mellea
+## Contributing
 
-Not all Mellea code lives in this repository.
-There are three pathways for contributing to Mellea:
-1. Contributing applications, tools, and libraries. These can be hosted in
-   your own repository. For observability, use a `mellea-` prefix. Examples:
-   `github.com/my-company/mellea-legal-utils` or `github.com/my-username/mellea-swe-agent`.
-2. Contributing stand-alone and general purpose Components, Requirements, or
-   Sampling Strategies. Please **open an issue** describing your proposed
-   feature and get feedback from the core team on whether the contribution
-   should go in our standard library (this repository) or our
-   [mellea-contribs](https://github.com/generative-computing/mellea-contribs)
-   library. After your issue is triaged, open a PR on the relevant repository.
-3. Contributing new features to the Mellea core, or fixing bugs in the Mellea
-   core or standard library. Please **open an issue** describing the bug
-   or feature. After your issue is triaged, open a PR on this repository and follow the instructions in our
-   automated PR workflow.
+We welcome contributions to Mellea! There are several ways to contribute:
 
-### Contributing to this repository
+1. **Contributing to this repository** - Core features, bug fixes, standard library components
+2. **Applications & Libraries** - Build tools using Mellea (host in your own repo with `mellea-` prefix)
+3. **Community Components** - Contribute to [mellea-contribs](https://github.com/generative-computing/mellea-contribs)
 
-If you are going to contribute to Mellea, it is important that you use our
-pre-commit hooks. Using these hooks -- or running our test suite -- 
-requires installing `[all]` optional dependencies and also the dev group.
+Please see our **[Contributing Guide](CONTRIBUTING.md)** for detailed information on:
+- Getting started with development
+- Coding standards and workflow
+- Testing guidelines
+- How to contribute specific types of components
 
-```
-git clone git@github.com:generative-computing/mellea.git && 
-cd mellea && 
-uv venv .venv && 
-source .venv/bin/activate &&
-uv pip install -e ".[all]" --group dev
-pre-commit install
-```
-
-You can then run all tests by running `pytest`, or only the CI/CD tests by
-running `CICD=1 pytest`. See [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md) for
-details on running specific test categories (e.g., by backend, resource requirements).
-
-Tip: you can bypass the hooks by passing the `-n` flag to `git commit`.
-This is sometimes helpful for intermediate commits that you intend to later
-squash.
-
-Please refer to the [Contributor Guide](docs/tutorial.md#appendix-contributing-to-mellea) for additional detailed instructions on how to contribute.
+Questions? Join our [Discord](https://ibm.biz/mellea-discord)!
 
 ### IBM ❤️ Open Source AI
 

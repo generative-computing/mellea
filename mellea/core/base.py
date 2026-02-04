@@ -562,6 +562,22 @@ class Context(abc.ABC):
         ...
 
 
+class AbstractMelleaTool(abc.ABC):
+    """Abstract base class for Mellea Tool."""
+
+    name: str
+    """Name of the tool."""
+
+    @abc.abstractmethod
+    def run(self, *args, **kwargs) -> Any:
+        """Runs the tool on the given arguments."""
+
+    @property
+    @abc.abstractmethod
+    def as_json_tool(self) -> dict[str, Any]:
+        """Provides a JSON description for Mellea Tool."""
+
+
 @dataclass
 class TemplateRepresentation:
     """Representing a component as a set of important attributes that can be consumed by the formatter."""
@@ -571,7 +587,7 @@ class TemplateRepresentation:
         str,
         str | Component | CBlock | Iterable | Mapping | TemplateRepresentation | None,
     ]
-    tools: dict[str, Callable] | None = (
+    tools: dict[str, AbstractMelleaTool] | None = (
         None  # the key must be the name of the function.
     )
     fields: list[Any] | None = None
@@ -607,12 +623,12 @@ class ModelToolCall:
     """
 
     name: str
-    func: Callable
+    func: AbstractMelleaTool
     args: Mapping[str, Any]
 
     def call_func(self) -> Any:
         """A helper function for calling the function/tool represented by this object."""
-        return self.func(**self.args)
+        return self.func.run(**self.args)
 
 
 def blockify(s: str | CBlock | Component) -> CBlock | Component:

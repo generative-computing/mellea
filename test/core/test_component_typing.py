@@ -44,7 +44,7 @@ class IntComp(FloatComp, Component[int]):
             return -1
         try:
             return int(computed.value)
-        except:
+        except Exception:
             return -2
 
 
@@ -80,7 +80,7 @@ def test_mot_init_typing():
     assert hasattr(mot, "__orig_class__"), (
         "mots are generics and should have this field"
     )
-    assert get_args(mot.__orig_class__)[0] == float, (  # type: ignore
+    assert get_args(mot.__orig_class__)[0] is float, (  # type: ignore
         f"expected float, got {get_args(mot.__orig_class__)[0]} as mot type"  # type: ignore
     )  # type: ignore
 
@@ -113,7 +113,7 @@ def test_component_parsing_fails():
 
 def test_incorrect_type_override():
     with pytest.raises(TypeError):
-        instruction = Instruction[int](description="this is an instruction")  # type: ignore
+        Instruction[int](description="this is an instruction")  # type: ignore
 
 
 # Marking as qualitative for now since there's so much generation required for this.

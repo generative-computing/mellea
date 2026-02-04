@@ -1,3 +1,5 @@
+# pytest: ollama, llm, requires_heavy_ram
+
 """Examples using vision models with OpenAI backend."""
 
 import pathlib
@@ -6,8 +8,8 @@ from PIL import Image
 
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
-from mellea.stdlib.context import ChatContext
 from mellea.core import ImageBlock
+from mellea.stdlib.context import ChatContext
 
 # # using anthropic AI model ...
 # anth_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -47,8 +49,11 @@ print(str(res))
 # print(m.last_prompt())
 
 # and now with PIL image and using m.chat
-res = m.chat("How many eyes can you identify in the image? Explain.", images=[test_pil])
-print(str(res.content))
+chat_res = m.chat(
+    "How many eyes can you identify in the image? Explain.",
+    images=[test_pil],  # type: ignore[arg-type]
+)
+print(str(chat_res.content))
 
 # and now without images again...
 res = m.instruct("How many eyes can you identify in the image?", images=[])

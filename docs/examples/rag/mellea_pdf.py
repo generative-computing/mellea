@@ -1,3 +1,5 @@
+# pytest: ollama, llm, qualitative
+
 import mellea
 from mellea.stdlib.components.docs.richdocument import RichDocument
 
