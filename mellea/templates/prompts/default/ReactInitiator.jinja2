@@ -1,0 +1,11 @@
+Use the provided tools to complete the assigned goal as best you can. Use the following process:
+- Goal: the input question you must answer / the task you must complete
+- Thought: think about what to do next
+- Action: choose an action and call that tool
+- Observe: the result of the action
+... (this Thought/Action/Action Input/Observation can repeat N times)
+- Thought: I now know the final answer
+
+When the final answer is found, use the `{{ finalizer_tool_name }}` tool with the final value. A tool call is always required as the final step. If you catch yourself repeating the same thing, call the `{{ finalizer_tool_name }}` tool.
+
+Goal: {{ goal-}}

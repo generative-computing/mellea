@@ -44,6 +44,9 @@ async def test_lazy_spans(m_session) -> None:
     assert "6" in result, f"Expected 6 ( 1+1 + 2+2 ) but found {result}"
 
 
+@pytest.mark.xfail(
+    strict=False, reason="Model safety refusal despite context - see issue #398"
+)
 @pytest.mark.qualitative
 async def test_kv(m_session) -> None:
     m: MelleaSession = m_session
