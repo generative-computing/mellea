@@ -100,7 +100,7 @@ def tool(*, name: str | None = None) -> Callable[[Callable], MelleaTool]: ...
 
 
 def tool(
-    func: Callable | None = None, *, name: str | None = None
+    func: Callable | None = None, name: str | None = None
 ) -> MelleaTool | Callable[[Callable], MelleaTool]:
     """Decorator to mark a function as a Mellea tool.
 
@@ -137,12 +137,16 @@ def tool(
         >>> # Must use .run() to invoke the tool
         >>> result = get_weather.run(location="Boston")
 
-        With custom name:
+        With custom name (as decorator):
         >>> @tool(name="weather_api")
         ... def get_weather(location: str) -> dict:
         ...     return {"location": location}
         >>>
         >>> result = get_weather.run(location="New York")
+
+        With custom name (as function):
+        >>> def new_tool(): ...
+        >>> differently_named_tool = tool(new_tool, name="different_name")
     """
 
     def decorator(f: Callable) -> MelleaTool:
