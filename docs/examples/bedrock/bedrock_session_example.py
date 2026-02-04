@@ -1,9 +1,10 @@
 import os
+
 import mellea
 
 try:
     import boto3
-except:
+except Exception:
     raise Exception(
         "Using Bedrock requires separately installing boto3."
         "Run `uv pip install mellea[aws]`"
