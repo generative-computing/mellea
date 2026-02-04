@@ -1,5 +1,6 @@
 import json
 import keyword
+import re
 from enum import Enum
 from graphlib import TopologicalSorter
 from pathlib import Path
@@ -27,13 +28,15 @@ def reorder_subtasks(
     """Reorder subtasks based on their dependencies using topological sort.
 
     Uses Python's graphlib.TopologicalSorter to perform a topological sort of
-    subtasks based on their depends_on relationships.
+    subtasks based on their depends_on relationships. Also renumbers the subtask
+    descriptions if they start with a number pattern (e.g., "1. ", "2. ").
 
     Args:
         subtasks: List of subtask dictionaries with 'tag' and 'depends_on' fields
 
     Returns:
-        Reordered list of subtasks where all dependencies appear before dependents
+        Reordered list of subtasks where all dependencies appear before dependents,
+        with subtask descriptions renumbered to match the new order
 
     Raises:
         ValueError: If a circular dependency is detected
@@ -60,8 +63,17 @@ def reorder_subtasks(
             "Circular dependency detected in subtasks. Cannot automatically reorder."
         ) from e
 
-    # Return reordered subtasks
-    return [subtask_map[tag] for tag in sorted_tags]
+    # Get reordered subtasks
+    reordered = [subtask_map[tag] for tag in sorted_tags]
+
+    # Renumber subtask descriptions if they start with "N. " pattern
+    number_pattern = re.compile(r"^\d+\.\s+")
+    for i, subtask in enumerate(reordered, start=1):
+        if number_pattern.match(subtask["subtask"]):
+            # Replace the number at the start with the new position
+            subtask["subtask"] = number_pattern.sub(f"{i}. ", subtask["subtask"])
+
+    return reordered
 
 
 def verify_user_variables(

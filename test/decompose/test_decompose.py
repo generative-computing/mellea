@@ -244,6 +244,118 @@ class TestReorderSubtasksHappyPath:
         assert result[0]["tag"] == "TASK_A"
         assert result[1]["tag"] == "TASK_B"
 
+    def test_renumbers_subtask_descriptions(self):
+        """Test that subtask descriptions with numbers are renumbered after reordering."""
+        subtasks: list[DecompSubtasksResult] = [
+            {
+                "subtask": "3. Do task C",
+                "tag": "TASK_C",
+                "constraints": [],
+                "prompt_template": "Do C",
+                "input_vars_required": [],
+                "depends_on": ["TASK_B"],
+            },
+            {
+                "subtask": "2. Do task B",
+                "tag": "TASK_B",
+                "constraints": [],
+                "prompt_template": "Do B",
+                "input_vars_required": [],
+                "depends_on": ["TASK_A"],
+            },
+            {
+                "subtask": "1. Do task A",
+                "tag": "TASK_A",
+                "constraints": [],
+                "prompt_template": "Do A",
+                "input_vars_required": [],
+                "depends_on": [],
+            },
+        ]
+
+        result = reorder_subtasks(subtasks)
+
+        # Should reorder and renumber
+        assert len(result) == 3
+        assert result[0]["subtask"] == "1. Do task A"
+        assert result[1]["subtask"] == "2. Do task B"
+        assert result[2]["subtask"] == "3. Do task C"
+
+    def test_renumbers_only_numbered_subtasks(self):
+        """Test that only subtasks starting with numbers are renumbered."""
+        subtasks: list[DecompSubtasksResult] = [
+            {
+                "subtask": "2. Numbered task B",
+                "tag": "TASK_B",
+                "constraints": [],
+                "prompt_template": "Do B",
+                "input_vars_required": [],
+                "depends_on": ["TASK_A"],
+            },
+            {
+                "subtask": "Unnumbered task A",
+                "tag": "TASK_A",
+                "constraints": [],
+                "prompt_template": "Do A",
+                "input_vars_required": [],
+                "depends_on": [],
+            },
+        ]
+
+        result = reorder_subtasks(subtasks)
+
+        # A should stay unnumbered, B should be renumbered to 2
+        assert len(result) == 2
+        assert result[0]["subtask"] == "Unnumbered task A"
+        assert result[1]["subtask"] == "2. Numbered task B"
+
+    def test_renumbers_with_complex_reordering(self):
+        """Test renumbering with reordering."""
+        subtasks: list[DecompSubtasksResult] = [
+            {
+                "subtask": "4. Final task",
+                "tag": "TASK_D",
+                "constraints": [],
+                "prompt_template": "Do D",
+                "input_vars_required": [],
+                "depends_on": ["TASK_B", "TASK_C"],
+            },
+            {
+                "subtask": "3. Third task",
+                "tag": "TASK_C",
+                "constraints": [],
+                "prompt_template": "Do C",
+                "input_vars_required": [],
+                "depends_on": ["TASK_A"],
+            },
+            {
+                "subtask": "2. Second task",
+                "tag": "TASK_B",
+                "constraints": [],
+                "prompt_template": "Do B",
+                "input_vars_required": [],
+                "depends_on": ["TASK_A"],
+            },
+            {
+                "subtask": "1. First task",
+                "tag": "TASK_A",
+                "constraints": [],
+                "prompt_template": "Do A",
+                "input_vars_required": [],
+                "depends_on": [],
+            },
+        ]
+
+        result = reorder_subtasks(subtasks)
+
+        # Should maintain correct numbering after reorder
+        assert len(result) == 4
+        assert result[0]["subtask"] == "1. First task"
+        assert result[3]["subtask"] == "4. Final task"
+        # B and C can be in either order but should be numbered 2 and 3
+        middle_numbers = {result[1]["subtask"][:2], result[2]["subtask"][:2]}
+        assert middle_numbers == {"2.", "3."}
+
 
 class TestReorderSubtasksUnhappyPath:
     """Negative tests for reorder_subtasks function."""
