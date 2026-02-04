@@ -4,6 +4,9 @@ from mellea.stdlib.components import Message, as_chat_history
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.session import start_session
 
+# Mark all tests as requiring Ollama (start_session defaults to Ollama)
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+
 
 @pytest.fixture(scope="function")
 def linear_session():

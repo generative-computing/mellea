@@ -7,11 +7,18 @@ from mellea.stdlib.context import ChatContext
 from mellea.stdlib.sampling import MultiTurnStrategy, RejectionSamplingStrategy
 
 
-class TestSamplingCtxCase:
-    m = start_session(
+@pytest.fixture(scope="class")
+def m_session():
+    """Shared session for sampling context tests."""
+    return start_session(
         model_options={ModelOption.MAX_NEW_TOKENS: 100}, ctx=ChatContext()
     )
 
+
+@pytest.mark.ollama
+@pytest.mark.llm
+@pytest.mark.qualitative
+class TestSamplingCtxCase:
     def _run_asserts_for_ctx_testing(self, res):
         assert isinstance(res, SamplingResult), "res should be a SamplingResult."
 
@@ -27,9 +34,9 @@ class TestSamplingCtxCase:
             "there should be 3 validation results."
         )
 
-    def test_ctx_for_rejection_sampling(self):
-        self.m.reset()
-        res = self.m.instruct(
+    def test_ctx_for_rejection_sampling(self, m_session):
+        m_session.reset()
+        res = m_session.instruct(
             "Write a sentence.",
             requirements=[
                 "be funny",
@@ -40,10 +47,10 @@ class TestSamplingCtxCase:
             return_sampling_results=True,
         )
         self._run_asserts_for_ctx_testing(res)
-        assert len(self.m.ctx.as_list()) == 2, (
+        assert len(m_session.ctx.as_list()) == 2, (
             "there should only be a message and a response in the ctx."
         )
-        assert len(self.m.last_prompt()) == 1, (  # type: ignore
+        assert len(m_session.last_prompt()) == 1, (  # type: ignore
             "Last prompt should only have only one instruction inside - independent of sampling iterations."
         )
 
@@ -55,9 +62,9 @@ class TestSamplingCtxCase:
         assert isinstance(val_res.context.previous_node.node_data, Requirement)  # type: ignore
         assert val_res.context.node_data is val_res.thunk
 
-    def test_ctx_for_multiturn(self):
-        self.m.reset()
-        res = self.m.instruct(
+    def test_ctx_for_multiturn(self, m_session):
+        m_session.reset()
+        res = m_session.instruct(
             "Write a sentence.",
             requirements=[
                 "be funny",
@@ -69,10 +76,10 @@ class TestSamplingCtxCase:
         )
 
         self._run_asserts_for_ctx_testing(res)
-        assert len(self.m.ctx.as_list()) >= 2, (
+        assert len(m_session.ctx.as_list()) >= 2, (
             "there should be at least a message and a response in the ctx; more if the first result failed validation"
         )
-        assert len(self.m.last_prompt()) == len(res.sample_generations) * 2 - 1, (  # type: ignore
+        assert len(m_session.last_prompt()) == len(res.sample_generations) * 2 - 1, (  # type: ignore
             "For n sampling iterations there should be 2n-1 prompt conversation elements in the last prompt."
         )
 

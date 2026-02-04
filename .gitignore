@@ -8,6 +8,13 @@ scratchpad/
 *.egg-info
 .vscode/
 
+# HPC job logs directory (synced from remote)
+logs/
+
+# Test output files
+pytest_*.stdout
+pytest_*.stderr
+
 # IDE
 .idea
 
