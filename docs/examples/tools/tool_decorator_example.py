@@ -57,9 +57,9 @@ def example_basic_usage():
     # Now you can just pass the decorated functions directly to model_options
     # Example: model_options={ModelOption.TOOLS: [get_weather, search_web, calculate]}
 
-    # The decorated functions still work as normal functions
-    weather = get_weather("Boston", days=3)
-    print(f"Direct call: {weather}")
+    # The decorated tools must be called using .run()
+    weather = get_weather.run("Boston", days=3)
+    print(f"Tool call via .run(): {weather}")
 
     # And they have tool properties
     print(f"Tool name: {get_weather.name}")
@@ -90,8 +90,8 @@ def example_custom_name():
     print("Function name: calculate")
     print(f"Tool name: {calculate.name}")
 
-    # Both work the same way
-    result = calculate("2 + 2")
+    # Must use .run() to invoke
+    result = calculate.run("2 + 2")
     print(f"Result: {result}")
 
 

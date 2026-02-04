@@ -106,15 +106,14 @@ def tool(
 
     This decorator wraps a function to make it usable as a tool without
     requiring explicit MelleaTool.from_callable() calls. The decorated
-    function IS a MelleaTool instance (via inheritance) and can be used
-    both as a normal callable and passed directly wherever MelleaTool is expected.
+    function returns a MelleaTool instance that must be called via .run().
 
     Args:
         func: The function to decorate (when used without arguments)
         name: Optional custom name for the tool (defaults to function name)
 
     Returns:
-        A MelleaTool instance that can be called directly like the original function.
+        A MelleaTool instance. Use .run() to invoke the tool.
         The returned object passes isinstance(result, MelleaTool) checks.
 
     Examples:
@@ -135,46 +134,20 @@ def tool(
         >>> # Can be used directly in tools list (no extraction needed)
         >>> tools = [get_weather]
         >>>
-        >>> # Can still be called normally
-        >>> result = get_weather("Boston")
-        >>>
-        >>> # Or use the .run() interface
+        >>> # Must use .run() to invoke the tool
         >>> result = get_weather.run(location="Boston")
 
         With custom name:
         >>> @tool(name="weather_api")
         ... def get_weather(location: str) -> dict:
         ...     return {"location": location}
+        >>>
+        >>> result = get_weather.run(location="New York")
     """
 
     def decorator(f: Callable) -> MelleaTool:
-        # Create the base MelleaTool instance
-        base_tool = MelleaTool.from_callable(f, name=name)
-
-        # Create an enhanced MelleaTool subclass that supports direct calling
-        class CallableMelleaTool(MelleaTool):
-            """MelleaTool subclass that supports direct calling like the original function."""
-
-            def __init__(self, base: MelleaTool, func: Callable):
-                # Initialize with base tool's attributes
-                super().__init__(base.name, base._call_tool, base._as_json_tool)
-                # Store original function for direct calling
-                self._original_func = func
-                # Copy function metadata for better introspection
-                self.__name__ = func.__name__
-                self.__doc__ = func.__doc__
-                self.__module__ = func.__module__
-                self.__qualname__ = func.__qualname__
-                self.__annotations__ = func.__annotations__
-
-            def __call__(self, *args, **kwargs) -> Any:
-                """Allow the tool to be called directly like the original function."""
-                return self._original_func(*args, **kwargs)
-
-            def __repr__(self) -> str:
-                return f"<tool {self.name}>"
-
-        return CallableMelleaTool(base_tool, f)
+        # Simply return the base MelleaTool instance
+        return MelleaTool.from_callable(f, name=name)
 
     # Handle both @tool and @tool() syntax
     if func is None:

@@ -60,8 +60,8 @@ class TestToolDecoratorBasics:
     """Test basic decorator functionality."""
 
     def test_decorated_function_is_callable(self):
-        """Test that decorated function can still be called normally."""
-        result = simple_tool("hello")
+        """Test that decorated function can be called via .run()."""
+        result = simple_tool.run("hello")
         assert result == "Processed: hello"
 
     def test_decorated_function_has_name_attribute(self):
@@ -84,14 +84,17 @@ class TestToolDecoratorBasics:
 
     def test_decorated_function_preserves_metadata(self):
         """Test that decorator preserves function metadata."""
-        assert simple_tool.__name__ == "simple_tool"
-        assert "simple tool" in simple_tool.__doc__.lower()
+        # MelleaTool doesn't have __name__ or __doc__ attributes
+        # but has name attribute and the original function's docstring in as_json_tool
+        assert simple_tool.name == "simple_tool"
+        json_tool = simple_tool.as_json_tool
+        assert "simple tool" in json_tool["function"]["description"].lower()
 
     def test_custom_name_decorator(self):
         """Test decorator with custom name parameter."""
         assert tool_with_custom_name.name == "custom_name"
-        # Function should still work
-        result = tool_with_custom_name(5)
+        # Function should still work via .run()
+        result = tool_with_custom_name.run(5)
         assert result == 10
 
 
@@ -210,7 +213,7 @@ class TestToolDecoratorEdgeCases:
             """Function with no parameters."""
             return "no params"
 
-        result = no_params()
+        result = no_params.run()
         assert result == "no params"
         assert no_params.name == "no_params"
 
@@ -227,9 +230,9 @@ class TestToolDecoratorEdgeCases:
             """
             return a + b
 
-        # Should work exactly like the original function
-        assert add(2, 3) == 5
-        assert add(10, 20) == 30
+        # Should work via .run() method
+        assert add.run(2, 3) == 5
+        assert add.run(10, 20) == 30
         assert add.run(5, 7) == 12
 
     def test_decorator_with_complex_types(self):
@@ -245,7 +248,7 @@ class TestToolDecoratorEdgeCases:
             """
             return len(items) + len(config)
 
-        result = complex_tool(["a", "b"], {"x": 1, "y": 2})
+        result = complex_tool.run(["a", "b"], {"x": 1, "y": 2})
         assert result == 4
 
     def test_multiple_decorators_on_same_function(self):

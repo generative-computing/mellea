@@ -1367,9 +1367,15 @@ For examples on adding tools to the template representation of a component, see 
 Here's an example of adding a tool through model options. This can be useful when you want to add a tool like web search that should almost always be available:
 ```python
 import mellea
-from mellea.backends import ModelOption
+from mellea.backends import ModelOption, tool
 
+@tool
 def web_search(query: str) -> str:
+    """Search the web for information.
+    
+    Args:
+        query: The search query
+    """
     ...
 
 m = mellea.start_session()
