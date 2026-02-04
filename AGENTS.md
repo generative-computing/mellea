@@ -42,36 +42,39 @@ uv run ruff format . && uv run ruff check .  # Lint & format
 ## 3. Configuration Files
 Mellea supports TOML configuration files for setting default backends, models, and credentials.
 
-**Config Locations (precedence order):**
-1. Project config: `./mellea.toml` (current dir and parents)
-2. User config: `~/.config/mellea/config.toml` (Linux/macOS) or `%APPDATA%\mellea\config.toml` (Windows)
+**Config Location:** `./mellea.toml` (searched in current dir and parents)
 
-**Value Precedence:** Explicit params > Project config > User config > Defaults
+**Value Precedence:** Explicit params > Project config > Defaults
 
 **CLI Commands:**
 ```bash
-m config init              # Create user config
-m config init-project      # Create project config
+m config init              # Create project config
 m config show              # Display effective config
 m config path              # Show loaded config file
-m config where             # Show all config locations
+m config where             # Show config location
 ```
 
 **Development Usage:**
-- Set your preferred backend/model in user config for convenience
-- Use project config for project-specific settings (safe to commit without credentials)
-- Store credentials in user config or environment variables (never commit)
-- Config files with credentials are git-ignored by default (`mellea.toml`, `.mellea.toml`)
+- If `mellea.toml` exists, it will be used; if not, defaults apply
+- Store credentials in environment variables (never commit credentials)
+- Config files are git-ignored by default (`mellea.toml`, `.mellea.toml`)
 
-**Example User Config** (`~/.config/mellea/config.toml`):
+**Example Project Config** (`./mellea.toml`):
 ```toml
 [backend]
 name = "ollama"
 model_id = "llama3.2:1b"
 
+# Generic model options (apply to all backends)
 [backend.model_options]
 temperature = 0.7
-max_tokens = 2048
+
+# Per-backend model options (override generic for that backend)
+[backend.model_options.ollama]
+num_ctx = 4096
+
+[backend.model_options.openai]
+presence_penalty = 0.5
 
 [credentials]
 # openai_api_key = "sk-..."  # Better: use env vars
@@ -145,11 +148,15 @@ Pre-commit runs: ruff, mypy, uv-lock, codespell
 | Ollama refused | Run `ollama serve` |
 
 ## 8. Self-Review (before notifying user)
-1. `uv run pytest -m "not qualitative"` passes?
-2. `ruff format` and `ruff check` clean?
+1. **Pre-commit checks pass?** Run `uv run pre-commit run --all-files` or at minimum:
+   - `uv run ruff format . && uv run ruff check .` (formatting & linting)
+   - `uv run mypy <changed-files>` (type checking)
+2. `uv run pytest -m "not qualitative"` passes?
 3. New functions typed with concise docstrings?
 4. Unit tests added for new functionality?
 5. Avoided over-engineering?
+
+**Note:** All pre-commit hooks (ruff, mypy, codespell, uv-lock) must pass before a task is considered complete.
 
 ## 9. Writing Tests
 - Place tests in `test/` mirroring source structure
