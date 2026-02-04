@@ -94,7 +94,7 @@ class WatsonxAIBackend(FormatterBackend):
         self._model_id = model_id
 
         if base_url is None:
-            base_url = f"{os.environ.get('WATSONX_URL')}"
+            base_url = os.environ.get("WATSONX_URL")
         if api_key is None:
             api_key = os.environ.get("WATSONX_API_KEY")
 

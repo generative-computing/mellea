@@ -1,7 +1,10 @@
+# pytest: ollama, llm
+
 import datetime
 import inspect
 import json
 from collections.abc import Callable
+from enum import Enum
 from typing import Literal
 
 import pydantic
@@ -79,9 +82,9 @@ class ReactToolbox(pydantic.BaseModel):
 
     def tool_name_schema(self):
         names = self.tool_names()
-        fields = dict()
-        fields["tool"] = Literal[*names]
-        return pydantic.create_model("ToolSelectionSchema", **fields)
+        # Python 3.10 compatible: use Enum instead of Literal[*names] (requires 3.11+)
+        ToolEnum = Enum("ToolEnum", {name: name for name in names})
+        return pydantic.create_model("ToolSelectionSchema", tool=(ToolEnum, ...))
 
     def get_tool_from_schema(self, content: str):
         schema = self.tool_name_schema()

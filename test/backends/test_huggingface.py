@@ -72,7 +72,7 @@ def session(backend):
 
 
 @pytest.mark.qualitative
-def test_adapters(backend):
+def test_adapters(backend) -> None:
     assert len(backend._added_adapters.items()) > 0
 
     expected_qualified_name = "requirement_check_alora"
@@ -90,7 +90,7 @@ def test_adapters(backend):
 
 
 @pytest.mark.qualitative
-def test_system_prompt(session):
+def test_system_prompt(session) -> None:
     result = session.chat(
         "Where are we going?",
         model_options={ModelOption.SYSTEM_PROMPT: "Talk like a pirate."},
@@ -99,8 +99,8 @@ def test_system_prompt(session):
 
 
 @pytest.mark.qualitative
-def test_constraint_lora_with_requirement(session, backend):
-    answer = session.instruct(
+def test_constraint_lora_with_requirement(session, backend) -> None:
+    session.instruct(
         "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
     )
     assert session.backend._cache is not None  # type: ignore
@@ -116,9 +116,9 @@ def test_constraint_lora_with_requirement(session, backend):
 
 
 @pytest.mark.qualitative
-def test_constraint_lora_override(session, backend):
+def test_constraint_lora_override(session, backend) -> None:
     backend.default_to_constraint_checking_alora = False  # type: ignore
-    answer = session.instruct(
+    session.instruct(
         "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
     )
     validation_outputs = session.validate(
@@ -132,9 +132,9 @@ def test_constraint_lora_override(session, backend):
 
 
 @pytest.mark.qualitative
-def test_constraint_lora_override_does_not_override_alora(session, backend):
+def test_constraint_lora_override_does_not_override_alora(session, backend) -> None:
     backend.default_to_constraint_checking_alora = False  # type: ignore
-    answer = session.instruct(
+    session.instruct(
         "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
     )
     validation_outputs = session.validate(
@@ -158,9 +158,9 @@ def test_constraint_lora_override_does_not_override_alora(session, backend):
 
 
 @pytest.mark.qualitative
-def test_llmaj_req_does_not_use_alora(session, backend):
+def test_llmaj_req_does_not_use_alora(session, backend) -> None:
     backend.default_to_constraint_checking_alora = True  # type: ignore
-    answer = session.instruct(
+    session.instruct(
         "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
     )
     validation_outputs = session.validate(
@@ -176,15 +176,15 @@ def test_llmaj_req_does_not_use_alora(session, backend):
 
 
 @pytest.mark.qualitative
-def test_instruct(session):
+def test_instruct(session) -> None:
     result = session.instruct("Compute 1+1.")
     print(result)
 
 
 @pytest.mark.qualitative
-def test_multiturn(session):
+def test_multiturn(session) -> None:
     session.instruct("Compute 1+1")
-    beta = session.instruct(
+    session.instruct(
         "Take the result of the previous sum and find the corresponding letter in the greek alphabet.",
         model_options={ModelOption.MAX_NEW_TOKENS: 300},
     )
@@ -193,7 +193,7 @@ def test_multiturn(session):
 
 
 @pytest.mark.qualitative
-def test_chat(session):
+def test_chat(session) -> None:
     output_message = session.chat("What is 1+1?")
     assert "2" in output_message.content, (
         f"Expected a message with content containing 2 but found {output_message}"
@@ -201,7 +201,7 @@ def test_chat(session):
 
 
 @pytest.mark.qualitative
-def test_format(session):
+def test_format(session) -> None:
     class Person(pydantic.BaseModel):
         name: str
         email_address: Annotated[
@@ -235,7 +235,7 @@ def test_format(session):
 
 
 @pytest.mark.qualitative
-async def test_generate_from_raw(session):
+async def test_generate_from_raw(session) -> None:
     prompts = [
         "what is 1+1?",
         "what is 2+2?",
@@ -253,7 +253,7 @@ async def test_generate_from_raw(session):
 
 
 @pytest.mark.qualitative
-async def test_generate_from_raw_with_format(session):
+async def test_generate_from_raw_with_format(session) -> None:
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
     class Answer(pydantic.BaseModel):
@@ -270,7 +270,7 @@ async def test_generate_from_raw_with_format(session):
 
     random_result = results[0]
     try:
-        answer = Answer.model_validate_json(random_result.value)
+        Answer.model_validate_json(random_result.value)
     except pydantic.ValidationError as e:
         assert False, (
             f"formatting directive failed for {random_result.value}: {e.json()}"
@@ -278,7 +278,7 @@ async def test_generate_from_raw_with_format(session):
 
 
 @pytest.mark.qualitative
-async def test_async_parallel_requests(session):
+async def test_async_parallel_requests(session) -> None:
     model_opts = {ModelOption.STREAM: True}
     mot1, _ = await session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext(), model_options=model_opts
@@ -314,7 +314,7 @@ async def test_async_parallel_requests(session):
 
 
 @pytest.mark.qualitative
-async def test_async_avalue(session):
+async def test_async_avalue(session) -> None:
     mot1, _ = await session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext()
     )
@@ -324,7 +324,7 @@ async def test_async_avalue(session):
 
 
 @pytest.mark.qualitative
-async def test_generate_with_lock(backend):
+async def test_generate_with_lock(backend) -> None:
     # Enable the faulthandler for this test.
     faulthandler.enable(all_threads=True)
 
@@ -343,7 +343,7 @@ async def test_generate_with_lock(backend):
         GraniteCommonAdapter("answerability", base_model_name=b.base_model_name)
     )
 
-    memoized = dict()
+    memoized: dict[torch.Tensor, str] = dict()
     gen_func = model.generate
 
     def mock_func(input_ids, *args, **kwargs):
@@ -414,7 +414,7 @@ async def test_generate_with_lock(backend):
 @pytest.mark.skipif(
     sys.version_info < (3, 11), reason="asyncio.timeout requires python3.11 or higher"
 )
-async def test_generate_with_lock_does_not_block_when_awaiting_value(backend):
+async def test_generate_with_lock_does_not_block_when_awaiting_value(backend) -> None:
     """This is a tricky test to setup.
 
     It's purpose is to ensure that a long-running generation doesn't get blocked
@@ -470,8 +470,7 @@ async def test_generate_with_lock_does_not_block_when_awaiting_value(backend):
     # most likely due to a deadlock caused by awaiting a generation that cannot complete until
     # the streaming is done.
     try:
-        async with asyncio.timeout(timeout_in_seconds):
-            await req_mot.avalue()
+        await asyncio.wait_for(req_mot.avalue(), timeout=timeout_in_seconds)
     except Exception as e:
         # The timeout could also be caused by the generation taking too long... be careful!
         # We assume that if the streaming model output thunk is computed after getting its astream here,
@@ -488,7 +487,7 @@ async def test_generate_with_lock_does_not_block_when_awaiting_value(backend):
 
 
 @pytest.mark.qualitative
-async def test_error_during_generate_with_lock(backend):
+async def test_error_during_generate_with_lock(backend) -> None:
     # Create local versions of these objects so that mocking
     # doesn't impact other functions. Don't do this in regular code,
     # the copying is complex.
@@ -529,7 +528,7 @@ async def test_error_during_generate_with_lock(backend):
     await req_mot.avalue()
 
 
-def test_assert_correct_adapters():
+def test_assert_correct_adapters() -> None:
     model = Mock()
 
     # Test scenarios with no active adapters.
