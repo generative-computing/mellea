@@ -23,20 +23,33 @@ ollama serve                        # Start Ollama (required for most tests)
 uv run pytest                       # Default: qualitative tests, skip slow tests
 uv run pytest -m "not qualitative"  # Fast tests only (~2 min)
 uv run pytest -m slow               # Run only slow tests (>5 min)
-uv run pytest                       # Run ALL tests including slow
-uv run ruff format . && uv run ruff check .  # Lint & format
+uv run pytest --co -q               # Run ALL tests including slow (bypass config)
+uv run ruff format .                # Format code
+uv run ruff check .                 # Lint code
+uv run mypy .                       # Type check
 ```
 **Branches**: `feat/topic`, `fix/issue-id`, `docs/topic`
 
 ## 2. Directory Structure
 | Path | Contents |
 |------|----------|
+<<<<<<< user-config
 | `mellea/stdlib` | Core: Sessions, Genslots, Requirements, Sampling, Context |
 | `mellea/backends` | Providers: HF, OpenAI, Ollama, Watsonx, LiteLLM |
 | `mellea/helpers` | Utilities, logging, model ID tables |
 | `mellea/config.py` | Configuration file support (TOML) |
 | `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`, `m config`) |
+=======
+| `mellea/core/` | Core abstractions: Backend, Base, Formatter, Requirement, Sampling |
+| `mellea/stdlib/` | Standard library: Sessions, Components, Context |
+| `mellea/backends/` | Providers: HF, OpenAI, Ollama, Watsonx, LiteLLM |
+| `mellea/formatters/` | Output formatters for different types |
+| `mellea/templates/` | Jinja2 templates |
+| `mellea/helpers/` | Utilities, logging, model ID tables |
+| `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`) |
+>>>>>>> main
 | `test/` | All tests (run from repo root) |
+| `docs/examples/` | Example code (run as tests via pytest) |
 | `scratchpad/` | Experiments (git-ignored) |
 
 ## 3. Configuration Files
@@ -148,10 +161,15 @@ Pre-commit runs: ruff, mypy, uv-lock, codespell
 | Ollama refused | Run `ollama serve` |
 
 ## 8. Self-Review (before notifying user)
+<<<<<<< user-config
 1. **Pre-commit checks pass?** Run `uv run pre-commit run --all-files` or at minimum:
    - `uv run ruff format . && uv run ruff check .` (formatting & linting)
    - `uv run mypy <changed-files>` (type checking)
 2. `uv run pytest -m "not qualitative"` passes?
+=======
+1. `uv run pytest test/ -m "not qualitative"` passes?
+2. `ruff format` and `ruff check` clean?
+>>>>>>> main
 3. New functions typed with concise docstrings?
 4. Unit tests added for new functionality?
 5. Avoided over-engineering?

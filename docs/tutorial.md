@@ -1423,36 +1423,13 @@ When using `SamplingStrategy`s or during validation, Mellea can speed up the exe
 
 ### Contributor Guide: Getting Started
 
-If you are going to contribute to Mellea, it is important that you use our
-pre-commit hooks. Using these hooks -- or running our test suite -- 
-requires installing `[all]` optional dependencies and also the dev group.
+For detailed instructions on setting up your development environment, installing dependencies, configuring pre-commit hooks, and running tests, please see our **[Contributing Guide](../CONTRIBUTING.md#getting-started)**.
 
-```
-git clone git@github.com:generative-computing/mellea.git && 
-cd mellea && 
-uv venv .venv && 
-source .venv/bin/activate &&
-uv pip install -e ".[all]" --group dev
-pre-commit install
-```
-
-You can then run tests:
-```bash
-# Fast tests (default, excludes slow qualitative tests)
-uv run pytest
-
-# Full test suite (includes qualitative tests)
-uv run pytest -m ""
-
-# CI/CD mode (skips qualitative tests even with -m "")
-CICD=1 uv run pytest -m ""
-```
-
-See [test/MARKERS_GUIDE.md](../test/MARKERS_GUIDE.md) for details on running specific test categories (e.g., by backend, resource requirements).
-
-Tip: you can bypass the hooks by passing the `-n` flag to `git commit`.
-This is sometimes helpful for intermediate commits that you intend to later
-squash.
+The Contributing Guide includes:
+- Installation instructions (uv and conda)
+- Development workflow and coding standards
+- Testing guidelines and markers
+- Troubleshooting common issues
 
 ### Contributor Guide: Requirements and Verifiers
 
