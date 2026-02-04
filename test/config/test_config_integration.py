@@ -90,8 +90,8 @@ model_id = "llama3.2:1b"
 """)
 
         # Start session with explicit model_id
-        with start_session(model_id="granite-4-micro:3b") as session:
-            assert session.backend.model_id == "granite-4-micro:3b"
+        with start_session(model_id="granite4:3b") as session:
+            assert session.backend.model_id == "granite4:3b"
 
     @pytest.mark.ollama
     def test_session_without_config(self, temp_project_dir):
@@ -170,8 +170,8 @@ temperature = 0.7
             assert session.backend.model_id == "llama3.2:1b"
 
         # Test 2: Explicit model_id - overrides project config
-        with start_session(model_id="granite-4-micro:3b") as session:
-            assert session.backend.model_id == "granite-4-micro:3b"
+        with start_session(model_id="granite4:3b") as session:
+            assert session.backend.model_id == "granite4:3b"
 
 
 class TestConfigWithDifferentBackends:
