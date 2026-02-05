@@ -10,6 +10,7 @@
 import os
 
 import mellea
+from mellea.backends import model_ids
 
 try:
     import boto3
@@ -25,7 +26,7 @@ assert "AWS_BEARER_TOKEN_BEDROCK" in os.environ.keys(), (
     "Then run `export AWS_BEARER_TOKEN_BEDROCK=<insert your key here>"
 )
 
-MODEL_ID = "bedrock/converse/openai.gpt-oss-120b-1:0"
+MODEL_ID = f"bedrock/converse/{model_ids.OPENAI_GPT_OSS_120B.bedrock_name}"
 
 m = mellea.start_session(backend_name="litellm", model_id=MODEL_ID)
 

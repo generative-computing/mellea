@@ -10,6 +10,7 @@
 import os
 
 from mellea import MelleaSession
+from mellea.backends import model_ids
 from mellea.backends.openai import OpenAIBackend
 from mellea.stdlib.context import ChatContext
 
@@ -19,7 +20,8 @@ assert "AWS_BEARER_TOKEN_BEDROCK" in os.environ.keys(), (
     "\n\t2. Run `export AWS_BEARER_TOKEN_BEDROCK=<insert your key here>"
 )
 
-MODEL_ID = "openai.gpt-oss-120b-1:0"
+MODEL_ID = model_ids.OPENAI_GPT_OSS_120B.bedrock_name
+assert MODEL_ID is not None
 
 m = MelleaSession(
     backend=OpenAIBackend(
