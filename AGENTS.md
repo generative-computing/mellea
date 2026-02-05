@@ -6,6 +6,8 @@ AGENTS.md — Instructions for AI coding assistants (Claude, Cursor, Copilot, Co
 
 > **Which guide?** Modifying `mellea/`, `cli/`, or `test/` → this file. Writing code that imports Mellea → [`docs/AGENTS_TEMPLATE.md`](docs/AGENTS_TEMPLATE.md).
 
+> **Code of Conduct**: This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). All contributors, including AI assistants, are expected to follow these community standards when generating code, documentation, or interacting with the project.
+
 ## 1. Quick Reference
 
 **⚠️ Always use `uv` for Python commands** — never use system Python or `pip` directly.
@@ -21,19 +23,25 @@ ollama serve                        # Start Ollama (required for most tests)
 uv run pytest                       # Default: qualitative tests, skip slow tests
 uv run pytest -m "not qualitative"  # Fast tests only (~2 min)
 uv run pytest -m slow               # Run only slow tests (>5 min)
-uv run pytest                       # Run ALL tests including slow
-uv run ruff format . && uv run ruff check .  # Lint & format
+uv run pytest --co -q               # Run ALL tests including slow (bypass config)
+uv run ruff format .                # Format code
+uv run ruff check .                 # Lint code
+uv run mypy .                       # Type check
 ```
 **Branches**: `feat/topic`, `fix/issue-id`, `docs/topic`
 
 ## 2. Directory Structure
 | Path | Contents |
 |------|----------|
-| `mellea/stdlib` | Core: Sessions, Genslots, Requirements, Sampling, Context |
-| `mellea/backends` | Providers: HF, OpenAI, Ollama, Watsonx, LiteLLM |
-| `mellea/helpers` | Utilities, logging, model ID tables |
+| `mellea/core/` | Core abstractions: Backend, Base, Formatter, Requirement, Sampling |
+| `mellea/stdlib/` | Standard library: Sessions, Components, Context |
+| `mellea/backends/` | Providers: HF, OpenAI, Ollama, Watsonx, LiteLLM |
+| `mellea/formatters/` | Output formatters for different types |
+| `mellea/templates/` | Jinja2 templates |
+| `mellea/helpers/` | Utilities, logging, model ID tables |
 | `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`) |
 | `test/` | All tests (run from repo root) |
+| `docs/examples/` | Example code (run as tests via pytest) |
 | `scratchpad/` | Experiments (git-ignored) |
 
 ## 3. Test Markers
@@ -99,7 +107,7 @@ Pre-commit runs: ruff, mypy, uv-lock, codespell
 | Ollama refused | Run `ollama serve` |
 
 ## 8. Self-Review (before notifying user)
-1. `uv run pytest -m "not qualitative"` passes?
+1. `uv run pytest test/ -m "not qualitative"` passes?
 2. `ruff format` and `ruff check` clean?
 3. New functions typed with concise docstrings?
 4. Unit tests added for new functionality?
