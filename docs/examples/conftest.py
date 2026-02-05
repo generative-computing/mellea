@@ -329,7 +329,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     )
 
 
-def pytest_ignore_collect(collection_path, path, config):
+def pytest_ignore_collect(collection_path, config):
     """Ignore files before pytest even tries to parse them.
 
     This is called BEFORE pytest_collect_file, so we can prevent
@@ -363,7 +363,7 @@ def pytest_ignore_collect(collection_path, path, config):
     return False
 
 
-def pytest_pycollect_makemodule(module_path, path, parent):
+def pytest_pycollect_makemodule(module_path, parent):
     """Prevent pytest from importing Python modules as test modules.
 
     This hook is called BEFORE pytest tries to import the module,
