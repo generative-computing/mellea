@@ -1,6 +1,6 @@
 # Using Mellea with Bedrock
 
-This directory demonstrates how to use Mellea with Bedrock, AWS's model inferencing platform.
+Mellea can be used with Bedrock models via Mellea's LiteLLM or OpenAI backends.
 
 ## Pre-requisites
 
@@ -8,13 +8,19 @@ To get started you will need a to set the `AWS_BEARER_TOKEN_BEDROCK` environment
 
 ```python
 export AWS_BEARER_TOKEN_BEDROCK=<your API key goes here>
-uv pip install mellea[aws,litellm]
+uv pip install mellea[litellm]
 ```
 
 ## Running the example
 
-You can then run the example using:
+You can then run the examples using:
 
 ```python
-python bedrock_session_example.py
+uv run bedrock_litellm_example.py
+```
+
+or
+
+```python
+uv run bedrock_openai_example.py
 ```
