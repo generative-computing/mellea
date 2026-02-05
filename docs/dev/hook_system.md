@@ -44,7 +44,7 @@ Hooks support two execution timing modes, configurable per-registration:
 - **Blocking** (default): The hook is awaited inline. Use for policy enforcement, payload transformation, and any hook that must complete before execution continues.
 - **Fire-and-forget**: The hook is dispatched via `asyncio.create_task()` and runs in the background. Use for logging, telemetry, and non-critical side effects where latency matters more than ordering guarantees.
 
-Fire-and-forget hooks cannot modify payloads or block execution — their `PluginResult` is ignored. Any exceptions in fire-and-forget hooks are logged but do not propagate.
+Fire-and-forget hooks cannot modify payloads or block execution — their `PluginResult` is ignored. Any exceptions in fire-and-forget hooks are logged but do not propagate. Fire-and-forget hooks receive the payload snapshot as it existed at dispatch time; blocking hooks in the same chain that execute earlier (higher priority) can modify the payload before fire-and-forget hooks see it.
 
 ### Plugin Framework
 
@@ -53,6 +53,34 @@ The hook system is backed by a lightweight plugin framework built as a Mellea de
 - Provides APIs to define hook invocation points and base data objects for plugin payload, context, and result
 - Exposes a base class and decorator to implement concrete plugins and register hook functions
 - Implements a plugin manager that loads, registers, and governs the execution of plugins
+
+### Hook Invocation Responsibilities
+
+Hooks are called from Mellea's base classes (`Component.aact()`, `Backend.generate()`, `SamplingStrategy.run()`, etc.). This means hook invocation is a framework-level concern, and authors of new backends, sampling strategies, or components do not need to manually insert hook calls.
+
+The calling convention is a single async call at each hook site:
+
+```python
+result = await plugin_manager.invoke_hook(hook_type, payload, context)
+```
+
+The caller (the base class method) is responsible for both invoking the hook and processing the result. Processing means checking the result for one of three possible outcomes:
+
+1. **Continue with original payload**: — `PluginResult(continue_processing=True)` with no `modified_payload`. The caller proceeds unchanged.
+2. **Continue with modified payload**: — `PluginResult(continue_processing=True, modified_payload=...)`. The caller uses the modified payload fields in place of the originals.
+3. **Block execution** — `PluginResult(continue_processing=False, violation=...)`. The caller raises or returns early with structured error information.
+
+Hooks cannot redirect control flow, jump to arbitrary code, or alter the calling method's logic beyond these outcomes. This is enforced by the `PluginResult` type.
+
+### Payload Design Principles
+
+Hook payloads follow five design principles:
+
+1. **Strongly typed** — Each hook has a dedicated payload dataclass (not a generic dict). This enables IDE autocompletion, static analysis, and clear documentation of what each hook receives.
+2. **Sufficient (maximize-at-boundary)** — Each payload includes everything available at that point in time. Post-hooks include the pre-hook fields plus results. This avoids forcing plugins to maintain their own state across pre/post pairs.
+3. **Immutable context** — `PluginContext` fields are read-only; only the `payload` is mutable. This separates "what the plugin can observe" from "what the plugin can change."
+4. **Serializable** — Payloads should be serializable for external (MCP-based) plugins that run out-of-process. All payload fields use types that can round-trip through JSON or similar formats.
+5. **Versioned** — Payload schemas carry a `payload_version` so plugins can detect incompatible changes at registration time rather than at runtime.
 
 ## 2. Common Payload Fields
 
@@ -192,6 +220,21 @@ Hooks that manage session boundaries, useful for initialization, state setup, an
 Hooks around Component creation and execution. All Mellea primitives — Instruction, Message, Query, Transform, GenerativeSlot — are Components. These hooks cover the full Component lifecycle; there are no separate hooks per component type.
 
 All component payloads include a `component_type: str` field (e.g., `"Instruction"`, `"Message"`, `"GenerativeSlot"`, `"Query"`, `"Transform"`) so plugins can filter by type. For example, a plugin targeting only generative slots would check `component_type == "GenerativeSlot"`.
+
+Not all `ComponentPreCreatePayload` fields are populated for every component type. The table below shows which fields are available per type (`✓` = populated, `—` = `None` or empty):
+
+| Field | Instruction | Message | Query | Transform | GenerativeSlot |
+|-------|:-----------:|:-------:|:-----:|:---------:|:--------------:|
+| `description` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `images` | ✓ | ✓ | — | — | ✓ |
+| `requirements` | ✓ | — | — | — | ✓ |
+| `icl_examples` | ✓ | — | — | — | ✓ |
+| `grounding_context` | ✓ | — | — | — | ✓ |
+| `user_variables` | ✓ | — | — | — | ✓ |
+| `prefix` | ✓ | — | — | — | ✓ |
+| `template_id` | ✓ | — | — | — | ✓ |
+
+Plugins should check for `None`/empty values rather than assuming all fields are present for all component types.
 
 
 #### `component_pre_create`
@@ -334,6 +377,10 @@ All component payloads include a `component_type: str` field (e.g., `"Instructio
 ### C. Generation Pipeline Hooks
 
 Low-level hooks between the component abstraction and raw LLM API calls. These operate on the (Backend, Context) tuple — they do not require a session.
+
+> **Context Modification Sequencing**
+>
+> Modifications to `Context` at `component_pre_execute` are reflected in the subsequent `generation_pre_call`, because context linearization happens after the component-level hook. Modifications to `Context` after `generation_pre_call` (e.g., in `generation_post_call`) do not affect the current generation — the prompt has already been sent. This ordering is by design: `component_pre_execute` is the last point where context changes influence what the LLM sees.
 
 
 #### `generation_pre_call`
@@ -732,7 +779,7 @@ Hooks around context changes and management. These operate on the Context direct
 
 #### `context_update`
 
-- **Trigger**: When data is added to context or context changes.
+- **Trigger**: When a component or CBlock is explicitly appended to a session's context (e.g., after a successful generation or a user-initiated addition). Does not fire on internal framework reads or context linearization.
 - **Use Cases**:
   - Context audit trail
   - Memory management policies
@@ -754,7 +801,7 @@ Hooks around context changes and management. These operate on the Context direct
 
 #### `context_prune`
 
-- **Trigger**: When context trimming or pruning logic runs.
+- **Trigger**: When `view_for_generation` is called and context exceeds token limits, or when a dedicated prune API is invoked. This is the point where context is linearized and token budget enforcement becomes relevant.
 - **Use Cases**:
   - Token budget management
   - Recording pruning events
@@ -950,6 +997,12 @@ class ContextSnapshot:
 
 Hooks can return different result types to control execution:
 
+1. **Continue (no-op)** — `PluginResult(continue_processing=True)` with no `modified_payload`. Execution proceeds with the original payload unchanged.
+2. **Continue with modification** — `PluginResult(continue_processing=True, modified_payload=...)`. Execution proceeds with the modified payload fields in place of the originals.
+3. **Block execution** — `PluginResult(continue_processing=False, violation=...)`. Execution halts with structured error information via `PluginViolation`.
+
+These three outcomes are exhaustive. Hooks cannot redirect control flow, throw arbitrary exceptions, or alter the calling method's logic beyond these outcomes. This is enforced by the `PluginResult` type — there is no escape hatch. The `violation` field provides structured error information but does not influence which code path runs next.
+
 ### Modify Payload
 
 ```python
@@ -1066,6 +1119,26 @@ m = mellea.start_session(
     hooks_enabled=["component_pre_create", "generation_post_call"]
 )
 ```
+
+### Global PluginManager
+
+The hook system uses a **singleton PluginManager** that is initialized once (typically at application startup via YAML config) and shared globally. Session-level configuration (e.g., `hooks_enabled`) is for scoped overrides — selectively enabling or disabling specific hooks for a particular session — not for owning or replacing the plugin manager.
+
+For the functional (non-session) path (e.g., calling `instruct()` or `generate()` directly without a `MelleaSession`), the PluginManager is accessed directly. Hooks still fire at the same points in the execution lifecycle; the only difference is that session-scoped overrides do not apply.
+
+### Custom Hook Types
+
+The plugin framework supports custom hook types for domain-specific extension points beyond the built-in lifecycle hooks. This is particularly relevant for agentic patterns (ReAct, tool-use loops, etc.) where the execution flow is application-defined.
+
+Custom hooks are registered using the `@hook` decorator:
+
+```python
+@hook("react_pre_reasoning", ReactReasoningPayload, ReactReasoningResult)
+async def before_reasoning(self, payload, context):
+    ...
+```
+
+Custom hooks follow the same calling convention, payload chaining, and result semantics as built-in hooks. The plugin manager discovers them via the decorator metadata at registration time. As agentic patterns stabilize in Mellea, frequently-used custom hooks may be promoted to built-in hooks.
 
 ## 8. Example Implementations
 
@@ -1356,6 +1429,7 @@ plugins:
 - Hook payload contracts are versioned (e.g., `payload_version: "1.0"`)
 - Breaking changes increment major version
 - Deprecated fields marked and maintained for one major version
+- Hook payload versions are independent of Mellea release versions. Payload versions change only when the payload schema changes, which may or may not coincide with a Mellea release
 
 ### Default Behavior
 
