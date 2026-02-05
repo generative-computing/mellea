@@ -13,20 +13,25 @@ uv run pytest
 
 # All tests including slow tests (>5 min)
 uv run pytest -m slow
-uv run pytest  # without pytest.ini config
 ```
 
-## vLLM Tests - Automatic Process Isolation
+## Environment Variables
 
-**vLLM tests automatically use process isolation when multiple test modules are detected.**
+- `CICD=1` - Enable CI mode (skips qualitative tests, enables aggressive memory cleanup)
+- `VLLM_USE_V1=0` - Required for vLLM tests (automatically set by process isolation)
+- `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` - Helps with GPU memory fragmentation
+
+## Heavy GPU Tests - Automatic Process Isolation
+
+**Heavy GPU tests (HuggingFace, vLLM) automatically use process isolation when multiple test modules are detected.**
 
 ### Why Process Isolation?
 
-vLLM holds GPU memory at the process level. Even with aggressive cleanup (garbage collection, CUDA cache clearing, etc.), GPU memory remains locked by the CUDA driver until the process exits. When running multiple vLLM test modules in sequence, this causes OOM errors.
+Heavy GPU backends (HuggingFace, vLLM) hold GPU memory at the process level. Even with aggressive cleanup (garbage collection, CUDA cache clearing, etc.), GPU memory remains locked by the CUDA driver until the process exits. When running multiple heavy GPU test modules in sequence, this causes OOM errors.
 
 ### How It Works
 
-When you run `pytest -m vllm`, the collection hook in `test/conftest.py` detects multiple vLLM modules and automatically:
+The collection hook in `test/conftest.py` detects multiple modules with `requires_heavy_ram` marker and automatically:
 
 1. Runs each module in a separate subprocess
 2. Sets required environment variables (`VLLM_USE_V1=0`, `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`)
@@ -36,16 +41,29 @@ When you run `pytest -m vllm`, the collection hook in `test/conftest.py` detects
 ### Usage
 
 ```bash
-# Automatically uses process isolation for multiple modules
+# Run all heavy GPU tests with automatic isolation
+uv run pytest -m requires_heavy_ram
+
+# Run vLLM tests specifically
 uv run pytest -m vllm
+
+# Run HuggingFace tests specifically
+uv run pytest -m huggingface
 
 # Single module runs normally (no isolation needed)
 uv run pytest test/backends/test_vllm.py
 
 # Works with other pytest options
-uv run pytest -m vllm -v
-uv run pytest -m "vllm and not qualitative"
+uv run pytest -m "requires_heavy_ram and not qualitative"
 ```
+
+### Affected Tests
+
+Tests marked with `@pytest.mark.requires_heavy_ram`:
+- `test/backends/test_huggingface.py` - HuggingFace backend tests
+- `test/backends/test_huggingface_tools.py` - HuggingFace tool calling
+- `test/backends/test_vllm.py` - vLLM backend tests
+- `test/backends/test_vllm_tools.py` - vLLM tool calling
 
 ### Technical Details
 

@@ -194,36 +194,38 @@ def pytest_configure(config):
 
 
 # ============================================================================
-# vLLM Process Isolation
+# Heavy GPU Test Process Isolation
 # ============================================================================
 
 
-def _collect_vllm_modules(session) -> list[str]:
-    """Collect all test modules that have vLLM tests.
+def _collect_heavy_ram_modules(session) -> list[str]:
+    """Collect all test modules that have heavy RAM tests (HuggingFace, vLLM, etc.).
 
     Returns list of module paths (e.g., 'test/backends/test_vllm.py').
     """
-    vllm_modules = set()
+    heavy_modules = set()
 
     for item in session.items:
-        # Check if test has vllm marker
-        if item.get_closest_marker("vllm"):
+        # Check if test has requires_heavy_ram marker (covers HF, vLLM, etc.)
+        if item.get_closest_marker("requires_heavy_ram"):
             # Get the module path
             module_path = str(item.path)
-            vllm_modules.add(module_path)
+            heavy_modules.add(module_path)
 
-    return sorted(vllm_modules)
+    return sorted(heavy_modules)
 
 
-def _run_vllm_modules_isolated(session, vllm_modules: list[str]) -> int:
-    """Run vLLM test modules in separate processes for GPU memory isolation.
+def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
+    """Run heavy RAM test modules in separate processes for GPU memory isolation.
 
     Returns exit code (0 = all passed, 1 = any failed).
     """
     print("\n" + "=" * 70)
-    print("vLLM Process Isolation Active")
+    print("Heavy GPU Test Process Isolation Active")
     print("=" * 70)
-    print(f"Running {len(vllm_modules)} vLLM test module(s) in separate processes")
+    print(
+        f"Running {len(heavy_modules)} heavy GPU test module(s) in separate processes"
+    )
     print("to ensure GPU memory is fully released between modules.\n")
 
     # Set environment variables for vLLM
@@ -233,8 +235,8 @@ def _run_vllm_modules_isolated(session, vllm_modules: list[str]) -> int:
 
     all_passed = True
 
-    for i, module_path in enumerate(vllm_modules, 1):
-        print(f"\n[{i}/{len(vllm_modules)}] Running: {module_path}")
+    for i, module_path in enumerate(heavy_modules, 1):
+        print(f"\n[{i}/{len(heavy_modules)}] Running: {module_path}")
         print("-" * 70)
 
         # Build pytest command with same options as parent session
@@ -257,50 +259,71 @@ def _run_vllm_modules_isolated(session, vllm_modules: list[str]) -> int:
 
     print("\n" + "=" * 70)
     if all_passed:
-        print("All vLLM modules passed!")
+        print("All heavy GPU modules passed!")
     else:
-        print("Some vLLM modules failed.")
+        print("Some heavy GPU modules failed.")
     print("=" * 70 + "\n")
 
     return 0 if all_passed else 1
 
 
 def pytest_collection_finish(session):
-    """After collection, check if we need vLLM process isolation.
+    """After collection, check if we need heavy GPU test process isolation.
 
-    If vLLM tests are collected and there are multiple modules,
-    run them in separate processes and exit.
+    If heavy RAM tests (HuggingFace, vLLM, etc.) are collected and there are
+    multiple modules, run them in separate processes and exit.
     """
-    # Only activate if vLLM marker is explicitly requested
-    config = session.config
-    markexpr = config.getoption("-m", default=None)
-
-    # Check if vllm marker is in the expression
-    if not markexpr or "vllm" not in markexpr:
-        return
-
-    # Collect vLLM modules
-    vllm_modules = _collect_vllm_modules(session)
+    # Collect heavy RAM modules
+    heavy_modules = _collect_heavy_ram_modules(session)
 
     # Only use process isolation if multiple modules
-    if len(vllm_modules) <= 1:
+    if len(heavy_modules) <= 1:
         return
 
     # Run modules in isolation
-    exit_code = _run_vllm_modules_isolated(session, vllm_modules)
+    exit_code = _run_heavy_modules_isolated(session, heavy_modules)
 
     # Clear collected items so pytest doesn't run them again
     session.items.clear()
 
-    # Set flag to indicate we handled vLLM tests
-    config._vllm_process_isolation = True
+    # Set flag to indicate we handled heavy tests
+    session.config._heavy_process_isolation = True
 
     # Exit with appropriate code
-    pytest.exit("vLLM tests completed in isolated processes", returncode=exit_code)
+    pytest.exit("Heavy GPU tests completed in isolated processes", returncode=exit_code)
 
 
 # ============================================================================
-# Test Skipping Logic
+# Test Collection Filtering
+# ============================================================================
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip tests at collection time based on markers.
+
+    This prevents fixture setup errors for tests that would be skipped anyway.
+    """
+    capabilities = get_system_capabilities()
+
+    # Check for override flags
+    ignore_all = config.getoption("--ignore-all-checks", default=False)
+    ignore_ollama = (
+        config.getoption("--ignore-ollama-check", default=False) or ignore_all
+    )
+
+    skip_ollama = pytest.mark.skip(
+        reason="Ollama not available (port 11434 not listening)"
+    )
+
+    for item in items:
+        # Skip ollama tests if ollama not available
+        if item.get_closest_marker("ollama") and not ignore_ollama:
+            if not capabilities["has_ollama"]:
+                item.add_marker(skip_ollama)
+
+
+# ============================================================================
+# Test Skipping Logic (Runtime)
 # ============================================================================
 
 
@@ -321,9 +344,6 @@ def pytest_runtest_setup(item):
     ignore_all = config.getoption("--ignore-all-checks", default=False)
     ignore_gpu = config.getoption("--ignore-gpu-check", default=False) or ignore_all
     ignore_ram = config.getoption("--ignore-ram-check", default=False) or ignore_all
-    ignore_ollama = (
-        config.getoption("--ignore-ollama-check", default=False) or ignore_all
-    )
     ignore_api_key = (
         config.getoption("--ignore-api-key-check", default=False) or ignore_all
     )
@@ -379,11 +399,8 @@ def pytest_runtest_setup(item):
         if not capabilities["has_gpu"]:
             pytest.skip("Skipping test: vLLM requires GPU")
 
-    if item.get_closest_marker("ollama") and not ignore_ollama:
-        if not capabilities["has_ollama"]:
-            pytest.skip(
-                "Skipping test: Ollama not available (port 11434 not listening)"
-            )
+    # Note: Ollama tests are now skipped at collection time in pytest_collection_modifyitems
+    # to prevent fixture setup errors
 
 
 def memory_cleaner():
