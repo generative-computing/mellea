@@ -26,6 +26,12 @@ from mellea.stdlib.context import ChatContext
 @pytest.fixture(scope="module")
 def backend():
     """Shared vllm backend for all tests in this module."""
+    # Import cleanup dependencies at top to avoid scoping issues
+    import gc
+    import time
+
+    import torch
+
     if os.environ.get("VLLM_USE_V1", -1) != "0":
         pytest.skip("skipping vllm tests; tests require `export VLLM_USE_V1=0`")
 
@@ -39,7 +45,39 @@ def backend():
             "max_num_seqs": 8,
         },
     )
-    return backend
+    yield backend
+    # Cleanup: shutdown vLLM engine and release GPU memory
+
+    # Shutdown the background loop
+    backend._underlying_model.shutdown_background_loop()
+
+    # Delete the model and clear references
+    del backend._underlying_model
+    del backend
+
+    # Force garbage collection and clear CUDA cache
+    gc.collect()
+
+    if torch.cuda.is_available():
+        # Synchronize to ensure all CUDA operations complete
+        torch.cuda.synchronize()
+        # Empty the cache multiple times to ensure memory is released
+        torch.cuda.empty_cache()
+
+        # Set environment variable to help with memory fragmentation
+        # This tells PyTorch to use expandable memory segments
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+        # Reset peak memory stats
+        torch.cuda.reset_peak_memory_stats()
+        # Reset accumulated memory stats
+        torch.cuda.reset_accumulated_memory_stats()
+
+        # Multiple cleanup passes with delays to allow CUDA runtime to release memory
+        for _ in range(3):
+            gc.collect()
+            torch.cuda.empty_cache()
+            time.sleep(1)
 
 
 @pytest.fixture(scope="function")
