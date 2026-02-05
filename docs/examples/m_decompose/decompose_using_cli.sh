@@ -1,0 +1,1 @@
+m decompose run --out-dir ./ --prompt-file ./docs/examples/m_decomposeexample_decompose_prompt.txt
