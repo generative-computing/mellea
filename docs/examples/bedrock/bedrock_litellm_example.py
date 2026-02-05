@@ -4,13 +4,13 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#   "mellea[litellm]"
+#   "mellea[litellm]",
+#   "boto3" # including so that this example works before the next release.
 # ]
 # ///
 import os
 
 import mellea
-from mellea.backends import model_ids
 
 try:
     import boto3
@@ -26,7 +26,7 @@ assert "AWS_BEARER_TOKEN_BEDROCK" in os.environ.keys(), (
     "Then run `export AWS_BEARER_TOKEN_BEDROCK=<insert your key here>"
 )
 
-MODEL_ID = f"bedrock/converse/{model_ids.OPENAI_GPT_OSS_120B.bedrock_name}"
+MODEL_ID = "bedrock/converse/us.amazon.nova-pro-v1:0"
 
 m = mellea.start_session(backend_name="litellm", model_id=MODEL_ID)
 

@@ -3,6 +3,7 @@
 import os
 
 from openai import OpenAI
+from openai.pagination import SyncPage
 
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.openai import OpenAIBackend
@@ -18,6 +19,23 @@ def _make_mantle_uri(region: str | None = None):
     region_for_uri = _make_region_for_uri(region)
     uri = f"https://bedrock-mantle.{region_for_uri}.api.aws/v1"
     return uri
+
+
+def list_mantle_models(region: str | None = None) -> list:
+    """Helper function get getting all models available at a bedrock-mantle endpoint."""
+    uri = _make_mantle_uri(region)
+    client = OpenAI(base_url=uri, api_key=os.environ["AWS_BEARER_TOKEN_BEDROCK"])
+    ms = client.models.list()
+    all_models = list(ms)
+    assert ms.next_page_info() is None
+    return all_models
+
+
+def stringify_mantle_model_ids(region: str | None = None) -> str:
+    """Helper function for getting a human-readable list of all models available at the mantle endpoint for an AWS region."""
+    models = list_mantle_models()
+    model_names = "\n * ".join([str(m.id) for m in models])
+    return f" * {model_names}"
 
 
 def create_bedrock_mantle_backend(
@@ -46,12 +64,10 @@ def create_bedrock_mantle_backend(
 
     uri = _make_mantle_uri(region=region)
 
-    _client = OpenAI(base_url=uri, api_key=os.environ["AWS_BEARER_TOKEN_BEDROCK"])
-    _models = _client.models.list()
-    if model_name not in [m.id for m in _models]:
-        model_names = "\n * ".join([str(m.id) for m in _models])
+    models = list_mantle_models(region)
+    if model_name not in [m.id for m in models]:
         raise Exception(
-            f"Model {model_name} is not supported in region {_make_region_for_uri(region=region)}.\nSupported models are:\n * {model_names}\n\nPerhaps change regions or check that model access for {model_name} is not gated on Bedrock?"
+            f"Model {model_name} is not supported in region {_make_region_for_uri(region=region)}.\nSupported models are:\n{stringify_mantle_model_ids(region)}\n\nPerhaps change regions or check that model access for {model_name} is not gated on Bedrock?"
         )
 
     backend = OpenAIBackend(
