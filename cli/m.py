@@ -3,6 +3,7 @@
 import typer
 
 from cli.alora.commands import alora_app
+from cli.config.commands import config_app
 from cli.decompose import app as decompose_app
 from cli.eval.commands import eval_app
 from cli.serve.app import serve
@@ -25,6 +26,7 @@ cli.command(name="serve")(serve)
 # Add new subcommand groups by importing and adding with `cli.add_typer()`
 # as documented: https://typer.tiangolo.com/tutorial/subcommands/add-typer/#put-them-together.
 cli.add_typer(alora_app)
+cli.add_typer(config_app)
 cli.add_typer(decompose_app)
 
 cli.add_typer(eval_app)

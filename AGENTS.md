@@ -33,6 +33,13 @@ uv run mypy .                       # Type check
 ## 2. Directory Structure
 | Path | Contents |
 |------|----------|
+<<<<<<< user-config
+| `mellea/stdlib` | Core: Sessions, Genslots, Requirements, Sampling, Context |
+| `mellea/backends` | Providers: HF, OpenAI, Ollama, Watsonx, LiteLLM |
+| `mellea/helpers` | Utilities, logging, model ID tables |
+| `mellea/config.py` | Configuration file support (TOML) |
+| `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`, `m config`) |
+=======
 | `mellea/core/` | Core abstractions: Backend, Base, Formatter, Requirement, Sampling |
 | `mellea/stdlib/` | Standard library: Sessions, Components, Context |
 | `mellea/backends/` | Providers: HF, OpenAI, Ollama, Watsonx, LiteLLM |
@@ -40,11 +47,58 @@ uv run mypy .                       # Type check
 | `mellea/templates/` | Jinja2 templates |
 | `mellea/helpers/` | Utilities, logging, model ID tables |
 | `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`) |
+>>>>>>> main
 | `test/` | All tests (run from repo root) |
 | `docs/examples/` | Example code (run as tests via pytest) |
 | `scratchpad/` | Experiments (git-ignored) |
 
-## 3. Test Markers
+## 3. Configuration Files
+Mellea supports TOML configuration files for setting default backends, models, and credentials.
+
+**Config Location:** `./mellea.toml` (searched in current dir and parents)
+
+**Value Precedence:** Explicit params > Project config > Defaults
+
+**CLI Commands:**
+```bash
+m config init              # Create project config
+m config show              # Display effective config
+m config path              # Show loaded config file
+m config where             # Show config location
+```
+
+**Development Usage:**
+- If `mellea.toml` exists, it will be used; if not, defaults apply
+- Store credentials in environment variables (never commit credentials)
+- Config files are git-ignored by default (`mellea.toml`, `.mellea.toml`)
+
+**Example Project Config** (`./mellea.toml`):
+```toml
+[backend]
+name = "ollama"
+model_id = "llama3.2:1b"
+
+# Generic model options (apply to all backends)
+[backend.model_options]
+temperature = 0.7
+
+# Per-backend model options (override generic for that backend)
+[backend.model_options.ollama]
+num_ctx = 4096
+
+[backend.model_options.openai]
+presence_penalty = 0.5
+
+[credentials]
+# openai_api_key = "sk-..."  # Better: use env vars
+```
+
+**Testing with Config:**
+- Tests use temporary config directories (see `test/config/test_config.py`)
+- Integration tests verify config precedence (see `test/config/test_config_integration.py`)
+- Clear config cache in tests with `clear_config_cache()` from `mellea.config`
+
+## 4. Test Markers
 All tests and examples use markers to indicate requirements. The test infrastructure automatically skips tests based on system capabilities.
 
 **Backend Markers:**
@@ -107,11 +161,20 @@ Pre-commit runs: ruff, mypy, uv-lock, codespell
 | Ollama refused | Run `ollama serve` |
 
 ## 8. Self-Review (before notifying user)
+<<<<<<< user-config
+1. **Pre-commit checks pass?** Run `uv run pre-commit run --all-files` or at minimum:
+   - `uv run ruff format . && uv run ruff check .` (formatting & linting)
+   - `uv run mypy <changed-files>` (type checking)
+2. `uv run pytest -m "not qualitative"` passes?
+=======
 1. `uv run pytest test/ -m "not qualitative"` passes?
 2. `ruff format` and `ruff check` clean?
+>>>>>>> main
 3. New functions typed with concise docstrings?
 4. Unit tests added for new functionality?
 5. Avoided over-engineering?
+
+**Note:** All pre-commit hooks (ruff, mypy, codespell, uv-lock) must pass before a task is considered complete.
 
 ## 9. Writing Tests
 - Place tests in `test/` mirroring source structure
