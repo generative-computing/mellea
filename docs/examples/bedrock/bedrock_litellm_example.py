@@ -1,3 +1,10 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#   "mellea[litellm]"
+# ]
+# ///
 import os
 
 import mellea
@@ -6,8 +13,8 @@ try:
     import boto3
 except Exception:
     raise Exception(
-        "Using Bedrock requires separately installing boto3."
-        "Run `uv pip install mellea[aws]`"
+        "Using Bedrock requires separately installing boto3. "
+        "Run `uv pip install mellea[litellm]`"
     )
 
 assert "AWS_BEARER_TOKEN_BEDROCK" in os.environ.keys(), (

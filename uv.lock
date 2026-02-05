@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14' and python_full_version < '4' and sys_platform == 'darwin'",
@@ -3430,6 +3430,7 @@ dependencies = [
 all = [
     { name = "accelerate" },
     { name = "alora" },
+    { name = "boto3" },
     { name = "datasets" },
     { name = "docling" },
     { name = "granite-common", extra = ["transformers"] },
@@ -3443,9 +3444,6 @@ all = [
     { name = "transformers" },
     { name = "trl" },
     { name = "vllm" },
-]
-aws = [
-    { name = "boto3" },
 ]
 docling = [
     { name = "docling" },
@@ -3462,6 +3460,7 @@ hf = [
     { name = "trl" },
 ]
 litellm = [
+    { name = "boto3" },
     { name = "litellm" },
 ]
 vllm = [
@@ -3510,7 +3509,7 @@ requires-dist = [
     { name = "accelerate", marker = "extra == 'hf'", specifier = ">=1.9.0" },
     { name = "alora", marker = "extra == 'hf'", specifier = "==0.2.0" },
     { name = "ansicolors" },
-    { name = "boto3", marker = "extra == 'aws'" },
+    { name = "boto3", marker = "extra == 'litellm'" },
     { name = "click", specifier = "<8.2.0" },
     { name = "datasets", marker = "extra == 'hf'", specifier = ">=4.0.0" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.45.0" },
@@ -3546,7 +3545,7 @@ requires-dist = [
     { name = "uvicorn" },
     { name = "vllm", marker = "extra == 'vllm'", specifier = ">=0.9.1" },
 ]
-provides-extras = ["hf", "vllm", "litellm", "aws", "watsonx", "docling", "all"]
+provides-extras = ["hf", "vllm", "litellm", "watsonx", "docling", "all"]
 
 [package.metadata.requires-dev]
 dev = [

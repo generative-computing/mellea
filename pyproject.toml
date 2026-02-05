@@ -90,10 +90,7 @@ vllm = [
 
 litellm = [
     "litellm>=1.76",
-]
-
-aws = [
-  "boto3" # for Bedrock support.
+    "boto3", # for Bedrock support.
 ]
 
 watsonx = [
