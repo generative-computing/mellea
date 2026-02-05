@@ -109,11 +109,13 @@ class Message(Component["Message"]):
             elif "oai_chat_response" in computed._meta:
                 # OpenAI and Watsonx.
                 return Message(
-                    role=computed._meta["oai_chat_response"]["message"]["role"],
+                    role=computed._meta["oai_chat_response"]["choices"][0]["message"][
+                        "role"
+                    ],
                     content=str(
-                        computed._meta["oai_chat_response"]["message"].get(
-                            "tool_calls", []
-                        )
+                        computed._meta["oai_chat_response"]["choices"][0][
+                            "message"
+                        ].get("tool_calls", [])
                     ),
                 )
             else:
@@ -130,8 +132,12 @@ class Message(Component["Message"]):
             )
         elif "oai_chat_response" in computed._meta:
             return Message(
-                role=computed._meta["oai_chat_response"]["message"]["role"],
-                content=computed._meta["oai_chat_response"]["message"]["content"],
+                role=computed._meta["oai_chat_response"]["choices"][0]["message"][
+                    "role"
+                ],
+                content=computed._meta["oai_chat_response"]["choices"][0]["message"][
+                    "content"
+                ],
             )
         else:
             assert computed.value is not None

@@ -38,12 +38,17 @@ from ..helpers import (
 )
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
+from ..telemetry.backend_instrumentation import (
+    instrument_generate_from_raw,
+    start_generate_span,
+)
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
+    validate_tool_arguments,
 )
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
@@ -250,6 +255,9 @@ class WatsonxAIBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The watsonx.ai backend only supports chat-like contexts."
         )
+        span = start_generate_span(
+            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
+        )
         mot = await self.generate_from_chat_context(
             action,
             ctx,
@@ -257,6 +265,11 @@ class WatsonxAIBackend(FormatterBackend):
             model_options=model_options,
             tool_calls=tool_calls,
         )
+
+        # Store span in metadata for post_processing to record telemetry
+        if span is not None:
+            mot._meta["_telemetry_span"] = span
+
         return mot, ctx.add(action).add(mot)
 
     async def generate_from_chat_context(
@@ -464,6 +477,32 @@ class WatsonxAIBackend(FormatterBackend):
             for key, val in tool_chunk.items():
                 mot.tool_calls[key] = val
 
+        # Record telemetry if span is available
+        span = mot._meta.get("_telemetry_span")
+        if span is not None:
+            from ..telemetry import end_backend_span
+            from ..telemetry.backend_instrumentation import (
+                record_response_metadata,
+                record_token_usage,
+            )
+
+            response = mot._meta.get("oai_chat_response")
+            if response is not None:
+                # Watsonx responses may have usage information
+                usage = (
+                    response.get("usage")
+                    if isinstance(response, dict)
+                    else getattr(response, "usage", None)
+                )
+                if usage:
+                    record_token_usage(span, usage)
+                record_response_metadata(span, response)
+
+            # Close the span now that async operation is complete
+            end_backend_span(span)
+            # Clean up span reference
+            del mot._meta["_telemetry_span"]
+
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
         generate_log.prompt = conversation
@@ -513,24 +552,27 @@ class WatsonxAIBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generates a completion text. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(list(actions))
+        with instrument_generate_from_raw(
+            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
+        ):
+            await self.do_generate_walks(list(actions))
 
-        if format is not None:
-            FancyLogger.get_logger().warning(
-                "WatsonxAI completion api does not accept response format, ignoring it for this request."
+            if format is not None:
+                FancyLogger.get_logger().warning(
+                    "WatsonxAI completion api does not accept response format, ignoring it for this request."
+                )
+
+            model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
+
+            prompts = [self.formatter.print(action) for action in actions]
+
+            responses = await asyncio.to_thread(
+                self._model.generate,
+                prompt=prompts,
+                params=self._make_backend_specific_and_remove(
+                    model_opts, is_chat_context=False
+                ),
             )
-
-        model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
-
-        prompts = [self.formatter.print(action) for action in actions]
-
-        responses = await asyncio.to_thread(
-            self._model.generate,
-            prompt=prompts,
-            params=self._make_backend_specific_and_remove(
-                model_opts, is_chat_context=False
-            ),
-        )
 
         results = []
         date = datetime.datetime.now()
@@ -590,7 +632,10 @@ class WatsonxAIBackend(FormatterBackend):
 
             # Watsonx returns the args as a string. Parse it here.
             args = json.loads(tool_args)
-            model_tool_calls[tool_name] = ModelToolCall(tool_name, func, args)
+
+            # Validate and coerce argument types
+            validated_args = validate_tool_arguments(func, args, strict=False)
+            model_tool_calls[tool_name] = ModelToolCall(tool_name, func, validated_args)
 
         if len(model_tool_calls) > 0:
             return model_tool_calls

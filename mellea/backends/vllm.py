@@ -16,13 +16,20 @@ import shutil
 from collections.abc import Callable, Sequence
 from typing import Any, overload
 
-import msgspec
-import outlines
-import outlines_core
-import torch
-import vllm
-from transformers import AutoTokenizer
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+try:
+    import msgspec
+    import outlines
+    import outlines_core
+    import torch
+    import vllm
+    from transformers import AutoTokenizer
+    from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+except ImportError as e:
+    raise ImportError(
+        "vLLM backend dependencies are not installed. "
+        "Please install with: pip install mellea[vllm]\n"
+        "Note: vLLM is not supported on macOS. Use other backends like Ollama or HuggingFace instead."
+    ) from e
 
 from ..backends import ModelIdentifier
 from ..core import (
@@ -457,50 +464,57 @@ class LocalVLLMBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(list(actions))
+        from ..telemetry.backend_instrumentation import instrument_generate_from_raw
 
-        if tool_calls:
-            FancyLogger.get_logger().warning(
-                "The completion endpoint does not support tool calling at the moment."
+        with instrument_generate_from_raw(
+            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
+        ):
+            await self.do_generate_walks(list(actions))
+
+            if tool_calls:
+                FancyLogger.get_logger().warning(
+                    "The completion endpoint does not support tool calling at the moment."
+                )
+
+            model_options = self._simplify_and_merge(model_options)
+
+            prompts = [self.formatter.print(action) for action in actions]
+
+            sampling_params = vllm.SamplingParams(
+                **self._make_backend_specific_and_remove(
+                    model_options, vllm.SamplingParams
+                ),
+                output_kind=vllm.sampling_params.RequestOutputKind.FINAL_ONLY,  # returns only the final results # type: ignore
             )
 
-        model_options = self._simplify_and_merge(model_options)
+            if format is not None:
+                schema: dict[str, Any] = format.model_json_schema()  # type: ignore
+                schema_json: str = json.dumps(schema)
+                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
+                    schema_json  # type: ignore
+                )  # type: ignore
 
-        prompts = [self.formatter.print(action) for action in actions]
+                from outlines.processors import RegexLogitsProcessor  # type: ignore
 
-        sampling_params = vllm.SamplingParams(
-            **self._make_backend_specific_and_remove(
-                model_options, vllm.SamplingParams
-            ),
-            output_kind=vllm.sampling_params.RequestOutputKind.FINAL_ONLY,  # returns only the final results # type: ignore
-        )
+                logits_processor = RegexLogitsProcessor(
+                    regex_str,
+                    tokenizer=self._tokenizer_for_outlines,  # type: ignore
+                )
+                sampling_params.logits_processors = (
+                    [logits_processor] if logits_processor is not None else []
+                )
 
-        if format is not None:
-            schema: dict[str, Any] = format.model_json_schema()  # type: ignore
-            schema_json: str = json.dumps(schema)
-            regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
-                schema_json  # type: ignore
-            )  # type: ignore
+            async def generate(prompt, request_id):
+                async for result_output in self._model.generate(
+                    request_id=request_id,
+                    prompt=prompt,
+                    sampling_params=sampling_params,
+                ):
+                    assert result_output.finished
+                    return result_output.outputs[0].text
 
-            from outlines.processors import RegexLogitsProcessor  # type: ignore
-
-            logits_processor = RegexLogitsProcessor(
-                regex_str,
-                tokenizer=self._tokenizer_for_outlines,  # type: ignore
-            )
-            sampling_params.logits_processors = (
-                [logits_processor] if logits_processor is not None else []
-            )
-
-        async def generate(prompt, request_id):
-            async for result_output in self._model.generate(
-                request_id=request_id, prompt=prompt, sampling_params=sampling_params
-            ):
-                assert result_output.finished
-                return result_output.outputs[0].text
-
-        tasks = [generate(p, f"{id(prompts)}-{i}") for i, p in enumerate(prompts)]
-        decoded_results = await asyncio.gather(*tasks)
+            tasks = [generate(p, f"{id(prompts)}-{i}") for i, p in enumerate(prompts)]
+            decoded_results = await asyncio.gather(*tasks)
 
         results = [ModelOutputThunk(value=text) for text in decoded_results]
 
