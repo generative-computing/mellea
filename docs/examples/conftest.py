@@ -179,32 +179,43 @@ def pytest_addoption(parser):
     """Add command-line options for skipping capability checks.
 
     These match the options in test/conftest.py to provide consistent behavior.
+    Only adds options if they don't already exist (to avoid conflicts when both
+    test/ and docs/ conftest files are loaded).
     """
-    parser.addoption(
+
+    # Helper to safely add option only if it doesn't exist
+    def add_option_safe(option_name, **kwargs):
+        try:
+            parser.addoption(option_name, **kwargs)
+        except ValueError:
+            # Option already exists (likely from test/conftest.py)
+            pass
+
+    add_option_safe(
         "--ignore-gpu-check",
         action="store_true",
         default=False,
         help="Ignore GPU requirement checks (examples may fail without GPU)",
     )
-    parser.addoption(
+    add_option_safe(
         "--ignore-ram-check",
         action="store_true",
         default=False,
         help="Ignore RAM requirement checks (examples may fail with insufficient RAM)",
     )
-    parser.addoption(
+    add_option_safe(
         "--ignore-ollama-check",
         action="store_true",
         default=False,
         help="Ignore Ollama availability checks (examples will fail if Ollama not running)",
     )
-    parser.addoption(
+    add_option_safe(
         "--ignore-api-key-check",
         action="store_true",
         default=False,
         help="Ignore API key checks (examples will fail without valid API keys)",
     )
-    parser.addoption(
+    add_option_safe(
         "--ignore-all-checks",
         action="store_true",
         default=False,
