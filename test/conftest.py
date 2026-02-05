@@ -110,32 +110,45 @@ def gh_run() -> int:
 
 
 def pytest_addoption(parser):
-    """Add custom command-line options."""
-    parser.addoption(
+    """Add custom command-line options.
+
+    Uses safe registration to avoid conflicts when both test/ and docs/
+    conftest files are loaded.
+    """
+
+    # Helper to safely add option only if it doesn't exist
+    def add_option_safe(option_name, **kwargs):
+        try:
+            parser.addoption(option_name, **kwargs)
+        except ValueError:
+            # Option already exists (likely from docs/examples/conftest.py)
+            pass
+
+    add_option_safe(
         "--ignore-gpu-check",
         action="store_true",
         default=False,
         help="Ignore GPU requirement checks (tests may fail without GPU)",
     )
-    parser.addoption(
+    add_option_safe(
         "--ignore-ram-check",
         action="store_true",
         default=False,
         help="Ignore RAM requirement checks (tests may fail with insufficient RAM)",
     )
-    parser.addoption(
+    add_option_safe(
         "--ignore-ollama-check",
         action="store_true",
         default=False,
         help="Ignore Ollama availability checks (tests will fail if Ollama not running)",
     )
-    parser.addoption(
+    add_option_safe(
         "--ignore-api-key-check",
         action="store_true",
         default=False,
         help="Ignore API key checks (tests will fail without valid API keys)",
     )
-    parser.addoption(
+    add_option_safe(
         "--ignore-all-checks",
         action="store_true",
         default=False,
