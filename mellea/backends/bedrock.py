@@ -1,3 +1,5 @@
+"""Helpers for creating bedrock backends from openai/litellm."""
+
 import os
 
 from openai import OpenAI
@@ -28,7 +30,8 @@ def create_bedrock_mantle_backend(
             raise Exception(
                 f"We do not have a known bedrock model identifier for {model_id}. If Bedrock supports this model, please pass the model_id string directly and  open an issue to add the model id: https://github.com/generative-computing/mellea/issues/new"
             )
-        case ModelIdentifier():
+        case ModelIdentifier() if model_id.bedrock_name is not None:
+            assert model_id.bedrock_name is not None  # for type checker help.
             model_name = model_id.bedrock_name
         case str():
             model_name = model_id
@@ -41,12 +44,11 @@ def create_bedrock_mantle_backend(
         "If you need to use normal AWS credentials instead of a bedrock-specific bearer token, please open an issue: https://github.com/generative-computing/mellea/issues/new"
     )
 
-    region_name = _make_region_for_uri(region=region)
     uri = _make_mantle_uri(region=region)
 
     _client = OpenAI(base_url=uri, api_key=os.environ["AWS_BEARER_TOKEN_BEDROCK"])
     _models = _client.models.list()
-    if model_name not in _models:
+    if model_name not in [m.id for m in _models]:
         model_names = "\n * ".join([str(m.id) for m in _models])
         raise Exception(
             f"Model {model_name} is not supported in region {_make_region_for_uri(region=region)}.\nSupported models are:\n * {model_names}\n\nPerhaps change regions or check that model access for {model_name} is not gated on Bedrock?"
@@ -57,5 +59,4 @@ def create_bedrock_mantle_backend(
         base_url=uri,
         api_key=os.environ["AWS_BEARER_TOKEN_BEDROCK"],
     )
-    backend._AWS_REGION = region_name
     return backend

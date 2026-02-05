@@ -69,7 +69,6 @@ META_LLAMA_4_SCOUT_17B_16E_INSTRUCT = ModelIdentifier(
     ollama_name="llama4:scout",
     hf_tokenizer_name="unsloth/Llama-4-Scout-17B-16E-Instruct",
     mlx_name="mlx-community/Llama-4-Scout-17B-16E-Instruct-4bit",
-    # bedrock_name="meta.llama4-scout-17b-instruct-v1:0",
 )
 
 META_LLAMA_4_MAVERICK_17B_128E_INSTRUCT = ModelIdentifier(
@@ -78,7 +77,6 @@ META_LLAMA_4_MAVERICK_17B_128E_INSTRUCT = ModelIdentifier(
     watsonx_name=None,  # NOTE: we do have a fp8 model in watsonx (meta-llama/llama-4-maverick-17b-128e-instruct-fp8) Not sure if we want to include it here.
     hf_tokenizer_name="unsloth/Llama-4-Maverick-17B-128E-Instruct",
     mlx_name="mlx-community/Llama-4-Maverick-17B-128E-Instruct-4bit",
-    # bedrock_name="meta.llama4-maverick-17b-instruct-v1:0",
 )
 
 #### LLAMA 3 models ####
@@ -88,14 +86,12 @@ META_LLAMA_3_3_70B = ModelIdentifier(
     watsonx_name="meta-llama/llama-3-3-70b-instruct",
     hf_tokenizer_name="unsloth/Llama-3.3-70B-Instruct",
     mlx_name="mlx-community/Llama-3.3-70B-Instruct-4bit",
-    # bedrock_name="meta.llama3-3-70b-instruct-v1:0",
 )
 
 META_LLAMA_3_2_3B = ModelIdentifier(
     hf_model_name="unsloth/Llama-3.2-3B-Instruct",
     ollama_name="llama3.2:3b",
     watsonx_name="meta-llama/llama-3-2-3b-instruct",
-    # bedrock_name="meta.llama3-2-3b-instruct-v1:0",
 )
 
 META_LLAMA_GUARD3_1B = ModelIdentifier(
@@ -103,9 +99,7 @@ META_LLAMA_GUARD3_1B = ModelIdentifier(
 )
 
 META_LLAMA_3_2_1B = ModelIdentifier(
-    ollama_name="llama3.2:1b",
-    hf_model_name="unsloth/Llama-3.2-1B",
-    # bedrock_name="meta.llama3-2-1b-instruct-v1:0",
+    ollama_name="llama3.2:1b", hf_model_name="unsloth/Llama-3.2-1B"
 )
 
 ########################
@@ -161,20 +155,12 @@ QWEN3_14B = ModelIdentifier(
 OPENAI_GPT_OSS_20B = ModelIdentifier(
     hf_model_name="openai/gpt-oss-20b",  # OpenAI GPT-OSS 20B
     ollama_name="gpt-oss:20b",  # Ollama
-    bedrock_name="openai.gpt-oss-20b-1:0",
+    bedrock_name="openai.gpt-oss-20b",
 )
 OPENAI_GPT_OSS_120B = ModelIdentifier(
     hf_model_name="openai/gpt-oss-120b",  # OpenAI GPT-OSS 120B
     ollama_name="gpt-oss:120b",  # Ollama
-    bedrock_name="openai.gpt-oss-120b-1:0",
-)
-
-###########################
-#### AWS Prop Models   ####
-###########################
-
-NOVA_PRO = ModelIdentifier(
-    bedrock_name="nova-pro-v1"
+    bedrock_name="openai.gpt-oss-120b",
 )
 
 ###########################
