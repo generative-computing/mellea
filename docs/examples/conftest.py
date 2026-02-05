@@ -175,6 +175,99 @@ def _check_optional_imports(file_path):
     return False, None
 
 
+def _collect_vllm_example_files(session) -> list[str]:
+    """Collect all example files that have vLLM marker.
+
+    Returns list of file paths.
+    """
+    vllm_files = set()
+
+    for item in session.items:
+        # Check if this is an ExampleItem with vllm marker
+        if hasattr(item, "path"):
+            file_path = str(item.path)
+            # Check if file has vllm marker
+            if file_path.endswith(".py"):
+                markers = _extract_markers_from_file(file_path)
+                if "vllm" in markers:
+                    vllm_files.add(file_path)
+
+    return sorted(vllm_files)
+
+
+def _run_vllm_examples_isolated(session, vllm_files: list[str]) -> int:
+    """Run vLLM example files in separate processes for GPU memory isolation.
+
+    Returns exit code (0 = all passed, 1 = any failed).
+    """
+    print("\n" + "=" * 70)
+    print("vLLM Process Isolation Active (Examples)")
+    print("=" * 70)
+    print(f"Running {len(vllm_files)} vLLM example(s) in separate processes")
+    print("to ensure GPU memory is fully released between examples.\n")
+
+    # Set environment variables for vLLM
+    env = os.environ.copy()
+    env["VLLM_USE_V1"] = "0"
+    env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+    all_passed = True
+
+    for i, file_path in enumerate(vllm_files, 1):
+        print(f"\n[{i}/{len(vllm_files)}] Running: {file_path}")
+        print("-" * 70)
+
+        # Run example directly with Python
+        cmd = [sys.executable, file_path]
+
+        result = subprocess.run(cmd, env=env)
+
+        if result.returncode != 0:
+            all_passed = False
+            print(f"✗ Example failed: {file_path}")
+        else:
+            print(f"✓ Example passed: {file_path}")
+
+    print("\n" + "=" * 70)
+    if all_passed:
+        print("All vLLM examples passed!")
+    else:
+        print("Some vLLM examples failed.")
+    print("=" * 70 + "\n")
+
+    return 0 if all_passed else 1
+
+
+def pytest_collection_finish(session):
+    """After collection, check if we need vLLM process isolation for examples.
+
+    If vLLM examples are collected and there are multiple files,
+    run them in separate processes and exit.
+    """
+    # Only check for examples in docs/examples
+    if not any(
+        "docs" in str(item.path) and "examples" in str(item.path)
+        for item in session.items
+    ):
+        return
+
+    # Collect vLLM example files
+    vllm_files = _collect_vllm_example_files(session)
+
+    # Only use process isolation if multiple vLLM examples
+    if len(vllm_files) <= 1:
+        return
+
+    # Run examples in isolation
+    exit_code = _run_vllm_examples_isolated(session, vllm_files)
+
+    # Clear collected items so pytest doesn't run them again
+    session.items.clear()
+
+    # Exit with appropriate code
+    pytest.exit("vLLM examples completed in isolated processes", returncode=exit_code)
+
+
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
     # Append the skipped examples if needed.
     if len(examples_to_skip) == 0:

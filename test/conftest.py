@@ -176,6 +176,115 @@ def pytest_configure(config):
         "markers", "llm: Tests that make LLM calls (needs at least Ollama)"
     )
 
+    # Store vLLM isolation flag in config
+    config._vllm_process_isolation = False
+
+
+# ============================================================================
+# vLLM Process Isolation
+# ============================================================================
+
+
+def _collect_vllm_modules(session) -> list[str]:
+    """Collect all test modules that have vLLM tests.
+
+    Returns list of module paths (e.g., 'test/backends/test_vllm.py').
+    """
+    vllm_modules = set()
+
+    for item in session.items:
+        # Check if test has vllm marker
+        if item.get_closest_marker("vllm"):
+            # Get the module path
+            module_path = str(item.path)
+            vllm_modules.add(module_path)
+
+    return sorted(vllm_modules)
+
+
+def _run_vllm_modules_isolated(session, vllm_modules: list[str]) -> int:
+    """Run vLLM test modules in separate processes for GPU memory isolation.
+
+    Returns exit code (0 = all passed, 1 = any failed).
+    """
+    print("\n" + "=" * 70)
+    print("vLLM Process Isolation Active")
+    print("=" * 70)
+    print(f"Running {len(vllm_modules)} vLLM test module(s) in separate processes")
+    print("to ensure GPU memory is fully released between modules.\n")
+
+    # Set environment variables for vLLM
+    env = os.environ.copy()
+    env["VLLM_USE_V1"] = "0"
+    env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+    all_passed = True
+
+    for i, module_path in enumerate(vllm_modules, 1):
+        print(f"\n[{i}/{len(vllm_modules)}] Running: {module_path}")
+        print("-" * 70)
+
+        # Build pytest command with same options as parent session
+        cmd = [sys.executable, "-m", "pytest", module_path, "-v"]
+
+        # Add markers from original command if present
+        config = session.config
+        markexpr = config.getoption("-m", default=None)
+        if markexpr:
+            cmd.extend(["-m", markexpr])
+
+        # Run in subprocess
+        result = subprocess.run(cmd, env=env)
+
+        if result.returncode != 0:
+            all_passed = False
+            print(f"✗ Module failed: {module_path}")
+        else:
+            print(f"✓ Module passed: {module_path}")
+
+    print("\n" + "=" * 70)
+    if all_passed:
+        print("All vLLM modules passed!")
+    else:
+        print("Some vLLM modules failed.")
+    print("=" * 70 + "\n")
+
+    return 0 if all_passed else 1
+
+
+def pytest_collection_finish(session):
+    """After collection, check if we need vLLM process isolation.
+
+    If vLLM tests are collected and there are multiple modules,
+    run them in separate processes and exit.
+    """
+    # Only activate if vLLM marker is explicitly requested
+    config = session.config
+    markexpr = config.getoption("-m", default=None)
+
+    # Check if vllm marker is in the expression
+    if not markexpr or "vllm" not in markexpr:
+        return
+
+    # Collect vLLM modules
+    vllm_modules = _collect_vllm_modules(session)
+
+    # Only use process isolation if multiple modules
+    if len(vllm_modules) <= 1:
+        return
+
+    # Run modules in isolation
+    exit_code = _run_vllm_modules_isolated(session, vllm_modules)
+
+    # Clear collected items so pytest doesn't run them again
+    session.items.clear()
+
+    # Set flag to indicate we handled vLLM tests
+    config._vllm_process_isolation = True
+
+    # Exit with appropriate code
+    pytest.exit("vLLM tests completed in isolated processes", returncode=exit_code)
+
 
 # ============================================================================
 # Test Skipping Logic
