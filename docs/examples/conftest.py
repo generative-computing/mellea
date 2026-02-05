@@ -175,6 +175,43 @@ def _check_optional_imports(file_path):
     return False, None
 
 
+def pytest_addoption(parser):
+    """Add command-line options for skipping capability checks.
+
+    These match the options in test/conftest.py to provide consistent behavior.
+    """
+    parser.addoption(
+        "--ignore-gpu-check",
+        action="store_true",
+        default=False,
+        help="Ignore GPU requirement checks (examples may fail without GPU)",
+    )
+    parser.addoption(
+        "--ignore-ram-check",
+        action="store_true",
+        default=False,
+        help="Ignore RAM requirement checks (examples may fail with insufficient RAM)",
+    )
+    parser.addoption(
+        "--ignore-ollama-check",
+        action="store_true",
+        default=False,
+        help="Ignore Ollama availability checks (examples will fail if Ollama not running)",
+    )
+    parser.addoption(
+        "--ignore-api-key-check",
+        action="store_true",
+        default=False,
+        help="Ignore API key checks (examples will fail without valid API keys)",
+    )
+    parser.addoption(
+        "--ignore-all-checks",
+        action="store_true",
+        default=False,
+        help="Ignore all requirement checks (GPU, RAM, Ollama, API keys)",
+    )
+
+
 def _collect_vllm_example_files(session) -> list[str]:
     """Collect all example files that have vLLM marker.
 
@@ -438,11 +475,17 @@ def pytest_runtest_setup(item):
     # Get gh_run status (CI environment)
     gh_run = int(os.environ.get("CICD", 0))
 
-    # Get config options (all default to False for examples)
-    ignore_gpu = False
-    ignore_ram = False
-    ignore_ollama = False
-    ignore_api_key = False
+    # Get config options from CLI (matching test/conftest.py behavior)
+    config = item.config
+    ignore_all = config.getoption("--ignore-all-checks", default=False)
+    ignore_gpu = config.getoption("--ignore-gpu-check", default=False) or ignore_all
+    ignore_ram = config.getoption("--ignore-ram-check", default=False) or ignore_all
+    ignore_ollama = (
+        config.getoption("--ignore-ollama-check", default=False) or ignore_all
+    )
+    ignore_api_key = (
+        config.getoption("--ignore-api-key-check", default=False) or ignore_all
+    )
 
     # Skip qualitative tests in CI
     if item.get_closest_marker("qualitative") and gh_run == 1:
