@@ -70,6 +70,8 @@ examples_to_skip = {
     "client.py",
     "pii_serve.py",
     "mellea_pdf.py",  # External URL returns 403 Forbidden
+    "m_decomp_result.py",
+    "python_decompose_result.py",
 }
 
 

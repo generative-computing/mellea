@@ -1,0 +1,28 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "I have a question about my bill. What should I do?"
+    },
+    {
+      "role": "assistant",
+      "content": "If you have a complaint about your bill, you can contact the California Public Utilities Commission's Consumer Affairs Branch. You can reach them by email at consumer-affairs@cpuc.ca.gov, by phone at 1-800-649-7570, or by mail at California Public Utilities Commission, Consumer Affairs Branch, 505 Van Ness Avenue, San Francisco, CA 94102. They are available Monday-Friday, 8:30 a.m.-4:30 p.m. You can also file a complaint online through their website at <https://cims.cpuc.ca.gov/complaints>."
+    },
+    {
+      "role": "user",
+      "content": "and if it is about service?"
+    }
+  ],
+  "extra_body": {
+    "documents": [
+      {
+        "doc_id": "1",
+        "text": "You can contact us by phone, email, or reporting online. You can use any one of the following contacts, depending on what you are reporting. Please be ready to give enough information to support your claims of supposed improper or unlawful behavior. If this information is not given to us, we will not be able to help you in your case.\nIf the situation poses an immediate safety threat, please call 911!\nUnsafe Conditions:\nPhone: 1-800-649-7570\nOn-Line: https://ia.cpuc.ca.gov/whblow \nFraud (deceptive practices causing financial or other losses to consumers)\nPhone: 1-800-649-7570\nE-Mail: fraudhotline@cpuc.ca.gov\nBilling, Service, and Other Complaints\nPhone: 1-800-649-7570\nOn-Line: https://cims.cpuc.ca.gov/complaints"
+      },
+      {
+        "doc_id": "2",
+        "text": "We also cannot award claims for damages or help you determine a utility's alleged negligence or liability.  If you cannot resolve this type of problem with the utility directly, you can file a claim in civil court.\n\nIf you do not want to file your complaint online, you can send us a written complaint letter.  Be sure to include:\n\nYour name \n\nThe name the account is billed under (if it is different than your name)\n\nYour mailing address\n\nThe service address (if it is different than your mailing address)\n\nThe name of the utility or company"
+      }
+    ]
+  }
+}
