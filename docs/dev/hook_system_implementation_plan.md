@@ -1,4 +1,4 @@
-# Mellea Hook System — Implementation Plan
+# Mellea Hook System Implementation Plan
 
 This document describes the implementation plan for the extensibility hook system specified in [`docs/dev/hook_system.md`](hook_system.md). The implementation uses the [ContextForge plugin framework](https://github.com/IBM/mcp-context-forge) (`mcpgateway.plugins.framework`) as an optional external dependency for core plumbing, while all Mellea-specific types — hook enums, payload models, and the plugin base class — are owned by Mellea under a new `mellea/plugins/` subpackage.
 
