@@ -25,7 +25,7 @@ mellea/plugins/
     └── error.py            # error handling payload
 ```
 
-## 2. ContextForge Plugin Framework — Key Interfaces Used
+## 2. ContextForge Plugin Framework (Key Interfaces Used)
 
 The following types from `mcpgateway.plugins.framework` form the plumbing layer. Mellea uses these but does **not** import any ContextForge-specific hook types (prompts, tools, resources, agents, http).
 
@@ -711,7 +711,7 @@ async def fire_error_hook(
 ```
 
 
-## 8. Critical Files Summary
+## 8. Modifications Summary
 
 | File | Changes |
 |------|---------|
