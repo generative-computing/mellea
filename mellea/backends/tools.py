@@ -92,7 +92,7 @@ class MelleaTool(AbstractMelleaTool):
 
 
 @overload
-def tool(func: Callable) -> MelleaTool: ...
+def tool(func: Callable, *, name: str | None = None) -> MelleaTool: ...
 
 
 @overload
