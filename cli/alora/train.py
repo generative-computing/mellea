@@ -14,6 +14,10 @@ from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer
 if torch.backends.mps.is_available():
     pytorch_version = tuple(int(x) for x in torch.__version__.split(".")[:2])
     if pytorch_version < (2, 8):
+        # Monkey-patch MPS detection to force CPU usage
+        # This must be done before any models or tensors are initialized
+        torch.backends.mps.is_available = lambda: False  # type: ignore[assignment]
+        torch.backends.mps.is_built = lambda: False  # type: ignore[assignment]
         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
         warnings.warn(
             "MPS is available but PyTorch < 2.8.0. Disabling MPS to avoid "
