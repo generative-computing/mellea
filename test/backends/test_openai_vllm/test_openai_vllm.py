@@ -133,7 +133,7 @@ class TestOpenAIBackend:
 class TestOpenAIALoraStuff:
     backend = OpenAIBackend(
         model_id="ibm-granite/granite-3.3-8b-instruct",
-        formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
+        formatter=TemplateFormatter(model_id="ibm-granite/granite-3.3-8b-instruct"),
         base_url="http://localhost:8000/v1",
         api_key="EMPTY",
     )

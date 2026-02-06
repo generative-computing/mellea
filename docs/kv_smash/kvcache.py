@@ -9,7 +9,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenize
 
 from mellea.backends.kv_block_helpers import DynamicCache, merge_dynamic_caches
 
-model_id = "ibm-granite/granite-3.3-8b-instruct"
+model_id = "ibm-granite/granite-4.0-tiny-preview"
 device = torch.device("mps")
 model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
 tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(model_id)
