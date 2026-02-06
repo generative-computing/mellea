@@ -69,11 +69,10 @@ m = "cli.m:cli"
 
 hf = [
     "accelerate>=1.9.0",
-    "alora==0.2.0",
     "datasets>=4.0.0",
     "outlines-core==0.1.26",
     "outlines",                 # intentionally un-versioned, expecting a minor update. coutlines-core version should be enough to specify it
-    "peft>=0.18.0", # aLoRA support was added in Peft 0.18.0
+    "peft>=0.18.1",  # Native aLoRA support added in PEFT 0.18.0
     "transformers>=4.53.2,<5",
     "trl==0.19.1",
     "granite-common[transformers]",

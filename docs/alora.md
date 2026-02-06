@@ -1,6 +1,6 @@
 # Mellea CLI — Train & Upload LoRA/aLoRA Adapters
 
-Mellea provides a command-line interface for training and uploading [LoRA](https://arxiv.org/abs/2106.09685) or [aLoRA](https://github.com/IBM/alora) adapters for causal language models. This tool is useful for adapting base models like IBM Granite to custom tasks using prompt-based classification. The major goal is to help customer train a requirement validator.
+Mellea provides a command-line interface for training and uploading [LoRA](https://arxiv.org/abs/2106.09685) or [aLoRA](https://huggingface.co/docs/peft/main/en/package_reference/lora#alora) adapters for causal language models. This tool is useful for adapting base models like IBM Granite to custom tasks using prompt-based classification. The major goal is to help customer train a requirement validator.
 
 ---
 
@@ -82,13 +82,12 @@ This will:
 ## 🛠 Requirements
 
 - Python 3.8+
-- Install the following dependencies manually or via `pip install mellea`:
+- Install the following dependencies manually or via `pip install mellea[hf]`:
   - `transformers`
   - `trl`
-  - `peft`
+  - `peft>=0.18.1` (native aLoRA support)
   - `datasets`
   - `huggingface_hub`
-  - `alora`
 
 
 ---

@@ -1,13 +1,27 @@
 import json
 import os
+import warnings
 
+import torch
 import typer
-from alora.config import aLoraConfig
-from alora.peft_model_alora import aLoRAPeftModelForCausalLM
 from datasets import Dataset
-from peft import LoraConfig, PeftModelForCausalLM
+from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
 from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer
+
+# Handle MPS with old PyTorch versions
+# Accelerate's GradScaler requires PyTorch >= 2.8.0 for MPS
+if torch.backends.mps.is_available():
+    pytorch_version = tuple(int(x) for x in torch.__version__.split(".")[:2])
+    if pytorch_version < (2, 8):
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
+        warnings.warn(
+            "MPS is available but PyTorch < 2.8.0. Disabling MPS to avoid "
+            "gradient scaling issues. Training will run on CPU. "
+            "To use MPS, upgrade to PyTorch >= 2.8.0.",
+            UserWarning,
+            stacklevel=2,
+        )
 
 
 def load_dataset_from_json(json_path, tokenizer, invocation_prompt):
@@ -90,8 +104,12 @@ def train_model(
     train_dataset = dataset.select(range(split_idx))
     val_dataset = dataset.select(range(split_idx, len(dataset)))
 
+    # Use device_map="auto" only when CUDA is available
+    # In CPU-only environments (like CI), device_map="auto" creates meta tensors
+    # which cause "Cannot copy out of meta tensor" errors
+    device_map = "auto" if torch.cuda.is_available() else None
     model_base = AutoModelForCausalLM.from_pretrained(
-        base_model, device_map="auto", use_cache=False
+        base_model, device_map=device_map, use_cache=False
     )
 
     collator = DataCollatorForCompletionOnlyLM(invocation_prompt, tokenizer=tokenizer)
@@ -100,21 +118,21 @@ def train_model(
     os.makedirs(output_dir, exist_ok=True)
 
     if adapter == "alora":
-        peft_config = aLoraConfig(
-            invocation_string=invocation_prompt,
+        # Tokenize the invocation string for PEFT 0.18.0 native aLoRA
+        invocation_token_ids = tokenizer.encode(
+            invocation_prompt, add_special_tokens=False
+        )
+
+        peft_config = LoraConfig(
             r=32,
             lora_alpha=32,
             lora_dropout=0.05,
             bias="none",
             task_type="CAUSAL_LM",
             target_modules=["q_proj", "k_proj", "v_proj"],
+            alora_invocation_tokens=invocation_token_ids,  # Enable aLoRA
         )
-        response_token_ids = tokenizer(
-            invocation_prompt, return_tensors="pt", add_special_tokens=False
-        )["input_ids"]
-        model = aLoRAPeftModelForCausalLM(
-            model_base, peft_config, response_token_ids=response_token_ids
-        )
+        model = get_peft_model(model_base, peft_config)
 
         sft_args = SFTConfig(
             output_dir=output_dir,
@@ -148,7 +166,7 @@ def train_model(
             task_type="CAUSAL_LM",
             target_modules=["q_proj", "k_proj", "v_proj"],
         )
-        model = PeftModelForCausalLM(model_base, peft_config)
+        model = get_peft_model(model_base, peft_config)
 
         sft_args = SFTConfig(
             output_dir=output_dir,
