@@ -96,12 +96,10 @@ def tool(func: Callable, *, name: str | None = None) -> MelleaTool: ...
 
 
 @overload
-def tool(*, name: str | None = None) -> Callable[[Callable], MelleaTool]: ...
+def tool(*, name: str | None = None) -> MelleaTool: ...
 
 
-def tool(
-    func: Callable | None = None, name: str | None = None
-) -> MelleaTool:
+def tool(func: Callable | None = None, name: str | None = None) -> MelleaTool:
     """Decorator to mark a function as a Mellea tool.
 
     This decorator wraps a function to make it usable as a tool without
