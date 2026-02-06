@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import warnings
 
 import torch
@@ -9,23 +10,24 @@ from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
 from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer
 
-# Handle MPS with old PyTorch versions
+# Handle MPS with old PyTorch versions on macOS only
 # Accelerate's GradScaler requires PyTorch >= 2.8.0 for MPS
-if torch.backends.mps.is_available():
-    pytorch_version = tuple(int(x) for x in torch.__version__.split(".")[:2])
-    if pytorch_version < (2, 8):
-        # Monkey-patch MPS detection to force CPU usage
-        # This must be done before any models or tensors are initialized
-        torch.backends.mps.is_available = lambda: False  # type: ignore[assignment]
-        torch.backends.mps.is_built = lambda: False  # type: ignore[assignment]
-        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
-        warnings.warn(
-            "MPS is available but PyTorch < 2.8.0. Disabling MPS to avoid "
-            "gradient scaling issues. Training will run on CPU. "
-            "To use MPS, upgrade to PyTorch >= 2.8.0.",
-            UserWarning,
-            stacklevel=2,
-        )
+if sys.platform == "darwin" and hasattr(torch.backends, "mps"):
+    if torch.backends.mps.is_available():
+        pytorch_version = tuple(int(x) for x in torch.__version__.split(".")[:2])
+        if pytorch_version < (2, 8):
+            # Disable MPS detection to force CPU usage on macOS
+            # This must be done before any models or tensors are initialized
+            torch.backends.mps.is_available = lambda: False  # type: ignore[assignment]
+            torch.backends.mps.is_built = lambda: False  # type: ignore[assignment]
+            os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
+            warnings.warn(
+                "MPS is available but PyTorch < 2.8.0. Disabling MPS to avoid "
+                "gradient scaling issues. Training will run on CPU. "
+                "To use MPS, upgrade to PyTorch >= 2.8.0.",
+                UserWarning,
+                stacklevel=2,
+            )
 
 
 def load_dataset_from_json(json_path, tokenizer, invocation_prompt):
