@@ -120,7 +120,11 @@ def train_model(
 
     collator = DataCollatorForCompletionOnlyLM(invocation_prompt, tokenizer=tokenizer)
 
-    output_dir = os.path.dirname(output_file)
+    output_dir = os.path.dirname(os.path.abspath(output_file))
+    assert output_dir != "", (
+        f"Expected output_dir for output_file='{output_file}'  to be non-'' but found '{output_dir}'"
+    )
+
     os.makedirs(output_dir, exist_ok=True)
 
     if adapter == "alora":
