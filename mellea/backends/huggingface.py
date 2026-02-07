@@ -541,7 +541,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             [toks["attention_mask"] for toks in tok_parts], dim=1
         )
         assert input_ids.shape == attention_mask.shape
-        merged_cache: DynamicCache = kv_block_helpers.merge_dynamic_caches(dc_parts)
+        merged_cache: DynamicCache = kv_block_helpers.merge_dynamic_caches_v5(dc_parts)
         # TODO: also assert that the merged cached is the correct shape given the input_ids and attention_mask shapes.
         # rewind merged cache by 1 for safety.
         merged_cache.crop(-1)  # type: ignore

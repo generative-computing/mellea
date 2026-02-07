@@ -97,7 +97,7 @@ watsonx = [
     "ibm-watsonx-ai>=1.3.31",
 ]
 docling = [
-    "docling>=2.45.0",
+    # TODO-nrf re-enable this "docling>=2.45.0",
 ]
 
 all = ["mellea[watsonx,docling,hf,vllm,litellm]"]
