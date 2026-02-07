@@ -1,0 +1,84 @@
+name: Auto-generate docs PR (PyPI mellea)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: docs-autogen-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs_autogen:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Resolve version from tag
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"          # e.g. v0.3.0
+          VERSION="${TAG#v}"               # 0.3.0
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Using version: $VERSION"
+
+      - name: Install tooling dependencies (decorator deps etc.)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tooling/docs-autogen/requirements.txt || true
+
+      - name: Generate API docs + merge docs.json (install-mode)
+        run: |
+          set -euxo pipefail
+          python3 tooling/docs-autogen/generate-ast.py \
+            --docs-json docs/docs/docs.json \
+            --docs-root docs/docs \
+            --pypi-name mellea \
+            --pypi-version "${{ steps.ver.outputs.version }}"
+
+      - name: Decorate API MDX (SidebarFix + pills)
+        run: |
+          set -euxo pipefail
+          python3 tooling/docs-autogen/decorate_api_mdx.py \
+            --docs-root docs/docs
+
+      - name: Create Pull Request (only if there are changes)
+        id: cpr
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "docs: auto-generate (PyPI mellea ${{ steps.ver.outputs.version }})"
+          title: "docs: auto-generate (PyPI mellea ${{ steps.ver.outputs.version }})"
+          body: |
+            This PR was automatically generated for tag `${{ steps.ver.outputs.tag }}`.
+
+            Target PyPI version: `${{ steps.ver.outputs.version }}`
+          branch: "automation/docs-autogen-${{ steps.ver.outputs.version }}"
+          delete-branch: true
+          labels: |
+            documentation
+            automation
+
+      - name: Cleanup local tooling environment (always)
+        if: always()
+        run: |
+          rm -rf .venv-docs-autogen .mdxify-run-cwd || true
+          rm -rf docs/api || true

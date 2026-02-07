@@ -1,0 +1,65 @@
+---
+title: "Interoperability with Other Frameworks"
+description: "Connect with Mellea programs with other (agentic) frameworks."
+sidebarTitle: "Framework Interoperability"
+---
+
+Mellea programs are, at last, just Python programs. Mellea programs can be shared via the Model Context Protocol or via the A2A protocol. Mellea programs can also consume tools and agents that implement these protocols.
+
+### Simple MCP server running Mellea
+
+Like we mentioned, Mellea are at the end python programs. We can wrap a simple `mcp` server around a program and use the server as-is. Here is an example using [Pydantic AI's inbuild MCP server](https://ai.pydantic.dev/mcp/server/).
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/agents/mcp_example.py#L15-L40
+## Create an MCP server
+mcp = FastMCP("Demo")
+
+
+@mcp.tool()
+def write_a_poem(word_limit: int) -> str:
+    """Write a poem with a word limit."""
+    m = MelleaSession(OllamaModelBackend(model_ids.QWEN3_8B))
+    wl_req = Requirement(
+        f"Use only {word_limit} words.",
+        validation_fn=simple_validate(lambda x: len(x.split(" ")) < word_limit),
+    )
+
+    res = m.instruct(
+        "Write a poem",
+        requirements=[wl_req],
+        strategy=RejectionSamplingStrategy(loop_budget=4),
+    )
+    assert isinstance(res, ModelOutputThunk)
+    return str(res.value)
+
+if __name__ == '__main__':
+    mcp.run()
+```
+
+### Running Mellea programs as an openai compatible server (Experimental)
+
+We also provide an expiermental `m serve` utility for serving up an OpenAI-compatible **chat** endpoint. This allows you to write `m` programs that masquerade as a "model". To learn more about this functionality, run:
+
+```shell
+m serve --help
+```
+
+#### Example `m serve` application
+
+While deploying programs using `m serve`, it is important for the programs to follow a specific structure. The programs needs a have function called `serve` with the following signature:
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/agents/m_serve_example.py#L25-L29
+def serve(
+    input: list[ChatMessage],
+    model_options: None | dict = None,
+    **kwargs
+)
+```
+
+the `m serve` command then subsequently takes this function and runs a server that is openai compatible. For more information, please have a look at [this file](./examples/tutorial/m_serve_example.py) for how to write an `m serve` compatible program. To run the example:
+
+```shell
+m serve docs/examples/tutorial/m_serve_example.py
+```

@@ -1,0 +1,180 @@
+---
+title: "mellea.stdlib.tools.interpreter"
+sidebarTitle: "mellea.stdlib.tools.interpreter"
+description: "Code interpreter tool."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `code_interpreter` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/tools/interpreter.py#L263" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+code_interpreter(code: str) -> ExecutionResult
+```
+
+
+Executes python code.
+
+**Args:**
+- `code`: The Python code to execute.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `local_code_interpreter` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/tools/interpreter.py#L273" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+local_code_interpreter(code: str) -> ExecutionResult
+```
+
+
+Executes python code in the cwd.
+
+**Args:**
+- `code`: The Python code to execute.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ExecutionResult` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/tools/interpreter.py#L18" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Result of code execution.
+
+Code execution can be aborted prior to spinning up an interpreter (e.g., if prohibited imports are used).
+In these cases, the `success` flag is set to False and the `skipped` flag is set to True.
+
+If code is executed, then `success` is set to true iff the exit code is 0, and the `stdout` and `stderr` outputs
+are set to non-None values.
+
+We also use the `ExecutionResult` object to communicate the result of static and dynamic analyses. Those are passed back
+using the `analysis_result` field.
+
+TODO\: should we also be trying to pass back the value of the final expression evaluated, or the value of locals() and globals()?
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `to_validationresult_reason` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/tools/interpreter.py#L48" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+to_validationresult_reason(self)
+```
+
+Maps an ExecutionResult to a ValidationResult reason.
+
+TODO\: Downstream use of this method is really hacky. A far better solution is for `ExecutionResult` to implement the `ValidationResult` interface.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ExecutionEnvironment` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/tools/interpreter.py#L68" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Abstract environment for executing Python code.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/tools/interpreter.py#L80" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+execute(self, code: str, timeout: int) -> ExecutionResult
+```
+
+Execute code and return result.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `StaticAnalysisEnvironment` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/tools/interpreter.py#L84" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Safe environment that validates but does not execute code.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/tools/interpreter.py#L87" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+execute(self, code: str, timeout: int) -> ExecutionResult
+```
+
+Validate code syntax and imports without executing.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `UnsafeEnvironment` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/tools/interpreter.py#L122" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Unsafe environment that executes code directly with subprocess.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/tools/interpreter.py#L125" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+execute(self, code: str, timeout: int) -> ExecutionResult
+```
+
+Execute code with subprocess after checking imports.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `LLMSandboxEnvironment` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/tools/interpreter.py#L182" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Environment using llm-sandbox for secure Docker-based execution.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/tools/interpreter.py#L185" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+execute(self, code: str, timeout: int) -> ExecutionResult
+```
+
+Execute code using llm-sandbox.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,46 @@
+---
+title: "mellea.stdlib.sampling.sampling_algos.budget_forcing_alg"
+sidebarTitle: "mellea.stdlib.sampling.sampling_algos.budget_forcing_alg"
+description: "Budget forcing implementation."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `think_budget_forcing` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/sampling/sampling_algos/budget_forcing_alg.py#L17" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+think_budget_forcing(backend: OllamaModelBackend, action: CBlock | Component) -> ModelOutputThunk
+```
+
+
+Generate with budget forcing using the completions APIs.
+
+This relies on raw autocompletion and assumes the model's output is structured in the following form: '&lt;think&gt; ... &lt;/think&gt; summary answer'
+The budget forcing method is proposed in the paper: https://arxiv.org/abs/2501.19393
+This implementation tries to follow the key outlines in the paper while ensuring stable and fail-safe operation.
+This is performed via multi-step generation. The model will be called multiple times until requirements are met, in other words, the response will be assembled conditionally.
+
+**Args:**
+- `backend`: OllamaModelBackend
+- `action`: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
+- `think_max_tokens`: Budget in number of tokens allocated for the think block
+- `answer_max_tokens`: Budget in number of tokens allocated for the summary and answer block, None indicates unbounded answer, generating till EoS
+- `start_think_token`: String indicating start of think block, default &lt;think&gt;
+- `end_think_token`: String indicating end of think block, default &lt;/think&gt;
+- `begin_response_token`: Used by certain models, string indicating start of response block, e.g. "&lt;response&gt;", default None
+- `think_more_suffix`: String to append to force continued thinking, e.g. "\nWait" if set to None we will not force additional thinking. Use None for upper-bound budget case
+- `answer_suffix`: String to append to force a final answer
+- `model_options`: Any model options to upsert into the defaults for this call.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,175 @@
+---
+title: "MObjects"
+description: "Bringing object-oriented programming to LLMs with MObjects"
+---
+
+Object-oriented programming (OOP) is a powerful paradigm for organizing code: you group related data and the methods that operate on that data into classes. In the world of LLMs, a similar organizational principle emerges—especially when you want to combine structured data with LLM-powered "tools" or operations. This is where Mellea's **MObject** abstraction comes in.
+
+**The MObject Pattern:** You should store data alongside its relevant operations (tools). This allows LLMs to interact with both the data and methods in a unified, structured manner. It also simplifies the process of exposing only the specific fields and methods you want the LLM to access.
+
+The `MOBject` pattern also provides a way of evolving existing classical codebases into generative programs. Mellea's `@mify` decorator lets you turn **any** class into an `MObject`. If needed, you can specify which fields and methods are included, and provide a template for how the object should be represented to the LLM.
+
+### Example: A Table as an MObject
+
+Suppose you have a table of sales data and want to let the LLM answer questions about it:
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/table_mobject.py#L1-L31
+import mellea
+from mellea.stdlib.mify import mify, MifiedProtocol
+import pandas
+from io import StringIO
+
+
+@mify(fields_include={"table"}, template="{{ table }}")
+class MyCompanyDatabase:
+  table: str = """| Store      | Sales   |
+                    | ---------- | ------- |
+                    | Northeast  | $250    |
+                    | Southeast  | $80     |
+                    | Midwest    | $420    |"""
+
+  def transpose(self):
+    pandas.read_csv(
+      StringIO(self.table),
+      sep='|',
+      skipinitialspace=True,
+      header=0,
+      index_col=False
+    )
+
+
+m = mellea.start_session()
+db = MyCompanyDatabase()
+assert isinstance(db, MifiedProtocol)
+answer = m.query(db, "What were sales for the Northeast branch this month?")
+print(str(answer))
+```
+
+In this example, the `@mify` decorator transforms MyCompanyDatabase into an MObject. Only the _table_ field is incorporated into the Large Language Model (LLM) prompt, as designated by `fields_include`. The `template` describes how the object is presented to the model. The `.query()` method now enables you to pose questions about the data, allowing the LLM to utilize the table as contextual information.
+
+**When to use MObjects?**
+MObjects offer a sophisticated and modular approach to linking structured data with operations powered by Large Language Models (LLMs). They provide precise control over what the LLM can access, allowing for the exposure of custom tools or methods. This design pattern can be particularly useful for tool-calling, document querying, and any scenario where data needs to be "wrapped" with behaviors accessible to an LLM.
+
+We'll see more advanced uses of MObjects -- including tool registration and custom operations -- in our next case study on working with rich-text documents.
+
+### Case Study: Working with Documents
+
+Mellea makes it easy to work with documents. For that we provide `mified` wrappers
+around [docling](https://github.com/docling-project/docling) documents.
+
+Let's create a RichDocument from an arxiv paper:
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/document_mobject.py#L1-L3
+from mellea.stdlib.docs.richdocument import RichDocument
+rd = RichDocument.from_document_file("https://arxiv.org/pdf/1906.04043")
+```
+
+this loads the PDF file and parses it using the Docling parser into an
+intermediate representation.
+
+From the rich document we can extract some document content, e.g. the
+first table:
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/document_mobject.py#L5-L8
+from mellea.stdlib.docs.richdocument import Table
+table1: Table = rd.get_tables()[0]
+print(table1.to_markdown())
+```
+
+Output:
+
+```markdown
+| Feature                              | AUC         |
+| ------------------------------------ | ----------- |
+| Bag of Words                         | 0.63 ± 0.11 |
+| (Test 1 - GPT-2) Average Probability | 0.71 ± 0.25 |
+| (Test 2 - GPT-2) Top-K Buckets       | 0.87 ± 0.07 |
+| (Test 1 - BERT) Average Probability  | 0.70 ± 0.27 |
+| (Test 2 - BERT) Top-K Buckets        | 0.85 ± 0.09 |
+```
+
+The `Table` object is Mellea-ready and can be used immediately with LLMs.
+Let's just get it to work:
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/document_mobject.py#L10-L24
+from mellea.backends.types import ModelOption
+from mellea import start_session
+
+m = start_session()
+for seed in [x*12 for x in range(5)]:
+    table2 = m.transform(table1,
+                         "Add a column 'Model' that extracts which model was used or 'None' if none.",
+                         model_options={ModelOption.SEED: seed})
+    if isinstance(table2, Table):
+        print(table2.to_markdown())
+        break
+    else:
+        print(f"==== TRYING AGAIN after non-useful output.====")
+```
+
+In this example, `table1` should be transformed to have an extra column `Model` which contains the model string from the `Feature` column or `None` if there is none. Iterating through some seed values, we try to find a version which returns a parsable representation of the table. If found, print it out.
+
+The output for this code sample could be:
+
+```markdown
+table1=
+| Feature | AUC |
+|--------------------------------------|-------------|
+| Bag of Words | 0.63 ± 0.11 |
+| (Test 1 - GPT-2) Average Probability | 0.71 ± 0.25 |
+| (Test 2 - GPT-2) Top-K Buckets | 0.87 ± 0.07 |
+| (Test 1 - BERT) Average Probability | 0.70 ± 0.27 |
+| (Test 2 - BERT) Top-K Buckets | 0.85 ± 0.09 |
+
+===== 18:21:00-WARNING ======
+added a tool message from transform to the context as well.
+
+table2=
+| Feature | AUC | Model |
+|--------------------------------------|-------------|---------|
+| Bag of Words | 0.63 ± 0.11 | None |
+| (Test 1 - GPT-2) Average Probability | 0.71 ± 0.25 | GPT-2 |
+| (Test 2 - GPT-2) Top-K Buckets | 0.87 ± 0.07 | GPT-2 |
+| (Test 1 - BERT) Average Probability | 0.70 ± 0.27 | BERT |
+| (Test 2 - BERT) Top-K Buckets | 0.85 ± 0.09 | BERT |
+```
+
+The model has done a great job at fulfilling the task and coming back with a parsable syntax. You could now call (e.g. `m.query(table2, "Are there any GPT models referenced?")`) or continue transformation (e.g. `m.transform(table2, "Transpose the table.")`).
+
+### MObject methods are tools
+
+When an object is `mified` all methods with a docstring get registered as tools for the LLM call. You can control if you only want a subset of these functions to be exposed by two parameters (`funcs_include` and `funcs_exclude`):
+
+```python
+from mellea.stdlib.mify import mify
+
+@mify(funcs_include={"from_markdown"})
+class MyDocumentLoader:
+    def __init__(self) -> None:
+        self.content = ""
+
+    @classmethod
+    def from_markdown(cls, text: str) -> "MyDocumentLoader":
+        doc = MyDocumentLoader()
+        # Your parsing functions here.
+        doc.content = text
+        return doc
+
+    def do_hoops(self) -> str:
+        return "hoop hoop"
+```
+
+Above, the `mified` class `MyDocumentLoader` only exposes the `from_markdown()` method as tool to the LLM.
+
+Here is an example, how the methods are handled with an LLM call. Imagine the following two calls that should lead to the same result:
+
+```python
+table1_t = m.transform(table1, "Transpose the table.") # the LLM function
+table1_t2 = table1.transpose() # the table method
+```
+
+Every native function of `Table` is automatically registered as a tool to the transform function. I.e., here the `.transform()` function calls the LLM and the LLM will get back suggesting to use the very own `.transpose()` function to achieve the result - it will also give you a friendly warning that you could directly use the function call instead of using the transform function.
