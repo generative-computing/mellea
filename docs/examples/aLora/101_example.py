@@ -3,34 +3,49 @@
 
 import time
 
-from mellea.backends.aloras.huggingface.granite_aloras import HFConstraintAlora
-from mellea.stdlib.base import ChatContext, GenerateLog
-from mellea.stdlib.requirement import ALoraRequirement, Requirement
-
 from mellea import MelleaSession
+from mellea.backends.adapters import AdapterType, LocalHFAdapter
 from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.huggingface import LocalHFBackend
+from mellea.core import GenerateLog
+from mellea.stdlib.context import ChatContext
+from mellea.stdlib.requirements import ALoraRequirement, Requirement
 
 # Define a backend and add the constraint aLora
 backend = LocalHFBackend(
-    model_id="ibm-granite/granite-3.2-8b-instruct", cache=SimpleLRUCache(5)
+    model_id="ibm-granite/granite-3.3-2b-instruct", cache=SimpleLRUCache(5)
 )
 
-custom_stembolt_failure_constraint = HFConstraintAlora(
-    name="custom_stembolt_failure_constraint",
-    path_or_model_id="docs/examples/aLora/checkpoints/alora_adapter",  # can also be the checkpoint path
-    generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>",
-    backend=backend,
-)
 
-backend.add_alora(custom_stembolt_failure_constraint)  # type: ignore[attr-defined]
+class StemboltAdapter(LocalHFAdapter):
+    # TODO how do I specify generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>"???
+    # TODO : just use Literal["alora", "lora"] instead of AdapterType.
+    def __init__(self):
+        super().__init__(
+            name="custom_stembolt_failure_constraint", adapter_type=AdapterType.ALORA
+        )
+
+    # TODO: spreading the initialization of this class across a constructor and an abstract method is a bit ugly.
+    # TODO: base_model_name should conform to the rest of the framework; namely, base_model_id : ModelIdentifier | str.
+    def get_local_hf_path(self, base_model_name):
+        if base_model_name == "granite-3.3-2b-instruct":
+            return "./3.3-2b-stembolts-lora.ckpt"
+        else:
+            raise ValueError(
+                f"StemboltAdapter is only available for `granite-3.3-2b-instruct`. (You are using {base_model_name})"
+            )
+
+
+backend.add_adapter(StemboltAdapter())
 
 # Create M session
 m = MelleaSession(backend, ctx=ChatContext())
 
 # define a requirement
+# TODO: we should be able to pass the adapter itself, or at the very least name should be a public property of Adapter.
 failure_check = ALoraRequirement(
-    "The failure mode should not be none.", alora=custom_stembolt_failure_constraint
+    "The failure mode should not be none.",
+    intrinsic_name="custom_stembolt_failure_constraint",
 )
 
 # run instruction with requirement attached on the base model
