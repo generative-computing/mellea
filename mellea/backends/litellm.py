@@ -36,12 +36,17 @@ from ..helpers import (
 from ..security import SecLevel, taint_sources
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
+from ..telemetry.backend_instrumentation import (
+    instrument_generate_from_raw,
+    start_generate_span,
+)
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
+    validate_tool_arguments,
 )
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
@@ -127,6 +132,9 @@ class LiteLLMBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
+        span = start_generate_span(
+            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
+        )
         mot = await self._generate_from_chat_context_standard(
             action,
             ctx,
@@ -134,6 +142,11 @@ class LiteLLMBackend(FormatterBackend):
             model_options=model_options,
             tool_calls=tool_calls,
         )
+
+        # Store span for telemetry recording in post_processing
+        if span is not None:
+            mot._meta["_telemetry_span"] = span
+
         return mot, ctx.add(action).add(mot)
 
     def _simplify_and_merge(
@@ -460,6 +473,31 @@ class LiteLLMBackend(FormatterBackend):
         generate_log.result = mot
         mot._generate_log = generate_log
 
+        # Record telemetry now that response is available
+        span = mot._meta.get("_telemetry_span")
+        if span is not None:
+            from ..telemetry import end_backend_span
+            from ..telemetry.backend_instrumentation import (
+                record_response_metadata,
+                record_token_usage,
+            )
+
+            response = mot._meta.get("litellm_chat_response")
+            if response:
+                # LiteLLM responses have usage information
+                usage = (
+                    response.get("usage")
+                    if isinstance(response, dict)
+                    else getattr(response, "usage", None)
+                )
+                if usage:
+                    record_token_usage(span, usage)
+                record_response_metadata(span, response)
+            # Close the span now that async operation is complete
+            end_backend_span(span)
+            # Clean up the span reference
+            del mot._meta["_telemetry_span"]
+
     @staticmethod
     def _extract_tools(
         action, _format, model_opts, tool_calls, ctx
@@ -512,35 +550,38 @@ class LiteLLMBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
         """Generate using the completions api. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(list(actions))
-        extra_body = {}
-        if format is not None:
-            FancyLogger.get_logger().warning(
-                "The official OpenAI completion api does not accept response format / structured decoding; "
-                "it will be passed as an extra arg."
+        with instrument_generate_from_raw(
+            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
+        ):
+            await self.do_generate_walks(list(actions))
+            extra_body = {}
+            if format is not None:
+                FancyLogger.get_logger().warning(
+                    "The official OpenAI completion api does not accept response format / structured decoding; "
+                    "it will be passed as an extra arg."
+                )
+
+                # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
+                extra_body["guided_json"] = format.model_json_schema()  # type: ignore
+            if tool_calls:
+                FancyLogger.get_logger().warning(
+                    "The completion endpoint does not support tool calling."
+                )
+
+            # We don't do anything fancy for model_opts with generate from raw; litellm has too many potential options depending on provider.
+            model_opts = self._simplify_and_merge(model_options)
+            model_specific_options = self._make_backend_specific_and_remove(model_opts)
+
+            if self._has_potential_event_loop_errors():
+                FancyLogger().get_logger().warning(
+                    "There is a known bug with litellm. This generation call may fail. If it does, you should ensure that you are either running only synchronous Mellea functions or running async Mellea functions from one asyncio.run() call."
+                )
+
+            prompts = [self.formatter.print(action) for action in actions]
+
+            completion_response = await litellm.atext_completion(
+                model=self._model_id, prompt=prompts, **model_specific_options
             )
-
-            # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
-            extra_body["guided_json"] = format.model_json_schema()  # type: ignore
-        if tool_calls:
-            FancyLogger.get_logger().warning(
-                "The completion endpoint does not support tool calling."
-            )
-
-        # We don't do anything fancy for model_opts with generate from raw; litellm has too many potential options depending on provider.
-        model_opts = self._simplify_and_merge(model_options)
-        model_specific_options = self._make_backend_specific_and_remove(model_opts)
-
-        if self._has_potential_event_loop_errors():
-            FancyLogger().get_logger().warning(
-                "There is a known bug with litellm. This generation call may fail. If it does, you should ensure that you are either running only synchronous Mellea functions or running async Mellea functions from one asyncio.run() call."
-            )
-
-        prompts = [self.formatter.print(action) for action in actions]
-
-        completion_response = await litellm.atext_completion(
-            model=self._model_id, prompt=prompts, **model_specific_options
-        )
 
         # Necessary for type checker.
         assert isinstance(completion_response, litellm.TextCompletionResponse)  # type: ignore
@@ -614,7 +655,12 @@ class LiteLLMBackend(FormatterBackend):
 
                 # Returns the args as a string. Parse it here.
                 args = json.loads(tool_args)
-                model_tool_calls[tool_name] = ModelToolCall(tool_name, func, args)
+
+                # Validate and coerce argument types
+                validated_args = validate_tool_arguments(func, args, strict=False)
+                model_tool_calls[tool_name] = ModelToolCall(
+                    tool_name, func, validated_args
+                )
 
         if len(model_tool_calls) > 0:
             return model_tool_calls

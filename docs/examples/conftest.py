@@ -70,6 +70,8 @@ examples_to_skip = {
     "client.py",
     "pii_serve.py",
     "mellea_pdf.py",  # External URL returns 403 Forbidden
+    "m_decomp_result.py",
+    "python_decompose_result.py",
 }
 
 
@@ -209,7 +211,7 @@ def pytest_ignore_collect(collection_path, path, config):
         # Extract markers and check if we should skip
         try:
             markers = _extract_markers_from_file(collection_path)
-            should_skip, reason = _should_skip_collection(markers)
+            should_skip, _reason = _should_skip_collection(markers)
             if should_skip:
                 # Return True to ignore this file completely
                 return True
@@ -233,7 +235,7 @@ def pytest_pycollect_makemodule(module_path, path, parent):
         and "examples" in module_path.parts
     ):
         # Check for optional imports
-        should_skip, reason = _check_optional_imports(module_path)
+        should_skip, _reason = _check_optional_imports(module_path)
         if should_skip:
             # Add to skip list and return None to prevent module creation
             examples_to_skip.add(module_path.name)
@@ -257,7 +259,7 @@ def pytest_collect_file(parent: pytest.Dir, file_path: pathlib.PosixPath):
             return
 
         # Check for optional imports before creating ExampleFile
-        should_skip, reason = _check_optional_imports(file_path)
+        should_skip, _reason = _check_optional_imports(file_path)
         if should_skip:
             return None
 
@@ -344,7 +346,6 @@ def pytest_runtest_setup(item):
     gh_run = int(os.environ.get("CICD", 0))
 
     # Get config options (all default to False for examples)
-    ignore_all = False
     ignore_gpu = False
     ignore_ram = False
     ignore_ollama = False

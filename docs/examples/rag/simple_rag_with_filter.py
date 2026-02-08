@@ -6,6 +6,18 @@
 #     "mellea"
 # ]
 # ///
+"""
+Simple RAG (Retrieval-Augmented Generation) example with relevance filtering.
+
+This script demonstrates how to:
+1. Create a FAISS vector index from documents
+2. Retrieve relevant documents using semantic search
+3. Filter retrieved documents for relevance using Mellea
+4. Generate a final answer based on the filtered documents
+
+Use `uv run simple_rag_with_filter.py` to run the script.
+"""
+
 from faiss import IndexFlatIP
 from sentence_transformers import SentenceTransformer
 
@@ -44,7 +56,7 @@ def create_index(model, ds: list[str]) -> IndexFlatIP:
 
 def query_index(model, idx: IndexFlatIP, query: str, ds: list[str], k: int = 5) -> list:
     query_embedding = model.encode([query])
-    distances, indices = idx.search(query_embedding, k=k)
+    _distances, indices = idx.search(query_embedding, k=k)
     return [ds[i] for i in indices[0]]
 
 

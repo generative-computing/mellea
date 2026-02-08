@@ -2,25 +2,25 @@ exclude: ^(scratchpad/)
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.5
+    rev: v0.14.14
     hooks:
       - id: ruff-format
         name: "Ruff formatter"
         args: [--config=pyproject.toml]
-        files: '^(mellea|test|cli|docs).*\.(py|ipynb)$'
+        types_or: [python, jupyter]
       - id: ruff
         name: "Ruff linter"
         args: [--exit-non-zero-on-fix, --fix, --config=pyproject.toml]
-        files: '^(mellea).*\.(py|ipynb)$'
+        types_or: [python, jupyter]
 
   - repo: local
     hooks:
       - id: mypy
         name: MyPy
-        entry: uv run --no-sync mypy mellea
+        entry: uv run --no-sync mypy . --exclude scratchpad/ --exclude tmp/
         pass_filenames: false
         language: system
-        files: '^(mellea|test|cli|docs).*\.(py|ipynb)$'
+        types_or: [python, jupyter]
 
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.7.8

@@ -1,10 +1,11 @@
 import pytest
+
+from mellea.backends import ModelOption
 from mellea.backends.tools import (
+    MelleaTool,
     add_tools_from_context_actions,
     add_tools_from_model_options,
-    MelleaTool,
 )
-from mellea.backends import ModelOption
 from mellea.core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 
 

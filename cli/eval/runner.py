@@ -1,15 +1,16 @@
 import json
 import re
 from pathlib import Path
-from typing import List
-
-import mellea
-from mellea.core import ModelOutputThunk
-from mellea.stdlib.components.unit_test_eval import TestBasedEval
-from mellea.backends import ModelOption
 
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
+
+import mellea
+from mellea.backends import ModelOption
+from mellea.backends.backend import Backend
+from mellea.core import ModelOutputThunk
+from mellea.stdlib.components import SimpleComponent
+from mellea.stdlib.components.unit_test_eval import TestBasedEval
 
 console = Console()
 
@@ -78,7 +79,6 @@ def create_session(
     backend: str, model: str | None, max_tokens: int | None
 ) -> mellea.MelleaSession:
     """Create a mellea session with the specified backend and model."""
-
     model_id = None
     if model:
         if model.isupper() or "_" in model:
@@ -93,6 +93,7 @@ def create_session(
 
     try:
         backend_lower = backend.lower()
+        backend_instance: Backend
 
         if backend_lower == "ollama":
             from mellea.backends.ollama import OllamaModelBackend
@@ -130,7 +131,7 @@ def create_session(
             from mellea.backends.litellm import LiteLLMBackend
 
             backend_instance = LiteLLMBackend(
-                model_id=model_id,
+                model_id=str(model_id),
                 model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
             )
 
@@ -153,7 +154,7 @@ def create_session(
 
 
 def run_evaluations(
-    test_files: List[str],
+    test_files: list[str],
     backend: str,
     model: str | None,
     max_gen_tokens: int | None,
@@ -173,14 +174,14 @@ def run_evaluations(
         "instructions": a set (in string form) of requirements which the generation should follow; the judge will evaluate if these are satisfied
         "examples": a list of entries containing an input_id, an input(prompt), and a list of targets. Each input may have multiple (or no) targets; inputs and targets are in messages format.
     """
-    all_test_evals: List[TestBasedEval] = []
+    all_test_evals: list[TestBasedEval] = []
 
     for test_file in test_files:
         try:
             test_evals = TestBasedEval.from_json_file(test_file)
             all_test_evals.extend(test_evals)
             console.print(f"Loaded {len(test_evals)} test evaluations from {test_file}")
-        except Exception as e:
+        except Exception:
             console.print(f"Error loading {test_file}")
 
     if not all_test_evals:
@@ -195,8 +196,11 @@ def run_evaluations(
     console.print(f"Judge model: {judge_model}")
 
     m = create_session(backend=backend, model=model, max_tokens=max_gen_tokens)
+    # Use same backend as generator if judge_backend not specified
     judge_session = create_session(
-        backend=judge_backend, model=judge_model, max_tokens=max_judge_tokens
+        backend=judge_backend if judge_backend else backend,
+        model=judge_model,
+        max_tokens=max_judge_tokens,
     )
 
     all_results = []
@@ -240,12 +244,13 @@ def execute_test_eval(
     For each input in the test, generate a response using generation_session
     Then, after all inputs are processed, validate using judge_session.
     """
-
     input_results = []
 
     # for all inputs, generate responses with generator
     for idx, input_text in enumerate(test_eval.inputs):
-        result: ModelOutputThunk = generation_session.act(input_text)
+        result: ModelOutputThunk = generation_session.act(
+            SimpleComponent(instruction=input_text)
+        )
         model_output = str(result)
 
         targets_for_input = (
@@ -267,7 +272,7 @@ def execute_test_eval(
             input_text=input_text,
             model_output=model_output,
             validation_passed=passed,
-            score=score,
+            score=score if score is not None else 0,
             validation_reason=justification,
         )
         input_results.append(input_result)
@@ -301,7 +306,7 @@ def parse_judge_output(judge_output: str):
     return None, judge_output
 
 
-def save_results(results: List[TestEvalResult], output_path: str, output_format: str):
+def save_results(results: list[TestEvalResult], output_path: str, output_format: str):
     output_path_obj = Path(output_path)
     if output_path_obj.suffix != f".{output_format}":
         output_path_obj = Path(f"{output_path}.{output_format}")
@@ -333,7 +338,7 @@ def save_results(results: List[TestEvalResult], output_path: str, output_format:
     console.print(f"Results saved to {output_path}")
 
 
-def summary_stats(results: List[TestEvalResult]):
+def summary_stats(results: list[TestEvalResult]):
     total_inputs = sum(r.total_count for r in results)
     passed_inputs = sum(r.passed_count for r in results)
     overall_pass_rate = passed_inputs / total_inputs if total_inputs > 0 else 0.0

@@ -27,6 +27,7 @@ from ..core import (
     ValidationResult,
 )
 from ..stdlib import functional as mfuncs
+from ..telemetry import set_span_attribute, trace_application
 from .components import Message
 from .context import SimpleContext
 from .sampling import RejectionSamplingStrategy
@@ -154,20 +155,8 @@ def start_session(
     """
     logger = FancyLogger.get_logger()
 
-    backend_class = backend_name_to_class(backend_name)
-    if backend_class is None:
-        raise Exception(
-            f"Backend name {backend_name} unknown. Please see the docstring for `mellea.stdlib.session.start_session` for a list of options."
-        )
-    assert backend_class is not None
-    backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
-
-    if ctx is None:
-        ctx = SimpleContext()
-
-    # Log session configuration
+    # Get model_id string for logging and tracing
     if isinstance(model_id, ModelIdentifier):
-        # Get the backend-specific model name
         backend_to_attr = {
             "ollama": "ollama_name",
             "hf": "hf_model_name",
@@ -181,14 +170,32 @@ def start_session(
             getattr(model_id, attr, None) or model_id.hf_model_name or str(model_id)
         )
     else:
-        model_id_str = model_id
-    logger.info(
-        f"Starting Mellea session: backend={backend_name}, model={model_id_str}, "
-        f"context={ctx.__class__.__name__}"
-        + (f", model_options={model_options}" if model_options else "")
-    )
+        model_id_str = str(model_id)
 
-    return MelleaSession(backend, ctx)
+    with trace_application(
+        "start_session",
+        backend=backend_name,
+        model_id=model_id_str,
+        context_type=ctx.__class__.__name__ if ctx else "SimpleContext",
+    ):
+        backend_class = backend_name_to_class(backend_name)
+        if backend_class is None:
+            raise Exception(
+                f"Backend name {backend_name} unknown. Please see the docstring for `mellea.stdlib.session.start_session` for a list of options."
+            )
+        assert backend_class is not None
+        backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
+
+        if ctx is None:
+            ctx = SimpleContext()
+
+        logger.info(
+            f"Starting Mellea session: backend={backend_name}, model={model_id_str}, "
+            f"context={ctx.__class__.__name__}"
+            + (f", model_options={model_options}" if model_options else "")
+        )
+
+        return MelleaSession(backend, ctx)
 
 
 class MelleaSession:
@@ -218,9 +225,16 @@ class MelleaSession:
         self.ctx: Context = ctx if ctx is not None else SimpleContext()
         self._session_logger = FancyLogger.get_logger()
         self._context_token = None
+        self._session_span = None
 
     def __enter__(self):
         """Enter context manager and set this session as the current global session."""
+        # Start a session span that will last for the entire context manager lifetime
+        self._session_span = trace_application(
+            "session_context",
+            backend=self.backend.__class__.__name__,
+            context_type=self.ctx.__class__.__name__,
+        ).__enter__()
         self._context_token = _context_session.set(self)
         return self
 
@@ -230,6 +244,9 @@ class MelleaSession:
         if self._context_token is not None:
             _context_session.reset(self._context_token)
             self._context_token = None
+        if self._session_span is not None:
+            self._session_span.__exit__(exc_type, exc_val, exc_tb)
+            self._session_span = None
 
     def __copy__(self):
         """Use self.clone. Copies the current session but keeps references to the backend and context."""

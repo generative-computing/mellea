@@ -1,8 +1,9 @@
 # pytest: ollama, llm
 
+from mellea.core import Requirement
 from mellea.stdlib.requirements import check, req, simple_validate
 
-requirements = [
+requirements: list[Requirement | str] = [
     req("The email should have a salutation"),  # == r1
     req(
         "Use only lower-case letters",
@@ -11,22 +12,22 @@ requirements = [
     check("Do not mention purple elephants."),  # == r3
 ]
 
-import mellea  # noqa: E402
-from mellea.stdlib.sampling import RejectionSamplingStrategy  # noqa: E402
+import mellea
+from mellea.stdlib.sampling import RejectionSamplingStrategy
 
 
 def write_email(m: mellea.MelleaSession, name: str, notes: str) -> str:
     email_candidate = m.instruct(
         "Write an email to {{name}} using the notes following: {{notes}}.",
         requirements=requirements,
-        strategy=RejectionSamplingStrategy(loop_budget=5),
         user_variables={"name": name, "notes": notes},
+        strategy=RejectionSamplingStrategy(loop_budget=5),
         return_sampling_results=True,
     )
     if email_candidate.success:
         return str(email_candidate.result)
     else:
-        return email_candidate.sample_generations[0].value
+        return email_candidate.sample_generations[0].value or ""
 
 
 m = mellea.start_session()

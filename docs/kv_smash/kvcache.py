@@ -5,10 +5,9 @@
 # ]
 # ///
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizer
 
 from mellea.backends.kv_block_helpers import DynamicCache, merge_dynamic_caches
-from transformers import AutoModelForCausalLM, PreTrainedTokenizer, AutoTokenizer
-import torch
 
 model_id = "ibm-granite/granite-3.3-8b-instruct"
 device = torch.device("mps")

@@ -175,8 +175,8 @@ FancyLogger.get_logger().setLevel("DEBUG")
 
 #### 14. Testing
 ```bash
-uv run pytest -m "not qualitative"  # Fast loop
-uv run pytest                        # Full (verify prompts work)
+uv run pytest test/ -m "not qualitative"  # Fast: tests only, skip quality checks
+uv run pytest                              # Full: tests + examples + quality checks
 ```
 
 #### 15. Feedback

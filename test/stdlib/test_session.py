@@ -9,6 +9,9 @@ from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.session import MelleaSession, start_session
 
+# Mark all tests as requiring Ollama (start_session defaults to Ollama)
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+
 
 # We edit the context type in the async tests below. Don't change the scope here.
 @pytest.fixture(scope="module")
@@ -69,7 +72,7 @@ async def test_async_await_with_chat_context(m_session):
         ctx = ctx.previous_node  # type: ignore
 
     # Ensure we made it back to the root.
-    assert ctx.is_root_node == True  # type: ignore
+    assert ctx.is_root_node  # type: ignore
 
 
 async def test_async_without_waiting_with_chat_context(m_session):

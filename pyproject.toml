@@ -89,17 +89,26 @@ vllm = [
 ]
 
 litellm = [
-    "litellm>=1.76"
+    "litellm>=1.76",
+    "boto3", # for Bedrock support.
 ]
 
 watsonx = [
     "ibm-watsonx-ai>=1.3.31",
 ]
+
 docling = [
     "docling>=2.45.0",
 ]
 
-all = ["mellea[watsonx,docling,hf,vllm,litellm]"]
+telemetry = [
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp>=1.20.0",
+    "opentelemetry-distro>=0.59b0",
+]
+
+all = ["mellea[watsonx,docling,hf,vllm,litellm,telemetry]"]
 
 [dependency-groups]
 # Use these like:
@@ -176,7 +185,7 @@ ignore = [
 #   "UP006",  # List vs list, etc
 #   "UP007",  # Option and Union
 #   "UP035",  # `typing.Set` is deprecated, use `set` instead"
-  "PD901",  # Avoid using the generic variable name `df` for DataFrames
+  "PD901",  # Generic variable name 'df' for DataFrames (deprecated rule, but needed while PD is enabled)
   "C901", # Complexity warnings
 ]
 
@@ -190,8 +199,25 @@ max-complexity = 20
 combine-as-imports = true
 split-on-trailing-comma = false
 
+[tool.ruff.lint.per-file-ignores]
+# E402: Module level import not at top of file
+# Intentional in examples (pedagogical structure) and tests (pytestmark before imports)
+# D: Docstring errors
+# Not required in examples, tests, and notebooks (core mellea/ has complete docstrings)
+"docs/**/*.py" = ["E402", "D"]
+"docs/**/*.ipynb" = ["D"]
+"test/**/*.py" = ["E402", "D"]
+"cli/**/*.py" = ["D"]
+
+[[tool.mypy.overrides]]
+# Keep import-not-found suppressed for optional dependencies
+module = "docs.*"
+disable_error_code = [
+    "import-not-found",
+]
+
 [tool.codespell]
-ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat'
+ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,Wight'
 check-filenames = true
 check-hidden = false
 regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=[A-Z])|\\d+"

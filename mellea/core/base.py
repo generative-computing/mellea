@@ -301,76 +301,96 @@ class ModelOutputThunk(CBlock, Generic[S]):
             raise RuntimeError(
                 f"Cannot use `ModelOutputThunk.astream()` when the generate function is using `{self._generate_type.name}`"
             )
+        # Beginning value
+        beginning_length = (
+            0 if self._underlying_value is None else len(str(self._underlying_value))
+        )  # type: ignore
 
-        # Type of the chunk depends on the backend.
-        chunks: list[Any | None] = []
-        while True:
-            try:
-                item = self._async_queue.get_nowait()
+        exception_to_raise = None
+        try:
+            # Type of the chunk depends on the backend.
+            chunks: list[Any | None] = []
+            while True:
+                try:
+                    item = self._async_queue.get_nowait()
+                    chunks.append(item)
+                except asyncio.QueueEmpty:
+                    # We've exhausted the current items in the queue.
+                    break
+
+            # Make sure we always get the minimum chunk size.
+            while len(chunks) <= self._chunk_size:
+                if len(chunks) > 0:
+                    if chunks[-1] is None or isinstance(chunks[-1], Exception):
+                        break  # Hit sentinel value or an error.
+                    # We could switch to relying on the `done` / `finish_reason` field of chunks,
+                    # but that forces us to know about the chunk type here. Prefer sentinel values
+                    # for now.
+
+                item = await self._async_queue.get()
                 chunks.append(item)
-            except asyncio.QueueEmpty:
-                # We've exhausted the current items in the queue.
-                break
 
-        # Make sure we always get the minimum chunk size.
-        while len(chunks) <= self._chunk_size:
-            if len(chunks) > 0:
-                if chunks[-1] is None or isinstance(chunks[-1], Exception):
-                    break  # Hit sentinel value or an error.
-                # We could switch to relying on the `done` / `finish_reason` field of chunks,
-                # but that forces us to know about the chunk type here. Prefer sentinel values
-                # for now.
+            # Process the sentinel value if it's there.
+            if chunks[-1] is None:
+                chunks.pop()  # Remove the sentinel value.
+                self._computed = True
 
-            item = await self._async_queue.get()
-            chunks.append(item)
+                # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk relied on.
+                if self._generate is not None:
+                    self._generate.cancel()
+                if self._generate_extra is not None:
+                    # Covers an hf edge case. The task is done generating anything useful but isn't `done` yet.
+                    await self._generate_extra
+                    self._generate_extra.cancel()
 
-        # Process the sentinel value if it's there.
-        if chunks[-1] is None:
-            chunks.pop()  # Remove the sentinel value.
-            self._computed = True
+                # If ModelOutputThunks get too bulky, we can do additional cleanup here
+                # and set fields to None.
 
-            # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk relied on.
-            if self._generate is not None:
-                self._generate.cancel()
-            if self._generate_extra is not None:
-                # Covers an hf edge case. The task is done generating anything useful but isn't `done` yet.
-                await self._generate_extra
-                self._generate_extra.cancel()
+            elif isinstance(chunks[-1], Exception):
+                # Mark as computed so post_process runs in finally block
+                self._computed = True
+                # Store exception to re-raise after cleanup
+                exception_to_raise = chunks[-1]
 
-            # If ModelOutputThunks get too bulky, we can do additional cleanup here
-            # and set fields to None.
+            for chunk in chunks:
+                assert self._process is not None
+                await self._process(self, chunk)
 
-        elif isinstance(chunks[-1], Exception):
-            # For now, just re-raise the exception.
-            # It's possible that we hit this error after already streaming some
-            # chunks. We should investigate allowing recovery in the future.
-            raise chunks[-1]
+        finally:
+            # Always call post_process if computed, even on exception
+            # This ensures telemetry spans are properly closed
+            if self._computed:
+                assert self._post_process is not None
+                await self._post_process(self)
 
-        for chunk in chunks:
-            assert self._process is not None
-            await self._process(self, chunk)
-
-        if self._computed:
-            assert self._post_process is not None
-            await self._post_process(self)
-
-            match self._action:
-                case Component():
-                    self.parsed_repr = self._action._parse(self)
-                case CBlock():
-                    assert self.value is not None, (
-                        "value must be non-None since this thunk is computed"
+                # Only parse if no exception occurred
+                if exception_to_raise is None:
+                    match self._action:
+                        case Component():
+                            self.parsed_repr = self._action._parse(self)
+                        case CBlock():
+                            assert self.value is not None, (
+                                "value must be non-None since this thunk is computed"
+                            )
+                            self.parsed_repr = self.value  # type: ignore
+                        case _:
+                            raise ValueError(
+                                "attempted to astream from a model output thunk with no ._action set"
+                            )
+                    assert self.parsed_repr is not None, (
+                        "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
                     )
-                    self.parsed_repr = self.value  # type: ignore
-                case _:
-                    raise ValueError(
-                        "attempted to astream from a model output thunk with no ._action set"
-                    )
-            assert self.parsed_repr is not None, (
-                "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
-            )
+                    return self._underlying_value  # type: ignore
 
-        return self._underlying_value  # type: ignore
+        # Re-raise exception after cleanup if one occurred
+        if exception_to_raise is not None:
+            raise exception_to_raise
+
+        return (
+            self._underlying_value
+            if beginning_length == 0
+            else self._underlying_value[beginning_length:]  # type: ignore
+        )
 
     def __repr__(self):
         """Provides a python-parsable representation (usually).
@@ -590,6 +610,9 @@ class Context(abc.ABC):
 
 class AbstractMelleaTool(abc.ABC):
     """Abstract base class for Mellea Tool."""
+
+    name: str
+    """Name of the tool."""
 
     @abc.abstractmethod
     def run(self, *args, **kwargs) -> Any:

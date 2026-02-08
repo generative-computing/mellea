@@ -26,6 +26,7 @@ from ..core import (
     ValidationResult,
 )
 from ..helpers import _run_async_in_thread
+from ..telemetry import set_span_attribute, trace_application
 from .components import Instruction, Message, MObjectProtocol, ToolMessage, mify
 from .context import SimpleContext
 from .sampling import RejectionSamplingStrategy
@@ -475,75 +476,111 @@ async def aact(
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
     """
-    if not silence_context_type_warning and not isinstance(context, SimpleContext):
-        FancyLogger().get_logger().warning(
-            "Not using a SimpleContext with asynchronous requests could cause unexpected results due to stale contexts. Ensure you await between requests."
-            "\nSee the async section of the tutorial: https://github.com/generative-computing/mellea/blob/main/docs/tutorial.md#chapter-12-asynchronicity"
-        )
-
-    sampling_result: SamplingResult | None = None
-    generate_logs: list[GenerateLog] = []
-
-    if return_sampling_results:
-        assert strategy is not None, (
-            "Must provide a SamplingStrategy when return_sampling_results==True"
-        )
-
-    if strategy is None:
-        # Only use the strategy if one is provided. Add a warning if requirements were passed in though.
-        if requirements is not None and len(requirements) > 0:
-            FancyLogger.get_logger().warning(
-                "Calling the function with NO strategy BUT requirements. No requirement is being checked!"
+    with trace_application(
+        "aact",
+        action_type=action.__class__.__name__,
+        has_requirements=requirements is not None and len(requirements) > 0,
+        has_strategy=strategy is not None,
+        strategy_type=strategy.__class__.__name__ if strategy else None,
+        has_format=format is not None,
+        tool_calls=tool_calls,
+    ) as span:
+        if not silence_context_type_warning and not isinstance(context, SimpleContext):
+            FancyLogger().get_logger().warning(
+                "Not using a SimpleContext with asynchronous requests could cause unexpected results due to stale contexts. Ensure you await between requests."
+                "\nSee the async section of the tutorial: https://github.com/generative-computing/mellea/blob/main/docs/tutorial.md#chapter-12-asynchronicity"
             )
 
-        result, new_ctx = await backend.generate_from_context(
-            action,
-            ctx=context,
-            format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
-        await result.avalue()
+        sampling_result: SamplingResult | None = None
+        generate_logs: list[GenerateLog] = []
 
-        # ._generate_log should never be None after generation.
-        assert result._generate_log is not None
-        result._generate_log.is_final_result = True
-        generate_logs.append(result._generate_log)
+        if return_sampling_results:
+            assert strategy is not None, (
+                "Must provide a SamplingStrategy when return_sampling_results==True"
+            )
 
-    else:
-        # Always sample if a strategy is provided, even if no requirements were provided.
-        # Some sampling strategies don't use requirements or set them when instantiated.
+        if strategy is None:
+            # Only use the strategy if one is provided. Add a warning if requirements were passed in though.
+            if requirements is not None and len(requirements) > 0:
+                FancyLogger.get_logger().warning(
+                    "Calling the function with NO strategy BUT requirements. No requirement is being checked!"
+                )
 
-        sampling_result = await strategy.sample(
-            action,
-            context=context,
-            backend=backend,
-            requirements=requirements,
-            validation_ctx=None,
-            format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
+            result, new_ctx = await backend.generate_from_context(
+                action,
+                ctx=context,
+                format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
+            await result.avalue()
 
-        assert sampling_result.sample_generations is not None
-        for result in sampling_result.sample_generations:
-            assert result._generate_log is not None  # Cannot be None after generation.
+            # ._generate_log should never be None after generation.
+            assert result._generate_log is not None
+            result._generate_log.is_final_result = True
             generate_logs.append(result._generate_log)
 
-        new_ctx = sampling_result.result_ctx
-        result = sampling_result.result
-        assert sampling_result.result._generate_log is not None
-        assert sampling_result.result._generate_log.is_final_result, (
-            "generate logs from the final result returned by the sampling strategy must be marked as final"
-        )
+        else:
+            # Always sample if a strategy is provided, even if no requirements were provided.
+            # Some sampling strategies don't use requirements or set them when instantiated.
 
-    if return_sampling_results:
-        assert (
-            sampling_result is not None
-        )  # Needed for the type checker but should never happen.
-        return sampling_result
-    else:
-        return result, new_ctx
+            sampling_result = await strategy.sample(
+                action,
+                context=context,
+                backend=backend,
+                requirements=requirements,
+                validation_ctx=None,
+                format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
+
+            assert sampling_result.sample_generations is not None
+            for result in sampling_result.sample_generations:
+                assert (
+                    result._generate_log is not None
+                )  # Cannot be None after generation.
+                generate_logs.append(result._generate_log)
+
+            new_ctx = sampling_result.result_ctx
+            result = sampling_result.result
+            assert sampling_result.result._generate_log is not None
+            assert sampling_result.result._generate_log.is_final_result, (
+                "generate logs from the final result returned by the sampling strategy must be marked as final"
+            )
+
+        # Add span attributes for the result
+        set_span_attribute(span, "num_generate_logs", len(generate_logs))
+        if sampling_result:
+            set_span_attribute(span, "sampling_success", bool(sampling_result.result))
+
+        # Log the model response (truncated for large responses)
+        try:
+            response_value = (
+                str(result.value)
+                if hasattr(result, "value") and result.value
+                else str(result)
+            )
+            # Truncate to 500 chars to avoid overwhelming trace storage
+            if len(response_value) > 500:
+                response_value = response_value[:500] + "..."
+            set_span_attribute(span, "response", response_value)
+            set_span_attribute(
+                span,
+                "response_length",
+                len(str(result.value) if hasattr(result, "value") else str(result)),
+            )
+        except Exception:
+            # If we can't get the response, don't fail the trace
+            pass
+
+        if return_sampling_results:
+            assert (
+                sampling_result is not None
+            )  # Needed for the type checker but should never happen.
+            return sampling_result
+        else:
+            return result, new_ctx
 
 
 @overload
@@ -918,9 +955,12 @@ def _call_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]
             except Exception as e:
                 output = e
 
+            # Default to the output. Attempt to properly print it. If that doesn't result in a str,
+            # stringify it.
             content = str(output)
             if isinstance(backend, FormatterBackend):
                 content = backend.formatter.print(output)  # type: ignore
+                content = str(content)
 
             outputs.append(
                 ToolMessage(
