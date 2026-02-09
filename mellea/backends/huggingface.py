@@ -336,6 +336,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         if model_options.get(ModelOption.STREAM, None) is not None:
             # Intrinsics don't support streaming because of their post-processing step.
+            raise Exception("Intrinsics do not support streaming.")
             FancyLogger.get_logger().warning(
                 "intrinsics cannot use streaming; removing model option"
             )
