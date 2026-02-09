@@ -321,9 +321,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             linearized_ctx
         )
 
-        # Add the action to the message list.
-        ctx_as_message_list.extend(self.formatter.to_chat_messages([action]))
-
         conversation: list[dict] = []
         system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
@@ -339,7 +336,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         if model_options.get(ModelOption.STREAM, None) is not None:
             # Intrinsics don't support streaming because of their post-processing step.
-            # raise Exception("Intrinsics do not support streaming.")
+            raise Exception("Intrinsics do not support streaming.")
             FancyLogger.get_logger().warning(
                 "intrinsics cannot use streaming; removing model option"
             )

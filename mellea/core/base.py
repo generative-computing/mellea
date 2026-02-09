@@ -307,7 +307,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             # Process the sentinel value if it's there.
             if chunks[-1] is None:
                 chunks.pop()  # Remove the sentinel value.
-                self.set_computed()
+                self._computed = True
 
                 # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk relied on.
                 if self._generate is not None:
@@ -322,7 +322,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
             elif isinstance(chunks[-1], Exception):
                 # Mark as computed so post_process runs in finally block
-                self.set_computed()
+                self._computed = True
                 # Store exception to re-raise after cleanup
                 exception_to_raise = chunks[-1]
 
@@ -333,7 +333,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         finally:
             # Always call post_process if computed, even on exception
             # This ensures telemetry spans are properly closed
-            if self.is_computed():
+            if self._computed:
                 assert self._post_process is not None
                 await self._post_process(self)
 
@@ -386,17 +386,12 @@ class ModelOutputThunk(CBlock, Generic[S]):
             copied.parsed_repr = copied  # type: ignore
 
         copied._computed = self._computed
-        assert copied._computed is False or copied._underlying_value is not None
         copied._thinking = self._thinking
         copied._action = self._action
         copied._context = self._context
         copied._generate_log = self._generate_log
         copied._model_options = self._model_options
         return copied
-
-    def set_computed(self):
-        assert self.value is not None
-        self._computed = True
 
     def __deepcopy__(self, memo):
         """Returns a deep copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generation. Similar to __copy__ but creates deepcopies of _meta, parsed_repr, and most other fields that are objects."""
@@ -418,7 +413,6 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied._meta = deepcopy(self._meta)
         deepcopied.tool_calls = deepcopy(self.tool_calls)
         deepcopied._computed = self._computed
-        assert deepcopied._computed is False or deepcopied._underlying_value is not None
         deepcopied._thinking = self._thinking
         deepcopied._action = deepcopy(self._action)
         deepcopied._context = copy(
