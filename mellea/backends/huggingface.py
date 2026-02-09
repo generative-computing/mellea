@@ -417,7 +417,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             result_processor: granite_common.IntrinsicsResultProcessor,
             input_ids,
         ):
-            res = result_processor.transform(chunk, rewritten)  # type: ignore
+            try:
+                res = result_processor.transform(chunk, rewritten)  # type: ignore
+            except json.JSONDecodeError:
+                raise Exception(f"Intrinsic did not return a JSON: {chunk}")
 
             # TODO: If we want to support caches, we need to get the GenerateDecoderOnlyOutput. This means we
             #       probably need to break out the pieces from `generate_with_transformers`.

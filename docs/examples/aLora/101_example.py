@@ -33,6 +33,8 @@ class StemboltAdapter(GraniteCommonAdapter):
 
 
 # Define a backend
+from mellea.backends.model_options import ModelOption
+
 backend = LocalHFBackend(
     model_id="ibm-granite/granite-3.3-2b-instruct", cache=SimpleLRUCache(5)
 )
@@ -107,4 +109,6 @@ computetime_alora, alora_result = validate_reqs([failure_check])
 backend.default_to_constraint_checking_alora = False
 computetime_no_alora, no_alora_result = validate_reqs([failure_check])
 
-print(f"Speed up time with using aloras is {computetime_alora - computetime_no_alora}")
+print(
+    f"Speed up time with using aloras is {(computetime_alora - computetime_no_alora) / computetime_no_alora * 100}% -- {computetime_alora - computetime_no_alora} seconds, not normalized for token count."
+)
