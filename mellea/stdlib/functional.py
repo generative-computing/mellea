@@ -535,11 +535,9 @@ async def aact(
                 "\nSee the async section of the tutorial: https://github.com/generative-computing/mellea/blob/main/docs/tutorial.md#chapter-12-asynchronicity"
             )
 
-
         sampling_result: SamplingResult | None = None
         generate_logs: list[GenerateLog] = []
 
-<<<<<<< HEAD
         if return_sampling_results:
             assert strategy is not None, (
                 "Must provide a SamplingStrategy when return_sampling_results==True"
@@ -629,16 +627,14 @@ async def aact(
             computed_result._context = result._context
             computed_result._action = result._action
             computed_result._model_options = result._model_options
-=======
+
             # ._generate_log should never be None after generation.
             assert result._generate_log is not None
             result._generate_log.is_final_result = True
 
             # Wrap in ComputedModelOutputThunk to indicate it's fully computed
             computed_result = ComputedModelOutputThunk(result)
->>>>>>> fbdc9da (review comments)
             computed_result._generate_log = result._generate_log
-
 
             # Update the sampling result to use the computed thunk
             sampling_result.sample_generations[sampling_result.result_index] = (
@@ -649,7 +645,6 @@ async def aact(
             # The context's last node contains the original result, replace it with wrapped version
             new_ctx._data = computed_result  # type: ignore
             sampling_result.sample_contexts[sampling_result.result_index] = new_ctx
-
 
             result = computed_result  # type: ignore
 
@@ -680,16 +675,11 @@ async def aact(
 
         if return_sampling_results:
             assert (
-<<<<<<< HEAD
                 sampling_result is not None
             )  # Needed for the type checker but should never happen.
             return sampling_result
         else:
             return result, new_ctx
-=======
-                gen_result._generate_log is not None
-            )  # Cannot be None after generation.
-            generate_logs.append(gen_result._generate_log)
 
         new_ctx = sampling_result.result_ctx
         result = sampling_result.result
@@ -721,7 +711,6 @@ async def aact(
     else:
         return result, new_ctx  # type: ignore
 
->>>>>>> fbdc9da (review comments)
 
 @overload
 async def ainstruct(
