@@ -321,6 +321,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             linearized_ctx
         )
 
+        # Also add the action
+        ctx_as_message_list.extend(self.formatter.to_chat_messages([action]))
+
         conversation: list[dict] = []
         system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
