@@ -1,0 +1,24 @@
+# Model name string, or null to use whatever is provided in the chat completion request.
+model: ~
+response_format: |
+  {
+    "properties": {
+      "defective_part": {
+        "title": "name of defective part, or unknown",
+        "type": "string"
+      },
+      "requirement_likelihood": {
+        "title": "likelihood of correct detective part identification",
+        "type": "number"
+      }
+    },
+    "required": [
+      "defective_part"
+    ],
+    "title": "Stembolt Detective Part",
+    "type": "object"
+  }
+transformations: null
+parameters:
+  # Current LoRA can be quite verbose in its explanations.
+  max_completion_tokens: 1024
