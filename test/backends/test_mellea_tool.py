@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from langchain_core.tools import Tool, tool  # type: ignore[import-not-found]
 from pydantic_core import ValidationError
@@ -117,6 +119,121 @@ def test_from_langchain_generation(session: MelleaSession):
 
     tool = out.tool_calls[t.name]
     assert isinstance(tool.call_func(), str), "tool call did not yield expected type"
+
+
+def test_from_huggingface_basic():
+    """Test basic smolagents tool loading and schema conversion.
+
+    This test verifies that:
+    1. A smolagents tool can be wrapped as a MelleaTool
+    2. The tool name is correctly extracted
+    3. The schema is converted to OpenAI-compatible format
+    4. The tool can be executed with arguments
+    """
+    try:
+        from smolagents import Tool
+    except ImportError:
+        pytest.skip(
+            "smolagents not installed - install with: uv pip install 'mellea[smolagents]'"
+        )
+
+    # Create a simple smolagents tool
+    class SimpleTool(Tool):
+        name = "simple_tool"
+        description = "A simple test tool"
+        inputs = {"text": {"type": "string", "description": "Input text"}}
+        output_type = "string"
+
+        def forward(self, text: str) -> str:
+            return f"Processed: {text}"
+
+    hf_tool = SimpleTool()
+    mellea_tool = MelleaTool.from_huggingface(hf_tool)
+
+    # Verify tool properties
+    assert isinstance(mellea_tool, MelleaTool)
+    assert mellea_tool.name == "simple_tool"
+
+    # Verify schema conversion
+    json_schema = mellea_tool.as_json_tool
+    assert json_schema is not None
+    assert "function" in json_schema
+    assert json_schema["function"]["name"] == "simple_tool"
+    assert json_schema["function"]["description"] == "A simple test tool"
+
+    # Verify parameters are present
+    assert "parameters" in json_schema["function"]
+    params = json_schema["function"]["parameters"]
+    assert "properties" in params
+    assert "text" in params["properties"]
+
+    # Verify tool execution
+    result = mellea_tool.run(text="hello")
+    assert result == "Processed: hello"
+
+
+def test_from_huggingface_multiple_inputs():
+    """Test smolagents tool with multiple input parameters."""
+    try:
+        from smolagents import Tool
+    except ImportError:
+        pytest.skip(
+            "smolagents not installed - install with: uv pip install 'mellea[smolagents]'"
+        )
+
+    class MultiInputTool(Tool):
+        name = "multi_input_tool"
+        description = "Tool with multiple inputs"
+        inputs = {
+            "x": {"type": "integer", "description": "First number"},
+            "y": {"type": "integer", "description": "Second number"},
+            "operation": {"type": "string", "description": "Operation to perform"},
+        }
+        output_type = "integer"
+
+        def forward(self, x: int, y: int, operation: str) -> int:
+            if operation == "add":
+                return x + y
+            elif operation == "multiply":
+                return x * y
+            return 0
+
+    hf_tool = MultiInputTool()
+    mellea_tool = MelleaTool.from_huggingface(hf_tool)
+
+    # Verify all parameters are in schema
+    json_schema = mellea_tool.as_json_tool
+    params = json_schema["function"]["parameters"]
+    assert "x" in params["properties"]
+    assert "y" in params["properties"]
+    assert "operation" in params["properties"]
+
+    # Verify tool execution with multiple args
+    result = mellea_tool.run(x=5, y=3, operation="add")
+    assert result == 8
+
+    result = mellea_tool.run(x=5, y=3, operation="multiply")
+    assert result == 15
+
+
+def test_from_huggingface_invalid_tool():
+    """Test error handling for non-smolagents tool objects."""
+    try:
+        from smolagents import Tool
+    except ImportError:
+        pytest.skip(
+            "smolagents not installed - install with: uv pip install 'mellea[smolagents]'"
+        )
+
+    # Try to create tool from non-Tool object
+    class NotATool:
+        name = "fake"
+
+    with pytest.raises(ValueError) as exc_info:
+        MelleaTool.from_huggingface(NotATool())
+
+    error_msg = str(exc_info.value)
+    assert "smolagents Tool type" in error_msg
 
 
 if __name__ == "__main__":
