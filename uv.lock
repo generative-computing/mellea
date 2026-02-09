@@ -3445,6 +3445,7 @@ all = [
     { name = "outlines" },
     { name = "outlines-core" },
     { name = "peft" },
+    { name = "smolagents" },
     { name = "transformers" },
     { name = "trl" },
     { name = "vllm" },
@@ -3466,6 +3467,9 @@ hf = [
 litellm = [
     { name = "boto3" },
     { name = "litellm" },
+]
+smolagents = [
+    { name = "smolagents" },
 ]
 telemetry = [
     { name = "opentelemetry-api" },
@@ -3533,7 +3537,7 @@ requires-dist = [
     { name = "litellm", marker = "extra == 'litellm'", specifier = ">=1.76" },
     { name = "llm-sandbox", extras = ["docker"], specifier = ">=0.3.23" },
     { name = "math-verify" },
-    { name = "mellea", extras = ["watsonx", "docling", "hf", "vllm", "litellm", "telemetry"], marker = "extra == 'all'" },
+    { name = "mellea", extras = ["watsonx", "docling", "hf", "vllm", "litellm", "smolagents", "telemetry"], marker = "extra == 'all'" },
     { name = "mistletoe", specifier = ">=1.4.0" },
     { name = "numpy", marker = "extra == 'vllm'", specifier = "<2.0.0" },
     { name = "ollama", specifier = ">=0.5.1" },
@@ -3550,6 +3554,7 @@ requires-dist = [
     { name = "pydantic" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "rouge-score" },
+    { name = "smolagents", marker = "extra == 'smolagents'", specifier = ">=1.0.0" },
     { name = "transformers", marker = "extra == 'hf'", specifier = ">=4.53.2,<5" },
     { name = "transformers", marker = "extra == 'vllm'", specifier = "<4.54.0" },
     { name = "trl", marker = "extra == 'hf'", specifier = "==0.19.1" },
@@ -3559,7 +3564,7 @@ requires-dist = [
     { name = "uvicorn" },
     { name = "vllm", marker = "extra == 'vllm'", specifier = ">=0.9.1" },
 ]
-provides-extras = ["hf", "vllm", "litellm", "watsonx", "docling", "telemetry", "all"]
+provides-extras = ["hf", "vllm", "litellm", "watsonx", "docling", "smolagents", "telemetry", "all"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -7334,6 +7339,23 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/44/cd/a040c4b3119bbe532e5b0732286f805445375489fceaec1f48306068ee3b/smmap-5.0.2.tar.gz", hash = "sha256:26ea65a03958fa0c8a1c7e8c7a58fdc77221b8910f6be2131affade476898ad5", size = 22329, upload-time = "2025-01-02T07:14:40.909Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/04/be/d09147ad1ec7934636ad912901c5fd7667e1c858e19d355237db0d0cd5e4/smmap-5.0.2-py3-none-any.whl", hash = "sha256:b30115f0def7d7531d22a0fb6502488d879e75b260a9db4d0819cfb25403af5e", size = 24303, upload-time = "2025-01-02T07:14:38.724Z" },
+]
+
+[[package]]
+name = "smolagents"
+version = "1.24.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "jinja2" },
+    { name = "pillow" },
+    { name = "python-dotenv" },
+    { name = "requests" },
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0a/1c/8d8e7f39f3586dc85a7f96681b08b7c1cfbd734b258a025f368632f2d666/smolagents-1.24.0.tar.gz", hash = "sha256:4d5028ffbd72aca85fb2e8daac52d03fb7d4290a9bf99dbc311dd65980f6b5de", size = 225246, upload-time = "2026-01-16T05:37:04.156Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/76/7a/461ead649c088d30f7847ef1c70f245a9c188381ed09a264633831050497/smolagents-1.24.0-py3-none-any.whl", hash = "sha256:54853759d07a92a939f1ff59238b757fb1a153204c90b69324c8e9709025aa86", size = 155727, upload-time = "2026-01-16T05:37:02.903Z" },
 ]
 
 [[package]]

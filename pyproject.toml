@@ -101,6 +101,10 @@ docling = [
     "docling>=2.45.0",
 ]
 
+smolagents = [
+    "smolagents>=1.0.0",
+]
+
 telemetry = [
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
@@ -108,7 +112,7 @@ telemetry = [
     "opentelemetry-distro>=0.59b0",
 ]
 
-all = ["mellea[watsonx,docling,hf,vllm,litellm,telemetry]"]
+all = ["mellea[watsonx,docling,hf,vllm,litellm,smolagents,telemetry]"]
 
 [dependency-groups]
 # Use these like:
