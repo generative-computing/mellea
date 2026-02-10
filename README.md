@@ -64,9 +64,10 @@ pip install mellea
 > `mellea` comes with some additional packages as defined in our `pyproject.toml`. If you would like to install all the extra optional dependencies, please run the following commands:
 >
 > ```bash
-> uv pip install "mellea[hf]" # for Huggingface extras and Alora capabilities.
+> uv pip install "mellea[hf]" # for Huggingface extras and Alora capabilities
 > uv pip install "mellea[watsonx]" # for watsonx backend
 > uv pip install "mellea[docling]" # for docling
+> uv pip install "mellea[smolagents]" # for HuggingFace smolagents tools
 > uv pip install "mellea[all]" # for all the optional dependencies
 > ```
 >
