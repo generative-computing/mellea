@@ -1,11 +1,10 @@
 import os
 import shutil
 import tempfile
-from pathlib import Path
 from typing import Literal
 
 import git
-from huggingface_hub import HfApi, HfFolder, RepoUrl, create_repo, upload_folder
+from huggingface_hub import HfFolder, RepoUrl, create_repo, upload_folder
 
 
 def upload_intrinsic(
@@ -52,28 +51,20 @@ def upload_intrinsic(
         shutil.copy2(io_yaml, weight_path)
 
         # Copy the model files to the target directory.
+        if "README.md" in os.listdir(weight_path):
+            os.remove(os.path.join(weight_path, "README.md"))
         shutil.copytree(weight_path, target_dir, dirs_exist_ok=True)
 
         # Commit and push changes
+        assert len(model_name.split("/")) == 2
+        intrinsic_name = model_name.split("/")[1]
         upload_folder(
-            repo_id=HfApi().whoami()["name"] + "/" + model_name,
+            repo_id=model_name,
             folder_path=target_dir,
-            path_in_repo=os.path.join(model_name, base_model_path, type),
+            path_in_repo=os.path.join(intrinsic_name, base_model_path, type),
             commit_message="Upload adapter weights as intrinsic.",
             token=token,
         )
     finally:
         # Clean up temporary directory
         shutil.rmtree(temp_dir)
-
-
-if __name__ == "__main__":
-    path = "/Users/nathan/dev/mellea/docs/examples/aLora/test.ckpt"
-    io = "/Users/nathan/dev/mellea/docs/examples/aLora/io.yaml"
-    upload_intrinsic(
-        weight_path=path,
-        base_model="granite-4.0-micro",
-        model_name="stembolts",
-        type="alora",
-        io_yaml=io,
-    )
