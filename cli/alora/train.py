@@ -83,6 +83,7 @@ def train_model(
     output_file: str,
     prompt_file: str | None = None,
     adapter: str = "alora",
+    device: str = "auto",
     run_name: str = "multiclass_run",
     epochs: int = 6,
     learning_rate: float = 6e-6,
@@ -110,13 +111,36 @@ def train_model(
     train_dataset = dataset.select(range(split_idx))
     val_dataset = dataset.select(range(split_idx, len(dataset)))
 
-    # Use device_map="auto" only when CUDA is available
-    # In CPU-only environments (like CI), device_map="auto" creates meta tensors
-    # which cause "Cannot copy out of meta tensor" errors
-    device_map = "auto" if torch.cuda.is_available() else None
-    model_base = AutoModelForCausalLM.from_pretrained(
-        base_model, device_map=device_map, use_cache=False
-    )
+    if device == "auto":
+        if torch.cuda.is_available():
+            gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            if gpu_memory_gb < 6:
+                print(
+                    f"⚠️  Warning: GPU has {gpu_memory_gb:.1f}GB VRAM. "
+                    "Training 3B+ models may fail. Consider using --device cpu"
+                )
+            device_map = "auto"
+        else:
+            device_map = None
+    elif device == "cpu":
+        device_map = None
+    elif device in ["cuda", "mps"]:
+        device_map = "auto"
+    else:
+        raise ValueError(f"Invalid device '{device}'. Use: auto, cpu, cuda, or mps")
+
+    try:
+        model_base = AutoModelForCausalLM.from_pretrained(
+            base_model, device_map=device_map, use_cache=False
+        )
+    except NotImplementedError as e:
+        if "meta tensor" in str(e):
+            raise RuntimeError(
+                "Insufficient GPU memory for model. The model is too large for available VRAM. "
+                "Try: (1) Use a smaller model, (2) Use a system with more GPU memory (6GB+ recommended), "
+                "or (3) Train on CPU (slower but works with limited memory)."
+            ) from e
+        raise
 
     collator = DataCollatorForCompletionOnlyLM(invocation_prompt, tokenizer=tokenizer)
 
