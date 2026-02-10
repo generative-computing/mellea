@@ -24,7 +24,7 @@ def _mellea_finalize_tool(answer: str) -> str:
     return answer
 
 
-class ReactInitiator(Component[str], Generic[BaseModelSubclass]):
+class ReactInitiator(Component[str]):
     """`ReactInitiator` is used at the start of the ReACT loop to prime the model."""
 
     def __init__(self, goal: str, tools: list[AbstractMelleaTool] | None):
