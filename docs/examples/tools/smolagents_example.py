@@ -43,5 +43,3 @@ try:
 except ImportError as e:
     print("Please install smolagents: uv pip install 'mellea[smolagents]'")
     print(f"Error: {e}")
-
-# Made with Bob
