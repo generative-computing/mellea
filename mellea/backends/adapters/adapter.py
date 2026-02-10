@@ -297,11 +297,12 @@ class CustomGraniteCommonAdapter(GraniteCommonAdapter):
         # patch the catalog. TODO this is a temporary hack until we re-org adapters.
         from mellea.backends.adapters import catalog
 
-        catalog._INTRINSICS_CATALOG_ENTRIES.append(
-            catalog.IntriniscsCatalogEntry(name=intrinsic_name, repo_id=model_id)
-        )
-        catalog._INTRINSICS_CATALOG = {
-            e.name: e for e in catalog._INTRINSICS_CATALOG_ENTRIES
-        }
+        if intrinsic_name not in catalog._INTRINSICS_CATALOG:
+            catalog._INTRINSICS_CATALOG_ENTRIES.append(
+                catalog.IntriniscsCatalogEntry(name=intrinsic_name, repo_id=model_id)
+            )
+            catalog._INTRINSICS_CATALOG = {
+                e.name: e for e in catalog._INTRINSICS_CATALOG_ENTRIES
+            }
 
         super().__init__(intrinsic_name=intrinsic_name, base_model_name=base_model_name)
