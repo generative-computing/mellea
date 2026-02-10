@@ -267,6 +267,52 @@ def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
     return 0 if all_passed else 1
 
 
+# ============================================================================
+# vLLM Backend Cleanup Helper
+# ============================================================================
+
+
+def cleanup_vllm_backend(backend):
+    """Best-effort cleanup of vLLM backend GPU memory.
+
+    Note: CUDA driver holds GPU memory at process level. Only process exit
+    reliably releases it. Cross-module isolation uses separate subprocesses
+    (see pytest_collection_finish hook).
+
+    Args:
+        backend: The vLLM backend instance to cleanup
+    """
+    import gc
+    import time
+
+    import torch
+
+    backend._underlying_model.shutdown_background_loop()
+    del backend._underlying_model
+    del backend
+    gc.collect()
+
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+        torch.cuda.reset_peak_memory_stats()
+        torch.cuda.reset_accumulated_memory_stats()
+
+        # Cleanup NCCL process groups to suppress warnings
+        if torch.distributed.is_initialized():
+            try:
+                torch.distributed.destroy_process_group()
+            except Exception:
+                # Ignore if already destroyed
+                pass
+
+        for _ in range(3):
+            gc.collect()
+            torch.cuda.empty_cache()
+            time.sleep(1)
+
+
 def pytest_collection_finish(session):
     """After collection, check if we need heavy GPU test process isolation.
 
