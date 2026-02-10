@@ -3,18 +3,17 @@
 
 This demonstrates loading existing tools from the smolagents ecosystem,
 similar to how you can use langchain tools with MelleaTool.from_langchain().
+
+The smolagents library provides various pre-built tools like:
+- PythonInterpreterTool for code execution
+- DuckDuckGoSearchTool for web search (requires ddgs package)
+- WikipediaSearchTool for Wikipedia queries
+- And many others from the HuggingFace ecosystem
 """
 
 from mellea import start_session
 from mellea.backends import ModelOption
 from mellea.backends.tools import MelleaTool
-
-# Example: Using a pre-built tool from smolagents
-# The smolagents library provides various pre-built tools like:
-# - PythonInterpreterTool for code execution
-# - DuckDuckGoSearchTool for web search (requires ddgs package)
-# - WikipediaSearchTool for Wikipedia queries
-# - And many others from the HuggingFace ecosystem
 
 try:
     # Import a pre-built tool from smolagents
