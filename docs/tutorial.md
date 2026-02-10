@@ -789,16 +789,11 @@ We will train a lightweight adapter with the `m alora train` command on this sma
 > For mac users, you might not be able to run this script as is, given the lack of `fp16` support in the accelerate library.
 
 ```bash
-m alora train /to/stembolts_data.jsonl \
-  --promptfile ./prompt_config.json \
-  --basemodel ibm-granite/granite-3.2-8b-instruct \
-  --outfile ./checkpoints/alora_adapter \
-  --adapter alora \
-  --epochs 6 \
-  --learning-rate 6e-6 \
-  --batch-size 2 \
-  --max-length 1024 \
-  --grad-accum 4
+m alora train \
+    --basemodel ibm-granite/granite-4.0-micro \
+    --outfile stembolts_model \
+    --adapter alora \
+    docs/examples/aLora/stembolt_failure_dataset.jsonl
 ```
 
 The default prompt format is `<|start_of_role|>check_requirement<|end_of_role|>`; this prompt should be appended to the context just before activated our newly trained aLoRA. If needed, you can customize this prompt using the `--promptfile` argument.
@@ -824,9 +819,16 @@ While training adapters, you can easily tuning the hyper-parameters as below:
 
 To share or reuse the trained adapter, use the `m alora upload` command to publish your trained adapter:
 
+> [!IMPORTANT]
+> Change `$HF_USERNAME` to your username, or else set that env var.
+> Your model will be uploaded to Huggingface in a private repo.
+
 ```bash
-m alora upload ./checkpoints/alora_adapter \
-  --name stembolts/failuremode-alora
+m alora upload \
+   --intrinsic \
+   --name "$HF_USERNAME/stembolts" \
+   --io-yaml io.yaml \
+    stembolts_model
 ```
 
 This will:
@@ -849,19 +851,22 @@ huggingface-cli login  # Optional: only needed for uploads
 After training an aLoRA classifier for our task, we would like to use that classifier to check requirements in a Mellea program. First, we need to setup our backend for using the aLoRA classifier:
 
 ```python
-backend = ...
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.adapters.adapter import CustomGraniteCommonAdapter
 
-# assumption the `m` backend must be a Huggingface or alora-compatible vLLM backend, with the same base model from which we trained the alora.
-# ollama does NOT yet support LoRA or aLoRA adapters.
+class StemboltAdapter(CustomGraniteCommonAdapter):
+    def __init__(self, base_model_name:str="granite-4.0-micro"):
+        super().__init__(
+            model_id="$USERNAME/stembolts", # REPLACE $USERNAME WITH YOUR HUGGINGFACE USERNAME
+            intrinsic_name="stembolts",
+            base_model_name=base_model_name,
+        )
 
-backend.add_alora(
-    HFConstraintAlora(
-        name="stembolts_failuremode_alora",
-        path_or_model_id="stembolts/failuremode-alora", # can also be the checkpoint path
-        generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>",
-        backend=m.backend,
-    )
+backend = LocalHFBackend(
+    model_id="ibm-granite/granite-4.0-micro", cache=SimpleLRUCache(5)
 )
+
+backend.add_adapter(StemboltAdapter(base_model_name="granite-4.0-micro"))
 ```
 
 In the above arguments, `path_or_model_id` refers to the model checkpoint from last step, i.e., the `m alora train` process.
@@ -869,62 +874,7 @@ In the above arguments, `path_or_model_id` refers to the model checkpoint from l
 > [!NOTE]
 > The `generation_prompt` passed to your `backend.add_alora` call should exactly match the prompt used for training.
 
-We are now ready to create a M session, define the requirement, and run the instruction:
-
-```python
-m = MelleaSession(backend, ctx=ChatContext())
-failure_check = req("The failure mode should not be none.")
-res = m.instruct("Write triage summaries based on technician note.", requirements=[failure_check])
-```
-
-To make the requirement work well with the well-trained alora model, we need also define the requirement validator function:
-
-```python
-def validate_reqs(reqs: list[Requirement]):
-    """Validate the requirements against the last output in the session."""
-    print("==== Validation =====")
-    print(
-        "using aLora"
-        if backend.default_to_constraint_checking_alora
-        else "using NO alora"
-    )
-
-    # helper to collect validation prompts (because validation calls never get added to session contexts).
-    logs: list[GenerateLog] = []  # type: ignore
-
-    # Run the validation. No output needed, because the last output in "m" will be used. Timing added.
-    start_time = time.time()
-    val_res = m.validate(reqs, generate_logs=logs)
-    end_time = time.time()
-    delta_t = end_time - start_time
-
-    print(f"Validation took {delta_t} seconds.")
-    print("Validation Results:")
-
-    # Print list of requirements and validation results
-    for i, r in enumerate(reqs):
-        print(f"- [{val_res[i]}]: {r.description}")
-
-    # Print prompts using the logs list
-    print("Prompts:")
-    for log in logs:
-        if isinstance(log, GenerateLog):
-            print(f" - {{prompt: {log.prompt}\n   raw result: {log.result.value} }}")  # type: ignore
-
-    return end_time - start_time, val_res
-```
-
-Then we can use this validator function to check the generated defect report as:
-
-```python
-validate_reqs([failure_check])
-```
-
-If the constraint alora is added to a model, it will be used by default. You can also force to run without alora as:
-
-```python
-backend.default_to_constraint_checking_alora = False
-```
+There is a full example in [docs/examples/aLora/101_example.py](https://github.com/generative-computing/mellea/blob/main/docs/examples/aLora/101_example.py).
 
 In this chapter, we have seen how a classification dataset can be used to tune a LoRA adapter on proprietary data. We then saw how the resulting model can be incorporated into a Mellea generative program. This is the tip of a very big iceberg.
 

@@ -1,58 +1,93 @@
----
-base_model: ibm-granite/granite-4.0-micro
-library_name: transformers
-model_name: aLora
-tags:
-- generated_from_trainer
-- sft
-- trl
-licence: license
----
+# aLoRA Examples
 
-# Model Card for aLora
+This directory contains examples demonstrating how to tune and use your own (Adaptive) Low-Rank Adapters.
 
-This model is a fine-tuned version of [ibm-granite/granite-4.0-micro](https://huggingface.co/ibm-granite/granite-4.0-micro).
-It has been trained using [TRL](https://github.com/huggingface/trl).
+## Training Models
 
-## Quick start
+First, we need to clone Mellea and put ourselves into this directory:
+
+```bash
+git clone github.com/generative-computing/mellea;
+cd mellea;
+uv venv .venv;
+source .venv/bin/activate;
+uv pip install -e .[all];
+pushd docs/examples/aLora/;
+```
+
+Now let's train a model:
+
+```
+m alora train \
+    --basemodel ibm-granite/granite-4.0-micro \
+    --outfile stembolts_model \
+    --adapter alora \
+    stembolt_failure_dataset.jsonl
+```
+
+>![NOTE]
+> You will need hardware capable of training models. 
+> For local training, our minimum recommendation is an M1 MAX with 64GB unitifed memory. This will allow you to train small language model adapters.
+> Alternatively, you can train small language models on relatively cheap spot instances at many popular cloud providers.
+
+## Upload Models
+
+If model training succeeds, you will need to upload your model as an intrinsic:
+
+```bash
+# WARNING: running this command will upload your model weights to huggingface.co !!!
+# The model will be private.
+# replace $HF_USERNAME with your huggingface username.
+m alora upload \
+   --intrinsic \
+   --name "$HF_USERNAME/stembolts" \
+   --io-yaml io.yaml \
+    stembolts_model
+```
+
+You can also train and upload the same adapter for multiple model families:
+
+```
+# CHANGE $HF_USERNAME to your username, or set envvar.
+m alora train \
+    --basemodel ibm-granite/granite-3.3-2b-instruct \
+    --outfile stembolts_model_3.3_2b \
+    --adapter alora \
+    stembolt_failure_dataset.jsonl &&
+m alora upload \
+   --intrinsic \
+   --name "$HF_USERNAME/stembolts"
+   --io-yaml io.yaml \
+    stembolts_model_3.3_2b
+```
+
+## Using Intrinsics
+
+You can now create a new adapter class for this model somewhere in your python project:
 
 ```python
-from transformers import pipeline
+from mellea.backends.adapters.adapter import CustomGraniteCommonAdapter
 
-question = "If you had a time machine, but could only go to the past or the future once and never return, which would you choose and why?"
-generator = pipeline("text-generation", model="None", device="cuda")
-output = generator([{"role": "user", "content": question}], max_new_tokens=128, return_full_text=False)[0]
-print(output["generated_text"])
+class StemboltAdapter(CustomGraniteCommonAdapter):
+    def __init__(self, base_model_name:str="granite-4.0-micro"):
+        super().__init__(
+            model_id="$USERNAME/stembolts", # REPLACE $USERNAME WITH YOUR HUGGINGFACE USERNAME
+            intrinsic_name="stembolts",
+            base_model_name=base_model_name,
+        )
 ```
 
-## Training procedure
+Using this adapter requires adding it to a backend:
 
- 
+```python
+from mellea.backends.huggingface import LocalHFBackend
 
+backend = LocalHFBackend(
+    model_id="ibm-granite/granite-4.0-micro", cache=SimpleLRUCache(5)
+)
 
-This model was trained with SFT.
-
-### Framework versions
-
-- TRL: 0.19.1
-- Transformers: 4.53.3
-- Pytorch: 2.7.0
-- Datasets: 4.5.0
-- Tokenizers: 0.21.4
-
-## Citations
-
-
-
-Cite TRL as:
-    
-```bibtex
-@misc{vonwerra2022trl,
-	title        = {{TRL: Transformer Reinforcement Learning}},
-	author       = {Leandro von Werra and Younes Belkada and Lewis Tunstall and Edward Beeching and Tristan Thrush and Nathan Lambert and Shengyi Huang and Kashif Rasul and Quentin Gallou{\'e}dec},
-	year         = 2020,
-	journal      = {GitHub repository},
-	publisher    = {GitHub},
-	howpublished = {\url{https://github.com/huggingface/trl}}
-}
+backend.add_adapter(StemboltAdapter(base_model_name="granite-4.0-micro"))
 ```
+
+A full example of how to use this adapter as a requirement is found in `101_example.py`
+
