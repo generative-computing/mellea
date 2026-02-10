@@ -3,7 +3,6 @@ name: "Run CI"
 on:
   pull_request:
     types: [opened, reopened, synchronize]
-  merge_group:
 
 jobs:
   code-checks:
