@@ -38,15 +38,16 @@ def alora_train(
 
 
 def alora_upload(
-    weightfile: str = typer.Argument(..., help="Path to saved adapter weights"),
+    weight_path: str = typer.Argument(..., help="Path to saved adapter weights"),
     name: str = typer.Option(
         ..., help="Destination model name (e.g., acme/carbchecker-alora)"
     ),
     intrinsic: bool = typer.Option(
-        default=False, help="Formats model upload using granite-intrinsic."
+        default=False,
+        help="Formats model upload using granite-intrinsic. An io.yaml file must be provided.",
     ),
     io_yaml: str = typer.Option(
-        ...,
+        default=None,
         help="Location of a granite-common io.yaml file. See https://nfulton.org/blog/alora_io_yaml.html",
     ),
 ):
@@ -58,14 +59,10 @@ def alora_upload(
         "If --intrinsic is set then you must provide an io.yaml"
     )
 
-    upload_model(weight_path=weightfile, model_name=name)
+    # Change the structure of the repo so that it's an intrinsic.
     if intrinsic:
-        # get intrinsic name from the model name.
-        assert len(name.split("/")) == 2
-        intrinsic_name = name.split("/")[1]
-
-        # get the base model and adpater type from the adapter config file.
-        with open(os.path.join(weightfile, "adapter_config.json")) as fh:
+        # get the base model and adapter type from the adapter config file.
+        with open(os.path.join(weight_path, "adapter_config.json")) as fh:
             config = json.load(fh)
             assert "base_model_name_or_path" in config.keys(), (
                 "All adapter config files should have a base_model_name_or_path."
@@ -73,13 +70,18 @@ def alora_upload(
             base_model = config["base_model_name_or_path"]
             adapter_type = "alora" if "alora_invocation_tokens" in config else "lora"
 
+        assert adapter_type in ["lora", "alora"]
         upload_intrinsic(
-            hf_path=name,
-            intrinsic_name=intrinsic_name,
+            weight_path=weight_path,
+            model_name=name,
             base_model=base_model,
-            type=adapter_type,
+            type=adapter_type,  # type: ignore
             io_yaml=io_yaml,
         )
+    else:
+        upload_model(weight_path=weight_path, model_name=name)
+
+    print("✅ Upload complete!")
 
 
 alora_app.command("train")(alora_train)
