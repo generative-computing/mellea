@@ -52,7 +52,7 @@ while getopts "yh" OPTNAME ; do
     esac
 done
 
-if $CONDA env list | grep -q mellea
+if ($CONDA activate mellea)
 then
     echo "An existing mellea environment was found."
     $CONDA env remove $CONDA_OPTIONS -n mellea
