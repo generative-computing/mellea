@@ -102,3 +102,533 @@
 {"item":"Engine bogs; air path is clean, fuel flow seems intermittent.","defective_part":"fuel filter","diag_likelihood":0.53}
 {"item":"Clattering noise and vibration started suddenly under load.","defective_part":"connecting rod","diag_likelihood":0.68}
 {"item":"Runs okay for a while, then surges and dies; restarts later.","defective_part":"tank vent","diag_likelihood":0.56}
+{"item":"Stembolt idles fine, but the moment I crack the throttle it coughs like a Husky on its 14th pull.","defective_part":"carburetor diaphragm","diag_likelihood":0.92}
+{"item":"Intermittent stall after warmup on a Stihl-ish power head; restart takes forever unless I let it sulk.","defective_part":"ignition coil","diag_likelihood":0.74}
+{"item":"Fuel smell near the rear handle and wetness around the tank outlet after sitting overnight.","defective_part":"fuel line","diag_likelihood":0.93}
+{"item":"Starts once, then dies the second I tip the stembolt sideways.","defective_part":"fuel pickup filter","diag_likelihood":0.86}
+{"item":"Sputters under load; exhaust note goes flat like the muffler is stuffed with pine needles.","defective_part":"spark arrestor screen","diag_likelihood":0.88}
+{"item":"Chain creeps at idle even with the idle screw backed out.","defective_part":"clutch springs","diag_likelihood":0.83}
+{"item":"No pop at all; plug looks dry, like we’re not even invited to the combustion party.","defective_part":"spark plug","diag_likelihood":0.77}
+{"item":"Primer bulb won’t fill; it just collapses and stays sad.","defective_part":"primer bulb","diag_likelihood":0.9}
+{"item":"Stembolt runs for 30 seconds then dies like a Stihl in a snarky forum thread.","defective_part":"tank vent","diag_likelihood":0.82}
+{"item":"Idle hunts up and down; sometimes it surges like it’s trying to tell me a secret.","defective_part":"air leak at crank seal","diag_likelihood":0.71}
+{"item":"Hard to start cold; when it does, it only runs on half-choke.","defective_part":"carburetor metering lever","diag_likelihood":0.79}
+{"item":"Bogging only at full throttle; half throttle is smooth.","defective_part":"main jet obstruction","diag_likelihood":0.84}
+{"item":"Oil reservoir stays full; bar turns blue and smells like regret.","defective_part":"oil pump","diag_likelihood":0.95}
+{"item":"Oiler works sometimes, but only when I smack the side cover like it owes me money.","defective_part":"oil pickup line","diag_likelihood":0.73}
+{"item":"Rope pulls easy with almost no resistance; it feels…wrong.","defective_part":"piston rings","diag_likelihood":0.8}
+{"item":"Compression feels decent, but it won’t hold an idle without dying.","defective_part":"idle circuit blockage","diag_likelihood":0.76}
+{"item":"Cuts out when I hit the throttle from idle; a brief ‘pop’ then silence.","defective_part":"impulse line","diag_likelihood":0.85}
+{"item":"Stembolt starts, revs to the moon, then seizes into a dramatic pause.","defective_part":"lean condition from air leak","diag_likelihood":0.69}
+{"item":"Runs rich; plug is black and wet; exhaust smokes like a campfire in a rainstorm.","defective_part":"carburetor needle valve","diag_likelihood":0.78}
+{"item":"Random shutdown when I bump the handle; jiggling the wiring makes it come back.","defective_part":"kill switch","diag_likelihood":0.88}
+{"item":"Starter rope won’t retract; it just hangs there like a defeated flag.","defective_part":"recoil spring","diag_likelihood":0.95}
+{"item":"Rope retracts, but sometimes slips and makes a crunchy clicking noise.","defective_part":"starter pawls","diag_likelihood":0.9}
+{"item":"Chain brake won’t disengage smoothly; lever feels gritty.","defective_part":"chain brake band","diag_likelihood":0.87}
+{"item":"Stembolt vibrates like it’s trying to break free and join a Husqvarna fan club.","defective_part":"anti-vibration mounts","diag_likelihood":0.83}
+{"item":"Sudden loss of power, metallic rattle under load, then it calms down at idle.","defective_part":"piston scoring","diag_likelihood":0.72}
+{"item":"Won’t start after refuel; strong fuel smell and a wet air filter.","defective_part":"flooded carburetor","diag_likelihood":0.77}
+{"item":"Only starts if I hold the throttle wide open like I’m negotiating with it.","defective_part":"spark plug","diag_likelihood":0.63}
+{"item":"Starts, then dies the moment I release the trigger; idle screw changes do nothing.","defective_part":"idle speed screw","diag_likelihood":0.6}
+{"item":"Throttle trigger feels sticky and doesn’t snap back cleanly.","defective_part":"throttle linkage","diag_likelihood":0.82}
+{"item":"Runs fine for a minute, then goes lean and screams; backing off saves it.","defective_part":"tank vent","diag_likelihood":0.84}
+{"item":"Fuel line looks fine, but it’s stiff as plastic and cracks when bent.","defective_part":"fuel line","diag_likelihood":0.91}
+{"item":"Misfire at high RPM; sounds like popcorn in the muffler.","defective_part":"spark plug boot","diag_likelihood":0.7}
+{"item":"Spark is weak and orange; only occasional ignition.","defective_part":"ignition coil","diag_likelihood":0.86}
+{"item":"Stembolt dies when I tilt it left, but not right.","defective_part":"fuel pickup filter","diag_likelihood":0.82}
+{"item":"Idle fine; cut quality awful; chain slows and then grabs.","defective_part":"clutch drum bearing","diag_likelihood":0.68}
+{"item":"Chain won’t move even at full throttle; engine revs freely.","defective_part":"clutch","diag_likelihood":0.9}
+{"item":"Engine labors; chain turns, but it feels like it’s dragging through syrup.","defective_part":"bar sprocket nose","diag_likelihood":0.62}
+{"item":"Bar oil leaks out the bottom when stored; puddle forms by morning.","defective_part":"oil tank cap seal","diag_likelihood":0.8}
+{"item":"Pull cord jerks violently at compression stroke; starting is a wrist workout.","defective_part":"decompression valve","diag_likelihood":0.79}
+{"item":"Decomp button won’t stay down; it pops back up immediately.","defective_part":"decompression valve","diag_likelihood":0.88}
+{"item":"Stembolt refuses to start unless I whisper ‘Stihl is better’ into the airbox.","defective_part":"choke linkage","diag_likelihood":0.55}
+{"item":"Choke lever moves, but butterfly doesn’t close all the way.","defective_part":"choke linkage","diag_likelihood":0.86}
+{"item":"Very high idle after carb tweak; chain spins even with brake off and throttle untouched.","defective_part":"air leak at intake boot","diag_likelihood":0.75}
+{"item":"Hanging idle that slowly drops after revving.","defective_part":"air leak at crank seal","diag_likelihood":0.73}
+{"item":"Engine revs, then sags like it’s starving; primer bulb shows bubbles.","defective_part":"fuel line air leak","diag_likelihood":0.81}
+{"item":"Primer bulb fills with foamy fuel; stembolt gets inconsistent.","defective_part":"fuel line air leak","diag_likelihood":0.77}
+{"item":"Won’t start; plug is wet; spark is good; feels like too much fuel.","defective_part":"carburetor metering needle","diag_likelihood":0.78}
+{"item":"Starts and immediately runs away at max RPM like it’s late for a Husky meetup.","defective_part":"idle circuit air leak","diag_likelihood":0.66}
+{"item":"Burbling rich idle; throttle response lazy; lots of smoke.","defective_part":"air filter","diag_likelihood":0.85}
+{"item":"Air filter is soaked with oily dust; engine chokes itself out.","defective_part":"air filter","diag_likelihood":0.9}
+{"item":"Power falls off after a few cuts; exhaust gets hotter; muffler smells scorched.","defective_part":"spark arrestor screen","diag_likelihood":0.8}
+{"item":"Stembolt starts, runs, then dies when I set it down on the ground.","defective_part":"kill switch wiring","diag_likelihood":0.7}
+{"item":"Random shutoff when I squeeze the handle; seems like a pinch point in the harness.","defective_part":"kill switch wiring","diag_likelihood":0.79}
+{"item":"Clutch cover area gets very hot; chain intermittently locks.","defective_part":"clutch drum bearing","diag_likelihood":0.74}
+{"item":"Chain brake engages by itself with vibration.","defective_part":"chain brake spring","diag_likelihood":0.76}
+{"item":"Chain brake feels mushy; doesn’t snap decisively.","defective_part":"chain brake spring","diag_likelihood":0.82}
+{"item":"Stembolt won’t oil at idle but oils when revved hard.","defective_part":"oil pump worm gear","diag_likelihood":0.71}
+{"item":"Oiler output is weak even at full; bar looks dry.","defective_part":"oil pump","diag_likelihood":0.87}
+{"item":"Sudden squeal from the flywheel side after rev; then it dies.","defective_part":"crank bearing","diag_likelihood":0.61}
+{"item":"Metallic grinding when pulling the rope; feels rough through the stroke.","defective_part":"crank bearing","diag_likelihood":0.66}
+{"item":"Starts great, but won’t restart hot unless I open the fuel cap.","defective_part":"tank vent","diag_likelihood":0.91}
+{"item":"Hot start is terrible; cold start is okay; spark seems inconsistent when warm.","defective_part":"ignition coil","diag_likelihood":0.78}
+{"item":"Won’t hold tune; L and H needles drift like they’re haunted.","defective_part":"carburetor diaphragm","diag_likelihood":0.7}
+{"item":"Needs choke to keep running even after it’s warm.","defective_part":"air leak at intake boot","diag_likelihood":0.68}
+{"item":"Idle is okay, but it dies when I blip the throttle quickly.","defective_part":"accelerator pump circuit","diag_likelihood":0.64}
+{"item":"Throttle cable is frayed and catches; trigger sometimes sticks open (cool cool).","defective_part":"throttle cable","diag_likelihood":0.9}
+{"item":"Stembolt slowly loses compression over weeks; starts getting ‘soft’ on the rope.","defective_part":"piston rings","diag_likelihood":0.73}
+{"item":"Scored piston visible through exhaust port; it still runs, but it’s not happy.","defective_part":"piston scoring","diag_likelihood":0.96}
+{"item":"Exhaust port looks carboned up; power is down and it’s smoky.","defective_part":"muffler baffle carbon buildup","diag_likelihood":0.7}
+{"item":"Backfires through intake; pops the airbox cover loose.","defective_part":"ignition timing issue","diag_likelihood":0.58}
+{"item":"Flywheel key looks slightly sheared; weird timing symptoms after a sudden stop.","defective_part":"flywheel key","diag_likelihood":0.88}
+{"item":"Starts on choke, dies on run; classic ‘only on choke’ behavior.","defective_part":"fuel filter","diag_likelihood":0.86}
+{"item":"Fuel filter is dark and heavy; flow seems reduced.","defective_part":"fuel filter","diag_likelihood":0.92}
+{"item":"Carb won’t prime; fuel lines are routed right but nothing moves.","defective_part":"impulse line","diag_likelihood":0.9}
+{"item":"Impulse line has a hairline crack at the nipple.","defective_part":"impulse line","diag_likelihood":0.95}
+{"item":"High-pitched whine at idle; clutch drum seems wobbly.","defective_part":"clutch drum bearing","diag_likelihood":0.72}
+{"item":"Stembolt idles, but clutch grabs late and chatters.","defective_part":"clutch shoes","diag_likelihood":0.74}
+{"item":"Chain sprocket teeth are hooked like little sharks.","defective_part":"drive sprocket","diag_likelihood":0.89}
+{"item":"Chain slips and surges; sprocket visibly worn.","defective_part":"drive sprocket","diag_likelihood":0.87}
+{"item":"Chain tension changes constantly during cuts; bar rails look uneven.","defective_part":"guide bar rails","diag_likelihood":0.65}
+{"item":"Chain gets dry fast; oil hole alignment seems off.","defective_part":"bar oil port blockage","diag_likelihood":0.81}
+{"item":"Stembolt leaks fuel from carb throat when parked.","defective_part":"carburetor needle valve","diag_likelihood":0.9}
+{"item":"Metering lever height seems off; flooding on restart.","defective_part":"carburetor metering lever","diag_likelihood":0.84}
+{"item":"Runs lean no matter how I adjust; I suspect it’s sucking air somewhere sneaky.","defective_part":"intake boot crack","diag_likelihood":0.73}
+{"item":"Intake boot has visible split at the clamp.","defective_part":"intake boot crack","diag_likelihood":0.96}
+{"item":"Stembolt dies when I engage the chain brake at idle (shouldn’t happen).","defective_part":"idle speed too low","diag_likelihood":0.62}
+{"item":"It stalls under sudden load; idle set too low to recover.","defective_part":"idle speed screw","diag_likelihood":0.66}
+{"item":"Starts, revs, then dies after a minute; fuel cap hisses when opened.","defective_part":"tank vent","diag_likelihood":0.93}
+{"item":"Stembolt only runs with cap slightly loose; otherwise it starves.","defective_part":"tank vent","diag_likelihood":0.95}
+{"item":"Spark plug is cracked porcelain; misfires at random.","defective_part":"spark plug","diag_likelihood":0.94}
+{"item":"Spark plug gap is huge; someone ‘tuned’ it with a screwdriver and vibes.","defective_part":"spark plug","diag_likelihood":0.86}
+{"item":"Excessive vibration and the handle feels detached from reality.","defective_part":"anti-vibration mounts","diag_likelihood":0.91}
+{"item":"AV mount is torn; stembolt buzzes like an angry hornet nest.","defective_part":"anti-vibration mounts","diag_likelihood":0.95}
+{"item":"Oil pump drive gear looks chewed; intermittent oiling.","defective_part":"oil pump worm gear","diag_likelihood":0.88}
+{"item":"Oil line is kinked behind the clutch cover; no oil reaches the bar.","defective_part":"oil line","diag_likelihood":0.9}
+{"item":"Stembolt starts after many tries; feels like it only starts when it feels appreciated (Husky energy).","defective_part":"carburetor diaphragm","diag_likelihood":0.6}
+{"item":"Won’t start unless I prime repeatedly; primer takes 12 pushes to fill.","defective_part":"primer bulb check valve","diag_likelihood":0.75}
+{"item":"Primer bulb check valve seems stuck; fuel moves backward.","defective_part":"primer bulb check valve","diag_likelihood":0.87}
+{"item":"Engine idles, but dies when I pick it up by the top handle.","defective_part":"loose ground wire","diag_likelihood":0.67}
+{"item":"Ground wire near coil is loose; spark intermittent on vibration.","defective_part":"loose ground wire","diag_likelihood":0.9}
+{"item":"Stembolt loses power and makes a ‘ting-ting’ sound at high RPM.","defective_part":"detonation from lean mix","diag_likelihood":0.58}
+{"item":"Runs hot; cylinder fins packed with chips and oily dust.","defective_part":"cooling fins blockage","diag_likelihood":0.85}
+{"item":"Cooling fins are clogged; it overheats and fades under load.","defective_part":"cooling fins blockage","diag_likelihood":0.88}
+{"item":"Muffler bolts are loose; exhaust leaks and it’s loud enough to startle squirrels.","defective_part":"muffler gasket","diag_likelihood":0.78}
+{"item":"Exhaust leak visible around muffler; soot marks on the case.","defective_part":"muffler gasket","diag_likelihood":0.91}
+{"item":"Chain won’t oil; oil tank is full; pump looks fine; bar is bone dry.","defective_part":"bar oil port blockage","diag_likelihood":0.86}
+{"item":"Bar oil holes packed with sawdust paste.","defective_part":"bar oil port blockage","diag_likelihood":0.94}
+{"item":"Idle screw has no effect; it’s like turning air.","defective_part":"throttle plate miss-set","diag_likelihood":0.55}
+{"item":"Throttle plate doesn’t return fully closed; idle stays high.","defective_part":"throttle linkage","diag_likelihood":0.83}
+{"item":"Idle is too high even on lowest setting; it ‘hangs’ after revving.","defective_part":"air leak at crank seal","diag_likelihood":0.71}
+{"item":"Stembolt idles high and chain spins; spray test changes RPM near the seal.","defective_part":"air leak at crank seal","diag_likelihood":0.86}
+{"item":"It dies when I tap the carb body; then it comes back after a minute.","defective_part":"carburetor metering diaphragm","diag_likelihood":0.7}
+{"item":"Metering diaphragm is stiff like cardboard; fuel delivery inconsistent.","defective_part":"carburetor metering diaphragm","diag_likelihood":0.93}
+{"item":"Fuel looks milky; old mix from last season; performance is chaos.","defective_part":"stale fuel","diag_likelihood":0.8}
+{"item":"Stale mix in the tank; it runs rough and won’t rev clean.","defective_part":"stale fuel","diag_likelihood":0.88}
+{"item":"Starts, then bogs when I pinch the throttle; like it can’t breathe.","defective_part":"air filter","diag_likelihood":0.74}
+{"item":"Air filter is caked; airflow restricted; throttle response dull.","defective_part":"air filter","diag_likelihood":0.91}
+{"item":"Cutting out only when hot; spark disappears after heat soak.","defective_part":"ignition coil","diag_likelihood":0.87}
+{"item":"Carb tune drifts as it warms; it becomes lean and touchy.","defective_part":"air leak at intake boot","diag_likelihood":0.62}
+{"item":"Fuel line rubs on the case edge; tiny pinhole leak appears under pressure.","defective_part":"fuel line","diag_likelihood":0.89}
+{"item":"Stembolt won’t shut off with the switch; I have to choke it to death.","defective_part":"kill switch","diag_likelihood":0.92}
+{"item":"Kill switch feels loose; sometimes it won’t stop the engine.","defective_part":"kill switch","diag_likelihood":0.86}
+{"item":"Starter rope frays rapidly; pulley edge is sharp.","defective_part":"starter pulley","diag_likelihood":0.74}
+{"item":"Recoil pulley has a burr; rope chafes every pull.","defective_part":"starter pulley","diag_likelihood":0.85}
+{"item":"Chain brake cover packed with oily sawdust; brake drags.","defective_part":"chain brake contamination","diag_likelihood":0.8}
+{"item":"Brake band is glazed and sticky; it won’t release cleanly.","defective_part":"chain brake band","diag_likelihood":0.84}
+{"item":"Sprocket cover area full of chips; clutch overheats and grabs.","defective_part":"clutch contamination","diag_likelihood":0.7}
+{"item":"Clutch shoes oily; engagement inconsistent.","defective_part":"clutch shoes","diag_likelihood":0.77}
+{"item":"Stembolt screams but won’t pull chain in the cut; feels like slipping.","defective_part":"clutch","diag_likelihood":0.82}
+{"item":"Carb low-speed adjustment does nothing; idle circuit likely blocked.","defective_part":"idle circuit blockage","diag_likelihood":0.87}
+{"item":"Low-speed jet packed with varnish; cleaning helps immediately.","defective_part":"idle circuit blockage","diag_likelihood":0.93}
+{"item":"High-speed jet seems blocked; it bogs at WOT no matter what.","defective_part":"main jet obstruction","diag_likelihood":0.9}
+{"item":"Stembolt dies when tipped forward; fuel pickup line looks too short.","defective_part":"fuel pickup line","diag_likelihood":0.78}
+{"item":"Fuel pickup line has split end; it sucks air intermittently.","defective_part":"fuel pickup line","diag_likelihood":0.88}
+{"item":"Sudden clunk then no compression; now it free-spins.","defective_part":"connecting rod failure","diag_likelihood":0.64}
+{"item":"Rattle from the top end; power down; plug shows aluminum flecks.","defective_part":"piston scoring","diag_likelihood":0.81}
+{"item":"Muffler outlet is clogged with carbon; exhaust choked.","defective_part":"spark arrestor screen","diag_likelihood":0.86}
+{"item":"Stembolt only idles with the choke partially on; otherwise it stalls.","defective_part":"fuel filter","diag_likelihood":0.75}
+{"item":"Fuel filter is missing entirely; now carb is full of grit.","defective_part":"carburetor contamination","diag_likelihood":0.73}
+{"item":"Carb bowl area gritty; metering needle sticks occasionally.","defective_part":"carburetor contamination","diag_likelihood":0.8}
+{"item":"Chain oil adjuster screw is stripped; can’t change output.","defective_part":"oiler adjuster","diag_likelihood":0.72}
+{"item":"Oiler adjuster is stuck; output won’t increase.","defective_part":"oiler adjuster","diag_likelihood":0.79}
+{"item":"Stembolt starts then immediately stops when I touch the throttle (instant drama).","defective_part":"impulse line","diag_likelihood":0.72}
+{"item":"Impulse line disconnected; carb won’t pump fuel under throttle.","defective_part":"impulse line","diag_likelihood":0.96}
+{"item":"Stembolt gets louder over time; muffler bolts keep loosening.","defective_part":"muffler bolts","diag_likelihood":0.7}
+{"item":"Muffler bolts are missing one; gasket leaks.","defective_part":"muffler gasket","diag_likelihood":0.82}
+{"item":"It surges at idle and calms when I press the carb lightly.","defective_part":"intake boot clamp loose","diag_likelihood":0.78}
+{"item":"Intake boot clamp was loose; tightening stabilizes idle.","defective_part":"intake boot clamp loose","diag_likelihood":0.92}
+{"item":"Throttle won’t return; spring seems weak or unhooked.","defective_part":"throttle return spring","diag_likelihood":0.9}
+{"item":"Throttle return spring unseated; trigger sticks partially open.","defective_part":"throttle return spring","diag_likelihood":0.93}
+{"item":"Stembolt idles fine but dies as soon as chain bites wood.","defective_part":"carburetor tune too lean","diag_likelihood":0.66}
+{"item":"H needle set too lean; it screams and then falls on its face under load.","defective_part":"carburetor tune too lean","diag_likelihood":0.78}
+{"item":"It four-strokes heavily at WOT; rich and blubbery.","defective_part":"carburetor tune too rich","diag_likelihood":0.77}
+{"item":"H needle too rich; lots of smoke and poor top-end power.","defective_part":"carburetor tune too rich","diag_likelihood":0.82}
+{"item":"Won’t start and the spark plug wire is barely seated on the plug.","defective_part":"spark plug boot","diag_likelihood":0.92}
+{"item":"Spark plug boot is torn; arcing visible in low light.","defective_part":"spark plug boot","diag_likelihood":0.88}
+{"item":"Stembolt won’t prime; fuel lines swapped on the carb nipples.","defective_part":"fuel line routing","diag_likelihood":0.9}
+{"item":"Fuel return and feed lines reversed; primer behavior weird.","defective_part":"fuel line routing","diag_likelihood":0.93}
+{"item":"It starts, revs, then quits when I let it idle; like it can’t hold low speed.","defective_part":"idle circuit blockage","diag_likelihood":0.79}
+{"item":"Idle mixture screw is missing O-ring; air leaks past threads.","defective_part":"idle mixture screw o-ring","diag_likelihood":0.81}
+{"item":"Idle mixture screw O-ring cracked; tuning is unstable.","defective_part":"idle mixture screw o-ring","diag_likelihood":0.88}
+{"item":"Stembolt runs, but power is down; exhaust is loud and tinny.","defective_part":"muffler baffle loose","diag_likelihood":0.6}
+{"item":"Muffler baffle rattles internally; performance reduced.","defective_part":"muffler baffle loose","diag_likelihood":0.67}
+{"item":"Chain throws oil sideways; oil outlet seal seems torn.","defective_part":"oil outlet seal","diag_likelihood":0.7}
+{"item":"Oil outlet seal damaged; leaks inside clutch cover.","defective_part":"oil outlet seal","diag_likelihood":0.83}
+{"item":"Stembolt only starts if I do the full Husky ritual: prime, choke, swear, prime again.","defective_part":"carburetor diaphragm","diag_likelihood":0.58}
+{"item":"Carb diaphragm stiff; needs excessive priming to start.","defective_part":"carburetor diaphragm","diag_likelihood":0.85}
+{"item":"It dies when I open the throttle quickly; slow roll works.","defective_part":"low-speed circuit lean","diag_likelihood":0.66}
+{"item":"Low-speed circuit lean; opening throttle fast causes bog.","defective_part":"low-speed circuit lean","diag_likelihood":0.74}
+{"item":"Runs fine until I install the air filter cover; then it chokes.","defective_part":"air filter cover misfit","diag_likelihood":0.69}
+{"item":"Air filter cover warped; presses on choke linkage.","defective_part":"air filter cover misfit","diag_likelihood":0.78}
+{"item":"Stembolt won’t rev; throttle plate only opens halfway.","defective_part":"throttle linkage","diag_likelihood":0.88}
+{"item":"Throttle linkage slipped; full trigger doesn’t reach WOT.","defective_part":"throttle linkage","diag_likelihood":0.92}
+{"item":"Random spark loss; coil gap to flywheel looks huge.","defective_part":"ignition coil gap","diag_likelihood":0.76}
+{"item":"Ignition coil gap set incorrectly; weak spark at RPM.","defective_part":"ignition coil gap","diag_likelihood":0.85}
+{"item":"Stembolt stalls with chain brake off and bar in cut; feels underpowered suddenly.","defective_part":"compression loss","diag_likelihood":0.62}
+{"item":"Compression low; top end worn; pull is too easy.","defective_part":"piston rings","diag_likelihood":0.7}
+{"item":"It starts, then the idle climbs and climbs like it’s searching for enlightenment.","defective_part":"air leak at intake boot","diag_likelihood":0.71}
+{"item":"Bar studs are loose; side cover wiggles; chain tension won’t hold.","defective_part":"bar studs","diag_likelihood":0.86}
+{"item":"Chain tensioner won’t engage; screw spins freely.","defective_part":"chain tensioner","diag_likelihood":0.92}
+{"item":"Tensioner pawl stripped; cannot adjust chain tension.","defective_part":"chain tensioner","diag_likelihood":0.94}
+{"item":"Stembolt idles, but chain oil flings only in bursts.","defective_part":"oil pickup line","diag_likelihood":0.66}
+{"item":"Oil pickup line intermittently sucks air; oiling pulses.","defective_part":"oil pickup line","diag_likelihood":0.77}
+{"item":"Engine dies when I flip the switch to RUN (yes, really).","defective_part":"kill switch wiring","diag_likelihood":0.81}
+{"item":"Kill switch wiring shorted; RUN position grounds ignition.","defective_part":"kill switch wiring","diag_likelihood":0.9}
+{"item":"Stembolt won’t start; decompression valve stuck open.","defective_part":"decompression valve","diag_likelihood":0.84}
+{"item":"Decompression valve carboned up; won’t seal; low compression at start.","defective_part":"decompression valve","diag_likelihood":0.79}
+{"item":"It runs, but the chain brake won’t stop the chain reliably.","defective_part":"chain brake band","diag_likelihood":0.73}
+{"item":"Brake band worn thin; braking weak.","defective_part":"chain brake band","diag_likelihood":0.88}
+{"item":"Stembolt acts normal until it hits a knot; then it bogs hard and dies.","defective_part":"carburetor tune too lean","diag_likelihood":0.7}
+{"item":"Bogging under load; H needle too lean for sustained cutting.","defective_part":"carburetor tune too lean","diag_likelihood":0.76}
+{"item":"Stembolt dies and won’t restart; plug is dry; tank is half full.","defective_part":"fuel filter","diag_likelihood":0.68}
+{"item":"Fuel filter clogged; starvation causes dry plug and stall.","defective_part":"fuel filter","diag_likelihood":0.86}
+{"item":"It ‘pops’ once on pull then nothing else.","defective_part":"spark plug","diag_likelihood":0.64}
+{"item":"One weak pop then dead; plug fouled and shorting.","defective_part":"spark plug","diag_likelihood":0.78}
+{"item":"Stembolt starts, idles, but won’t transition; classic stumble.","defective_part":"carburetor transition port blockage","diag_likelihood":0.74}
+{"item":"Transition ports varnished; throttle transition is rough.","defective_part":"carburetor transition port blockage","diag_likelihood":0.86}
+{"item":"It runs better with the air filter removed (don’t judge me).","defective_part":"air filter","diag_likelihood":0.82}
+{"item":"Runs with filter off; filter is restricting airflow excessively.","defective_part":"air filter","diag_likelihood":0.9}
+{"item":"Stembolt only dies on decel; rev down and it quits.","defective_part":"low-speed circuit too lean","diag_likelihood":0.7}
+{"item":"Decel stall; low-speed circuit too lean or blocked.","defective_part":"low-speed circuit too lean","diag_likelihood":0.77}
+{"item":"Idle is unstable; spray test at carb gasket changes RPM.","defective_part":"carburetor gasket leak","diag_likelihood":0.8}
+{"item":"Carb gasket leaking; unmetered air causes hunting idle.","defective_part":"carburetor gasket leak","diag_likelihood":0.9}
+{"item":"Stembolt bogs only when the fuel level drops below 1/4 tank.","defective_part":"fuel pickup filter","diag_likelihood":0.79}
+{"item":"Pickup filter positioned wrong; starvation at low fuel level.","defective_part":"fuel pickup filter","diag_likelihood":0.86}
+{"item":"It stalls when I blip throttle; primer bulb shows no movement.","defective_part":"impulse line","diag_likelihood":0.83}
+{"item":"Impulses weak; crankcase pulse not reaching carb.","defective_part":"impulse line","diag_likelihood":0.78}
+{"item":"Stembolt makes a hollow ‘clack’ and the chain jerks sporadically.","defective_part":"clutch","diag_likelihood":0.62}
+{"item":"Clutch shoes cracked; engagement jerky.","defective_part":"clutch shoes","diag_likelihood":0.8}
+{"item":"WOT sounds muffled and weak; spark arrestor is almost fully blocked.","defective_part":"spark arrestor screen","diag_likelihood":0.94}
+{"item":"Stembolt starts, then dies when I squeeze the trigger and release quickly.","defective_part":"carburetor metering diaphragm","diag_likelihood":0.66}
+{"item":"Metering diaphragm slow to respond; transient fuel delivery poor.","defective_part":"carburetor metering diaphragm","diag_likelihood":0.74}
+{"item":"Stembolt refuses to acknowledge the concept of ‘idle’ unless the screw is cranked in.","defective_part":"idle circuit blockage","diag_likelihood":0.78}
+{"item":"Idle circuit partially blocked; needs high throttle plate opening to stay running.","defective_part":"idle circuit blockage","diag_likelihood":0.85}
+{"item":"It dies randomly; fuel looks okay; spark looks okay; vibes are cursed.","defective_part":"unknown","diag_likelihood":0.35}
+{"item":"Stembolt runs rough after I ‘tuned’ it; now neither needle seems to matter.","defective_part":"carburetor needle damage","diag_likelihood":0.57}
+{"item":"Needle tips scarred; adjustments have little effect.","defective_part":"carburetor needle damage","diag_likelihood":0.73}
+{"item":"Stembolt won’t start; starter pawls don’t grab the flywheel consistently.","defective_part":"starter pawls","diag_likelihood":0.88}
+{"item":"Pawls worn; rope pulls but flywheel barely turns.","defective_part":"starter pawls","diag_likelihood":0.92}
+{"item":"Stembolt stalls when I rotate it upside down to ‘inspect’ the underside.","defective_part":"carburetor flooding","diag_likelihood":0.52}
+{"item":"Flooding when inverted; metering needle not sealing well.","defective_part":"carburetor needle valve","diag_likelihood":0.74}
+{"item":"After sitting, it won’t start unless I add a tiny splash of fresh mix.","defective_part":"stale fuel","diag_likelihood":0.72}
+{"item":"Old fuel varnish in carb; fresh fuel helps but cleaning needed.","defective_part":"carburetor contamination","diag_likelihood":0.71}
+{"item":"Stembolt idles, but any load causes it to die instantly.","defective_part":"fuel starvation","diag_likelihood":0.58}
+{"item":"Fuel starvation under load; likely clogged filter or line restriction.","defective_part":"fuel filter","diag_likelihood":0.63}
+{"item":"It starts and runs, but the chain oil adjuster is stuck at minimum output.","defective_part":"oiler adjuster","diag_likelihood":0.83}
+{"item":"Adjuster screw stripped; output can’t be increased.","defective_part":"oiler adjuster","diag_likelihood":0.78}
+{"item":"Stembolt shakes the muffler loose every hour; it’s a recurring bit now.","defective_part":"muffler bolts","diag_likelihood":0.64}
+{"item":"Muffler bolts backing out; threadlocker missing; gasket compresses unevenly.","defective_part":"muffler bolts","diag_likelihood":0.76}
+{"item":"Husky-ish stembolt only starts after many tries; once running it’s fine.","defective_part":"primer bulb","diag_likelihood":0.55}
+{"item":"Primer bulb stiff and slow; priming takes excessive presses.","defective_part":"primer bulb","diag_likelihood":0.7}
+{"item":"Stembolt dies when I squeeze the trigger halfway; full trigger sometimes works.","defective_part":"transition circuit issue","diag_likelihood":0.6}
+{"item":"It feels like it ‘leans out’ right at the top end; slight whistle at seal area.","defective_part":"air leak at crank seal","diag_likelihood":0.68}
+{"item":"Whistle near crank seal; top-end lean symptoms and hanging idle.","defective_part":"air leak at crank seal","diag_likelihood":0.79}
+{"item":"Starts, idles, but dies if I let it sit at idle for 20 seconds.","defective_part":"low-speed circuit blockage","diag_likelihood":0.73}
+{"item":"Low-speed passages restricted; idle fuel delivery fades.","defective_part":"idle circuit blockage","diag_likelihood":0.82}
+{"item":"Stembolt loses oiling after swapping bars; new bar has mismatched oil holes.","defective_part":"bar oil hole mismatch","diag_likelihood":0.86}
+{"item":"Bar oil holes not aligned to case outlet; oiling fails despite pump output.","defective_part":"bar oil hole mismatch","diag_likelihood":0.9}
+{"item":"Stembolt has spark, has fuel, still won’t start; compression feels borderline.","defective_part":"compression loss","diag_likelihood":0.54}
+{"item":"Compression borderline; worn rings/cylinder causing no-start sensitivity.","defective_part":"piston rings","diag_likelihood":0.58}
+{"item":"It backfires once and the recoil snaps back hard.","defective_part":"flywheel key","diag_likelihood":0.7}
+{"item":"Backfire kickback after sudden stop; flywheel key likely damaged.","defective_part":"flywheel key","diag_likelihood":0.82}
+{"item":"Stembolt starts then immediately dies unless I keep feathering the throttle.","defective_part":"idle speed too low","diag_likelihood":0.61}
+{"item":"Idle set too low; won’t sustain combustion without throttle assist.","defective_part":"idle speed screw","diag_likelihood":0.7}
+{"item":"It runs, but the exhaust smells sharp and it runs hotter than usual.","defective_part":"carburetor tune too lean","diag_likelihood":0.73}
+{"item":"Lean tune; high cylinder temp and sharp exhaust note.","defective_part":"carburetor tune too lean","diag_likelihood":0.8}
+{"item":"Stembolt won’t rev past midrange; it just blubbers.","defective_part":"spark arrestor screen","diag_likelihood":0.67}
+{"item":"Spark arrestor partially clogged; top-end RPM limited.","defective_part":"spark arrestor screen","diag_likelihood":0.78}
+{"item":"Stembolt dies when I push the choke to run; choke plate might still be closing.","defective_part":"choke linkage","diag_likelihood":0.76}
+{"item":"Choke linkage binding; plate partially closes on run position.","defective_part":"choke linkage","diag_likelihood":0.88}
+{"item":"Fuel leaks only when running; spray appears near carb inlet.","defective_part":"fuel line clamp","diag_likelihood":0.71}
+{"item":"Clamp loose at carb inlet; fuel weeps under pulse pressure.","defective_part":"fuel line clamp","diag_likelihood":0.83}
+{"item":"Stembolt starts and then dies when I set it on the clutch side.","defective_part":"fuel line routing","diag_likelihood":0.62}
+{"item":"Fuel line pinched when resting on clutch side; starvation occurs.","defective_part":"fuel line routing","diag_likelihood":0.74}
+{"item":"Chain doesn’t stop immediately when I release throttle; clutch drags.","defective_part":"clutch springs","diag_likelihood":0.78}
+{"item":"Clutch springs weak; shoes don’t retract fully at idle.","defective_part":"clutch springs","diag_likelihood":0.86}
+{"item":"Stembolt is loud, underpowered, and spits soot; muffler gasket blown.","defective_part":"muffler gasket","diag_likelihood":0.84}
+{"item":"Muffler gasket failed; exhaust leak reduces scavenging and power.","defective_part":"muffler gasket","diag_likelihood":0.9}
+{"item":"It won’t oil, and I found plastic shavings near the worm gear.","defective_part":"oil pump worm gear","diag_likelihood":0.86}
+{"item":"Worm gear stripped; oil pump not driven by crankshaft.","defective_part":"oil pump worm gear","diag_likelihood":0.93}
+{"item":"Stembolt starts fine, but after refueling it won’t restart until it cools.","defective_part":"vapor lock","diag_likelihood":0.5}
+{"item":"Hot restart issues consistent with vapor lock or venting problem.","defective_part":"tank vent","diag_likelihood":0.62}
+{"item":"Stembolt only runs with the high-speed screw way out; otherwise it dies.","defective_part":"main jet obstruction","diag_likelihood":0.74}
+{"item":"Main circuit partially blocked; requires excessive enrichment to run.","defective_part":"main jet obstruction","diag_likelihood":0.85}
+{"item":"The stembolt ‘pops’ then sputters to stop; classic fuel delivery interruption.","defective_part":"mini-carburetor","diag_likelihood":0.9}
+{"item":"Airflow to the mini-carburetor was obstructed by residue buildup.","defective_part":"mini-carburetor","diag_likelihood":0.95}
+{"item":"Oil seepage suggestive of seal degradation around the crank area.","defective_part":"air leak at crank seal","diag_likelihood":0.72}
+{"item":"Sounds like the machine is popping then machine sputters to stop.","defective_part":"mini-carburetor","diag_likelihood":0.96}
+{"item":"Stembolt starts, then immediately loads up and smokes like it’s auditioning for a fog machine.","defective_part":"carburetor tune too rich","diag_likelihood":0.84}
+{"item":"Runs great for two cuts, then the top end goes flat and it won’t clear out.","defective_part":"spark arrestor screen","diag_likelihood":0.79}
+{"item":"Cold start takes 20 pulls unless I prime like I’m pumping up a bicycle tire.","defective_part":"primer bulb","diag_likelihood":0.76}
+{"item":"Primer bulb stays empty and I can hear air hissing at the carb nipple.","defective_part":"fuel line air leak","diag_likelihood":0.88}
+{"item":"Stembolt idles, but any throttle makes it die instantly—like it hates ambition.","defective_part":"impulse line","diag_likelihood":0.82}
+{"item":"Impulse line is soft and oily; feels swollen and loose on the fitting.","defective_part":"impulse line","diag_likelihood":0.9}
+{"item":"High idle that won’t come down; chain spins even after I back off the idle screw.","defective_part":"air leak at intake boot","diag_likelihood":0.78}
+{"item":"Idle ‘hangs’ after revving; takes 5–10 seconds to settle.","defective_part":"air leak at crank seal","diag_likelihood":0.72}
+{"item":"Stembolt runs fine until I close the top cover; then it chokes and bogs.","defective_part":"air filter cover misfit","diag_likelihood":0.74}
+{"item":"Air filter cover is warped and pinches the choke linkage.","defective_part":"air filter cover misfit","diag_likelihood":0.83}
+{"item":"Pops once on choke, then nothing; plug is dry and clean.","defective_part":"fuel filter","diag_likelihood":0.66}
+{"item":"Fuel filter looks like it’s been steeped in espresso grounds.","defective_part":"fuel filter","diag_likelihood":0.91}
+{"item":"Starts, idles, but dies the moment I tip it left; right side is fine.","defective_part":"fuel pickup line","diag_likelihood":0.84}
+{"item":"Fuel pickup line is too short and doesn’t reach the corner of the tank.","defective_part":"fuel pickup line","diag_likelihood":0.92}
+{"item":"Stembolt only starts after many tries—very Husky-coded—but once running it rips.","defective_part":"carburetor diaphragm","diag_likelihood":0.63}
+{"item":"Metering diaphragm is stiff; fuel delivery lags after sitting.","defective_part":"carburetor metering diaphragm","diag_likelihood":0.89}
+{"item":"Oil tank stays full; bar looks dry; chain turns blue at the rails.","defective_part":"oil pump","diag_likelihood":0.94}
+{"item":"Oil pump drive gear is shredded like confetti.","defective_part":"oil pump worm gear","diag_likelihood":0.93}
+{"item":"Chain creeps at idle; clutch cover gets hot and smells scorched.","defective_part":"clutch springs","diag_likelihood":0.86}
+{"item":"Clutch springs are stretched; shoes don’t retract fully.","defective_part":"clutch springs","diag_likelihood":0.91}
+{"item":"Engine revs normally but chain doesn’t move unless I blip it hard.","defective_part":"clutch shoes","diag_likelihood":0.73}
+{"item":"Clutch shoes glazed; engagement inconsistent.","defective_part":"clutch shoes","diag_likelihood":0.78}
+{"item":"Stembolt won’t shut off with the switch; I have to choke it out.","defective_part":"kill switch","diag_likelihood":0.93}
+{"item":"Kill switch wire is rubbed through against the handle frame.","defective_part":"kill switch wiring","diag_likelihood":0.9}
+{"item":"Random shutdown when vibration is high; restarting is immediate.","defective_part":"loose ground wire","diag_likelihood":0.74}
+{"item":"Ground strap near coil is loose; spark cuts out under vibration.","defective_part":"loose ground wire","diag_likelihood":0.88}
+{"item":"Hot restart is awful; cold start is fine; spark fades after heat soak.","defective_part":"ignition coil","diag_likelihood":0.83}
+{"item":"Spark is weak/orange when hot; strong/blue when cold.","defective_part":"ignition coil","diag_likelihood":0.87}
+{"item":"Stembolt has good spark but plug is wet every time; smells like overfueling.","defective_part":"carburetor needle valve","diag_likelihood":0.81}
+{"item":"Metering needle isn’t sealing; fuel drips from carb throat when parked.","defective_part":"carburetor needle valve","diag_likelihood":0.92}
+{"item":"Only runs on half-choke even after warm; full run position stalls.","defective_part":"air leak at intake boot","diag_likelihood":0.69}
+{"item":"Intake boot has a hairline crack at the clamp line.","defective_part":"intake boot crack","diag_likelihood":0.9}
+{"item":"Won’t rev past midrange; it blubbers and smokes under throttle.","defective_part":"spark arrestor screen","diag_likelihood":0.68}
+{"item":"Spark arrestor is carboned nearly shut; exhaust flow restricted.","defective_part":"spark arrestor screen","diag_likelihood":0.95}
+{"item":"Stembolt pulls too easy; feels like there’s no compression anymore.","defective_part":"piston rings","diag_likelihood":0.78}
+{"item":"Compression is low; top end looks worn through exhaust port.","defective_part":"piston rings","diag_likelihood":0.84}
+{"item":"Metallic rattle at high RPM then sudden power loss; now it scuffs badly.","defective_part":"piston scoring","diag_likelihood":0.76}
+{"item":"Visible aluminum transfer on cylinder wall; it still runs but poorly.","defective_part":"piston scoring","diag_likelihood":0.94}
+{"item":"Stembolt overheats; cylinder fins packed with oily sawdust paste.","defective_part":"cooling fins blockage","diag_likelihood":0.9}
+{"item":"Cooling fins clogged; power fades after a minute of cutting.","defective_part":"cooling fins blockage","diag_likelihood":0.88}
+{"item":"Chain tension won’t hold; bar wiggles even with nuts tight.","defective_part":"bar studs","diag_likelihood":0.77}
+{"item":"One bar stud is partially stripped; side cover doesn’t clamp evenly.","defective_part":"bar studs","diag_likelihood":0.85}
+{"item":"Tensioner screw spins but the pawl doesn’t move the bar.","defective_part":"chain tensioner","diag_likelihood":0.92}
+{"item":"Chain tensioner pawl is worn down to a nub.","defective_part":"chain tensioner","diag_likelihood":0.95}
+{"item":"Stembolt surges at idle; spray test near carb gasket spikes RPM.","defective_part":"carburetor gasket leak","diag_likelihood":0.86}
+{"item":"Carb gasket looks pinched and uneven; unmetered air suspected.","defective_part":"carburetor gasket leak","diag_likelihood":0.9}
+{"item":"Idle screw does nothing; it’s like turning a decorative knob.","defective_part":"idle circuit blockage","diag_likelihood":0.71}
+{"item":"Low-speed passages varnished; idle depends on throttle plate being open.","defective_part":"idle circuit blockage","diag_likelihood":0.9}
+{"item":"Bog at WOT; half throttle is fine; it feels starved on the main.","defective_part":"main jet obstruction","diag_likelihood":0.85}
+{"item":"Main jet clogged with residue; cleaning restores top end immediately.","defective_part":"main jet obstruction","diag_likelihood":0.93}
+{"item":"Stembolt runs away to high RPM and hangs there like it’s possessed.","defective_part":"air leak at crank seal","diag_likelihood":0.7}
+{"item":"Hanging idle worsens with heat; likely crank seal leak.","defective_part":"air leak at crank seal","diag_likelihood":0.78}
+{"item":"Stembolt dies after 30–60 seconds; fuel cap hisses like a soda.","defective_part":"tank vent","diag_likelihood":0.92}
+{"item":"Runs only with fuel cap cracked open slightly.","defective_part":"tank vent","diag_likelihood":0.95}
+{"item":"Throttle trigger sticks open; return spring feels weak.","defective_part":"throttle return spring","diag_likelihood":0.89}
+{"item":"Throttle return spring is unhooked from the trigger frame.","defective_part":"throttle return spring","diag_likelihood":0.94}
+{"item":"Full trigger doesn’t reach WOT; linkage slipped or bent.","defective_part":"throttle linkage","diag_likelihood":0.83}
+{"item":"Throttle linkage clip missing; travel limited.","defective_part":"throttle linkage","diag_likelihood":0.9}
+{"item":"Stembolt misfires at high RPM like popcorn in the muffler.","defective_part":"spark plug boot","diag_likelihood":0.72}
+{"item":"Plug boot is cracked and arcs to the cylinder shroud.","defective_part":"spark plug boot","diag_likelihood":0.88}
+{"item":"Stembolt won’t start; plug porcelain is cracked; spark jumps weirdly.","defective_part":"spark plug","diag_likelihood":0.9}
+{"item":"Spark plug gap is wildly off; someone ‘tuned’ it with vibes.","defective_part":"spark plug","diag_likelihood":0.82}
+{"item":"Backfire and kickback after sudden chain stop; timing feels off.","defective_part":"flywheel key","diag_likelihood":0.74}
+{"item":"Flywheel key is partially sheared; ignition timing shifted.","defective_part":"flywheel key","diag_likelihood":0.9}
+{"item":"Stembolt vibrates like it’s trying to escape its own tutorial.","defective_part":"anti-vibration mounts","diag_likelihood":0.82}
+{"item":"AV mount is torn; handle buzzes violently.","defective_part":"anti-vibration mounts","diag_likelihood":0.94}
+{"item":"Chain brake won’t release cleanly; lever feels gritty and slow.","defective_part":"chain brake band","diag_likelihood":0.8}
+{"item":"Brake band glazed; drags even when disengaged.","defective_part":"chain brake band","diag_likelihood":0.85}
+{"item":"Chain brake engages too easily from vibration; spring feels weak.","defective_part":"chain brake spring","diag_likelihood":0.76}
+{"item":"Chain brake spring is deformed; inconsistent engagement.","defective_part":"chain brake spring","diag_likelihood":0.83}
+{"item":"Oiler works only at high RPM; at idle the bar stays dry.","defective_part":"oil pump","diag_likelihood":0.73}
+{"item":"Oil pickup line has a split end; it sucks air intermittently.","defective_part":"oil pickup line","diag_likelihood":0.86}
+{"item":"After bar swap, oiling stopped; holes don’t line up with the case outlet.","defective_part":"bar oil hole mismatch","diag_likelihood":0.91}
+{"item":"Bar oil port packed solid with sawdust paste.","defective_part":"bar oil port blockage","diag_likelihood":0.93}
+{"item":"Stembolt starts, then dies when I set it clutch-side down.","defective_part":"fuel line routing","diag_likelihood":0.71}
+{"item":"Fuel line pinched by cover when resting; starvation follows.","defective_part":"fuel line routing","diag_likelihood":0.79}
+{"item":"Fuel smells strong; carb area wet after sitting; likely seepage.","defective_part":"fuel line clamp","diag_likelihood":0.69}
+{"item":"Clamp at carb inlet loose; fuel weeps under pulse.","defective_part":"fuel line clamp","diag_likelihood":0.84}
+{"item":"Primer bulb fills with bubbles; stembolt runs inconsistent and surgy.","defective_part":"fuel line air leak","diag_likelihood":0.82}
+{"item":"Fuel line is stiff and cracked when bent; classic aging failure.","defective_part":"fuel line","diag_likelihood":0.9}
+{"item":"Stembolt has spark and compression, but won’t start; fuel is last season’s mix.","defective_part":"stale fuel","diag_likelihood":0.77}
+{"item":"Old mix varnished the carb; fresh fuel helps briefly then fades.","defective_part":"carburetor contamination","diag_likelihood":0.73}
+{"item":"Carb low-speed screw missing O-ring; tuning is impossible and idle hunts.","defective_part":"idle mixture screw o-ring","diag_likelihood":0.88}
+{"item":"Idle mixture O-ring cracked; unmetered air at screw threads.","defective_part":"idle mixture screw o-ring","diag_likelihood":0.9}
+{"item":"Stembolt runs lean and screams; exhaust note sharp; plug looks white.","defective_part":"carburetor tune too lean","diag_likelihood":0.86}
+{"item":"H needle set too lean; under load it sags then dies.","defective_part":"carburetor tune too lean","diag_likelihood":0.8}
+{"item":"Four-stroking at WOT; lots of smoke; plug sooty.","defective_part":"carburetor tune too rich","diag_likelihood":0.83}
+{"item":"H needle too rich; it won’t clear out on top end.","defective_part":"carburetor tune too rich","diag_likelihood":0.81}
+{"item":"Stembolt starts fine, then shuts off when I bump the handle lightly.","defective_part":"kill switch wiring","diag_likelihood":0.75}
+{"item":"Run position intermittently grounds ignition; harness rub point found.","defective_part":"kill switch wiring","diag_likelihood":0.86}
+{"item":"Decompression button won’t stay down; pops back immediately.","defective_part":"decompression valve","diag_likelihood":0.87}
+{"item":"Decompression valve carboned up; won’t seal; starting feels soft.","defective_part":"decompression valve","diag_likelihood":0.81}
+{"item":"Starter rope won’t retract; it just hangs there like a disappointed parent.","defective_part":"recoil spring","diag_likelihood":0.94}
+{"item":"Recoil spring snapped; pulley spins free without tension.","defective_part":"recoil spring","diag_likelihood":0.96}
+{"item":"Rope retracts but slips with crunchy clicks; pawls aren’t biting.","defective_part":"starter pawls","diag_likelihood":0.9}
+{"item":"Starter pawls worn; flywheel barely turns on pull.","defective_part":"starter pawls","diag_likelihood":0.93}
+{"item":"Stembolt is loud and underpowered; soot marks around muffler joint.","defective_part":"muffler gasket","diag_likelihood":0.86}
+{"item":"Muffler bolts keep loosening; gasket blows repeatedly.","defective_part":"muffler bolts","diag_likelihood":0.74}
+{"item":"Stembolt stalls only when fuel drops below 1/4 tank.","defective_part":"fuel pickup filter","diag_likelihood":0.8}
+{"item":"Pickup filter stuck forward; starves at low fuel levels.","defective_part":"fuel pickup filter","diag_likelihood":0.86}
+{"item":"Midrange stumble only; idle and WOT are fine.","defective_part":"carburetor transition port blockage","diag_likelihood":0.79}
+{"item":"Transition ports dirty; 1/3–2/3 throttle is rough.","defective_part":"carburetor transition port blockage","diag_likelihood":0.86}
+{"item":"Stembolt runs better with air filter removed (I know, I know).","defective_part":"air filter","diag_likelihood":0.84}
+{"item":"Air filter oil-saturated and clogged; airflow restricted.","defective_part":"air filter","diag_likelihood":0.92}
+{"item":"Stembolt dies on decel; rev down and it quits.","defective_part":"low-speed circuit too lean","diag_likelihood":0.74}
+{"item":"Low-speed circuit lean; decel causes stall consistently.","defective_part":"low-speed circuit too lean","diag_likelihood":0.81}
+{"item":"Stembolt bogs on quick throttle; slow roll works fine.","defective_part":"low-speed circuit lean","diag_likelihood":0.72}
+{"item":"Acceleration stumble suggests low-speed fuel lag.","defective_part":"carburetor metering lever","diag_likelihood":0.66}
+{"item":"Metering lever height off; throttle tip-in bogs.","defective_part":"carburetor metering lever","diag_likelihood":0.78}
+{"item":"Carb won’t prime; nothing moves through the lines despite full tank.","defective_part":"impulse line","diag_likelihood":0.86}
+{"item":"Crank pulse not reaching carb; impulse nipple loose.","defective_part":"impulse line","diag_likelihood":0.82}
+{"item":"Chain won’t move in the cut; engine revs freely like it’s pretending.","defective_part":"clutch","diag_likelihood":0.88}
+{"item":"Clutch drum bearing seized; chain motion inconsistent.","defective_part":"clutch drum bearing","diag_likelihood":0.74}
+{"item":"High-pitched whine near clutch; drum wobbles slightly.","defective_part":"clutch drum bearing","diag_likelihood":0.77}
+{"item":"Drive sprocket teeth hooked and sharp; chain surges.","defective_part":"drive sprocket","diag_likelihood":0.9}
+{"item":"Drive sprocket worn; chain slips under load.","defective_part":"drive sprocket","diag_likelihood":0.87}
+{"item":"Bar nose sprocket binds; cutting feels like dragging a brake.","defective_part":"bar sprocket nose","diag_likelihood":0.79}
+{"item":"Bar rails uneven; chain tension changes constantly.","defective_part":"guide bar rails","diag_likelihood":0.67}
+{"item":"Stembolt runs okay, but feels hotter and weaker every minute.","defective_part":"cooling fins blockage","diag_likelihood":0.73}
+{"item":"Cooling airflow blocked by chip-packed shroud; overheating symptoms.","defective_part":"cooling fins blockage","diag_likelihood":0.81}
+{"item":"Stembolt dies randomly; spark/fuel seem fine; no clear pattern.","defective_part":"unknown","diag_likelihood":0.32}
+{"item":"It sometimes refuses to start unless I compliment both Stihl and Husky equally.","defective_part":"unknown","diag_likelihood":0.28}
+{"item":"Stembolt starts then immediately races; idle screw changes barely affect it.","defective_part":"air leak at intake boot","diag_likelihood":0.67}
+{"item":"Intake boot clamp loose; unmetered air causes runaway idle.","defective_part":"intake boot clamp loose","diag_likelihood":0.88}
+{"item":"Stembolt dies when I flip to RUN; yes, RUN kills it.","defective_part":"kill switch wiring","diag_likelihood":0.84}
+{"item":"RUN position grounds ignition due to shorted wire.","defective_part":"kill switch wiring","diag_likelihood":0.9}
+{"item":"Stembolt is slow to return to idle; throttle plate sticks slightly.","defective_part":"throttle linkage","diag_likelihood":0.76}
+{"item":"Throttle cable frayed; trigger movement gritty.","defective_part":"throttle cable","diag_likelihood":0.88}
+{"item":"Stembolt sputters to stop mid-cut; fuel cap hiss present.","defective_part":"tank vent","diag_likelihood":0.87}
+{"item":"Tank vent clogged; vacuum forms; fuel flow stops.","defective_part":"tank vent","diag_likelihood":0.94}
+{"item":"Stembolt oiler leaks into clutch cover when stored; puddle forms overnight.","defective_part":"oil outlet seal","diag_likelihood":0.82}
+{"item":"Oil outlet seal torn; oil migrates into clutch area.","defective_part":"oil outlet seal","diag_likelihood":0.88}
+{"item":"Stembolt won’t idle unless I keep the throttle slightly open by hand.","defective_part":"idle circuit blockage","diag_likelihood":0.82}
+{"item":"Idle jet varnished; needs throttle plate open to pull fuel.","defective_part":"idle circuit blockage","diag_likelihood":0.9}
+{"item":"Stembolt ‘pings’ under load; sharp metallic ‘ting’ at WOT.","defective_part":"detonation from lean mix","diag_likelihood":0.62}
+{"item":"Lean detonation signs; plug white; cylinder very hot.","defective_part":"carburetor tune too lean","diag_likelihood":0.69}
+{"item":"Muffler baffle rattles; power down and exhaust note tinny.","defective_part":"muffler baffle loose","diag_likelihood":0.7}
+{"item":"Muffler baffle loose internally; reduced scavenging.","defective_part":"muffler baffle loose","diag_likelihood":0.75}
+{"item":"Stembolt won’t start after a sudden stop; now it kicks back on pull.","defective_part":"flywheel key","diag_likelihood":0.78}
+{"item":"Flywheel key damaged after abrupt stop; timing shifted.","defective_part":"flywheel key","diag_likelihood":0.9}
+{"item":"Stembolt cuts out at high RPM only; midrange fine.","defective_part":"ignition coil gap","diag_likelihood":0.68}
+{"item":"Coil gap too wide; spark weak at RPM.","defective_part":"ignition coil gap","diag_likelihood":0.82}
+{"item":"Stembolt feels like it’s dragging; chain motion jerky; cover packed with gunk.","defective_part":"clutch contamination","diag_likelihood":0.74}
+{"item":"Oily sawdust packed around clutch; shoes slip and overheat.","defective_part":"clutch contamination","diag_likelihood":0.81}
+{"item":"Stembolt chain brake drags; chain slows even off-brake.","defective_part":"chain brake contamination","diag_likelihood":0.76}
+{"item":"Brake mechanism packed with debris; partial drag persists.","defective_part":"chain brake contamination","diag_likelihood":0.84}
+{"item":"Stembolt coughs and dies right as I tip it into a cut, every time.","defective_part":"fuel starvation","diag_likelihood":0.57}
+{"item":"Fuel starvation likely; suspect clogged fuel filter or kinked line.","defective_part":"fuel filter","diag_likelihood":0.61}
+{"item":"Stembolt starts, runs 10 seconds, then dies; restarting immediate.","defective_part":"tank vent","diag_likelihood":0.66}
+{"item":"Vent valve sticks intermittently; short run then stall.","defective_part":"tank vent","diag_likelihood":0.73}
+{"item":"Stembolt has spark but no pop; plug dry; primer does nothing.","defective_part":"primer bulb check valve","diag_likelihood":0.65}
+{"item":"Primer check valve stuck; fuel won’t move forward.","defective_part":"primer bulb check valve","diag_likelihood":0.86}
+{"item":"Stembolt starts only if I hold WOT while pulling; otherwise nothing.","defective_part":"flooded carburetor","diag_likelihood":0.69}
+{"item":"Flooded symptoms; wet plug; WOT clears excess fuel.","defective_part":"flooded carburetor","diag_likelihood":0.75}
+{"item":"Stembolt runs rich and loads up at idle; clearing it takes a long rev.","defective_part":"carburetor tune too rich","diag_likelihood":0.8}
+{"item":"Stembolt idles fine, but dies when I engage chain brake (idle too low).","defective_part":"idle speed too low","diag_likelihood":0.68}
+{"item":"Idle too low to handle sudden load; stalls on brake engagement.","defective_part":"idle speed screw","diag_likelihood":0.72}
+{"item":"Stembolt won’t oil and the oil line behind the cover is kinked.","defective_part":"oil line","diag_likelihood":0.9}
+{"item":"Oil line pinched by cover; restricts flow to bar.","defective_part":"oil line","diag_likelihood":0.86}
+{"item":"Stembolt runs, but power is down; exhaust smells muffled; screen clogged.","defective_part":"spark arrestor screen","diag_likelihood":0.83}
+{"item":"Stembolt starts with choke, dies on run; classic ‘needs fuel’ behavior.","defective_part":"fuel filter","diag_likelihood":0.78}
+{"item":"Stembolt started once, then never again; now there’s grinding when pulling rope.","defective_part":"crank bearing","diag_likelihood":0.6}
+{"item":"Roughness through pull stroke; bearing noise suspected.","defective_part":"crank bearing","diag_likelihood":0.66}
+{"item":"Stembolt’s recoil rope frays fast; pulley edge sharp like a tiny guillotine.","defective_part":"starter pulley","diag_likelihood":0.79}
+{"item":"Pulley has burr; rope chafes and breaks.","defective_part":"starter pulley","diag_likelihood":0.86}
+{"item":"Stembolt does everything right except actually starting (philosophically compelling).","defective_part":"unknown","diag_likelihood":0.3}
+{"item":"Stembolt fires once, then refuses to do it again unless I re-prime like a maniac.","defective_part":"primer bulb","diag_likelihood":0.7}
+{"item":"Primer bulb stays collapsed; won’t rebound after pressing.","defective_part":"primer bulb","diag_likelihood":0.9}
+{"item":"Starts on choke, but the second I flip to run it stalls cleanly.","defective_part":"fuel filter","diag_likelihood":0.77}
+{"item":"Fuel filter is partially clogged; runs only with choke enrichment.","defective_part":"fuel filter","diag_likelihood":0.88}
+{"item":"Stembolt idles okay but bogs hard if I snap the throttle.","defective_part":"carburetor metering lever","diag_likelihood":0.73}
+{"item":"Tip-in bog suggests metering lever height too low.","defective_part":"carburetor metering lever","diag_likelihood":0.8}
+{"item":"It screams lean at WOT and then dies like a Stihl meme come to life.","defective_part":"carburetor tune too lean","diag_likelihood":0.82}
+{"item":"White plug, hot cylinder, sharp exhaust note: lean condition.","defective_part":"carburetor tune too lean","diag_likelihood":0.9}
+{"item":"Four-strokes and smokes at WOT; won’t clean up.","defective_part":"carburetor tune too rich","diag_likelihood":0.82}
+{"item":"Sooty plug and lazy throttle response: rich tune.","defective_part":"carburetor tune too rich","diag_likelihood":0.88}
+{"item":"Stembolt idles high and won’t come down; idle screw barely changes anything.","defective_part":"air leak at intake boot","diag_likelihood":0.74}
+{"item":"Idle hangs after rev; likely crank seal leak.","defective_part":"air leak at crank seal","diag_likelihood":0.73}
+{"item":"Spray test near flywheel side changes RPM immediately.","defective_part":"air leak at crank seal","diag_likelihood":0.86}
+{"item":"Idle hunts like it’s trying to find religion; surges up and down steadily.","defective_part":"carburetor gasket leak","diag_likelihood":0.78}
+{"item":"Carb base gasket looks pinched; unmetered air suspected.","defective_part":"carburetor gasket leak","diag_likelihood":0.9}
+{"item":"Stembolt runs 45 seconds, then dies; cap hisses when opened.","defective_part":"tank vent","diag_likelihood":0.93}
+{"item":"Runs with cap loose; dies with cap tight.","defective_part":"tank vent","diag_likelihood":0.95}
+{"item":"Starts then stalls when tipped forward into a cut; acts like fuel pickup misses.","defective_part":"fuel pickup filter","diag_likelihood":0.8}
+{"item":"Fuel pickup filter is stiff and doesn’t follow the fuel.","defective_part":"fuel pickup filter","diag_likelihood":0.88}
+{"item":"Stembolt only dies when fuel level gets low; above half tank it’s fine.","defective_part":"fuel pickup line","diag_likelihood":0.77}
+{"item":"Fuel pickup line is too short; starves near empty.","defective_part":"fuel pickup line","diag_likelihood":0.9}
+{"item":"Primer fills with bubbles; clear line shows air getting in.","defective_part":"fuel line air leak","diag_likelihood":0.86}
+{"item":"Fuel line is stiff and cracked; microleaks under pulse.","defective_part":"fuel line","diag_likelihood":0.9}
+{"item":"Stembolt smells like fuel and carb throat is wet after sitting.","defective_part":"carburetor needle valve","diag_likelihood":0.83}
+{"item":"Metering needle not sealing; fuel dribbles when parked.","defective_part":"carburetor needle valve","diag_likelihood":0.92}
+{"item":"Runs great cold, but once hot it loses spark and quits.","defective_part":"ignition coil","diag_likelihood":0.84}
+{"item":"Hot spark weak and orange; coil likely failing.","defective_part":"ignition coil","diag_likelihood":0.9}
+{"item":"Misfires at high RPM; sounds like tiny firecrackers in the muffler.","defective_part":"spark plug boot","diag_likelihood":0.71}
+{"item":"Plug boot cracked; visible arcing to shroud at night.","defective_part":"spark plug boot","diag_likelihood":0.88}
+{"item":"No-start after chain pinch event; now it kicks back hard on pull.","defective_part":"flywheel key","diag_likelihood":0.78}
+{"item":"Flywheel key partially sheared; timing shifted.","defective_part":"flywheel key","diag_likelihood":0.9}
+{"item":"Stembolt starts and immediately runs away at high RPM like it’s late for a Husky ritual.","defective_part":"air leak at intake boot","diag_likelihood":0.71}
+{"item":"Intake clamp loose; runaway idle persists until tightened.","defective_part":"intake boot clamp loose","diag_likelihood":0.9}
+{"item":"Chain creeps at idle; clutch cover gets hot quickly.","defective_part":"clutch springs","diag_likelihood":0.84}
+{"item":"Clutch springs stretched; shoes don’t retract fully.","defective_part":"clutch springs","diag_likelihood":0.9}
+{"item":"Engine revs freely but chain won’t pull in wood; feels like slip.","defective_part":"clutch","diag_likelihood":0.82}
+{"item":"Clutch shoes glazed; engagement inconsistent under load.","defective_part":"clutch shoes","diag_likelihood":0.77}
+{"item":"High-pitched whine from clutch area; drum feels rough.","defective_part":"clutch drum bearing","diag_likelihood":0.76}
+{"item":"Clutch drum bearing seized intermittently; chain motion jerky.","defective_part":"clutch drum bearing","diag_likelihood":0.8}
+{"item":"Drive sprocket teeth hooked like little sharks; chain surges.","defective_part":"drive sprocket","diag_likelihood":0.9}
+{"item":"Chain tension won’t hold; tensioner screw spins with no movement.","defective_part":"chain tensioner","diag_likelihood":0.92}
+{"item":"Tensioner pawl stripped; cannot adjust tension.","defective_part":"chain tensioner","diag_likelihood":0.95}
+{"item":"Side cover won’t clamp evenly; bar shifts during cut.","defective_part":"bar studs","diag_likelihood":0.82}
+{"item":"One bar stud stripped; nuts torque but cover stays loose.","defective_part":"bar studs","diag_likelihood":0.87}
+{"item":"Stembolt oils fine sometimes, then not at all; output pulses.","defective_part":"oil pickup line","diag_likelihood":0.7}
+{"item":"Oil pickup line split; sucks air intermittently.","defective_part":"oil pickup line","diag_likelihood":0.83}
+{"item":"Oil tank full but bar dry; pump gear looks chewed.","defective_part":"oil pump worm gear","diag_likelihood":0.89}
+{"item":"Worm gear stripped; pump not driven.","defective_part":"oil pump worm gear","diag_likelihood":0.95}
+{"item":"After bar swap, oiling stopped entirely; holes don’t align.","defective_part":"bar oil hole mismatch","diag_likelihood":0.92}
+{"item":"Oil ports packed with sawdust paste; no oil reaches bar.","defective_part":"bar oil port blockage","diag_likelihood":0.93}
+{"item":"Chain brake drags even off; chain slows like there’s a hidden brake.","defective_part":"chain brake contamination","diag_likelihood":0.78}
+{"item":"Brake band glazed; doesn’t fully release.","defective_part":"chain brake band","diag_likelihood":0.84}
+{"item":"Brake engages too easily from vibration; spring feels weak.","defective_part":"chain brake spring","diag_likelihood":0.77}
+{"item":"Stembolt vibrates like a tuning fork; hands go numb fast.","defective_part":"anti-vibration mounts","diag_likelihood":0.83}
+{"item":"AV mount torn; handle buzzes violently.","defective_part":"anti-vibration mounts","diag_likelihood":0.95}
+{"item":"Stembolt overheats; fins and shroud are packed with chips.","defective_part":"cooling fins blockage","diag_likelihood":0.88}
+{"item":"Cooling airflow restricted; power fades after a minute.","defective_part":"cooling fins blockage","diag_likelihood":0.85}
+{"item":"Muffler joint sooty; exhaust louder and tinny; power down.","defective_part":"muffler gasket","diag_likelihood":0.85}
+{"item":"Muffler bolts keep backing out; gasket blows repeatedly.","defective_part":"muffler bolts","diag_likelihood":0.76}
+{"item":"Won’t rev past midrange; feels like it can’t exhale.","defective_part":"spark arrestor screen","diag_likelihood":0.8}
+{"item":"Spark arrestor nearly blocked with carbon; exhaust restricted.","defective_part":"spark arrestor screen","diag_likelihood":0.95}
+{"item":"Stembolt won’t idle unless I keep throttle cracked open.","defective_part":"idle circuit blockage","diag_likelihood":0.84}
+{"item":"Low-speed passages varnished; idle depends on throttle plate opening.","defective_part":"idle circuit blockage","diag_likelihood":0.9}
+{"item":"Midrange stumble only; idle and WOT are fine.","defective_part":"carburetor transition port blockage","diag_likelihood":0.8}
+{"item":"Transition ports dirty; 1/3–2/3 throttle is rough.","defective_part":"carburetor transition port blockage","diag_likelihood":0.87}
+{"item":"Carb won’t prime; lines full but no movement through carb.","defective_part":"impulse line","diag_likelihood":0.85}
+{"item":"Impulse line cracked at nipple; carb pump ineffective.","defective_part":"impulse line","diag_likelihood":0.95}
+{"item":"Stembolt dies when I bump the handle; jiggling wire fixes it.","defective_part":"kill switch wiring","diag_likelihood":0.78}
+{"item":"Harness rubbed through; intermittent grounding of ignition.","defective_part":"kill switch wiring","diag_likelihood":0.9}
+{"item":"Won’t shut off with switch; stays running until choked.","defective_part":"kill switch","diag_likelihood":0.91}
+{"item":"Kill switch contacts corroded; inconsistent behavior.","defective_part":"kill switch","diag_likelihood":0.8}
+{"item":"Starter rope won’t retract; hangs limp (mood).","defective_part":"recoil spring","diag_likelihood":0.94}
+{"item":"Recoil spring snapped; no return tension.","defective_part":"recoil spring","diag_likelihood":0.96}
+{"item":"Rope retracts but slips with clicking; pawls don’t catch.","defective_part":"starter pawls","diag_likelihood":0.9}
+{"item":"Starter pawls worn; flywheel barely turns on pull.","defective_part":"starter pawls","diag_likelihood":0.93}
+{"item":"Starter rope frays fast; pulley edge feels sharp.","defective_part":"starter pulley","diag_likelihood":0.8}
+{"item":"Starter pulley has burr; rope chafes and breaks.","defective_part":"starter pulley","diag_likelihood":0.86}
+{"item":"Throttle trigger sticky; doesn’t snap back cleanly.","defective_part":"throttle linkage","diag_likelihood":0.8}
+{"item":"Throttle cable frayed; gritty trigger travel.","defective_part":"throttle cable","diag_likelihood":0.88}
+{"item":"Decompression button won’t stay down; pops back immediately.","defective_part":"decompression valve","diag_likelihood":0.86}
+{"item":"Decompression valve carboned; won’t seal; low start compression feel.","defective_part":"decompression valve","diag_likelihood":0.8}
+{"item":"Compression feels soft; starts getting harder over weeks, then worse.","defective_part":"piston rings","diag_likelihood":0.72}
+{"item":"Low compression and easy pull; top end wear likely.","defective_part":"piston rings","diag_likelihood":0.84}
+{"item":"Metallic scuff sound under load; power down; plug shows aluminum flecks.","defective_part":"piston scoring","diag_likelihood":0.79}
+{"item":"Scored piston visible through exhaust port; runs poorly.","defective_part":"piston scoring","diag_likelihood":0.95}
+{"item":"Stembolt starts only after 18 pulls—Husky folklore achieved—but then runs okay.","defective_part":"carburetor diaphragm","diag_likelihood":0.6}
+{"item":"Carb diaphragm stiff; excessive pulls required to draw fuel.","defective_part":"carburetor diaphragm","diag_likelihood":0.84}
+{"item":"Runs better with air filter removed (don’t @ me).","defective_part":"air filter","diag_likelihood":0.83}
+{"item":"Air filter oil-saturated and clogged; airflow restricted.","defective_part":"air filter","diag_likelihood":0.92}
+{"item":"Stembolt dies on decel; rev down and it quits cleanly.","defective_part":"low-speed circuit too lean","diag_likelihood":0.78}
+{"item":"Decel stall indicates lean low-speed circuit.","defective_part":"low-speed circuit too lean","diag_likelihood":0.82}
+{"item":"Oil puddle under stembolt after storage; leaks from oil outlet region.","defective_part":"oil outlet seal","diag_likelihood":0.83}
+{"item":"Oil outlet seal torn; oil migrates into clutch cover.","defective_part":"oil outlet seal","diag_likelihood":0.9}
+{"item":"It sometimes runs fine, sometimes refuses; no consistent trigger (pure chaos).","defective_part":"unknown","diag_likelihood":0.31}
+{"item":"Stembolt behaves perfectly until I look at it; then it won’t start.","defective_part":"unknown","diag_likelihood":0.25}
+{"item":"Stembolt behaves perfectly until I look at it; then it won’t start.","defective_part":"unknown","diag_likelihood":0.25}
