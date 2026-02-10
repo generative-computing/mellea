@@ -12,13 +12,8 @@ import typing_extensions
 from .base import C, CBlock, Component, Context, ModelOutputThunk
 from .utils import FancyLogger
 
-# Necessary to define a type that supports `None` so that the BaseModelSubclass
-# can have a default value. Otherwise, Python complains about typed-components
-# since types with default values must come after those without default values in
-# function signatures (which is incompatible with our function parameter formatting).
-pydantic_model_or_none = pydantic.BaseModel | None
 BaseModelSubclass = typing_extensions.TypeVar(
-    "BaseModelSubclass", bound=pydantic_model_or_none, default=None
+    "BaseModelSubclass", bound=pydantic.BaseModel
 )  # must be a subclass of BaseModel
 
 
