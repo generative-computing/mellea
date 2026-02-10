@@ -19,7 +19,7 @@ Shows how to use pre-built tools from HuggingFace's smolagents library.
 
 **Key Features:**
 - Loading existing smolagents tools (PythonInterpreterTool, WikipediaSearchTool, etc.)
-- Converting to Mellea tools with `MelleaTool.from_huggingface()`
+- Converting to Mellea tools with `MelleaTool.from_smolagents()`
 - Using tools from the HuggingFace ecosystem
 
 ## Concepts Demonstrated

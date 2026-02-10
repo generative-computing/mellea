@@ -119,7 +119,7 @@ def test_from_langchain_generation(session: MelleaSession):
     assert isinstance(tool.call_func(), str), "tool call did not yield expected type"
 
 
-def test_from_huggingface_basic():
+def test_from_smolagents_basic():
     """Test basic smolagents tool loading and schema conversion.
 
     This test verifies that:
@@ -146,7 +146,7 @@ def test_from_huggingface_basic():
             return f"Processed: {text}"
 
     hf_tool = SimpleTool()
-    mellea_tool = MelleaTool.from_huggingface(hf_tool)
+    mellea_tool = MelleaTool.from_smolagents(hf_tool)
 
     # Verify tool properties
     assert isinstance(mellea_tool, MelleaTool)
@@ -170,7 +170,7 @@ def test_from_huggingface_basic():
     assert result == "Processed: hello"
 
 
-def test_from_huggingface_multiple_inputs():
+def test_from_smolagents_multiple_inputs():
     """Test smolagents tool with multiple input parameters."""
     try:
         from smolagents import Tool
@@ -197,7 +197,7 @@ def test_from_huggingface_multiple_inputs():
             return 0
 
     hf_tool = MultiInputTool()
-    mellea_tool = MelleaTool.from_huggingface(hf_tool)
+    mellea_tool = MelleaTool.from_smolagents(hf_tool)
 
     # Verify all parameters are in schema
     json_schema = mellea_tool.as_json_tool
@@ -214,7 +214,7 @@ def test_from_huggingface_multiple_inputs():
     assert result == 15
 
 
-def test_from_huggingface_invalid_tool():
+def test_from_smolagents_invalid_tool():
     """Test error handling for non-smolagents tool objects."""
     try:
         from smolagents import Tool
@@ -228,7 +228,7 @@ def test_from_huggingface_invalid_tool():
         name = "fake"
 
     with pytest.raises(ValueError) as exc_info:
-        MelleaTool.from_huggingface(NotATool())
+        MelleaTool.from_smolagents(NotATool())
 
     error_msg = str(exc_info.value)
     assert "smolagents Tool type" in error_msg

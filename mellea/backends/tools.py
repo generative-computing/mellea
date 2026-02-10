@@ -80,7 +80,7 @@ class MelleaTool(AbstractMelleaTool):
             ) from e
 
     @classmethod
-    def from_huggingface(cls, tool: Any):
+    def from_smolagents(cls, tool: Any):
         """Create a Tool from a HuggingFace smolagents tool object.
 
         Args:
@@ -94,16 +94,9 @@ class MelleaTool(AbstractMelleaTool):
             ValueError: If tool is not a smolagents Tool instance
 
         Example:
-            >>> from smolagents import Tool
-            >>> class MyTool(Tool):
-            ...     name = "my_tool"
-            ...     description = "Does something"
-            ...     inputs = {"x": {"type": "string", "description": "Input"}}
-            ...     output_type = "string"
-            ...     def forward(self, x: str) -> str:
-            ...         return f"Result: {x}"
-            >>> hf_tool = MyTool()
-            >>> mellea_tool = MelleaTool.from_huggingface(hf_tool)
+            >>> from smolagents import PythonInterpreterTool
+            >>> tool = PythonInterpreterTool()
+            >>> mellea_tool = MelleaTool.from_smolagents(tool)
         """
         try:
             from smolagents import (  # type: ignore[import-not-found]

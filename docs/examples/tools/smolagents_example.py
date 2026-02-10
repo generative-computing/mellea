@@ -23,7 +23,7 @@ try:
     python_tool_hf = PythonInterpreterTool()
 
     # Convert to Mellea tool - now you can use it with Mellea!
-    python_tool = MelleaTool.from_huggingface(python_tool_hf)
+    python_tool = MelleaTool.from_smolagents(python_tool_hf)
 
     # Use with Mellea session
     m = start_session()
