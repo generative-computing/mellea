@@ -76,7 +76,6 @@ hf = [
     "transformers>=4.53.2,<5",
     "trl==0.19.1",
     "granite-common[transformers]",
-    "git",
 ]
 
 vllm = [
