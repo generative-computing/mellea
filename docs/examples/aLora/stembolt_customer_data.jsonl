@@ -1,0 +1,104 @@
+{"item":"Airflow to the intake seems restricted; it bogs under throttle.","defective_part":"air filter","diag_likelihood":0.78}
+{"item":"Intermittent sputter at high RPM after sitting overnight.","defective_part":"fuel line","diag_likelihood":0.62}
+{"item":"Oil seepage around the lower end suggests wear over time.","defective_part":"piston rings","diag_likelihood":0.71}
+{"item":"Popping noises then it sputters to a stop.","defective_part":"mini-carburetor","diag_likelihood":0.96}
+{"item":"Starts on choke but dies the moment choke is opened.","defective_part":"mini-carburetor","diag_likelihood":0.92}
+{"item":"Hard start when cold; once warm it behaves normally.","defective_part":"spark plug","diag_likelihood":0.58}
+{"item":"No spark visible at the plug even with a good ground.","defective_part":"ignition coil","diag_likelihood":0.86}
+{"item":"Runs for 30 seconds then starves like it’s out of fuel.","defective_part":"fuel filter","diag_likelihood":0.8}
+{"item":"Surging idle that oscillates up and down.","defective_part":"governor spring","diag_likelihood":0.63}
+{"item":"Idle screw adjustments do almost nothing.","defective_part":"carburetor jet","diag_likelihood":0.67}
+{"item":"Strong fuel smell, wet plug, and occasional backfire.","defective_part":"float needle","diag_likelihood":0.74}
+{"item":"Fuel drips from the bowl area while parked.","defective_part":"float needle","diag_likelihood":0.9}
+{"item":"Engine shakes violently even at low speed.","defective_part":"flywheel","diag_likelihood":0.55}
+{"item":"Metallic knock that gets louder under load.","defective_part":"connecting rod","diag_likelihood":0.79}
+{"item":"Won’t crank smoothly; feels like it catches once per revolution.","defective_part":"bearing","diag_likelihood":0.52}
+{"item":"Recoil pulls but doesn’t engage reliably.","defective_part":"recoil starter","diag_likelihood":0.84}
+{"item":"Starter rope frays quickly and retracts slowly.","defective_part":"pull starter rope","diag_likelihood":0.76}
+{"item":"Noticeable exhaust leak sound and reduced power.","defective_part":"muffler","diag_likelihood":0.66}
+{"item":"Overheats rapidly and smells hot; fan area seems fine.","defective_part":"thermostat","diag_likelihood":0.49}
+{"item":"Temperature spikes then drops suddenly while running.","defective_part":"thermostat","diag_likelihood":0.6}
+{"item":"Runs rough and stalls when tipped slightly.","defective_part":"tank vent","diag_likelihood":0.57}
+{"item":"After a few minutes, the fuel cap hiss is intense.","defective_part":"tank vent","diag_likelihood":0.73}
+{"item":"Only runs with primer pumped continuously.","defective_part":"primer bulb","diag_likelihood":0.88}
+{"item":"Primer bulb stays collapsed and doesn’t rebound.","defective_part":"primer bulb","diag_likelihood":0.93}
+{"item":"Throttle feels sticky; return action is inconsistent.","defective_part":"throttle linkage","diag_likelihood":0.72}
+{"item":"Choke lever moves but the engine behavior doesn’t change.","defective_part":"choke plate","diag_likelihood":0.69}
+{"item":"Backfires through intake when accelerating.","defective_part":"valve","diag_likelihood":0.54}
+{"item":"Compression test shows low compression.","defective_part":"piston rings","diag_likelihood":0.83}
+{"item":"Compression is uneven across pulls; occasional puff at breather.","defective_part":"unknown","diag_likelihood":0.4}
+{"item":"Oil pooling near the crank exit; sling pattern on housing.","defective_part":"oil seal","diag_likelihood":0.82}
+{"item":"Grinding noise near front housing; worsens with RPM.","defective_part":"bearing","diag_likelihood":0.77}
+{"item":"Spark is weak and orange; plug gap looks fine.","defective_part":"ignition coil","diag_likelihood":0.64}
+{"item":"New plug improved it briefly then symptoms returned.","defective_part":"unknown","diag_likelihood":0.35}
+{"item":"Engine hunts at idle but smooths out at mid throttle.","defective_part":"mini-carburetor","diag_likelihood":0.61}
+{"item":"Fuel consumption is abnormally high with black smoke.","defective_part":"mini-carburetor","diag_likelihood":0.73}
+{"item":"Black smoke and soot around exhaust outlet.","defective_part":"mini-carburetor","diag_likelihood":0.59}
+{"item":"Misfire only when the machine is hot.","defective_part":"spark plug","diag_likelihood":0.46}
+{"item":"Won’t start after rain; drying it out helps.","defective_part":"ignition coil","diag_likelihood":0.41}
+{"item":"Rattling from flywheel area; timing feels off.","defective_part":"flywheel","diag_likelihood":0.68}
+{"item":"Repeated shear of the flywheel key after sudden stops.","defective_part":"flywheel","diag_likelihood":0.85}
+{"item":"Sharp clank when engaging load; then steady knock.","defective_part":"connecting rod","diag_likelihood":0.74}
+{"item":"Power drops under load though it idles okay.","defective_part":"fuel filter","diag_likelihood":0.65}
+{"item":"Runs fine at idle but dies on quick throttle.","defective_part":"carburetor jet","diag_likelihood":0.7}
+{"item":"Stalls when fuel level gets below half.","defective_part":"fuel line","diag_likelihood":0.51}
+{"item":"Random stall, then immediate restart possible.","defective_part":"unknown","diag_likelihood":0.33}
+{"item":"Idle is too high even with adjustment backed out.","defective_part":"throttle linkage","diag_likelihood":0.6}
+{"item":"Governor seems to overshoot and oscillate under steady load.","defective_part":"governor spring","diag_likelihood":0.72}
+{"item":"Clicking from valve cover area and loss of power.","defective_part":"valve","diag_likelihood":0.58}
+{"item":"Poor acceleration and constant bog regardless of fuel mix.","defective_part":"air filter","diag_likelihood":0.55}
+{"item":"Airbox is clean but it still behaves like it’s choking.","defective_part":"unknown","diag_likelihood":0.29}
+{"item":"Fuel dribble from intake throat after shutdown.","defective_part":"float needle","diag_likelihood":0.79}
+{"item":"Only runs with the fuel cap slightly loosened.","defective_part":"tank vent","diag_likelihood":0.87}
+{"item":"White smoke after startup that clears slowly.","defective_part":"piston rings","diag_likelihood":0.52}
+{"item":"Oil smoke persists and worsens with throttle.","defective_part":"piston rings","diag_likelihood":0.77}
+{"item":"Exhaust note is muffled, like it’s plugged.","defective_part":"muffler","diag_likelihood":0.7}
+{"item":"Muffler glows faintly red under load.","defective_part":"muffler","diag_likelihood":0.61}
+{"item":"Recoil binds at one spot, then releases.","defective_part":"recoil starter","diag_likelihood":0.66}
+{"item":"Pull cord snaps back violently and bruises knuckles.","defective_part":"recoil starter","diag_likelihood":0.57}
+{"item":"Sudden loss of spark when it warms up; then returns after cooling.","defective_part":"ignition coil","diag_likelihood":0.9}
+{"item":"Occasional spark, but timing seems inconsistent.","defective_part":"flywheel","diag_likelihood":0.5}
+{"item":"Wet air filter element with oily residue.","defective_part":"unknown","diag_likelihood":0.38}
+{"item":"Fuel line appears stiff and cracked; leaks under prime.","defective_part":"fuel line","diag_likelihood":0.94}
+{"item":"Starts, revs high, then settles into a rough idle.","defective_part":"governor spring","diag_likelihood":0.47}
+{"item":"Idle mixture screw has to be nearly closed to run.","defective_part":"mini-carburetor","diag_likelihood":0.68}
+{"item":"Throttle response is delayed, then it lurches forward.","defective_part":"throttle linkage","diag_likelihood":0.56}
+{"item":"Fuel starvation symptoms appear only on slopes.","defective_part":"fuel filter","diag_likelihood":0.44}
+{"item":"Constant ticking and reduced compression; leakdown suggests valves.","defective_part":"valve","diag_likelihood":0.75}
+{"item":"Loud knock on decel; oil level is normal.","defective_part":"connecting rod","diag_likelihood":0.61}
+{"item":"Engine locks briefly after shutdown, then frees up.","defective_part":"unknown","diag_likelihood":0.27}
+{"item":"Visible spark, but it still won’t fire unless plug is replaced.","defective_part":"spark plug","diag_likelihood":0.81}
+{"item":"Spark plug fouls quickly with sooty deposits.","defective_part":"mini-carburetor","diag_likelihood":0.66}
+{"item":"Repeated stalls after refuel; debris likely entered system.","defective_part":"fuel filter","diag_likelihood":0.69}
+{"item":"Primer doesn’t draw fuel; lines look empty.","defective_part":"primer bulb","diag_likelihood":0.72}
+{"item":"Choke linkage feels loose and doesn’t hold position.","defective_part":"choke plate","diag_likelihood":0.48}
+{"item":"Engine idles only if choke is half engaged.","defective_part":"carburetor jet","diag_likelihood":0.76}
+{"item":"Carb bowl is clean but main jet passage seems blocked.","defective_part":"carburetor jet","diag_likelihood":0.88}
+{"item":"Fuel overflows after transport; smells like flooding.","defective_part":"float needle","diag_likelihood":0.67}
+{"item":"Strong vibration and intermittent spark dropouts at speed.","defective_part":"flywheel","diag_likelihood":0.43}
+{"item":"Oil sling inside shroud and dampness at seal lip.","defective_part":"oil seal","diag_likelihood":0.91}
+{"item":"Grinding under load; shaft feels rough when spun by hand.","defective_part":"bearing","diag_likelihood":0.81}
+{"item":"Pull start is normal, but engine won’t sustain combustion.","defective_part":"unknown","diag_likelihood":0.31}
+{"item":"Runs lean; surges and backfires occasionally.","defective_part":"fuel line","diag_likelihood":0.46}
+{"item":"Runs rich; stumbling and black smoke on acceleration.","defective_part":"mini-carburetor","diag_likelihood":0.63}
+{"item":"Knocking noise started after running low on oil.","defective_part":"connecting rod","diag_likelihood":0.92}
+{"item":"Low power and oily exhaust after many hours of use.","defective_part":"piston rings","diag_likelihood":0.64}
+{"item":"Engine dies when you quickly open throttle, recovers slowly.","defective_part":"air filter","diag_likelihood":0.42}
+{"item":"Recoil won’t retract fully unless guided by hand.","defective_part":"recoil starter","diag_likelihood":0.88}
+{"item":"Repeated plug failures; electrode looks overheated.","defective_part":"spark plug","diag_likelihood":0.6}
+{"item":"No-start after storage; fuel is present but spark is absent.","defective_part":"ignition coil","diag_likelihood":0.73}
+{"item":"Runs only at wide open throttle; idle is unstable.","defective_part":"governor spring","diag_likelihood":0.51}
+{"item":"Persistent hissing near exhaust flange; soot pattern present.","defective_part":"muffler","diag_likelihood":0.58}
+{"item":"Fuel cap area vents poorly; engine stumbles after 5 minutes.","defective_part":"tank vent","diag_likelihood":0.79}
+{"item":"Primer bulb cracks and leaks when pressed.","defective_part":"primer bulb","diag_likelihood":0.97}
+{"item":"Engine backfires and kicks back on pull.","defective_part":"flywheel","diag_likelihood":0.73}
+{"item":"Stalls randomly; no consistent fuel or spark pattern found.","defective_part":"unknown","diag_likelihood":0.22}
+{"item":"Starts then immediately floods; plug is soaked.","defective_part":"float needle","diag_likelihood":0.85}
+{"item":"Only runs if you feather throttle constantly.","defective_part":"throttle linkage","diag_likelihood":0.49}
+{"item":"Idle is rough; adjusting mixture helps a bit but never stable.","defective_part":"mini-carburetor","diag_likelihood":0.54}
+{"item":"Rapid clicking and low compression after overheating event.","defective_part":"valve","diag_likelihood":0.62}
+{"item":"Oil leak worsens at higher RPM, localized near crank exit.","defective_part":"oil seal","diag_likelihood":0.74}
+{"item":"Power loss and sputter began right after replacing fuel line.","defective_part":"unknown","diag_likelihood":0.28}
+{"item":"Engine bogs; air path is clean, fuel flow seems intermittent.","defective_part":"fuel filter","diag_likelihood":0.53}
+{"item":"Clattering noise and vibration started suddenly under load.","defective_part":"connecting rod","diag_likelihood":0.68}
+{"item":"Runs okay for a while, then surges and dies; restarts later.","defective_part":"tank vent","diag_likelihood":0.56}
