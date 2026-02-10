@@ -1,48 +1,58 @@
-# aLoRA Examples
+---
+base_model: ibm-granite/granite-4.0-micro
+library_name: transformers
+model_name: aLora
+tags:
+- generated_from_trainer
+- sft
+- trl
+licence: license
+---
 
-This directory contains examples demonstrating Adaptive Low-Rank Adaptation (aLoRA) for efficient constraint checking and requirement validation.
+# Model Card for aLora
 
-## Files
+This model is a fine-tuned version of [ibm-granite/granite-4.0-micro](https://huggingface.co/ibm-granite/granite-4.0-micro).
+It has been trained using [TRL](https://github.com/huggingface/trl).
 
-### 101_example.py
-A comprehensive example showing how to use aLoRA adapters for fast constraint checking with Granite models.
+## Quick start
 
-**Key Features:**
-- Loading and using custom aLoRA adapters for constraint checking
-- Comparing validation speed with and without aLoRA
-- Using `ALoraRequirement` for efficient requirement validation
-- Demonstrates significant speedup when using aLoRA adapters
+```python
+from transformers import pipeline
 
-**Usage:**
-```bash
-python docs/examples/aLora/101_example.py
+question = "If you had a time machine, but could only go to the past or the future once and never return, which would you choose and why?"
+generator = pipeline("text-generation", model="None", device="cuda")
+output = generator([{"role": "user", "content": question}], max_new_tokens=128, return_full_text=False)[0]
+print(output["generated_text"])
 ```
 
-### Supporting Files
+## Training procedure
 
-- **prompt_config.json**: Configuration for training aLoRA adapters
-- **stembolt_failure_dataset.jsonl**: Training dataset for the failure mode constraint
-- **checkpoints/alora_adapter/**: Pre-trained aLoRA adapter checkpoint
+ 
 
-## Concepts Demonstrated
 
-- **aLoRA Adapters**: Using specialized adapters for constraint checking
-- **Constraint Validation**: Fast requirement checking with aLoRA
-- **Performance Optimization**: Comparing validation times with/without aLoRA
-- **Custom Requirements**: Creating domain-specific validation requirements
-- **Backend Integration**: Adding aLoRA adapters to HuggingFace backends
+This model was trained with SFT.
 
-## Training Your Own aLoRA
+### Framework versions
 
-To train custom aLoRA adapters for your constraints:
+- TRL: 0.19.1
+- Transformers: 4.53.3
+- Pytorch: 2.7.0
+- Datasets: 4.5.0
+- Tokenizers: 0.21.4
 
-```bash
-m alora train --config docs/examples/aLora/prompt_config.json
+## Citations
+
+
+
+Cite TRL as:
+    
+```bibtex
+@misc{vonwerra2022trl,
+	title        = {{TRL: Transformer Reinforcement Learning}},
+	author       = {Leandro von Werra and Younes Belkada and Lewis Tunstall and Edward Beeching and Tristan Thrush and Nathan Lambert and Shengyi Huang and Kashif Rasul and Quentin Gallou{\'e}dec},
+	year         = 2020,
+	journal      = {GitHub repository},
+	publisher    = {GitHub},
+	howpublished = {\url{https://github.com/huggingface/trl}}
+}
 ```
-
-See `cli/alora/` for more details on training aLoRA adapters.
-
-## Related Documentation
-
-- See `docs/dev/requirement_aLoRA_rerouting.md` for aLoRA architecture details
-- See `mellea/backends/adapters/` for adapter implementation
