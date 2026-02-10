@@ -8,6 +8,8 @@ from mellea.stdlib.session import start_session
 ctx = ChatContext()
 ctx = ctx.add(ModelOutputThunk("test"))
 
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+
 
 async def test_llmaj_validation_req_output_field():
     m = start_session(ctx=ctx)
