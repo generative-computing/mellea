@@ -44,8 +44,6 @@ def backend():
             "gpu_memory_utilization": 0.8,
             "max_model_len": 8192,
             "max_num_seqs": 8,
-            # Suppress Mistral tokenizer warning
-            "tokenizer_mode": "mistral",
         },
     )
     yield backend
