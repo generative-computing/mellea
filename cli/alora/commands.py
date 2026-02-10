@@ -1,3 +1,6 @@
+import json
+import os
+
 import typer
 
 alora_app = typer.Typer(
@@ -39,11 +42,44 @@ def alora_upload(
     name: str = typer.Option(
         ..., help="Destination model name (e.g., acme/carbchecker-alora)"
     ),
+    intrinsic: bool = typer.Option(
+        ..., help="Formats model upload using granite-intrinsic.", default=False
+    ),
+    io_yaml: str = typer.Option(
+        ...,
+        help="Location of a granite-common io.yaml file. See https://nfulton.org/blog/alora_io_yaml.html",
+    ),
 ):
     """Upload trained adapter to remote model registry."""
+    from cli.alora.intrinsic_uploader import upload_intrinsic
     from cli.alora.upload import upload_model
 
+    assert not intrinsic or io_yaml, (
+        "If --intrinsic is set then you must provide an io.yaml"
+    )
+
     upload_model(weight_path=weightfile, model_name=name)
+    if intrinsic:
+        # get intrinsic name from the model name.
+        assert len(name.split("/")) == 2
+        intrinsic_name = name.split("/")[1]
+
+        # get the base model and adpater type from the adapter config file.
+        with open(os.path.join(weightfile, "adapter_config.json")) as fh:
+            config = json.load(fh)
+            assert "base_model_name_or_path" in config.keys(), (
+                "All adapter config files should have a base_model_name_or_path."
+            )
+            base_model = config["base_model_name_or_path"]
+            adapter_type = "alora" if "alora_invocation_tokens" in config else "lora"
+
+        upload_intrinsic(
+            hf_path=name,
+            intrinsic_name=intrinsic_name,
+            base_model=base_model,
+            type=adapter_type,
+            io_yaml=io_yaml,
+        )
 
 
 alora_app.command("train")(alora_train)
