@@ -43,7 +43,7 @@ def alora_upload(
         ..., help="Destination model name (e.g., acme/carbchecker-alora)"
     ),
     intrinsic: bool = typer.Option(
-        ..., help="Formats model upload using granite-intrinsic.", default=False
+        default=False, help="Formats model upload using granite-intrinsic."
     ),
     io_yaml: str = typer.Option(
         ...,
