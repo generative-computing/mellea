@@ -54,8 +54,8 @@ class _ConstraintExtractor(PromptModule):
             )
 
         s = constraint_extractor_str.strip()
-        s_upper = s.upper()
-        if s_upper in {"N/A", "N / A", "N/ A", "N /A"}:
+        s_norm = s.strip().upper().replace(" ", "")
+        if s_norm == "N/A":
             return []
 
         results: list[str] = []
