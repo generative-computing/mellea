@@ -59,7 +59,7 @@ class WatsonxAIBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_3_3_8B,
+        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_HYBRID_SMALL,
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
@@ -71,7 +71,7 @@ class WatsonxAIBackend(FormatterBackend):
         """A generic watsonx backend that wraps around the ibm_watsonx_ai sdk.
 
         Args:
-            model_id  : Model id. Defaults to model_ids.IBM_GRANITE_3_3_8B.
+            model_id  : Model id. Defaults to model_ids.IBM_GRANITE_4_HYBRID_SMALL.
             formatter : input formatter. Defaults to TemplateFormatter in __init__.
             base_url  : url for watson ML deployment. Defaults to env(WATSONX_URL).
             model_options : Global model options to pass to the model. Defaults to None.

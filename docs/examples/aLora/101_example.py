@@ -13,7 +13,7 @@ from mellea.backends.huggingface import LocalHFBackend
 
 # Define a backend and add the constraint aLora
 backend = LocalHFBackend(
-    model_id="ibm-granite/granite-3.2-8b-instruct", cache=SimpleLRUCache(5)
+    model_id="ibm-granite/granite-4.0-h-micro", cache=SimpleLRUCache(5)
 )
 
 custom_stembolt_failure_constraint = HFConstraintAlora(

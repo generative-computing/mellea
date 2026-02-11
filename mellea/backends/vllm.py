@@ -70,6 +70,9 @@ class LocalVLLMBackend(FormatterBackend):
     Its throughput is generally higher than that of LocalHFBackend.
     However, it takes longer to load the weights during the instantiation.
     Also, if you submit a request one by one, it can be slower.
+
+    Note: vLLM defaults to ~16 tokens. Always set ModelOption.MAX_NEW_TOKENS explicitly (100-1000+).
+    Structured output needs 200-500+ tokens.
     """
 
     def __init__(

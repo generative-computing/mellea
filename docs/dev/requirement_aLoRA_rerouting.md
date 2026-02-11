@@ -37,10 +37,10 @@ from mellea.core import Requirement
 from mellea.backends.adapters import GraniteCommonAdapter
 
 m = start_session(
-    "huggingface.LocalHFBackend:ibm-granite/granite-3.2-8b-instruct")
+    "huggingface.LocalHFBackend:ibm-granite/granite-4.0-micro")
 
 # By default, the AloraRequirement uses a GraniteCommonAdapter with "requirement_check".
-m.backend.add_adapter(GraniteCommonAdapter("ibm-granite/rag-intrinsics-lib", "requirement_check", base_model_name="granite-3.2-8b-instruct"))
+m.backend.add_adapter(GraniteCommonAdapter("ibm-granite/rag-intrinsics-lib", "requirement_check", base_model_name="granite-4.0-micro"))
 
 m.instruct(
     "Corporate wants you to find the difference between these two strings:\n\naaa\naba")
