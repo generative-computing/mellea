@@ -218,6 +218,9 @@ def _collect_heavy_ram_modules(session) -> list[str]:
 def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
     """Run heavy RAM test modules in separate processes for GPU memory isolation.
 
+    Streams output in real-time and parses for test failures to provide
+    a clear summary at the end.
+
     Returns exit code (0 = all passed, 1 = any failed).
     """
     print("\n" + "=" * 70)
@@ -234,6 +237,7 @@ def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
     env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
     all_passed = True
+    failed_modules = {}  # module_path -> list of failed test names
 
     for i, module_path in enumerate(heavy_modules, 1):
         print(f"\n[{i}/{len(heavy_modules)}] Running: {module_path}")
@@ -248,11 +252,41 @@ def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
         if markexpr:
             cmd.extend(["-m", markexpr])
 
-        # Run in subprocess
-        result = subprocess.run(cmd, env=env)
+        # Stream output in real-time while capturing for parsing
+        process = subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # Merge stderr into stdout
+            text=True,
+            bufsize=1,  # Line buffered for immediate output
+        )
 
-        if result.returncode != 0:
+        failed_tests = []
+
+        # Stream output line by line
+        if process.stdout:
+            for line in process.stdout:
+                print(line, end="")  # Print immediately (streaming)
+
+                # Parse for failures (pytest format: "FAILED test_file.py::test_name")
+                if " FAILED " in line:
+                    # Extract test name from pytest output
+                    try:
+                        parts = line.split(" FAILED ")
+                        if len(parts) > 1:
+                            # Get the test identifier (before any additional info like [percentage])
+                            test_name = parts[1].split()[0]
+                            failed_tests.append(test_name)
+                    except Exception:
+                        # If parsing fails, continue - we'll still show module failed
+                        pass
+
+        process.wait()
+
+        if process.returncode != 0:
             all_passed = False
+            failed_modules[module_path] = failed_tests
             print(f"✗ Module failed: {module_path}")
         else:
             print(f"✓ Module passed: {module_path}")
@@ -261,7 +295,14 @@ def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
     if all_passed:
         print("All heavy GPU modules passed!")
     else:
-        print("Some heavy GPU modules failed.")
+        print(f"Failed modules ({len(failed_modules)}):")
+        for module, tests in failed_modules.items():
+            print(f"  {module}:")
+            if tests:
+                for test in tests:
+                    print(f"    - {test}")
+            else:
+                print("    (module failed but couldn't parse specific test names)")
     print("=" * 70 + "\n")
 
     return 0 if all_passed else 1
