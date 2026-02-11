@@ -37,7 +37,7 @@ Use the `m alora train` command to fine-tune a LoRA or aLoRA adapter requirement
 
 ```bash
 m alora train path/to/data.jsonl \
-  --basemodel ibm-granite/granite-3.2-8b-instruct \
+  --basemodel ibm-granite/granite-4.0-micro \
   --outfile ./checkpoints/alora_adapter \
   --adapter alora \
   --device auto \
@@ -47,6 +47,10 @@ m alora train path/to/data.jsonl \
   --max-length 1024 \
   --grad-accum 4
 ```
+
+> **Note on Model Selection**: Use non-hybrid models (e.g., `granite-4.0-micro`) for aLoRA training.
+> Hybrid models (`granite-4.0-h-micro`) are recommended for general inference but adapters should be
+> trained on non-hybrid base models for compatibility with the `ibm-granite/rag-intrinsics-lib` repository.
 
 ### 📌 Parameters
 

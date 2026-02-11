@@ -27,7 +27,7 @@ pytestmark = [
 ]
 
 from mellea import MelleaSession
-from mellea.backends import ModelOption
+from mellea.backends import ModelOption, model_ids
 from mellea.backends.adapters import GraniteCommonAdapter
 from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.huggingface import LocalHFBackend, _assert_correct_adapters
@@ -46,7 +46,12 @@ from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement
 
 @pytest.fixture(scope="module")
 def backend():
-    """Shared HuggingFace backend for all tests in this module."""
+    """Shared HuggingFace backend for all tests in this module.
+
+    Uses Granite 3.3-8b for aLoRA adapter compatibility.
+    The ibm-granite/rag-intrinsics-lib repository only has adapters for
+    Granite 3.3 models. Granite 4 adapters are not yet available.
+    """
     backend = LocalHFBackend(
         model_id="ibm-granite/granite-3.3-8b-instruct",
         formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),

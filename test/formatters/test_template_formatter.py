@@ -5,7 +5,7 @@ import tempfile
 
 import pytest
 
-from mellea.backends.model_ids import IBM_GRANITE_3_2_8B, ModelIdentifier
+from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO, ModelIdentifier
 from mellea.core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 from mellea.formatters import TemplateFormatter
 from mellea.stdlib.components import Instruction, Message, MObject
@@ -173,7 +173,7 @@ def test_no_template(tf: TemplateFormatter):
 
 
 def test_load_with_model_id(instr: Instruction):
-    tf = TemplateFormatter(IBM_GRANITE_3_2_8B)
+    tf = TemplateFormatter(IBM_GRANITE_4_HYBRID_MICRO)
     tmpl = tf._load_template(instr.format_for_llm())
     assert tmpl.name is not None
     assert "granite" in tmpl.name, (
