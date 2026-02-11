@@ -227,6 +227,8 @@ regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=
 skip = 'requirements.txt,uv.lock,CHANGELOG.md'
 
 [tool.mypy]
+install_types = true
+non_interactive = true
 disable_error_code = ["empty-body", "import-untyped"]
 python_version = "3.10"
 
@@ -240,14 +242,14 @@ markers = [
     "huggingface: Tests requiring HuggingFace backend (local, heavy)",
     "vllm: Tests requiring vLLM backend (local, GPU required)",
     "litellm: Tests requiring LiteLLM backend",
-    
+
     # Capability markers
     "requires_api_key: Tests requiring external API keys",
     "requires_gpu: Tests requiring GPU",
     "requires_heavy_ram: Tests requiring 48GB+ RAM",
     "qualitative: Non-deterministic quality tests",
     "slow: Tests taking >5 minutes (e.g., dataset loading)",
-    
+
     # Composite markers
     "llm: Tests that make LLM calls (needs at least Ollama)",
 ]
@@ -268,7 +270,7 @@ filterwarnings = [
     # Show each deprecation warning only once per session
     "once::DeprecationWarning",
     "once::PendingDeprecationWarning",
-    
+
     # Deduplicate noisy Pydantic serialization warnings
     "once:.*PydanticSerializationUnexpectedValue.*:UserWarning",
     
