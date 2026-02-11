@@ -565,18 +565,7 @@ async def aact(
                 generate_logs.append(result._generate_log)
 
                 # Wrap in ComputedModelOutputThunk to indicate it's fully computed
-                computed_result = ComputedModelOutputThunk(
-                    value=result.value,  # type: ignore
-                    meta=result._meta,
-                    parsed_repr=result.parsed_repr,
-                    tool_calls=result.tool_calls,
-                )
-                # Copy over important fields
-                computed_result._thinking = result._thinking
-                computed_result._context = result._context
-                computed_result._action = result._action
-                computed_result._model_options = result._model_options
-                computed_result._generate_log = result._generate_log
+                computed_result = ComputedModelOutputThunk(result)
                 result = computed_result  # type: ignore
             else:
                 # Return uncomputed ModelOutputThunk for streaming
@@ -612,18 +601,7 @@ async def aact(
             )
 
             # Wrap sampling result in ComputedModelOutputThunk since it's always computed
-            computed_result = ComputedModelOutputThunk(
-                value=result.value,  # type: ignore
-                meta=result._meta,
-                parsed_repr=result.parsed_repr,
-                tool_calls=result.tool_calls,
-            )
-            # Copy over important fields
-            computed_result._thinking = result._thinking
-            computed_result._context = result._context
-            computed_result._action = result._action
-            computed_result._model_options = result._model_options
-            computed_result._generate_log = result._generate_log
+            computed_result = ComputedModelOutputThunk(result)
 
             # Update the sampling result to use the computed thunk
             sampling_result.sample_generations[sampling_result.result_index] = (
