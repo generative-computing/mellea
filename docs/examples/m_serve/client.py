@@ -1,3 +1,4 @@
+# pytest: skip_always
 import openai
 
 PORT = 8080

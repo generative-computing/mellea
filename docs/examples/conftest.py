@@ -63,16 +63,7 @@ def get_system_capabilities():
         return fallback()
 
 
-examples_to_skip = {
-    "__init__.py",
-    "simple_rag_with_filter.py",
-    "mcp_example.py",
-    "client.py",
-    "pii_serve.py",
-    "mellea_pdf.py",  # External URL returns 403 Forbidden
-    "m_decomp_result.py",
-    "python_decompose_result.py",
-}
+examples_to_skip: dict[str, str] = {}
 
 
 def _extract_markers_from_file(file_path):
@@ -115,6 +106,10 @@ def _should_skip_collection(markers):
         return False, None
 
     gh_run = int(os.environ.get("CICD", 0))
+
+    # Skip tests marked with skip_always
+    if "skip_always" in markers:
+        return True, "Example marked to always skip (skip_always marker)"
 
     # Skip qualitative tests in CI
     if "qualitative" in markers and gh_run == 1:
@@ -182,10 +177,9 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 
     terminalreporter.ensure_newline()
     terminalreporter.section("Skipped Examples", sep="=", blue=True, bold=True)
-    newline = "\n"
-    terminalreporter.line(
-        f"Examples with the following names were skipped because they cannot be easily run in the pytest framework; please run them manually:\n{newline.join(examples_to_skip)}"
-    )
+    terminalreporter.line("The following examples were skipped during collection:\n")
+    for filename, reason in examples_to_skip.items():
+        terminalreporter.line(f"  • {filename}: {reason}")
 
 
 def pytest_ignore_collect(collection_path, path, config):
@@ -211,8 +205,10 @@ def pytest_ignore_collect(collection_path, path, config):
         # Extract markers and check if we should skip
         try:
             markers = _extract_markers_from_file(collection_path)
-            should_skip, _reason = _should_skip_collection(markers)
-            if should_skip:
+            should_skip, reason = _should_skip_collection(markers)
+            if should_skip and reason:
+                # Add to skip list with reason for terminal summary
+                examples_to_skip[collection_path.name] = reason
                 # Return True to ignore this file completely
                 return True
         except Exception:
@@ -235,10 +231,10 @@ def pytest_pycollect_makemodule(module_path, path, parent):
         and "examples" in module_path.parts
     ):
         # Check for optional imports
-        should_skip, _reason = _check_optional_imports(module_path)
-        if should_skip:
-            # Add to skip list and return None to prevent module creation
-            examples_to_skip.add(module_path.name)
+        should_skip, reason = _check_optional_imports(module_path)
+        if should_skip and reason:
+            # Add to skip list with reason for terminal summary and return None to prevent module creation
+            examples_to_skip[module_path.name] = reason
             return None
 
     # Return None to let pytest handle it normally
