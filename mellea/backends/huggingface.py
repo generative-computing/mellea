@@ -138,7 +138,7 @@ class _GuidanceLogitsProcessor:
 
         self.new_sampling = True
 
-        return scores
+        return batch_scores
 
 
 class LocalHFBackend(FormatterBackend, AdapterMixin):
