@@ -269,14 +269,15 @@ def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
             for line in process.stdout:
                 print(line, end="")  # Print immediately (streaming)
 
-                # Parse for failures (pytest format: "FAILED test_file.py::test_name")
+                # Parse for failures (pytest format: "test_file.py::test_name FAILED")
                 if " FAILED " in line:
                     # Extract test name from pytest output
                     try:
                         parts = line.split(" FAILED ")
-                        if len(parts) > 1:
-                            # Get the test identifier (before any additional info like [percentage])
-                            test_name = parts[1].split()[0]
+                        if len(parts) >= 2:
+                            # Get the test identifier (the part before " FAILED ")
+                            # Strip whitespace and take last token (handles indentation)
+                            test_name = parts[0].strip().split()[-1]
                             failed_tests.append(test_name)
                     except Exception:
                         # If parsing fails, continue - we'll still show module failed
