@@ -99,6 +99,10 @@ def _should_skip_collection(markers):
     if not markers:
         return False, None
 
+    # Skip tests marked with skip_always
+    if "skip_always" in markers:
+        return True, "Example marked to always skip (skip_always marker)"
+
     try:
         capabilities = get_system_capabilities()
     except Exception:
@@ -106,10 +110,6 @@ def _should_skip_collection(markers):
         return False, None
 
     gh_run = int(os.environ.get("CICD", 0))
-
-    # Skip tests marked with skip_always
-    if "skip_always" in markers:
-        return True, "Example marked to always skip (skip_always marker)"
 
     # Skip qualitative tests in CI
     if "qualitative" in markers and gh_run == 1:
@@ -170,6 +170,147 @@ def _check_optional_imports(file_path):
     return False, None
 
 
+def pytest_addoption(parser):
+    """Add command-line options for skipping capability checks.
+
+    These match the options in test/conftest.py to provide consistent behavior.
+    Only adds options if they don't already exist (to avoid conflicts when both
+    test/ and docs/ conftest files are loaded).
+    """
+
+    # Helper to safely add option only if it doesn't exist
+    def add_option_safe(option_name, **kwargs):
+        try:
+            parser.addoption(option_name, **kwargs)
+        except ValueError:
+            # Option already exists (likely from test/conftest.py)
+            pass
+
+    add_option_safe(
+        "--ignore-gpu-check",
+        action="store_true",
+        default=False,
+        help="Ignore GPU requirement checks (examples may fail without GPU)",
+    )
+    add_option_safe(
+        "--ignore-ram-check",
+        action="store_true",
+        default=False,
+        help="Ignore RAM requirement checks (examples may fail with insufficient RAM)",
+    )
+    add_option_safe(
+        "--ignore-ollama-check",
+        action="store_true",
+        default=False,
+        help="Ignore Ollama availability checks (examples will fail if Ollama not running)",
+    )
+    add_option_safe(
+        "--ignore-api-key-check",
+        action="store_true",
+        default=False,
+        help="Ignore API key checks (examples will fail without valid API keys)",
+    )
+    add_option_safe(
+        "--ignore-all-checks",
+        action="store_true",
+        default=False,
+        help="Ignore all requirement checks (GPU, RAM, Ollama, API keys)",
+    )
+
+
+def _collect_vllm_example_files(session) -> list[str]:
+    """Collect all example files that have vLLM marker.
+
+    Returns list of file paths.
+    """
+    vllm_files = set()
+
+    for item in session.items:
+        # Check if this is an ExampleItem with vllm marker
+        if hasattr(item, "path"):
+            file_path = str(item.path)
+            # Check if file has vllm marker
+            if file_path.endswith(".py"):
+                markers = _extract_markers_from_file(file_path)
+                if "vllm" in markers:
+                    vllm_files.add(file_path)
+
+    return sorted(vllm_files)
+
+
+def _run_vllm_examples_isolated(session, vllm_files: list[str]) -> int:
+    """Run vLLM example files in separate processes for GPU memory isolation.
+
+    Returns exit code (0 = all passed, 1 = any failed).
+    """
+    print("\n" + "=" * 70)
+    print("vLLM Process Isolation Active (Examples)")
+    print("=" * 70)
+    print(f"Running {len(vllm_files)} vLLM example(s) in separate processes")
+    print("to ensure GPU memory is fully released between examples.\n")
+
+    # Set environment variables for vLLM
+    env = os.environ.copy()
+    env["VLLM_USE_V1"] = "0"
+    env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+    all_passed = True
+
+    for i, file_path in enumerate(vllm_files, 1):
+        print(f"\n[{i}/{len(vllm_files)}] Running: {file_path}")
+        print("-" * 70)
+
+        # Run example directly with Python
+        cmd = [sys.executable, file_path]
+
+        result = subprocess.run(cmd, env=env)
+
+        if result.returncode != 0:
+            all_passed = False
+            print(f"✗ Example failed: {file_path}")
+        else:
+            print(f"✓ Example passed: {file_path}")
+
+    print("\n" + "=" * 70)
+    if all_passed:
+        print("All vLLM examples passed!")
+    else:
+        print("Some vLLM examples failed.")
+    print("=" * 70 + "\n")
+
+    return 0 if all_passed else 1
+
+
+def pytest_collection_finish(session):
+    """After collection, check if we need vLLM process isolation for examples.
+
+    If vLLM examples are collected and there are multiple files,
+    run them in separate processes and exit.
+    """
+    # Only check for examples in docs/examples
+    if not any(
+        "docs" in str(item.path) and "examples" in str(item.path)
+        for item in session.items
+    ):
+        return
+
+    # Collect vLLM example files
+    vllm_files = _collect_vllm_example_files(session)
+
+    # Only use process isolation if multiple vLLM examples
+    if len(vllm_files) <= 1:
+        return
+
+    # Run examples in isolation
+    exit_code = _run_vllm_examples_isolated(session, vllm_files)
+
+    # Clear collected items so pytest doesn't run them again
+    session.items.clear()
+
+    # Exit with appropriate code
+    pytest.exit("vLLM examples completed in isolated processes", returncode=exit_code)
+
+
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
     # Append the skipped examples if needed.
     if len(examples_to_skip) == 0:
@@ -182,21 +323,73 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
         terminalreporter.line(f"  • {filename}: {reason}")
 
 
-def pytest_ignore_collect(collection_path, path, config):
+def pytest_pycollect_makemodule(module_path, parent):
+    """Intercepts Module creation to skip files before import.
+
+    Runs for both directory traversal and direct file specification.
+    Returning a SkippedFile prevents pytest from importing the file,
+    which is necessary when files contain unavailable dependencies.
+
+    Args:
+        module_path: pathlib.Path to the module
+        parent: Parent collector node
+    """
+    file_path = module_path
+
+    # Limit scope to docs/examples directory
+    if "docs" not in str(file_path) or "examples" not in str(file_path):
+        return None
+
+    if file_path.name == "conftest.py":
+        return None
+
+    # Initialize capabilities cache if needed
+    config = parent.config
+    if not hasattr(config, "_example_capabilities"):
+        config._example_capabilities = get_system_capabilities()
+
+    # Check manual skip list
+    if file_path.name in examples_to_skip:
+        return SkippedFile.from_parent(parent, path=file_path)
+
+    # Extract and evaluate markers
+    markers = _extract_markers_from_file(file_path)
+
+    if not markers:
+        return None
+
+    should_skip, _reason = _should_skip_collection(markers)
+
+    if should_skip:
+        # Prevent import by returning custom collector
+        return SkippedFile.from_parent(parent, path=file_path)
+
+    return None
+
+
+def pytest_ignore_collect(collection_path, config):
     """Ignore files before pytest even tries to parse them.
 
     This is called BEFORE pytest_collect_file, so we can prevent
     heavy files from being parsed at all.
+
+    NOTE: This hook is only called during directory traversal, not for
+    directly specified files. The pytest_pycollect_makemodule hook handles
+    both cases.
     """
     # Skip conftest.py itself - it's not a test
     if collection_path.name == "conftest.py":
         return True
 
+    # Convert to absolute path to check if it's in docs/examples
+    # (pytest may pass relative paths)
+    abs_path = collection_path.resolve()
+
     # Only check Python files in docs/examples
     if (
         collection_path.suffix == ".py"
-        and "docs" in collection_path.parts
-        and "examples" in collection_path.parts
+        and "docs" in abs_path.parts
+        and "examples" in abs_path.parts
     ):
         # Skip files in the manual skip list
         if collection_path.name in examples_to_skip:
@@ -211,34 +404,16 @@ def pytest_ignore_collect(collection_path, path, config):
                 examples_to_skip[collection_path.name] = reason
                 # Return True to ignore this file completely
                 return True
-        except Exception:
-            # If anything goes wrong, don't skip
-            pass
+        except Exception as e:
+            # Log the error but don't skip - let pytest handle it
+            import sys
+
+            print(
+                f"WARNING: Error checking markers for {collection_path}: {e}",
+                file=sys.stderr,
+            )
 
     return False
-
-
-def pytest_pycollect_makemodule(module_path, path, parent):
-    """Prevent pytest from importing Python modules as test modules.
-
-    This hook is called BEFORE pytest tries to import the module,
-    so we can prevent import errors from optional dependencies.
-    """
-    # Only handle files in docs/examples
-    if (
-        module_path.suffix == ".py"
-        and "docs" in module_path.parts
-        and "examples" in module_path.parts
-    ):
-        # Check for optional imports
-        should_skip, reason = _check_optional_imports(module_path)
-        if should_skip and reason:
-            # Add to skip list with reason for terminal summary and return None to prevent module creation
-            examples_to_skip[module_path.name] = reason
-            return None
-
-    # Return None to let pytest handle it normally
-    return None
 
 
 # This doesn't replace the existing pytest file collection behavior.
@@ -254,12 +429,47 @@ def pytest_collect_file(parent: pytest.Dir, file_path: pathlib.PosixPath):
         if file_path.name in examples_to_skip:
             return
 
+        # Check markers first - if file has skip marker, return SkippedFile
+        try:
+            markers = _extract_markers_from_file(file_path)
+            should_skip, _reason = _should_skip_collection(markers)
+            if should_skip:
+                # FIX: Return a dummy collector instead of None.
+                # This prevents pytest from falling back to the default Module collector
+                # which would try to import the file.
+                return SkippedFile.from_parent(parent, path=file_path)
+        except Exception:
+            # If we can't read markers, continue with other checks
+            pass
+
         # Check for optional imports before creating ExampleFile
         should_skip, _reason = _check_optional_imports(file_path)
         if should_skip:
-            return None
+            # FIX: Return SkippedFile instead of None for optional import skips too
+            return SkippedFile.from_parent(parent, path=file_path)
 
         return ExampleFile.from_parent(parent, path=file_path)
+
+
+class SkippedFile(pytest.File):
+    """A dummy collector for skipped files to prevent default import.
+
+    This collector is returned by pytest_pycollect_makemodule and pytest_collect_file
+    when a file should be skipped based on markers or system capabilities.
+
+    By returning this custom collector instead of None, we prevent pytest from
+    falling back to its default Module collector which would import the file.
+    The collect() method returns an empty list, so no tests are collected.
+    """
+
+    def __init__(self, **kwargs):
+        # Extract reason if provided, otherwise use default
+        self.skip_reason = kwargs.pop("reason", "File skipped based on markers")
+        super().__init__(**kwargs)
+
+    def collect(self):
+        # Return empty list - no tests to collect from this file
+        return []
 
 
 class ExampleFile(pytest.File):
@@ -335,17 +545,27 @@ def pytest_runtest_setup(item):
     if not isinstance(item, ExampleItem):
         return
 
+    # Check for explicit skip marker first
+    if item.get_closest_marker("skip"):
+        pytest.skip("Example marked with skip marker")
+
     # Get system capabilities
     capabilities = get_system_capabilities()
 
     # Get gh_run status (CI environment)
     gh_run = int(os.environ.get("CICD", 0))
 
-    # Get config options (all default to False for examples)
-    ignore_gpu = False
-    ignore_ram = False
-    ignore_ollama = False
-    ignore_api_key = False
+    # Get config options from CLI (matching test/conftest.py behavior)
+    config = item.config
+    ignore_all = config.getoption("--ignore-all-checks", default=False)
+    ignore_gpu = config.getoption("--ignore-gpu-check", default=False) or ignore_all
+    ignore_ram = config.getoption("--ignore-ram-check", default=False) or ignore_all
+    ignore_ollama = (
+        config.getoption("--ignore-ollama-check", default=False) or ignore_all
+    )
+    ignore_api_key = (
+        config.getoption("--ignore-api-key-check", default=False) or ignore_all
+    )
 
     # Skip qualitative tests in CI
     if item.get_closest_marker("qualitative") and gh_run == 1:
