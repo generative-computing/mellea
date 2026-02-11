@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from mellea import start_session
-from mellea.stdlib.requirements.requirement import check, simple_validate
+from mellea.stdlib.requirements.requirement import check, req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.stdlib.session import MelleaSession
 
@@ -24,7 +24,7 @@ class ReadmeTemplateVars(BaseModel):
 def _parses_as_arglist(code: str) -> bool:
     """Check if a string parses as a valid Python function argument list."""
     try:
-        ast.parse(f"def f({code}): pass")
+        ast.parse(f"def f({code}):\n\tpass")
         return True
     except SyntaxError:
         return False
@@ -53,6 +53,18 @@ def _make_requirements(name: str) -> list:
                 )
             ),
         ),
+        req(
+            "arglist should not be enclosed in parens",
+            validation_fn=simple_validate(
+                lambda output: (
+                    not (
+                        _parse(output).arglist[0] == "("
+                        and _parse(output).arglist[-1] == ")"
+                    ),
+                    "arglist was enclosed in parens.",
+                )
+            ),
+        ),
         check(
             f"userid must be '{expected_userid}'",
             validation_fn=simple_validate(
@@ -64,25 +76,34 @@ def _make_requirements(name: str) -> list:
         ),
         check(
             "intrinsic_name_camelcase must match intrinsic_name",
-            validation_fn=simple_validate(lambda output: (
-                _parse(output).intrinsic_name_camelcase.lower()
-                == _parse(output).intrinsic_name.replace("_", "").replace("-", "").lower(),
-                f"'{_parse(output).intrinsic_name_camelcase}' doesn't match '{_parse(output).intrinsic_name}'",
-            )),
+            validation_fn=simple_validate(
+                lambda output: (
+                    _parse(output).intrinsic_name_camelcase.lower()
+                    == _parse(output)
+                    .intrinsic_name.replace("_", "")
+                    .replace("-", "")
+                    .lower(),
+                    f"'{_parse(output).intrinsic_name_camelcase}' doesn't match '{_parse(output).intrinsic_name}'",
+                )
+            ),
         ),
         check(
             "arglist must be a valid Python argument list",
-            validation_fn=simple_validate(lambda output: (
-                _parses_as_arglist(_parse(output).arglist),
-                f"arglist '{_parse(output).arglist}' does not parse as valid Python",
-            )),
+            validation_fn=simple_validate(
+                lambda output: (
+                    _parses_as_arglist(_parse(output).arglist),
+                    f"arglist '{_parse(output).arglist}' does not parse as valid Python",
+                )
+            ),
         ),
         check(
             "arglist_without_type_annotations must be a valid Python argument list",
-            validation_fn=simple_validate(lambda output: (
-                _parses_as_arglist(_parse(output).arglist_without_type_annotations),
-                f"arglist_without_type_annotations '{_parse(output).arglist_without_type_annotations}' does not parse as valid Python",
-            )),
+            validation_fn=simple_validate(
+                lambda output: (
+                    _parses_as_arglist(_parse(output).arglist_without_type_annotations),
+                    f"arglist_without_type_annotations '{_parse(output).arglist_without_type_annotations}' does not parse as valid Python",
+                )
+            ),
         ),
     ]
 
@@ -169,7 +190,7 @@ Generate appropriate values for each field:
 - intrinsic_name: A short snake_case identifier for this intrinsic (e.g., "stembolts"). No hyphens. MUST be {name.split("/")[1]}
 - intrinsic_name_camelcase: The CamelCase version of intrinsic_name (e.g., "Stembolt"). No underscores.
 - arglist: The Python function argument list with type hints based on the input data structure. This will be used as function parameters.
-- arglist_without_type_annotations: The arglist without any type annotations. Should NOT start or end with parens."""
+- arglist_without_type_annotations: The arglist without any type annotations."""
 
     result = m.instruct(
         description,
