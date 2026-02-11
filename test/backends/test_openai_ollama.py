@@ -74,6 +74,13 @@ def test_chat(m_session) -> None:
         f"Expected a message with content containing 2 but found {output_message}"
     )
 
+@pytest.mark.qualitative
+def test_chat_stream(m_session) -> None:
+    output_message = m_session.chat("What is 1+1?", model_options={ModelOption.STREAM: True})
+    assert "2" in output_message.content, (
+        f"Expected a message with content containing 2 but found {output_message}"
+    )
+
 
 @pytest.mark.qualitative
 def test_format(m_session) -> None:
@@ -288,4 +295,4 @@ def test_missing_api_key_raises_error() -> None:
 if __name__ == "__main__":
     import pytest
 
-    pytest.main([__file__, "-k", "generate_from_raw"])
+    pytest.main([__file__])
