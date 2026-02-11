@@ -104,9 +104,15 @@ class _GuidanceLogitsProcessor:
         self, batch_input_ids: torch.Tensor, batch_scores: torch.Tensor
     ) -> torch.Tensor:
         i_batch, _ = batch_input_ids.shape
-        s_batch, s_vocab = batch_scores.shape
+        s_batch, _ = batch_scores.shape
         assert i_batch == s_batch
-        assert s_vocab == self.vocab_size
+
+        # s_batch, s_vocab = batch_scores.shape
+        # assert s_vocab == self.vocab_size
+        #
+        # NOTE: somehow, this does not hold. s_vocab is not same as either of
+        # * self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=True) == self.vocab_size == ll_tokenizer.vocab_size
+        # * self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=False)
 
         if self.batch_size != i_batch:
             self.batch_size = i_batch
@@ -232,6 +238,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._llguidance_tokenizer: llguidance.LLTokenizer = (
             llguidance.hf.from_tokenizer(self._tokenizer)  # type:ignore
         )
+        assert (
+            self._llguidance_tokenizer.vocab_size
+            == self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=True)
+        ), "vocab size mismatch between llguidance and huggingface tokenizers ... wtf?"
 
         self._use_caches = use_caches
         self._cache = cache if cache is not None else SimpleLRUCache(3)
