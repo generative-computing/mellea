@@ -9,6 +9,8 @@ from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 from mellea.stdlib.sampling import RepairTemplateStrategy
 
+from mellea.backends.tools import MelleaTool
+
 
 def demo_repair_with_actual_function_calling():
     """Demonstrate RepairTemplateStrategy with actual function calling and Guardian validation.
@@ -56,7 +58,7 @@ def demo_repair_with_actual_function_calling():
         model_options={
             "temperature": 0.7,
             "seed": 789,
-            "tools": [get_stock_price],
+            "tools": [MelleaTool.from_callable(get_stock_price)],
             # Intentionally misconfigured to demonstrate repair
             "system": "When users ask about stock prices, use the full company name as the symbol parameter. For example, use 'Tesla Motors' instead of 'TSLA'.",
         },
