@@ -88,8 +88,6 @@ if __name__ == "__main__":
     from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
     from mellea.stdlib.context import ChatContext
     backend = LocalHFBackend(IBM_GRANITE_4_MICRO_3B)
-    # Example inputs: {{ samples[0].input }}
-    # Example outputs: {{ samples[0].output }}
-    result, ctx = {{ intrinsic_name }}({{ arglist_as_kwargs }}, ctx=ChatContext(), backend=backend)
+    result, ctx = {{ intrinsic_name }}({{ example_call_kwargs }}, ctx=ChatContext(), backend=backend)
     print(result.value)
 ```

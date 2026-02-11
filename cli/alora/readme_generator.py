@@ -225,6 +225,26 @@ Generate appropriate values for each field:
     arg_names = [arg.arg for arg in tree.body[0].args.args]  # type: ignore
     vars_dict["arglist_as_kwargs"] = ", ".join(f"{n}={n}" for n in arg_names)
 
+    # Build example call kwargs using actual values from the first sample,
+    # so the __main__ block has runnable code instead of undefined variables.
+    first_item = samples[0].get("item", "")
+    sample_values: dict[str, str] | None = None
+    if isinstance(first_item, dict):
+        sample_values = {k: str(v) for k, v in first_item.items()}
+    elif isinstance(first_item, str):
+        try:
+            parsed = json.loads(first_item)
+            if isinstance(parsed, dict):
+                sample_values = {k: str(v) for k, v in parsed.items()}
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    if sample_values is not None:
+        parts = [f"{n}={repr(sample_values.get(n, ''))}" for n in arg_names]
+    else:
+        parts = [f"{arg_names[0]}={repr(str(first_item))}"]
+    vars_dict["example_call_kwargs"] = ", ".join(parts)
+
     vars_dict["base_model"] = base_model
 
     return vars_dict
