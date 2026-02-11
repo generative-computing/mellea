@@ -194,6 +194,14 @@ Generate appropriate values for each field:
         formatted_samples.append({"input": item_str, "output": str(s.get("label", ""))})
     vars_dict["samples"] = formatted_samples
 
+    # Programmatically build kwargs forwarding string from arglist.
+    # E.g. "description, notes" -> "description=description, notes=notes"
+    tree = ast.parse(f"def f({vars_dict['arglist_without_type_annotations']}): pass")
+    arg_names = [arg.arg for arg in tree.body[0].args.args]
+    vars_dict["arglist_as_kwargs"] = ", ".join(f"{n}={n}" for n in arg_names)
+
+    vars_dict["base_model"] = base_model
+
     return vars_dict
 
 

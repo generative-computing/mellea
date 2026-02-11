@@ -1,3 +1,10 @@
+---
+library_name: peft
+base_model: {{ base_model }}
+tags:
+  - mellea
+---
+
 # {{ adapter_name }} Intrinsic Adapter
 
 {{ high_level_description }}
@@ -54,7 +61,7 @@ class {{ intrinsic_name_camelcase }}Adapter(CustomGraniteCommonAdapter):
 class {{ intrinsic_name_camelcase }}Intrinsic(Intrinsic, SimpleComponent):
     def __init__(self, {{ arglist }}):
         Intrinsic.__init__(self, intrinsic_name=_INTRINSIC_ADAPTER_NAME)
-        SimpleComponent.__init__(self, mechanic_notes=mechanic_notes)
+        SimpleComponent.__init__(self, {{ arglist_as_kwargs }})
 
     def format_for_llm(self):
         return SimpleComponent.format_for_llm(self)
@@ -73,7 +80,7 @@ def {{ intrinsic_name }}({{ arglist }}, ctx: Context, backend: Backend | Adapter
     adapter = {{ intrinsic_name_camelcase }}Adapter(backend.base_model_name)
     if adapter.qualified_name not in backend.list_adapters():
         backend.add_adapter(adapter)
-    action = {{ intrinsic_name_camelcase }}Intrinsic(notes)
+    action = {{ intrinsic_name_camelcase }}Intrinsic({{ arglist_without_type_annotations }})
     return mfuncs.act(action, ctx, backend)
 
 if __name__ == "__main__":
