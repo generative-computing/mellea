@@ -1,6 +1,6 @@
 # type: ignore
 # pytest: skip, huggingface, requires_heavy_ram, llm
-# SKIP REASON: Example broken since intrinsics refactor - see issue #385
+# SKIP REASON: needs to update.
 
 import mellea.stdlib.functional as mfuncs
 from mellea.backends import Backend

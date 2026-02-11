@@ -1,3 +1,6 @@
+# pytest: skip, huggingface, requires_heavy_ram, llm
+# SKIP REASON: documentation only.
+
 from cli.alora.readme_generator import generate_readme, make_readme_jinja_dict
 
 generate_readme(

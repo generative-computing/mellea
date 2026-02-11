@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+# pytest: skip, huggingface, requires_heavy_ram, llm
+# SKIP REASON: documentation only.import argparse
 import argparse
 import json
 import sys
