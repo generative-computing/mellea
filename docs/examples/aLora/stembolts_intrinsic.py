@@ -7,6 +7,7 @@ from mellea.backends import Backend
 from mellea.backends.adapters import AdapterMixin
 from mellea.backends.adapters.adapter import CustomGraniteCommonAdapter
 from mellea.core import Context
+from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import Intrinsic
 from mellea.stdlib.components.simple import SimpleComponent
 
@@ -23,13 +24,9 @@ class StemboltAdapter(CustomGraniteCommonAdapter):
         )
 
 
-class StemboltIntrinsic(Intrinsic, SimpleComponent):
-    def __init__(self, mechanic_notes: str):
+class StemboltIntrinsic(Intrinsic):
+    def __init__(self):
         Intrinsic.__init__(self, intrinsic_name=_INTRINSIC_ADAPTER_NAME)
-        SimpleComponent.__init__(self, mechanic_notes=mechanic_notes)
-
-    def format_for_llm(self):
-        return SimpleComponent.format_for_llm(self)
 
 
 async def async_stembolt_failure_analysis(
@@ -39,7 +36,9 @@ async def async_stembolt_failure_analysis(
     if _INTRINSIC_ADAPTER_NAME not in backend.list_adapters():
         backend.add_adapter(StemboltAdapter(backend.base_model_name))
 
-    action = StemboltIntrinsic("stembolt", mechanic_notes=notes)
+    ctx = ctx.add(Message("user", content=notes))
+
+    action = StemboltIntrinsic()
     mot = await backend.generate_from_context(action, ctx)
     return mot
 
@@ -52,5 +51,7 @@ def stembolt_failure_analysis(
     if adapter.qualified_name not in backend.list_adapters():
         backend.add_adapter(adapter)
 
-    action = StemboltIntrinsic(notes)
+    ctx = ctx.add(Message("user", content=notes))
+
+    action = StemboltIntrinsic()
     return mfuncs.act(action, ctx, backend)

@@ -3,12 +3,14 @@ from stembolts_intrinsic import (
     stembolt_failure_analysis,
 )
 
+from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.stdlib.context import ChatContext
 
 if __name__ == "__main__":
-    backend = LocalHFBackend(IBM_GRANITE_4_MICRO_3B)
+    backend = LocalHFBackend(
+        model_id="ibm-granite/granite-3.3-2b-instruct", cache=SimpleLRUCache(5)
+    )
 
     welcome_msg = (
         "==   Welcome to the Self-Sealing Stembolt Part Diagnostic System.   =="
