@@ -34,12 +34,13 @@ backend.add_adapter(granite_33_2b_stembolt_adapter)
 # define a requirement
 # TODO: we should be able to pass the adapter itself, or at the very least name should be a public property of Adapter.
 failure_check = ALoraRequirement(
-    "The failure mode should not be none.",
+    "The diagnostic confidence should be in the unit interval and greater than 0.9.",
     intrinsic_name=granite_33_2b_stembolt_adapter.intrinsic_name,
 )
+failure_check.check_only = True
 
 res = m.instruct(
-    "Write triage summaries based on technician note 'Oil seepage around piston rings suggests seal degradation'",
+    "Oil seepage around piston rings suggests seal degradation",
     requirements=[failure_check],
 )
 
@@ -73,7 +74,7 @@ def validate_reqs(reqs: list[Requirement]):
 
     # Print list of requirements and validation results
     for i, r in enumerate(reqs):
-        print(f"- [{val_res[i]}]: {r.description}")
+        print(f"- {r.description}: [{val_res[i].reason}]")
 
     # Print prompts using the logs list
     print("Prompts:")
