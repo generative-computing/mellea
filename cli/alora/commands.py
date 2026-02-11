@@ -1,5 +1,6 @@
 import json
 import os
+import tempfile
 
 import typer
 
@@ -20,11 +21,6 @@ def alora_train(
     batch_size: int = typer.Option(2, help="Per-device batch size"),
     max_length: int = typer.Option(1024, help="Max sequence length"),
     grad_accum: int = typer.Option(4, help="Gradient accumulation steps"),
-    generate_readme: bool = typer.Option(
-        False,
-        "--generate-readme",
-        help="Generate an INTRINSIC_README.md file for the trained adapter.",
-    ),
 ):
     """Train an aLoRA or LoRA model on your dataset."""
     from cli.alora.train import train_model
@@ -42,17 +38,6 @@ def alora_train(
         grad_accum=grad_accum,
         prompt_file=promptfile,
     )
-
-    if generate_readme:
-        from cli.alora.readme_generator import generate_readme as gen_readme
-
-        readme_path = os.path.join(outfile, "INTRINSIC_README.md")
-        gen_readme(
-            dataset_path=datafile,
-            base_model=basemodel,
-            prompt_file=promptfile,
-            output_path=readme_path,
-        )
 
 
 def alora_upload(
@@ -102,5 +87,51 @@ def alora_upload(
     print("✅ Upload complete!")
 
 
+def alora_add_readme(
+    datafile: str = typer.Argument(..., help="JSONL file with item/label pairs"),
+    basemodel: str = typer.Option(..., help="Base model ID or path"),
+    promptfile: str = typer.Option(None, help="Path to load the prompt format file"),
+    name: str = typer.Option(
+        ..., help="Destination model name (e.g., acme/carbchecker-alora)"
+    ),
+    io_yaml: str = typer.Option(
+        default=None,
+        help="Location of a granite-common io.yaml file. See https://nfulton.org/blog/alora_io_yaml.html",
+    ),
+):
+    """Generate and upload an INTRINSIC_README.md for a trained adapter."""
+    from huggingface_hub import HfFolder, create_repo, upload_file
+
+    from cli.alora.readme_generator import generate_readme
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        readme_path = os.path.join(tmp_dir, "README.md")
+        generate_readme(
+            dataset_path=datafile,
+            base_model=basemodel,
+            prompt_file=promptfile,
+            output_path=readme_path,
+            name=name,
+        )
+
+        token = HfFolder.get_token()
+        if token is None:
+            raise OSError(
+                "Hugging Face token not found. Run `huggingface-cli login` first."
+            )
+
+        create_repo(repo_id=name, token=token, private=True, exist_ok=True)
+        upload_file(
+            path_or_fileobj=readme_path,
+            path_in_repo="README.md",
+            repo_id=name,
+            commit_message="Upload intrinsic README.",
+            token=token,
+        )
+
+    print(f"README uploaded to {name}")
+
+
 alora_app.command("train")(alora_train)
 alora_app.command("upload")(alora_upload)
+alora_app.command("add-readme")(alora_add_readme)

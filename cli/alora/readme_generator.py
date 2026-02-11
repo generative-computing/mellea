@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -8,7 +9,6 @@ from mellea.stdlib.session import MelleaSession
 
 
 class ReadmeTemplateVars(BaseModel):
-    adapter_name: str
     high_level_description: str
     dataset_description: str
     userid: str
@@ -23,7 +23,8 @@ def make_readme_jinja_dict(
     dataset_path: str,
     base_model: str,
     prompt_file: str,
-) -> dict[str, str]:
+    name: str,
+) -> dict[str, Any]:
     """Generate all template variables for the intrinsic README using an LLM.
 
     Loads the first five lines of the JSONL dataset, determines the input structure,
@@ -91,7 +92,6 @@ Base model: {base_model}
 {arglist_hint}
 
 Generate appropriate values for each field:
-- adapter_name: A human-readable title for this adapter (e.g., "Stembolt Failure Analysis")
 - high_level_description: A 2-3 sentence description of what this intrinsic adapter does based on the training data
 - dataset_description: A brief description of the training dataset contents and format
 - userid: Set this to "your-username" as a placeholder for the HuggingFace user ID
@@ -103,6 +103,24 @@ Generate appropriate values for each field:
     result = m.chat(prompt, format=ReadmeTemplateVars)
     vars_dict = ReadmeTemplateVars.model_validate_json(result.content).model_dump()
 
+    # Use model name from the --name arg (strip username/ prefix)
+    model_name = name.split("/")[-1] if "/" in name else name
+    vars_dict["adapter_name"] = model_name
+
+    # Add formatted samples for template rendering
+    formatted_samples = []
+    for s in samples:
+        item = s.get("item", "")
+        if isinstance(item, dict):
+            item_str = json.dumps(item)
+        else:
+            item_str = str(item)
+        formatted_samples.append({
+            "input": item_str,
+            "output": str(s.get("label", "")),
+        })
+    vars_dict["samples"] = formatted_samples
+
     return vars_dict
 
 
@@ -111,6 +129,7 @@ def generate_readme(
     base_model: str,
     prompt_file: str | None,
     output_path: str,
+    name: str,
 ) -> str:
     """Generate an INTRINSIC_README.md file from the dataset and template.
 
@@ -123,7 +142,7 @@ def generate_readme(
 
     try:
         template_vars = make_readme_jinja_dict(
-            m, dataset_path, base_model, prompt_file or ""
+            m, dataset_path, base_model, prompt_file or "", name
         )
 
         template_dir = os.path.dirname(os.path.abspath(__file__))

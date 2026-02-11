@@ -6,6 +6,18 @@
 
 {{ dataset_description }}
 
+### Examples
+
+**Input examples:**
+{% for sample in samples %}
+- {{ sample.input }}
+{% endfor %}
+
+**Output examples:**
+{% for sample in samples %}
+- {{ sample.output }}
+{% endfor %}
+
 ## How to Use
 
 To use this intrinsic adapter in your application, you need to define an adapter class
