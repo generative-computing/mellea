@@ -94,6 +94,9 @@ def alora_add_readme(
     name: str = typer.Option(
         ..., help="Destination model name (e.g., acme/carbchecker-alora)"
     ),
+    hints: str = typer.Option(
+        default=None, help="File containing any additional hints."
+    ),
     io_yaml: str = typer.Option(
         default=None,
         help="Location of a granite-common io.yaml file. See https://nfulton.org/blog/alora_io_yaml.html",
@@ -112,7 +115,25 @@ def alora_add_readme(
             prompt_file=promptfile,
             output_path=readme_path,
             name=name,
+            hints=open(hints).read() if hints is not None else None,
         )
+
+        print(open(readme_path).read())
+        continue_answer: str | None = None
+        while continue_answer is None or continue_answer not in ["yes", "no"]:
+            if continue_answer is not None:
+                print("Pleas answer with only 'yes' or 'no'.")
+            answer = input(
+                f"\nWe auto-generated a README using Mellea. Should we upload this README to {name} (yes/no)? "
+            )
+            continue_answer = answer.strip().lower()
+        if continue_answer == "no":
+            print("ABORTING.")
+            import sys
+
+            sys.exit(-1)
+        else:
+            assert continue_answer == "yes"
 
         token = HfFolder.get_token()
         if token is None:

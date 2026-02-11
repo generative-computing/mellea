@@ -25,7 +25,7 @@ and an intrinsic component. The adapter connects to the HuggingFace model reposi
 where the trained weights are stored, and the intrinsic wraps it as a composable Mellea
 component that can be used with any compatible backend.
 
-Make sure you have Mellea installed (`pip install mellea`), then use the code below to
+Make sure you have Mellea installed (`uv pip install mellea`), then use the code below to
 integrate this intrinsic into your application.
 
 ```python
@@ -38,11 +38,11 @@ from mellea.backends.adapters.adapter import CustomGraniteCommonAdapter
 from mellea.stdlib.components.intrinsic import Intrinsic
 
 
-_INTRINSIC_MODEL_ID = "{{ userid }}/{{ instrinsic_name }}"
-_INTRINSIC_ADAPTER_NAME = "{{ instrinsic_name }}"
+_INTRINSIC_MODEL_ID = "{{ userid }}/{{ intrinsic_name }}"
+_INTRINSIC_ADAPTER_NAME = "{{ intrinsic_name }}"
 
 
-class {{ instrinsic_name_camelcase }}Adapter(CustomGraniteCommonAdapter):
+class {{ intrinsic_name_camelcase }}Adapter(CustomGraniteCommonAdapter):
     def __init__(self, base_model_name: str):
         super().__init__(
             model_id=_INTRINSIC_MODEL_ID,
@@ -51,7 +51,7 @@ class {{ instrinsic_name_camelcase }}Adapter(CustomGraniteCommonAdapter):
         )
 
 
-class {{ instrinsic_name_camelcase }}Intrinsic(Intrinsic, SimpleComponent):
+class {{ intrinsic_name_camelcase }}Intrinsic(Intrinsic, SimpleComponent):
     def __init__(self, {{ arglist }}):
         Intrinsic.__init__(self, intrinsic_name=_INTRINSIC_ADAPTER_NAME)
         SimpleComponent.__init__(self, mechanic_notes=mechanic_notes)
@@ -62,17 +62,27 @@ class {{ instrinsic_name_camelcase }}Intrinsic(Intrinsic, SimpleComponent):
 async def async_{{ intrinsic_name }}({{ arglist }}, ctx: Context, backend: Backend | AdapterMixin):
     # Backend.add_adapter should be idempotent, but we'll go ahead and check just in case.
     if adapter.qualified_name not in backend.list_adapters():
-        backend.add_adapter({{ instrinsic_name_camelcase }}Adapter(backend.base_model_name))
-    action = {{ instrinsic_name_camelcase }}Intrinsic("{{ intrinsic_name }}", {{ arglist }})
+        backend.add_adapter({{ intrinsic_name_camelcase }}Adapter(backend.base_model_name))
+    action = {{ intrinsic_name_camelcase }}Intrinsic("{{ intrinsic_name }}", {{ arglist_without_type_annotations }})
     mot = await backend.generate_from_context(action, ctx)
     return mot
 
 
 def {{ intrinsic_name }}({{ arglist }}, ctx: Context, backend: Backend | AdapterMixin):
     # Backend.add_adapter should be idempotent, but we'll go ahead and check just in case.
-    adapter = {{ instrinsic_name_camelcase }}Adapter(backend.base_model_name)
+    adapter = {{ intrinsic_name_camelcase }}Adapter(backend.base_model_name)
     if adapter.qualified_name not in backend.list_adapters():
         backend.add_adapter(adapter)
-    action = {{ instrinsic_name_camelcase }}Intrinsic(notes)
+    action = {{ intrinsic_name_camelcase }}Intrinsic(notes)
     return mfuncs.act(action, ctx, backend)
+
+if __name__ == "__main__":
+    from mellea.backends.huggingface import LocalHFBackend
+    from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
+    from mellea.stdlib.context import ChatContext
+    backend = LocalHFBackend(IBM_GRANITE_4_MICRO_3B)
+    # Example inputs: {{ samples[0].input }}
+    # Example outputs: {{ samples[0].output }}
+    result, ctx = {{ intrinsic_name }}(..., ctx=ChatContext(), backend=backend)
+    print(result.value)
 ```
