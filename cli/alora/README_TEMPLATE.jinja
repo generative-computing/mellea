@@ -1,0 +1,66 @@
+# {{ adapter_name }} Intrinsic Adapter
+
+{{ high_level_description }}
+
+## Training Data
+
+{{ dataset_description }}
+
+## How to Use
+
+To use this intrinsic adapter in your application, you need to define an adapter class
+and an intrinsic component. The adapter connects to the HuggingFace model repository
+where the trained weights are stored, and the intrinsic wraps it as a composable Mellea
+component that can be used with any compatible backend.
+
+Make sure you have Mellea installed (`pip install mellea`), then use the code below to
+integrate this intrinsic into your application.
+
+```python
+import mellea.stdlib.functional as mfuncs
+from mellea.core import Context
+from mellea.backends import Backend
+from mellea.stdlib.components.simple import SimpleComponent
+from mellea.backends.adapters import AdapterMixin
+from mellea.backends.adapters.adapter import CustomGraniteCommonAdapter
+from mellea.stdlib.components.intrinsic import Intrinsic
+
+
+_INTRINSIC_MODEL_ID = "{{ userid }}/{{ instrinsic_name }}"
+_INTRINSIC_ADAPTER_NAME = "{{ instrinsic_name }}"
+
+
+class {{ instrinsic_name_camelcase }}Adapter(CustomGraniteCommonAdapter):
+    def __init__(self, base_model_name: str):
+        super().__init__(
+            model_id=_INTRINSIC_MODEL_ID,
+            intrinsic_name=_INTRINSIC_ADAPTER_NAME,
+            base_model_name=base_model_name,
+        )
+
+
+class {{ instrinsic_name_camelcase }}Intrinsic(Intrinsic, SimpleComponent):
+    def __init__(self, {{ arglist }}):
+        Intrinsic.__init__(self, intrinsic_name=_INTRINSIC_ADAPTER_NAME)
+        SimpleComponent.__init__(self, mechanic_notes=mechanic_notes)
+
+    def format_for_llm(self):
+        return SimpleComponent.format_for_llm(self)
+
+async def async_{{ intrinsic_name }}({{ arglist }}, ctx: Context, backend: Backend | AdapterMixin):
+    # Backend.add_adapter should be idempotent, but we'll go ahead and check just in case.
+    if adapter.qualified_name not in backend.list_adapters():
+        backend.add_adapter({{ instrinsic_name_camelcase }}Adapter(backend.base_model_name))
+    action = {{ instrinsic_name_camelcase }}Intrinsic("{{ intrinsic_name }}", {{ arglist }})
+    mot = await backend.generate_from_context(action, ctx)
+    return mot
+
+
+def {{ intrinsic_name }}({{ arglist }}, ctx: Context, backend: Backend | AdapterMixin):
+    # Backend.add_adapter should be idempotent, but we'll go ahead and check just in case.
+    adapter = {{ instrinsic_name_camelcase }}Adapter(backend.base_model_name)
+    if adapter.qualified_name not in backend.list_adapters():
+        backend.add_adapter(adapter)
+    action = {{ instrinsic_name_camelcase }}Intrinsic(notes)
+    return mfuncs.act(action, ctx, backend)
+```

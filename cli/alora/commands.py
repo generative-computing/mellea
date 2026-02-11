@@ -20,6 +20,11 @@ def alora_train(
     batch_size: int = typer.Option(2, help="Per-device batch size"),
     max_length: int = typer.Option(1024, help="Max sequence length"),
     grad_accum: int = typer.Option(4, help="Gradient accumulation steps"),
+    generate_readme: bool = typer.Option(
+        False,
+        "--generate-readme",
+        help="Generate an INTRINSIC_README.md file for the trained adapter.",
+    ),
 ):
     """Train an aLoRA or LoRA model on your dataset."""
     from cli.alora.train import train_model
@@ -37,6 +42,17 @@ def alora_train(
         grad_accum=grad_accum,
         prompt_file=promptfile,
     )
+
+    if generate_readme:
+        from cli.alora.readme_generator import generate_readme as gen_readme
+
+        readme_path = os.path.join(outfile, "INTRINSIC_README.md")
+        gen_readme(
+            dataset_path=datafile,
+            base_model=basemodel,
+            prompt_file=promptfile,
+            output_path=readme_path,
+        )
 
 
 def alora_upload(

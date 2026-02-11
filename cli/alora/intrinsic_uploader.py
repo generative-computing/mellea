@@ -4,7 +4,7 @@ import tempfile
 from typing import Literal
 
 import git
-from huggingface_hub import HfFolder, RepoUrl, create_repo, upload_folder
+from huggingface_hub import HfFolder, RepoUrl, create_repo, upload_file, upload_folder
 
 
 def upload_intrinsic(
@@ -65,6 +65,17 @@ def upload_intrinsic(
             commit_message="Upload adapter weights as intrinsic.",
             token=token,
         )
+
+        # Upload INTRINSIC_README.md as the repo root README.md if it exists.
+        readme_path = os.path.join(weight_path, "INTRINSIC_README.md")
+        if os.path.exists(readme_path):
+            upload_file(
+                path_or_fileobj=readme_path,
+                path_in_repo="README.md",
+                repo_id=model_name,
+                commit_message="Upload intrinsic README.",
+                token=token,
+            )
     finally:
         # Clean up temporary directory
         shutil.rmtree(temp_dir)
