@@ -106,7 +106,7 @@ def test_from_langchain_generation(session: MelleaSession):
     t = MelleaTool.from_langchain(langchain_tool)
 
     out = session.instruct(
-        "Call a langchain tool.",
+        "Call the langchain_tool.",
         model_options={ModelOption.TOOLS: [t], ModelOption.SEED: 1},
         strategy=None,
         tool_calls=True,

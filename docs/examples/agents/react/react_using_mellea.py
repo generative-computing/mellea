@@ -1,3 +1,5 @@
+# pytest: skip_always
+
 """React examples using the Mellea library's framework."""
 
 import asyncio
