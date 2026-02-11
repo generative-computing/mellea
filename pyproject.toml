@@ -112,7 +112,11 @@ telemetry = [
     "opentelemetry-distro>=0.59b0",
 ]
 
-all = ["mellea[watsonx,docling,hf,vllm,litellm,smolagents,telemetry]"]
+langchain = [
+    "mellea-langchain>=0.1.0",
+]
+
+all = ["mellea[watsonx,docling,hf,vllm,litellm,smolagents,telemetry,langchain]"]
 
 [dependency-groups]
 # Use these like:
@@ -251,6 +255,9 @@ markers = [
     
     # Composite markers
     "llm: Tests that make LLM calls (needs at least Ollama)",
+    
+    # Integration markers
+    "langchain: Tests for LangChain integration (optional dependency)",
 ]
 asyncio_mode = "auto"  # Don't require explicitly marking async tests.
 addopts = [

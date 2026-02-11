@@ -1,4 +1,4 @@
-exclude: ^(scratchpad/)
+exclude: ^(scratchpad/|integrations/)
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -17,7 +17,7 @@ repos:
     hooks:
       - id: mypy
         name: MyPy
-        entry: uv run --no-sync mypy . --exclude scratchpad/ --exclude tmp/
+        entry: uv run --no-sync mypy . --exclude scratchpad/ --exclude tmp/ --exclude integrations/
         pass_filenames: false
         language: system
         types_or: [python, jupyter]

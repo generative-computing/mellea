@@ -68,6 +68,7 @@ pip install mellea
 > uv pip install "mellea[watsonx]" # for watsonx backend
 > uv pip install "mellea[docling]" # for docling
 > uv pip install "mellea[smolagents]" # for HuggingFace smolagents tools
+> uv pip install "mellea[langchain]" # for LangChain integration
 > uv pip install "mellea[all]" # for all the optional dependencies
 > ```
 >

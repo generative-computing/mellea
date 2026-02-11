@@ -30,6 +30,8 @@ uv run mypy .                       # Type check
 ```
 **Branches**: `feat/topic`, `fix/issue-id`, `docs/topic`
 
+**Optional Integrations**: The `integrations/` directory contains optional sub-projects (e.g., `langchain`). These are separate packages with their own dependencies and can be installed via `pip install mellea[langchain]`.
+
 ## 2. Directory Structure
 | Path | Contents |
 |------|----------|
@@ -42,6 +44,7 @@ uv run mypy .                       # Type check
 | `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`) |
 | `test/` | All tests (run from repo root) |
 | `docs/examples/` | Example code (run as tests via pytest) |
+| `integrations/` | Optional sub-projects (langchain, etc.) with separate dependencies |
 | `scratchpad/` | Experiments (git-ignored) |
 
 ## 3. Test Markers

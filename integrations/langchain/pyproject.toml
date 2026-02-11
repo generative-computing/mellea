@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mellea-langchain"
+version = "0.1.0"
+authors = [
+    { name = "Mellea Team", email = "mellea-team@ibm.com" },
+]
+description = "LangChain-compatible chat model that wraps Mellea"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "mellea>=0.3.0",
+    "langchain-core>=0.3.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "langchain>=0.3.0",
+    "langserve>=0.3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/generative-computing/mellea-adapter"
+Documentation = "https://mellea.ai/"
+Repository = "https://github.com/generative-computing/mellea-adapter"
+Issues = "https://github.com/generative-computing/mellea-adapter/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "langchain: Tests for LangChain integration",
+    "streaming: Tests for streaming functionality",
+    "tool_calling: Tests for tool calling",
+    "integration: Integration tests",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
