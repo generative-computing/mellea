@@ -25,6 +25,7 @@
     - [Training the aLoRA Adapter](#training-the-alora-adapter)
       - [Parameters](#parameters)
     - [Upload to Hugging Face (Optional)](#upload-to-hugging-face-optional)
+    - [Generating a README for Your Adapter](#generating-a-readme-for-your-adapter)
     - [Integrating the Tuned Model into Mellea](#integrating-the-tuned-model-into-mellea)
   - [Chapter 7: On Context Management](#chapter-7-on-context-management)
   - [Chapter 8: Implementing Agents](#chapter-8-implementing-agents)
@@ -845,6 +846,52 @@ huggingface-cli login  # Optional: only needed for uploads
 > [!NOTE]
 > **Warning on Privacy:** Before uploading your trained model to the Hugging Face Hub, review the visibility carefully. If you will be sharing your model with the public, consider whether your training data includes any proprietary, confidential, or sensitive information. Language models can unintentionally memorize details, and this problem compounds when operating over small or domain-specific datasets.
 
+
+### Generating a README for Your Adapter
+
+After training and uploading your adapter, you can use the `m alora add-readme` command to automatically generate a README for your HuggingFace model repository. The readme generator uses Mellea itself to analyze your training dataset and produce documentation that includes a description of the adapter, training data examples, and ready-to-use Python integration code.
+
+```bash
+m alora add-readme \
+    docs/examples/aLora/stembolt_failure_dataset.jsonl \
+    --basemodel ibm-granite/granite-4.0-micro \
+    --name "$HF_USERNAME/stembolts-alora"
+```
+
+The generator will:
+1. Load the first five samples from your JSONL dataset
+2. Use an LLM to infer metadata: a high-level description, dataset summary, a CamelCase class name, and a Python function signature matching your input data structure
+3. Validate the generated metadata using rejection sampling with deterministic checks (e.g., ensuring the arglist parses as valid Python)
+4. Render a Jinja2 template into a complete README with HuggingFace-compatible YAML frontmatter, training data examples, and a full Python code snippet showing how to define an adapter class and use the intrinsic
+5. Display the result and prompt you to confirm upload to HuggingFace
+
+You can optionally provide a `--hints` file with domain-specific context to help the LLM produce more accurate descriptions:
+
+```bash
+m alora add-readme \
+    docs/examples/aLora/stembolt_failure_dataset.jsonl \
+    --basemodel ibm-granite/granite-4.0-micro \
+    --name "$HF_USERNAME/stembolts-alora" \
+    --hints hints.txt
+```
+
+The readme generator can also be used programmatically:
+
+```python
+from cli.alora.readme_generator import generate_readme
+
+generate_readme(
+    dataset_path="stembolt_failure_dataset.jsonl",
+    base_model="granite-4.0-micro",
+    prompt_file=None,
+    output_path="my_adapter_readme.md",
+    name="your-username/stembolts-alora",
+    hints=None,
+)
+```
+
+> [!NOTE]
+> The readme generator is itself a Mellea generative program. It uses `m.instruct` with a Pydantic output format, deterministic `check()` requirements, and `RejectionSamplingStrategy` to reliably generate structured metadata -- the same patterns described earlier in this tutorial.
 
 ### Integrating the Tuned Model into Mellea
 

@@ -61,6 +61,29 @@ m alora upload \
     stembolts_model_3.3_2b
 ```
 
+## Generate a README
+
+After uploading your adapter, you can auto-generate a README for the HuggingFace model repository using `m alora add-readme`. This command uses Mellea to analyze your training dataset and produce documentation with a description, data examples, and integration code:
+
+```bash
+m alora add-readme \
+    stembolt_failure_dataset.jsonl \
+    --basemodel ibm-granite/granite-4.0-micro \
+    --name "$HF_USERNAME/stembolts-alora"
+```
+
+You can provide a `--hints` file with additional domain context to improve the generated descriptions:
+
+```bash
+m alora add-readme \
+    stembolt_failure_dataset.jsonl \
+    --basemodel ibm-granite/granite-4.0-micro \
+    --name "$HF_USERNAME/stembolts-alora" \
+    --hints hints.txt
+```
+
+The generator will display the README and ask for confirmation before uploading it to your HuggingFace repo. You can also call the generator programmatically from Python -- see `test_readme_generator.py` for an example.
+
 ## Using Intrinsics
 
 You can now create a new adapter class for this model somewhere in your python project:
