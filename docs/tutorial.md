@@ -853,9 +853,10 @@ After training and uploading your adapter, you can use the `m alora add-readme` 
 
 ```bash
 m alora add-readme \
-    docs/examples/aLora/stembolt_failure_dataset.jsonl \
-    --basemodel ibm-granite/granite-4.0-micro \
-    --name "$HF_USERNAME/stembolts-alora"
+    --name $HF_USERNAME/stembolts \
+    --io-yaml docs/examples/aLora/io.yaml \
+    --basemodel granite-4.0-micro \
+    docs/examples/aLora/stembolt_failure_dataset.jsonl
 ```
 
 The generator will:
@@ -869,10 +870,11 @@ You can optionally provide a `--hints` file with domain-specific context to help
 
 ```bash
 m alora add-readme \
-    docs/examples/aLora/stembolt_failure_dataset.jsonl \
-    --basemodel ibm-granite/granite-4.0-micro \
-    --name "$HF_USERNAME/stembolts-alora" \
+    --name $HF_USERNAME/stembolts \
+    --io-yaml docs/examples/aLora/io.yaml \
+    --basemodel granite-4.0-micro \
     --hints hints.txt
+    docs/examples/aLora/stembolt_failure_dataset.jsonl
 ```
 
 The readme generator can also be used programmatically:
@@ -891,7 +893,7 @@ generate_readme(
 ```
 
 > [!NOTE]
-> The readme generator is itself a Mellea generative program. It uses `m.instruct` with a Pydantic output format, deterministic `check()` requirements, and `RejectionSamplingStrategy` to reliably generate structured metadata -- the same patterns described earlier in this tutorial.
+> The readme generator is itself a Mellea generative program. It uses `m.instruct` with a Pydantic output format, deterministic requirements, and `RejectionSamplingStrategy` to reliably generate structured metadata -- the same patterns described earlier in this tutorial.
 
 ### Integrating the Tuned Model into Mellea
 

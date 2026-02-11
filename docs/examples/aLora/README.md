@@ -67,19 +67,21 @@ After uploading your adapter, you can auto-generate a README for the HuggingFace
 
 ```bash
 m alora add-readme \
-    stembolt_failure_dataset.jsonl \
-    --basemodel ibm-granite/granite-4.0-micro \
-    --name "$HF_USERNAME/stembolts-alora"
+    --name $HF_USERNAME/stembolts \
+    --io-yaml io.yaml \
+    --basemodel granite-4.0-micro \
+    stembolt_failure_dataset.jsonl
 ```
 
 You can provide a `--hints` file with additional domain context to improve the generated descriptions:
 
 ```bash
 m alora add-readme \
-    stembolt_failure_dataset.jsonl \
-    --basemodel ibm-granite/granite-4.0-micro \
-    --name "$HF_USERNAME/stembolts-alora" \
+    --name $HF_USERNAME/stembolts \
+    --io-yaml io.yaml \
+    --basemodel granite-4.0-micro \
     --hints hints.txt
+    stembolt_failure_dataset.jsonl
 ```
 
 The generator will display the README and ask for confirmation before uploading it to your HuggingFace repo. You can also call the generator programmatically from Python -- see `test_readme_generator.py` for an example.
