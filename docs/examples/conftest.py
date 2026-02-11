@@ -367,50 +367,6 @@ def pytest_pycollect_makemodule(module_path, parent):
     return None
 
 
-def pytest_pycollect_makemodule(module_path, parent):
-    """Intercepts Module creation to skip files before import.
-
-    Runs for both directory traversal and direct file specification.
-    Returning a SkippedFile prevents pytest from importing the file,
-    which is necessary when files contain unavailable dependencies.
-
-    Args:
-        module_path: pathlib.Path to the module
-        parent: Parent collector node
-    """
-    file_path = module_path
-
-    # Limit scope to docs/examples directory
-    if "docs" not in str(file_path) or "examples" not in str(file_path):
-        return None
-
-    if file_path.name == "conftest.py":
-        return None
-
-    # Initialize capabilities cache if needed
-    config = parent.config
-    if not hasattr(config, "_example_capabilities"):
-        config._example_capabilities = get_system_capabilities()
-
-    # Check manual skip list
-    if file_path.name in examples_to_skip:
-        return SkippedFile.from_parent(parent, path=file_path)
-
-    # Extract and evaluate markers
-    markers = _extract_markers_from_file(file_path)
-
-    if not markers:
-        return None
-
-    should_skip, _reason = _should_skip_collection(markers)
-
-    if should_skip:
-        # Prevent import by returning custom collector
-        return SkippedFile.from_parent(parent, path=file_path)
-
-    return None
-
-
 def pytest_ignore_collect(collection_path, config):
     """Ignore files before pytest even tries to parse them.
 
