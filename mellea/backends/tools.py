@@ -75,8 +75,63 @@ class MelleaTool(AbstractMelleaTool):
 
         except ImportError as e:
             raise ImportError(
-                f"It appears you are attempting to utilize a langchain tool '{type(tool)}'"
-                "Please install langchain core: pip install 'langchain_core'."
+                f"It appears you are attempting to utilize a langchain tool '{type(tool)}'. "
+                "Please install langchain core: uv pip install langchain-core"
+            ) from e
+
+    @classmethod
+    def from_smolagents(cls, tool: Any):
+        """Create a Tool from a HuggingFace smolagents tool object.
+
+        Args:
+            tool: A smolagents.Tool instance
+
+        Returns:
+            MelleaTool: A Mellea tool wrapping the smolagents tool
+
+        Raises:
+            ImportError: If smolagents is not installed
+            ValueError: If tool is not a smolagents Tool instance
+
+        Example:
+            >>> from smolagents import PythonInterpreterTool
+            >>> tool = PythonInterpreterTool()
+            >>> mellea_tool = MelleaTool.from_smolagents(tool)
+        """
+        try:
+            from smolagents import (  # type: ignore[import-not-found]
+                Tool as SmolagentsTool,
+            )
+            from smolagents.models import (  # type: ignore[import-not-found]
+                get_tool_json_schema,
+            )
+
+            if not isinstance(tool, SmolagentsTool):
+                raise ValueError(
+                    f"tool parameter must be a smolagents Tool type; got: {type(tool)}"
+                )
+
+            tool_name = tool.name
+
+            # Use smolagents' built-in conversion to OpenAI format
+            as_json = get_tool_json_schema(tool)
+
+            # Wrap the tool's forward method
+            def tool_call(*args, **kwargs):
+                """Wrapper for smolagents tool forward method."""
+                if args:
+                    # This shouldn't happen. Our ModelToolCall.call_func passes everything as kwargs.
+                    FancyLogger.get_logger().warning(
+                        f"ignoring unexpected args while calling smolagents tool ({tool_name}): ({args})"
+                    )
+                return tool.forward(**kwargs)
+
+            return MelleaTool(tool_name, tool_call, as_json)
+
+        except ImportError as e:
+            raise ImportError(
+                f"It appears you are attempting to utilize a smolagents tool '{type(tool)}'. "
+                "Please install mellea with smolagents support: uv pip install 'mellea[smolagents]'"
             ) from e
 
     @classmethod
