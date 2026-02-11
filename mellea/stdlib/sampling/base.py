@@ -219,7 +219,12 @@ class BaseSamplingStrategy(SamplingStrategy):
                 # log partial success and continue
                 failed = [s for s in constraint_scores if not bool(s[1])]
                 count_failed = len(failed)
-                failed_reqs = [r[0].description for r in failed]
+                failed_reqs = [
+                    r[0].description
+                    if r[0].description is not None
+                    else "[no description]"
+                    for r in failed
+                ]
                 stringify_failed = "\n\t - " + "\n\t - ".join(failed_reqs)
                 flog.info(
                     f"FAILED. Valid: {len(constraint_scores) - count_failed}/{len(constraint_scores)}. Failed: {stringify_failed}"

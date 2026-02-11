@@ -173,9 +173,13 @@ def make_readme_jinja_dict(
     # Build the instruction description.
     sample_text = "\n".join(json.dumps(s) for s in samples)
 
-    description = f"""You are generating metadata for a README file for a machine learning intrinsic adapter trained on the dataset below.
+    hints_text = ""
+    if hints is not None:
+        hints = "\n\nHere are some additional details about the domain:\n" + hints
 
-{"Here are some additional details about the domain:\n" + hints + "\n\n" if hints is not None else ""}Here are the first few samples from the training dataset (JSONL format):
+    description = f"""You are generating metadata for a README file for a machine learning intrinsic adapter trained on the dataset below.{hints_text}
+
+Here are the first few samples from the training dataset (JSONL format):
 {sample_text}
 
 Base model: {base_model}
@@ -218,7 +222,7 @@ Generate appropriate values for each field:
     # Programmatically build kwargs forwarding string from arglist.
     # E.g. "description, notes" -> "description=description, notes=notes"
     tree = ast.parse(f"def f({vars_dict['arglist_without_type_annotations']}): pass")
-    arg_names = [arg.arg for arg in tree.body[0].args.args]
+    arg_names = [arg.arg for arg in tree.body[0].args.args]  # type: ignore
     vars_dict["arglist_as_kwargs"] = ", ".join(f"{n}={n}" for n in arg_names)
 
     vars_dict["base_model"] = base_model

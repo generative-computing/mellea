@@ -122,7 +122,7 @@ def alora_add_readme(
         continue_answer: str | None = None
         while continue_answer is None or continue_answer not in ["yes", "no"]:
             if continue_answer is not None:
-                print("Pleas answer with only 'yes' or 'no'.")
+                print("Please answer with only 'yes' or 'no'.")
             answer = input(
                 f"\nWe auto-generated a README using Mellea. Should we upload this README to {name} (yes/no)? "
             )
