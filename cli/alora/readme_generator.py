@@ -240,9 +240,9 @@ Generate appropriate values for each field:
             pass
 
     if sample_values is not None:
-        parts = [f"{n}={repr(sample_values.get(n, ''))}" for n in arg_names]
+        parts = [f"{n}={sample_values.get(n, '')!r}" for n in arg_names]
     else:
-        parts = [f"{arg_names[0]}={repr(str(first_item))}"]
+        parts = [f"{arg_names[0]}={str(first_item)!r}"]
     vars_dict["example_call_kwargs"] = ", ".join(parts)
 
     vars_dict["base_model"] = base_model
