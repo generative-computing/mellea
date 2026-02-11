@@ -68,11 +68,15 @@ pip install mellea
 > uv pip install "mellea[watsonx]" # for watsonx backend
 > uv pip install "mellea[docling]" # for docling
 > uv pip install "mellea[smolagents]" # for HuggingFace smolagents tools
-> uv pip install "mellea[langchain]" # for LangChain integration
 > uv pip install "mellea[all]" # for all the optional dependencies
 > ```
 >
 > You can also install all the optional dependencies with `uv sync --all-extras`
+>
+> For the LangChain integration, install directly from source:
+> ```bash
+> pip install -e integrations/langchain
+> ```
 
 > [!NOTE]
 > If running on an Intel mac, you may get errors related to torch/torchvision versions. Conda maintains updated versions of these packages. You will need to create a conda environment and run `conda install 'torchvision>=0.22.0'` (this should also install pytorch and torchvision-extra). Then, you should be able to run `uv pip install mellea`. To run the examples, you will need to use `python <filename>` inside the conda environment instead of `uv run --with mellea <filename>`.

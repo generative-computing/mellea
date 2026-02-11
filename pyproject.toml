@@ -112,11 +112,7 @@ telemetry = [
     "opentelemetry-distro>=0.59b0",
 ]
 
-langchain = [
-    "mellea-langchain>=0.1.0",
-]
-
-all = ["mellea[watsonx,docling,hf,vllm,litellm,smolagents,telemetry,langchain]"]
+all = ["mellea[watsonx,docling,hf,vllm,litellm,smolagents,telemetry]"]
 
 [dependency-groups]
 # Use these like:
