@@ -74,9 +74,12 @@ def test_chat(m_session) -> None:
         f"Expected a message with content containing 2 but found {output_message}"
     )
 
+
 @pytest.mark.qualitative
 def test_chat_stream(m_session) -> None:
-    output_message = m_session.chat("What is 1+1?", model_options={ModelOption.STREAM: True})
+    output_message = m_session.chat(
+        "What is 1+1?", model_options={ModelOption.STREAM: True}
+    )
     assert "2" in output_message.content, (
         f"Expected a message with content containing 2 but found {output_message}"
     )

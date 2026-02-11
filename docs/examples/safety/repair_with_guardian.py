@@ -6,10 +6,9 @@ Demonstrates how RepairTemplateStrategy repairs responses using actual function 
 
 from mellea import MelleaSession
 from mellea.backends.ollama import OllamaModelBackend
+from mellea.backends.tools import MelleaTool
 from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 from mellea.stdlib.sampling import RepairTemplateStrategy
-
-from mellea.backends.tools import MelleaTool
 
 
 def demo_repair_with_actual_function_calling():
