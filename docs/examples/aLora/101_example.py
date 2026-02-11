@@ -32,7 +32,6 @@ granite_33_2b_stembolt_adapter = StemboltAdapter()
 backend.add_adapter(granite_33_2b_stembolt_adapter)
 
 # define a requirement
-# TODO: we should be able to pass the adapter itself, or at the very least name should be a public property of Adapter.
 failure_check = ALoraRequirement(
     "The diagnostic confidence should be in the unit interval and greater than 0.9.",
     intrinsic_name=granite_33_2b_stembolt_adapter.intrinsic_name,
@@ -42,6 +41,7 @@ failure_check.check_only = True
 res = m.instruct(
     "Oil seepage around piston rings suggests seal degradation",
     requirements=[failure_check],
+    strategy=None,
 )
 
 print("==== Generation =====")
@@ -85,13 +85,15 @@ def validate_reqs(reqs: list[Requirement]):
     return end_time - start_time, val_res
 
 
-# run with aLora -- which is the default if the constraint alora is added to a model
-computetime_alora, alora_result = validate_reqs([failure_check])
-
 # NOTE: This is not meant for use in regular programming using mellea, but just as an illustration for the speedup you can get with aloras.
 # force to run without alora
 backend.default_to_constraint_checking_alora = False
 computetime_no_alora, no_alora_result = validate_reqs([failure_check])
+
+# run with aLora -- which is the default if the constraint alora is added to a model
+backend.default_to_constraint_checking_alora = True
+computetime_alora, alora_result = validate_reqs([failure_check])
+
 
 print(
     f"Speed up time with using aloras is {((computetime_alora - computetime_no_alora) / computetime_no_alora * 100):.2f}% ({computetime_alora - computetime_no_alora} seconds). This speedup is absolute -- not normalized for token count."

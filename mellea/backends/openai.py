@@ -432,10 +432,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         if model_opts.get(ModelOption.STREAM, None) is not None:
             # Intrinsics don't support streaming because of their post-processing step.
-            FancyLogger.get_logger().warning(
-                "intrinsics cannot use streaming; removing model option"
-            )
-            del model_opts[ModelOption.STREAM]
+            raise Exception("Intrinsics do not support streaming.")
 
         adapter = get_adapter_for_intrinsic(
             action.intrinsic_name, action.adapter_types, self._added_adapters

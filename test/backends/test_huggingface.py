@@ -458,10 +458,10 @@ async def test_generate_with_lock_does_not_block_when_awaiting_value(backend) ->
     )
     reg_mot, _ = await backend.generate_from_context(act, ctx)
     req_mot, _ = await backend.generate_from_context(
-        req_intrinsic, ctx, model_options={ModelOption.STREAM: True}
+        req_intrinsic, ctx, model_options={}
     )
     answerability_mot, _ = await backend.generate_from_context(
-        answerability_intrinsic, ctx, model_options={ModelOption.STREAM: True}
+        answerability_intrinsic, ctx, model_options={}
     )
 
     # Ensure the stream is generating but not yet completing.
@@ -489,6 +489,17 @@ async def test_generate_with_lock_does_not_block_when_awaiting_value(backend) ->
     for output in [reg_mot_stream, reg_mot, req_mot, answerability_mot]:
         if not output.is_computed():
             await output.avalue()  # Ensure everything gets computed.
+
+
+@pytest.mark.qualitative
+async def test_streaming_error_with_intrinsics(backend) -> None:
+    ctx = ChatContext().add(Message("user", "hello"))
+    req_intrinsic = Intrinsic("requirement_check", {"requirement": "did nothing"})
+
+    with pytest.raises(Exception, match="Intrinsics do not support streaming"):
+        _, _ = await backend.generate_from_context(
+            req_intrinsic, ctx, model_options={ModelOption.STREAM: True}
+        )
 
 
 @pytest.mark.qualitative
