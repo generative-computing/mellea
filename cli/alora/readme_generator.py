@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 from typing import Any
@@ -5,6 +6,8 @@ from typing import Any
 from pydantic import BaseModel
 
 from mellea import start_session
+from mellea.stdlib.requirements.requirement import check, simple_validate
+from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.stdlib.session import MelleaSession
 
 
@@ -18,6 +21,72 @@ class ReadmeTemplateVars(BaseModel):
     arglist_without_type_annotations: str
 
 
+def _parses_as_arglist(code: str) -> bool:
+    """Check if a string parses as a valid Python function argument list."""
+    try:
+        ast.parse(f"def f({code}): pass")
+        return True
+    except SyntaxError:
+        return False
+
+
+def _make_requirements(name: str) -> list:
+    """Build deterministic check requirements for README generation.
+
+    All are check_only=True so they are not included in the prompt,
+    avoiding prompt pollution while still being validated by the
+    rejection sampling loop.
+    """
+    expected_userid = name.split("/")[0]
+    expected_intrinsic_name = name.split("/")[1]
+
+    def _parse(output: str) -> ReadmeTemplateVars:
+        return ReadmeTemplateVars.model_validate_json(output)
+
+    return [
+        check(
+            f"intrinsic_name must be '{expected_intrinsic_name}'",
+            validation_fn=simple_validate(
+                lambda output: (
+                    _parse(output).intrinsic_name == expected_intrinsic_name,
+                    f"intrinsic_name was '{_parse(output).intrinsic_name}', expected '{expected_intrinsic_name}'",
+                )
+            ),
+        ),
+        check(
+            f"userid must be '{expected_userid}'",
+            validation_fn=simple_validate(
+                lambda output: (
+                    _parse(output).userid == expected_userid,
+                    f"userid was '{_parse(output).userid}', expected '{expected_userid}'",
+                )
+            ),
+        ),
+        check(
+            "intrinsic_name_camelcase must match intrinsic_name",
+            validation_fn=simple_validate(lambda output: (
+                _parse(output).intrinsic_name_camelcase.lower()
+                == _parse(output).intrinsic_name.replace("_", "").replace("-", "").lower(),
+                f"'{_parse(output).intrinsic_name_camelcase}' doesn't match '{_parse(output).intrinsic_name}'",
+            )),
+        ),
+        check(
+            "arglist must be a valid Python argument list",
+            validation_fn=simple_validate(lambda output: (
+                _parses_as_arglist(_parse(output).arglist),
+                f"arglist '{_parse(output).arglist}' does not parse as valid Python",
+            )),
+        ),
+        check(
+            "arglist_without_type_annotations must be a valid Python argument list",
+            validation_fn=simple_validate(lambda output: (
+                _parses_as_arglist(_parse(output).arglist_without_type_annotations),
+                f"arglist_without_type_annotations '{_parse(output).arglist_without_type_annotations}' does not parse as valid Python",
+            )),
+        ),
+    ]
+
+
 def make_readme_jinja_dict(
     m: MelleaSession,
     dataset_path: str,
@@ -29,7 +98,8 @@ def make_readme_jinja_dict(
     """Generate all template variables for the intrinsic README using an LLM.
 
     Loads the first five lines of the JSONL dataset, determines the input structure,
-    and uses m.chat with constrained decoding to generate README template variables.
+    and uses m.instruct with deterministic requirements and rejection sampling to
+    generate README template variables.
     """
     # Load first 5 lines of the dataset.
     samples = []
@@ -79,13 +149,12 @@ def make_readme_jinja_dict(
         with open(prompt_file) as f:
             prompt_content = f.read()
 
-    # Build the LLM prompt.
+    # Build the instruction description.
     sample_text = "\n".join(json.dumps(s) for s in samples)
 
-    prompt = f"""You are generating metadata for a README file for a machine learning intrinsic adapter trained on the dataset below.
+    description = f"""You are generating metadata for a README file for a machine learning intrinsic adapter trained on the dataset below.
 
-{"Here are some additional details about the domain:\n" + hints + "\n\n" if hints is not None else ""}
-Here are the first few samples from the training dataset (JSONL format):
+{"Here are some additional details about the domain:\n" + hints + "\n\n" if hints is not None else ""}Here are the first few samples from the training dataset (JSONL format):
 {sample_text}
 
 Base model: {base_model}
@@ -102,28 +171,13 @@ Generate appropriate values for each field:
 - arglist: The Python function argument list with type hints based on the input data structure. This will be used as function parameters.
 - arglist_without_type_annotations: The arglist without any type annotations. Should NOT start or end with parens."""
 
-    result = m.chat(prompt, format=ReadmeTemplateVars)
-    vars_dict = ReadmeTemplateVars.model_validate_json(result.content).model_dump()
-
-    # TODO this should be a requirement
-    if (
-        vars_dict["intrinsic_name_camelcase"].lower()
-        != vars_dict["intrinsic_name"].replace("_", "").replace("-", "").lower()
-    ):
-        print(
-            f"Fixing {vars_dict['intrinsic_name_camelcase']} to be the camelcase version of {vars_dict['intrinsic_name']}"
-        )
-        snake = vars_dict["intrinsic_name"]
-        camel = ""
-        while i < len(snake):
-            if i == 0:
-                camel += snake[i].upper()
-                continue
-            if snake[i] == "-" or snake[i] == "_" or i == 0:
-                camel += snake[i + 1].upper() if len(snake) < i + 1 else ""
-                i += 2
-                continue
-        vars_dict["intrinsic_name_camelcase"] = camel
+    result = m.instruct(
+        description,
+        requirements=_make_requirements(name),
+        format=ReadmeTemplateVars,
+        strategy=RejectionSamplingStrategy(loop_budget=10),
+    )
+    vars_dict = ReadmeTemplateVars.model_validate_json(str(result)).model_dump()
 
     # Use model name from the --name arg (strip username/ prefix)
     model_name = name.split("/")[-1] if "/" in name else name
@@ -164,26 +218,6 @@ def generate_readme(
         template_vars = make_readme_jinja_dict(
             m, dataset_path, base_model, prompt_file or "", name, hints
         )
-
-        # TODO this should be a requirement.
-        assert template_vars["intrinsic_name"] == name.split("/")[1], (
-            f"intrinsic_name {template_vars['intrinsic_name']} should be the same as {name.split('/')[1]}. TODO-rf: we need to robustify this generator. If you are seeing this message, just try running the same command again. Sorry about that, this feature is still beta."
-        )
-
-        # TODO this should be a requirement
-        # TODO the actual requirement should be that both of these things parse as tuples and arg lists respectively in python
-        # TODO the full python code block parsing should also be a requirement
-        # TODO these should be 'check' requirements, ie not included in thep rompt.
-        if template_vars["arglist"].startswith("(") and template_vars[
-            "arglist"
-        ].endswith(")"):
-            template_vars["arglist"] = template_vars["arglist"][1:-1]
-        if template_vars["arglist_without_type_annotations"].startswith(
-            "("
-        ) and template_vars["arglist_without_type_annotations"].endswith(")"):
-            template_vars["arglist_without_type_annotations"] = template_vars[
-                "arglist_without_type_annotations"
-            ][1:-1]
 
         template_dir = os.path.dirname(os.path.abspath(__file__))
         env = Environment(loader=FileSystemLoader(template_dir))
