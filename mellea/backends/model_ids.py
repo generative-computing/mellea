@@ -26,14 +26,28 @@ class ModelIdentifier:
 #### IBM models ####
 ####################
 
-IBM_GRANITE_4_MICRO_3B = ModelIdentifier(
-    hf_model_name="ibm-granite/granite-4.0-micro",
-    ollama_name="granite4:micro",
+# Granite 4 Hybrid Models (Recommended for general use)
+IBM_GRANITE_4_HYBRID_MICRO = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.0-h-micro",
+    ollama_name="granite4:micro-h",
+    watsonx_name=None,  # Only h-small available on Watsonx
+)
+
+IBM_GRANITE_4_HYBRID_TINY = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.0-h-tiny",
+    ollama_name="granite4:tiny-h",
+    watsonx_name=None,  # Only h-small available on Watsonx
+)
+
+IBM_GRANITE_4_HYBRID_SMALL = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.0-h-small",
+    ollama_name="granite4:small-h",
     watsonx_name="ibm/granite-4-h-small",
 )
-# todo: watsonx model is different from ollama model - should be same.
 
 
+# Deprecated Granite 3 models - kept for backward compatibility
+# These maintain their original model references (not upgraded to Granite 4)
 IBM_GRANITE_3_2_8B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-3.2-8b-instruct",
     ollama_name="granite3.2:8b",
@@ -44,6 +58,23 @@ IBM_GRANITE_3_3_8B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-3.3-8b-instruct",
     ollama_name="granite3.3:8b",
     watsonx_name="ibm/granite-3-3-8b-instruct",
+)
+
+# Deprecated: Use IBM_GRANITE_4_HYBRID_MICRO or IBM_GRANITE_4_HYBRID_SMALL instead
+# Kept for backward compatibility with per-backend model selection:
+# - Ollama/HF: Uses MICRO (fits in CI memory constraints)
+# - Watsonx: Uses SMALL (required for watsonx support)
+IBM_GRANITE_4_MICRO_3B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.0-h-micro",
+    ollama_name="granite4:micro-h",
+    watsonx_name="ibm/granite-4-h-small",
+)
+
+# Granite 3.3 Vision Model (2B)
+IBM_GRANITE_3_3_VISION_2B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-vision-3.3-2b",
+    ollama_name="ibm/granite3.3-vision:2b",
+    watsonx_name=None,
 )
 
 IBM_GRANITE_GUARDIAN_3_0_2B = ModelIdentifier(

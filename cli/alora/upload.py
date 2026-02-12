@@ -1,6 +1,5 @@
 import os
 
-import typer
 from huggingface_hub import HfApi, HfFolder, create_repo, upload_folder
 
 
@@ -41,5 +40,3 @@ def upload_model(weight_path: str, model_name: str, private: bool = True):
         commit_message="Upload adapter weights",
         token=token,
     )
-
-    print("✅ Upload complete!")
