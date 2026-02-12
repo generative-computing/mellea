@@ -1,0 +1,27 @@
+---
+title: "cli.eval.commands"
+sidebarTitle: "cli.eval.commands"
+description: "Use the eval command for LLM-as-a-judge evaluation, given a (set of) test file(s) consisting of prompts, instructions, and optionally, targets."
+---
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Instantiate a generator model to produce candidate responses, and a judge model to determine whether the instructions have been followed.
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `eval_run` <sup><a href="https://github.com/generative-computing/mellea/blob/main/cli/eval/commands.py#L9" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+eval_run(test_files: list[str] = typer.Argument(..., help='List of paths to json/jsonl files containing test cases'), backend: str = typer.Option('ollama', '--backend', '-b', help='Generation backend'), model: str = typer.Option(None, '--model', help='Generation model name'), max_gen_tokens: int = typer.Option(256, '--max-gen-tokens', help='Max tokens to generate for responses'), judge_backend: str = typer.Option(None, '--judge-backend', '-jb', help='Judge backend'), judge_model: str = typer.Option(None, '--judge-model', help='Judge model name'), max_judge_tokens: int = typer.Option(256, '--max-judge-tokens', help="Max tokens for the judge model's judgement."), output_path: str = typer.Option('eval_results', '--output-path', '-o', help='Output path for results'), output_format: str = typer.Option('json', '--output-format', help='Either json or jsonl format for results'), continue_on_error: bool = typer.Option(True, '--continue-on-error'))
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,36 @@
+---
+title: "cli.decompose.decompose"
+sidebarTitle: "cli.decompose.decompose"
+---
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `run` <sup><a href="https://github.com/generative-computing/mellea/blob/main/cli/decompose/decompose.py#L23" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+run(out_dir: Annotated[Path, typer.Option(help='Path to an existing directory to save the output files.')], out_name: Annotated[str, typer.Option(help='Name for the output files. Defaults to "m_result".')] = 'm_decomp_result', prompt_file: Annotated[typer.FileText | None, typer.Option(help='Path to a raw text file containing a task prompt.')] = None, model_id: Annotated[str, typer.Option(help='Model name/id to be used to run the decomposition pipeline.' + ' Defaults to "mistral-small3.2:latest", which is valid for the "ollama" backend.' + " If you have a vLLM instance serving a model from HF with vLLM's OpenAI" + " compatible endpoint, then this option should be set to the model's HF name/id," + ' e.g. "mistralai/Mistral-Small-3.2-24B-Instruct-2506" and the "--backend" option' + ' should be set to "openai".')] = 'mistral-small3.2:latest', backend: Annotated[DecompBackend, typer.Option(help='Backend to be used for inference. Defaults to "ollama".' + ' Options are: "ollama" and "openai".' + ' The "ollama" backend runs a local inference server.' + ' The "openai" backend will send inference requests to any' + " endpoint that's OpenAI compatible.", case_sensitive=False)] = DecompBackend.ollama, backend_req_timeout: Annotated[int, typer.Option(help='Time (in seconds) for timeout to be passed on the model inference requests. Defaults to "300"')] = 300, backend_endpoint: Annotated[str | None, typer.Option(help='The "endpoint URL", sometimes called "base URL",' + ' to reach the model when using the "openai" backend.' + ' This option is required if using "--backend openai".')] = None, backend_api_key: Annotated[str | None, typer.Option(help='The API key for the configured "--backend-endpoint".' + ' If using "--backend openai" this option must be set,' + ' even if you are running locally (an OpenAI compatible server), you' + ' must set this option, it can be set to "EMPTY" if your local' + " server doesn't need it.")] = None, version: Annotated[DecompVersion, typer.Option(help='Version of the mellea program generator template to be used.', case_sensitive=False)] = DecompVersion.latest, input_var: Annotated[list[str] | None, typer.Option(help='If your task needs user input data, you must pass' + ' a descriptive variable name using this option, this way' + ' the variable names can be templated into the generated prompts.' + ' You can pass this option multiple times, one for each input variable name.' + ' These names must be all uppercase, alphanumeric, with words separated by underscores.')] = None) -> None
+```
+
+
+Runs the decomposition pipeline.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `DecompVersion` <sup><a href="https://github.com/generative-computing/mellea/blob/main/cli/decompose/decompose.py#L14" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
