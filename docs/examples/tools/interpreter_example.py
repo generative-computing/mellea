@@ -1,7 +1,7 @@
 # pytest: ollama, llm
 
 from mellea import MelleaSession, start_session
-from mellea.backends import ModelOption, tool
+from mellea.backends import ModelOption
 from mellea.stdlib.requirements import tool_arg_validator, uses_tool
 from mellea.stdlib.tools import code_interpreter, local_code_interpreter
 
