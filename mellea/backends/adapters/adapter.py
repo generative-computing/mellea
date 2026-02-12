@@ -38,26 +38,6 @@ class Adapter(abc.ABC):
         """set when the adapter is added to a backend"""
 
 
-class OpenAIAdapter(Adapter):
-    """Adapter for OpenAIBackends."""
-
-    @abc.abstractmethod
-    def get_open_ai_path(
-        self,
-        base_model_name: str,
-        server_type: _ServerType = _ServerType.LOCALHOST,
-        remote_path: str | None = None,
-    ) -> str:
-        """Returns the path needed to load the adapter.
-
-        Args:
-            base_model_name: the base model; typically the last part of the huggingface model id like "granite-3.3-8b-instruct"
-            server_type: the server type (ie LOCALHOST / OPENAI); usually the backend has information on this
-            remote_path: optional; used only if the server_type is REMOTE_VLLM; base path at which to find the adapter
-        """
-        ...
-
-
 class LocalHFAdapter(Adapter):
     """Adapter for LocalHFBackends."""
 
@@ -71,7 +51,7 @@ class LocalHFAdapter(Adapter):
         ...
 
 
-class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
+class GraniteCommonAdapter(LocalHFAdapter):
     """Adapter for intrinsics that utilize the ``granite-common`` library."""
 
     def __init__(
@@ -149,35 +129,6 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
         assert config_dict is not None  # Code above should initialize this variable
         self.config: dict = config_dict
 
-    def get_open_ai_path(
-        self,
-        base_model_name: str,
-        server_type: _ServerType = _ServerType.LOCALHOST,
-        remote_path: str | None = None,
-    ) -> str:
-        """Returns the path needed to load the adapter.
-
-        Args:
-            base_model_name: the base model; typically the last part of the huggingface
-                model id like "granite-3.3-8b-instruct"
-            server_type: the server type (ie LOCALHOST / OPENAI); usually the backend
-                has information on this
-            remote_path: optional; used only if the server_type is REMOTE_VLLM; base
-                path at which to find the adapter
-        """
-        if server_type == _ServerType.LOCALHOST:
-            path = self.download_and_get_path(base_model_name)
-        elif server_type == _ServerType.REMOTE_VLLM:
-            if remote_path is None:
-                remote_path = "rag-intrinsics-lib"
-            path = self.get_path_on_remote(base_model_name, remote_path)
-        else:
-            raise ValueError(
-                f"{self} not supported for OpenAIBackend with server_type: {server_type}"
-            )
-
-        return path
-
     def get_local_hf_path(self, base_model_name: str) -> str:
         """Returns the path needed to load the adapter.
 
@@ -206,11 +157,6 @@ class GraniteCommonAdapter(OpenAIAdapter, LocalHFAdapter):
                 alora=is_alora,
             )
         )
-
-    def get_path_on_remote(self, base_model_name: str, base_path: str) -> str:
-        """Assumes the files have already been downloaded on the remote server."""
-        # TODO: This will break when we switch to the new repo!!!
-        return f"./{base_path}/{self.name}/{self.adapter_type.value}/{base_model_name}"
 
 
 T = TypeVar("T")
