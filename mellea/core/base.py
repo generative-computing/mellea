@@ -378,6 +378,17 @@ class ModelOutputThunk(CBlock, Generic[S]):
         """
         return f"ModelOutputThunk({self.value})"
 
+    def __eq__(self, other: object) -> bool:
+        """Compare ModelOutputThunks based on their value and parsed representation.
+
+        Two ModelOutputThunks are considered equal if they have the same value
+        and parsed_repr. This is useful for testing and comparing thunks that
+        may have been copied or stored in different contexts.
+        """
+        if not isinstance(other, ModelOutputThunk):
+            return False
+        return self.value == other.value and self.parsed_repr == other.parsed_repr
+
     def __copy__(self):
         """Returns a shallow copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generating."""
         copied = ModelOutputThunk(

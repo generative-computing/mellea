@@ -70,7 +70,7 @@ async def test_async_await_with_chat_context(m_session):
 
     ctx = m_session.ctx
     for i in range(len(history)):
-        assert ctx.node_data is history[i]  # type: ignore
+        assert ctx.node_data == history[i]  # type: ignore
         ctx = ctx.previous_node  # type: ignore
 
     # Ensure we made it back to the root.

@@ -798,6 +798,7 @@ async def achat(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        await_result=await_result,
     )
     parsed_assistant_message = result.parsed_repr
     assert isinstance(parsed_assistant_message, Message)
