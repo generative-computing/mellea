@@ -84,8 +84,10 @@ docling = [
     "docling>=2.45.0",
 ]
 
-smolagents = [
+tools = [
     "smolagents>=1.0.0",
+    "langchain-community>=0.3.0",
+    "ddgs>=9.0.0",  # Required by DuckDuckGoSearchResults in langchain-community
 ]
 
 telemetry = [
@@ -95,7 +97,7 @@ telemetry = [
     "opentelemetry-distro>=0.59b0",
 ]
 
-all = ["mellea[watsonx,docling,hf,vllm,litellm,smolagents,telemetry]"]
+all = ["mellea[watsonx,docling,hf,vllm,litellm,tools,telemetry]"]
 
 [dependency-groups]
 # Use these like:

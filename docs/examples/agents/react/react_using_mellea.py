@@ -1,4 +1,4 @@
-# pytest: skip_always
+# pytest: ollama, llm
 
 """React examples using the Mellea library's framework."""
 
@@ -14,7 +14,7 @@ from mellea.stdlib.session import start_session
 
 m = start_session()
 
-# Simple tool for searching. Requires the langchain_communities package.
+# Simple tool for searching. Requires the langchain-community package.
 # Mellea allows you to interop with langchain defined tools.
 lc_ddg_search = DuckDuckGoSearchResults(output_format="list")
 search_tool = MelleaTool.from_langchain(lc_ddg_search)

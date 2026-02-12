@@ -164,6 +164,19 @@ def _check_optional_imports(file_path):
             except ImportError:
                 return True, "langchain_core not installed"
 
+            # Check for langchain_community specifically
+            if (
+                "from langchain_community" in content
+                or "import langchain_community" in content
+            ):
+                try:
+                    import langchain_community
+                except ImportError:
+                    return (
+                        True,
+                        "langchain_community not installed (install with: uv pip install mellea[tools])",
+                    )
+
     except Exception:
         pass
 
