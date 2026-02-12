@@ -17,8 +17,8 @@ repos:
     hooks:
       - id: mypy
         name: MyPy
-        entry: uv run --no-sync mypy --install-types --non-interactive . --exclude scratchpad/ --exclude tmp/
-        pass_filenames: false
+        entry: uv run --no-sync mypy --install-types --non-interactive --exclude scratchpad/ --exclude tmp/
+        pass_filenames: true
         language: system
         types_or: [python, jupyter]
 

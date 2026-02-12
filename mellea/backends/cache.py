@@ -2,6 +2,7 @@
 
 import abc
 from collections import OrderedDict
+from collections.abc import Callable
 from typing import Any
 
 
@@ -29,13 +30,19 @@ class Cache(abc.ABC):
 class SimpleLRUCache(Cache):
     """A simple [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_Recently_Used_(LRU)) cache."""
 
-    def __init__(self, capacity: int):
+    def __init__(self, capacity: int, on_evict: Callable[[Any], None] | None = None):
         """Initializes the LRU cache with a certain capacity.
 
         The `SimpleLRUCache` either contains a value or it doesn't. There is no cache hierarchy. Take care when choosing `capacity`. In practice usually a small value will be fine, but ideally you should try to choose a capacity based upon your available device memory and the context size of your model.
+
+        Args:
+            capacity: Maximum number of items to store in the cache.
+            on_evict: Optional callback function called when an item is evicted from the cache.
+                      This can be used to free resources (e.g., GPU memory) when items are removed.
         """
         self.capacity = capacity
         self.cache: OrderedDict = OrderedDict()
+        self.on_evict = on_evict
 
     def current_size(self):
         """Just return the size of the key set. This isn't necessarily safe."""
@@ -58,6 +65,9 @@ class SimpleLRUCache(Cache):
             self.cache.pop(key)
         elif len(self.cache) >= self.capacity:
             # If the cache is full, remove the least recently used item
-            self.cache.popitem(last=False)
+            _evicted_key, evicted_value = self.cache.popitem(last=False)
+            # Call eviction callback if provided (e.g., to free GPU memory)
+            if self.on_evict is not None:
+                self.on_evict(evicted_value)
         # Add the new key-value pair to the end (most recent)
         self.cache[key] = value
