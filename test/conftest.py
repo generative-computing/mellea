@@ -329,7 +329,7 @@ def cleanup_vllm_backend(backend):
 
     import torch
 
-    backend._underlying_model.shutdown_background_loop()
+    backend._underlying_model.shutdown()
     del backend._underlying_model
     del backend
     gc.collect()

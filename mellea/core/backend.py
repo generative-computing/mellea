@@ -12,13 +12,19 @@ import typing_extensions
 from .base import C, CBlock, Component, Context, ModelOutputThunk
 from .utils import FancyLogger
 
-# Necessary to define a type that supports `None` so that the BaseModelSubclass
-# can have a default value. Otherwise, Python complains about typed-components
-# since types with default values must come after those without default values in
-# function signatures (which is incompatible with our function parameter formatting).
-pydantic_model_or_none = pydantic.BaseModel | None
+# Necessary to define a type variable that has a default value.
+# This is because VSCode's pyright static type checker instantiates
+# all type parameters, order them in a specific order, and checks
+# that a type parameter with a default is not followed by a type parameter without a default.
+# This was originally specified in PEP 696 (Type Defaults for Type Parameters) and
+# is now part of official spec https://typing.python.org/en/latest/spec/generics.html#type-parameter-defaults .
+# For example, in mellea/stdlib/functional.py ,
+#    def act(action: Component[S], ... format: type[BaseModelSubclass] | None = None, ...)
+# gets instantiated as act[S, BaseModelSubclass].
+# S is TypeVar("S", default=Any, covariant=True) which has a default.
+#
 BaseModelSubclass = typing_extensions.TypeVar(
-    "BaseModelSubclass", bound=pydantic_model_or_none, default=None
+    "BaseModelSubclass", bound=pydantic.BaseModel, default=pydantic.BaseModel
 )  # must be a subclass of BaseModel
 
 

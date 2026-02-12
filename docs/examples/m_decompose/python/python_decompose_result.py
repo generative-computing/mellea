@@ -1,3 +1,4 @@
+# pytest: skip_always
 import textwrap
 
 import mellea

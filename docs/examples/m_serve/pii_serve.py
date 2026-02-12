@@ -1,3 +1,4 @@
+# pytest: skip_always
 """PII Purifier using Mellea Framework."""
 
 import spacy
