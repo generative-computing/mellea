@@ -1032,8 +1032,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 q_end=len(input_ids[0]),  # type: ignore
             )
 
-            # TODO: Consider using UUID for cache key instead of mot.value for uniqueness
-            self.cache_put(mot.value, cache_info)
+            cache_key = id(mot.value)
+            self.cache_put(cache_key, cache_info)
 
             # Clear KV cache from HF output - it's now owned by the LRU cache
             hf_output.past_key_values = None
@@ -1231,13 +1231,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         return results
 
     # region cache management
-    def cache_get(self, id: str) -> HFAloraCacheInfo | None:
+    def cache_get(self, id: str | int) -> HFAloraCacheInfo | None:
         """Retrieve from cache."""
         v = self._cache.get(id)
         assert v is None or type(v) is HFAloraCacheInfo
         return v
 
-    def cache_put(self, id: str, v: HFAloraCacheInfo):
+    def cache_put(self, id: str | int, v: HFAloraCacheInfo):
         """Put into cache."""
         self._cache.put(id, v)
 
