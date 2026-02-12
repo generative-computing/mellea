@@ -37,6 +37,7 @@ from ..helpers import (
     chat_completion_delta_merge,
     extract_model_tool_requests,
     get_current_event_loop,
+    is_vllm_server_with_structured_output,
     message_to_openai_message,
     messages_to_docs,
     send_to_queue,
@@ -175,6 +176,12 @@ class OpenAIBackend(FormatterBackend):
 
         self._client = openai.OpenAI(  # type: ignore
             api_key=self._api_key, base_url=self._base_url, **self._openai_client_kwargs
+        )
+
+        # Attempt to detect vllm so that we can pass the correct structured output payload based on vllm version.
+        # This is only necessary when passing format to generate_from_raw.
+        self._use_structured_output_for_raw = is_vllm_server_with_structured_output(
+            base_url=str(self._client.base_url), headers=self._client._custom_headers
         )
 
         self._client_cache = ClientCache(2)
@@ -659,7 +666,11 @@ class OpenAIBackend(FormatterBackend):
             )
 
             # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
-            extra_body["guided_json"] = format.model_json_schema()  # type: ignore
+            # It's dependent on the vllm version though. We check at backend init.
+            if self._use_structured_output_for_raw:
+                extra_body["structured_outputs"] = {"json": format.model_json_schema()}  # type: ignore
+            else:
+                extra_body["guided_json"] = format.model_json_schema()  # type: ignore
         if tool_calls:
             FancyLogger.get_logger().warning(
                 "The completion endpoint does not support tool calling at the moment."
