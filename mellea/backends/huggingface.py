@@ -322,6 +322,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             linearized_ctx
         )
 
+        # NOTE: Explicitly do not add the action to the context here. Intrinsics modify the context
+        #       through their rewriters.
+
         conversation: list[dict] = []
         system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
@@ -337,10 +340,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         if model_options.get(ModelOption.STREAM, None) is not None:
             # Intrinsics don't support streaming because of their post-processing step.
-            FancyLogger.get_logger().warning(
-                "intrinsics cannot use streaming; removing model option"
-            )
-            del model_options[ModelOption.STREAM]
+            raise Exception("Intrinsics do not support streaming.")
 
         adapter = get_adapter_for_intrinsic(
             action.intrinsic_name, action.adapter_types, self._added_adapters
@@ -418,7 +418,10 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             result_processor: granite_common.IntrinsicsResultProcessor,
             input_ids,
         ):
-            res = result_processor.transform(chunk, rewritten)  # type: ignore
+            try:
+                res = result_processor.transform(chunk, rewritten)  # type: ignore
+            except json.JSONDecodeError:
+                raise Exception(f"Intrinsic did not return a JSON: {chunk}")
 
             # TODO: If we want to support caches, we need to get the GenerateDecoderOnlyOutput. This means we
             #       probably need to break out the pieces from `generate_with_transformers`.

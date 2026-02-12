@@ -50,7 +50,12 @@ def backend():
             "max_num_seqs": 8,
         },
     )
-    return backend
+    yield backend
+
+    # Cleanup using shared function (best-effort within module)
+    from test.conftest import cleanup_vllm_backend
+
+    cleanup_vllm_backend(backend)
 
 
 @pytest.fixture(scope="function")
@@ -141,6 +146,7 @@ async def test_generate_from_raw_with_format(session) -> None:
         actions=[CBlock(value=prompt) for prompt in prompts],
         ctx=session.ctx,
         format=Answer,
+        model_options={ModelOption.MAX_NEW_TOKENS: 100},
     )
 
     assert len(results) == len(prompts)

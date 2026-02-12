@@ -1,13 +1,33 @@
 import json
 import os
+import sys
+import warnings
 
+import torch
 import typer
-from alora.config import aLoraConfig
-from alora.peft_model_alora import aLoRAPeftModelForCausalLM
 from datasets import Dataset
-from peft import LoraConfig, PeftModelForCausalLM
+from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
 from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer
+
+# Handle MPS with old PyTorch versions on macOS only
+# Accelerate's GradScaler requires PyTorch >= 2.8.0 for MPS
+if sys.platform == "darwin" and hasattr(torch.backends, "mps"):
+    if torch.backends.mps.is_available():
+        pytorch_version = tuple(int(x) for x in torch.__version__.split(".")[:2])
+        if pytorch_version < (2, 8):
+            # Disable MPS detection to force CPU usage on macOS
+            # This must be done before any models or tensors are initialized
+            torch.backends.mps.is_available = lambda: False  # type: ignore[assignment]
+            torch.backends.mps.is_built = lambda: False  # type: ignore[assignment]
+            os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
+            warnings.warn(
+                "MPS is available but PyTorch < 2.8.0. Disabling MPS to avoid "
+                "gradient scaling issues. Training will run on CPU. "
+                "To use MPS, upgrade to PyTorch >= 2.8.0.",
+                UserWarning,
+                stacklevel=2,
+            )
 
 
 def load_dataset_from_json(json_path, tokenizer, invocation_prompt):
@@ -63,6 +83,7 @@ def train_model(
     output_file: str,
     prompt_file: str | None = None,
     adapter: str = "alora",
+    device: str = "auto",
     run_name: str = "multiclass_run",
     epochs: int = 6,
     learning_rate: float = 6e-6,
@@ -90,31 +111,62 @@ def train_model(
     train_dataset = dataset.select(range(split_idx))
     val_dataset = dataset.select(range(split_idx, len(dataset)))
 
-    model_base = AutoModelForCausalLM.from_pretrained(
-        base_model, device_map="auto", use_cache=False
-    )
+    if device == "auto":
+        if torch.cuda.is_available():
+            gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            if gpu_memory_gb < 6:
+                print(
+                    f"⚠️  Warning: GPU has {gpu_memory_gb:.1f}GB VRAM. "
+                    "Training 3B+ models may fail. Consider using --device cpu"
+                )
+            device_map = "auto"
+        else:
+            device_map = None
+    elif device == "cpu":
+        device_map = None
+    elif device in ["cuda", "mps"]:
+        device_map = "auto"
+    else:
+        raise ValueError(f"Invalid device '{device}'. Use: auto, cpu, cuda, or mps")
+
+    try:
+        model_base = AutoModelForCausalLM.from_pretrained(
+            base_model, device_map=device_map, use_cache=False
+        )
+    except NotImplementedError as e:
+        if "meta tensor" in str(e):
+            raise RuntimeError(
+                "Insufficient GPU memory for model. The model is too large for available VRAM. "
+                "Try: (1) Use a smaller model, (2) Use a system with more GPU memory (6GB+ recommended), "
+                "or (3) Train on CPU (slower but works with limited memory)."
+            ) from e
+        raise
 
     collator = DataCollatorForCompletionOnlyLM(invocation_prompt, tokenizer=tokenizer)
 
-    output_dir = os.path.dirname(output_file)
+    output_dir = os.path.dirname(os.path.abspath(output_file))
+    assert output_dir != "", (
+        f"Expected output_dir for output_file='{output_file}'  to be non-'' but found '{output_dir}'"
+    )
+
     os.makedirs(output_dir, exist_ok=True)
 
     if adapter == "alora":
-        peft_config = aLoraConfig(
-            invocation_string=invocation_prompt,
+        # Tokenize the invocation string for PEFT 0.18.0 native aLoRA
+        invocation_token_ids = tokenizer.encode(
+            invocation_prompt, add_special_tokens=False
+        )
+
+        peft_config = LoraConfig(
             r=32,
             lora_alpha=32,
             lora_dropout=0.05,
             bias="none",
             task_type="CAUSAL_LM",
             target_modules=["q_proj", "k_proj", "v_proj"],
+            alora_invocation_tokens=invocation_token_ids,  # Enable aLoRA
         )
-        response_token_ids = tokenizer(
-            invocation_prompt, return_tensors="pt", add_special_tokens=False
-        )["input_ids"]
-        model = aLoRAPeftModelForCausalLM(
-            model_base, peft_config, response_token_ids=response_token_ids
-        )
+        model = get_peft_model(model_base, peft_config)
 
         sft_args = SFTConfig(
             output_dir=output_dir,
@@ -148,7 +200,7 @@ def train_model(
             task_type="CAUSAL_LM",
             target_modules=["q_proj", "k_proj", "v_proj"],
         )
-        model = PeftModelForCausalLM(model_base, peft_config)
+        model = get_peft_model(model_base, peft_config)
 
         sft_args = SFTConfig(
             output_dir=output_dir,
@@ -171,3 +223,13 @@ def train_model(
         )
         trainer.train()
         model.save_pretrained(output_file, safe_serialization=True)
+
+    # remove useless README file generated by trainer.
+    # NOTE: this might delete an existing readme if the output_dir already existed.
+    # But we don't do any git commits yet, so that's probably okay.
+    annoying_readme = os.path.join(output_dir, "README.md")
+    if os.path.exists(annoying_readme):
+        print(
+            f"WArning: assuming {annoying_readme} was a useless peft-generated README. Deleting."
+        )
+        os.remove(annoying_readme)

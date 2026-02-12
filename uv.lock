@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14' and python_full_version < '4' and sys_platform == 'darwin'",
@@ -207,20 +207,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a6/f8/d9c74d0daf3f742840fd818d69cfae176fa332022fd44e3469487d5a9420/alabaster-1.0.0.tar.gz", hash = "sha256:c00dca57bca26fa62a6d7d0a9fcce65f3e026e9bfe33e9c538fd3fbb2144fd9e", size = 24210, upload-time = "2024-07-26T18:15:03.762Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7e/b3/6b4067be973ae96ba0d615946e314c5ae35f9f993eca561b356540bb0c2b/alabaster-1.0.0-py3-none-any.whl", hash = "sha256:fc6786402dc3fcb2de3cabd5fe455a2db534b371124f1f21de8731783dec828b", size = 13929, upload-time = "2024-07-26T18:15:02.05Z" },
-]
-
-[[package]]
-name = "alora"
-version = "0.2.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "click" },
-    { name = "peft" },
-    { name = "transformers" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/af/f5/c88b856fbb53b8fccf472c387d758f5f84e47f44be17707cd26824810a39/alora-0.2.0.tar.gz", hash = "sha256:e71f2c69bd1813f69f540efeea210be192ecd871b1ba94906a2e00b428b8fcb3", size = 68868, upload-time = "2025-06-09T19:35:56.694Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/8a/bb/10bdbade587a26d0f95c6c44456d491a9c8cc5d60b793ae797b77e61da7c/alora-0.2.0-py3-none-any.whl", hash = "sha256:5b90607062037dd6953c81f32ec9ef5fca088484100c72fb2c88a5e8c2545eba", size = 62989, upload-time = "2025-06-09T19:35:55.44Z" },
 ]
 
 [[package]]
@@ -3401,7 +3387,7 @@ wheels = [
 
 [[package]]
 name = "mellea"
-version = "0.3.0"
+version = "0.3.1"
 source = { editable = "." }
 dependencies = [
     { name = "ansicolors" },
@@ -3429,7 +3415,6 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "accelerate" },
-    { name = "alora" },
     { name = "boto3" },
     { name = "datasets" },
     { name = "docling" },
@@ -3445,6 +3430,7 @@ all = [
     { name = "outlines" },
     { name = "outlines-core" },
     { name = "peft" },
+    { name = "smolagents" },
     { name = "transformers" },
     { name = "trl" },
     { name = "vllm" },
@@ -3454,7 +3440,6 @@ docling = [
 ]
 hf = [
     { name = "accelerate" },
-    { name = "alora" },
     { name = "datasets" },
     { name = "granite-common", extra = ["transformers"] },
     { name = "outlines" },
@@ -3466,6 +3451,9 @@ hf = [
 litellm = [
     { name = "boto3" },
     { name = "litellm" },
+]
+smolagents = [
+    { name = "smolagents" },
 ]
 telemetry = [
     { name = "opentelemetry-api" },
@@ -3517,7 +3505,6 @@ notebook = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", marker = "extra == 'hf'", specifier = ">=1.9.0" },
-    { name = "alora", marker = "extra == 'hf'", specifier = "==0.2.0" },
     { name = "ansicolors" },
     { name = "boto3", marker = "extra == 'litellm'" },
     { name = "click", specifier = "<8.2.0" },
@@ -3533,7 +3520,7 @@ requires-dist = [
     { name = "litellm", marker = "extra == 'litellm'", specifier = ">=1.76" },
     { name = "llm-sandbox", extras = ["docker"], specifier = ">=0.3.23" },
     { name = "math-verify" },
-    { name = "mellea", extras = ["watsonx", "docling", "hf", "vllm", "litellm", "telemetry"], marker = "extra == 'all'" },
+    { name = "mellea", extras = ["watsonx", "docling", "hf", "vllm", "litellm", "smolagents", "telemetry"], marker = "extra == 'all'" },
     { name = "mistletoe", specifier = ">=1.4.0" },
     { name = "numpy", marker = "extra == 'vllm'", specifier = "<2.0.0" },
     { name = "ollama", specifier = ">=0.5.1" },
@@ -3545,11 +3532,12 @@ requires-dist = [
     { name = "outlines", marker = "extra == 'hf'" },
     { name = "outlines-core", marker = "extra == 'hf'", specifier = "==0.1.26" },
     { name = "outlines-core", marker = "extra == 'vllm'", specifier = "==0.1.26" },
-    { name = "peft", marker = "extra == 'hf'", specifier = ">=0.18.0" },
+    { name = "peft", marker = "extra == 'hf'", specifier = ">=0.18.1" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "rouge-score" },
+    { name = "smolagents", marker = "extra == 'smolagents'", specifier = ">=1.0.0" },
     { name = "transformers", marker = "extra == 'hf'", specifier = ">=4.53.2,<5" },
     { name = "transformers", marker = "extra == 'vllm'", specifier = "<4.54.0" },
     { name = "trl", marker = "extra == 'hf'", specifier = "==0.19.1" },
@@ -3559,7 +3547,7 @@ requires-dist = [
     { name = "uvicorn" },
     { name = "vllm", marker = "extra == 'vllm'", specifier = ">=0.9.1" },
 ]
-provides-extras = ["hf", "vllm", "litellm", "watsonx", "docling", "telemetry", "all"]
+provides-extras = ["hf", "vllm", "litellm", "watsonx", "docling", "smolagents", "telemetry", "all"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -5006,7 +4994,7 @@ wheels = [
 
 [[package]]
 name = "peft"
-version = "0.18.0"
+version = "0.18.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "accelerate" },
@@ -5020,9 +5008,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "transformers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4b/0c/f2938db546ac7fc961ab5917cd50fcf5d0d70b406de93e3faccaa504e152/peft-0.18.0.tar.gz", hash = "sha256:c81c80b2056ab40c23d58ef25f74daab417ac653970718589a11a8af28218588", size = 634141, upload-time = "2025-11-13T11:13:06.603Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d8/48/147b3ea999560b40a34fd78724c7777aa9d18409c2250bdcaf9c4f2db7fc/peft-0.18.1.tar.gz", hash = "sha256:2dd0d6bfce936d1850e48aaddbd250941c5c02fc8ef3237cd8fd5aac35e0bae2", size = 635030, upload-time = "2026-01-09T13:08:01.136Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0f/55/481bf25613d40ef53534f664deba7b138fe566356b6ca10304e2b3b2529c/peft-0.18.0-py3-none-any.whl", hash = "sha256:624f69ca6393b765ccc6734adda7ca57d80b238f0900a42c357d8b67a03d62ff", size = 556427, upload-time = "2025-11-13T11:13:03.664Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/14/b4e3f574acf349ae6f61f9c000a77f97a3b315b4bb6ad03791e79ae4a568/peft-0.18.1-py3-none-any.whl", hash = "sha256:0bf06847a3551e3019fc58c440cffc9a6b73e6e2962c95b52e224f77bbdb50f1", size = 556960, upload-time = "2026-01-09T13:07:55.865Z" },
 ]
 
 [[package]]
@@ -7334,6 +7322,23 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/44/cd/a040c4b3119bbe532e5b0732286f805445375489fceaec1f48306068ee3b/smmap-5.0.2.tar.gz", hash = "sha256:26ea65a03958fa0c8a1c7e8c7a58fdc77221b8910f6be2131affade476898ad5", size = 22329, upload-time = "2025-01-02T07:14:40.909Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/04/be/d09147ad1ec7934636ad912901c5fd7667e1c858e19d355237db0d0cd5e4/smmap-5.0.2-py3-none-any.whl", hash = "sha256:b30115f0def7d7531d22a0fb6502488d879e75b260a9db4d0819cfb25403af5e", size = 24303, upload-time = "2025-01-02T07:14:38.724Z" },
+]
+
+[[package]]
+name = "smolagents"
+version = "1.24.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "jinja2" },
+    { name = "pillow" },
+    { name = "python-dotenv" },
+    { name = "requests" },
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0a/1c/8d8e7f39f3586dc85a7f96681b08b7c1cfbd734b258a025f368632f2d666/smolagents-1.24.0.tar.gz", hash = "sha256:4d5028ffbd72aca85fb2e8daac52d03fb7d4290a9bf99dbc311dd65980f6b5de", size = 225246, upload-time = "2026-01-16T05:37:04.156Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/76/7a/461ead649c088d30f7847ef1c70f245a9c188381ed09a264633831050497/smolagents-1.24.0-py3-none-any.whl", hash = "sha256:54853759d07a92a939f1ff59238b757fb1a153204c90b69324c8e9709025aa86", size = 155727, upload-time = "2026-01-16T05:37:02.903Z" },
 ]
 
 [[package]]

@@ -12,7 +12,7 @@ pytestmark = [pytest.mark.openai, pytest.mark.ollama, pytest.mark.llm]
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
-from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
+from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.backends.openai import OpenAIBackend
 from mellea.core import CBlock, ModelOutputThunk
 from mellea.formatters import TemplateFormatter
@@ -23,8 +23,8 @@ from mellea.stdlib.context import ChatContext, SimpleContext
 def backend(gh_run: int):
     """Shared OpenAI backend configured for Ollama."""
     return OpenAIBackend(
-        model_id=IBM_GRANITE_4_MICRO_3B.ollama_name,  # type: ignore
-        formatter=TemplateFormatter(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name),  # type: ignore
+        model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name,  # type: ignore
+        formatter=TemplateFormatter(model_id=IBM_GRANITE_4_HYBRID_MICRO.hf_model_name),  # type: ignore
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="ollama",
     )
@@ -70,6 +70,16 @@ def test_multiturn(m_session) -> None:
 @pytest.mark.qualitative
 def test_chat(m_session) -> None:
     output_message = m_session.chat("What is 1+1?")
+    assert "2" in output_message.content, (
+        f"Expected a message with content containing 2 but found {output_message}"
+    )
+
+
+@pytest.mark.qualitative
+def test_chat_stream(m_session) -> None:
+    output_message = m_session.chat(
+        "What is 1+1?", model_options={ModelOption.STREAM: True}
+    )
     assert "2" in output_message.content, (
         f"Expected a message with content containing 2 but found {output_message}"
     )
@@ -288,4 +298,4 @@ def test_missing_api_key_raises_error() -> None:
 if __name__ == "__main__":
     import pytest
 
-    pytest.main([__file__, "-k", "generate_from_raw"])
+    pytest.main([__file__])

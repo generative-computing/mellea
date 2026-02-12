@@ -4,7 +4,7 @@ from typing import Literal
 import pytest
 
 from mellea import MelleaSession, generative, start_session
-from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
+from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import Requirement
 from mellea.stdlib.components.genslot import (
@@ -17,13 +17,8 @@ from mellea.stdlib.context import ChatContext, Context
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
-# Module-level markers: Uses granite3.3:8b (8B, heavy) in local mode
-pytestmark = [
-    pytest.mark.ollama,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.llm,
-]
+# Module-level markers: Uses granite4:micro-h (3B hybrid, lightweight) in local mode
+pytestmark = [pytest.mark.ollama, pytest.mark.requires_gpu, pytest.mark.llm]
 
 
 @pytest.fixture(scope="module")
@@ -31,10 +26,10 @@ def backend(gh_run: int):
     """Shared backend."""
     if gh_run == 1:
         return OllamaModelBackend(
-            model_id=IBM_GRANITE_4_MICRO_3B.ollama_name  # type: ignore
+            model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name  # type: ignore
         )
     else:
-        return OllamaModelBackend(model_id="granite3.3:8b")
+        return OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
 
 
 @generative

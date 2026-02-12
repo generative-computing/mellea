@@ -46,7 +46,12 @@ def backend():
             "max_num_seqs": 8,
         },
     )
-    return backend
+    yield backend
+
+    # Cleanup using shared function (best-effort within module)
+    from test.conftest import cleanup_vllm_backend
+
+    cleanup_vllm_backend(backend)
 
 
 @pytest.fixture(scope="function")

@@ -297,6 +297,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
             assert self.value is not None  # If computed, the value cannot be None.
             return self.value
 
+        do_set_computed = False
+
         if not self._generate_type == GenerateType.ASYNC:
             raise RuntimeError(
                 f"Cannot use `ModelOutputThunk.astream()` when the generate function is using `{self._generate_type.name}`"
@@ -333,7 +335,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             # Process the sentinel value if it's there.
             if chunks[-1] is None:
                 chunks.pop()  # Remove the sentinel value.
-                self._computed = True
+                do_set_computed = True
 
                 # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk relied on.
                 if self._generate is not None:
@@ -356,6 +358,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 assert self._process is not None
                 await self._process(self, chunk)
 
+            if do_set_computed:
+                assert self._underlying_value is not None
+                self._computed = True
         finally:
             # Always call post_process if computed, even on exception
             # This ensures telemetry spans are properly closed

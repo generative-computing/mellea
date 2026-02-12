@@ -1,6 +1,6 @@
 # pytest: ollama, qualitative, llm, slow
 
-"""Example of chain-of-thought reasoning on a mathematical question from the GSM8K dataset, structured as code for improved performance with the granite-3.3-8B model. The original accuracy in standard "thinking" mode is approximately 80%, while this implementation achieves 85-89% accuracy—up to 9 points higher.
+"""Example of chain-of-thought reasoning on a mathematical question from the GSM8K dataset, structured as code for improved performance with Granite 4 models. The original accuracy in standard "thinking" mode is approximately 80%, while this implementation achieves 85-89% accuracy—up to 9 points higher.
 
 This demonstrates that generative decorators are sufficient for complex reasoning tasks: not only do they maintain or improve performance, but they also significantly enhance observability and control. For instance, the structured Thought titles can be easily surfaced in a UI, providing instant insight into the model's reasoning process.
 """
