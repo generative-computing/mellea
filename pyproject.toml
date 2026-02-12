@@ -203,6 +203,13 @@ disable_error_code = [
     "import-not-found",
 ]
 
+[[tool.mypy.overrides]]
+# vLLM is an optional backend that doesn't work on macOS
+module = "mellea.backends.vllm"
+disable_error_code = [
+    "import-not-found",
+]
+
 [tool.codespell]
 ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,Wight'
 check-filenames = true
