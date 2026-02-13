@@ -991,7 +991,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # and already decoded.
         if isinstance(chunk, str):
             mot._underlying_value += chunk
-        else:
+        elif isinstance(chunk, GenerateDecoderOnlyOutput):
             # Otherwise, it's a non-streaming request. Decode it here.
             mot._meta["hf_output"] = chunk
             mot._underlying_value += self._tokenizer.decode(
@@ -1023,7 +1023,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         hf_output = mot._meta.get("hf_output", None)
         if (
             self._use_caches
-            and hf_output is not None
+            and isinstance(hf_output, GenerateDecoderOnlyOutput)
             and (hf_output.past_key_values is not None or hf_output.scores is not None)
         ):
             output_complete = hf_output.sequences[0]
@@ -1064,7 +1064,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # HuggingFace local models don't typically provide token counts
             # but we can record response metadata if available
             hf_output = mot._meta.get("hf_output")
-            if hf_output is not None:
+            if isinstance(hf_output, GenerateDecoderOnlyOutput):
                 record_response_metadata(span, hf_output)
 
             # Close the span now that async operation is complete
@@ -1074,7 +1074,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         # When caching is disabled, clear hf_output from meta to free GPU memory.
         # The sequences tensor is on GPU and accumulates if not cleared.
-        if not self._use_caches and mot._meta.get("hf_output") is not None:
+        if not self._use_caches and isinstance(
+            mot._meta.get("hf_output"), GenerateDecoderOnlyOutput
+        ):
             import gc
 
             hf_out = mot._meta["hf_output"]
