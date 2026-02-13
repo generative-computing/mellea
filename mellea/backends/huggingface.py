@@ -82,10 +82,11 @@ format: None = None  # typing this variable in order to shadow the global format
 class HFAloraCacheInfo:
     """A dataclass for holding some KV cache and associated information."""
 
-    kv_cache: DynamicCache
+    kv_cache: DynamicCache | None
     merged_token_ids: Any
     merged_attention: Any
     q_end: int = -1
+    scores: Any = None
 
 
 def _cleanup_kv_cache(cache_info: HFAloraCacheInfo) -> None:
@@ -119,6 +120,12 @@ def _cleanup_kv_cache(cache_info: HFAloraCacheInfo) -> None:
     # Delete other tensors
     if cache_info.merged_attention is not None:
         del cache_info.merged_attention
+
+    # Delete score tensors if present
+    if cache_info.scores is not None:
+        for tensor in cache_info.scores:
+            del tensor
+        del cache_info.scores
 
     # Force Python garbage collection and return CUDA memory to device
     gc.collect()
@@ -205,7 +212,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         custom_config: TransformersTorchConfig | None = None,
         default_to_constraint_checking_alora: bool = True,
         model_options: dict | None = None,
-        return_scores: bool = False,
     ):
         """Attempt to load model weights using the model_id by default, or using `custom_config` if provided.
 
@@ -284,7 +290,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         ), "vocab size mismatch between llguidance and huggingface tokenizers ... wtf?"
 
         self._use_caches = use_caches
-        self._return_scores = return_scores
         self._cache = (
             cache
             if cache is not None
@@ -922,7 +927,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # Passed as args/kwargs to generate.
                 input_ids,
                 return_dict_in_generate=True,
-                output_scores=self._return_scores,  # Default False to save GPU memory
                 use_cache=self._use_caches,  # Only create KV cache if caching is enabled
                 **self._make_backend_specific_and_remove(generate_options),
                 **streaming_kwargs,  # type: ignore
@@ -1020,23 +1024,25 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         if (
             self._use_caches
             and hf_output is not None
-            and hf_output.past_key_values is not None
+            and (hf_output.past_key_values is not None or hf_output.scores is not None)
         ):
             output_complete = hf_output.sequences[0]
-            kv_cache: DynamicCache = hf_output.past_key_values  # type: ignore
+            kv_cache: DynamicCache | None = hf_output.past_key_values  # type: ignore
 
             cache_info = HFAloraCacheInfo(
                 kv_cache=kv_cache,
                 merged_token_ids=output_complete,
                 merged_attention=torch.ones_like(output_complete).to(self._device),
                 q_end=len(input_ids[0]),  # type: ignore
+                scores=hf_output.scores,
             )
 
             cache_key = id(mot.value)
             self.cache_put(cache_key, cache_info)
 
-            # Clear KV cache from HF output - it's now owned by the LRU cache
+            # Clear KV cache and scores from HF output - they're now owned by the LRU cache
             hf_output.past_key_values = None
+            hf_output.scores = None
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
