@@ -244,7 +244,7 @@ def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
         print("-" * 70)
 
         # Build pytest command with same options as parent session
-        cmd = [sys.executable, "-m", "pytest", module_path, "-v"]
+        cmd = [sys.executable, "-m", "pytest", module_path, "-v", "--cov-report="]
 
         # Add markers from original command if present
         config = session.config
