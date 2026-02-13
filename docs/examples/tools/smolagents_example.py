@@ -36,8 +36,11 @@ try:
     print(f"Response: {result}")
 
     if result.tool_calls:
-        calc_result = result.tool_calls[python_tool.name].call_func()
-        print(f"\nCalculation result: {calc_result}")
+        try:
+            calc_result = result.tool_calls[python_tool.name].call_func()
+            print(f"\nCalculation result: {calc_result}")
+        except Exception as e:
+            print(f"\nTool execution failed: {e}")
 
 except ImportError as e:
     print("Please install smolagents: uv pip install 'mellea[smolagents]'")
