@@ -378,6 +378,17 @@ class ModelOutputThunk(CBlock, Generic[S]):
         """
         return f"ModelOutputThunk({self.value})"
 
+    def __eq__(self, other: object) -> bool:
+        """Compare ModelOutputThunks based on their value and parsed representation.
+
+        Two ModelOutputThunks are considered equal if they have the same value
+        and parsed_repr. This is useful for testing and comparing thunks that
+        may have been copied or stored in different contexts.
+        """
+        if not isinstance(other, ModelOutputThunk):
+            return False
+        return self.value == other.value and self.parsed_repr == other.parsed_repr
+
     def __copy__(self):
         """Returns a shallow copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generating."""
         copied = ModelOutputThunk(
@@ -426,6 +437,83 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied._generate_log = copy(self._generate_log)
         deepcopied._model_options = copy(self._model_options)
         return deepcopied
+
+
+class ComputedModelOutputThunk(ModelOutputThunk[S]):
+    """A `ComputedModelOutputThunk` is a `ModelOutputThunk` that is guaranteed to be computed.
+
+    This subclass provides a clear type distinction between thunks that may need awaiting
+    and those that are already computed. It should be returned from synchronous functions
+    and sampling strategies to indicate that no awaiting is needed.
+
+    Rather than creating from scratch, this wraps an existing ModelOutputThunk and ensures
+    it's fully computed. All attribute access is delegated to the wrapped thunk.
+
+    Key differences from ModelOutputThunk:
+    - Always initialized from a computed ModelOutputThunk
+    - _computed is always True
+    - Cannot be used for streaming (generation fields are not set)
+    - Provides type safety to indicate "already computed"
+    """
+
+    def __init__(self, thunk: ModelOutputThunk[S]):
+        """Wraps an existing ModelOutputThunk, ensuring it's computed.
+
+        Args:
+            thunk: A ModelOutputThunk that must be fully computed (value cannot be None)
+
+        Raises:
+            ValueError: If the thunk is not computed or has a None value
+        """
+        if not thunk.is_computed():
+            raise ValueError(
+                "ComputedModelOutputThunk requires a computed ModelOutputThunk"
+            )
+        if thunk.value is None:
+            raise ValueError("ComputedModelOutputThunk requires a non-None value")
+
+        # Store the wrapped thunk and ensure it's marked as computed
+        self._wrapped_thunk = thunk
+        self._wrapped_thunk._computed = True
+
+        # Clear generation-related fields since this is already computed
+        self._wrapped_thunk._generate = None
+        self._wrapped_thunk._generate_type = GenerateType.NONE
+        self._wrapped_thunk._generate_extra = None
+        self._wrapped_thunk._process = None
+        self._wrapped_thunk._post_process = None
+
+    def __getattr__(self, name: str) -> Any:
+        """Delegate all attribute access to the wrapped thunk."""
+        return getattr(self._wrapped_thunk, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Delegate all attribute setting to the wrapped thunk, except for _wrapped_thunk itself."""
+        if name == "_wrapped_thunk":
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._wrapped_thunk, name, value)
+
+    async def avalue(self) -> str:
+        """Returns the value immediately since it's already computed.
+
+        Overrides the parent method to avoid unnecessary async operations.
+        """
+        assert self._wrapped_thunk.value is not None, (
+            "ComputedModelOutputThunk value cannot be None"
+        )
+        return self._wrapped_thunk.value
+
+    async def astream(self) -> str:
+        """Returns the value immediately since streaming is not applicable.
+
+        Raises:
+            RuntimeError: Always, since ComputedModelOutputThunk cannot stream.
+        """
+        raise RuntimeError(
+            "Cannot stream from a ComputedModelOutputThunk. "
+            "This thunk is already fully computed and does not support streaming."
+        )
 
 
 @dataclass

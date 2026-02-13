@@ -14,6 +14,7 @@ from ..core import (
     BaseModelSubclass,
     CBlock,
     Component,
+    ComputedModelOutputThunk,
     Context,
     FancyLogger,
     GenerateLog,
@@ -89,6 +90,7 @@ def act(
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+        Always returns ComputedModelOutputThunk since sync functions must await completion.
     """
     out = _run_async_in_thread(
         aact(
@@ -102,6 +104,7 @@ def act(
             model_options=model_options,
             tool_calls=tool_calls,
             silence_context_type_warning=True,  # We can safely silence this here since it's in a sync function.
+            await_result=True,  # Sync functions must always await
         )  # type: ignore[call-overload]
         # Mypy doesn't like the bool for return_sampling_results.
     )
@@ -190,6 +193,7 @@ def instruct(
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+        Always returns ComputedModelOutputThunk since sync functions must await completion.
     """
     requirements = [] if requirements is None else requirements
     icl_examples = [] if icl_examples is None else icl_examples
@@ -421,12 +425,47 @@ async def aact(
     backend: Backend,
     *,
     requirements: list[Requirement] | None = None,
-    strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+    strategy: None = None,
     return_sampling_results: Literal[False] = False,
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
+    await_result: Literal[True],
+) -> tuple[ComputedModelOutputThunk[S], Context]: ...
+
+
+@overload
+async def aact(
+    action: Component[S],
+    context: Context,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
+    strategy: SamplingStrategy,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
+    await_result: bool = False,
+) -> tuple[ComputedModelOutputThunk[S], Context]: ...
+
+
+@overload
+async def aact(
+    action: Component[S],
+    context: Context,
+    backend: Backend,
+    *,
+    requirements: list[Requirement] | None = None,
+    strategy: None = None,
+    return_sampling_results: Literal[False] = False,
+    format: type[BaseModelSubclass] | None = None,
+    model_options: dict | None = None,
+    tool_calls: bool = False,
+    silence_context_type_warning: bool = False,
+    await_result: Literal[False] = False,
 ) -> tuple[ModelOutputThunk[S], Context]: ...
 
 
@@ -443,6 +482,7 @@ async def aact(
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
+    await_result: bool = False,
 ) -> SamplingResult[S]: ...
 
 
@@ -458,6 +498,7 @@ async def aact(
     model_options: dict | None = None,
     tool_calls: bool = False,
     silence_context_type_warning: bool = False,
+    await_result: bool = False,
 ) -> tuple[ModelOutputThunk[S], Context] | SamplingResult:
     """Asynchronous version of .act; runs a generic action, and adds both the action and the result to the context.
 
@@ -472,6 +513,7 @@ async def aact(
         model_options: additional model options, which will upsert into the model/backend's defaults.
         tool_calls: if true, tool calling is enabled.
         silence_context_type_warning: if called directly from an asynchronous function, will log a warning if not using a SimpleContext
+        await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. If True or strategy is not None, awaits and returns ComputedModelOutputThunk. Default is False.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -513,13 +555,22 @@ async def aact(
                 model_options=model_options,
                 tool_calls=tool_calls,
             )
-            await result.avalue()
+            # Only await and wrap if await_result is True
+            if await_result:
+                await result.avalue()
 
-            # ._generate_log should never be None after generation.
-            assert result._generate_log is not None
-            result._generate_log.is_final_result = True
-            generate_logs.append(result._generate_log)
+                # ._generate_log should never be None after generation.
+                assert result._generate_log is not None
+                result._generate_log.is_final_result = True
+                generate_logs.append(result._generate_log)
 
+                # Wrap in ComputedModelOutputThunk to indicate it's fully computed
+                computed_result = ComputedModelOutputThunk(result)
+                result = computed_result  # type: ignore
+            else:
+                # Return uncomputed ModelOutputThunk for streaming
+                # Note: new_ctx is already set from generate_from_context
+                pass
         else:
             # Always sample if a strategy is provided, even if no requirements were provided.
             # Some sampling strategies don't use requirements or set them when instantiated.
@@ -536,11 +587,11 @@ async def aact(
             )
 
             assert sampling_result.sample_generations is not None
-            for result in sampling_result.sample_generations:
+            for gen_result in sampling_result.sample_generations:
                 assert (
-                    result._generate_log is not None
+                    gen_result._generate_log is not None
                 )  # Cannot be None after generation.
-                generate_logs.append(result._generate_log)
+                generate_logs.append(gen_result._generate_log)
 
             new_ctx = sampling_result.result_ctx
             result = sampling_result.result
@@ -548,6 +599,21 @@ async def aact(
             assert sampling_result.result._generate_log.is_final_result, (
                 "generate logs from the final result returned by the sampling strategy must be marked as final"
             )
+
+            # Wrap sampling result in ComputedModelOutputThunk since it's always computed
+            computed_result = ComputedModelOutputThunk(result)
+
+            # Update the sampling result to use the computed thunk
+            sampling_result.sample_generations[sampling_result.result_index] = (
+                computed_result  # type: ignore
+            )
+
+            # Update context to point to the wrapped result
+            # The context's last node contains the original result, replace it with wrapped version
+            new_ctx._data = computed_result  # type: ignore
+            sampling_result.sample_contexts[sampling_result.result_index] = new_ctx
+
+            result = computed_result  # type: ignore
 
         # Add span attributes for the result
         set_span_attribute(span, "num_generate_logs", len(generate_logs))
@@ -601,6 +667,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    await_result: bool = False,
 ) -> tuple[ModelOutputThunk[str], Context]: ...
 
 
@@ -622,6 +689,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    await_result: bool = False,
 ) -> SamplingResult[S]: ...
 
 
@@ -642,6 +710,7 @@ async def ainstruct(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    await_result: bool = False,
 ) -> tuple[ModelOutputThunk[str], Context] | SamplingResult:
     """Generates from an instruction.
 
@@ -661,6 +730,7 @@ async def ainstruct(
         model_options: Additional model options, which will upsert into the model/backend's defaults.
         tool_calls: If true, tool calling is enabled.
         images: A list of images to be used in the instruction or None if none.
+        await_result: If False (default), returns an uncomputed ModelOutputThunk for streaming. If True, awaits and returns a ComputedModelOutputThunk.
 
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
@@ -693,6 +763,7 @@ async def ainstruct(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        await_result=await_result,
     )  # type: ignore[call-overload]
 
 
@@ -707,6 +778,7 @@ async def achat(
     format: type[BaseModelSubclass] | None = None,
     model_options: dict | None = None,
     tool_calls: bool = False,
+    await_result=True,  # achat always needs the computed result
 ) -> tuple[Message, Context]:
     """Sends a simple chat message and returns the response. Adds both messages to the Context."""
     if user_variables is not None:
@@ -726,6 +798,7 @@ async def achat(
         format=format,
         model_options=model_options,
         tool_calls=tool_calls,
+        await_result=await_result,
     )
     parsed_assistant_message = result.parsed_repr
     assert isinstance(parsed_assistant_message, Message)
