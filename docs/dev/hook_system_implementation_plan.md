@@ -2,16 +2,23 @@
 
 This document describes the implementation plan for the extensibility hook system specified in [`docs/dev/hook_system.md`](hook_system.md). The implementation uses the [ContextForge plugin framework](https://github.com/IBM/mcp-context-forge) (`mcpgateway.plugins.framework`) as an optional external dependency for core plumbing, while all Mellea-specific types — hook enums, payload models, and the plugin base class — are owned by Mellea under a new `mellea/plugins/` subpackage.
 
+The primary developer-facing API is Python decorators (`@hook`, `@plugin`) and programmatic registration (`register()`, `PluginSet`). YAML configuration is supported as a secondary mechanism for deployment-time overrides. Plugins work identically whether invoked through a session or via the functional API (`instruct(backend, context, ...)`).
+
+**Note**: The plugin framework is in the process of being extracted as a standalone Python package. Once completed, the package import path prefix will look like `cpex.framework`.
+
 
 ## 1. Package Structure
 
 ```
 mellea/plugins/
-├── __init__.py            # Public API with try/except ImportError guard
-├── _manager.py            # Lazy singleton wrapper around PluginManager
+├── __init__.py            # Public API: hook, plugin, block, PluginSet, register, MelleaPlugin
+├── _manager.py            # Singleton wrapper + session-tag filtering
 ├── _base.py               # MelleaBasePayload, MelleaPlugin base class
 ├── _types.py              # MelleaHookType enum + hook registration
-├── _context.py            # Plugins context factory helper
+├── _context.py            # Plugin context factory helper
+├── _decorators.py         # @hook and @plugin decorator implementations
+├── _pluginset.py          # PluginSet class
+├── _registry.py           # register(), block() helpers + global/session dispatch logic
 └── hooks/
     ├── __init__.py         # Re-exports all payload classes
     ├── session.py          # session lifecycle payloads
@@ -37,7 +44,7 @@ The following types from `mcpgateway.plugins.framework` form the plumbing layer.
 | `PluginResult[T]` | Generic result: `continue_processing: bool`, `modified_payload: T | None`, `violation: PluginViolation | None`, `metadata: dict`. |
 | `PluginViolation` | `reason`, `description`, `code`, `details`. |
 | `PluginConfig` | `name`, `kind`, `hooks`, `mode`, `priority`, `conditions`, `config`, ... |
-| `PluginMode` | `ENFORCE`, `ENFORCE_IGNORE_ERROR`, `PERMISSIVE`, `DISABLED`. |
+| `PluginMode` | `ENFORCE`, `ENFORCE_IGNORE_ERROR`, `PERMISSIVE`, `FIRE_AND_FORGET`, `DISABLED`. |
 | `PluginContext` | `state: dict`, `global_context: GlobalContext`, `metadata: dict`. |
 | `HookRegistry` | `get_hook_registry()`, `register_hook(hook_type, payload_class, result_class)`, `is_registered(hook_type)`. |
 | `@hook` decorator | `@hook("hook_type")` or `@hook("hook_type", PayloadType, ResultType)` for custom method names. |
@@ -86,6 +93,7 @@ classDiagram
           ENFORCE
           ENFORCE_IGNORE_ERROR
           PERMISSIVE
+          FIRE_AND_FORGET
           DISABLED
       }
 
@@ -139,7 +147,7 @@ classDiagram
 
 ### YAML Plugin Configuration (reference)
 
-Plugins can also be configured programmatically without a YAML file.
+Plugins can also be configured via YAML as a secondary mechanism. Programmatic registration via `@hook`, `@plugin`, and `register()` is the primary approach.
 
 ```yaml
 plugins:
@@ -148,6 +156,7 @@ plugins:
     hooks:
       - component_pre_create
       - generation_post_call
+    mode: enforce
     mode: enforce
     priority: 10
     config:
@@ -158,11 +167,20 @@ plugins:
     hooks:
       - component_post_success
       - sampling_loop_end
-    mode: permissive
+    mode: fire_and_forget
     priority: 100
     config:
       endpoint: "https://telemetry.example.com"
 ```
+
+### Mellea Wrapper Layer
+
+Mellea exposes its own `@hook` and `@plugin` decorators that translate to ContextForge registrations internally. This serves two purposes:
+
+1. **Mellea-aligned API**: The `@hook` decorator accepts a `mode` parameter with three string values (`"enforce"`, `"permissive"`, `"fire_and_forget"`) that map directly to ContextForge's `PluginMode` enum (`ENFORCE`, `PERMISSIVE`, `FIRE_AND_FORGET`), matching Mellea's code-first ergonomics without requiring users to import the enum.
+2. **Session tagging**: Mellea's wrapper adds session-scoping metadata that ContextForge's `PluginManager` does not natively support. The `_manager.py` layer filters hooks at dispatch time based on session tags.
+
+Users never import from `mcpgateway.plugins.framework` directly.
 
 ## 3. Core Types
 
@@ -226,7 +244,7 @@ All Mellea hook payloads inherit from this base, which extends `PluginPayload` w
 class MelleaBasePayload(PluginPayload):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    session_id: str
+    session_id: str | None = None
     request_id: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     hook: str
@@ -274,11 +292,13 @@ def build_global_context(
 
 ### 3.5 `MelleaPlugin` Base Class (`mellea/plugins/_base.py`)
 
+`MelleaPlugin` is one of three ways to define plugins, alongside `@hook` on standalone functions (primary) and `@plugin` on plain classes. Use `MelleaPlugin` when you need lifecycle hooks (`initialize`/`shutdown`) or typed context accessors.
+
 Extends ContextForge `Plugin` with typed context accessor helpers so plugin authors don't need to know about the `GlobalContext.state` mapping:
 
 ```python
 class MelleaPlugin(Plugin):
-    """Base class for Mellea plugins."""
+    """Base class for Mellea plugins with lifecycle hooks and typed accessors."""
 
     def get_backend(self, context: PluginContext) -> Backend | None:
         return context.global_context.state.get("backend")
@@ -296,14 +316,131 @@ class MelleaPlugin(Plugin):
 
 No new abstract methods. ContextForge's `initialize()` and `shutdown()` suffice.
 
+### 3.6 `@hook` Decorator (`mellea/plugins/_decorators.py`)
+
+The `@hook` decorator works on both standalone async functions and class methods:
+
+```python
+@dataclass(frozen=True)
+class HookMeta:
+    hook_type: str
+    mode: Literal["enforce", "permissive", "fire_and_forget"] = "enforce"
+    priority: int = 50
+
+def hook(
+    hook_type: str,
+    *,
+    mode: Literal["enforce", "permissive", "fire_and_forget"] = "enforce",
+    priority: int = 50,
+) -> Callable:
+    """Register an async function or method as a hook handler."""
+    def decorator(fn):
+        fn._mellea_hook_meta = HookMeta(
+            hook_type=hook_type,
+            mode=mode,
+            priority=priority,
+        )
+        return fn
+    return decorator
+```
+
+The `mode` parameter controls both execution strategy and result handling. These map directly to ContextForge's `PluginMode` enum:
+- `"enforce"` → `PluginMode.ENFORCE` / `"permissive"` → `PluginMode.PERMISSIVE`: Hook is awaited inline (blocking). Difference is whether violations halt execution or are logged only.
+- `"fire_and_forget"` → `PluginMode.FIRE_AND_FORGET`: Hook is dispatched as a background `asyncio.create_task()`. Result is ignored. This is handled by ContextForge's `PluginManager` dispatch logic.
+
+When used on a standalone function, the metadata is read at `register()` time or when passed to `start_session(plugins=[...])`. When used on a class method, it is discovered during class registration (either via `@plugin` or `MelleaPlugin` introspection).
+
+### 3.7 `@plugin` Decorator (`mellea/plugins/_decorators.py`)
+
+The `@plugin` decorator marks a plain class as a multi-hook plugin:
+
+```python
+@dataclass(frozen=True)
+class PluginMeta:
+    name: str
+    priority: int = 50
+
+def plugin(
+    name: str,
+    *,
+    priority: int = 50,
+) -> Callable:
+    """Mark a class as a Mellea plugin."""
+    def decorator(cls):
+        cls._mellea_plugin_meta = PluginMeta(
+            name=name,
+            priority=priority,
+        )
+        return cls
+    return decorator
+```
+
+On registration, all methods with `_mellea_hook_meta` are discovered and registered as hook handlers bound to the instance. Methods without `@hook` are ignored.
+
+### 3.8 `PluginSet` (`mellea/plugins/_pluginset.py`)
+
+A named, composable group of hook functions and plugin instances:
+
+```python
+class PluginSet:
+    def __init__(
+        self,
+        name: str,
+        items: list[Callable | Any | "PluginSet"],
+        *,
+        priority: int | None = None,
+    ):
+        self.name = name
+        self.items = items
+        self.priority = priority
+
+    def flatten(self) -> list[tuple[Callable | Any, int | None]]:
+        """Recursively flatten nested PluginSets into (item, priority_override) pairs."""
+        result = []
+        for item in self.items:
+            if isinstance(item, PluginSet):
+                result.extend(item.flatten())
+            else:
+                result.append((item, self.priority))
+        return result
+```
+
+PluginSets are inert containers — they do not register anything themselves. Registration happens when they are passed to `register()` or `start_session(plugins=[...])`.
+
+### 3.9 `block()` Helper (`mellea/plugins/_registry.py`)
+
+Convenience function for returning a blocking result from a hook:
+
+```python
+def block(
+    reason: str,
+    *,
+    code: str = "",
+    description: str = "",
+    details: dict[str, Any] | None = None,
+) -> PluginResult:
+    return PluginResult(
+        continue_processing=False,
+        violation=PluginViolation(
+            reason=reason,
+            description=description or reason,
+            code=code,
+            details=details or {},
+        ),
+    )
+```
+
 
 ## 4. Plugin Manager Integration (`mellea/plugins/_manager.py`)
 
 ### 4.1 Lazy Singleton Wrapper
 
+The `PluginManager` is lazily initialized on first use (either via `register()` or `start_session(plugins=[...])`). A config path is no longer required — code-first registration may be the only path.
+
 ```python
 _plugin_manager: PluginManager | None = None
 _plugins_enabled: bool = False
+_session_tags: dict[str, set[str]] = {}  # session_id -> set of plugin keys
 
 def has_plugins() -> bool:
     """Fast check: are plugins configured and available?"""
@@ -313,10 +450,21 @@ def get_plugin_manager() -> PluginManager | None:
     """Returns the initialized PluginManager, or None if plugins are not configured."""
     return _plugin_manager
 
+def _ensure_plugin_manager() -> PluginManager:
+    """Lazily initialize the PluginManager if not already created."""
+    global _plugin_manager, _plugins_enabled
+    if _plugin_manager is None:
+        _register_mellea_hooks()
+        pm = PluginManager("", timeout=5)
+        _run_async_in_thread(pm.initialize())
+        _plugin_manager = pm
+        _plugins_enabled = True
+    return _plugin_manager
+
 async def initialize_plugins(
     config_path: str | None = None, *, timeout: float = 5.0
 ) -> PluginManager:
-    """Initialize the PluginManager with Mellea hook registrations."""
+    """Initialize the PluginManager with Mellea hook registrations and optional YAML config."""
     global _plugin_manager, _plugins_enabled
     _register_mellea_hooks()
     pm = PluginManager(config_path or "", timeout=int(timeout))
@@ -327,11 +475,12 @@ async def initialize_plugins(
 
 async def shutdown_plugins() -> None:
     """Shut down the PluginManager."""
-    global _plugin_manager, _plugins_enabled
+    global _plugin_manager, _plugins_enabled, _session_tags
     if _plugin_manager is not None:
         await _plugin_manager.shutdown()
     _plugin_manager = None
     _plugins_enabled = False
+    _session_tags.clear()
 ```
 
 ### 4.2 `invoke_hook()` Central Helper
@@ -342,11 +491,14 @@ All hook call sites use this single function. Three layers of no-op guards ensur
 2. **`has_hooks_for(hook_type)`** — skips invocation when no plugin subscribes to this hook
 3. **Returns `(None, original_payload)` immediately** when either guard fails
 
+When `session_id` is provided, the manager invokes both global plugins (those registered without a session tag) and session-scoped plugins matching that session ID. When `session_id` is `None` (functional API path), only global plugins are invoked.
+
 ```python
 async def invoke_hook(
     hook_type: MelleaHookType,
     payload: MelleaBasePayload,
     *,
+    session_id: str | None = None,
     session: MelleaSession | None = None,
     backend: Backend | None = None,
     context: Context | None = None,
@@ -358,6 +510,10 @@ async def invoke_hook(
 
     Returns (result, possibly-modified-payload).
     If plugins are not configured, returns (None, original_payload) immediately.
+
+    When session_id is provided, both global plugins and session-scoped
+    plugins matching that session ID are invoked. When session_id is None
+    (functional API path), only global plugins are invoked.
     """
     if not _plugins_enabled or _plugin_manager is None:
         return None, payload
@@ -366,12 +522,13 @@ async def invoke_hook(
         return None, payload
 
     payload.hook = hook_type.value
+    payload.session_id = session_id
     if not payload.request_id:
         payload.request_id = request_id
 
     global_ctx = build_global_context(
         session=session, backend=backend, context=context,
-        request_id=request_id, **context_fields,
+        request_id=request_id, session_id=session_id, **context_fields,
     )
 
     result, _ = await _plugin_manager.invoke_hook(
@@ -385,19 +542,18 @@ async def invoke_hook(
     return result, modified
 ```
 
-### 4.3 Session-Level Configuration
+### 4.3 Session-Scoped Registration
 
-`start_session()` in `mellea/stdlib/session.py` gains two optional keyword-only parameters:
+`start_session()` in `mellea/stdlib/session.py` gains an optional `plugins` keyword parameter:
 
 ```python
 def start_session(
     ...,
-    plugin_config: str | None = None,       # Path to plugin YAML config
-    plugin_manager: PluginManager | None = None,  # Pre-configured manager
+    plugins: list[Callable | Any | PluginSet] | None = None,
 ) -> MelleaSession:
 ```
 
-If `plugin_manager` is provided, it is used directly. If `plugin_config` is a path, `initialize_plugins()` is called. Backward-compatible: existing code without these parameters sees no change.
+When `plugins` is provided, `start_session()` registers each item with the session's ID via `register(items, session_id=session.id)`. These plugins fire only within this session, in addition to any globally registered plugins. They are automatically deregistered when the session is cleaned up (at `session_cleanup`).
 
 ### 4.4 Dependency Management
 
@@ -409,18 +565,108 @@ plugins = ["contextforge-plugin-framework>=0.1.0"]
 
 All imports in `mellea/plugins/` are guarded with `try/except ImportError`.
 
+### 4.5 Global Registration (`mellea/plugins/_registry.py`)
+
+Global registration happens via `register()` at application startup:
+
+```python
+def register(
+    items: Callable | Any | PluginSet | list[Callable | Any | PluginSet],
+    *,
+    session_id: str | None = None,
+) -> None:
+    """Register plugins globally or for a specific session.
+
+    When session_id is None, plugins are global (fire for all invocations).
+    When session_id is provided, plugins fire only within that session.
+
+    Accepts standalone @hook functions, @plugin-decorated class instances,
+    MelleaPlugin instances, PluginSets, or lists thereof.
+    """
+    pm = _ensure_plugin_manager()
+
+    if not isinstance(items, list):
+        items = [items]
+
+    for item in items:
+        if isinstance(item, PluginSet):
+            for flattened_item, priority_override in item.flatten():
+                _register_single(pm, flattened_item, session_id, priority_override)
+        else:
+            _register_single(pm, item, session_id, None)
+
+
+def _register_single(
+    pm: PluginManager,
+    item: Callable | Any,
+    session_id: str | None,
+    priority_override: int | None,
+) -> None:
+    """Register a single hook function or plugin instance.
+
+    - Standalone functions with _mellea_hook_meta: wrapped in _FunctionHookAdapter
+    - @plugin-decorated class instances: methods with _mellea_hook_meta discovered and registered
+    - MelleaPlugin instances: registered directly with ContextForge
+    """
+    ...
+```
+
+A `_FunctionHookAdapter` internal class wraps a standalone `@hook`-decorated function into a ContextForge `Plugin` for the `PluginManager`:
+
+```python
+class _FunctionHookAdapter(Plugin):
+    """Adapts a standalone @hook-decorated function into a ContextForge Plugin."""
+
+    def __init__(self, fn: Callable, session_id: str | None = None):
+        meta = fn._mellea_hook_meta
+        config = PluginConfig(
+            name=fn.__qualname__,
+            kind=fn.__module__ + "." + fn.__qualname__,
+            hooks=[meta.hook_type],
+            mode=_map_mode(meta.mode),
+            priority=meta.priority,
+        )
+        super().__init__(config)
+        self._fn = fn
+        self._session_id = session_id
+
+    async def initialize(self):
+        pass
+
+    async def shutdown(self):
+        pass
+```
+
 ## 5. Hook Call Sites
+
+**Session context threading**: All `invoke_hook` calls pass `session_id` when operating within a session. For the functional API path, `session_id` is `None` and only globally registered plugins are dispatched. Session-scoped plugins (registered via `start_session(plugins=[...])`) fire only when the dispatch context matches their session ID.
 
 ### 5.1 Session Lifecycle
 
 **File**: `mellea/stdlib/session.py`
+
+`start_session()` gains the `plugins` parameter for session-scoped registration:
+
+```python
+def start_session(
+    backend_name: ... = "ollama",
+    model_id: ... = IBM_GRANITE_4_MICRO_3B,
+    ctx: Context | None = None,
+    *,
+    model_options: dict | None = None,
+    plugins: list[Callable | Any | PluginSet] | None = None,
+    **backend_kwargs,
+) -> MelleaSession:
+```
+
+Session-scoped plugins passed via `plugins=[...]` are registered with this session's ID and deregistered at `session_cleanup`.
 
 | Hook | Location | Trigger | Result Handling |
 |------|----------|---------|-----------------|
 | `session_pre_init` | `start_session()`, before `backend_class(model_id, ...)` (~L163) | Before backend instantiation | Supports payload modification: updated `model_options`, `backend_name`. Violation blocks session creation. |
 | `session_post_init` | `start_session()`, after `MelleaSession(backend, ctx)` (~L191) | Session fully created | Observability-only. |
 | `session_reset` | `MelleaSession.reset()`, before `self.ctx.reset_to_new()` (~L269) | Context about to reset | Observability-only. |
-| `session_cleanup` | `MelleaSession.cleanup()`, at top of method (~L272) | Before teardown | Observability-only. Must not raise. |
+| `session_cleanup` | `MelleaSession.cleanup()`, at top of method (~L272) | Before teardown | Observability-only. Must not raise. Deregisters session-scoped plugins. |
 
 **Sync/async bridge**: These are sync methods. Use `_run_async_in_thread(invoke_hook(...))` from `mellea/helpers/__init__.py`.
 
@@ -716,14 +962,22 @@ async def fire_error_hook(
 | File | Changes |
 |------|---------|
 | `mellea/stdlib/functional.py` | ~12 hook insertions (component lifecycle, validation, tools, error) |
-| `mellea/stdlib/session.py` | 4 session hooks + `plugin_config`/`plugin_manager` params on `start_session()` |
+| `mellea/stdlib/session.py` | 4 session hooks + `plugins` param on `start_session()` + session-scoped plugin registration/deregistration |
 | `mellea/stdlib/sampling/base.py` | 4 sampling hooks + `generate_from_context` → `generate_from_context_with_hooks` |
 | `mellea/core/backend.py` | Add `generate_from_context_with_hooks()` wrapper method to `Backend` ABC |
 | `mellea/stdlib/context.py` | 2 context operation hooks in `ChatContext.add()`, `SimpleContext.add()` |
 | `mellea/backends/openai.py` | 4 adapter hooks in `load_adapter()` / `unload_adapter()` |
 | `mellea/backends/huggingface.py` | 4 adapter hooks in `load_adapter()` / `unload_adapter()` |
 | `pyproject.toml` | Add `plugins` optional dependency + `plugins` test marker |
-| `mellea/plugins/` (new) | Plugin subpackage |
+| `mellea/plugins/__init__.py` (new) | Public API: `hook`, `plugin`, `block`, `PluginSet`, `register`, `MelleaPlugin` |
+| `mellea/plugins/_decorators.py` (new) | `@hook` and `@plugin` decorator implementations, `HookMeta`, `PluginMeta` |
+| `mellea/plugins/_pluginset.py` (new) | `PluginSet` class with `flatten()` for recursive expansion |
+| `mellea/plugins/_registry.py` (new) | `register()`, `block()`, `_FunctionHookAdapter`, `_register_single()` |
+| `mellea/plugins/_manager.py` (new) | Singleton wrapper, `invoke_hook()` with session-tag filtering, `_ensure_plugin_manager()` |
+| `mellea/plugins/_base.py` (new) | `MelleaBasePayload`, `MelleaPlugin` base class |
+| `mellea/plugins/_types.py` (new) | `MelleaHookType` enum, `_register_mellea_hooks()` |
+| `mellea/plugins/_context.py` (new) | `build_global_context()` factory |
+| `mellea/plugins/hooks/` (new) | Hook payload dataclasses (session, component, generation, etc.) |
 | `test/plugins/` (new) | Tests for plugins subpackage |
 
 > Note: + update docs and add examples.
