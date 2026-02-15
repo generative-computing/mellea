@@ -10,24 +10,38 @@ Mellea's hook system provides extension points for deployed generative AI applic
 1. **Consistent Interface**: All hooks follow the same async pattern with payload and context parameters
 2. **Composable**: Multiple plugins can register for the same hook, executing in priority order
 3. **Fail-safe**: Hook failures can be handled gracefully without breaking core execution
-4. **Minimal Intrusion**: Plugins are opt-in; default Mellea behavior remains unchanged without plugins
+4. **Minimal Intrusion**: Plugins are opt-in; default Mellea behavior remains unchanged without plugins. Plugins work identically whether invoked through a session (`m.instruct(...)`) or via the functional API (`instruct(backend, context, ...)`)
 5. **Architecturally Aligned**: Hook categories reflect Mellea's true abstraction boundaries — Session lifecycle, Component lifecycle, and the (Backend, Context) generation pipeline
+6. **Code-First**: Plugins are defined and composed in Python. Decorators are the primary registration mechanism; YAML configuration is a secondary option for deployment-time overrides
+7. **Functions-First**: The simplest plugin is a plain async function decorated with `@hook`. Class-based plugins exist for stateful, multi-hook scenarios but are not required
 
 ### Hook Method Signature
 
 All hooks follow this consistent async pattern:
 
 ```python
-async def hook_name(
-    self,
+# Standalone function hook (primary)
+@hook("hook_name", mode="enforce", priority=50)
+async def my_hook(
     payload: PluginPayload,
     context: PluginContext
-) -> PluginResult
+) -> PluginResult | None
+
+# Class-based method hook
+class MyPlugin(MelleaPlugin):
+    @hook("hook_name")
+    async def my_hook(
+        self,
+        payload: PluginPayload,
+        context: PluginContext
+    ) -> PluginResult | None
 ```
 
 - **`payload`**: Mutable, strongly-typed data specific to the hook point
 - **`context`**: Read-only shared context with session metadata and utilities
-- **Returns**: A result object with continuation flag, modified payload, and violation/explanation
+- **`mode`**: `"enforce"` (default), `"permissive"`, or `"fire_and_forget"` — controls execution behavior (see Execution Mode below)
+- **`priority`**: Lower numbers execute first (default: 50)
+- **Returns**: A `PluginResult` with continuation flag, modified payload, and violation/explanation — or `None` to continue unchanged
 
 ### Concurrency Model
 
@@ -37,22 +51,49 @@ Hooks use Python's `async`/`await` cooperative multitasking. Because Python's ev
 - **Race conditions only at `await` points**: Shared state is safe to read and write between `await` calls within a single hook. Races only arise if multiple hooks modify the same shared state and are dispatched concurrently.
 - **No preemptive interruption**: Unlike threads, a hook handler runs uninterrupted until it yields control via `await`.
 
-### Execution Timing
+### Execution Mode
 
-Hooks support two execution timing modes, configurable per-registration:
+Hooks support three execution modes, configurable per-registration via the `mode` parameter on the `@hook` decorator:
 
-- **Blocking** (default): The hook is awaited inline. Use for policy enforcement, payload transformation, and any hook that must complete before execution continues.
-- **Fire-and-forget**: The hook is dispatched via `asyncio.create_task()` and runs in the background. Use for logging, telemetry, and non-critical side effects where latency matters more than ordering guarantees.
+| Mode | Behavior |
+|------|----------|
+| **`enforce`** (default) | Awaited inline. If the hook returns `PluginResult(continue_processing=False)`, execution is blocked. Use for policy enforcement, budget controls, and authorization. |
+| **`permissive`** | Awaited inline. Violations are logged but do not block execution. Use for monitoring, auditing, and gradual rollout of policies. |
+| **`fire_and_forget`** | Dispatched via `asyncio.create_task()` and runs in the background. The `PluginResult` is ignored — cannot modify payloads or block execution. Use for logging, telemetry, and non-critical side effects where latency matters more than ordering guarantees. |
 
-Fire-and-forget hooks cannot modify payloads or block execution — their `PluginResult` is ignored. Any exceptions in fire-and-forget hooks are logged but do not propagate. Fire-and-forget hooks receive the payload snapshot as it existed at dispatch time; blocking hooks in the same chain that execute earlier (higher priority) can modify the payload before fire-and-forget hooks see it.
+Fire-and-forget hooks receive the payload snapshot as it existed at dispatch time; `enforce`/`permissive` hooks in the same chain that execute earlier (higher priority) can modify the payload before fire-and-forget hooks see it. Any exceptions in fire-and-forget hooks are logged but do not propagate.
+
+> **Note**: All three modes (`enforce`, `permissive`, `fire_and_forget`) are supported by the ContextForge Plugin Framework's `PluginMode` enum. The additional modes `enforce_ignore_error` and `disabled` remain available in the `PluginMode` enum and YAML configuration for deployment-time control, but are not exposed as `@hook` decorator values. They are deployment concerns, not definition-time concerns.
 
 ### Plugin Framework
 
 The hook system is backed by a lightweight plugin framework built as a Mellea dependency (not a separate user-facing package). This framework:
 
-- Provides APIs to define hook invocation points and base data objects for plugin payload, context, and result
-- Exposes a base class and decorator to implement concrete plugins and register hook functions
+- Provides the `@hook` decorator for registering standalone async functions as hook handlers
+- Provides the `@plugin` decorator for marking plain classes as multi-hook plugins
+- Provides the `MelleaPlugin` base class for stateful plugins that need lifecycle hooks (`initialize`/`shutdown`) and typed context accessors
+- Exposes `PluginSet` for grouping related hooks/plugins into composable, reusable units
+- Exposes `register()` for global plugin registration and `block()` as a convenience for returning blocking `PluginResult`s
 - Implements a plugin manager that loads, registers, and governs the execution of plugins
+
+The public API surface:
+
+```python
+from mellea.plugins import hook, plugin, block, PluginSet, register, MelleaPlugin
+```
+
+### Global vs Session-Scoped Plugins
+
+Plugins can be registered at two scopes:
+
+- **Global**: Registered via `register()` at module or application startup. Global plugins fire for every hook invocation — both session-based (`m.instruct(...)`) and functional (`instruct(backend, context, ...)`).
+- **Session-scoped**: Passed via the `plugins` parameter to `start_session()`. Session-scoped plugins fire only for hook invocations within that session.
+
+Both scopes coexist. When a hook fires within a session, both global plugins and that session's plugins execute, ordered by priority. When a hook fires via the functional API outside a session, only global plugins execute.
+
+**Implementation**: A single `PluginManager` instance manages all plugins. Plugins are tagged with an optional `session_id`. At dispatch time, the manager filters: global plugins (no session tag) always run; session-tagged plugins run only when the dispatch context matches their session ID.
+
+**Functional API support**: The functional API (`instruct(backend, context, ...)`) does not require a session. Hooks still fire at the same execution points. If global plugins are registered, they execute. If no plugins are registered, hooks are no-ops with zero overhead.
 
 ### Hook Invocation Responsibilities
 
@@ -88,7 +129,7 @@ All hook payloads inherit these base fields:
 
 ```python
 class BasePayload(PluginPayload):
-    session_id: str                    # Unique session identifier
+    session_id: str | None = None      # Session identifier (None for functional API calls)
     request_id: str                    # Unique ID for this execution chain
     timestamp: datetime                # When the event fired
     hook: str                          # Name of the hook (e.g., "generation_pre_call")
@@ -1031,9 +1072,161 @@ return PluginResult(
 
 ## 7. Registration & Configuration
 
-### Plugin Registration
+### Public API
 
-Plugins register programmatically or via YAML configuration:
+All plugin registration APIs are available from `mellea.plugins`:
+
+```python
+from mellea.plugins import hook, plugin, block, PluginSet, register, MelleaPlugin
+```
+
+### Standalone Function Hooks
+
+The simplest way to define a hook handler is with the `@hook` decorator on a plain async function:
+
+```python
+from mellea.plugins import hook, block
+
+@hook("generation_pre_call", mode="enforce", priority=10)
+async def enforce_budget(payload, ctx):
+    if (payload.estimated_tokens or 0) > 4000:
+        return block("Token budget exceeded")
+
+@hook("component_post_success", mode="fire_and_forget")
+async def log_result(payload, ctx):
+    print(f"[{payload.component_type}] {payload.latency_ms}ms")
+```
+
+**Parameters**:
+- `hook_type: str` — the hook point name (required, first positional argument)
+- `mode: str` — `"enforce"` (default), `"permissive"`, or `"fire_and_forget"`
+- `priority: int` — lower numbers execute first (default: 50)
+
+The `block()` helper is shorthand for returning `PluginResult(continue_processing=False, violation=PluginViolation(reason=...))`. It accepts an optional `code`, `description`, and `details` for structured violation information.
+
+### Class-Based Plugins
+
+For plugins that need shared state across multiple hooks, use the `@plugin` decorator on a class or subclass `MelleaPlugin`:
+
+**`@plugin` decorator** — marks a plain class as a multi-hook plugin:
+
+```python
+from mellea.plugins import plugin, hook
+
+@plugin("pii-redactor", priority=5)
+class PIIRedactor:
+    def __init__(self, patterns: list[str] | None = None):
+        self.patterns = patterns or []
+
+    @hook("component_pre_create")
+    async def redact_input(self, payload, ctx):
+        ...
+
+    @hook("generation_post_call")
+    async def redact_output(self, payload, ctx):
+        ...
+```
+
+The `@plugin` decorator accepts:
+- `name: str` — plugin name (required, first positional argument)
+- `priority: int` — default priority for all hooks in this plugin (default: 50). Individual `@hook` decorators on methods can override.
+
+**`MelleaPlugin` subclass** — for plugins that need lifecycle hooks (`initialize`/`shutdown`) or typed context accessors:
+
+```python
+from mellea.plugins import MelleaPlugin, hook
+
+class MetricsPlugin(MelleaPlugin):
+    def __init__(self, endpoint: str):
+        super().__init__()
+        self.endpoint = endpoint
+        self._buffer = []
+
+    async def initialize(self):
+        self._client = await connect(self.endpoint)
+
+    async def shutdown(self):
+        await self._client.flush(self._buffer)
+        await self._client.close()
+
+    @hook("component_post_success")
+    async def collect(self, payload, ctx):
+        backend = self.get_backend(ctx)  # typed accessor
+        self._buffer.append({"latency": payload.latency_ms})
+```
+
+Convention-based registration (methods named `on_<hook_type>`) remains supported for `MelleaPlugin` subclasses.
+
+### Composing Plugins with PluginSet
+
+`PluginSet` groups related hooks and plugins for reuse across sessions:
+
+```python
+from mellea.plugins import PluginSet
+
+security = PluginSet("security", [
+    enforce_budget,
+    PIIRedactor(patterns=[r"\d{3}-\d{2}-\d{4}"]),
+])
+
+observability = PluginSet("observability", [
+    log_result,
+    MetricsPlugin(endpoint="https://..."),
+])
+```
+
+`PluginSet` accepts standalone hook functions, `@plugin`-decorated class instances, and `MelleaPlugin` instances. PluginSets can be nested.
+
+### Global Registration
+
+Register plugins globally so they fire for all hook invocations — both session-based and functional API:
+
+```python
+from mellea.plugins import register
+
+register(security)                          # single item
+register([security, observability])         # list
+register(enforce_budget)                    # standalone function
+```
+
+`register()` accepts a single item or a list. Items can be standalone hook functions, plugin instances, or `PluginSet`s.
+
+### Session-Scoped Registration
+
+Pass plugins to `start_session()` to scope them to that session:
+
+```python
+m = mellea.start_session(
+    backend_name="openai",
+    model_id="gpt-4",
+    plugins=[security, observability],
+)
+```
+
+The `plugins` parameter accepts the same types as `register()`: standalone hook functions, plugin instances, and `PluginSet`s. These plugins fire only within this session, in addition to any globally registered plugins. They are automatically deregistered when the session is cleaned up.
+
+### Functional API (No Session)
+
+When using the functional API directly:
+
+```python
+from mellea.stdlib.functional import instruct
+
+result = instruct(backend, context, "Extract the user's age")
+```
+
+Only globally registered plugins fire. If no global plugins are registered, hooks are no-ops with zero overhead. Session-scoped plugins do not apply because there is no session.
+
+### Priority
+
+- Lower numbers execute first
+- Within the same priority, execution order is deterministic but unspecified
+- Default priority: 50
+- Priority can be set on `@hook` (per-handler), `@plugin` (per-plugin default), or `PluginSet` (per-set default). Most specific wins: per-handler > per-plugin > per-set.
+
+### YAML Configuration (Secondary)
+
+For deployment-time configuration, plugins can also be loaded from YAML. This is useful for enabling/disabling plugins or changing priorities without code changes:
 
 ```yaml
 plugins:
@@ -1043,7 +1236,6 @@ plugins:
       - component_pre_create
       - generation_post_call
     mode: enforce
-    execution: blocking
     priority: 10
     config:
       blocked_terms: ["term1", "term2"]
@@ -1054,87 +1246,33 @@ plugins:
       - component_post_success
       - validation_post_check
       - sampling_loop_end
-    mode: permissive
-    execution: fire_and_forget
+    mode: fire_and_forget
     priority: 100
     config:
       endpoint: "https://telemetry.example.com"
 ```
 
-### Execution Modes
+### Execution Modes (YAML / PluginMode Enum)
 
-- **`enforce`**: Block execution on violation
-- **`enforce_ignore_error`**: Block on violation, but tolerate plugin errors
-- **`permissive`**: Log violations without blocking
-- **`disabled`**: Skip hook execution
+The following modes are available in the ContextForge `PluginMode` enum and YAML configuration:
 
-### Execution Timing
+- **`enforce`** (`PluginMode.ENFORCE`): Awaited inline, block execution on violation
+- **`permissive`** (`PluginMode.PERMISSIVE`): Awaited inline, log violations without blocking
+- **`fire_and_forget`** (`PluginMode.FIRE_AND_FORGET`): Background task, result ignored
+- **`enforce_ignore_error`** (`PluginMode.ENFORCE_IGNORE_ERROR`): Like `enforce`, but tolerate plugin errors
+- **`disabled`** (`PluginMode.DISABLED`): Skip hook execution
 
-- **`blocking`** (default): Hook is awaited inline before continuing
-- **`fire_and_forget`**: Hook is dispatched as an `asyncio.create_task()` — cannot modify payloads or block execution
-
-### Priority
-
-- Lower numbers execute first
-- Hooks with same priority may execute in parallel
-- Default priority: 50
-
-### Convention-Based Registration
-
-Plugins can use method naming conventions:
-
-```python
-class MyPlugin(MelleaPlugin):
-    async def on_generation_pre_call(self, payload, context):
-        # Automatically registered for generation_pre_call
-        ...
-
-    async def on_validation_post_check(self, payload, context):
-        # Automatically registered for validation_post_check
-        ...
-```
-
-### Programmatic Registration
-
-```python
-class PIIRedactionPlugin(Plugin):
-    def name(self):
-        return "PII_Redactor"
-
-    def register(self, hooks):
-        hooks.register("component_pre_create", self.redact_input)
-        hooks.register("generation_post_call", self.redact_output)
-
-    async def redact_input(self, payload, context):
-        # Redact PII from input
-        ...
-```
-
-### Session-Level Configuration
-
-```python
-m = mellea.start_session(
-    ...,
-    plugin_manager=pm,
-    hooks_enabled=["component_pre_create", "generation_post_call"]
-)
-```
-
-### Global PluginManager
-
-The hook system uses a **singleton PluginManager** that is initialized once (typically at application startup via YAML config) and shared globally. Session-level configuration (e.g., `hooks_enabled`) is for scoped overrides — selectively enabling or disabling specific hooks for a particular session — not for owning or replacing the plugin manager.
-
-For the functional (non-session) path (e.g., calling `instruct()` or `generate()` directly without a `MelleaSession`), the PluginManager is accessed directly. Hooks still fire at the same points in the execution lifecycle; the only difference is that session-scoped overrides do not apply.
+The `@hook` decorator exposes `enforce`, `permissive`, and `fire_and_forget` — all backed by ContextForge's `PluginMode` enum. The others (`enforce_ignore_error`, `disabled`) are deployment-time concerns configured via YAML or programmatic `PluginConfig`.
 
 ### Custom Hook Types
 
 The plugin framework supports custom hook types for domain-specific extension points beyond the built-in lifecycle hooks. This is particularly relevant for agentic patterns (ReAct, tool-use loops, etc.) where the execution flow is application-defined.
 
-Custom hooks are registered using the `@hook` decorator:
+Custom hooks use the same `@hook` decorator:
 
 ```python
-@hook("react_pre_reasoning", ReactReasoningPayload, ReactReasoningResult)
-async def before_reasoning(self, payload, context):
+@hook("react_pre_reasoning")
+async def before_reasoning(payload, ctx):
     ...
 ```
 
@@ -1142,126 +1280,158 @@ Custom hooks follow the same calling convention, payload chaining, and result se
 
 ## 8. Example Implementations
 
-### Content Policy Plugin
+### Token Budget Enforcement (Standalone Function)
 
 ```python
-class ContentPolicyPlugin(MelleaPlugin):
-    async def on_component_pre_create(
-        self,
-        payload: ComponentPreCreatePayload,
-        context: PluginContext
-    ) -> PluginResult | None:
-        # Only enforce on Instructions and GenerativeSlots
-        if payload.component_type not in ("Instruction", "GenerativeSlot"):
-            return None
+from mellea.plugins import hook, block
 
-        blocked_terms = self.config.get("blocked_terms", [])
-
-        for term in blocked_terms:
-            if term.lower() in payload.description.lower():
-                return PluginResult(
-                    continue_processing=False,
-                    violation=PluginViolation(
-                        reason="Blocked content detected",
-                        description=f"Component contains blocked term: {term}",
-                        code="CONTENT_POLICY_001"
-                )
-
-    async def on_generation_post_call(
-        self,
-        payload: GenerationPostCallPayload,
-        context: PluginContext
-    ) -> PluginResult | None:
-        # Redact sensitive patterns from output
-        redacted = self._redact_pii(payload.processed_output)
-
-        if redacted != payload.processed_output:
-            payload.processed_output = redacted
-            return PluginResult(modified_payload=payload)
+@hook("generation_pre_call", mode="enforce", priority=10)
+async def enforce_token_budget(payload, ctx):
+    budget = 4000
+    estimated = payload.estimated_tokens or 0
+    if estimated > budget:
+        return block(
+            f"Estimated {estimated} tokens exceeds budget of {budget}",
+            code="TOKEN_BUDGET_001",
+            details={"estimated": estimated, "budget": budget},
+        )
 ```
 
-### Audit Logging Plugin
+### Content Policy (Standalone Function)
 
 ```python
-class AuditLoggingPlugin(MelleaPlugin):
-    async def on_component_post_success(
-        self,
-        payload: ComponentPostSuccessPayload,
-        context: PluginContext
-    ) -> PluginResult | None:
-        self._log_audit_event({
-            "event": "generation_success",
-            "session_id": payload.session_id,
-            "component_type": payload.component_type,
-            "latency_ms": payload.latency_ms,
-            "token_usage": context.get("token_usage"),
-            "timestamp": payload.timestamp.isoformat()
-        })
+from mellea.plugins import hook, block
 
+BLOCKED_TERMS = ["term1", "term2"]
 
-    async def on_component_post_error(
-        self,
-        payload: ComponentPostErrorPayload,
-        context: PluginContext
-    ) -> PluginResult | None:
-        self._log_audit_event({
-            "event": "generation_error",
-            "session_id": payload.session_id,
-            "component_type": payload.component_type,
-            "error_type": payload.error_type,
-            "stack_trace": payload.stack_trace,
-            "timestamp": payload.timestamp.isoformat()
-        })
-```
+@hook("component_pre_create", mode="enforce", priority=10)
+async def enforce_content_policy(payload, ctx):
+    # Only enforce on Instructions and GenerativeSlots
+    if payload.component_type not in ("Instruction", "GenerativeSlot"):
+        return None
 
-### Token Budget Plugin
-
-```python
-class TokenBudgetPlugin(MelleaPlugin):
-    async def on_generation_pre_call(
-        self,
-        payload: GenerationPreCallPayload,
-        context: PluginContext
-    ) -> PluginResult | None:
-        budget = self.config.get("max_tokens_per_request", 4000)
-        estimated = payload.estimated_tokens or 0
-
-        if estimated > budget:
-            return PluginResult(
-                    continue_processing=False,
-                    violation=PluginViolation(
-                      reason="Token budget exceeded",
-                      description=f"Estimated {estimated} tokens exceeds budget of {budget}",
-                      code="TOKEN_BUDGET_001",
-                      details={"estimated": estimated, "budget": budget}
+    for term in BLOCKED_TERMS:
+        if term.lower() in payload.description.lower():
+            return block(
+                f"Component contains blocked term: {term}",
+                code="CONTENT_POLICY_001",
             )
 ```
 
-### Generative Slot Profiler
+### Audit Logger (Fire-and-Forget)
 
 ```python
-class SlotProfilerPlugin(MelleaPlugin):
-    def __init__(self):
-        self._stats = defaultdict(lambda: {"calls": 0, "total_ms": 0, "errors": 0})
+from mellea.plugins import hook
 
-    async def on_component_post_success(
-        self,
-        payload: ComponentPostSuccessPayload,
-        context: PluginContext
-    ) -> PluginResult | None:
-        # Only profile GenerativeSlot components
+@hook("component_post_success", mode="fire_and_forget")
+async def audit_log_success(payload, ctx):
+    await send_to_audit_service({
+        "event": "generation_success",
+        "session_id": payload.session_id,
+        "component_type": payload.component_type,
+        "latency_ms": payload.latency_ms,
+        "timestamp": payload.timestamp.isoformat(),
+    })
+
+@hook("component_post_error", mode="fire_and_forget")
+async def audit_log_error(payload, ctx):
+    await send_to_audit_service({
+        "event": "generation_error",
+        "session_id": payload.session_id,
+        "error_type": payload.error_type,
+        "timestamp": payload.timestamp.isoformat(),
+    })
+```
+
+### PII Redaction Plugin (Class-Based with `@plugin`)
+
+```python
+import re
+from mellea.plugins import plugin, hook, PluginResult
+
+@plugin("pii-redactor", priority=5)
+class PIIRedactor:
+    def __init__(self, patterns: list[str] | None = None):
+        self.patterns = patterns or [r"\d{3}-\d{2}-\d{4}"]
+
+    @hook("component_pre_create")
+    async def redact_input(self, payload, ctx):
+        redacted = self._redact(payload.description)
+        if redacted != payload.description:
+            payload.description = redacted
+            return PluginResult(continue_processing=True, modified_payload=payload)
+
+    @hook("generation_post_call")
+    async def redact_output(self, payload, ctx):
+        redacted = self._redact(payload.processed_output)
+        if redacted != payload.processed_output:
+            payload.processed_output = redacted
+            return PluginResult(continue_processing=True, modified_payload=payload)
+
+    def _redact(self, text: str) -> str:
+        for pattern in self.patterns:
+            text = re.sub(pattern, "[REDACTED]", text)
+        return text
+```
+
+### Generative Slot Profiler (`MelleaPlugin` Subclass)
+
+```python
+from collections import defaultdict
+from mellea.plugins import MelleaPlugin, hook
+
+class SlotProfiler(MelleaPlugin):
+    """Uses MelleaPlugin for lifecycle hooks and typed context accessors."""
+
+    def __init__(self):
+        super().__init__()
+        self._stats = defaultdict(lambda: {"calls": 0, "total_ms": 0})
+
+    async def initialize(self):
+        # Called once when the plugin manager starts
+        self._stats.clear()
+
+    @hook("component_post_success")
+    async def profile(self, payload, ctx):
         if payload.component_type != "GenerativeSlot":
             return None
-
         stats = self._stats[payload.action.__name__]
         stats["calls"] += 1
         stats["total_ms"] += payload.latency_ms
+```
 
-        context.emit_metric(
-            "slot_latency_ms",
-            payload.latency_ms,
-            tags={"slot": payload.action.__name__, "success": True}
-        )
+### Composition Example
+
+```python
+from mellea.plugins import PluginSet, register
+import mellea
+
+# Group by concern
+security = PluginSet("security", [
+    enforce_token_budget,
+    enforce_content_policy,
+    PIIRedactor(patterns=[r"\d{3}-\d{2}-\d{4}"]),
+])
+
+observability = PluginSet("observability", [
+    audit_log_success,
+    audit_log_error,
+    SlotProfiler(),
+])
+
+# Global: fires for all invocations (session and functional API)
+register(observability)
+
+# Session-scoped: security only for this session
+m = mellea.start_session(
+    backend_name="openai",
+    model_id="gpt-4",
+    plugins=[security],
+)
+
+# Functional API: only global plugins (observability) fire
+from mellea.stdlib.functional import instruct
+result = instruct(backend, context, "Extract the user's age")
 ```
 
 
