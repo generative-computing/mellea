@@ -65,9 +65,9 @@ IBM_GRANITE_3_3_8B = ModelIdentifier(
 # - Ollama/HF: Uses MICRO (fits in CI memory constraints)
 # - Watsonx: Uses SMALL (required for watsonx support)
 IBM_GRANITE_4_MICRO_3B = ModelIdentifier(
-    hf_model_name="ibm-granite/granite-4.0-h-micro",
-    ollama_name="granite4:micro-h",
-    watsonx_name="ibm/granite-4-h-small",
+    hf_model_name="ibm-granite/granite-4.0-micro",
+    ollama_name="granite4:micro",
+    watsonx_name="ibm/granite-4-small",
 )
 
 # Granite 3.3 Vision Model (2B)
