@@ -45,6 +45,18 @@ IBM_GRANITE_4_HYBRID_SMALL = ModelIdentifier(
     watsonx_name="ibm/granite-4-h-small",
 )
 
+IBM_GRANITE_4_HYBRID_1B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.0-h-1b",
+    ollama_name="granite4:1b-h",
+    watsonx_name=None,
+)
+
+IBM_GRANITE_4_HYBRID_350m = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.0-h-350m",
+    ollama_name="granite4:350m-h",
+    watsonx_name=None,
+)
+
 
 # Deprecated Granite 3 models - kept for backward compatibility
 # These maintain their original model references (not upgraded to Granite 4)
