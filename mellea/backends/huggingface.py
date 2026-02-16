@@ -293,7 +293,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._cache = (
             cache
             if cache is not None
-            else SimpleLRUCache(3, on_evict=_cleanup_kv_cache)
+            else SimpleLRUCache(0, on_evict=_cleanup_kv_cache)
         )
 
         # Adapters can be made known to the backend (added) and loaded.
