@@ -325,8 +325,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
             elif isinstance(chunks[-1], Exception):
                 # Mark as computed so post_process runs in finally block
                 self._computed = True
-                # Store exception to re-raise after cleanup
-                exception_to_raise = chunks[-1]
+                # Remove the exception from chunks so _process doesn't receive it
+                exception_to_raise = chunks.pop()
 
             for chunk in chunks:
                 assert self._process is not None
