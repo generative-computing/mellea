@@ -204,10 +204,6 @@ class LocalVLLMBackend(FormatterBackend):
         # we store the engine args because we have to reset the engine with a different event loop. See _model .
         self.engine_args = engine_args
 
-        self._tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
-            self._hf_model_id
-        )  # type:ignore
-
     @property
     def _model(self) -> vllm.AsyncLLMEngine:
         """Use model when making generation requests."""
@@ -231,6 +227,7 @@ class LocalVLLMBackend(FormatterBackend):
             self._underlying_model = vllm.AsyncLLMEngine.from_engine_args(
                 vllm.AsyncEngineArgs(model=self._hf_model_id, **self.engine_args)
             )
+            self._tokenizer = self._underlying_model.get_tokenizer()
             self._event_loop = el
 
         return self._underlying_model
@@ -299,7 +296,7 @@ class LocalVLLMBackend(FormatterBackend):
                 FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
             input_str: str = self._tokenizer.apply_chat_template(  # type: ignore
-                ctx_as_chat,
+                ctx_as_chat,  # type: ignore
                 tokenize=False,
                 tools=convert_tools_to_json(tools),  # type: ignore
             )
