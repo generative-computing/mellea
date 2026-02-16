@@ -225,7 +225,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             custom_config (Optional[TransformersTorchConfig]): Overrides loading from the `model_id`. If set, then the specified tokenizer/model/device will be used instead of auto-loading from the model_id.
             default_to_constraint_checking_alora: If set to False then aloras will be deactivated. This is primarily for performance benchmarking and debugging.
             model_options (Optional[dict]): Default model options.
-            return_scores (bool): If True, return output logits from model.generate(). Default False to save GPU memory.
         """
         formatter = (
             formatter if formatter is not None else TemplateFormatter(model_id=model_id)
