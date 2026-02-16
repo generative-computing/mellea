@@ -250,7 +250,8 @@ def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
             "pytest",
             module_path,
             "-v",
-            "--cov-report=html--cov-report=xml",
+            "--cov-report=html",
+            "--cov-report=xml",
         ]
 
         # Add markers from original command if present
