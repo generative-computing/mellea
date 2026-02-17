@@ -97,6 +97,71 @@ class Backend(abc.ABC):
             tool_calls: Always set to false unless supported by backend.
         """
 
+    async def generate_from_context_with_hooks(
+        self,
+        action: Component[C] | CBlock,
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> tuple[ModelOutputThunk[C], Context]:
+        """Wraps ``generate_from_context`` with generation_pre_call / generation_post_call hooks.
+
+        Falls through to ``generate_from_context`` directly when no plugins are configured.
+        """
+        import time
+
+        from mellea.plugins.manager import has_plugins, invoke_hook
+        from mellea.plugins.types import MelleaHookType
+
+        if has_plugins():
+            from mellea.plugins.hooks.generation import (
+                GenerationPostCallPayload,
+                GenerationPreCallPayload,
+            )
+
+            pre_payload = GenerationPreCallPayload(
+                action=action,
+                context=ctx,
+                formatted_prompt="",
+                model_options=model_options or {},
+                format=format,
+                tools=None,
+            )
+            _, pre_payload = await invoke_hook(
+                MelleaHookType.GENERATION_PRE_CALL,
+                pre_payload,
+                backend=self,
+                context=ctx,
+            )
+            model_options = pre_payload.model_options
+            format = pre_payload.format
+
+        t0 = time.monotonic()
+        out_result, new_ctx = await self.generate_from_context(
+            action,
+            ctx,
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )
+
+        if has_plugins():
+            from mellea.plugins.hooks.generation import GenerationPostCallPayload
+
+            post_payload = GenerationPostCallPayload(
+                model_output=out_result, latency_ms=int((time.monotonic() - t0) * 1000)
+            )
+            await invoke_hook(
+                MelleaHookType.GENERATION_POST_CALL,
+                post_payload,
+                backend=self,
+                context=new_ctx,
+            )
+
+        return out_result, new_ctx
+
     async def do_generate_walk(
         self, action: CBlock | Component | ModelOutputThunk
     ) -> None:
