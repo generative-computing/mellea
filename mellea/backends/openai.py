@@ -5,15 +5,15 @@ import datetime
 import functools
 import inspect
 import os
-from collections.abc import Callable, Coroutine, Sequence
+from collections.abc import Coroutine, Sequence
 from typing import TYPE_CHECKING, Any, overload
 
-import granite_common
 import openai
-import requests
 from openai.types.chat import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.completion import Completion
+
+from mellea.stdlib.requirements.requirement import ALoraRequirement
 
 from ..backends import ModelIdentifier, model_ids
 from ..core import (
@@ -37,22 +37,16 @@ from ..helpers import (
     chat_completion_delta_merge,
     extract_model_tool_requests,
     get_current_event_loop,
+    is_vllm_server_with_structured_output,
     message_to_openai_message,
     messages_to_docs,
     send_to_queue,
 )
 from ..stdlib.components import Intrinsic, Message
-from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
+from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.backend_instrumentation import (
     instrument_generate_from_context,
     instrument_generate_from_raw,
-)
-from .adapters import (
-    AdapterMixin,
-    AdapterType,
-    GraniteCommonAdapter,
-    OpenAIAdapter,
-    get_adapter_for_intrinsic,
 )
 from .backend import FormatterBackend
 from .model_options import ModelOption
@@ -70,7 +64,7 @@ openai_ollama_batching_error = "json: cannot unmarshal array into Go struct fiel
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
-class OpenAIBackend(FormatterBackend, AdapterMixin):
+class OpenAIBackend(FormatterBackend):
     """A generic OpenAI compatible backend."""
 
     def __init__(
@@ -184,15 +178,16 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             api_key=self._api_key, base_url=self._base_url, **self._openai_client_kwargs
         )
 
+        # Attempt to detect vllm so that we can pass the correct structured output payload based on vllm version.
+        # This is only necessary when passing format to generate_from_raw.
+        self._use_structured_output_for_raw = is_vllm_server_with_structured_output(
+            base_url=str(self._client.base_url), headers=self._client._custom_headers
+        )
+
         self._client_cache = ClientCache(2)
 
         # Call once to create an async_client and populate the cache.
         _ = self._async_client
-
-        # Adapters can be made know to the backend (added) and
-        # loaded / active.
-        self._added_adapters: dict[str, OpenAIAdapter] = {}
-        self._loaded_adapters: dict[str, OpenAIAdapter] = {}
 
     @property
     def _async_client(self) -> openai.AsyncOpenAI:
@@ -315,6 +310,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             "The Openai backend only supports chat-like contexts."
         )
 
+        assert not isinstance(action, Intrinsic), (
+            "The openai backend does not currently support adapters, intrinsics, loras, or aloras."
+        )
+
         # Start span without auto-closing (will be closed in post_processing)
         span = start_generate_span(
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
@@ -346,50 +345,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         """Generates a new completion from the provided Context using this backend's `Formatter`."""
         await self.do_generate_walk(action)
 
-        # Requirements can be automatically rerouted to a requirement adapter.
-        if isinstance(action, Requirement):
-            # See docs/dev/requirement_aLoRA_rerouting.md
-            reroute_to_alora = self.default_to_constraint_checking_alora
-            adapter_name = "requirement_check"
-
-            if isinstance(action, ALoraRequirement):
-                reroute_to_alora = True
-                adapter_name = action.intrinsic_name
-                alora_action = action
-            else:
-                assert action.description is not None, (
-                    "must have a description when generating from a requirement"
-                )
-                alora_action = ALoraRequirement(action.description, adapter_name)
-
-            # Check if a requirement_check (or AloraRequirement specified) adapter exists.
-            alora_req_adapter = get_adapter_for_intrinsic(
-                adapter_name, [AdapterType.ALORA], self._added_adapters
-            )
-            if alora_req_adapter is None:
-                # Log a warning if using an AloraRequirement but no adapter fit.
-                if reroute_to_alora and isinstance(action, ALoraRequirement):
-                    FancyLogger.get_logger().warning(
-                        f"attempted to use an AloraRequirement but backend {self} doesn't have the specified adapter added {adapter_name}; defaulting to regular generation"
-                    )
-                reroute_to_alora = False
-
-            if issubclass(type(action), LLMaJRequirement):
-                reroute_to_alora = False
-
-            if reroute_to_alora:
-                # Keep the alora requirement handling separate for now.
-                mot = await self._generate_from_intrinsic(
-                    alora_action, ctx, model_options=model_options
-                )
-                return mot, ctx.add(alora_action).add(mot)
-
-        elif isinstance(action, Intrinsic):
-            mot = await self._generate_from_intrinsic(
-                action, ctx, model_options=model_options
-            )
-            return mot, ctx.add(action).add(mot)
-
         mot = await self._generate_from_chat_context_standard(
             action,
             ctx,
@@ -398,143 +353,6 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             tool_calls=tool_calls,
         )
         return mot, ctx.add(action).add(mot)
-
-    async def _generate_from_intrinsic(
-        self, action: Intrinsic, ctx: Context, *, model_options: dict | None = None
-    ) -> ModelOutputThunk:
-        model_opts = self._simplify_and_merge(
-            model_options, is_chat_context=ctx.is_chat_context
-        )
-        if len(model_opts.items()) > 0:
-            FancyLogger.get_logger().info(
-                "passing in model options when generating with an adapter; some model options may be overwritten / ignored"
-            )
-
-        linearized_context = ctx.view_for_generation()
-        assert linearized_context is not None, (
-            "Cannot generate from a non-linear context in a FormatterBackend."
-        )
-        if len(linearized_context) == 0:
-            FancyLogger.get_logger().warning(
-                f"generating with an intrinsic when the context is empty; this is typically incorrect: {action}"
-            )
-
-        # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
-        messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
-
-        conversation: list[dict] = []
-
-        system_prompt = model_opts.get(ModelOption.SYSTEM_PROMPT, "")
-        if system_prompt != "":
-            conversation.append({"role": "system", "content": system_prompt})
-        conversation.extend([message_to_openai_message(m) for m in messages])
-        docs = messages_to_docs(messages)
-
-        if model_opts.get(ModelOption.STREAM, None) is not None:
-            # Intrinsics don't support streaming because of their post-processing step.
-            raise Exception("Intrinsics do not support streaming.")
-
-        adapter = get_adapter_for_intrinsic(
-            action.intrinsic_name, action.adapter_types, self._added_adapters
-        )
-        if adapter is None:
-            raise ValueError(
-                f"backend ({self}) has no adapter for processing intrinsic: {action.intrinsic_name}"
-            )
-
-        # TODO: Code below this point is mostly specific to RagIntrinsics (and granite_common).
-        #       It should be refactored into a specific adapter.transform() function.
-        assert isinstance(adapter, GraniteCommonAdapter), (
-            "currently Mellea only supports GraniteCommonAdapters and Intrinsics"
-        )
-        assert adapter.config is not None
-        rewriter = granite_common.IntrinsicsRewriter(
-            config_dict=adapter.config, model_name=adapter.qualified_name
-        )
-        result_processor = granite_common.IntrinsicsResultProcessor(
-            config_dict=adapter.config
-        )
-
-        # Convert our conversation into a proper chat completions dict.
-        # [{role: user, content: Hello}, {...}] -> {messages: [{role:user,...}, ...], model:..., ...}
-        request_json: dict = {
-            "messages": conversation,
-            "extra_body": {"documents": docs},
-        }
-
-        # Convert other parameters from Mellea proprietary format to standard format.
-        if model_options is not None:
-            for model_option in model_options:
-                if model_option == ModelOption.TEMPERATURE:
-                    request_json["temperature"] = model_options[model_option]
-
-        rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
-
-        self.load_adapter(adapter.qualified_name)
-        chat_response: Coroutine[Any, Any, ChatCompletion] = (
-            self._async_client.chat.completions.create(**rewritten.model_dump())
-        )
-
-        output = ModelOutputThunk(None)
-        output._context = linearized_context
-        output._action = action
-        output._model_options = model_opts
-        output._meta["granite_common_chat_response"] = rewritten
-
-        # Add another step to the processing function.
-        async def granite_common_processing(
-            mot: ModelOutputThunk,
-            chunk: ChatCompletion,
-            rewritten: ChatCompletion,
-            result_processor: granite_common.IntrinsicsResultProcessor,
-        ):
-            res = result_processor.transform(chunk, rewritten)  # type: ignore
-
-            # processing expects a ChatCompletion object. Granite common differs slightly from this. Re-create the necessary object.
-            full_res = ChatCompletion(
-                id=chunk.id,
-                choices=[],
-                created=chunk.created,
-                model=chunk.model,
-                usage=chunk.usage,
-                object="chat.completion",
-            )
-
-            # Set the choices here so that pydantic validation doesn't error out.
-            full_res.choices = res.choices  # type: ignore
-
-            return await self.processing(mot, full_res)
-
-        output._process = functools.partial(
-            granite_common_processing,
-            rewritten=rewritten,  # type: ignore
-            result_processor=result_processor,
-        )
-
-        output._post_process = functools.partial(
-            self.post_processing,
-            tools={},
-            conversation=conversation,
-            thinking=None,
-            seed=model_opts.get(ModelOption.SEED, None),
-            _format=None,
-        )
-
-        try:
-            # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
-            # We can also support synchronous calls by adding a flag and changing this ._generate function.
-
-            # This function should always be called from a running event loop so we don't have to worry about
-            # scheduling the task to a specific event loop here.
-            output._generate = asyncio.create_task(
-                send_to_queue(chat_response, output._async_queue)
-            )
-            output._generate_type = GenerateType.ASYNC
-        except RuntimeError as e:
-            # Most likely cause is running this function without an event loop present
-            raise e
-
-        return output
 
     async def _generate_from_chat_context_standard(
         self,
@@ -848,7 +666,11 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             )
 
             # Some versions (like vllm's version) of the OpenAI API support structured decoding for completions requests.
-            extra_body["guided_json"] = format.model_json_schema()  # type: ignore
+            # It's dependent on the vllm version though. We check at backend init.
+            if self._use_structured_output_for_raw:
+                extra_body["structured_outputs"] = {"json": format.model_json_schema()}  # type: ignore
+            else:
+                extra_body["guided_json"] = format.model_json_schema()  # type: ignore
         if tool_calls:
             FancyLogger.get_logger().warning(
                 "The completion endpoint does not support tool calling at the moment."
@@ -923,112 +745,3 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             return self._model_id.split("/")[1]
         else:
             return self._model_id
-
-    def add_adapter(self, adapter: OpenAIAdapter):
-        """Adds the given adapter to the backend. Must not have been added to a different backend."""
-        if adapter.backend is not None:
-            if adapter.backend is self:
-                FancyLogger.get_logger().warning(
-                    f"attempted to add adapter {adapter.name} with type {adapter.adapter_type} to the same backend {adapter.backend}"
-                )
-                return
-            else:
-                raise Exception(
-                    f"adapter {adapter.name} with type {adapter.adapter_type} has already been added to backend {adapter.backend}"
-                )
-
-        if self._added_adapters.get(adapter.qualified_name, None) is not None:
-            FancyLogger.get_logger().warning(
-                f"Client code attempted to add {adapter.name} with type {adapter.adapter_type} but it was already added to {self.__class__}. This attempt to add the adapter will be ignored."
-            )
-            return None
-
-        adapter.path = adapter.get_open_ai_path(
-            self.base_model_name, server_type=self._server_type
-        )
-        adapter.backend = self
-        self._added_adapters[adapter.qualified_name] = adapter
-
-    def load_adapter(self, adapter_qualified_name: str):
-        """Loads the given adapter for the backend. Must have previously been added."""
-        adapter = self._added_adapters.get(adapter_qualified_name, None)
-        if adapter is None:
-            raise ValueError(
-                f"could not load adapter {adapter_qualified_name} for backend {self}: adapter was not previously added"
-            )
-
-        url = f"{self._base_url}/load_lora_adapter"
-        response = requests.post(
-            url,
-            json={"lora_name": adapter_qualified_name, "lora_path": adapter.path},
-            headers={"Content-Type": "application/json"},
-        )
-
-        err: str | None = None
-        match response.status_code:
-            case 200:
-                FancyLogger.get_logger().info(
-                    f"{url}: status {response.status_code} {response.text}"
-                )
-            case 400:
-                if "has already been loaded." in str(response.content):
-                    FancyLogger.get_logger().warning(
-                        f"{url}: status {response.status_code} {response.text}"
-                    )
-                else:
-                    err = f"{url}: status {response.status_code} {response.text}"
-            case _:
-                err = f"{url}: status {response.status_code} {response.text}"
-
-        if err is not None:
-            FancyLogger.get_logger().error(err)
-            raise Exception(f"error loading adapter {adapter_qualified_name}: {err}")
-
-        self._loaded_adapters[adapter.qualified_name] = adapter
-
-    def unload_adapter(self, adapter_qualified_name: str):
-        """Unloads the given adapter from the backend."""
-        # Check if the backend knows about this adapter.
-        adapter = self._loaded_adapters.get(adapter_qualified_name, None)
-        if adapter is None:
-            FancyLogger.get_logger().info(
-                f"could not unload adapter {adapter_qualified_name} for backend {self}: adapter is not loaded"
-            )
-            return
-
-        url = f"{self._base_url}/unload_lora_adapter"
-        response = requests.post(
-            url,
-            json={"lora_name": adapter_qualified_name},
-            headers={"Content-Type": "application/json"},
-        )
-
-        match response.status_code:
-            case 200:
-                FancyLogger.get_logger().info(
-                    f"{url}: status {response.status_code} {response.text}"
-                )
-            case 404:
-                # This response code indicates that the adapter isn't currently loaded;
-                # which is the goal of this function. Log it but proceed as if successful.
-                FancyLogger.get_logger().info(
-                    f"{url}: status {response.status_code} {response.text}"
-                )
-            case _:
-                # Unknown err.
-                FancyLogger.get_logger().error(
-                    f"{url}: status {response.status_code} {response.text}"
-                )
-                raise Exception(
-                    f"error unloading adapter {adapter_qualified_name}: {url}: status {response.status_code} {response.text}"
-                )
-
-        # Remove the adapter from the list of loaded adapters.
-        del self._loaded_adapters[adapter.qualified_name]
-
-    def list_adapters(self) -> list[str]:
-        """Lists the adapters added via add_adapter().
-
-        :returns: list of adapter names that are currently registered with this backend
-        """
-        return list(self._loaded_adapters.keys())

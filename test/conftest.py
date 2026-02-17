@@ -233,7 +233,6 @@ def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
 
     # Set environment variables for vLLM
     env = os.environ.copy()
-    env["VLLM_USE_V1"] = "0"
     env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
     all_passed = True

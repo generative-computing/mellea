@@ -18,7 +18,6 @@ uv run pytest -m slow
 ## Environment Variables
 
 - `CICD=1` - Enable CI mode (skips qualitative tests, enables aggressive memory cleanup)
-- `VLLM_USE_V1=0` - Required for vLLM tests (automatically set by process isolation)
 - `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` - Helps with GPU memory fragmentation
 
 ## Heavy GPU Tests - Automatic Process Isolation
@@ -34,7 +33,7 @@ Heavy GPU backends (HuggingFace, vLLM) hold GPU memory at the process level. Eve
 The collection hook in `test/conftest.py` detects multiple modules with `requires_heavy_ram` marker and automatically:
 
 1. Runs each module in a separate subprocess
-2. Sets required environment variables (`VLLM_USE_V1=0`, `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`)
+2. Sets required environment variables (`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`)
 3. Ensures full GPU memory release between modules
 4. Reports results from all modules
 

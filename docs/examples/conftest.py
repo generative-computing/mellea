@@ -264,7 +264,6 @@ def _run_vllm_examples_isolated(session, vllm_files: list[str]) -> int:
 
     # Set environment variables for vLLM
     env = os.environ.copy()
-    env["VLLM_USE_V1"] = "0"
     env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
     all_passed = True
