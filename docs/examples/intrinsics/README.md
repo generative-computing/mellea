@@ -32,7 +32,7 @@ Detects when model outputs contain hallucinated information.
 Rewrites queries for better retrieval or understanding.
 
 ### uncertainty.py
-Estimates the model's certainty about answering a question given retrieved documents.
+Estimates the model's certainty about answering a question.
 
 ## Concepts Demonstrated
 
