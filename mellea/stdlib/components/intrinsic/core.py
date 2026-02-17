@@ -2,7 +2,7 @@
 
 from ....backends.adapters import AdapterMixin
 from ...context import ChatContext
-from ._util import call_intrinsic as _call_intrinsic
+from ._util import call_intrinsic
 
 
 def check_certainty(context: ChatContext, backend: AdapterMixin) -> float:
@@ -17,5 +17,5 @@ def check_certainty(context: ChatContext, backend: AdapterMixin) -> float:
 
     :return: Certainty score as a float (higher = more certain).
     """
-    result_json = _call_intrinsic("uncertainty", context, backend)
+    result_json = call_intrinsic("uncertainty", context, backend)
     return result_json["certainty"]

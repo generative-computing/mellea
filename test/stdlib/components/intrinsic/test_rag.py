@@ -199,7 +199,7 @@ def test_answer_relevance_classifier(backend):
     """Verify that the first phase of the answer relevance flow behaves as expectee."""
     context, answer, docs = _read_input_json("answer_relevance.json")
 
-    result_json = rag._call_intrinsic(
+    result_json = rag.call_intrinsic(
         "answer_relevance_classifier",
         context.add(Message("assistant", answer, documents=list(docs))),
         backend,
