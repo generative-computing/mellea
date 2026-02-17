@@ -143,35 +143,35 @@ class BasePayload(PluginPayload):
 
 ## 3. Hook Summary Table
 
-| Hook Point | Category | Domain | Description |
-|------------|----------|--------|-------------|
-| `session_pre_init` | Session Lifecycle | Session | Before session initialization |
-| `session_post_init` | Session Lifecycle | Session | After session is fully initialized |
-| `session_reset` | Session Lifecycle | Session | When session context is reset |
-| `session_cleanup` | Session Lifecycle | Session | Before session cleanup/teardown |
-| `component_pre_create` | Component Lifecycle | Component / (Backend, Context) | Before component creation |
-| `component_post_create` | Component Lifecycle | Component / (Backend, Context) | After component created, before execution |
-| `component_pre_execute` | Component Lifecycle | Component / (Backend, Context) | Before component execution via `aact()` |
-| `component_post_success` | Component Lifecycle | Component / (Backend, Context) | After successful component execution |
-| `component_post_error` | Component Lifecycle | Component / (Backend, Context) | After component execution fails |
-| `generation_pre_call` | Generation Pipeline | (Backend, Context) | Before LLM backend call |
-| `generation_post_call` | Generation Pipeline | (Backend, Context) | After LLM response received |
-| `generation_stream_chunk` | Generation Pipeline | (Backend, Context) | For each streaming chunk |
-| `validation_pre_check` | Validation | (Backend, Context) | Before requirement validation |
-| `validation_post_check` | Validation | (Backend, Context) | After validation completes |
-| `sampling_loop_start` | Sampling Pipeline | (Backend, Context) | When sampling strategy begins |
-| `sampling_iteration` | Sampling Pipeline | (Backend, Context) | After each sampling attempt |
-| `sampling_repair` | Sampling Pipeline | (Backend, Context) | When repair is invoked |
-| `sampling_loop_end` | Sampling Pipeline | (Backend, Context) | When sampling completes |
-| `tool_pre_invoke` | Tool Execution | (Backend, Context) | Before tool/function invocation |
-| `tool_post_invoke` | Tool Execution | (Backend, Context) | After tool execution |
-| `adapter_pre_load` | Backend Adapter Ops | Backend | Before `backend.load_adapter()` |
-| `adapter_post_load` | Backend Adapter Ops | Backend | After adapter loaded |
-| `adapter_pre_unload` | Backend Adapter Ops | Backend | Before `backend.unload_adapter()` |
-| `adapter_post_unload` | Backend Adapter Ops | Backend | After adapter unloaded |
-| `context_update` | Context Operations | Context | When context changes |
-| `context_prune` | Context Operations | Context | When context is trimmed |
-| `error_occurred` | Error Handling | Cross-cutting | When an unrecoverable error occurs |
+| Prio | Hook Point | Category | Domain | Description |
+|--|------------|----------|--------|-------------|
+|3| `session_pre_init` | Session Lifecycle | Session | Before session initialization |
+|3| `session_post_init` | Session Lifecycle | Session | After session is fully initialized |
+|3| `session_reset` | Session Lifecycle | Session | When session context is reset |
+|3| `session_cleanup` | Session Lifecycle | Session | Before session cleanup/teardown |
+|7| `component_pre_create` | Component Lifecycle | Component / (Backend, Context) | Before component creation |
+|7| `component_post_create` | Component Lifecycle | Component / (Backend, Context) | After component created, before execution |
+|7| `component_pre_execute` | Component Lifecycle | Component / (Backend, Context) | Before component execution via `aact()` |
+|7| `component_post_success` | Component Lifecycle | Component / (Backend, Context) | After successful component execution |
+|7| `component_post_error` | Component Lifecycle | Component / (Backend, Context) | After component execution fails |
+|1| `generation_pre_call` | Generation Pipeline | (Backend, Context) | Before LLM backend call |
+|1| `generation_post_call` | Generation Pipeline | (Backend, Context) | After LLM response received |
+|1| `generation_stream_chunk` | Generation Pipeline | (Backend, Context) | For each streaming chunk |
+|1| `validation_pre_check` | Validation | (Backend, Context) | Before requirement validation |
+|1| `validation_post_check` | Validation | (Backend, Context) | After validation completes |
+|3| `sampling_loop_start` | Sampling Pipeline | (Backend, Context) | When sampling strategy begins |
+|3| `sampling_iteration` | Sampling Pipeline | (Backend, Context) | After each sampling attempt |
+|3| `sampling_repair` | Sampling Pipeline | (Backend, Context) | When repair is invoked |
+|3| `sampling_loop_end` | Sampling Pipeline | (Backend, Context) | When sampling completes |
+|1| `tool_pre_invoke` | Tool Execution | (Backend, Context) | Before tool/function invocation |
+|1| `tool_post_invoke` | Tool Execution | (Backend, Context) | After tool execution |
+|5| `adapter_pre_load` | Backend Adapter Ops | Backend | Before `backend.load_adapter()` |
+|5| `adapter_post_load` | Backend Adapter Ops | Backend | After adapter loaded |
+|5| `adapter_pre_unload` | Backend Adapter Ops | Backend | Before `backend.unload_adapter()` |
+|5| `adapter_post_unload` | Backend Adapter Ops | Backend | After adapter unloaded |
+|???| `context_update` | Context Operations | Context | When context changes |
+|???| `context_prune` | Context Operations | Context | When context is trimmed |
+|???| `error_occurred` | Error Handling | Cross-cutting | When an unrecoverable error occurs |
 
 ## 3b. Hook Payload Policies
 
