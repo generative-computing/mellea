@@ -6,7 +6,7 @@ from ....backends.adapters import AdapterMixin
 from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
-from ._util import call_intrinsic as _call_intrinsic
+from ._util import call_intrinsic
 
 _ANSWER_RELEVANCE_CORRECTION_METHODS = {
     "Excessive unnecessary information": "removing the excessive information from the "
@@ -50,7 +50,7 @@ def check_answerability(
     Returns:
         Answerability score as a floating-point value from 0 to 1.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "answerability",
         context.add(Message("user", question, documents=list(documents))),
         backend,
@@ -75,7 +75,7 @@ def rewrite_question(
     Returns:
         Rewritten version of ``question``.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "query_rewrite", context.add(Message("user", question)), backend
     )
     return result_json["rewritten_question"]
@@ -104,7 +104,7 @@ def clarify_query(
         Clarification question string (e.g., "Do you mean A or B?"), or
         the string "CLEAR" if no clarification is needed.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "query_clarification",
         context.add(Message("user", question, documents=list(documents))),
         backend,
@@ -139,7 +139,7 @@ def find_citations(
         ``citation_end``, ``citation_text``. Begin and end offsets are character
         offsets into their respective UTF-8 strings.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "citations",
         context.add(Message("assistant", response, documents=list(documents))),
         backend,
@@ -166,7 +166,7 @@ def check_context_relevance(
     Returns:
         Context relevance score as a floating-point value from 0 to 1.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "context_relevance",
         context.add(Message("user", question)),
         backend,
@@ -201,7 +201,7 @@ def flag_hallucinated_content(
         ``response_end``, ``response_text``, ``faithfulness_likelihood``,
         ``explanation``.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "hallucination_detection",
         context.add(Message("assistant", response, documents=list(documents))),
         backend,
@@ -238,7 +238,7 @@ def rewrite_answer_for_relevance(
     # * answer_relevance_analysis
     # * answer_relevance_category
     # * answer_relevance_likelihood
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "answer_relevance_classifier",
         context.add(Message("assistant", response, documents=list(documents))),
         backend,
@@ -254,7 +254,7 @@ def rewrite_answer_for_relevance(
         result_json["answer_relevance_category"]
     ]
 
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "answer_relevance_rewriter",
         context.add(Message("assistant", response, documents=list(documents))),
         backend,
