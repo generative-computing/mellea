@@ -21,6 +21,20 @@ if TYPE_CHECKING:
     from mellea.stdlib.session import MelleaSession
 
 
+class PluginViolationError(Exception):
+    """Raised when a plugin blocks execution in enforce mode."""
+
+    def __init__(  # noqa: D107
+        self, hook_type: str, reason: str, code: str = "", plugin_name: str = ""
+    ):
+        self.hook_type = hook_type
+        self.reason = reason
+        self.code = code
+        self.plugin_name = plugin_name
+        detail = f"[{code}] " if code else ""
+        super().__init__(f"Plugin blocked {hook_type}: {detail}{reason}")
+
+
 class MelleaBasePayload(BaseModel):
     """Frozen base — all payloads are immutable by design.
 

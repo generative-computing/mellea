@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from mellea.plugins.base import MelleaBasePayload
+from mellea.plugins.base import MelleaBasePayload, PluginViolationError
 from mellea.plugins.context import build_global_context
 from mellea.plugins.policies import MELLEA_HOOK_PAYLOAD_POLICIES
 from mellea.plugins.types import MelleaHookType, _register_mellea_hooks
@@ -139,7 +139,6 @@ async def invoke_hook(
     backend: Backend | None = None,
     context: Context | None = None,
     request_id: str = "",
-    violations_as_exceptions: bool = True,
     **context_fields: Any,
 ) -> tuple[Any | None, MelleaBasePayload]:
     """Invoke a hook if plugins are configured.
@@ -179,8 +178,24 @@ async def invoke_hook(
         hook_type=hook_type.value,
         payload=payload,
         global_context=global_ctx,
-        violations_as_exceptions=violations_as_exceptions,
+        violations_as_exceptions=False,
     )
+
+    if result and not result.continue_processing and result.violation:
+        v = result.violation
+        logger.warning(
+            "Plugin violation on %s: [%s] %s (plugin=%s)",
+            hook_type.value,
+            v.code,
+            v.reason,
+            v.plugin_name or "unknown",
+        )
+        raise PluginViolationError(
+            hook_type=hook_type.value,
+            reason=v.reason,
+            code=v.code,
+            plugin_name=v.plugin_name or "",
+        )
 
     modified = (
         result.modified_payload if result and result.modified_payload else payload

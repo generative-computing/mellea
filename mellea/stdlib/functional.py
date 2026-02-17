@@ -667,7 +667,6 @@ async def aact(
                     error_payload,
                     backend=backend,
                     context=context,
-                    violations_as_exceptions=False,
                 )
             raise
 

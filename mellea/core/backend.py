@@ -121,6 +121,18 @@ class Backend(abc.ABC):
                 GenerationPreCallPayload,
             )
 
+            # Rough token estimate: ~4 chars per token
+            prompt_chars = sum(
+                len(str(c.format_for_llm())) for c in (ctx.view_for_generation() or [])
+            ) + len(
+                str(
+                    action.format_for_llm()
+                    if hasattr(action, "format_for_llm")
+                    else action
+                )
+            )
+            estimated_tokens = prompt_chars // 4 or None
+
             pre_payload = GenerationPreCallPayload(
                 action=action,
                 context=ctx,
@@ -128,6 +140,7 @@ class Backend(abc.ABC):
                 model_options=model_options or {},
                 format=format,
                 tools=None,
+                estimated_tokens=estimated_tokens,
             )
             _, pre_payload = await invoke_hook(
                 MelleaHookType.GENERATION_PRE_CALL,

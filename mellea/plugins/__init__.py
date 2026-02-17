@@ -7,9 +7,17 @@ Public API::
 
 from __future__ import annotations
 
-from mellea.plugins.base import MelleaPlugin
+from mellea.plugins.base import MelleaPlugin, PluginViolationError
 from mellea.plugins.decorators import hook, plugin
 from mellea.plugins.pluginset import PluginSet
 from mellea.plugins.registry import block, register
 
-__all__ = ["MelleaPlugin", "PluginSet", "block", "hook", "plugin", "register"]
+__all__ = [
+    "MelleaPlugin",
+    "PluginSet",
+    "PluginViolationError",
+    "block",
+    "hook",
+    "plugin",
+    "register",
+]
