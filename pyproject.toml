@@ -98,6 +98,10 @@ sandbox = [
 
 backends = ["mellea[watsonx,hf,vllm,litellm]"]
 
+contextforge = [
+    "mcp-contextforge-gateway; python_version >= '3.11' and python_version < '3.14'",
+]
+
 all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever]"]
 
 [dependency-groups]
@@ -359,3 +363,15 @@ branch = "main"
 parser_angular_allowed_types = "build,chore,ci,docs,feat,fix,perf,style,refactor,test,release"
 parser_angular_minor_types = "release"
 parser_angular_patch_types = "fix,perf,feat"
+
+[tool.uv]
+conflicts = [
+    [
+        { extra = "contextforge" },
+        { extra = "docling" },
+        { extra = "all" },
+    ],
+]
+
+[tool.uv.sources]
+mcp-contextforge-gateway = { git = "https://github.com/IBM/mcp-context-forge.git", branch = "refactor/plugins_data_models" }
