@@ -37,7 +37,7 @@ class MyPlugin(MelleaPlugin):
     ) -> PluginResult | None
 ```
 
-- **`payload`**: Mutable, strongly-typed data specific to the hook point
+- **`payload`**: Immutable (frozen), strongly-typed data specific to the hook point. Plugins use `model_copy(update={...})` to propose modifications
 - **`context`**: Read-only shared context with session metadata and utilities
 - **`mode`**: `"enforce"` (default), `"permissive"`, or `"fire_and_forget"` — controls execution behavior (see Execution Mode below)
 - **`priority`**: Lower numbers execute first (default: 50)
@@ -75,6 +75,7 @@ The hook system is backed by a lightweight plugin framework built as a Mellea de
 - Exposes `PluginSet` for grouping related hooks/plugins into composable, reusable units
 - Exposes `register()` for global plugin registration and `block()` as a convenience for returning blocking `PluginResult`s
 - Implements a plugin manager that loads, registers, and governs the execution of plugins
+- Enforces per-hook-type payload policies via `HookPayloadPolicy`, accepting only writable-field changes from plugins
 
 The public API surface:
 
@@ -108,20 +109,21 @@ result = await plugin_manager.invoke_hook(hook_type, payload, context)
 The caller (the base class method) is responsible for both invoking the hook and processing the result. Processing means checking the result for one of three possible outcomes:
 
 1. **Continue with original payload**: — `PluginResult(continue_processing=True)` with no `modified_payload`. The caller proceeds unchanged.
-2. **Continue with modified payload**: — `PluginResult(continue_processing=True, modified_payload=...)`. The caller uses the modified payload fields in place of the originals.
+2. **Continue with modified payload**: — `PluginResult(continue_processing=True, modified_payload=...)`. The plugin manager applies the hook's payload policy, accepting only changes to writable fields and discarding unauthorized modifications. The caller uses the policy-filtered payload in place of the original.
 3. **Block execution** — `PluginResult(continue_processing=False, violation=...)`. The caller raises or returns early with structured error information.
 
 Hooks cannot redirect control flow, jump to arbitrary code, or alter the calling method's logic beyond these outcomes. This is enforced by the `PluginResult` type.
 
 ### Payload Design Principles
 
-Hook payloads follow five design principles:
+Hook payloads follow six design principles:
 
 1. **Strongly typed** — Each hook has a dedicated payload dataclass (not a generic dict). This enables IDE autocompletion, static analysis, and clear documentation of what each hook receives.
 2. **Sufficient (maximize-at-boundary)** — Each payload includes everything available at that point in time. Post-hooks include the pre-hook fields plus results. This avoids forcing plugins to maintain their own state across pre/post pairs.
-3. **Immutable context** — `PluginContext` fields are read-only; only the `payload` is mutable. This separates "what the plugin can observe" from "what the plugin can change."
-4. **Serializable** — Payloads should be serializable for external (MCP-based) plugins that run out-of-process. All payload fields use types that can round-trip through JSON or similar formats.
-5. **Versioned** — Payload schemas carry a `payload_version` so plugins can detect incompatible changes at registration time rather than at runtime.
+3. **Frozen (immutable)** — Payloads are frozen Pydantic models (`model_config = ConfigDict(frozen=True)`). Plugins cannot mutate payload attributes in place. To propose changes, plugins must call `payload.model_copy(update={...})` and return the copy via `PluginResult.modified_payload`. This ensures every modification is explicit and flows through the policy system.
+4. **Policy-controlled** — Each hook type declares a `HookPayloadPolicy` specifying which fields are writable. The plugin manager applies the policy after each plugin returns, accepting only changes to writable fields and silently discarding unauthorized modifications. This separates "what the plugin can observe" from "what the plugin can change" — and enforces it at the framework level. See [Hook Payload Policies](#hook-payload-policies) for the full policy table.
+5. **Serializable** — Payloads should be serializable for external (MCP-based) plugins that run out-of-process. All payload fields use types that can round-trip through JSON or similar formats.
+6. **Versioned** — Payload schemas carry a `payload_version` so plugins can detect incompatible changes at registration time rather than at runtime.
 
 ## 2. Common Payload Fields
 
@@ -129,6 +131,9 @@ All hook payloads inherit these base fields:
 
 ```python
 class BasePayload(PluginPayload):
+    """Frozen base — all payloads are immutable by design."""
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
     session_id: str | None = None      # Session identifier (None for functional API calls)
     request_id: str                    # Unique ID for this execution chain
     timestamp: datetime                # When the event fired
@@ -167,6 +172,131 @@ class BasePayload(PluginPayload):
 | `context_update` | Context Operations | Context | When context changes |
 | `context_prune` | Context Operations | Context | When context is trimmed |
 | `error_occurred` | Error Handling | Cross-cutting | When an unrecoverable error occurs |
+
+## 3b. Hook Payload Policies
+
+Each hook type declares a `HookPayloadPolicy` that specifies which payload fields plugins are allowed to modify. The plugin manager enforces these policies after each plugin returns: only changes to writable fields are accepted; all other modifications are silently discarded.
+
+Hooks not listed in the policy table are **observe-only** — plugins can read the payload but cannot modify any fields.
+
+### Policy Types
+
+```python
+from dataclasses import dataclass
+from enum import Enum
+
+class DefaultHookPolicy(str, Enum):
+    """Controls behavior for hooks without an explicit policy."""
+    ALLOW = "allow"   # Accept all modifications (backwards-compatible)
+    DENY = "deny"     # Reject all modifications (strict mode, default for Mellea)
+
+@dataclass(frozen=True)
+class HookPayloadPolicy:
+    """Defines which payload fields plugins may modify."""
+    writable_fields: frozenset[str]
+```
+
+### Policy Enforcement
+
+When a plugin returns `PluginResult(modified_payload=...)`, the plugin manager applies `apply_policy()`:
+
+```python
+def apply_policy(
+    original: BaseModel,
+    modified: BaseModel,
+    policy: HookPayloadPolicy,
+) -> BaseModel | None:
+    """Accept only changes to writable fields; discard all others.
+
+    Returns an updated payload via model_copy(update=...), or None
+    if the plugin made no effective (allowed) changes.
+    """
+    updates: dict[str, Any] = {}
+    for field in policy.writable_fields:
+        old_val = getattr(original, field, _SENTINEL)
+        new_val = getattr(modified, field, _SENTINEL)
+        if new_val is not _SENTINEL and new_val != old_val:
+            updates[field] = new_val
+    return original.model_copy(update=updates) if updates else None
+```
+
+### Policy Table
+
+| Hook Point | Writable Fields |
+|------------|----------------|
+| **Session Lifecycle** | |
+| `session_pre_init` | `backend_name`, `model_id`, `model_options`, `backend_kwargs` |
+| `session_post_init` | *(observe-only)* |
+| `session_reset` | *(observe-only)* |
+| `session_cleanup` | *(observe-only)* |
+| **Component Lifecycle** | |
+| `component_pre_create` | `description`, `images`, `requirements`, `icl_examples`, `grounding_context`, `user_variables`, `prefix`, `template_id` |
+| `component_post_create` | `component` |
+| `component_pre_execute` | `action`, `context`, `context_view`, `requirements`, `model_options`, `format`, `strategy`, `tool_calls_enabled` |
+| `component_post_success` | `result` |
+| `component_post_error` | *(observe-only)* |
+| **Generation Pipeline** | |
+| `generation_pre_call` | `model_options`, `tools`, `format`, `formatted_prompt` |
+| `generation_post_call` | `processed_output`, `model_output` |
+| `generation_stream_chunk` | `chunk`, `accumulated` |
+| **Validation** | |
+| `validation_pre_check` | `requirements`, `model_options` |
+| `validation_post_check` | `results`, `all_passed` |
+| **Sampling Pipeline** | |
+| `sampling_loop_start` | `loop_budget` |
+| `sampling_iteration` | *(observe-only)* |
+| `sampling_repair` | `repair_action`, `repair_context` |
+| `sampling_loop_end` | `final_result` |
+| **Tool Execution** | |
+| `tool_pre_invoke` | `tool_args` |
+| `tool_post_invoke` | `tool_output` |
+| **Backend Adapter Ops** | |
+| `adapter_pre_load` | *(observe-only)* |
+| `adapter_post_load` | *(observe-only)* |
+| `adapter_pre_unload` | *(observe-only)* |
+| `adapter_post_unload` | *(observe-only)* |
+| **Context Operations** | |
+| `context_update` | *(observe-only)* |
+| `context_prune` | *(observe-only)* |
+| **Error Handling** | |
+| `error_occurred` | *(observe-only)* |
+
+### Default Policy
+
+Mellea uses `DefaultHookPolicy.DENY` as the default for hooks without an explicit policy. This means:
+
+- **Hooks with an explicit policy**: Only writable fields are accepted; other changes are discarded.
+- **Hooks without a policy** (observe-only): All modifications are rejected with a warning log.
+- **Custom hooks**: Custom hooks registered by users default to `DENY`. To allow modifications, pass a `HookPayloadPolicy` when registering the custom hook type.
+
+### Modification Pattern
+
+Because payloads are frozen, plugins must use `model_copy(update={...})` to create a modified copy:
+
+```python
+@hook("generation_pre_call", mode="enforce", priority=10)
+async def enforce_budget(payload, ctx):
+    if (payload.estimated_tokens or 0) > 4000:
+        return block("Token budget exceeded")
+
+    # Modify a writable field — use model_copy, not direct assignment
+    modified = payload.model_copy(update={"model_options": {**payload.model_options, "max_tokens": 4000}})
+    return PluginResult(continue_processing=True, modified_payload=modified)
+```
+
+Attempting to set attributes directly (e.g., `payload.model_options = {...}`) raises a `FrozenModelError`.
+
+### Chaining
+
+When multiple plugins modify the same hook's payload, modifications are chained:
+
+1. Plugin A receives the original payload, returns a modified copy.
+2. The policy filters Plugin A's changes to writable fields only.
+3. Plugin B receives the policy-filtered result from Plugin A.
+4. The policy filters Plugin B's changes.
+5. The final policy-filtered payload is returned to the caller.
+
+This ensures each plugin sees the cumulative effect of prior plugins, and all modifications pass through the policy filter.
 
 ## 4. Hook Definitions
 
@@ -1039,19 +1169,25 @@ class ContextSnapshot:
 Hooks can return different result types to control execution:
 
 1. **Continue (no-op)** — `PluginResult(continue_processing=True)` with no `modified_payload`. Execution proceeds with the original payload unchanged.
-2. **Continue with modification** — `PluginResult(continue_processing=True, modified_payload=...)`. Execution proceeds with the modified payload fields in place of the originals.
+2. **Continue with modification** — `PluginResult(continue_processing=True, modified_payload=...)`. The plugin manager applies the hook's `HookPayloadPolicy`, accepting only changes to writable fields. Execution proceeds with the policy-filtered payload.
 3. **Block execution** — `PluginResult(continue_processing=False, violation=...)`. Execution halts with structured error information via `PluginViolation`.
 
 These three outcomes are exhaustive. Hooks cannot redirect control flow, throw arbitrary exceptions, or alter the calling method's logic beyond these outcomes. This is enforced by the `PluginResult` type — there is no escape hatch. The `violation` field provides structured error information but does not influence which code path runs next.
 
+Because payloads are frozen, the `modified_payload` in option 2 must be a new object created via `payload.model_copy(update={...})` — not a mutated version of the original.
+
 ### Modify Payload
 
 ```python
+# Create an immutable copy with only the desired changes
+modified = payload.model_copy(update={"model_options": new_options})
 return PluginResult(
-    continue_processing=True
-    modified_payload=modified_payload,
+    continue_processing=True,
+    modified_payload=modified,
 )
 ```
+
+> **Note**: Only changes to fields listed in the hook's `HookPayloadPolicy.writable_fields` will be accepted. Changes to other fields are silently discarded by the policy enforcement layer.
 
 ### Block Execution
 
@@ -1358,15 +1494,15 @@ class PIIRedactor:
     async def redact_input(self, payload, ctx):
         redacted = self._redact(payload.description)
         if redacted != payload.description:
-            payload.description = redacted
-            return PluginResult(continue_processing=True, modified_payload=payload)
+            modified = payload.model_copy(update={"description": redacted})
+            return PluginResult(continue_processing=True, modified_payload=modified)
 
     @hook("generation_post_call")
     async def redact_output(self, payload, ctx):
         redacted = self._redact(payload.processed_output)
         if redacted != payload.processed_output:
-            payload.processed_output = redacted
-            return PluginResult(continue_processing=True, modified_payload=payload)
+            modified = payload.model_copy(update={"processed_output": redacted})
+            return PluginResult(continue_processing=True, modified_payload=modified)
 
     def _redact(self, text: str) -> str:
         for pattern in self.patterns:

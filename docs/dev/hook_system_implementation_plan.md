@@ -15,6 +15,7 @@ mellea/plugins/
 ├── _manager.py            # Singleton wrapper + session-tag filtering
 ├── _base.py               # MelleaBasePayload, MelleaPlugin base class
 ├── _types.py              # MelleaHookType enum + hook registration
+├── _policies.py           # HookPayloadPolicy table + DefaultHookPolicy for Mellea hooks
 ├── _context.py            # Plugin context factory helper
 ├── _decorators.py         # @hook and @plugin decorator implementations
 ├── _pluginset.py          # PluginSet class
@@ -39,13 +40,16 @@ The following types from `mcpgateway.plugins.framework` form the plumbing layer.
 | Type | Role |
 |------|------|
 | `Plugin` | ABC base class. `__init__(config: PluginConfig)`, `initialize()`, `shutdown()`. Hook methods discovered by convention (method name = hook type) or `@hook()` decorator. Signature: `async def hook_name(self, payload, context) -> PluginResult`. |
-| `PluginManager` | Borg singleton. `__init__(config_path, timeout, observability)`. Key methods: `invoke_hook(hook_type, payload, global_context, ...) -> (PluginResult, PluginContextTable)`, `has_hooks_for(hook_type) -> bool`, `initialize()`, `shutdown()`. |
-| `PluginPayload` | Type alias for `pydantic.BaseModel`. Base type for all hook payloads. |
+| `PluginManager` | Borg singleton. `__init__(config_path, timeout, observability, hook_policies)`. Key methods: `invoke_hook(hook_type, payload, global_context, ...) -> (PluginResult, PluginContextTable)`, `has_hooks_for(hook_type) -> bool`, `initialize()`, `shutdown()`. The `hook_policies` parameter accepts a `dict[str, HookPayloadPolicy]` mapping hook types to their writable-field policies. |
+| `PluginPayload` | Base type for all hook payloads. Frozen Pydantic `BaseModel` (`ConfigDict(frozen=True)`). Plugins use `model_copy(update={...})` to propose modifications. |
 | `PluginResult[T]` | Generic result: `continue_processing: bool`, `modified_payload: T | None`, `violation: PluginViolation | None`, `metadata: dict`. |
 | `PluginViolation` | `reason`, `description`, `code`, `details`. |
 | `PluginConfig` | `name`, `kind`, `hooks`, `mode`, `priority`, `conditions`, `config`, ... |
 | `PluginMode` | `ENFORCE`, `ENFORCE_IGNORE_ERROR`, `PERMISSIVE`, `FIRE_AND_FORGET`, `DISABLED`. |
 | `PluginContext` | `state: dict`, `global_context: GlobalContext`, `metadata: dict`. |
+| `HookPayloadPolicy` | Frozen dataclass with `writable_fields: frozenset[str]`. Defines which payload fields plugins may modify for a given hook type. |
+| `DefaultHookPolicy` | Enum: `ALLOW` (accept all modifications), `DENY` (reject all modifications). Controls behavior for hooks without an explicit policy. |
+| `apply_policy()` | `apply_policy(original, modified, policy) -> BaseModel \| None`. Accepts only changes to writable fields via `model_copy(update=...)`, discarding unauthorized changes. Returns `None` if no effective changes. |
 | `HookRegistry` | `get_hook_registry()`, `register_hook(hook_type, payload_class, result_class)`, `is_registered(hook_type)`. |
 | `@hook` decorator | `@hook("hook_type")` or `@hook("hook_type", PayloadType, ResultType)` for custom method names. |
 
@@ -70,7 +74,8 @@ classDiagram
           -timeout: int
           -observability: Any
           -hook_registry: HookRegistry
-          +__init__(config_path, timeout, observability)
+          -hook_policies: dict~str, HookPayloadPolicy~
+          +__init__(config_path, timeout, observability, hook_policies)
           +invoke_hook(hook_type, payload, global_context, ...) tuple~PluginResult, PluginContextTable~
           +has_hooks_for(hook_type: str) bool
           +initialize() async
@@ -97,10 +102,23 @@ classDiagram
           DISABLED
       }
 
+      %% Policy
+      class HookPayloadPolicy {
+          <<frozen dataclass>>
+          +writable_fields: frozenset~str~
+      }
+
+      class DefaultHookPolicy {
+          <<enumeration>>
+          ALLOW
+          DENY
+      }
+
       %% Payload & Result
       class PluginPayload {
           <<type alias>>
           pydantic.BaseModel
+          model_config: frozen=True
       }
 
       class PluginResult~T~ {
@@ -138,6 +156,7 @@ classDiagram
       Plugin ..> hook : decorated by
 
       PluginManager --> Plugin : manages 0..*
+      PluginManager --> HookPayloadPolicy : enforces per hook
 
       PluginConfig --> PluginMode : has
 
@@ -156,7 +175,6 @@ plugins:
     hooks:
       - component_pre_create
       - generation_post_call
-    mode: enforce
     mode: enforce
     priority: 10
     config:
@@ -242,7 +260,14 @@ All Mellea hook payloads inherit from this base, which extends `PluginPayload` w
 
 ```python
 class MelleaBasePayload(PluginPayload):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    """Frozen base — all payloads are immutable by design.
+
+    Plugins must use ``model_copy(update={...})`` to propose modifications
+    and return the copy via ``PluginResult.modified_payload``.  The plugin
+    manager applies the hook's ``HookPayloadPolicy`` to filter changes to
+    writable fields only.
+    """
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     session_id: str | None = None
     request_id: str
@@ -251,7 +276,7 @@ class MelleaBasePayload(PluginPayload):
     user_metadata: dict[str, Any] = Field(default_factory=dict)
 ```
 
-`arbitrary_types_allowed=True` is required because payloads include non-serializable Mellea objects (`Backend`, `Context`, `Component`, `ModelOutputThunk`). This means external plugins cannot receive these payloads directly; they are designed for native in-process plugins.
+`frozen=True` prevents in-place mutations — attribute assignment on a payload instance raises `FrozenModelError`. `arbitrary_types_allowed=True` is required because payloads include non-serializable Mellea objects (`Backend`, `Context`, `Component`, `ModelOutputThunk`). This means external plugins cannot receive these payloads directly; they are designed for native in-process plugins.
 
 ### 3.3 Hook Registration (`mellea/plugins/_types.py`)
 
@@ -431,6 +456,86 @@ def block(
 ```
 
 
+### 3.10 Hook Payload Policies (`mellea/plugins/_policies.py`)
+
+Defines the concrete per-hook-type policies for Mellea hooks. These are injected into the `PluginManager` at initialization time via the `hook_policies` parameter.
+
+```python
+from mcpgateway.plugins.framework.hooks.policies import HookPayloadPolicy
+
+MELLEA_HOOK_PAYLOAD_POLICIES: dict[str, HookPayloadPolicy] = {
+    # Session Lifecycle
+    "session_pre_init": HookPayloadPolicy(
+        writable_fields=frozenset({"backend_name", "model_id", "model_options", "backend_kwargs"}),
+    ),
+    # session_post_init, session_reset, session_cleanup: observe-only (no entry)
+
+    # Component Lifecycle
+    "component_pre_create": HookPayloadPolicy(
+        writable_fields=frozenset({
+            "description", "images", "requirements", "icl_examples",
+            "grounding_context", "user_variables", "prefix", "template_id",
+        }),
+    ),
+    "component_post_create": HookPayloadPolicy(
+        writable_fields=frozenset({"component"}),
+    ),
+    "component_pre_execute": HookPayloadPolicy(
+        writable_fields=frozenset({
+            "action", "context", "context_view", "requirements",
+            "model_options", "format", "strategy", "tool_calls_enabled",
+        }),
+    ),
+    "component_post_success": HookPayloadPolicy(
+        writable_fields=frozenset({"result"}),
+    ),
+    # component_post_error: observe-only
+
+    # Generation Pipeline
+    "generation_pre_call": HookPayloadPolicy(
+        writable_fields=frozenset({"model_options", "tools", "format", "formatted_prompt"}),
+    ),
+    "generation_post_call": HookPayloadPolicy(
+        writable_fields=frozenset({"processed_output", "model_output"}),
+    ),
+    "generation_stream_chunk": HookPayloadPolicy(
+        writable_fields=frozenset({"chunk", "accumulated"}),
+    ),
+
+    # Validation
+    "validation_pre_check": HookPayloadPolicy(
+        writable_fields=frozenset({"requirements", "model_options"}),
+    ),
+    "validation_post_check": HookPayloadPolicy(
+        writable_fields=frozenset({"results", "all_passed"}),
+    ),
+
+    # Sampling Pipeline
+    "sampling_loop_start": HookPayloadPolicy(
+        writable_fields=frozenset({"loop_budget"}),
+    ),
+    # sampling_iteration: observe-only
+    "sampling_repair": HookPayloadPolicy(
+        writable_fields=frozenset({"repair_action", "repair_context"}),
+    ),
+    "sampling_loop_end": HookPayloadPolicy(
+        writable_fields=frozenset({"final_result"}),
+    ),
+
+    # Tool Execution
+    "tool_pre_invoke": HookPayloadPolicy(
+        writable_fields=frozenset({"tool_args"}),
+    ),
+    "tool_post_invoke": HookPayloadPolicy(
+        writable_fields=frozenset({"tool_output"}),
+    ),
+
+    # adapter_*, context_*, error_occurred: observe-only (no entry)
+}
+```
+
+Hooks absent from this table are observe-only. With `DefaultHookPolicy.DENY` (the Mellea default), any modification attempt on an observe-only hook is rejected with a warning log.
+
 ## 4. Plugin Manager Integration (`mellea/plugins/_manager.py`)
 
 ### 4.1 Lazy Singleton Wrapper
@@ -455,7 +560,11 @@ def _ensure_plugin_manager() -> PluginManager:
     global _plugin_manager, _plugins_enabled
     if _plugin_manager is None:
         _register_mellea_hooks()
-        pm = PluginManager("", timeout=5)
+        pm = PluginManager(
+            "",
+            timeout=5,
+            hook_policies=MELLEA_HOOK_PAYLOAD_POLICIES,
+        )
         _run_async_in_thread(pm.initialize())
         _plugin_manager = pm
         _plugins_enabled = True
@@ -467,7 +576,11 @@ async def initialize_plugins(
     """Initialize the PluginManager with Mellea hook registrations and optional YAML config."""
     global _plugin_manager, _plugins_enabled
     _register_mellea_hooks()
-    pm = PluginManager(config_path or "", timeout=int(timeout))
+    pm = PluginManager(
+        config_path or "",
+        timeout=int(timeout),
+        hook_policies=MELLEA_HOOK_PAYLOAD_POLICIES,
+    )
     await pm.initialize()
     _plugin_manager = pm
     _plugins_enabled = True
@@ -521,10 +634,11 @@ async def invoke_hook(
     if not _plugin_manager.has_hooks_for(hook_type.value):
         return None, payload
 
-    payload.hook = hook_type.value
-    payload.session_id = session_id
+    # Payloads are frozen — use model_copy to set dispatch-time fields
+    updates: dict[str, Any] = {"hook": hook_type.value, "session_id": session_id}
     if not payload.request_id:
-        payload.request_id = request_id
+        updates["request_id"] = request_id
+    payload = payload.model_copy(update=updates)
 
     global_ctx = build_global_context(
         session=session, backend=backend, context=context,
@@ -772,14 +886,16 @@ async def generate_from_context_with_hooks(
     if has_plugins():
         pre_payload = GenerationPreCallPayload(
             action=action, context=ctx,
+            formatted_prompt="",  # Populated after linearization; writable by plugins
             model_options=model_options or {}, format=format, tools=None,
         )
         result, pre_payload = await invoke_hook(
             MelleaHookType.GENERATION_PRE_CALL, pre_payload,
             backend=self, context=ctx,
         )
-        if result and result.modified_payload:
-            model_options = result.modified_payload.model_options
+        # pre_payload is the policy-filtered result — extract all writable fields
+        model_options = pre_payload.model_options
+        format = pre_payload.format
 
     t0 = time.monotonic()
     out_result, new_ctx = await self.generate_from_context(
@@ -788,8 +904,13 @@ async def generate_from_context_with_hooks(
 
     if has_plugins():
         post_payload = GenerationPostCallPayload(
+            prompt=...,              # Sent prompt (from linearization)
+            raw_response=...,        # Full JSON response from provider
+            processed_output=...,    # Extracted text from response
             model_output=out_result,
+            token_usage=...,         # From backend response metadata
             latency_ms=int((time.monotonic() - t0) * 1000),
+            finish_reason=...,       # From backend response metadata
         )
         await invoke_hook(
             MelleaHookType.GENERATION_POST_CALL, post_payload,
@@ -974,8 +1095,9 @@ async def fire_error_hook(
 | `mellea/plugins/_pluginset.py` (new) | `PluginSet` class with `flatten()` for recursive expansion |
 | `mellea/plugins/_registry.py` (new) | `register()`, `block()`, `_FunctionHookAdapter`, `_register_single()` |
 | `mellea/plugins/_manager.py` (new) | Singleton wrapper, `invoke_hook()` with session-tag filtering, `_ensure_plugin_manager()` |
-| `mellea/plugins/_base.py` (new) | `MelleaBasePayload`, `MelleaPlugin` base class |
+| `mellea/plugins/_base.py` (new) | `MelleaBasePayload` (frozen), `MelleaPlugin` base class |
 | `mellea/plugins/_types.py` (new) | `MelleaHookType` enum, `_register_mellea_hooks()` |
+| `mellea/plugins/_policies.py` (new) | `MELLEA_HOOK_PAYLOAD_POLICIES` table, injected into `PluginManager` at init |
 | `mellea/plugins/_context.py` (new) | `build_global_context()` factory |
 | `mellea/plugins/hooks/` (new) | Hook payload dataclasses (session, component, generation, etc.) |
 | `test/plugins/` (new) | Tests for plugins subpackage |
