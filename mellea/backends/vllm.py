@@ -150,6 +150,7 @@ class LocalVLLMBackend(FormatterBackend):
                 self._underlying_model = vllm.AsyncLLMEngine.from_engine_args(
                     vllm.AsyncEngineArgs(model=self._hf_model_id, **engine_args)
                 )
+                self._tokenizer = self._underlying_model.get_tokenizer()
                 break
             except torch._dynamo.exc.BackendCompilerFailed as e:  # type: ignore
                 # example:
