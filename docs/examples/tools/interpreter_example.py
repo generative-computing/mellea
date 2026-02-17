@@ -2,6 +2,7 @@
 
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
+from mellea.backends.tools import MelleaTool
 from mellea.stdlib.requirements import tool_arg_validator, uses_tool
 from mellea.stdlib.tools import code_interpreter, local_code_interpreter
 
@@ -18,7 +19,9 @@ def example_1(m: MelleaSession):
 def example_2(m: MelleaSession):
     plot_output = m.instruct(
         description="Make a plot of y=x^2",
-        model_options={ModelOption.TOOLS: [local_code_interpreter]},
+        model_options={
+            ModelOption.TOOLS: [MelleaTool.from_callable(local_code_interpreter)]
+        },
     )
     print(plot_output)
 
@@ -30,7 +33,9 @@ def example_3(m: MelleaSession):
     plot_output = m.instruct(
         description="Use the code interpreter tool to make a plot of y=x^2.",
         requirements=[uses_tool(local_code_interpreter)],
-        model_options={ModelOption.TOOLS: [local_code_interpreter]},
+        model_options={
+            ModelOption.TOOLS: [MelleaTool.from_callable(local_code_interpreter)]
+        },
         tool_calls=True,
     )
 
@@ -63,7 +68,9 @@ def example_4(m: MelleaSession):
                 and "plt.show()" not in code_snippet,
             ),
         ],
-        model_options={ModelOption.TOOLS: [local_code_interpreter]},
+        model_options={
+            ModelOption.TOOLS: [MelleaTool.from_callable(local_code_interpreter)]
+        },
         tool_calls=True,
     )
 

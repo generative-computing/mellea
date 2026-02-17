@@ -6,12 +6,15 @@ from .backend import FormatterBackend
 from .cache import SimpleLRUCache
 from .model_ids import ModelIdentifier
 from .model_options import ModelOption
+from .tools import MelleaTool, tool
 
 __all__ = [
     "Backend",
     "BaseModelSubclass",
     "FormatterBackend",
+    "MelleaTool",
     "ModelIdentifier",
     "ModelOption",
     "SimpleLRUCache",
+    "tool",
 ]

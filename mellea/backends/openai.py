@@ -87,7 +87,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
         """Initialize and OpenAI compatible backend. For any additional kwargs that you need to pass the the client, pass them as a part of **kwargs.
 
         Args:
-            model_id : A generic model identifier or OpenAI compatible string. Defaults to model_ids.IBM_GRANITE_3_3_8B.
+            model_id : A generic model identifier or OpenAI compatible string. Defaults to model_ids.IBM_GRANITE_4_HYBRID_MICRO.
             formatter: A custom formatter based on backend.If None, defaults to TemplateFormatter
             base_url : Base url for LLM API. Defaults to None.
             model_options : Generation options to pass to the LLM. Defaults to None.
@@ -432,10 +432,7 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
 
         if model_opts.get(ModelOption.STREAM, None) is not None:
             # Intrinsics don't support streaming because of their post-processing step.
-            FancyLogger.get_logger().warning(
-                "intrinsics cannot use streaming; removing model option"
-            )
-            del model_opts[ModelOption.STREAM]
+            raise Exception("Intrinsics do not support streaming.")
 
         adapter = get_adapter_for_intrinsic(
             action.intrinsic_name, action.adapter_types, self._added_adapters

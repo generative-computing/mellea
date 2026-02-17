@@ -9,7 +9,7 @@ from PIL import Image
 pytestmark = [pytest.mark.ollama, pytest.mark.llm]
 
 from mellea import MelleaSession, start_session
-from mellea.backends import ModelOption
+from mellea.backends import ModelOption, model_ids
 from mellea.core import ImageBlock, ModelOutputThunk
 from mellea.stdlib.components import Instruction, Message
 

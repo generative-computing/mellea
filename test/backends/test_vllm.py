@@ -36,9 +36,6 @@ except ImportError as e:
 @pytest.fixture(scope="module")
 def backend():
     """Shared vllm backend for all tests in this module."""
-    if os.environ.get("VLLM_USE_V1", -1) != "0":
-        pytest.skip("skipping vllm tests; tests require `export VLLM_USE_V1=0`")
-
     backend = LocalVLLMBackend(
         model_id=model_ids.QWEN3_0_6B,
         # formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
@@ -50,7 +47,12 @@ def backend():
             "max_num_seqs": 8,
         },
     )
-    return backend
+    yield backend
+
+    # Cleanup using shared function (best-effort within module)
+    from test.conftest import cleanup_vllm_backend
+
+    cleanup_vllm_backend(backend)
 
 
 @pytest.fixture(scope="function")
@@ -141,6 +143,7 @@ async def test_generate_from_raw_with_format(session) -> None:
         actions=[CBlock(value=prompt) for prompt in prompts],
         ctx=session.ctx,
         format=Answer,
+        model_options={ModelOption.MAX_NEW_TOKENS: 100},
     )
 
     assert len(results) == len(prompts)

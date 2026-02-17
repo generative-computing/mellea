@@ -1,48 +1,118 @@
 # aLoRA Examples
 
-This directory contains examples demonstrating Adaptive Low-Rank Adaptation (aLoRA) for efficient constraint checking and requirement validation.
+This directory contains examples demonstrating how to tune and use your own (Adaptive) Low-Rank Adapters.
 
-## Files
+## Training Models
 
-### 101_example.py
-A comprehensive example showing how to use aLoRA adapters for fast constraint checking with Granite models.
-
-**Key Features:**
-- Loading and using custom aLoRA adapters for constraint checking
-- Comparing validation speed with and without aLoRA
-- Using `ALoraRequirement` for efficient requirement validation
-- Demonstrates significant speedup when using aLoRA adapters
-
-**Usage:**
-```bash
-python docs/examples/aLora/101_example.py
-```
-
-### Supporting Files
-
-- **prompt_config.json**: Configuration for training aLoRA adapters
-- **stembolt_failure_dataset.jsonl**: Training dataset for the failure mode constraint
-- **checkpoints/alora_adapter/**: Pre-trained aLoRA adapter checkpoint
-
-## Concepts Demonstrated
-
-- **aLoRA Adapters**: Using specialized adapters for constraint checking
-- **Constraint Validation**: Fast requirement checking with aLoRA
-- **Performance Optimization**: Comparing validation times with/without aLoRA
-- **Custom Requirements**: Creating domain-specific validation requirements
-- **Backend Integration**: Adding aLoRA adapters to HuggingFace backends
-
-## Training Your Own aLoRA
-
-To train custom aLoRA adapters for your constraints:
+First, we need to clone Mellea and put ourselves into this directory:
 
 ```bash
-m alora train --config docs/examples/aLora/prompt_config.json
+git clone github.com/generative-computing/mellea;
+cd mellea;
+uv venv .venv;
+source .venv/bin/activate;
+uv pip install -e .[all];
+pushd docs/examples/aLora/;
 ```
 
-See `cli/alora/` for more details on training aLoRA adapters.
+Now let's train a model:
 
-## Related Documentation
+```
+m alora train \
+    --basemodel ibm-granite/granite-4.0-micro \
+    --outfile stembolts_model \
+    --adapter alora \
+    stembolt_failure_dataset.jsonl
+```
 
-- See `docs/dev/requirement_aLoRA_rerouting.md` for aLoRA architecture details
-- See `mellea/backends/adapters/` for adapter implementation
+>![NOTE]
+> You will need hardware capable of training models. 
+> For local training, our minimum recommendation is an M1 MAX with 64GB unitifed memory. This will allow you to train small language model adapters.
+> Alternatively, you can train small language models on relatively cheap spot instances at many popular cloud providers.
+
+## Upload Models
+
+If model training succeeds, you will need to upload your model as an intrinsic:
+
+```bash
+# WARNING: running this command will upload your model weights to huggingface.co !!!
+# The model will be private.
+# replace $HF_USERNAME with your huggingface username.
+m alora upload \
+   --intrinsic \
+   --name "$HF_USERNAME/stembolts" \
+   --io-yaml io.yaml \
+    stembolts_model
+```
+
+You can also train and upload the same adapter for multiple model families:
+
+```
+# CHANGE $HF_USERNAME to your username, or set envvar.
+m alora train \
+    --basemodel ibm-granite/granite-3.3-2b-instruct \
+    --outfile stembolts_model_3.3_2b \
+    --adapter alora \
+    stembolt_failure_dataset.jsonl &&
+m alora upload \
+   --intrinsic \
+   --name "$HF_USERNAME/stembolts"
+   --io-yaml io.yaml \
+    stembolts_model_3.3_2b
+```
+
+## Generate a README
+
+After uploading your adapter, you can auto-generate a README for the HuggingFace model repository using `m alora add-readme`. This command uses Mellea to analyze your training dataset and produce documentation with a description, data examples, and integration code:
+
+```bash
+m alora add-readme \
+    --name $HF_USERNAME/stembolts \
+    --io-yaml io.yaml \
+    --basemodel granite-4.0-micro \
+    stembolt_failure_dataset.jsonl
+```
+
+You can provide a `--hints` file with additional domain context to improve the generated descriptions:
+
+```bash
+m alora add-readme \
+    --name $HF_USERNAME/stembolts \
+    --io-yaml io.yaml \
+    --basemodel granite-4.0-micro \
+    --hints hints.txt
+    stembolt_failure_dataset.jsonl
+```
+
+The generator will display the README and ask for confirmation before uploading it to your HuggingFace repo. You can also call the generator programmatically from Python -- see `test_readme_generator.py` for an example.
+
+## Using Intrinsics
+
+You can now create a new adapter class for this model somewhere in your python project:
+
+```python
+from mellea.backends.adapters.adapter import CustomGraniteCommonAdapter
+
+class StemboltAdapter(CustomGraniteCommonAdapter):
+    def __init__(self, base_model_name:str="granite-4.0-micro"):
+        super().__init__(
+            model_id="$USERNAME/stembolts", # REPLACE $USERNAME WITH YOUR HUGGINGFACE USERNAME
+            intrinsic_name="stembolts",
+            base_model_name=base_model_name,
+        )
+```
+
+Using this adapter requires adding it to a backend:
+
+```python
+from mellea.backends.huggingface import LocalHFBackend
+
+backend = LocalHFBackend(
+    model_id="ibm-granite/granite-4.0-micro", cache=SimpleLRUCache(5)
+)
+
+backend.add_adapter(StemboltAdapter(base_model_name="granite-4.0-micro"))
+```
+
+A full example of how to use this adapter as a requirement is found in `101_example.py`
+

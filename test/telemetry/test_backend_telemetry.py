@@ -319,6 +319,3 @@ async def test_streaming_span_duration(span_exporter, gh_run):
     assert abs(span_duration_s - actual_duration) < 0.5, (
         f"Streaming span duration {span_duration_s}s differs from actual {actual_duration}s"
     )
-
-
-# Made with Bob
