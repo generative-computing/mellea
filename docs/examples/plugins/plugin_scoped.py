@@ -23,7 +23,6 @@ from mellea import start_session
 from mellea.plugins import (
     HookType,
     PluginMode,
-    PluginResult,
     PluginSet,
     PluginViolationError,
     hook,
