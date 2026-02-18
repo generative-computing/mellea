@@ -1,6 +1,11 @@
 """OpenTelemetry instrumentation for Mellea."""
 
-# Import tracing functions
+from .metrics import (
+    create_counter,
+    create_histogram,
+    create_up_down_counter,
+    is_metrics_enabled,
+)
 from .tracing import (
     end_backend_span,
     is_application_tracing_enabled,
@@ -10,14 +15,6 @@ from .tracing import (
     start_backend_span,
     trace_application,
     trace_backend,
-)
-
-# Import metrics functions
-from .metrics import (
-    create_counter,
-    create_histogram,
-    create_up_down_counter,
-    is_metrics_enabled,
 )
 
 __all__ = [
