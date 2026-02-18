@@ -27,6 +27,9 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
+logging.getLogger("mcpgateway").setLevel(logging.ERROR)
+logging.getLogger("httpx").setLevel(logging.ERROR)
+logging.getLogger("fancy_logger").setLevel(logging.ERROR)
 log = logging.getLogger("tool_hooks")
 
 
