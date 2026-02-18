@@ -1,3 +1,4 @@
+# pytest: ollama, llm
 #
 # Tool hook plugins — safety and security policies for tool invocation.
 #
@@ -9,21 +10,17 @@
 #                            disallowed patterns in calculator expressions)
 #   3. Tool audit logger   — fire-and-forget logging of every tool call
 #
-# Scenarios are driven directly through _acall_tools() with hand-crafted
-# ModelToolCall objects so that plugin behavior is always exercised regardless
-# of what the LLM chooses to do.
-#
 # Run:
 #   uv run python docs/examples/plugins/tool_hooks.py
 
-import asyncio
 import logging
+import sys
 
-from mellea.backends import tool
-from mellea.core.base import ModelOutputThunk, ModelToolCall
+from mellea import start_session
+from mellea.backends import ModelOption, tool
+from mellea.stdlib.functional import _call_tools
 from mellea.stdlib.requirements import uses_tool
-from mellea.plugins import HookType, PluginMode, PluginSet, block, hook, register
-from mellea.stdlib.functional import _acall_tools
+from mellea.plugins import HookType, PluginMode, PluginSet, block, hook
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,7 +43,12 @@ def get_weather(location: str, days: int = 1) -> dict:
         location: City name
         days: Number of days to forecast (default: 1)
     """
-    return {"location": location, "days": days, "forecast": "sunny", "temperature": 72}
+    return {
+        "location": location,
+        "days": str(days),
+        "forecast": "sunny",
+        "temperature": "72",
+    }
 
 
 @tool
@@ -207,88 +209,88 @@ async def audit_tool_calls(payload, ctx):
 
 
 # ---------------------------------------------------------------------------
-# Compose into a PluginSet and register globally
+# Compose into a PluginSet for clean session-scoped registration
 # ---------------------------------------------------------------------------
 
 tool_security = PluginSet(
     "tool-security", [enforce_tool_allowlist, validate_tool_args, audit_tool_calls]
 )
-register(tool_security)
 
 
 # ---------------------------------------------------------------------------
-# Helpers
-#
-# _make_result() builds a ModelOutputThunk that looks exactly like what the
-# LLM would produce when it decides to call a tool.  This lets us exercise the
-# full tool hook pipeline without depending on the model's behaviour.
+# Main — four scenarios
 # ---------------------------------------------------------------------------
 
-
-def _make_result(tool_obj, **args) -> ModelOutputThunk:
-    """Wrap a single tool call into a ModelOutputThunk."""
-    tool_call = ModelToolCall(name=tool_obj.name, func=tool_obj, args=args)
-    return ModelOutputThunk(value="", tool_calls={tool_obj.name: tool_call})
-
-
-class _NoOpBackend:
-    """Minimal backend stand-in that skips LLM calls (no FormatterBackend)."""
-
-    model_id = "test"
-
-
-_backend = _NoOpBackend()
-
-
-# ---------------------------------------------------------------------------
-# Main — four scenarios driven directly through _acall_tools()
-# ---------------------------------------------------------------------------
-
-
-async def main() -> None:
+if __name__ == "__main__":
     log.info("--- Tool hook plugins example ---")
     log.info("")
 
-    # --- Scenario 1: allowed tool — get_weather ---
+    all_tools = [get_weather, search_web, calculate]
+
+    # --- Scenario 1: allowed tool call (get_weather) ---
     log.info("=== Scenario 1: allowed tool — get_weather ===")
-    outputs = await _acall_tools(
-        _make_result(get_weather, location="Boston", days=3),
-        _backend,  # type: ignore[arg-type]
-    )
-    if outputs:
-        log.info("Tool returned: %s", outputs[0].content)
+    with start_session(plugins=[tool_security]) as m:
+        result = m.instruct(
+            description="What is the weather in Boston for the next 3 days?",
+            requirements=[uses_tool("get_weather")],
+            model_options={ModelOption.TOOLS: all_tools},
+            tool_calls=True,
+        )
+        tool_outputs = _call_tools(result, m.backend)
+        if tool_outputs:
+            log.info("Tool returned: %s", tool_outputs[0].content)
+        else:
+            log.error("Expected tool call but none were executed — exiting")
+            sys.exit(1)
     log.info("")
 
-    # --- Scenario 2: blocked tool — search_web is not on the allow list ---
+    # --- Scenario 2: blocked tool call (search_web is not on the allow list) ---
     log.info("=== Scenario 2: blocked tool — search_web not on allow list ===")
-    outputs = await _acall_tools(
-        _make_result(search_web, query="Python news", max_results=3),
-        _backend,  # type: ignore[arg-type]
-    )
-    if not outputs:
-        log.info("Tool call was blocked — outputs list is empty, as expected")
+    with start_session(plugins=[tool_security]) as m:
+        result = m.instruct(
+            description="Search the web for the latest Python news.",
+            requirements=[uses_tool("search_web")],
+            model_options={ModelOption.TOOLS: all_tools},
+            tool_calls=True,
+        )
+        tool_outputs = _call_tools(result, m.backend)
+        if not tool_outputs:
+            log.info("Tool call was blocked — outputs list is empty, as expected")
+        else:
+            log.warning("Expected tool to be blocked but it executed: %s", tool_outputs)
     log.info("")
 
-    # --- Scenario 3: allowed tool with safe calculator expression ---
-    log.info("=== Scenario 3: safe calculator expression — allowed ===")
-    outputs = await _acall_tools(
-        _make_result(calculate, expression="6 * 7"),
-        _backend,  # type: ignore[arg-type]
-    )
-    if outputs:
-        log.info("Tool returned: %s", outputs[0].content)
+    # --- Scenario 3: safe calculator expression goes through ---
+    log.info("=== Scenario 3: safe calculator expression ===")
+    with start_session(plugins=[tool_security]) as m:
+        result = m.instruct(
+            description="Use the calculator to compute 6 * 7.",
+            requirements=[uses_tool("calculator")],
+            model_options={ModelOption.TOOLS: all_tools},
+            tool_calls=True,
+        )
+        tool_outputs = _call_tools(result, m.backend)
+        if tool_outputs:
+            log.info("Tool returned: %s", tool_outputs[0].content)
+        else:
+            log.error("Expected tool call but none were executed — exiting")
+            sys.exit(1)
     log.info("")
 
-    # --- Scenario 4: calculator with disallowed characters — blocked ---
-    log.info("=== Scenario 4: unsafe calculator expression — blocked ===")
-    outputs = await _acall_tools(
-        _make_result(calculate, expression="__builtins__['open']('/etc/passwd')"),
-        _backend,  # type: ignore[arg-type]
-    )
-    if not outputs:
-        log.info("Tool call was blocked — outputs list is empty, as expected")
-    log.info("")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    # --- Scenario 4: unsafe calculator expression is blocked ---
+    log.info("=== Scenario 4: unsafe calculator expression blocked ===")
+    with start_session(plugins=[tool_security]) as m:
+        result = m.instruct(
+            description=(
+                "Use the calculator on this expression: "
+                "__builtins__['print']('injected')"
+            ),
+            requirements=[uses_tool("calculator")],
+            model_options={ModelOption.TOOLS: all_tools},
+            tool_calls=True,
+        )
+        tool_outputs = _call_tools(result, m.backend)
+        if not tool_outputs:
+            log.info("Tool call was blocked — outputs list is empty, as expected")
+        else:
+            log.warning("Expected tool to be blocked but it executed: %s", tool_outputs)
