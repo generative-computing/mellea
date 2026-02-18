@@ -113,7 +113,7 @@ class Backend(abc.ABC):
         import time
 
         from mellea.plugins.manager import has_plugins, invoke_hook
-        from mellea.plugins.types import MelleaHookType
+        from mellea.plugins.types import HookType
 
         if has_plugins():
             from mellea.plugins.hooks.generation import (
@@ -143,10 +143,7 @@ class Backend(abc.ABC):
                 estimated_tokens=estimated_tokens,
             )
             _, pre_payload = await invoke_hook(
-                MelleaHookType.GENERATION_PRE_CALL,
-                pre_payload,
-                backend=self,
-                context=ctx,
+                HookType.GENERATION_PRE_CALL, pre_payload, backend=self, context=ctx
             )
             model_options = pre_payload.model_options
             format = pre_payload.format
@@ -167,7 +164,7 @@ class Backend(abc.ABC):
                 model_output=out_result, latency_ms=int((time.monotonic() - t0) * 1000)
             )
             await invoke_hook(
-                MelleaHookType.GENERATION_POST_CALL,
+                HookType.GENERATION_POST_CALL,
                 post_payload,
                 backend=self,
                 context=new_ctx,

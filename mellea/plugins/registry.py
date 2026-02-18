@@ -8,12 +8,13 @@ from typing import Any
 
 from mellea.plugins.decorators import HookMeta, PluginMeta
 from mellea.plugins.pluginset import PluginSet
+from mellea.plugins.types import PluginMode
 
 try:
     from mcpgateway.plugins.framework.base import Plugin
     from mcpgateway.plugins.framework.models import (
         PluginConfig,
-        PluginMode,
+        PluginMode as _CFPluginMode,
         PluginResult,
         PluginViolation,
     )
@@ -24,19 +25,19 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-_MODE_MAP: dict[str, Any] = {}
+_MODE_MAP: dict[PluginMode, Any] = {}
 if _HAS_PLUGIN_FRAMEWORK:
     _MODE_MAP = {
-        "enforce": PluginMode.ENFORCE,
-        "permissive": PluginMode.PERMISSIVE,
+        PluginMode.ENFORCE: _CFPluginMode.ENFORCE,
+        PluginMode.PERMISSIVE: _CFPluginMode.PERMISSIVE,
         # fire_and_forget deferred — store as enforce for now
-        "fire_and_forget": PluginMode.ENFORCE,
+        PluginMode.FIRE_AND_FORGET: _CFPluginMode.ENFORCE,
     }
 
 
-def _map_mode(mode: str) -> Any:
-    """Map Mellea mode string to ContextForge PluginMode."""
-    return _MODE_MAP.get(mode, _MODE_MAP.get("enforce"))
+def _map_mode(mode: PluginMode) -> Any:
+    """Map Mellea PluginMode to ContextForge PluginMode."""
+    return _MODE_MAP.get(mode, _MODE_MAP.get(PluginMode.ENFORCE))
 
 
 def block(

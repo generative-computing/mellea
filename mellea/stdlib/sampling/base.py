@@ -19,7 +19,7 @@ from ...core import (
     ValidationResult,
 )
 from ...plugins.manager import has_plugins, invoke_hook
-from ...plugins.types import MelleaHookType
+from ...plugins.types import HookType
 from ...stdlib import functional as mfuncs
 from ..components import Instruction, Message
 from ..context import ChatContext
@@ -162,7 +162,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 loop_budget=self.loop_budget,
             )
             _, start_payload = await invoke_hook(
-                MelleaHookType.SAMPLING_LOOP_START,
+                HookType.SAMPLING_LOOP_START,
                 start_payload,
                 backend=backend,
                 context=context,
@@ -236,7 +236,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                     total_count=len(constraint_scores),
                 )
                 await invoke_hook(
-                    MelleaHookType.SAMPLING_ITERATION,
+                    HookType.SAMPLING_ITERATION,
                     iter_payload,
                     backend=backend,
                     context=result_ctx,
@@ -264,7 +264,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                         all_validations=sampled_scores,
                     )
                     await invoke_hook(
-                        MelleaHookType.SAMPLING_LOOP_END,
+                        HookType.SAMPLING_LOOP_END,
                         end_payload,
                         backend=backend,
                         context=result_ctx,
@@ -318,7 +318,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                     repair_iteration=loop_count,
                 )
                 _, repair_payload = await invoke_hook(
-                    MelleaHookType.SAMPLING_REPAIR,
+                    HookType.SAMPLING_REPAIR,
                     repair_payload,
                     backend=backend,
                     context=next_context,
@@ -357,7 +357,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 all_validations=sampled_scores,
             )
             await invoke_hook(
-                MelleaHookType.SAMPLING_LOOP_END,
+                HookType.SAMPLING_LOOP_END,
                 end_payload,
                 backend=backend,
                 context=context,

@@ -28,7 +28,7 @@ from ..core import (
 )
 from ..helpers import _run_async_in_thread
 from ..plugins.manager import has_plugins, invoke_hook
-from ..plugins.types import MelleaHookType
+from ..plugins.types import HookType
 from ..stdlib import functional as mfuncs
 from ..telemetry import set_span_attribute, trace_application
 from .components import Message
@@ -197,7 +197,7 @@ def start_session(
                 context_type=ctx.__class__.__name__ if ctx else "SimpleContext",
             )
             _, pre_payload = _run_async_in_thread(
-                invoke_hook(MelleaHookType.SESSION_PRE_INIT, pre_payload)
+                invoke_hook(HookType.SESSION_PRE_INIT, pre_payload)
             )
             # Apply writable field modifications
             backend_name = pre_payload.backend_name  # type: ignore[assignment]
@@ -237,7 +237,7 @@ def start_session(
             post_payload = SessionPostInitPayload(session=session)
             _run_async_in_thread(
                 invoke_hook(
-                    MelleaHookType.SESSION_POST_INIT,
+                    HookType.SESSION_POST_INIT,
                     post_payload,
                     session_id=session.id,
                     session=session,
@@ -343,7 +343,7 @@ class MelleaSession:
             payload = SessionResetPayload(previous_context=self.ctx)
             _run_async_in_thread(
                 invoke_hook(
-                    MelleaHookType.SESSION_RESET,
+                    HookType.SESSION_RESET,
                     payload,
                     session_id=self.id,
                     session=self,
@@ -363,7 +363,7 @@ class MelleaSession:
             )
             _run_async_in_thread(
                 invoke_hook(
-                    MelleaHookType.SESSION_CLEANUP,
+                    HookType.SESSION_CLEANUP,
                     payload,
                     session_id=self.id,
                     session=self,

@@ -24,7 +24,7 @@ import re
 import sys
 
 from mellea import start_session
-from mellea.plugins import MelleaHookType, PluginViolationError, hook, plugin, register
+from mellea.plugins import HookType, PluginViolationError, hook, plugin, register
 
 
 @plugin("pii-redactor", priority=5)
@@ -38,7 +38,7 @@ class PIIRedactor:
         ]
         self.redaction_count = 0
 
-    @hook(MelleaHookType.COMPONENT_PRE_CREATE)
+    @hook(HookType.COMPONENT_PRE_CREATE)
     async def redact_input(self, payload, ctx):
         """Scan and redact PII from component descriptions before they reach the LLM."""
         original = payload.description
@@ -52,7 +52,7 @@ class PIIRedactor:
             return PluginResult(continue_processing=True, modified_payload=modified)
         log.info("[pii-redactor] no PII found in input")
 
-    @hook(MelleaHookType.GENERATION_POST_CALL)
+    @hook(HookType.GENERATION_POST_CALL)
     async def redact_output(self, payload, ctx):
         """Scan and redact PII from LLM output before it reaches the caller."""
         original = payload.processed_output

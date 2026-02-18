@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from mellea.plugins.base import MelleaBasePayload, PluginViolationError
 from mellea.plugins.context import build_global_context
 from mellea.plugins.policies import MELLEA_HOOK_PAYLOAD_POLICIES
-from mellea.plugins.types import MelleaHookType, _register_mellea_hooks
+from mellea.plugins.types import HookType, _register_mellea_hooks
 
 try:
     from mcpgateway.plugins.framework.manager import PluginManager
@@ -131,7 +131,7 @@ def deregister_session_plugins(session_id: str) -> None:
 
 
 async def invoke_hook(
-    hook_type: MelleaHookType,
+    hook_type: HookType,
     payload: MelleaBasePayload,
     *,
     session_id: str | None = None,

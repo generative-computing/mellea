@@ -11,7 +11,7 @@ from mellea.plugins.manager import (
     invoke_hook,
     shutdown_plugins,
 )
-from mellea.plugins.types import MelleaHookType
+from mellea.plugins.types import HookType, PluginMode
 
 # These tests require the contextforge plugin framework
 pytest.importorskip("mcpgateway.plugins.framework")
@@ -29,9 +29,7 @@ class TestNoOpGuards:
     async def test_invoke_hook_noop_when_no_plugins(self):
         """When no plugins are registered, invoke_hook returns (None, original_payload)."""
         payload = MelleaBasePayload(request_id="test-123")
-        result, returned_payload = await invoke_hook(
-            MelleaHookType.SESSION_PRE_INIT, payload
-        )
+        result, returned_payload = await invoke_hook(HookType.SESSION_PRE_INIT, payload)
         assert result is None
         assert returned_payload is payload
 
@@ -63,7 +61,7 @@ class TestHookRegistration:
 
         invocations = []
 
-        @hook("session_pre_init", mode="enforce", priority=10)
+        @hook("session_pre_init", mode=PluginMode.ENFORCE, priority=10)
         async def test_hook(payload, ctx):
             invocations.append(payload)
             return None
@@ -74,7 +72,7 @@ class TestHookRegistration:
             backend_name="openai", model_id="gpt-4", model_options=None
         )
         _result, _returned_payload = await invoke_hook(
-            MelleaHookType.SESSION_PRE_INIT, payload
+            HookType.SESSION_PRE_INIT, payload
         )
         assert len(invocations) == 1
         assert invocations[0].backend_name == "openai"
@@ -98,7 +96,7 @@ class TestHookRegistration:
         payload = SessionPreInitPayload(
             backend_name="openai", model_id="gpt-4", model_options=None
         )
-        await invoke_hook(MelleaHookType.SESSION_PRE_INIT, payload)
+        await invoke_hook(HookType.SESSION_PRE_INIT, payload)
         assert len(invocations) == 1
         assert invocations[0][0] == "pre_init"
 
@@ -125,7 +123,7 @@ class TestHookRegistration:
         payload = SessionPreInitPayload(
             backend_name="openai", model_id="gpt-4", model_options=None
         )
-        await invoke_hook(MelleaHookType.SESSION_PRE_INIT, payload)
+        await invoke_hook(HookType.SESSION_PRE_INIT, payload)
         assert "a" in invocations
         assert "b" in invocations
 

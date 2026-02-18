@@ -3,6 +3,7 @@
 import pytest
 
 from mellea.plugins.decorators import HookMeta, PluginMeta, hook, plugin
+from mellea.plugins.types import PluginMode
 
 
 class TestHookDecorator:
@@ -15,25 +16,25 @@ class TestHookDecorator:
         meta = my_hook._mellea_hook_meta
         assert isinstance(meta, HookMeta)
         assert meta.hook_type == "generation_pre_call"
-        assert meta.mode == "enforce"
+        assert meta.mode == PluginMode.ENFORCE
         assert meta.priority == 50
 
     def test_hook_custom_mode_and_priority(self):
-        @hook("component_post_success", mode="permissive", priority=10)
+        @hook("component_post_success", mode=PluginMode.PERMISSIVE, priority=10)
         async def my_hook(payload, ctx):
             pass
 
         meta = my_hook._mellea_hook_meta
-        assert meta.mode == "permissive"
+        assert meta.mode == PluginMode.PERMISSIVE
         assert meta.priority == 10
 
     def test_hook_fire_and_forget_mode(self):
-        @hook("component_post_success", mode="fire_and_forget")
+        @hook("component_post_success", mode=PluginMode.FIRE_AND_FORGET)
         async def my_hook(payload, ctx):
             pass
 
         meta = my_hook._mellea_hook_meta
-        assert meta.mode == "fire_and_forget"
+        assert meta.mode == PluginMode.FIRE_AND_FORGET
 
     def test_hook_preserves_function(self):
         @hook("generation_pre_call")

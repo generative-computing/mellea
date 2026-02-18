@@ -14,7 +14,15 @@ except ImportError:
     _HAS_PLUGIN_FRAMEWORK = False
 
 
-class MelleaHookType(str, Enum):
+class PluginMode(str, Enum):
+    """Execution modes for Mellea plugins."""
+
+    ENFORCE = "enforce"
+    PERMISSIVE = "permissive"
+    FIRE_AND_FORGET = "fire_and_forget"
+
+
+class HookType(str, Enum):
     """All Mellea hook types."""
 
     # Session Lifecycle
@@ -104,64 +112,43 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
 
     return {
         # Session Lifecycle
-        MelleaHookType.SESSION_PRE_INIT.value: (SessionPreInitPayload, PluginResult),
-        MelleaHookType.SESSION_POST_INIT.value: (SessionPostInitPayload, PluginResult),
-        MelleaHookType.SESSION_RESET.value: (SessionResetPayload, PluginResult),
-        MelleaHookType.SESSION_CLEANUP.value: (SessionCleanupPayload, PluginResult),
+        HookType.SESSION_PRE_INIT.value: (SessionPreInitPayload, PluginResult),
+        HookType.SESSION_POST_INIT.value: (SessionPostInitPayload, PluginResult),
+        HookType.SESSION_RESET.value: (SessionResetPayload, PluginResult),
+        HookType.SESSION_CLEANUP.value: (SessionCleanupPayload, PluginResult),
         # Component Lifecycle
-        MelleaHookType.COMPONENT_PRE_CREATE.value: (
-            ComponentPreCreatePayload,
-            PluginResult,
-        ),
-        MelleaHookType.COMPONENT_POST_CREATE.value: (
+        HookType.COMPONENT_PRE_CREATE.value: (ComponentPreCreatePayload, PluginResult),
+        HookType.COMPONENT_POST_CREATE.value: (
             ComponentPostCreatePayload,
             PluginResult,
         ),
-        MelleaHookType.COMPONENT_PRE_EXECUTE.value: (
+        HookType.COMPONENT_PRE_EXECUTE.value: (
             ComponentPreExecutePayload,
             PluginResult,
         ),
-        MelleaHookType.COMPONENT_POST_SUCCESS.value: (
+        HookType.COMPONENT_POST_SUCCESS.value: (
             ComponentPostSuccessPayload,
             PluginResult,
         ),
-        MelleaHookType.COMPONENT_POST_ERROR.value: (
-            ComponentPostErrorPayload,
-            PluginResult,
-        ),
+        HookType.COMPONENT_POST_ERROR.value: (ComponentPostErrorPayload, PluginResult),
         # Generation Pipeline
-        MelleaHookType.GENERATION_PRE_CALL.value: (
-            GenerationPreCallPayload,
-            PluginResult,
-        ),
-        MelleaHookType.GENERATION_POST_CALL.value: (
-            GenerationPostCallPayload,
-            PluginResult,
-        ),
-        MelleaHookType.GENERATION_STREAM_CHUNK.value: (
+        HookType.GENERATION_PRE_CALL.value: (GenerationPreCallPayload, PluginResult),
+        HookType.GENERATION_POST_CALL.value: (GenerationPostCallPayload, PluginResult),
+        HookType.GENERATION_STREAM_CHUNK.value: (
             GenerationStreamChunkPayload,
             PluginResult,
         ),
         # Validation
-        MelleaHookType.VALIDATION_PRE_CHECK.value: (
-            ValidationPreCheckPayload,
-            PluginResult,
-        ),
-        MelleaHookType.VALIDATION_POST_CHECK.value: (
+        HookType.VALIDATION_PRE_CHECK.value: (ValidationPreCheckPayload, PluginResult),
+        HookType.VALIDATION_POST_CHECK.value: (
             ValidationPostCheckPayload,
             PluginResult,
         ),
         # Sampling Pipeline
-        MelleaHookType.SAMPLING_LOOP_START.value: (
-            SamplingLoopStartPayload,
-            PluginResult,
-        ),
-        MelleaHookType.SAMPLING_ITERATION.value: (
-            SamplingIterationPayload,
-            PluginResult,
-        ),
-        MelleaHookType.SAMPLING_REPAIR.value: (SamplingRepairPayload, PluginResult),
-        MelleaHookType.SAMPLING_LOOP_END.value: (SamplingLoopEndPayload, PluginResult),
+        HookType.SAMPLING_LOOP_START.value: (SamplingLoopStartPayload, PluginResult),
+        HookType.SAMPLING_ITERATION.value: (SamplingIterationPayload, PluginResult),
+        HookType.SAMPLING_REPAIR.value: (SamplingRepairPayload, PluginResult),
+        HookType.SAMPLING_LOOP_END.value: (SamplingLoopEndPayload, PluginResult),
     }
 
 

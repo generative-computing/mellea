@@ -27,7 +27,7 @@ from ..core import (
 )
 from ..helpers import _run_async_in_thread
 from ..plugins.manager import has_plugins, invoke_hook
-from ..plugins.types import MelleaHookType
+from ..plugins.types import HookType
 from ..telemetry import set_span_attribute, trace_application
 from .components import Instruction, Message, MObjectProtocol, ToolMessage, mify
 from .context import SimpleContext
@@ -511,7 +511,7 @@ async def aact(
                 tool_calls_enabled=tool_calls,
             )
             _, pre_exec_payload = await invoke_hook(
-                MelleaHookType.COMPONENT_PRE_EXECUTE,
+                HookType.COMPONENT_PRE_EXECUTE,
                 pre_exec_payload,
                 backend=backend,
                 context=context,
@@ -629,7 +629,7 @@ async def aact(
                     latency_ms=int((time.monotonic() - t0) * 1000),
                 )
                 _, success_payload = await invoke_hook(
-                    MelleaHookType.COMPONENT_POST_SUCCESS,
+                    HookType.COMPONENT_POST_SUCCESS,
                     success_payload,
                     backend=backend,
                     context=new_ctx,
@@ -663,7 +663,7 @@ async def aact(
                     model_options=model_options or {},
                 )
                 await invoke_hook(
-                    MelleaHookType.COMPONENT_POST_ERROR,
+                    HookType.COMPONENT_POST_ERROR,
                     error_payload,
                     backend=backend,
                     context=context,
@@ -774,10 +774,7 @@ async def ainstruct(
             prefix=prefix,
         )
         _, pre_payload = await invoke_hook(
-            MelleaHookType.COMPONENT_PRE_CREATE,
-            pre_payload,
-            backend=backend,
-            context=context,
+            HookType.COMPONENT_PRE_CREATE, pre_payload, backend=backend, context=context
         )
         description = pre_payload.description
         images = pre_payload.images
@@ -807,7 +804,7 @@ async def ainstruct(
             component_type="Instruction", component=i
         )
         _, post_payload = await invoke_hook(
-            MelleaHookType.COMPONENT_POST_CREATE,
+            HookType.COMPONENT_POST_CREATE,
             post_payload,
             backend=backend,
             context=context,
@@ -857,10 +854,7 @@ async def achat(
             component_type="Message", description=content_resolved, images=images
         )
         _, pre_payload = await invoke_hook(
-            MelleaHookType.COMPONENT_PRE_CREATE,
-            pre_payload,
-            backend=backend,
-            context=context,
+            HookType.COMPONENT_PRE_CREATE, pre_payload, backend=backend, context=context
         )
         content_resolved = pre_payload.description
         images = pre_payload.images
@@ -875,7 +869,7 @@ async def achat(
             component_type="Message", component=user_message
         )
         _, post_payload = await invoke_hook(
-            MelleaHookType.COMPONENT_POST_CREATE,
+            HookType.COMPONENT_POST_CREATE,
             post_payload,
             backend=backend,
             context=context,
@@ -938,10 +932,7 @@ async def avalidate(
             model_options=model_options or {},
         )
         _, pre_payload = await invoke_hook(
-            MelleaHookType.VALIDATION_PRE_CHECK,
-            pre_payload,
-            backend=backend,
-            context=context,
+            HookType.VALIDATION_PRE_CHECK, pre_payload, backend=backend, context=context
         )
         reqs = pre_payload.requirements
         model_options = pre_payload.model_options or model_options
@@ -986,7 +977,7 @@ async def avalidate(
             failed_count=sum(1 for r in rvs if not bool(r)),
         )
         _, post_payload = await invoke_hook(
-            MelleaHookType.VALIDATION_POST_CHECK,
+            HookType.VALIDATION_POST_CHECK,
             post_payload,
             backend=backend,
             context=context,
