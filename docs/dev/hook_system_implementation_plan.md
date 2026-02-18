@@ -669,7 +669,181 @@ def start_session(
 
 When `plugins` is provided, `start_session()` registers each item with the session's ID via `register(items, session_id=session.id)`. These plugins fire only within this session, in addition to any globally registered plugins. They are automatically deregistered when the session is cleaned up (at `session_cleanup`).
 
-### 4.4 Dependency Management
+### 4.4 With-Block-Scoped Registration (Context Managers)
+
+All three plugin forms — standalone `@hook` functions, `@plugin`-decorated class instances, and `MelleaPlugin` subclass instances — plus `PluginSet` support the Python context manager protocol for block-scoped activation. This is a fourth registration scope complementing global, session-scoped, and YAML-configured plugins.
+
+#### Mechanism
+
+With-block scopes reuse the existing `session_id` tagging infrastructure from section 4.3. Each `with` entry generates a fresh UUID scope ID, registers plugins with that scope ID, and deregisters them by scope ID on exit. The `_session_tags` dict in `_manager.py` tracks these scope IDs alongside session IDs — the manager makes no distinction between them at dispatch time.
+
+#### `plugin_scope()` factory (`mellea/plugins/_registry.py`)
+
+A `_PluginScope` internal class and `plugin_scope()` public factory serve as the universal entry point, accepting any mix of standalone functions, `@plugin` instances, and `PluginSet`s:
+
+```python
+class _PluginScope:
+    """Context manager that activates a set of plugins for a block of code."""
+
+    def __init__(self, items: list[Callable | Any | PluginSet]) -> None:
+        self._items = items
+        self._scope_id: str | None = None
+
+    def _activate(self) -> None:
+        self._scope_id = str(uuid.uuid4())
+        register(self._items, session_id=self._scope_id)
+
+    def _deactivate(self) -> None:
+        if self._scope_id is not None:
+            deregister_session_plugins(self._scope_id)
+            self._scope_id = None
+
+    def __enter__(self) -> _PluginScope:
+        self._activate()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self._deactivate()
+
+    async def __aenter__(self) -> _PluginScope:
+        self._activate()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        self._deactivate()
+
+
+def plugin_scope(*items: Callable | Any | PluginSet) -> _PluginScope:
+    """Create a context manager that activates the given plugins for a block of code."""
+    return _PluginScope(list(items))
+```
+
+#### `@plugin`-decorated class instances (`mellea/plugins/_decorators.py`)
+
+The `@plugin` decorator injects `__enter__`, `__exit__`, `__aenter__`, `__aexit__` into every decorated class. The methods are defined as module-level helpers (not lambdas) so they work correctly as unbound methods:
+
+```python
+def _plugin_cm_enter(self: Any) -> Any:
+    if getattr(self, "_scope_id", None) is not None:
+        meta = getattr(type(self), "_mellea_plugin_meta", None)
+        plugin_name = meta.name if meta else type(self).__name__
+        raise RuntimeError(
+            f"Plugin {plugin_name!r} is already active as a context manager. "
+            "Concurrent or nested reuse of the same instance is not supported; "
+            "create a new instance instead."
+        )
+    self._scope_id = str(uuid.uuid4())
+    register(self, session_id=self._scope_id)
+    return self
+
+
+def _plugin_cm_exit(self: Any, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    scope_id = getattr(self, "_scope_id", None)
+    if scope_id is not None:
+        deregister_session_plugins(scope_id)
+        self._scope_id = None
+
+
+async def _plugin_cm_aenter(self: Any) -> Any:
+    return self.__enter__()
+
+
+async def _plugin_cm_aexit(self: Any, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    self.__exit__(exc_type, exc_val, exc_tb)
+
+
+def plugin(name: str, *, priority: int = 50) -> Callable:
+    def decorator(cls: Any) -> Any:
+        cls._mellea_plugin_meta = PluginMeta(name=name, priority=priority)
+        cls.__enter__ = _plugin_cm_enter   # injected here
+        cls.__exit__ = _plugin_cm_exit
+        cls.__aenter__ = _plugin_cm_aenter
+        cls.__aexit__ = _plugin_cm_aexit
+        return cls
+    return decorator
+```
+
+#### `PluginSet` (`mellea/plugins/_pluginset.py`)
+
+`PluginSet` gains the same context manager protocol using the same UUID scope ID pattern:
+
+```python
+def __enter__(self) -> PluginSet:
+    if self._scope_id is not None:
+        raise RuntimeError(
+            f"PluginSet {self.name!r} is already active as a context manager. "
+            "Create a new instance to use in a separate scope."
+        )
+    self._scope_id = str(uuid.uuid4())
+    register(self, session_id=self._scope_id)
+    return self
+
+def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    if self._scope_id is not None:
+        deregister_session_plugins(self._scope_id)
+        self._scope_id = None
+
+async def __aenter__(self) -> PluginSet:
+    return self.__enter__()
+
+async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    self.__exit__(exc_type, exc_val, exc_tb)
+```
+
+#### `MelleaPlugin` (`mellea/plugins/_base.py`)
+
+`MelleaPlugin` gains the same protocol. Because `MelleaPlugin` subclasses ContextForge `Plugin` (which owns `__init__`), the scope ID is stored as an instance attribute accessed via `getattr` with a default rather than declared in `__init__`:
+
+```python
+def __enter__(self) -> MelleaPlugin:
+    if getattr(self, "_scope_id", None) is not None:
+        raise RuntimeError(
+            f"MelleaPlugin {self.name!r} is already active as a context manager. "
+            "Create a new instance to use in a separate scope."
+        )
+    self._scope_id = str(uuid.uuid4())
+    register(self, session_id=self._scope_id)
+    return self
+
+def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    scope_id = getattr(self, "_scope_id", None)
+    if scope_id is not None:
+        deregister_session_plugins(scope_id)
+        self._scope_id = None
+
+async def __aenter__(self) -> MelleaPlugin:
+    return self.__enter__()
+
+async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    self.__exit__(exc_type, exc_val, exc_tb)
+```
+
+#### Deregistration helper (`mellea/plugins/_manager.py`)
+
+A `deregister_session_plugins(scope_id)` function removes all plugins tagged with a given scope ID from the `PluginManager` and cleans up the `_session_tags` entry. This is the same function used by `session_cleanup` to deregister session-scoped plugins:
+
+```python
+def deregister_session_plugins(session_id: str) -> None:
+    """Deregister all plugins associated with a given session or scope ID."""
+    pm = _plugin_manager
+    if pm is None:
+        return
+    plugin_keys = _session_tags.pop(session_id, set())
+    for key in plugin_keys:
+        pm.deregister(key)
+```
+
+#### Public API
+
+`plugin_scope` is exported from `mellea.plugins`:
+
+```python
+from mellea.plugins import plugin_scope
+```
+
+All four forms (`plugin_scope`, `@plugin` instance, `PluginSet`, `MelleaPlugin` instance) support both `with` and `async with`. The same-instance re-entrant restriction applies to all forms: attempting to re-enter an already-active instance raises `RuntimeError`. Create separate instances to activate the same plugin logic in nested or concurrent scopes.
+
+### 4.5 Dependency Management
 
 Add to `pyproject.toml` under `[project.optional-dependencies]`:
 
@@ -679,7 +853,7 @@ plugins = ["contextforge-plugin-framework>=0.1.0"]
 
 All imports in `mellea/plugins/` are guarded with `try/except ImportError`.
 
-### 4.5 Global Registration (`mellea/plugins/_registry.py`)
+### 4.6 Global Registration (`mellea/plugins/_registry.py`)
 
 Global registration happens via `register()` at application startup:
 
@@ -1090,12 +1264,12 @@ async def fire_error_hook(
 | `mellea/backends/openai.py` | 4 adapter hooks in `load_adapter()` / `unload_adapter()` |
 | `mellea/backends/huggingface.py` | 4 adapter hooks in `load_adapter()` / `unload_adapter()` |
 | `pyproject.toml` | Add `plugins` optional dependency + `plugins` test marker |
-| `mellea/plugins/__init__.py` (new) | Public API: `hook`, `plugin`, `block`, `PluginSet`, `register`, `MelleaPlugin` |
-| `mellea/plugins/_decorators.py` (new) | `@hook` and `@plugin` decorator implementations, `HookMeta`, `PluginMeta` |
-| `mellea/plugins/_pluginset.py` (new) | `PluginSet` class with `flatten()` for recursive expansion |
-| `mellea/plugins/_registry.py` (new) | `register()`, `block()`, `_FunctionHookAdapter`, `_register_single()` |
-| `mellea/plugins/_manager.py` (new) | Singleton wrapper, `invoke_hook()` with session-tag filtering, `_ensure_plugin_manager()` |
-| `mellea/plugins/_base.py` (new) | `MelleaBasePayload` (frozen), `MelleaPlugin` base class |
+| `mellea/plugins/__init__.py` (new) | Public API: `hook`, `plugin`, `block`, `PluginSet`, `register`, `MelleaPlugin`, `plugin_scope` |
+| `mellea/plugins/_decorators.py` (new) | `@hook` and `@plugin` decorator implementations, `HookMeta`, `PluginMeta`; `@plugin` injects `__enter__`/`__exit__`/`__aenter__`/`__aexit__` into decorated classes |
+| `mellea/plugins/_pluginset.py` (new) | `PluginSet` class with `flatten()` for recursive expansion; context manager protocol (`__enter__`/`__exit__`/`__aenter__`/`__aexit__`) for with-block scoping |
+| `mellea/plugins/_registry.py` (new) | `register()`, `block()`, `_FunctionHookAdapter`, `_register_single()`; `_PluginScope` class and `plugin_scope()` factory for with-block scoping |
+| `mellea/plugins/_manager.py` (new) | Singleton wrapper, `invoke_hook()` with session-tag filtering, `_ensure_plugin_manager()`; `deregister_session_plugins()` for scope cleanup (used by both session and with-block exit) |
+| `mellea/plugins/_base.py` (new) | `MelleaBasePayload` (frozen), `MelleaPlugin` base class with context manager protocol for with-block scoping |
 | `mellea/plugins/_types.py` (new) | `MelleaHookType` enum, `_register_mellea_hooks()` |
 | `mellea/plugins/_policies.py` (new) | `MELLEA_HOOK_PAYLOAD_POLICIES` table, injected into `PluginManager` at init |
 | `mellea/plugins/_context.py` (new) | `build_global_context()` factory |
