@@ -1,7 +1,5 @@
 """Tests for the @hook and @plugin decorators."""
 
-import pytest
-
 from mellea.plugins.decorators import HookMeta, PluginMeta, hook, plugin
 from mellea.plugins.types import PluginMode
 

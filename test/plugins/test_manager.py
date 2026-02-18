@@ -1,7 +1,5 @@
 """Tests for the plugin manager."""
 
-import asyncio
-
 import pytest
 
 from mellea.plugins.base import MelleaBasePayload

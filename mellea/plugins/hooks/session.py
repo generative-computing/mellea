@@ -7,8 +7,7 @@ from typing import TYPE_CHECKING, Any
 from mellea.plugins.base import MelleaBasePayload
 
 if TYPE_CHECKING:
-    from mellea.core.base import Context
-    from mellea.stdlib.session import MelleaSession
+    pass
 
 
 class SessionPreInitPayload(MelleaBasePayload):

@@ -26,6 +26,7 @@ from ..core import (
     ValidationResult,
 )
 from ..helpers import _run_async_in_thread
+from ..plugins.base import PluginViolationError
 from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
 from ..telemetry import set_span_attribute, trace_application
@@ -1071,7 +1072,7 @@ async def atransform(
         tool_calls=True,
     )
 
-    tools = _call_tools(transformed, backend)
+    tools = await _acall_tools(transformed, backend, context=context)
 
     # Transform only supports calling one tool call since it cannot currently synthesize multiple outputs.
     # Attempt to choose the best one to call.
@@ -1141,26 +1142,100 @@ def _call_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]
     Returns:
         list[ToolMessage]: A list of tool messages that can be empty.
     """
-    # There might be multiple tool calls returned.
+    return _run_async_in_thread(_acall_tools(result, backend))
+
+
+async def _acall_tools(
+    result: ModelOutputThunk,
+    backend: Backend,
+    *,
+    context: Context | None = None,
+    session_id: str | None = None,
+) -> list[ToolMessage]:
+    """Async implementation of _call_tools with tool_pre_invoke / tool_post_invoke hook support."""
+    import time
+
+    from ..plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
+
     outputs: list[ToolMessage] = []
     tool_calls = result.tool_calls
-    if tool_calls:
-        # Call the tools and decide what to do.
-        for name, tool in tool_calls.items():
+    if not tool_calls:
+        return outputs
+
+    for name, tool in tool_calls.items():
+        # --- tool_pre_invoke ---
+        if has_plugins():
+            pre_payload = ToolPreInvokePayload(
+                tool_name=name,
+                tool_args=tool.args or {},
+                tool_callable=tool.call_func,
+                model_tool_call=tool,
+            )
             try:
-                output = tool.call_func()
-            except Exception as e:
-                output = e
+                await invoke_hook(
+                    HookType.TOOL_PRE_INVOKE,
+                    pre_payload,
+                    backend=backend,
+                    context=context,
+                    session_id=session_id,
+                )
+            except PluginViolationError:
+                continue  # tool call blocked by plugin — skip silently
 
-            # Default to the output. Attempt to properly print it. If that doesn't result in a str,
-            # stringify it.
-            content = str(output)
-            if isinstance(backend, FormatterBackend):
-                content = backend.formatter.print(output)  # type: ignore
-                content = str(content)
+        # --- execute the tool ---
+        t0 = time.monotonic()
+        success = True
+        error: Exception | None = None
+        try:
+            output = tool.call_func()
+        except Exception as e:
+            output = e
+            success = False
+            error = e
+        latency_ms = int((time.monotonic() - t0) * 1000)
 
-            outputs.append(
-                ToolMessage(
+        # Default to the output. Attempt to properly print it. If that doesn't result in a str,
+        # stringify it.
+        content = str(output)
+        if isinstance(backend, FormatterBackend):
+            content = backend.formatter.print(output)  # type: ignore
+            content = str(content)
+
+        tool_msg = ToolMessage(
+            role="tool",
+            content=content,
+            tool_output=output,
+            name=name,
+            args=tool.args,
+            tool=tool,
+        )
+
+        # --- tool_post_invoke ---
+        if has_plugins():
+            post_payload = ToolPostInvokePayload(
+                tool_name=name,
+                tool_args=tool.args or {},
+                tool_output=output,
+                tool_message=tool_msg,
+                execution_time_ms=latency_ms,
+                success=success,
+                error=error,
+            )
+            _, post_payload = await invoke_hook(
+                HookType.TOOL_POST_INVOKE,
+                post_payload,
+                backend=backend,
+                context=context,
+                session_id=session_id,
+            )
+            # If a plugin modified tool_output, reformat and rebuild the ToolMessage
+            if post_payload.tool_output is not output:
+                output = post_payload.tool_output
+                content = str(output)
+                if isinstance(backend, FormatterBackend):
+                    content = backend.formatter.print(output)  # type: ignore
+                    content = str(content)
+                tool_msg = ToolMessage(
                     role="tool",
                     content=content,
                     tool_output=output,
@@ -1168,5 +1243,7 @@ def _call_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]
                     args=tool.args,
                     tool=tool,
                 )
-            )
+
+        outputs.append(tool_msg)
+
     return outputs

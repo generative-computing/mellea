@@ -24,6 +24,7 @@ from mellea.plugins.hooks.session import (
     SessionPreInitPayload,
     SessionResetPayload,
 )
+from mellea.plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
 from mellea.plugins.hooks.validation import (
     ValidationPostCheckPayload,
     ValidationPreCheckPayload,
@@ -50,6 +51,9 @@ __all__ = [
     "SessionPostInitPayload",
     "SessionPreInitPayload",
     "SessionResetPayload",
+    # Tool
+    "ToolPostInvokePayload",
+    "ToolPreInvokePayload",
     # Validation
     "ValidationPostCheckPayload",
     "ValidationPreCheckPayload",

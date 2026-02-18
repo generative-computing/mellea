@@ -105,6 +105,7 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
         SessionPreInitPayload,
         SessionResetPayload,
     )
+    from mellea.plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
     from mellea.plugins.hooks.validation import (
         ValidationPostCheckPayload,
         ValidationPreCheckPayload,
@@ -149,6 +150,9 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
         HookType.SAMPLING_ITERATION.value: (SamplingIterationPayload, PluginResult),
         HookType.SAMPLING_REPAIR.value: (SamplingRepairPayload, PluginResult),
         HookType.SAMPLING_LOOP_END.value: (SamplingLoopEndPayload, PluginResult),
+        # Tool Execution
+        HookType.TOOL_PRE_INVOKE.value: (ToolPreInvokePayload, PluginResult),
+        HookType.TOOL_POST_INVOKE.value: (ToolPostInvokePayload, PluginResult),
     }
 
 
