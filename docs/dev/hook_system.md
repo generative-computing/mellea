@@ -96,6 +96,111 @@ Both scopes coexist. When a hook fires within a session, both global plugins and
 
 **Functional API support**: The functional API (`instruct(backend, context, ...)`) does not require a session. Hooks still fire at the same execution points. If global plugins are registered, they execute. If no plugins are registered, hooks are no-ops with zero overhead.
 
+### With-Block-Scoped Context Managers
+
+In addition to global and session-scoped registration, plugins can be activated for a specific block of code using the context manager protocol. Plugins are registered on entry and deregistered on exit, even if the block raises an exception.
+
+This is useful for:
+- Feature flags: enable a plugin only during a specific operation
+- Testing: activate a mock or spy plugin around a single call
+- Middleware injection: wrap a third-party call with additional hooks without polluting global state
+- Composing scopes: stack independent scopes that each clean up after themselves
+
+Four equivalent forms are supported:
+
+**1. `plugin_scope(*items)` factory**
+
+Accepts standalone `@hook` functions, `@plugin`-decorated instances, `PluginSet`s, or any mix:
+
+```python
+from mellea.plugins import plugin_scope
+
+with plugin_scope(log_request, log_response):
+    result = m.instruct("Name the planets.")
+# log_request and log_response are deregistered here
+
+with plugin_scope(pii_redactor, observability_set, enforce_budget):
+    result = m.instruct("Summarize the customer record.")
+```
+
+**2. `@plugin`-decorated class instance as context manager**
+
+Any instance of a `@plugin`-decorated class can be entered directly as a context manager:
+
+```python
+guard = ContentGuard()
+with guard:
+    result = m.instruct("What is the boiling point of water?")
+# ContentGuard hooks are deregistered here
+```
+
+**3. `PluginSet` as context manager**
+
+A `PluginSet` can be entered directly, activating all of its contained hooks and plugins:
+
+```python
+with observability:  # observability is a PluginSet
+    result = m.instruct("What is the capital of France?")
+# All observability hooks are deregistered here
+```
+
+**4. `MelleaPlugin` subclass instance as context manager**
+
+Any `MelleaPlugin` instance supports the same `with` syntax:
+
+```python
+profiler = SlotProfiler()
+with profiler:
+    result = m.instruct("Generate a report.")
+```
+
+**Async variants**
+
+All four forms also support `async with` for use in async code:
+
+```python
+async with plugin_scope(log_request, ContentGuard()):
+    result = await m.ainstruct("Describe the solar system.")
+
+async with observability:
+    result = await m.ainstruct("What is the capital of France?")
+```
+
+**Nesting and mixing**
+
+Scopes stack cleanly, i.e., each exit deregisters only its own plugins. Nesting is independent of form:
+
+```python
+with plugin_scope(log_request):          # outer scope
+    with ContentGuard() as guard:        # inner scope: @plugin instance
+        result = m.instruct("...")       # log_request + ContentGuard active
+    result = m.instruct("...")           # only log_request active
+# no plugins active
+```
+
+**Cleanup guarantee**
+
+Plugins are always deregistered on scope exit, even if the block raises an exception. There is no resource leak on error.
+
+**Re-entrant restriction**
+
+The same instance cannot be active in two overlapping scopes simultaneously. Attempting to re-enter an already-active instance raises `RuntimeError`. To run the same plugin logic in parallel or in nested scopes, create separate instances:
+
+```python
+guard1 = ContentGuard()
+guard2 = ContentGuard()  # separate instance
+
+with guard1:
+    with guard2:  # OK — different instances
+        ...
+
+with guard1:
+    with guard1:  # RuntimeError — same instance already active
+        ...
+```
+
+**Implementation note**: With-block scopes use the same `session_id` tagging mechanism as session-scoped plugins. Each `with` block gets a unique UUID scope ID; the plugin manager filters plugins by scope ID at dispatch time and deregisters them by scope ID on exit. This means with-block plugins coexist with global and session-scoped plugins: all three layers execute together, ordered by priority.
+
 ### Hook Invocation Responsibilities
 
 Hooks are called from Mellea's base classes (`Component.aact()`, `Backend.generate()`, `SamplingStrategy.run()`, etc.). This means hook invocation is a framework-level concern, and authors of new backends, sampling strategies, or components do not need to manually insert hook calls.
