@@ -38,7 +38,18 @@ TOKEN_BUDGET = 4000
 @hook(HookType.GENERATION_PRE_CALL, mode=PluginMode.ENFORCE, priority=10)
 async def enforce_token_budget(payload, ctx):
     """Block generation calls that exceed the token budget."""
-    estimated = payload.estimated_tokens or 0
+    # Rough token estimate: ~4 chars per token
+    prompt_chars = sum(
+        len(str(c.format_for_llm()))
+        for c in (payload.context.view_for_generation() or [])
+    ) + len(
+        str(
+            payload.action.format_for_llm()
+            if hasattr(payload.action, "format_for_llm")
+            else payload.action
+        )
+    )
+    estimated = prompt_chars // 4 or 0
     log.info(
         "[enforce_token_budget] estimated_tokens=%d, budget=%d", estimated, TOKEN_BUDGET
     )

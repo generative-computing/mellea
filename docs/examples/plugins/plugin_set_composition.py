@@ -36,21 +36,33 @@ from mellea.plugins import (
 
 # --- Security hooks ---
 
+TOKEN_BUDGET = 4000
+
 
 @hook(HookType.GENERATION_PRE_CALL, mode=PluginMode.ENFORCE, priority=10)
 async def enforce_token_budget(payload, ctx):
     """Enforce a conservative token budget."""
-    budget = 4000
-    estimated = payload.estimated_tokens or 0
-    log.info("[security/token-budget] estimated=%d budget=%d", estimated, budget)
-    if estimated > budget:
+    # Rough token estimate: ~4 chars per token
+    prompt_chars = sum(
+        len(str(c.format_for_llm()))
+        for c in (payload.context.view_for_generation() or [])
+    ) + len(
+        str(
+            payload.action.format_for_llm()
+            if hasattr(payload.action, "format_for_llm")
+            else payload.action
+        )
+    )
+    estimated = prompt_chars // 4 or 0
+    log.info("[security/token-budget] estimated=%d budget=%d", estimated, TOKEN_BUDGET)
+    if estimated > TOKEN_BUDGET:
         return block(
-            f"Estimated {estimated} tokens exceeds budget of {budget}",
+            f"Estimated {estimated} tokens exceeds budget of {TOKEN_BUDGET}",
             code="TOKEN_BUDGET_001",
         )
 
 
-@hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.ENFORCE, priority=10)
+@hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.ENFORCE, priority=20)
 async def enforce_description_length(payload, ctx):
     """Reject component descriptions that are too long."""
     max_len = 2000

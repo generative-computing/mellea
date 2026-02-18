@@ -17,7 +17,6 @@ class GenerationPreCallPayload(MelleaBasePayload):
     model_options: dict[str, Any] = {}
     tools: dict[str, Callable] | None = None
     format: Any = None  # type | None
-    estimated_tokens: int | None = None
 
 
 class GenerationPostCallPayload(MelleaBasePayload):
