@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import Callable
 from typing import Any
 
@@ -270,3 +271,66 @@ class _ClassPluginAdapter(Plugin):
         raise AttributeError(
             f"'{type(self).__name__}' object has no attribute '{name}'"
         )
+
+
+class _PluginScope:
+    """Context manager returned by :func:`plugin_scope`.
+
+    Supports both synchronous and asynchronous ``with`` statements.
+    """
+
+    def __init__(self, items: list[Callable | Any | PluginSet]) -> None:
+        self._items = items
+        self._scope_id: str | None = None
+
+    def _activate(self) -> None:
+        self._scope_id = str(uuid.uuid4())
+        register(self._items, session_id=self._scope_id)
+
+    def _deactivate(self) -> None:
+        if self._scope_id is not None:
+            from mellea.plugins.manager import deregister_session_plugins
+
+            deregister_session_plugins(self._scope_id)
+            self._scope_id = None
+
+    def __enter__(self) -> _PluginScope:
+        self._activate()
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self._deactivate()
+
+    async def __aenter__(self) -> _PluginScope:
+        self._activate()
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self._deactivate()
+
+
+def plugin_scope(*items: Callable | Any | PluginSet) -> _PluginScope:
+    """Return a context manager that temporarily registers plugins for a block of code.
+
+    Accepts the same items as :func:`register`: standalone ``@hook``-decorated
+    functions, ``@plugin``-decorated class instances, ``MelleaPlugin`` instances,
+    and :class:`~mellea.plugins.PluginSet` instances — or any mix thereof.
+
+    Supports both synchronous and asynchronous ``with`` statements::
+
+        # Sync functional API
+        with plugin_scope(log_hook, audit_plugin):
+            result, ctx = instruct("Summarize this", ctx, backend)
+
+        # Async functional API
+        async with plugin_scope(safety_hook, rate_limit_plugin):
+            result, ctx = await ainstruct("Generate code", ctx, backend)
+
+    Args:
+        *items: One or more plugins to register for the duration of the block.
+
+    Returns:
+        A context manager that registers the given plugins on entry and
+        deregisters them on exit.
+    """
+    return _PluginScope(list(items))

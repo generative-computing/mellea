@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
 try:
     from mcpgateway.plugins.framework.base import Plugin
-    from mcpgateway.plugins.framework.models import PluginContext
+    from mcpgateway.plugins.framework.models import (
+        PluginContext,
+        PluginPayload,
+        PluginResult as _CFPluginResult,
+    )
 
     _HAS_PLUGIN_FRAMEWORK = True
 except ImportError:
@@ -35,7 +39,7 @@ class PluginViolationError(Exception):
         super().__init__(f"Plugin blocked {hook_type}: {detail}{reason}")
 
 
-class MelleaBasePayload(BaseModel):
+class MelleaBasePayload(PluginPayload):
     """Frozen base — all payloads are immutable by design.
 
     Plugins must use ``model_copy(update={...})`` to propose modifications
@@ -43,8 +47,6 @@ class MelleaBasePayload(BaseModel):
     manager applies the hook's ``HookPayloadPolicy`` to filter changes to
     writable fields only.
     """
-
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     session_id: str | None = None
     request_id: str = ""
@@ -61,6 +63,22 @@ if _HAS_PLUGIN_FRAMEWORK:
         Use this when you need lifecycle hooks (``initialize``/``shutdown``)
         or typed context accessors.  For simpler plugins, prefer ``@hook``
         on standalone functions or ``@plugin`` on plain classes.
+
+        Instances support the context manager protocol for temporary activation::
+
+            class MyPlugin(MelleaPlugin):
+                def __init__(self):
+                    super().__init__(PluginConfig(name="my-plugin", hooks=[...]))
+
+                async def some_hook(self, payload, ctx):
+                    ...
+
+            with MyPlugin() as p:
+                result, ctx = instruct("...", ctx, backend)
+
+            # or async
+            async with MyPlugin() as p:
+                result, ctx = await ainstruct("...", ctx, backend)
         """
 
         def get_backend(self, context: PluginContext) -> Backend | None:
@@ -80,6 +98,41 @@ if _HAS_PLUGIN_FRAMEWORK:
             """Plugin-specific configuration from PluginConfig.config."""
             return self._config.config or {}
 
+        def __enter__(self) -> MelleaPlugin:
+            """Register this plugin for the duration of a ``with`` block."""
+            if getattr(self, "_scope_id", None) is not None:
+                raise RuntimeError(
+                    f"MelleaPlugin {self.name!r} is already active as a context manager. "
+                    "Concurrent or nested reuse of the same instance is not supported; "
+                    "create a new instance instead."
+                )
+            import uuid
+
+            from mellea.plugins.registry import register
+
+            self._scope_id = str(uuid.uuid4())
+            register(self, session_id=self._scope_id)
+            return self
+
+        def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+            """Deregister this plugin on exit."""
+            scope_id = getattr(self, "_scope_id", None)
+            if scope_id is not None:
+                from mellea.plugins.manager import deregister_session_plugins
+
+                deregister_session_plugins(scope_id)
+                self._scope_id = None
+
+        async def __aenter__(self) -> MelleaPlugin:
+            """Async variant — delegates to the synchronous ``__enter__``."""
+            return self.__enter__()
+
+        async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+            """Async variant — delegates to the synchronous ``__exit__``."""
+            self.__exit__(exc_type, exc_val, exc_tb)
+
+    PluginResult: TypeAlias = _CFPluginResult
+
 else:
     # Provide a stub when the plugin framework is not installed.
     class MelleaPlugin:  # type: ignore[no-redef]
@@ -90,3 +143,6 @@ else:
                 "MelleaPlugin requires the ContextForge plugin framework. "
                 "Install it with: pip install 'mellea[contextforge]'"
             )
+
+    # Provide an alias when the plugin framework is not installed.
+    PluginResult: TypeAlias = Any

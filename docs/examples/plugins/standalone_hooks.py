@@ -10,16 +10,6 @@
 #   uv run python docs/examples/plugins/standalone_hooks.py
 
 import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S",
-)
-logging.getLogger("mcpgateway.config").setLevel(logging.ERROR)
-logging.getLogger("mcpgateway.observability").setLevel(logging.ERROR)
-log = logging.getLogger("standalone_hooks")
-
 import sys
 
 from mellea import start_session
@@ -31,6 +21,14 @@ from mellea.plugins import (
     hook,
     register,
 )
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+log = logging.getLogger("standalone_hooks")
+
 
 TOKEN_BUDGET = 4000
 

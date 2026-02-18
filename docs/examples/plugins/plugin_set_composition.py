@@ -11,16 +11,6 @@
 #   uv run python docs/examples/plugins/plugin_set_composition.py
 
 import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S",
-)
-logging.getLogger("mcpgateway.config").setLevel(logging.ERROR)
-logging.getLogger("mcpgateway.observability").setLevel(logging.ERROR)
-log = logging.getLogger("plugin_set")
-
 import sys
 
 from mellea import start_session
@@ -33,6 +23,14 @@ from mellea.plugins import (
     hook,
     register,
 )
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+log = logging.getLogger("plugin_set")
+
 
 # --- Security hooks ---
 

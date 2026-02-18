@@ -12,7 +12,6 @@ from mellea.plugins.types import HookType, _register_mellea_hooks
 
 try:
     from mcpgateway.plugins.framework.manager import PluginManager
-    from mcpgateway.plugins.framework.models import PluginResult
 
     _HAS_PLUGIN_FRAMEWORK = True
 except ImportError:

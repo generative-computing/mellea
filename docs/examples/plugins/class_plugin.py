@@ -10,21 +10,25 @@
 #   uv run python docs/examples/plugins/class_plugin.py
 
 import logging
+import re
+import sys
+
+from mellea import start_session
+from mellea.plugins import (
+    HookType,
+    PluginResult,
+    PluginViolationError,
+    hook,
+    plugin,
+    register,
+)
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
-logging.getLogger("mcpgateway.config").setLevel(logging.ERROR)
-logging.getLogger("mcpgateway.observability").setLevel(logging.ERROR)
 log = logging.getLogger("class_plugin")
-
-import re
-import sys
-
-from mellea import start_session
-from mellea.plugins import HookType, PluginViolationError, hook, plugin, register
 
 
 @plugin("pii-redactor", priority=5)
@@ -47,8 +51,6 @@ class PIIRedactor:
             log.info("[pii-redactor] redacted PII from input description")
             self.redaction_count += 1
             modified = payload.model_copy(update={"description": redacted})
-            from mcpgateway.plugins.framework.models import PluginResult
-
             return PluginResult(continue_processing=True, modified_payload=modified)
         log.info("[pii-redactor] no PII found in input")
 

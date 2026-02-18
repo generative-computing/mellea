@@ -41,3 +41,7 @@ class TestPluginSet:
     def test_repr(self):
         ps = PluginSet("security", [1, 2])
         assert repr(ps) == "PluginSet('security', 2 items)"
+
+    def test_scope_id_initially_none(self):
+        ps = PluginSet("test", [1, 2])
+        assert ps._scope_id is None
