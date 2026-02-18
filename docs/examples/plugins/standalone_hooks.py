@@ -23,12 +23,12 @@ log = logging.getLogger("standalone_hooks")
 import sys
 
 from mellea import start_session
-from mellea.plugins import PluginViolationError, block, hook, register
+from mellea.plugins import MelleaHookType, PluginViolationError, block, hook, register
 
 TOKEN_BUDGET = 4000
 
 
-@hook("generation_pre_call", mode="enforce", priority=10)
+@hook(MelleaHookType.GENERATION_PRE_CALL, mode="enforce", priority=10)
 async def enforce_token_budget(payload, ctx):
     """Block generation calls that exceed the token budget."""
     estimated = payload.estimated_tokens or 0
@@ -44,7 +44,7 @@ async def enforce_token_budget(payload, ctx):
     log.info("[enforce_token_budget] within budget — allowing generation")
 
 
-@hook("component_post_success", mode="permissive", priority=50)
+@hook(MelleaHookType.COMPONENT_POST_SUCCESS, mode="permissive", priority=50)
 async def log_latency(payload, ctx):
     """Log latency after each successful component execution."""
     log.info(

@@ -11,8 +11,10 @@ from mellea.plugins.base import MelleaPlugin, PluginViolationError
 from mellea.plugins.decorators import hook, plugin
 from mellea.plugins.pluginset import PluginSet
 from mellea.plugins.registry import block, register
+from mellea.plugins.types import MelleaHookType
 
 __all__ = [
+    "MelleaHookType",
     "MelleaPlugin",
     "PluginSet",
     "PluginViolationError",

@@ -24,12 +24,19 @@ log = logging.getLogger("plugin_set")
 import sys
 
 from mellea import start_session
-from mellea.plugins import PluginSet, PluginViolationError, block, hook, register
+from mellea.plugins import (
+    MelleaHookType,
+    PluginSet,
+    PluginViolationError,
+    block,
+    hook,
+    register,
+)
 
 # --- Security hooks ---
 
 
-@hook("generation_pre_call", mode="enforce", priority=10)
+@hook(MelleaHookType.GENERATION_PRE_CALL, mode="enforce", priority=10)
 async def enforce_token_budget(payload, ctx):
     """Enforce a conservative token budget."""
     budget = 4000
@@ -42,7 +49,7 @@ async def enforce_token_budget(payload, ctx):
         )
 
 
-@hook("component_pre_create", mode="enforce", priority=10)
+@hook(MelleaHookType.COMPONENT_PRE_CREATE, mode="enforce", priority=10)
 async def enforce_description_length(payload, ctx):
     """Reject component descriptions that are too long."""
     max_len = 2000
@@ -63,7 +70,7 @@ async def enforce_description_length(payload, ctx):
 # --- Observability hooks ---
 
 
-@hook("session_post_init", mode="permissive")
+@hook(MelleaHookType.SESSION_POST_INIT, mode="permissive")
 async def trace_session_start(payload, ctx):
     """Trace session initialization."""
     log.info(
@@ -71,7 +78,7 @@ async def trace_session_start(payload, ctx):
     )
 
 
-@hook("component_post_success", mode="permissive")
+@hook(MelleaHookType.COMPONENT_POST_SUCCESS, mode="permissive")
 async def trace_component_success(payload, ctx):
     """Trace successful component executions."""
     log.info(
@@ -81,7 +88,7 @@ async def trace_component_success(payload, ctx):
     )
 
 
-@hook("session_cleanup", mode="permissive")
+@hook(MelleaHookType.SESSION_CLEANUP, mode="permissive")
 async def trace_session_end(payload, ctx):
     """Trace session cleanup."""
     log.info(

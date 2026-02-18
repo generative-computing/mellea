@@ -24,13 +24,13 @@ log = logging.getLogger("session_scoped")
 import sys
 
 from mellea import start_session
-from mellea.plugins import PluginViolationError, block, hook, register
+from mellea.plugins import MelleaHookType, PluginViolationError, block, hook, register
 
 
 # --- Global hook: fires for every session ---
 
 
-@hook("session_post_init", mode="permissive")
+@hook(MelleaHookType.SESSION_POST_INIT, mode="permissive")
 async def log_session_init(payload, ctx):
     """Log when any session is initialized."""
     log.info("[global] session initialized (session_id=%s)", payload.session_id)
@@ -44,7 +44,7 @@ register(log_session_init)
 BLOCKED_TOPICS = ["weaponry", "explosives"]
 
 
-@hook("component_pre_create", mode="enforce", priority=10)
+@hook(MelleaHookType.COMPONENT_PRE_CREATE, mode="enforce", priority=10)
 async def enforce_content_policy(payload, ctx):
     """Block components whose descriptions mention restricted topics."""
     desc = payload.description.lower()
@@ -55,7 +55,7 @@ async def enforce_content_policy(payload, ctx):
     log.info("[content-policy] description is clean — allowing")
 
 
-@hook("component_post_success", mode="permissive")
+@hook(MelleaHookType.COMPONENT_POST_SUCCESS, mode="permissive")
 async def log_component_result(payload, ctx):
     """Log the result of each successful component execution."""
     log.info(
