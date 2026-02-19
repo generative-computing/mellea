@@ -31,4 +31,3 @@ __all__ = [
     "trace_application",
     "trace_backend",
 ]
-

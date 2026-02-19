@@ -262,4 +262,3 @@ __all__ = [
     "create_up_down_counter",
     "is_metrics_enabled",
 ]
-
