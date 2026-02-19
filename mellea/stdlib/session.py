@@ -423,7 +423,7 @@ class MelleaSession:
             description: The description of the instruction.
             requirements: A list of requirements that the instruction can be validated against.
             icl_examples: A list of in-context-learning examples that the instruction can be validated against.
-            grounding_context: A list of grounding contexts that the instruction can use. They can bind as variables using a (key: str, value: str | ContentBlock) tuple.
+            grounding_context: A list of grounding contexts that the instruction can use. They can bind as variables using a (key: str, value: str | CBlock | Component) tuple.
             user_variables: A dict of user-defined variables used to fill in Jinja placeholders in other parameters. This requires that all other provided parameters are provided as strings.
             prefix: A prefix string or ContentBlock to use when generating the instruction.
             output_prefix: A string or ContentBlock that defines a prefix for the output generation. Usually you do not need this.
@@ -586,6 +586,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: bool = False,
     ) -> ModelOutputThunk[S]: ...
 
     @overload
@@ -599,6 +600,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: bool = False,
     ) -> SamplingResult[S]: ...
 
     async def aact(
@@ -611,6 +613,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: bool = False,
     ) -> ModelOutputThunk[S] | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
@@ -622,9 +625,11 @@ class MelleaSession:
             format: if set, the BaseModel to use for constrained decoding.
             model_options: additional model options, which will upsert into the model/backend's defaults.
             tool_calls: if true, tool calling is enabled.
+            await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. Default is False.
 
         Returns:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+            When await_result=False and strategy=None, returns uncomputed ModelOutputThunk that can be streamed.
         """
         r = await mfuncs.aact(
             action,
@@ -636,6 +641,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            await_result=await_result,
         )  # type: ignore
 
         if isinstance(r, SamplingResult):
@@ -663,6 +669,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: bool = False,
     ) -> ModelOutputThunk[str]: ...
 
     @overload
@@ -682,6 +689,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: bool = False,
     ) -> SamplingResult[str]: ...
 
     async def ainstruct(
@@ -700,6 +708,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: bool = False,
     ) -> ModelOutputThunk[str] | SamplingResult[str]:
         """Generates from an instruction.
 
@@ -717,6 +726,7 @@ class MelleaSession:
             model_options: Additional model options, which will upsert into the model/backend's defaults.
             tool_calls: If true, tool calling is enabled.
             images: A list of images to be used in the instruction or None if none.
+            await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. Default is False.
         """
         r = await mfuncs.ainstruct(
             description,
@@ -734,6 +744,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            await_result=await_result,
         )
 
         if isinstance(r, SamplingResult):
