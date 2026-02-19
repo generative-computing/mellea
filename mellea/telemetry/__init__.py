@@ -13,13 +13,13 @@ Package Structure:
 
 Configuration:
     All telemetry features are opt-in via environment variables:
-    
+
     Tracing:
         - MELLEA_TRACE_APPLICATION: Enable application tracing (default: false)
         - MELLEA_TRACE_BACKEND: Enable backend tracing (default: false)
         - OTEL_EXPORTER_OTLP_ENDPOINT: OTLP endpoint for trace export
         - OTEL_SERVICE_NAME: Service name for traces (default: mellea)
-    
+
     Metrics:
         - MELLEA_METRICS_ENABLED: Enable metrics collection (default: false)
         - MELLEA_METRICS_CONSOLE: Print metrics to console (default: false)
@@ -32,12 +32,12 @@ Dependencies:
 
 Example:
     from mellea.telemetry import trace_application, create_counter
-    
+
     # Trace application operations
     @trace_application("my_operation")
     def my_function():
         pass
-    
+
     # Collect metrics
     counter = create_counter("mellea.requests", unit="1")
     counter.add(1, {"backend": "ollama"})

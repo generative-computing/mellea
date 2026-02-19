@@ -31,6 +31,7 @@ Example usage:
 
 import os
 import warnings
+from importlib.metadata import version
 from typing import Any
 
 # Try to import OpenTelemetry, but make it optional
@@ -124,7 +125,7 @@ def _get_meter() -> Any:
     if _meter is None:
         _meter_provider = _setup_meter_provider()
         if _meter_provider is not None:
-            _meter = metrics.get_meter("mellea.metrics", "0.3.0")  # type: ignore
+            _meter = metrics.get_meter("mellea.metrics", version("mellea"))  # type: ignore
 
     return _meter
 
@@ -188,11 +189,7 @@ def create_counter(name: str, description: str = "", unit: str = "1") -> Any:
     return meter.create_counter(name, description=description, unit=unit)
 
 
-def create_histogram(
-    name: str,
-    description: str = "",
-    unit: str = "1",
-) -> Any:
+def create_histogram(name: str, description: str = "", unit: str = "1") -> Any:
     """Create a histogram instrument for recording value distributions.
 
     Histograms are used for values that vary and need statistical analysis:

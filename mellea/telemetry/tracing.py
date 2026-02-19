@@ -16,6 +16,7 @@ Configuration via environment variables:
 
 import os
 from contextlib import contextmanager
+from importlib.metadata import version
 from typing import Any
 
 # Try to import OpenTelemetry, but make it optional
@@ -25,14 +26,12 @@ try:
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-    from opentelemetry.semconv.trace import SpanAttributes
 
     _OTEL_AVAILABLE = True
 except ImportError:
     _OTEL_AVAILABLE = False
     # Provide dummy types for type hints
     trace = None  # type: ignore
-    SpanAttributes = None  # type: ignore
 
 # Configuration from environment variables
 # Disable tracing if OpenTelemetry is not available
@@ -86,8 +85,9 @@ _backend_tracer = None
 if _OTEL_AVAILABLE and (_TRACE_APPLICATION_ENABLED or _TRACE_BACKEND_ENABLED):
     _tracer_provider = _setup_tracer_provider()
     # Create separate tracers for application and backend
-    _application_tracer = trace.get_tracer("mellea.application", "0.3.0")  # type: ignore
-    _backend_tracer = trace.get_tracer("mellea.backend", "0.3.0")  # type: ignore
+    _mellea_version = version("mellea")
+    _application_tracer = trace.get_tracer("mellea.application", _mellea_version)  # type: ignore
+    _backend_tracer = trace.get_tracer("mellea.backend", _mellea_version)  # type: ignore
 
 
 def is_application_tracing_enabled() -> bool:
