@@ -329,6 +329,10 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 exception_to_raise = chunks.pop()
 
             for chunk in chunks:
+                # Belt-and-suspenders: skip non-chunk objects that should
+                # have been removed above (exceptions, sentinel None).
+                if chunk is None or isinstance(chunk, Exception):
+                    continue
                 assert self._process is not None
                 await self._process(self, chunk)
 
