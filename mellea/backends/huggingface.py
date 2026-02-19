@@ -1079,7 +1079,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         ):
             import gc
 
-            hf_out = mot._meta.get("hf_output")
+            hf_out = mot._meta["hf_output"]
             if hasattr(hf_out, "sequences") and hf_out.sequences is not None:
                 del hf_out.sequences
             if hasattr(hf_out, "scores") and hf_out.scores is not None:
