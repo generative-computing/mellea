@@ -510,7 +510,11 @@ async def test_error_during_generate_with_lock(backend) -> None:
     b: LocalHFBackend = copy(backend)
     model = copy(b._model)
     b._model = model
-    b._model.set_adapter([])
+    try:
+        b._model.set_adapter([])
+    except ValueError as e:
+        if "No adapter loaded" not in str(e):
+            raise
     b._added_adapters = {}
     b._loaded_adapters = {}
     b.add_adapter(

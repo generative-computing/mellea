@@ -69,6 +69,7 @@ hf = [
 
 vllm = [
     "vllm>=0.13.0; sys_platform != 'darwin'",
+    "numpy<=2.2",               # ImportError: Numba needs NumPy 2.2 or less. Got NumPy 2.4.
 ]
 
 litellm = [

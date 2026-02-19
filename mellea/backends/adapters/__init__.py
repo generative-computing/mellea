@@ -5,7 +5,6 @@ from .adapter import (
     AdapterType,
     GraniteCommonAdapter,
     LocalHFAdapter,
-    OpenAIAdapter,
     fetch_intrinsic_metadata,
     get_adapter_for_intrinsic,
 )
@@ -15,7 +14,6 @@ __all__ = [
     "AdapterType",
     "GraniteCommonAdapter",
     "LocalHFAdapter",
-    "OpenAIAdapter",
     "fetch_intrinsic_metadata",
     "get_adapter_for_intrinsic",
 ]
