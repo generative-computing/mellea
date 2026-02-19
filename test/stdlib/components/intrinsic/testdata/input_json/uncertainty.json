@@ -1,0 +1,12 @@
+{
+    "messages": [
+        {
+            "role": "user",
+            "content": "What is the square root of 4?"
+        },
+        {
+            "role": "assistant",
+            "content": "The square root of 4 is 2."
+        }
+    ]
+}
