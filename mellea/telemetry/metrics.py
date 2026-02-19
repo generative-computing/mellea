@@ -8,6 +8,8 @@ Provides metrics collection using OpenTelemetry Metrics API with support for:
 Configuration via environment variables:
 - MELLEA_METRICS_ENABLED: Enable/disable metrics collection (default: false)
 - MELLEA_METRICS_CONSOLE: Print metrics to console for debugging (default: false)
+- OTEL_EXPORTER_OTLP_ENDPOINT: OTLP endpoint for metric export (optional)
+- OTEL_SERVICE_NAME: Service name for metrics (default: mellea)
 
 Example usage:
     from mellea.telemetry.metrics import create_counter, create_histogram
@@ -28,7 +30,7 @@ Example usage:
 """
 
 import os
-from collections.abc import Sequence
+import warnings
 from typing import Any
 
 # Try to import OpenTelemetry, but make it optional
@@ -92,6 +94,16 @@ def _setup_meter_provider() -> Any:
         except Exception:
             # Silently ignore console exporter setup failures
             pass
+
+    # Warn if no exporters are configured
+    if not readers:
+        warnings.warn(
+            "Metrics are enabled (MELLEA_METRICS_ENABLED=true) but no exporters are configured. "
+            "Metrics will be collected but not exported. "
+            "Set OTEL_EXPORTER_OTLP_ENDPOINT or MELLEA_METRICS_CONSOLE=true to export metrics.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     provider = MeterProvider(resource=resource, metric_readers=readers)  # type: ignore
     metrics.set_meter_provider(provider)  # type: ignore
@@ -180,7 +192,6 @@ def create_histogram(
     name: str,
     description: str = "",
     unit: str = "1",
-    boundaries: Sequence[float] | None = None,
 ) -> Any:
     """Create a histogram instrument for recording value distributions.
 
@@ -193,7 +204,6 @@ def create_histogram(
         name: Metric name (e.g., "mellea.request.duration")
         description: Human-readable description
         unit: Unit of measurement (e.g., "ms", "tokens", "bytes")
-        boundaries: Optional bucket boundaries for histogram
 
     Returns:
         Histogram instrument (or no-op if metrics disabled)
@@ -210,8 +220,6 @@ def create_histogram(
     if meter is None:
         return _NoOpHistogram()
 
-    # Note: OpenTelemetry Python SDK doesn't support custom boundaries in create_histogram
-    # They are configured at the MeterProvider level via Views
     return meter.create_histogram(name, description=description, unit=unit)
 
 

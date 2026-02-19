@@ -178,22 +178,6 @@ def test_create_histogram(enable_metrics):
     assert hasattr(histogram, "record")
 
 
-def test_create_histogram_with_boundaries(enable_metrics):
-    """Test creating a histogram with custom boundaries."""
-    from mellea.telemetry.metrics import create_histogram
-
-    # Note: boundaries parameter is accepted but may not be used by SDK
-    histogram = create_histogram(
-        "test.latency",
-        description="Latency distribution",
-        unit="ms",
-        boundaries=[10, 50, 100, 500, 1000],
-    )
-
-    assert histogram is not None
-    assert hasattr(histogram, "record")
-
-
 def test_create_up_down_counter(enable_metrics):
     """Test creating an up-down counter instrument."""
     from mellea.telemetry.metrics import create_up_down_counter
