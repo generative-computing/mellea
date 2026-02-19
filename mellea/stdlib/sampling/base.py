@@ -347,11 +347,15 @@ class BaseSamplingStrategy(SamplingStrategy):
         if has_plugins():
             from ...plugins.hooks.sampling import SamplingLoopEndPayload
 
+            _final_ctx = (
+                sample_contexts[best_failed_index] if sample_contexts else context
+            )
             end_payload = SamplingLoopEndPayload(
                 success=False,
                 iterations_used=loop_count,
                 final_result=sampled_results[best_failed_index],
                 final_action=sampled_actions[best_failed_index],
+                final_context=_final_ctx,
                 failure_reason=f"Budget exhausted after {loop_count} iterations",
                 all_results=sampled_results,
                 all_validations=sampled_scores,
@@ -360,7 +364,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 HookType.SAMPLING_LOOP_END,
                 end_payload,
                 backend=backend,
-                context=context,
+                context=_final_ctx,
             )
 
         return SamplingResult(

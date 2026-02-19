@@ -65,12 +65,10 @@ def _build_policies() -> dict[str, object]:
         # component_post_error: observe-only
         # Generation Pipeline
         "generation_pre_call": HookPayloadPolicy(
-            writable_fields=frozenset(
-                {"model_options", "tools", "format", "formatted_prompt"}
-            )
+            writable_fields=frozenset({"model_options", "tools", "format"})
         ),
         "generation_post_call": HookPayloadPolicy(
-            writable_fields=frozenset({"processed_output", "model_output"})
+            writable_fields=frozenset({"model_output"})
         ),
         "generation_stream_chunk": HookPayloadPolicy(
             writable_fields=frozenset({"chunk", "accumulated"})

@@ -124,7 +124,6 @@ class Backend(abc.ABC):
             pre_payload = GenerationPreCallPayload(
                 action=action,
                 context=ctx,
-                formatted_prompt="",
                 model_options=model_options or {},
                 format=format,
                 tools=None,
@@ -147,8 +146,11 @@ class Backend(abc.ABC):
         if has_plugins():
             from mellea.plugins.hooks.generation import GenerationPostCallPayload
 
+            glog = getattr(out_result, "_generate_log", None)
             post_payload = GenerationPostCallPayload(
-                model_output=out_result, latency_ms=int((time.monotonic() - t0) * 1000)
+                prompt=glog.prompt if glog else "",
+                model_output=out_result,
+                latency_ms=int((time.monotonic() - t0) * 1000),
             )
             await invoke_hook(
                 HookType.GENERATION_POST_CALL,

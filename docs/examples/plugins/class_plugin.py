@@ -60,7 +60,7 @@ class PIIRedactor:
     @hook(HookType.GENERATION_POST_CALL)
     async def redact_output(self, payload, ctx):
         """Scan and redact PII from LLM output before it reaches the caller."""
-        original = payload.processed_output
+        original = str(payload.model_output.value)
         redacted = self._redact(original)
         if redacted != original:
             log.info("[pii-redactor] redacted PII from LLM output")
