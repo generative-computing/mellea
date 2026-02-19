@@ -1015,7 +1015,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 mot._meta["hf_output"] = full_output
 
         # The ModelOutputThunk must be computed by this point.
-        assert mot.value is not None
+        if mot.value is None:
+            return
 
         # Store KV cache in LRU separately (not in mot._meta) to enable proper cleanup on eviction.
         # This prevents GPU memory from being held by ModelOutputThunk references.
@@ -1078,7 +1079,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         ):
             import gc
 
-            hf_out = mot._meta["hf_output"]
+            hf_out = mot._meta.get("hf_output")
             if hasattr(hf_out, "sequences") and hf_out.sequences is not None:
                 del hf_out.sequences
             if hasattr(hf_out, "scores") and hf_out.scores is not None:

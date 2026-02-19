@@ -575,9 +575,13 @@ class OpenAIBackend(FormatterBackend):
         # check for complete tool calls in the post_processing step.
         # Use the choice format for tool extraction (backward compatibility)
         choice_response = mot._meta.get(
-            "oai_chat_response_choice", mot._meta["oai_chat_response"]
+            "oai_chat_response_choice", mot._meta.get("oai_chat_response")
         )
-        tool_chunk = extract_model_tool_requests(tools, choice_response)
+        tool_chunk = (
+            extract_model_tool_requests(tools, choice_response)
+            if choice_response is not None
+            else None
+        )
         if tool_chunk is not None:
             if mot.tool_calls is None:
                 mot.tool_calls = {}
@@ -592,7 +596,7 @@ class OpenAIBackend(FormatterBackend):
         generate_log.model_options = mot._model_options
         generate_log.date = datetime.datetime.now()
         # Store the full response (includes usage info)
-        generate_log.model_output = mot._meta["oai_chat_response"]
+        generate_log.model_output = mot._meta.get("oai_chat_response")
         generate_log.extra = {
             "format": _format,
             "thinking": thinking,
@@ -613,12 +617,13 @@ class OpenAIBackend(FormatterBackend):
                 record_token_usage,
             )
 
-            response = mot._meta["oai_chat_response"]
-            # response is a dict from model_dump(), extract usage if present
-            usage = response.get("usage") if isinstance(response, dict) else None
-            if usage:
-                record_token_usage(span, usage)
-            record_response_metadata(span, response)
+            response = mot._meta.get("oai_chat_response")
+            if response is not None:
+                # response is a dict from model_dump(), extract usage if present
+                usage = response.get("usage") if isinstance(response, dict) else None
+                if usage:
+                    record_token_usage(span, usage)
+                record_response_metadata(span, response)
             # Close the span now that async operation is complete
             end_backend_span(span)
             # Clean up the span reference
