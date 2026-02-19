@@ -380,7 +380,8 @@ class LocalVLLMBackend(FormatterBackend):
     ):
         """Called when generation is done."""
         # The ModelOutputThunk must be computed by this point.
-        assert mot.value is not None
+        if mot.value is None:
+            return
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
