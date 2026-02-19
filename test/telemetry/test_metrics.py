@@ -413,6 +413,3 @@ def test_console_exporter_disabled_by_default(enable_metrics):
     from mellea.telemetry.metrics import _METRICS_CONSOLE
 
     assert _METRICS_CONSOLE is False
-
-
-# Made with Bob
