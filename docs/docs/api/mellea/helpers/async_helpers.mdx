@@ -1,0 +1,108 @@
+---
+title: "mellea.helpers.async_helpers"
+sidebarTitle: "mellea.helpers.async_helpers"
+description: "Async helper functions."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `send_to_queue` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/helpers/async_helpers.py#L11" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+send_to_queue(co: Coroutine[Any, Any, AsyncIterator | Any] | AsyncIterator, aqueue: asyncio.Queue) -> None
+```
+
+
+Processes the output of an async chat request by sending the output to an async queue.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `wait_for_all_mots` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/helpers/async_helpers.py#L39" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+wait_for_all_mots(mots: list[ModelOutputThunk])
+```
+
+
+Helper function to make waiting for multiple ModelOutputThunks to be computed easier.
+
+All ModelOutputThunks must be from the same event loop. This should always be the case in sampling
+functions, session functions, and top-level mellea functions.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_current_event_loop` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/helpers/async_helpers.py#L52" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_current_event_loop() -> None | asyncio.AbstractEventLoop
+```
+
+
+Get the current event loop without having to catch exceptions.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ClientCache` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/helpers/async_helpers.py#L62" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A simple [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_Recently_Used_(LRU)) cache.
+
+Used to keep track of clients for backends where the client is tied to a specific event loop.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `current_size` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/helpers/async_helpers.py#L76" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+current_size(self)
+```
+
+Just return the size of the key set. This isn't necessarily safe.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/helpers/async_helpers.py#L80" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get(self, key: int) -> Any | None
+```
+
+Gets a value from the cache.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `put` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/helpers/async_helpers.py#L90" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+put(self, key: int, value: Any)
+```
+
+Put a value into the cache.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

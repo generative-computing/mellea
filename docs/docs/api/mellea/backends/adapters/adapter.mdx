@@ -1,0 +1,250 @@
+---
+title: "mellea.backends.adapters.adapter"
+sidebarTitle: "mellea.backends.adapters.adapter"
+description: "Module for adapters to backends."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_adapter_for_intrinsic` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L218" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_adapter_for_intrinsic(intrinsic_name: str, intrinsic_adapter_types: list[AdapterType] | tuple[AdapterType, ...], available_adapters: dict[str, T]) -> T | None
+```
+
+
+Finds an adapter from a dict of available adapters based on the intrinsic name and its allowed adapter types.
+
+**Args:**
+- `repo_id`: Name of Hugging Face Hub repository containing the adapters that
+    implement the intrinsic
+- `intrinsic_name`: the name of the intrinsic, like "answerability"
+- `intrinsic_adapter_types`: the adapter types allowed for this intrinsic, like ALORA / LORA
+- `available_adapters`: the available adapters to choose from; maps adapter.qualified_name to the Adapter
+
+**Returns:**
+- an Adapter if found; else None
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L15" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+An adapter that can be added to a single backend.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `OpenAIAdapter` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L40" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Adapter for OpenAIBackends.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_open_ai_path` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L44" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_open_ai_path(self, base_model_name: str, server_type: _ServerType = _ServerType.LOCALHOST, remote_path: str | None = None) -> str
+```
+
+Returns the path needed to load the adapter.
+
+**Args:**
+- `base_model_name`: the base model; typically the last part of the huggingface model id like "granite-3.3-8b-instruct"
+- `server_type`: the server type (ie LOCALHOST / OPENAI); usually the backend has information on this
+- `remote_path`: optional; used only if the server_type is REMOTE_VLLM; base path at which to find the adapter
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `LocalHFAdapter` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L60" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Adapter for LocalHFBackends.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_local_hf_path` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L64" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_local_hf_path(self, base_model_name: str) -> str
+```
+
+Returns the path needed to load the adapter.
+
+**Args:**
+- `base_model_name`: the base model; typically the last part of the huggingface model id like "granite-3.3-8b-instruct"
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `GraniteCommonAdapter` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L73" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Adapter for intrinsics that utilize the ``granite-common`` library.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_open_ai_path` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L151" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_open_ai_path(self, base_model_name: str, server_type: _ServerType = _ServerType.LOCALHOST, remote_path: str | None = None) -> str
+```
+
+Returns the path needed to load the adapter.
+
+**Args:**
+- `base_model_name`: the base model; typically the last part of the huggingface
+model id like "granite-3.3-8b-instruct"
+- `server_type`: the server type (ie LOCALHOST / OPENAI); usually the backend
+has information on this
+- `remote_path`: optional; used only if the server_type is REMOTE_VLLM; base
+path at which to find the adapter
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_local_hf_path` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L180" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_local_hf_path(self, base_model_name: str) -> str
+```
+
+Returns the path needed to load the adapter.
+
+**Args:**
+- `base_model_name`: the base model; typically the last part of the huggingface
+model id like "granite-3.3-8b-instruct"
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `download_and_get_path` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L189" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+download_and_get_path(self, base_model_name: str) -> str
+```
+
+Downloads the required rag intrinsics files if necessary and returns the path to them.
+
+**Args:**
+- `base_model_name`: the base model; typically the last part of the huggingface
+model id like "granite-3.3-8b-instruct"
+
+**Returns:**
+- a path to the files
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_path_on_remote` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L209" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_path_on_remote(self, base_model_name: str, base_path: str) -> str
+```
+
+Assumes the files have already been downloaded on the remote server.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `AdapterMixin` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L245" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Mixin class for backends capable of utilizing adapters.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `base_model_name` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L250" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+base_model_name(self) -> str
+```
+
+Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add_adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L254" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+add_adapter(self, *args, **kwargs)
+```
+
+Adds the given adapter to the backend. Must not have been added to a different backend.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `load_adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L258" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+load_adapter(self, adapter_qualified_name: str)
+```
+
+Loads the given adapter for the backend. Must have previously been added.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `unload_adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L262" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+unload_adapter(self, adapter_qualified_name: str)
+```
+
+Unloads the given adapter from the backend.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `list_adapters` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/adapters/adapter.py#L266" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+list_adapters(self) -> list[str]
+```
+
+Lists the adapters added via add_adapter().
+
+:returns: list of adapter names that are currently registered with this backend
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

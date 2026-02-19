@@ -1,0 +1,84 @@
+---
+title: "mellea.stdlib.components.instruction"
+sidebarTitle: "mellea.stdlib.components.instruction"
+description: "Instructions."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Instruction` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/components/instruction.py#L21" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+The Instruction in an instruct/validate/repair loop.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/components/instruction.py#L129" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parts(self)
+```
+
+Returns all of the constituent parts of an Instruction.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/components/instruction.py#L144" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format_for_llm(self) -> TemplateRepresentation
+```
+
+Formats the instruction for Formatter use.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `apply_user_dict_from_jinja` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/components/instruction.py#L171" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+apply_user_dict_from_jinja(user_dict: dict[str, str], s: str) -> str
+```
+
+Treats s as a jinja string and user_dict as the template values dictionary.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `requirements` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/components/instruction.py#L177" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+requirements(self) -> list[Requirement]
+```
+
+Returns a list of Requirement instances.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `copy_and_repair` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/components/instruction.py#L181" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+copy_and_repair(self, repair_string: str) -> Instruction
+```
+
+Creates a copy of the instruction and adds/overwrites the repair string.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

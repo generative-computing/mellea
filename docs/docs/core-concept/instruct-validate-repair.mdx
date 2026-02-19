@@ -1,0 +1,41 @@
+---
+title: "Instruct-Validate-Repair"
+---
+
+Now, we bring it all together into a first generative program using the instruct-validate-repair pattern:
+
+```python
+import mellea
+from mellea.stdlib.requirement import req, check, simple_validate
+from mellea.stdlib.sampling import RejectionSamplingStrategy
+
+def write_email(m: mellea.MelleaSession, name: str, notes: str) -> str:
+    email_candidate = m.instruct(
+        "Write an email to {{name}} using the notes following: {{notes}}.",
+        requirements=[
+            req("The email should have a salutation"),  # == r1
+            req(
+                "Use only lower-case letters",
+                validation_fn=simple_validate(lambda x: x.lower() == x),
+            ),  # == r2
+            check("Do not mention purple elephants."),  # == r3
+        ],
+        strategy=RejectionSamplingStrategy(loop_budget=5),
+        user_variables={"name": name, "notes": notes},
+        return_sampling_results=True,
+    )
+    if email_candidate.success:
+        return str(email_candidate.result)
+    else:
+        return email_candidate.sample_generations[0].value
+
+
+m = mellea.start_session()
+print(write_email(m, "Olivia",
+                  "Olivia helped the lab over the last few weeks by organizing intern events, advertising the speaker series, and handling issues with snack delivery."))
+```
+
+<Note>
+The instruct() method is a convenience function that creates and then generates from an Instruction Component, req() similarly wraps the Requirement Component, etc. Chapter 2 will takes us one level deeper into understanding what happens under the hood when you call m.instruct().
+
+</Note>

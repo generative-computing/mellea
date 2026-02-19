@@ -1,0 +1,69 @@
+---
+title: "mellea.helpers.openai_compatible_helpers"
+sidebarTitle: "mellea.helpers.openai_compatible_helpers"
+description: "A file for helper functions that deal with OpenAI API compatible helpers."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `extract_model_tool_requests` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/helpers/openai_compatible_helpers.py#L11" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+extract_model_tool_requests(tools: dict[str, Callable], response: dict[str, Any]) -> dict[str, ModelToolCall] | None
+```
+
+
+Extracts tool calls from the dict representation of an OpenAI-like chat response object.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `chat_completion_delta_merge` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/helpers/openai_compatible_helpers.py#L40" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+chat_completion_delta_merge(chunks: list[dict], force_all_tool_calls_separate: bool = False) -> dict
+```
+
+
+Takes a list of deltas from `ChatCompletionChunk`s and merges them into a single dict representing the `ChatCompletion` choice.
+
+**Args:**
+- `chunks`: the list of dicts that represent the message deltas
+- `force_all_tool_calls_separate`: if `True`, tool calls in separate message deltas will not be merged (even if their index values are the same); use when providers do not return the correct index value for tool calls. If using this option, all tool calls must be fully populated in a single delta since they won't be merged.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `message_to_openai_message` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/helpers/openai_compatible_helpers.py#L120" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+message_to_openai_message(msg: Message)
+```
+
+
+Serializes a mellea Message object to the message format required by OpenAI compatible api providers.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `messages_to_docs` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/helpers/openai_compatible_helpers.py#L152" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]
+```
+
+
+Extracts the docs from a list of messages.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

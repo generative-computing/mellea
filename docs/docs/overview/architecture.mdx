@@ -1,0 +1,49 @@
+---
+title: "Overview of the Standard Library"
+sidebarTitle: "Standard Library"
+---
+
+Before going any further, we need to overview the architecture of Mellea.
+
+Mellea's core abstraction is called a `Component`. A `Component` is a structured object that represents a unit of interaction with an LLM. The Mellea `stdlib` contains a set of useful components, but you can also define your own. We have already seen some components -- `Instruction` and `Requirement` are both `Component`s.
+
+Components are composite data structures; that is, a `Component` can be made up of many other parts. Each of those parts is either a `CBlock` or another `Component`. `CBlock`s, or "content blocks", are an atomic unit of text or data. CBlocks hold raw text (or sometimes parsed representations) and can be used as leaves in the Component DAG.
+
+Backends are the engine that actually run the LLM. Backends consume Components, format the Component, pass the formatted input to an LLM, and return model outputs, which are then parsed back into CBlocks or Components.
+
+During the course of an interaction with an LLM, several Components and CBlocks may be created. Logic for handling this trace of interactions is provided by a `Context` object. Some book-keeping needs to be done in order for Contexts to approporiately handle a trace of Components and CBlocks. The `MelleaSession` class, which is created by `mellea.start_session()`, does this book-keeping a simple wrapper around Contexts and Backends.
+
+When we call `m.instruct()`, the `MelleaSession.instruct` method creates a component called an `Instruction`. Instructions are part of the Mellea standard library.
+
+So far we have seen Instructions with descriptions and requirements, but an Instruction can also have in-context learning examples and grounding_context (for RAG):
+
+```python
+class Instruction(Component):
+    """The Instruction in an instruct/validate/repair loop."""
+
+    def __init__(
+        self,
+        description: str | CBlock | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+    ):
+```
+
+The following Cheat Sheet concisely visualizes the relationship between Components/CBlocks, Backends, Contexts, and Sessions.
+
+TODO INSERT HENDRIK'S CHEAT SHEET
+
+M's standard library contains four basic types of Components:
+
+1. [Instructions](#chapter-2-getting-started-with-generative-programming-in-mellea), which we have already seen.
+2. [Requirements](#chapter-2-getting-started-with-generative-programming-in-mellea), which we have already seen and will continue to use heavily throughout the remainder of the tutorial.
+3. [Generative Slots](#chapter-4-generative-slots), which treat LLM calls as functions.
+4. [MObjects](#chapter-5-mobjects), which help with context engineering for tool use by placing tools next to the data that those tools most reasonably operate over.
+
+This is not an exhaustive list of possible component types. New components can be created as [user libraries or as stdlib contributions](#appendix-contributing-to-m). Where it makes sense, you can also back new components by [fine-tuned models designed especially to work with your Component types](#chapter-6-tuning-requirements-and-components).
+
+But before getting into these advanced modalities, let's finish our overview of the standard library of Components that ship with Mellea.

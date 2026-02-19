@@ -1,0 +1,34 @@
+---
+title: "mellea.backends.backend"
+sidebarTitle: "mellea.backends.backend"
+description: "FormatterBackend."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `FormatterBackend` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/backend.py#L12" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+`FormatterBackend`s support legacy model types.
+
+The `mellea` library was designed to support generative computing with [spanned attention](https://generative.computing/what-are-spans.html) over [generative programming primitives](https://generative.computing/what-are-generative-programs.html).
+In the ideal world, context management is handled via span scope-relations and all generative programming primitives are baked into the model via fine-tuning.
+I.e., the model's instruction tuning is done in terms of generative programming primitives, and the model is then prompted with the same set of templates that were used for that tuning.
+
+Today, most models do not yet support spans and even those that do are not properly tuned to leverage generative programming primitives.
+The `mellea` library supports these legacy models primarily through prompt engineering surfaced via `FormatterBackends`.
+A `FormatterBackend` is a backend that uses hand-engineered prompts for rendering generative programming primitives to a model and parsing responses from the model back into `mellea`.
+By default, a `FormatterBackend` uses jinja2 templates for pretty-printing, and relies on the user's ad-hoc logic for parsing.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

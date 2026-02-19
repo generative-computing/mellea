@@ -1,0 +1,110 @@
+---
+title: "Requirements"
+description: "Use pre- and post-conditions to validate your LLM outputs meet specific requirements."
+---
+
+But how do we know that the generated email is a good one?
+Good generative programmers don't leave this up to chance -- instead, they use pre-conditions to ensure that inputs to the LLM are as expected and then check post-conditions to ensure that the LLM's outputs are fit-for-purpose.
+
+Suppose that in this case we want to ensure that the email has a salutation and contains only lower-case letters. We can capture these post-conditions by specifying **requirements** on the `m.instruct` call:
+
+```python
+import mellea
+
+def write_email_with_requirements(m: mellea.MelleaSession, name: str, notes: str) -> str:
+  email = m.instruct(
+      "Write an email to {{name}} using the notes following: {{notes}}.",
+      requirements=[
+          "The email should have a salutation",
+          "Use only lower-case letters",
+      ],
+      user_variables={"name": name, "notes": notes},
+  )
+  return str(email)
+
+m = mellea.start_session()
+print(write_email_with_requirements(
+  m,
+  name="Olivia",
+  notes="Olivia helped the lab over the last few weeks by organizing intern events, advertising the speaker series, and handling issues with snack delivery.",
+))
+```
+
+We just added two requirements to the instruction which will be added to the model request. But we don't check yet if these requirements are satisfied. Let's add a **strategy** for validating the requirements:
+
+```python
+import mellea
+from mellea.stdlib.sampling import RejectionSamplingStrategy
+
+def write_email_with_strategy(m: mellea.MelleaSession, name: str, notes: str) -> str:
+    email_candidate = m.instruct(
+        "Write an email to {{name}} using the notes following: {{notes}}.",
+        requirements=[
+            "The email should have a salutation",
+            "Use only lower-case letters",
+        ],
+        strategy=RejectionSamplingStrategy(loop_budget=5),
+        user_variables={"name": name, "notes": notes},
+        return_sampling_results=True,
+    )
+    if email_candidate.success:
+        return str(email_candidate.result)
+    else:
+        print("Expect sub-par result.")
+        return email_candidate.sample_generations[0].value
+
+m = mellea.start_session()
+print(
+    write_email_with_strategy(
+        m,
+        "Olivia",
+        "Olivia helped the lab over the last few weeks by organizing intern events, advertising the speaker series, and handling issues with snack delivery.",
+    )
+)
+```
+
+A couple of things happened here. First, we added a sampling `strategy` to the instruction.
+This strategy (`RejectionSamplingStrategy()`) checks if all requirements are met.
+If any requirement fails, then the sampling strategy will sample a new email from the LLM.
+This process will repeat until the `loop_budget` on retries is consumed or all requirements are met.
+
+Even with retries, sampling might not generate results that fulfill all requirements (`email_candidate.success==False`).
+Mellea forces you to think about what it means for an LLM call to fail;
+in this case, we handle the situation by simply returning the first sample as the final result.
+
+<Note>
+
+When using the `return_sampling_results=True` parameter, the `instruct()` function returns a `SamplingResult` object (not a `ModelOutputThunk`) which carries the full history of sampling and validation results for each sample.
+
+</Note>
+
+### Validating Requirements
+
+Now that we defined requirements and sampling we should have a
+look into **how requirements are validated**. The default validation strategy is [LLM-as-a-judge](https://arxiv.org/abs/2306.05685).
+
+Let's look on how we can customize requirement definitions:
+
+```python
+from mellea.stdlib.requirement import req, check, simple_validate
+
+requirements = [
+    req("The email should have a salutation"),  # == r1
+    req("Use only lower-case letters", validation_fn=simple_validate(lambda x: x.lower() == x)),  # == r2
+    check("Do not mention purple elephants.")  # == r3
+]
+```
+
+Here, the first requirement (r1) will be validated by LLM-as-a-judge on the output (last turn) of the instruction. This is the default behavior, since nothing else is specified.
+
+The second requirement (r2) simply uses a function that takes the output of a sampling step and returns a boolean value indicating (un-)successful validation. While the `validation_fn` parameter requires to run validation on the full session context (see [Chapter 7](#chapter-7-on-context-management)), Mellea provides a wrapper for simpler validation functions (`simple_validate(fn: Callable[[str], bool])`) that take the output string and return a boolean as seen in this case.
+
+The third requirement is a `check()`. Checks are only used for validation, not for generation.
+Checks aim to avoid the "do not think about B" effect that often primes models (and humans)
+to do the opposite and "think" about B.
+
+<Note>
+
+LLMaJ is not presumtively robust. Whenever possible, implement requirement validation using plain old Python code. When a model is necessary, it can often be a good idea to train a **calibrated** model specifically for your validation problem. [Chapter 6](#chapter-6-tuning-requirements-and-components) explains how to use Mellea's `m tune` subcommand to train your own LoRAs for requirement checking (and for other types of Mellea components as well).
+
+</Note>

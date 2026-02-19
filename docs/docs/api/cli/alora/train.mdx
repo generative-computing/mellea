@@ -1,0 +1,76 @@
+---
+title: "cli.alora.train"
+sidebarTitle: "cli.alora.train"
+---
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `load_dataset_from_json` <sup><a href="https://github.com/generative-computing/mellea/blob/main/cli/alora/train.py#L13" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+load_dataset_from_json(json_path, tokenizer, invocation_prompt)
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `formatting_prompts_func` <sup><a href="https://github.com/generative-computing/mellea/blob/main/cli/alora/train.py#L32" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+formatting_prompts_func(example)
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `train_model` <sup><a href="https://github.com/generative-computing/mellea/blob/main/cli/alora/train.py#L60" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+train_model(dataset_path: str, base_model: str, output_file: str, prompt_file: str | None = None, adapter: str = 'alora', run_name: str = 'multiclass_run', epochs: int = 6, learning_rate: float = 6e-06, batch_size: int = 2, max_length: int = 1024, grad_accum: int = 4)
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SaveBestModelCallback` <sup><a href="https://github.com/generative-computing/mellea/blob/main/cli/alora/train.py#L39" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `on_evaluate` <sup><a href="https://github.com/generative-computing/mellea/blob/main/cli/alora/train.py#L43" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+on_evaluate(self, args, state, control, **kwargs)
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SafeSaveTrainer` <sup><a href="https://github.com/generative-computing/mellea/blob/main/cli/alora/train.py#L52" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `save_model` <sup><a href="https://github.com/generative-computing/mellea/blob/main/cli/alora/train.py#L53" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+save_model(self, output_dir: str | None = None, _internal_call: bool = False)
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,56 @@
+---
+title: "Contributor Guide"
+---
+
+# Contributor Guide
+
+### Contributor Guide: Requirements and Verifiers
+
+Contributing new Requirements (i.e., verifiers) is an easy way to get started contributing to Mellea. Requirements can be as general or as domain-specific as you'd like, but must encapsulate a coherent and testable property. We have seen many examples of Requirements throughout this tutorial.
+
+If you write a Requirement that is general-purose and likely useful to others, consider contributing your _general-purpose_ component to Mellea's standard library:
+
+1. Find a file in `mellea/stdlib/reqlib/` where your requirement belongs; if no file fits, create a new one.
+2. Implement your requirement. Ideally, your verifier should be robust, which typically means not using the default LLMaJ behavior. If the requirement can be checked with code, you should write a validation function. See [our Markdown requirements](/core-concept/requirements) for some examples of how this works. You could also [tune (and evaluate) a well-calibrated aLoRA](/core-concept/tuning) for requirements that are not possible to implement in code.
+3. Open a PR. If your Requirement uses LLMaJ, be sure to include a robust evaluation suite in your PR demonstrating that LLMaJ verification is good enough.
+
+One important note: if your requirement can be easily specified in terms of a grammatical constraint, then you should consider using constrained generation (by passing `format=` into your session or generate call -- see [agent implementation](/core-concept/agents) for some examples) instead of using requirements.
+
+### Contributor Guide: Components
+
+Components are the building blocks of Mellea. The point of a Component is that it has a way to represent itself to a Backend, its `format_for_llm` function. When creating a new component, you will most likely want to have `format_for_llm` return a `TemplateRepresentation`, a structured representation of itself that includes template args, tools, and the template itself.
+
+Components are best created when you find yourself with data/objects that you are frequently formatting and marshalling into text to interact with LLMs.
+
+To create a new component, you must both define it in code and (in most cases) create a template for it. Components are also runtime checkable protocols, so you need not inherit from the base class; you can simply add the required methods to an existing class as well.
+
+When distributing a new Component, think of the Component the same way you think about a software library. Components are self-contained, well-documented, amenable to reuse, and hopefully also composable with other Components.
+
+You have a couple of options for distributing your Component. You can distribute the Component as a library in user-space, or you can request that the Component is incorporated into the Mellea stdlib. Most Components are best positioned as third party libraries. You can distribute third-party generative programming components just like you distribute any third party library (github, pypi).
+
+For Components that implement useful and widely used patterns, inclusion in the the Mellea stdlib may make sense. These are the early days of generative programming; we expect that some contributions will have pride-of-place in the Mellea standard library. We encourage contributors to ask early and often about inclusion in the stdlib.
+
+### Contributor Guide: Specialized Mify
+
+Mifying an object is another way to make it compatible with `Mellea`. Just like with Components, there is a `MifiedProtocol` that is a runtime checkable protocol. `@mify` or `mify(object)` adds the required methods to any object.
+
+Since it's a protocol, you can create your own `mify` functions that wrap a class/object or add the required functionality to that class/object in any way you want.
+
+For instance, you may have an ORM library where most of your objects follow the same pattern and structure. To integrate that library with `Mellea`, one approach would be to write a specific `mify` function that knows about that structure. It could look something like this:
+
+```python
+T = TypeVar("T")
+def mify_orm(obj: T):
+  setattr(obj, "format_for_llm", obj.sql)
+  ...
+```
+
+In this way, you can define a common way to `mify` all components of this library on the fly, assuming they all have a `sql` function.
+
+For a specialized mify function to be added to the stdlib, it must work as both a decorator and a function that can be called directly on objects/classes. It must also be a generic but useful pattern or a pattern for a widely used library.
+
+### Contributor Guide: Sessions
+
+While a less common need, Mellea allows you to create new types of sessions. When you need fine-grained control over context, it's advised that you completely override the `MelleaSession` methods.
+
+To institute gates on calls that get made or modify calls without modifying the underlying context, overriding the methods but calling the `MelleaSession` supermethod is advised.

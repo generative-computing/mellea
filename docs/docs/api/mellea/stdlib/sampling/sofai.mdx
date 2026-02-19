@@ -1,0 +1,130 @@
+---
+title: "mellea.stdlib.sampling.sofai"
+sidebarTitle: "mellea.stdlib.sampling.sofai"
+description: "SOFAI (Slow and Fast AI) Sampling Strategy."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+This module implements a two-solver sampling strategy that uses:
+1. S1 Solver (fast model) - Iterative solving with feedback-based repair
+2. S2 Solver (slow model) - Single attempt escalation when S1 fails or shows no improvement
+
+The strategy leverages ValidationResult.reason fields to provide targeted
+feedback for repair, enabling more effective iterative improvement.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SOFAISamplingStrategy` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/sampling/sofai.py#L36" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+SOFAI sampling strategy.
+
+Uses S1 Solver (fast model) in a loop with targeted feedback from validation results.
+If S1 Solver fails after exhausting the budget or shows no improvement,
+escalates to a single attempt with S2 Solver (slow model).
+
+The strategy leverages ValidationResult.reason fields to provide targeted
+feedback for repair, enabling more effective iterative improvement.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `repair` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/sampling/sofai.py#L106" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+repair(old_ctx: Context, new_ctx: Context, past_actions: list[Component], past_results: list[ModelOutputThunk], past_val: list[list[tuple[Requirement, ValidationResult]]]) -> tuple[Component, Context]
+```
+
+Create targeted feedback message from validation results.
+
+Extracts failed requirements and uses their ValidationResult.reason fields
+to provide specific, actionable feedback for the next attempt.
+
+**Args:**
+- `old_ctx`: The context WITHOUT the last action + output.
+- `new_ctx`: The context including the last action + output.
+- `past_actions`: List of actions executed.
+- `past_results`: List of generation results.
+- `past_val`: List of validation results.
+
+**Returns:**
+- Tuple of (Message component with repair feedback, new context).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `select_from_failure` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/sampling/sofai.py#L154" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+select_from_failure(sampled_actions: list[Component], sampled_results: list[ModelOutputThunk], sampled_val: list[list[tuple[Requirement, ValidationResult]]]) -> int
+```
+
+Select the most informed attempt (last) when all fail.
+
+Returns the last attempt as it has benefited from the most feedback.
+
+**Args:**
+- `sampled_actions`: List of actions that have been executed (without success).
+- `sampled_results`: List of (unsuccessful) generation results for these actions.
+- `sampled_val`: List of validation results for the results.
+
+**Returns:**
+- The index of the result that should be selected as `.value`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `sample` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/sampling/sofai.py#L556" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+sample(self, action: Component[S], context: Context, backend: Backend, requirements: list[Requirement] | None) -> SamplingResult[S]
+```
+
+Execute SOFAI two-solver sampling strategy.
+
+SOFAI Flow Overview:
+====================
+1. PHASE 1 - S1 Solver Loop:
+   - Generate candidate solution with fast S1 model
+   - Validate against requirements
+   - If success: return immediately
+   - If failure: generate repair feedback and iterate
+   - If no improvement detected: early exit to Phase 2
+
+2. PHASE 2 - S2 Solver Escalation:
+   - Prepare context based on s2_solver_mode:
+     * fresh_start: clean slate with original prompt
+     * continue_chat: full S1 conversation history
+     * best_attempt: best S1 result with feedback summary
+   - Generate single attempt with slow S2 model
+   - Validate and return result (success or failure)
+
+**Args:**
+- `action`: The component to sample (Instruction, Message, etc.).
+- `context`: The session context (must be ChatContext).
+- `backend`: Session backend (used for validation fallback).
+- `requirements`: Requirements to validate against.
+- `validation_ctx`: Optional separate validation context (unused).
+- `format`: Output format for structured outputs.
+- `model_options`: Model options to pass to backends.
+- `tool_calls`: True if tool calls should be used.
+
+**Returns:**
+- SamplingResult with success status and all generation history.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
