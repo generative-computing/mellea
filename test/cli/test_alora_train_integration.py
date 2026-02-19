@@ -14,14 +14,24 @@ import pytest
 import torch
 from transformers import AutoTokenizer
 
+pytestmark = [
+    pytest.mark.huggingface,
+    pytest.mark.llm,
+    pytest.mark.requires_gpu,
+    pytest.mark.requires_heavy_ram,
+    # Skip entire module in CI since 17/18 tests are qualitative
+    pytest.mark.skipif(
+        int(os.environ.get("CICD", 0)) == 1,
+        reason="Skipping alora training tests in CI - need gpus",
+    ),
+]
+
 # Check if MPS is available but PyTorch version is too old
 _mps_needs_cpu_fallback = torch.backends.mps.is_available() and tuple(
     int(x) for x in torch.__version__.split(".")[:2]
 ) < (2, 8)
 
 
-@pytest.mark.huggingface
-@pytest.mark.llm
 def test_alora_training_integration():
     """Integration test: Train a tiny aLoRA adapter and verify it works.
 
@@ -278,8 +288,6 @@ def test_alora_training_integration():
         )
 
 
-@pytest.mark.huggingface
-@pytest.mark.llm
 def test_lora_training_integration():
     """Integration test: Train a tiny standard LoRA adapter and verify it works.
 
