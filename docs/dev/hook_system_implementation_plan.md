@@ -493,7 +493,7 @@ MELLEA_HOOK_PAYLOAD_POLICIES: dict[str, HookPayloadPolicy] = {
 
     # Generation Pipeline
     "generation_pre_call": HookPayloadPolicy(
-        writable_fields=frozenset({"model_options", "tools", "format", "formatted_prompt"}),
+        writable_fields=frozenset({"model_options", "tools", "format"}),
     ),
     "generation_post_call": HookPayloadPolicy(
         writable_fields=frozenset({"processed_output", "model_output"}),
@@ -1060,7 +1060,6 @@ async def generate_from_context_with_hooks(
     if has_plugins():
         pre_payload = GenerationPreCallPayload(
             action=action, context=ctx,
-            formatted_prompt="",  # Populated after linearization; writable by plugins
             model_options=model_options or {}, format=format, tools=None,
         )
         result, pre_payload = await invoke_hook(
@@ -1077,14 +1076,11 @@ async def generate_from_context_with_hooks(
     )
 
     if has_plugins():
+        glog = getattr(out_result, "_generate_log", None)
         post_payload = GenerationPostCallPayload(
-            prompt=...,              # Sent prompt (from linearization)
-            raw_response=...,        # Full JSON response from provider
-            processed_output=...,    # Extracted text from response
+            prompt=glog.prompt if glog else "",  # Sent prompt (from linearization)
             model_output=out_result,
-            token_usage=...,         # From backend response metadata
             latency_ms=int((time.monotonic() - t0) * 1000),
-            finish_reason=...,       # From backend response metadata
         )
         await invoke_hook(
             MelleaHookType.GENERATION_POST_CALL, post_payload,

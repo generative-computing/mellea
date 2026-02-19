@@ -381,7 +381,7 @@ Because payloads are frozen, plugins must use `model_copy(update={...})` to crea
 ```python
 @hook("generation_pre_call", mode="enforce", priority=10)
 async def enforce_budget(payload, ctx):
-    if (payload.estimated_tokens or 0) > 4000:
+    if (_estimate_tokens(payload) or 0) > 4000:
         return block("Token budget exceeded")
 
     # Modify a writable field — use model_copy, not direct assignment
@@ -677,11 +677,9 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
       action: Component | CBlock           # Source action
       context: Context                     # Current context
       linearized_context: list[Component | CBlock]  # Context as list
-      formatted_prompt: str | list[dict]   # Final prompt to send
       model_options: dict[str, Any]        # Generation parameters
       tools: dict[str, Callable] | None    # Available tools
       format: type | None                  # Structured output format
-      estimated_tokens: int | None         # Token estimate
   ```
 - **Context**:
   - `backend`: Backend
@@ -690,6 +688,8 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
   - `model_id`: str
   - `provider`: str - Provider name (e.g., "ibm/granite")
 
+- **Notes**:
+  - Field `formatted_prompt: str | list[dict] # Final prompt to send` not implemented
 
 #### `generation_post_call`
 
@@ -706,12 +706,8 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
   ```python
   class GenerationPostCallPayload(BasePayload):
       prompt: str | list[dict]       # Sent prompt
-      raw_response: dict             # Full JSON response from provider
-      processed_output: str          # Processed output text
       model_output: ModelOutputThunk # Output thunk
-      token_usage: dict | None       # Token counts
       latency_ms: int                # Generation time
-      finish_reason: str             # Why generation stopped
   ```
 - **Context**:
   - `backend`: Backend
@@ -720,7 +716,11 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
   - `model_id`: str
   - `status_code`: int | None - HTTP status from provider
   - `stream_chunks`: int | None - Number of chunks if streaming
-
+- **Notes**:
+  - Field `raw_response: dict # Full JSON response from provider` not implemented
+  - Field `processed_output: str # Processed output text` not implemented
+  - Field `token_usage: dict | None # Token counts` not implemented
+  - Field `finish_reason: str # Why generation stopped` not implemented
 
 #### `generation_stream_chunk`
 
@@ -1330,7 +1330,7 @@ from mellea.plugins import hook, block
 
 @hook("generation_pre_call", mode="enforce", priority=10)
 async def enforce_budget(payload, ctx):
-    if (payload.estimated_tokens or 0) > 4000:
+    if (_estimate_tokens(payload) or 0) > 4000:
         return block("Token budget exceeded")
 
 @hook("component_post_success", mode="fire_and_forget")
@@ -1529,7 +1529,7 @@ from mellea.plugins import hook, block
 @hook("generation_pre_call", mode="enforce", priority=10)
 async def enforce_token_budget(payload, ctx):
     budget = 4000
-    estimated = payload.estimated_tokens or 0
+    estimated = _estimate_tokens(payload) or 0
     if estimated > budget:
         return block(
             f"Estimated {estimated} tokens exceeds budget of {budget}",
