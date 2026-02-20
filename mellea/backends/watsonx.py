@@ -36,6 +36,7 @@ from ..helpers import (
     get_current_event_loop,
     send_to_queue,
 )
+from ..security import SecLevel, taint_sources
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
 from ..telemetry.backend_instrumentation import (
@@ -368,7 +369,11 @@ class WatsonxAIBackend(FormatterBackend):
                 ),
             )
 
-        output = ModelOutputThunk(None)
+        # Compute taint sources from action and context
+        sources = taint_sources(action, ctx)
+        sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+
+        output = ModelOutputThunk(value=None, sec_level=sec_level, meta={})
         output._context = linearized_context
         output._action = action
         output._model_options = model_opts
@@ -579,8 +584,12 @@ class WatsonxAIBackend(FormatterBackend):
 
         for i, response in enumerate(responses):
             output = response["results"][0]
+            sources = taint_sources(actions[i], ctx)
+            sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+
             result = ModelOutputThunk(
                 value=output["generated_text"],
+                sec_level=sec_level,
                 meta={
                     "oai_completion_response": response["results"][0],
                     "usage": {

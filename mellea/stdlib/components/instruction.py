@@ -15,6 +15,7 @@ from ...core import (
     TemplateRepresentation,
     blockify,
 )
+from ...security import SecLevel
 from ..requirements.requirement import reqify
 
 
@@ -125,6 +126,12 @@ class Instruction(Component[str]):
         )
         self._images = images
         self._repair_string: str | None = None
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component."""
+        return self._sec_level
 
     def parts(self):
         """Returns all of the constituent parts of an Instruction."""

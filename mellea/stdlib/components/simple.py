@@ -1,6 +1,7 @@
 """SimpleComponent."""
 
 from ...core import CBlock, Component, ModelOutputThunk
+from ...security import SecLevel
 
 
 class SimpleComponent(Component[str]):
@@ -13,6 +14,12 @@ class SimpleComponent(Component[str]):
                 kwargs[key] = CBlock(value=kwargs[key])
         self._kwargs_type_check(kwargs)
         self._kwargs = kwargs
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component."""
+        return self._sec_level
 
     def parts(self):
         """Returns the values of the kwargs."""
@@ -21,9 +28,9 @@ class SimpleComponent(Component[str]):
     def _kwargs_type_check(self, kwargs):
         for key in kwargs.keys():
             value = kwargs[key]
-            assert issubclass(type(value), Component) or issubclass(
-                type(value), CBlock
-            ), f"Expected span but found {type(value)} of value: {value}"
+            assert isinstance(value, Component) or isinstance(value, CBlock), (
+                f"Expected span but found {type(value)} of value: {value}"
+            )
             assert type(key) is str
         return True
 

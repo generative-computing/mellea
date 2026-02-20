@@ -33,6 +33,7 @@ from ..helpers import (
     message_to_openai_message,
     send_to_queue,
 )
+from ..security import SecLevel, taint_sources
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
 from ..telemetry.backend_instrumentation import (
@@ -325,7 +326,11 @@ class LiteLLMBackend(FormatterBackend):
             **model_specific_options,
         )
 
-        output = ModelOutputThunk(None)
+        # Compute taint sources from action and context
+        sources = taint_sources(action, ctx)
+        sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+
+        output = ModelOutputThunk(value=None, sec_level=sec_level, meta={})
         output._context = linearized_context
         output._action = action
         output._model_options = model_opts
@@ -590,16 +595,22 @@ class LiteLLMBackend(FormatterBackend):
             )
 
         for res, action, prompt in zip(responses, actions, prompts):
-            output = ModelOutputThunk(res.text)  # type: ignore
+            sources = taint_sources(action, None)
+            sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+
+            output = ModelOutputThunk(
+                value=res.text,  # type: ignore
+                sec_level=sec_level,
+                meta={
+                    "litellm_chat_response": res.model_dump(),
+                    "usage": completion_response.usage.model_dump()
+                    if completion_response.usage
+                    else None,
+                },
+            )
             output._context = None  # There is no context for generate_from_raw for now
             output._action = action
             output._model_options = model_opts
-            output._meta = {
-                "litellm_chat_response": res.model_dump(),
-                "usage": completion_response.usage.model_dump()
-                if completion_response.usage
-                else None,
-            }
 
             output.parsed_repr = (
                 action.parse(output) if isinstance(action, Component) else output.value

@@ -44,6 +44,7 @@ from ..core import (
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import get_current_event_loop, send_to_queue
+from ..security import SecLevel, taint_sources
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -325,7 +326,11 @@ class LocalVLLMBackend(FormatterBackend):
             # stream = model_options.get(ModelOption.STREAM, False)
             # if stream:
 
-            output = ModelOutputThunk(None)
+            # Compute taint sources from action and context
+            sources = taint_sources(action, ctx)
+            sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+
+            output = ModelOutputThunk(value=None, sec_level=sec_level, meta={})
 
             generator = self._model.generate(  # type: ignore
                 request_id=str(id(output)),
@@ -485,7 +490,11 @@ class LocalVLLMBackend(FormatterBackend):
             tasks = [generate(p, f"{id(prompts)}-{i}") for i, p in enumerate(prompts)]
             decoded_results = await asyncio.gather(*tasks)
 
-        results = [ModelOutputThunk(value=text) for text in decoded_results]
+        results = []
+        for i, text in enumerate(decoded_results):
+            sources = taint_sources(actions[i], ctx)
+            sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+            results.append(ModelOutputThunk(value=text, sec_level=sec_level, meta={}))
 
         for i, result in enumerate(results):
             date = datetime.datetime.now()

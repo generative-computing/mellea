@@ -42,6 +42,7 @@ from ..helpers import (
     messages_to_docs,
     send_to_queue,
 )
+from ..security import SecLevel, taint_sources
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.backend_instrumentation import (
@@ -467,7 +468,11 @@ class OpenAIBackend(FormatterBackend):
             ),
         )  # type: ignore
 
-        output = ModelOutputThunk(None)
+        # Compute taint sources from action and context
+        sources = taint_sources(action, ctx)
+        sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+
+        output = ModelOutputThunk(value=None, sec_level=sec_level, meta={})
         output._context = linearized_context
         output._action = action
         output._model_options = model_opts
@@ -709,16 +714,22 @@ class OpenAIBackend(FormatterBackend):
         for response, action, prompt in zip(
             completion_response.choices, actions, prompts
         ):
-            output = ModelOutputThunk(response.text)
+            sources = taint_sources(action, None)
+            sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+
+            output = ModelOutputThunk(
+                value=response.text,
+                sec_level=sec_level,
+                meta={
+                    "oai_completion_response": response.model_dump(),
+                    "usage": completion_response.usage.model_dump()
+                    if completion_response.usage
+                    else None,
+                },
+            )
             output._context = None  # There is no context for generate_from_raw for now
             output._action = action
             output._model_options = model_opts
-            output._meta = {
-                "oai_completion_response": response.model_dump(),
-                "usage": completion_response.usage.model_dump()
-                if completion_response.usage
-                else None,
-            }
 
             output.parsed_repr = (
                 action.parse(output) if isinstance(action, Component) else output.value
