@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
+from typing import Any
 
 from ..core import CBlock, Component, Context, FancyLogger, ModelToolCall
 from ..core.base import AbstractMelleaTool
@@ -14,6 +15,21 @@ from .tools import parse_tools, validate_tool_arguments
 # Chat = dict[Literal["role", "content"], str] # external apply_chat_template type hint is weaker
 # Chat = dict[str, str | list[dict[str, Any]] ] # for multi-modal models
 Chat = dict[str, str]
+
+
+def get_value(obj: Any, key: str) -> Any:
+    """Get value from dict or object attribute.
+
+    Args:
+        obj: Dict or object
+        key: Key or attribute name
+
+    Returns:
+        Value if found, None otherwise
+    """
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return getattr(obj, key, None)
 
 
 def to_chat(

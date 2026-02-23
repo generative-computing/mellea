@@ -615,9 +615,13 @@ class OllamaModelBackend(FormatterBackend):
         if span is not None:
             from ..telemetry import end_backend_span
             from ..telemetry.backend_instrumentation import (
+                get_model_id_str,
+                get_system_name,
                 record_response_metadata,
                 record_token_usage,
             )
+            from ..telemetry.metrics import record_token_usage_metrics
+            from .utils import get_value
 
             response = mot._meta.get("chat_response")
             if response:
@@ -629,6 +633,13 @@ class OllamaModelBackend(FormatterBackend):
                 )
                 if usage:
                     record_token_usage(span, usage)
+                    record_token_usage_metrics(
+                        input_tokens=get_value(usage, "prompt_tokens"),
+                        output_tokens=get_value(usage, "completion_tokens"),
+                        model=get_model_id_str(self),
+                        backend=self.__class__.__name__,
+                        system=get_system_name(self),
+                    )
                 record_response_metadata(span, response)
 
             # Close the span now that telemetry is recorded
