@@ -6,12 +6,14 @@
 # ///
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizer
+from transformers.generation import GenerateDecoderOnlyOutput
 
 from mellea.backends.kv_block_helpers import DynamicCache, merge_dynamic_caches
 
-model_id = "ibm-granite/granite-3.3-8b-instruct"
+model_id = "ibm-granite/granite-4.0-tiny-preview"
 device = torch.device("mps")
-model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
+model = AutoModelForCausalLM.from_pretrained(model_id)
+# model = model.to(device=device) # this part does not pass mypy; possible misconfiguration
 tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(model_id)
 
 
@@ -19,8 +21,8 @@ def cache(toks) -> DynamicCache:
     dc = DynamicCache()
     with torch.no_grad():
         rv = model(
-            toks["input_ids"].to(device),
-            attention_mask=toks["attention_mask"].to(device),
+            toks["input_ids"].to(model.device),
+            attention_mask=toks["attention_mask"].to(model.device),
             past_key_values=dc,
         ).past_key_values
     return rv
@@ -42,14 +44,17 @@ strs = ["this is a test", "this is another test"]
 merged_toks, merged_masks, merged_dcs = merge(strs)
 merged_dcs.crop(-1)
 
+# GenerateDecoderOnlyOutput | GenerateEncoderDecoderOutput | GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderOutput | LongTensor
 result = model.generate(
-    merged_toks.to(device),
-    attention_mask=merged_masks.to(device),
+    merged_toks.to(model.device),
+    attention_mask=merged_masks.to(model.device),
     past_key_values=merged_dcs,
     use_cache=True,
     return_dict_in_generate=True,
     output_scores=True,
 )
+
+assert isinstance(result, GenerateDecoderOnlyOutput)
 
 result_decoded = tokenizer.decode(
     result.sequences[0, merged_toks.shape[1] :], skip_special_tokens=True

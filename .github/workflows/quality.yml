@@ -45,9 +45,10 @@ jobs:
         run: curl -fsSL https://ollama.com/install.sh | sh
       - name: Start serving ollama
         run: nohup ollama serve &
-      - name: Pull Llama 3.2:1b model
-        run: ollama pull llama3.2:1b
-
+      - name: Pull models
+        run: |
+          ollama pull granite4:micro
+          ollama pull granite4:micro-h
       - name: Run Tests
         run: uv run -m pytest -v test
       - name: Send failure message tests

@@ -2,7 +2,7 @@ import asyncio
 
 from mellea.backends import ModelOption
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
+from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.core import CBlock
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext
@@ -30,7 +30,7 @@ async def example():
         role="user",
         content="What is the likely ZIP code of Nathan Fulton's work address?",
     )
-    backend = LocalHFBackend(model_id=IBM_GRANITE_3_3_8B)
+    backend = LocalHFBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO)
     mot = await backend._generate_from_context_with_kv_cache(
         action=msg, ctx=ctx, model_options={ModelOption.MAX_NEW_TOKENS: 64}
     )

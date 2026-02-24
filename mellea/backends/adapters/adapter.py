@@ -2,6 +2,7 @@
 
 import abc
 import pathlib
+import re
 from typing import TypeVar
 
 import granite_common.intrinsics
@@ -271,3 +272,37 @@ class AdapterMixin(Backend, abc.ABC):
         raise NotImplementedError(
             f"Backend type {type(self)} does not implement list_adapters() API call."
         )
+
+
+class CustomGraniteCommonAdapter(GraniteCommonAdapter):
+    """A custom granite adapter."""
+
+    def __init__(
+        self, *, model_id: str, intrinsic_name: str | None = None, base_model_name: str
+    ):
+        """Custom granite adapters.
+
+        Args:
+            model_id: the huggingface model id. Used for downloading model weights.
+            intrinsic_name (optional): catalog name. Defaults to the repo name if none is provided. For example, nfulton/stembolts model_id uses an intrinsic name of stembolts.
+            base_model_name: the name (NOT repo_id) of the model.
+        """
+        assert re.match(".*/.*", model_id), (
+            "expected a huggingface model id with format <user-id>/<repo-name>"
+        )
+        intrinsic_name = (
+            intrinsic_name if intrinsic_name is not None else model_id.split("/")[1]
+        )
+
+        # patch the catalog. TODO this is a temporary hack until we re-org adapters.
+        from mellea.backends.adapters import catalog
+
+        if intrinsic_name not in catalog._INTRINSICS_CATALOG:
+            catalog._INTRINSICS_CATALOG_ENTRIES.append(
+                catalog.IntriniscsCatalogEntry(name=intrinsic_name, repo_id=model_id)
+            )
+            catalog._INTRINSICS_CATALOG = {
+                e.name: e for e in catalog._INTRINSICS_CATALOG_ENTRIES
+            }
+
+        super().__init__(intrinsic_name=intrinsic_name, base_model_name=base_model_name)

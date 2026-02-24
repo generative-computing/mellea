@@ -6,6 +6,8 @@ from mellea.backends import ModelOption
 from mellea.core import ModelOutputThunk
 from mellea.stdlib.session import MelleaSession, start_session
 
+pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+
 
 # Use generated ModelOutputThunks to fully test copying. This can technically be done without a
 # backend, but it simplifies test setup.

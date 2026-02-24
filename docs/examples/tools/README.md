@@ -14,6 +14,14 @@ Comprehensive examples of using the code interpreter tool with LLMs.
 - Validating tool arguments
 - Local vs. sandboxed execution
 
+### smolagents_example.py
+Shows how to use pre-built tools from HuggingFace's smolagents library.
+
+**Key Features:**
+- Loading existing smolagents tools (PythonInterpreterTool, WikipediaSearchTool, etc.)
+- Converting to Mellea tools with `MelleaTool.from_smolagents()`
+- Using tools from the HuggingFace ecosystem
+
 ## Concepts Demonstrated
 
 - **Tool Definition**: Creating tools for LLM use

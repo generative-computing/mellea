@@ -13,7 +13,7 @@ from mellea.stdlib.context import ChatContext
 # Create the backend. Example for a VLLM Server. Commented out in favor of the hugging face code for now.
 # # Assumes a locally running VLLM server.
 # backend = OpenAIBackend(
-#     model_id="ibm-granite/granite-3.3-8b-instruct",
+#     model_id="ibm-granite/granite-4.0-micro",
 #     base_url="http://0.0.0.0:8000/v1",
 #     api_key="EMPTY",
 # )

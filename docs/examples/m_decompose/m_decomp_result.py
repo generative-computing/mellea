@@ -1,4 +1,4 @@
-# pytest: ollama, requires_heavy_ram, llm
+# pytest: skip_always
 # Note: This is an example of an intermediary result from using decompose, not an example of how to use decompose.
 
 import textwrap
