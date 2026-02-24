@@ -1,6 +1,6 @@
 import json
 import keyword
-import re
+import shutil
 from enum import Enum
 from graphlib import TopologicalSorter
 from pathlib import Path
@@ -16,7 +16,7 @@ from .pipeline import DecompBackend, DecompPipelineResult, DecompSubtasksResult
 class DecompVersion(str, Enum):
     latest = "latest"
     v1 = "v1"
-    # v2 = "v2"
+    v2 = "v2"
 
 
 this_file_dir = Path(__file__).resolve().parent
@@ -307,27 +307,40 @@ def run(
                 backend_api_key=backend_api_key,
             )
 
-        # Verify that all user variables are properly defined before use
-        # This may reorder subtasks if dependencies are out of order
-        decomp_data = verify_user_variables(decomp_data, input_var)
+        decomp_dir = out_dir / out_name
+        val_fn_dir = decomp_dir / "validations"
+        val_fn_dir.mkdir(parents=True)
 
-        with open(out_dir / f"{out_name}.json", "w") as f:
+        (val_fn_dir / "__init__.py").touch()
+
+        for constraint in decomp_data["identified_constraints"]:
+            if constraint["val_fn"] is not None:
+                with open(val_fn_dir / f"{constraint['val_fn_name']}.py", "w") as f:
+                    f.write(constraint["val_fn"] + "\n")
+
+        with open(decomp_dir / f"{out_name}.json", "w") as f:
             json.dump(decomp_data, f, indent=2)
 
-        with open(out_dir / f"{out_name}.py", "w") as f:
+        with open(decomp_dir / f"{out_name}.py", "w") as f:
             f.write(
                 m_template.render(
-                    subtasks=decomp_data["subtasks"], user_inputs=input_var
+                    subtasks=decomp_data["subtasks"],
+                    user_inputs=input_var,
+                    identified_constraints=decomp_data["identified_constraints"],
                 )
                 + "\n"
             )
     except Exception:
-        created_json = Path(out_dir / f"{out_name}.json")
-        created_py = Path(out_dir / f"{out_name}.py")
+        # created_json = Path(out_dir / f"{out_name}.json")
+        # created_py = Path(out_dir / f"{out_name}.py")
 
-        if created_json.exists() and created_json.is_file():
-            created_json.unlink()
-        if created_py.exists() and created_py.is_file():
-            created_py.unlink()
+        # if created_json.exists() and created_json.is_file():
+        #     created_json.unlink()
+        # if created_py.exists() and created_py.is_file():
+        #     created_py.unlink()
+
+        decomp_dir = out_dir / out_name
+        if decomp_dir.exists() and decomp_dir.is_dir():
+            shutil.rmtree(decomp_dir)
 
         raise Exception
