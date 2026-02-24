@@ -3,9 +3,10 @@ name: Verify Code Quality
 on:
   workflow_call:
 
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref_name }}
-  cancel-in-progress: true
+    group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref_name }}
+    cancel-in-progress: true
 
 env:
   CICD: 1
@@ -14,10 +15,10 @@ env:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 90 # TODO: need to reduce this after we figure out our testing strategy.
+    timeout-minutes: 90 # TODO: need to reduce this after we figure out our testing strategy. 
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"] # Need to add 3.13 once we resolve outlines issues.
+        python-version: ['3.10', '3.11', '3.12'] # Need to add 3.13 once we resolve outlines issues.
     steps:
       - uses: actions/checkout@v4
       - name: Free disk space
@@ -38,7 +39,7 @@ jobs:
       - name: Check style and run tests
         run: pre-commit run --all-files
       - name: Send failure message pre-commit
-        if: failure() # This step will only run if a previous step failed
+        if: failure()  # This step will only run if a previous step failed
         run: echo "The quality verification failed. Please run precommit "
       - name: Install Ollama
         run: curl -fsSL https://ollama.com/install.sh | sh
@@ -51,5 +52,6 @@ jobs:
       - name: Run Tests
         run: uv run -m pytest -v test
       - name: Send failure message tests
-        if: failure() # This step will only run if a previous step failed
+        if: failure()  # This step will only run if a previous step failed
         run: echo "Tests failed. Please verify that tests are working locally."
+      
