@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, llm, qualitative
 
 # Installing langchain is necessary for this example, but it works for any library
 # you may want to use Mellea with.
@@ -37,9 +37,9 @@ for msg in openai_messages:
 # Utilize that new ChatContext to ask the assistant about its past messages.
 m = start_session(ctx=ctx)
 response = m.chat(
-    "What was the last assistant message?",
+    "What exact words did the AI assistant use in its most recent response?",
     model_options={
-        ModelOption.SEED: 2
+        ModelOption.SEED: 123
     },  # Utilizing a seed for consistency in the example.
 ).content
 

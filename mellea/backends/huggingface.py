@@ -82,10 +82,55 @@ format: None = None  # typing this variable in order to shadow the global format
 class HFAloraCacheInfo:
     """A dataclass for holding some KV cache and associated information."""
 
-    kv_cache: DynamicCache
+    kv_cache: DynamicCache | None
     merged_token_ids: Any
     merged_attention: Any
     q_end: int = -1
+    scores: Any = None
+
+
+def _cleanup_kv_cache(cache_info: HFAloraCacheInfo) -> None:
+    """Free GPU memory when KV cache is evicted from LRU.
+
+    This function is called by SimpleLRUCache when an entry is evicted.
+    It explicitly deletes tensor references and calls torch.cuda.empty_cache()
+    to return pooled CUDA memory to the device.
+
+    Args:
+        cache_info: The HFAloraCacheInfo being evicted from cache.
+    """
+    import gc
+
+    if cache_info is None:
+        return
+
+    kv = cache_info.kv_cache
+    if kv is not None:
+        # Delete individual tensors from each layer
+        if hasattr(kv, "key_cache"):
+            for tensor in kv.key_cache:
+                del tensor
+            kv.key_cache.clear()
+        if hasattr(kv, "value_cache"):
+            for tensor in kv.value_cache:
+                del tensor
+            kv.value_cache.clear()
+        del cache_info.kv_cache
+
+    # Delete other tensors
+    if cache_info.merged_attention is not None:
+        del cache_info.merged_attention
+
+    # Delete score tensors if present
+    if cache_info.scores is not None:
+        for tensor in cache_info.scores:
+            del tensor
+        del cache_info.scores
+
+    # Force Python garbage collection and return CUDA memory to device
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 # modified from VLLM v0.9.2 code base
@@ -244,7 +289,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         ), "vocab size mismatch between llguidance and huggingface tokenizers ... wtf?"
 
         self._use_caches = use_caches
-        self._cache = cache if cache is not None else SimpleLRUCache(3)
+        self._cache = (
+            cache
+            if cache is not None
+            else SimpleLRUCache(0, on_evict=_cleanup_kv_cache)
+        )
 
         # Adapters can be made known to the backend (added) and loaded.
         self._added_adapters: dict[str, LocalHFAdapter] = {}
@@ -877,7 +926,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # Passed as args/kwargs to generate.
                 input_ids,
                 return_dict_in_generate=True,
-                output_scores=True,
+                use_cache=self._use_caches,  # Only create KV cache if caching is enabled
                 **self._make_backend_specific_and_remove(generate_options),
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
@@ -941,7 +990,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # and already decoded.
         if isinstance(chunk, str):
             mot._underlying_value += chunk
-        else:
+        elif isinstance(chunk, GenerateDecoderOnlyOutput):
             # Otherwise, it's a non-streaming request. Decode it here.
             mot._meta["hf_output"] = chunk
             mot._underlying_value += self._tokenizer.decode(
@@ -968,19 +1017,31 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # The ModelOutputThunk must be computed by this point.
         assert mot.value is not None
 
-        # Add an entry to the cache for ALora reuse.
-        if self._use_caches and mot._meta.get("hf_output", None) is not None:
-            output_complete = mot._meta["hf_output"].sequences[0]
-            cache: DynamicCache = mot._meta["hf_output"].past_key_values  # type: ignore
+        # Store KV cache in LRU separately (not in mot._meta) to enable proper cleanup on eviction.
+        # This prevents GPU memory from being held by ModelOutputThunk references.
+        hf_output = mot._meta.get("hf_output", None)
+        if (
+            self._use_caches
+            and isinstance(hf_output, GenerateDecoderOnlyOutput)
+            and (hf_output.past_key_values is not None or hf_output.scores is not None)
+        ):
+            output_complete = hf_output.sequences[0]
+            kv_cache: DynamicCache | None = hf_output.past_key_values  # type: ignore
 
             cache_info = HFAloraCacheInfo(
-                kv_cache=cache,
+                kv_cache=kv_cache,
                 merged_token_ids=output_complete,
                 merged_attention=torch.ones_like(output_complete).to(self._device),
                 q_end=len(input_ids[0]),  # type: ignore
+                scores=hf_output.scores,
             )
 
-            self.cache_put(mot.value, cache_info)
+            cache_key = id(mot.value)
+            self.cache_put(cache_key, cache_info)
+
+            # Clear KV cache and scores from HF output - they're now owned by the LRU cache
+            hf_output.past_key_values = None
+            hf_output.scores = None
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
@@ -1002,13 +1063,31 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # HuggingFace local models don't typically provide token counts
             # but we can record response metadata if available
             hf_output = mot._meta.get("hf_output")
-            if hf_output is not None:
+            if isinstance(hf_output, GenerateDecoderOnlyOutput):
                 record_response_metadata(span, hf_output)
 
             # Close the span now that async operation is complete
             end_backend_span(span)
             # Clean up span reference
             del mot._meta["_telemetry_span"]
+
+        # When caching is disabled, clear hf_output from meta to free GPU memory.
+        # The sequences tensor is on GPU and accumulates if not cleared.
+        if not self._use_caches and isinstance(
+            mot._meta.get("hf_output"), GenerateDecoderOnlyOutput
+        ):
+            import gc
+
+            hf_out = mot._meta["hf_output"]
+            if hasattr(hf_out, "sequences") and hf_out.sequences is not None:
+                del hf_out.sequences
+            if hasattr(hf_out, "scores") and hf_out.scores is not None:
+                del hf_out.scores
+            del mot._meta["hf_output"]
+
+            # Force Python GC and return CUDA memory to device
+            gc.collect()
+            torch.cuda.empty_cache()
 
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
@@ -1159,13 +1238,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         return results
 
     # region cache management
-    def cache_get(self, id: str) -> HFAloraCacheInfo | None:
+    def cache_get(self, id: str | int) -> HFAloraCacheInfo | None:
         """Retrieve from cache."""
         v = self._cache.get(id)
         assert v is None or type(v) is HFAloraCacheInfo
         return v
 
-    def cache_put(self, id: str, v: HFAloraCacheInfo):
+    def cache_put(self, id: str | int, v: HFAloraCacheInfo):
         """Put into cache."""
         self._cache.put(id, v)
 

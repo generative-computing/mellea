@@ -123,7 +123,6 @@ Specify which backend the test uses:
 - **`@pytest.mark.vllm`**: Tests requiring vLLM backend
   - Local execution
   - Heavy resources (GPU required, 16-32GB RAM, 8GB+ VRAM)
-  - Requires `VLLM_USE_V1=0` environment variable
   - Example: `test/backends/test_vllm.py`
 
 - **`@pytest.mark.litellm`**: Tests requiring LiteLLM backend
@@ -310,11 +309,11 @@ jobs:
   unit-tests:
     # Fast unit tests, no LLM
     run: pytest -m "not llm"
-  
+
   ollama-tests:
     # Ollama infrastructure tests
     run: pytest -m "ollama and not qualitative"
-  
+
   quality-tests:
     # Optional: Run quality tests on schedule
     if: github.event_name == 'schedule'

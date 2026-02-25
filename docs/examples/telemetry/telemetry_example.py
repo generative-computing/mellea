@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 """Example demonstrating OpenTelemetry tracing in Mellea.
 
 This example shows how to use the two independent trace scopes:

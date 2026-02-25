@@ -69,6 +69,7 @@ hf = [
 
 vllm = [
     "vllm>=0.13.0; sys_platform != 'darwin'",
+    "numpy<=2.2",               # ImportError: Numba needs NumPy 2.2 or less. Got NumPy 2.4.
 ]
 
 litellm = [
@@ -84,8 +85,10 @@ docling = [
     "docling>=2.45.0",
 ]
 
-smolagents = [
+tools = [
     "smolagents>=1.0.0",
+    "langchain-community>=0.3.0",
+    "ddgs>=9.0.0",  # Required by DuckDuckGoSearchResults in langchain-community
 ]
 
 telemetry = [
@@ -95,7 +98,7 @@ telemetry = [
     "opentelemetry-distro>=0.59b0",
 ]
 
-all = ["mellea[watsonx,docling,hf,vllm,litellm,smolagents,telemetry]"]
+all = ["mellea[watsonx,docling,hf,vllm,litellm,tools,telemetry]"]
 
 [dependency-groups]
 # Use these like:
@@ -203,6 +206,13 @@ disable_error_code = [
     "import-not-found",
 ]
 
+[[tool.mypy.overrides]]
+# vLLM is an optional backend that doesn't work on macOS
+module = "mellea.backends.vllm"
+disable_error_code = [
+    "import-not-found",
+]
+
 [tool.codespell]
 ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,Wight'
 check-filenames = true
@@ -211,6 +221,8 @@ regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=
 skip = 'requirements.txt,uv.lock,CHANGELOG.md'
 
 [tool.mypy]
+install_types = true
+non_interactive = true
 disable_error_code = ["empty-body", "import-untyped"]
 python_version = "3.10"
 
