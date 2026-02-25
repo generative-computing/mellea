@@ -1,0 +1,585 @@
+/* ==========================================================================
+   LANDING PAGE CUSTOM STYLES
+   ========================================================================== */
+
+/* ==========================================================================
+   FORCE-HIDE SIDEBAR & TOC ON LANDING PAGE ONLY
+   Scoped via :has() so it only applies when landing page content is present.
+   Mintlify's mode: "custom" should do this, but the maple theme may not
+   fully respect it. These selectors are documented by Mintlify.
+   ========================================================================== */
+body:has(.landing-hero) #sidebar,
+body:has(.landing-hero) #sidebar-content {
+  display: none !important;
+}
+
+body:has(.landing-hero) #toc {
+  display: none !important;
+}
+
+body:has(.landing-hero) #content-container,
+body:has(.landing-hero) #body-content {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* CSS Custom Properties */
+:root {
+  --landing-color-text: #161616;
+  --landing-color-text-secondary: #525252;
+  --landing-color-text-muted: #8d8d8d;
+  --landing-color-border: #e0e0e0;
+  --landing-color-surface: #f4f4f4;
+  --landing-color-dark-bg: #161616;
+  --landing-color-dark-text: #ffffff;
+  --landing-color-dark-text-muted: #a8a8a8;
+  --landing-font-mono: 'IBM Plex Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+}
+
+/* ==========================================================================
+   LAYOUT
+   ========================================================================== */
+.landing-container {
+  max-width: 1584px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+@media (min-width: 672px) {
+  .landing-container {
+    padding: 0 2rem;
+  }
+}
+
+.landing-grid {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 1rem;
+}
+
+.landing-content-area {
+  grid-column: 2 / -2;
+}
+
+@media (min-width: 672px) {
+  .landing-content-area {
+    grid-column: 3 / -3;
+  }
+}
+
+/* ==========================================================================
+   HERO SECTION
+   ========================================================================== */
+.landing-hero {
+  padding: 6rem 0;
+}
+
+@media (max-width: 671px) {
+  .landing-hero {
+    padding: 4rem 0;
+    margin-top: 3rem;
+  }
+}
+
+.landing-hero-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.landing-hero h1 {
+  font-size: clamp(3rem, 10vw, 5rem);
+  font-weight: 200;
+  line-height: 1.125;
+  max-width: 54rem;
+  color: var(--landing-color-text);
+}
+
+.landing-hero .app-name {
+  font-weight: 600;
+}
+
+.landing-hero-logo {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: middle;
+  margin-left: 0.1em;
+}
+
+.landing-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* ==========================================================================
+   COPY SNIPPET BUTTON
+   ========================================================================== */
+.copy-snippet {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--landing-color-surface);
+  border: none;
+  border-radius: 0;
+  font-family: var(--landing-font-mono);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  color: var(--landing-color-text);
+}
+
+.copy-snippet:hover {
+  background: var(--landing-color-border);
+}
+
+.copy-snippet svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--landing-color-text-secondary);
+}
+
+.copy-snippet.copied {
+  background: #198038;
+  color: white;
+}
+
+.copy-snippet.copied svg {
+  color: white;
+}
+
+/* ==========================================================================
+   GITHUB BUTTON
+   ========================================================================== */
+.landing-github-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--landing-color-text);
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background 0.15s;
+  text-decoration: none;
+}
+
+.landing-github-btn:hover {
+  background: #393939;
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.landing-github-btn svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* ==========================================================================
+   FRAMEWORK SECTION
+   ========================================================================== */
+.landing-framework {
+  background: var(--landing-color-dark-bg);
+  color: var(--landing-color-dark-text);
+  padding: 6rem 0;
+}
+
+.landing-framework-intro {
+  display: grid;
+  gap: 2rem;
+  align-items: center;
+  margin-bottom: 6rem;
+}
+
+@media (min-width: 1056px) {
+  .landing-framework-intro {
+    grid-template-columns: 1fr 1.5fr;
+    gap: 3rem;
+  }
+}
+
+.landing-framework-headline h2 {
+  font-size: 2.5rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.landing-framework-headline p {
+  color: var(--landing-color-dark-text-muted);
+  margin-bottom: 1.5rem;
+  max-width: 30rem;
+}
+
+.landing-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1rem;
+  min-width: 12rem;
+  background: white;
+  color: var(--landing-color-text);
+  font-size: 0.875rem;
+  font-weight: 400;
+  transition: background 0.15s;
+  border: none;
+  cursor: pointer;
+  border-radius: 0.5rem;
+  text-decoration: none;
+}
+
+.landing-btn-primary:hover {
+  background: #f4f4f4;
+  text-decoration: none;
+}
+
+.landing-btn-primary svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* ==========================================================================
+   COMPARISON SLIDER
+   ========================================================================== */
+.comparison-container {
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 0.5rem;
+}
+
+.comparison-slider {
+  position: relative;
+  width: 100%;
+  user-select: none;
+  touch-action: none;
+}
+
+.comparison-slider img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.comparison-slider .after-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  clip-path: inset(0 0 0 40%);
+}
+
+.comparison-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 40%;
+  width: 2px;
+  background: transparent;
+  cursor: ew-resize;
+  z-index: 10;
+}
+
+.comparison-handle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 42px;
+  height: 42px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.comparison-handle svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 24px;
+  color: var(--landing-color-text);
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   FEATURES GRID
+   ========================================================================== */
+.landing-features-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+@media (min-width: 672px) {
+  .landing-features-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.landing-feature-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.landing-feature-item svg {
+  width: 2rem;
+  height: 2rem;
+  color: var(--landing-color-dark-text);
+}
+
+.landing-feature-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.landing-feature-text strong {
+  font-weight: 600;
+  font-size: 1.2rem;
+  display: block;
+}
+
+.landing-feature-text span {
+  color: var(--landing-color-dark-text-muted);
+  font-size: 1.1rem;
+  display: block;
+}
+
+/* ==========================================================================
+   SHOWCASE SECTION (Accordion)
+   ========================================================================== */
+.landing-showcase {
+  background: var(--landing-color-surface);
+  padding: 6rem 0;
+}
+
+.landing-showcase-grid {
+  display: grid;
+  gap: 3rem;
+}
+
+@media (min-width: 1056px) {
+  .landing-showcase-grid {
+    grid-template-columns: 1fr 2fr;
+  }
+}
+
+/* Accordion */
+.landing-accordion {
+  display: flex;
+  flex-direction: column;
+}
+
+.landing-accordion-item {
+  border-bottom: 1px solid var(--landing-color-border);
+}
+
+.landing-accordion-item:last-child {
+  border-bottom: none;
+}
+
+.landing-accordion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 1rem 0;
+  background: none;
+  border: none;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  color: var(--landing-color-text);
+  font-family: inherit;
+}
+
+.landing-accordion-header:hover {
+  color: var(--landing-color-text-secondary);
+}
+
+.landing-accordion-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  transition: transform 0.2s;
+}
+
+.landing-accordion-item.active .landing-accordion-icon {
+  display: none;
+}
+
+.landing-accordion-item.active .landing-accordion-header {
+  cursor: default;
+}
+
+.landing-accordion-content {
+  display: none;
+  padding-bottom: 1.5rem;
+}
+
+.landing-accordion-item.active .landing-accordion-content {
+  display: block;
+}
+
+.landing-accordion-description {
+  color: var(--landing-color-text-secondary);
+  margin-bottom: 1rem;
+}
+
+.landing-learn-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--landing-color-text-secondary);
+  margin-bottom: 1.5rem;
+  text-decoration: none;
+}
+
+.landing-learn-more:hover {
+  color: var(--landing-color-text);
+  text-decoration: none;
+}
+
+.landing-learn-more svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* ==========================================================================
+   CODE BLOCKS
+   ========================================================================== */
+
+/* Code snippet - mobile */
+.snippet-mobile {
+  display: block;
+  margin-top: 1rem;
+}
+
+@media (min-width: 1056px) {
+  .snippet-mobile {
+    display: none;
+  }
+}
+
+/* Code snippet - desktop */
+.snippet-desktop {
+  display: none;
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px rgba(193, 199, 205, 0.45);
+  padding: 1rem;
+  overflow: auto;
+  transition: opacity 0.2s;
+}
+
+.snippet-desktop.transitioning {
+  opacity: 0;
+}
+
+@media (min-width: 1056px) {
+  .snippet-desktop {
+    display: block;
+  }
+}
+
+/* Code block styling */
+.landing-code-block {
+  position: relative;
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px rgba(193, 199, 205, 0.45);
+  padding: 1rem;
+  padding-top: calc(1rem + 1.5rem);
+  overflow: auto;
+}
+
+.code-copy-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  background: var(--landing-color-surface);
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  color: var(--landing-color-text-secondary);
+  transition: background 0.15s, color 0.15s;
+}
+
+.code-copy-btn:hover {
+  background: var(--landing-color-border);
+  color: var(--landing-color-text);
+}
+
+.code-copy-btn.copied {
+  background: #198038;
+  color: white;
+}
+
+.code-copy-btn svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.code-copy-btn .icon-check {
+  display: none;
+}
+
+.code-copy-btn.copied .icon-copy {
+  display: none;
+}
+
+.code-copy-btn.copied .icon-check {
+  display: block;
+}
+
+.landing-code-block pre {
+  margin: 0;
+  font-family: var(--landing-font-mono);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.landing-code-block code {
+  font-family: inherit;
+  color: inherit;
+}
+
+/* Highlight.js overrides */
+.landing-code-block pre code.hljs {
+  background: transparent;
+  padding: 0;
+  color: #24292e;
+}
+
+.hljs-keyword { color: #d73a49 !important; }
+.hljs-string { color: #032f62 !important; }
+.hljs-number { color: #005cc5 !important; }
+.hljs-function { color: #6f42c1 !important; }
+.hljs-title { color: #6f42c1 !important; }
+.hljs-params { color: #24292e !important; }
+.hljs-comment { color: #6a737d !important; }
+.hljs-built_in { color: #005cc5 !important; }
+.hljs-literal { color: #005cc5 !important; }
+.hljs-type { color: #005cc5 !important; }
+.hljs-attr { color: #005cc5 !important; }
+.hljs-selector-tag { color: #22863a !important; }
+.hljs-selector-class { color: #6f42c1 !important; }
+.hljs-selector-id { color: #005cc5 !important; }
+.hljs-variable { color: #e36209 !important; }
+.hljs-meta { color: #005cc5 !important; }
+.hljs-decorator { color: #6f42c1 !important; }

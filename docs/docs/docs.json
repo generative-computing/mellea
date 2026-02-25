@@ -223,7 +223,8 @@
   },
   "logo": {
     "light": "/logo/logo-light.svg",
-    "dark": "/logo/logo-dark.svg"
+    "dark": "/logo/logo-dark.svg",
+    "href": "/"
   },
   "navbar": {
     "primary": {
@@ -250,6 +251,8 @@
       }
     ]
   },
+ "css": "/styles/landing.css",
+ "js": "/scripts/landing.js",
   "search": {
     "prompt": "Search documentation..."
   }
