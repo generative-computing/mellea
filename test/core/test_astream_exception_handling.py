@@ -12,7 +12,7 @@ import asyncio
 
 import pytest
 
-from mellea.core.base import GenerateType, ModelOutputThunk
+from mellea.core.base import CBlock, GenerateType, ModelOutputThunk
 
 
 def _make_streaming_mot():
@@ -42,7 +42,6 @@ def _make_streaming_mot():
     return mot, process_calls, post_process_called
 
 
-@pytest.mark.asyncio
 async def test_astream_propagates_exception_from_queue():
     """Exception in the queue is re-raised after cleanup, not passed to _process."""
     mot, process_calls, post_process_called = _make_streaming_mot()
@@ -59,7 +58,6 @@ async def test_astream_propagates_exception_from_queue():
     assert post_process_called.is_set()
 
 
-@pytest.mark.asyncio
 async def test_astream_propagates_exception_after_valid_chunks():
     """Valid chunks before the exception are processed; exception still raised."""
     mot, process_calls, post_process_called = _make_streaming_mot()
@@ -79,18 +77,13 @@ async def test_astream_propagates_exception_after_valid_chunks():
     assert post_process_called.is_set()
 
 
-@pytest.mark.asyncio
 async def test_astream_skips_none_and_exception_in_chunk_loop():
     """Belt-and-suspenders: stray None/Exception objects in the middle of the
     chunk list are skipped rather than passed to _process."""
     mot, process_calls, _ = _make_streaming_mot()
 
-    # Simulate a queue where a None sentinel terminates the stream normally
     await mot._async_queue.put("good chunk")
     await mot._async_queue.put(None)
-
-    # Need _action for the finally-block parse path
-    from mellea.core.base import CBlock
 
     mot._action = CBlock("test")
 
