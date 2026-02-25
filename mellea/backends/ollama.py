@@ -31,6 +31,7 @@ from ..telemetry.backend_instrumentation import (
     instrument_generate_from_context,
     instrument_generate_from_raw,
 )
+from ..telemetry.metrics import is_metrics_enabled
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import add_tools_from_context_actions, add_tools_from_model_options
@@ -610,36 +611,47 @@ class OllamaModelBackend(FormatterBackend):
         mot._generate_log = generate_log
         mot._generate = None
 
+        # Extract token counts from response
+        response = mot._meta.get("chat_response")
+        prompt_tokens = (
+            getattr(response, "prompt_eval_count", None) if response else None
+        )
+        completion_tokens = getattr(response, "eval_count", None) if response else None
+
+        # Record metrics if enabled
+        if is_metrics_enabled():
+            from ..telemetry.backend_instrumentation import (
+                get_model_id_str,
+                get_system_name,
+            )
+            from ..telemetry.metrics import record_token_usage_metrics
+
+            record_token_usage_metrics(
+                input_tokens=prompt_tokens,
+                output_tokens=completion_tokens,
+                model=get_model_id_str(self),
+                backend=self.__class__.__name__,
+                system=get_system_name(self),
+            )
+
         # Record telemetry and close span now that response is available
         span = mot._meta.get("_telemetry_span")
         if span is not None:
             from ..telemetry import end_backend_span
             from ..telemetry.backend_instrumentation import (
-                get_model_id_str,
-                get_system_name,
                 record_response_metadata,
                 record_token_usage,
             )
-            from ..telemetry.metrics import record_token_usage_metrics
-            from .utils import get_value
 
-            response = mot._meta.get("chat_response")
             if response:
                 # Ollama responses may have usage information
-                usage = (
-                    response.get("usage")
-                    if isinstance(response, dict)
-                    else getattr(response, "usage", None)
-                )
-                if usage:
+                if prompt_tokens is not None or completion_tokens is not None:
+                    usage = {
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "total_tokens": (prompt_tokens or 0) + (completion_tokens or 0),
+                    }
                     record_token_usage(span, usage)
-                    record_token_usage_metrics(
-                        input_tokens=get_value(usage, "prompt_tokens"),
-                        output_tokens=get_value(usage, "completion_tokens"),
-                        model=get_model_id_str(self),
-                        backend=self.__class__.__name__,
-                        system=get_system_name(self),
-                    )
                 record_response_metadata(span, response)
 
             # Close the span now that telemetry is recorded

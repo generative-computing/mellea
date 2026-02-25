@@ -54,13 +54,6 @@ def enable_metrics(monkeypatch):
     importlib.reload(mellea.telemetry.metrics)
 
 
-@pytest.fixture
-def metric_reader():
-    """Create an in-memory metric reader for testing."""
-    reader = InMemoryMetricReader()
-    return reader
-
-
 # Configuration Tests
 
 

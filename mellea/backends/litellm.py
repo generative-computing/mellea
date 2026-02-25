@@ -39,6 +39,7 @@ from ..telemetry.backend_instrumentation import (
     instrument_generate_from_raw,
     start_generate_span,
 )
+from ..telemetry.metrics import is_metrics_enabled
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -389,6 +390,9 @@ class LiteLLMBackend(FormatterBackend):
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
 
+            # Store the full response (includes usage) as a dict
+            mot._meta["litellm_full_response"] = chunk.model_dump()
+            # Also store just the choice for backward compatibility
             mot._meta["litellm_chat_response"] = chunk.choices[0].model_dump()
 
         elif isinstance(chunk, litellm.ModelResponseStream):  # type: ignore
@@ -468,36 +472,41 @@ class LiteLLMBackend(FormatterBackend):
         generate_log.result = mot
         mot._generate_log = generate_log
 
+        # Extract token usage from full response dict
+        full_response = mot._meta.get("litellm_full_response")
+        usage = full_response.get("usage") if isinstance(full_response, dict) else None
+
+        # Record metrics if enabled
+        if is_metrics_enabled() and usage:
+            from ..telemetry.backend_instrumentation import (
+                get_model_id_str,
+                get_system_name,
+            )
+            from ..telemetry.metrics import record_token_usage_metrics
+            from .utils import get_value
+
+            record_token_usage_metrics(
+                input_tokens=get_value(usage, "prompt_tokens"),
+                output_tokens=get_value(usage, "completion_tokens"),
+                model=get_model_id_str(self),
+                backend=self.__class__.__name__,
+                system=get_system_name(self),
+            )
+
         # Record telemetry now that response is available
         span = mot._meta.get("_telemetry_span")
         if span is not None:
             from ..telemetry import end_backend_span
             from ..telemetry.backend_instrumentation import (
-                get_model_id_str,
-                get_system_name,
                 record_response_metadata,
                 record_token_usage,
             )
-            from ..telemetry.metrics import record_token_usage_metrics
-            from .utils import get_value
 
             response = mot._meta.get("litellm_chat_response")
             if response:
                 # LiteLLM responses have usage information
-                usage = (
-                    response.get("usage")
-                    if isinstance(response, dict)
-                    else getattr(response, "usage", None)
-                )
                 if usage:
                     record_token_usage(span, usage)
-                    record_token_usage_metrics(
-                        input_tokens=get_value(usage, "prompt_tokens"),
-                        output_tokens=get_value(usage, "completion_tokens"),
-                        model=get_model_id_str(self),
-                        backend=self.__class__.__name__,
-                        system=get_system_name(self),
-                    )
                 record_response_metadata(span, response)
             # Close the span now that async operation is complete
             end_backend_span(span)

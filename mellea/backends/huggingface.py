@@ -51,6 +51,7 @@ from ..telemetry.backend_instrumentation import (
     instrument_generate_from_raw,
     start_generate_span,
 )
+from ..telemetry.metrics import is_metrics_enabled
 from .adapters import (
     AdapterMixin,
     AdapterType,
@@ -1008,22 +1009,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         input_ids,
     ):
         """Called when generation is done."""
-
-        def _calculate_token_counts(input_ids, hf_output):
-            """Calculate token counts from input_ids and output sequences."""
-            try:
-                if input_ids is None or not isinstance(
-                    hf_output, GenerateDecoderOnlyOutput
-                ):
-                    return None, None
-                if hf_output.sequences is None:
-                    return None, None
-                n_prompt = input_ids.shape[1]
-                n_completion = hf_output.sequences[0].shape[0] - n_prompt
-                return n_prompt, n_completion
-            except Exception:
-                return None, None
-
         if mot._meta.get("hf_output", None) is None:
             if mot._generate_extra is not None:
                 full_output = await mot._generate_extra
@@ -1070,24 +1055,50 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
-        # Record telemetry if span is available
         span = mot._meta.get("_telemetry_span")
-        if span is not None:
-            from ..telemetry import end_backend_span
+        metrics_enabled = is_metrics_enabled()
+
+        # Extract token counts only if needed
+        hf_output = mot._meta.get("hf_output")
+        n_prompt, n_completion = None, None
+        if (span is not None or metrics_enabled) and isinstance(
+            hf_output, GenerateDecoderOnlyOutput
+        ):
+            # HuggingFace local models don't provide usage objects, but we can
+            # calculate token counts from sequences
+            try:
+                if input_ids is not None and hf_output.sequences is not None:
+                    n_prompt = input_ids.shape[1]
+                    n_completion = hf_output.sequences[0].shape[0] - n_prompt
+            except Exception:
+                pass
+
+        # Record metrics if enabled
+        if metrics_enabled and n_prompt is not None:
             from ..telemetry.backend_instrumentation import (
                 get_model_id_str,
                 get_system_name,
-                record_response_metadata,
-                record_token_usage,
             )
             from ..telemetry.metrics import record_token_usage_metrics
 
-            hf_output = mot._meta.get("hf_output")
+            record_token_usage_metrics(
+                input_tokens=n_prompt,
+                output_tokens=n_completion,
+                model=get_model_id_str(self),
+                backend=self.__class__.__name__,
+                system=get_system_name(self),
+            )
+
+        # Record tracing if span exists
+        if span is not None:
+            from ..telemetry import end_backend_span
+            from ..telemetry.backend_instrumentation import (
+                record_response_metadata,
+                record_token_usage,
+            )
+
             if isinstance(hf_output, GenerateDecoderOnlyOutput):
                 record_response_metadata(span, hf_output)
-                # HuggingFace local models don't provide usage objects, but we can
-                # calculate token counts from sequences
-                n_prompt, n_completion = _calculate_token_counts(input_ids, hf_output)
                 if n_prompt is not None:
                     usage = {
                         "prompt_tokens": n_prompt,
@@ -1095,13 +1106,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                         "total_tokens": n_prompt + n_completion,
                     }
                     record_token_usage(span, usage)
-                    record_token_usage_metrics(
-                        input_tokens=n_prompt,
-                        output_tokens=n_completion,
-                        model=get_model_id_str(self),
-                        backend=self.__class__.__name__,
-                        system=get_system_name(self),
-                    )
 
             # Close the span now that async operation is complete
             end_backend_span(span)

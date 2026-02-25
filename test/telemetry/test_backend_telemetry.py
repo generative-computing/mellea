@@ -1,6 +1,7 @@
 """Unit tests for backend telemetry instrumentation with Gen-AI semantic conventions."""
 
 import asyncio
+import os
 import time
 from unittest.mock import MagicMock, patch
 
@@ -12,7 +13,9 @@ from mellea.stdlib.context import SimpleContext
 
 # Check if OpenTelemetry is available
 try:
-    from opentelemetry import trace
+    from opentelemetry import metrics, trace
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
@@ -33,8 +36,9 @@ def setup_telemetry():
     """Set up telemetry for all tests in this module."""
     import os
 
-    # Enable backend tracing before any imports
+    # Enable backend tracing and metrics before any imports
     os.environ["MELLEA_TRACE_BACKEND"] = "true"
+    os.environ["MELLEA_METRICS_ENABLED"] = "true"
 
 
 @pytest.fixture
@@ -56,6 +60,29 @@ def span_exporter():
 
     yield exporter
     exporter.clear()
+
+
+@pytest.fixture
+def metric_reader():
+    """Create an in-memory metric reader for testing."""
+    reader = InMemoryMetricReader()
+    yield reader
+
+
+@pytest.fixture
+def enable_metrics(monkeypatch):
+    """Enable metrics for tests."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    # Force reload of metrics module to pick up env vars
+    import importlib
+
+    import mellea.telemetry.metrics
+
+    importlib.reload(mellea.telemetry.metrics)
+    yield
+    # Reset after test
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "false")
+    importlib.reload(mellea.telemetry.metrics)
 
 
 @pytest.mark.asyncio
@@ -167,9 +194,6 @@ async def test_token_usage_recorded_after_completion(span_exporter, gh_run):
     # Get the recorded span
     spans = span_exporter.get_finished_spans()
     assert len(spans) > 0, "No spans were recorded"
-
-    # Debug: print all span names
-    print(f"\nRecorded spans: {[s.name for s in spans]}")
 
     backend_span = None
     for span in spans:
@@ -319,3 +343,286 @@ async def test_streaming_span_duration(span_exporter, gh_run):
     assert abs(span_duration_s - actual_duration) < 0.5, (
         f"Streaming span duration {span_duration_s}s differs from actual {actual_duration}s"
     )
+
+
+# ============================================================================
+# Token Metrics Integration Tests
+# ============================================================================
+
+
+def get_metric_value(metrics_data, metric_name, attributes=None):
+    """Helper to extract metric value from metrics data.
+
+    Args:
+        metrics_data: Metrics data from reader (may be None)
+        metric_name: Name of the metric to find
+        attributes: Optional dict of attributes to match
+
+    Returns:
+        The metric value or None if not found
+    """
+    if metrics_data is None:
+        return None
+
+    for resource_metrics in metrics_data.resource_metrics:
+        for scope_metrics in resource_metrics.scope_metrics:
+            for metric in scope_metrics.metrics:
+                if metric.name == metric_name:
+                    for data_point in metric.data.data_points:
+                        if attributes is None:
+                            return data_point.value
+                        # Check if attributes match
+                        point_attrs = dict(data_point.attributes)
+                        if all(point_attrs.get(k) == v for k, v in attributes.items()):
+                            return data_point.value
+    return None
+
+
+@pytest.mark.asyncio
+@pytest.mark.ollama
+async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, gh_run):
+    """Test that Ollama backend records token metrics correctly."""
+    if gh_run:
+        pytest.skip("Skipping in CI - requires Ollama")
+
+    from mellea.backends.ollama import OllamaModelBackend
+    from mellea.telemetry import metrics as metrics_module
+
+    provider = MeterProvider(metric_readers=[metric_reader])
+    metrics_module._meter_provider = provider
+    metrics_module._meter = provider.get_meter("mellea")
+    metrics_module._input_token_counter = None
+    metrics_module._output_token_counter = None
+
+    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    ctx = SimpleContext()
+    ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
+
+    mot, _ = await backend.generate_from_context(
+        Message(role="assistant", content=""), ctx
+    )
+    await mot.avalue()
+
+    # Force metrics export and collection
+    provider.force_flush()
+    metrics_data = metric_reader.get_metrics_data()
+
+    # Verify input token counter
+    input_tokens = get_metric_value(
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "ollama"}
+    )
+
+    # Verify output token counter
+    output_tokens = get_metric_value(
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "ollama"}
+    )
+
+    # Ollama should always return token counts
+    assert input_tokens is not None, "Input tokens should not be None"
+    assert input_tokens > 0, f"Input tokens should be > 0, got {input_tokens}"
+
+    assert output_tokens is not None, "Output tokens should not be None"
+    assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.ollama
+async def test_openai_token_metrics_integration(enable_metrics, metric_reader, gh_run):
+    """Test that OpenAI backend records token metrics correctly using Ollama's OpenAI-compatible endpoint."""
+    if gh_run:
+        pytest.skip("Skipping in CI - requires Ollama")
+
+    from mellea.backends.openai import OpenAIBackend
+    from mellea.telemetry import metrics as metrics_module
+
+    provider = MeterProvider(metric_readers=[metric_reader])
+    metrics_module._meter_provider = provider
+    metrics_module._meter = provider.get_meter("mellea")
+    metrics_module._input_token_counter = None
+    metrics_module._output_token_counter = None
+
+    # Use Ollama's OpenAI-compatible endpoint
+    backend = OpenAIBackend(
+        model_id="llama3.2:1b",
+        base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
+        api_key="ollama",
+    )
+    ctx = SimpleContext()
+    ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
+
+    mot, _ = await backend.generate_from_context(
+        Message(role="assistant", content=""), ctx
+    )
+    await mot.avalue()
+
+    provider.force_flush()
+    metrics_data = metric_reader.get_metrics_data()
+
+    # OpenAI always provides token counts
+    input_tokens = get_metric_value(
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "openai"}
+    )
+
+    output_tokens = get_metric_value(
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "openai"}
+    )
+
+    assert input_tokens is not None, "Input tokens should be recorded"
+    assert input_tokens > 0, f"Input tokens should be > 0, got {input_tokens}"
+
+    assert output_tokens is not None, "Output tokens should be recorded"
+    assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.watsonx
+@pytest.mark.requires_api_key
+async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader, gh_run):
+    """Test that WatsonX backend records token metrics correctly."""
+    if gh_run:
+        pytest.skip("Skipping in CI - requires WatsonX credentials")
+
+    if not os.getenv("WATSONX_API_KEY"):
+        pytest.skip("WATSONX_API_KEY not set")
+
+    from mellea.backends.watsonx import WatsonxAIBackend
+    from mellea.telemetry import metrics as metrics_module
+
+    provider = MeterProvider(metric_readers=[metric_reader])
+    metrics_module._meter_provider = provider
+    metrics_module._meter = provider.get_meter("mellea")
+    metrics_module._input_token_counter = None
+    metrics_module._output_token_counter = None
+
+    backend = WatsonxAIBackend(
+        model_id="ibm/granite-3-8b-instruct",
+        project_id=os.getenv("WATSONX_PROJECT_ID", "test-project"),
+    )
+    ctx = SimpleContext()
+    ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
+
+    mot, _ = await backend.generate_from_context(
+        Message(role="assistant", content=""), ctx
+    )
+    await mot.avalue()
+
+    provider.force_flush()
+    metrics_data = metric_reader.get_metrics_data()
+
+    input_tokens = get_metric_value(
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "watsonx"}
+    )
+
+    output_tokens = get_metric_value(
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "watsonx"}
+    )
+
+    assert input_tokens is not None, "Input tokens should be recorded"
+    assert input_tokens > 0, f"Input tokens should be > 0, got {input_tokens}"
+
+    assert output_tokens is not None, "Output tokens should be recorded"
+    assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.litellm
+@pytest.mark.ollama
+async def test_litellm_token_metrics_integration(
+    enable_metrics, metric_reader, gh_run, monkeypatch
+):
+    """Test that LiteLLM backend records token metrics correctly using OpenAI-compatible endpoint."""
+    if gh_run:
+        pytest.skip("Skipping in CI - requires Ollama")
+
+    from mellea.backends.litellm import LiteLLMBackend
+    from mellea.telemetry import metrics as metrics_module
+
+    # Set environment variables for LiteLLM to use Ollama's OpenAI-compatible endpoint
+    ollama_url = f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1"
+    monkeypatch.setenv("OPENAI_API_KEY", "ollama")
+    monkeypatch.setenv("OPENAI_BASE_URL", ollama_url)
+
+    provider = MeterProvider(metric_readers=[metric_reader])
+    metrics_module._meter_provider = provider
+    metrics_module._meter = provider.get_meter("mellea")
+    metrics_module._input_token_counter = None
+    metrics_module._output_token_counter = None
+
+    # Use LiteLLM with openai/ prefix - it will use the OPENAI_BASE_URL env var
+    # This tests LiteLLM with a provider that properly returns token usage
+    backend = LiteLLMBackend(model_id="openai/llama3.2:1b")
+    ctx = SimpleContext()
+    ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
+
+    mot, _ = await backend.generate_from_context(
+        Message(role="assistant", content=""), ctx
+    )
+    await mot.avalue()
+
+    provider.force_flush()
+    metrics_data = metric_reader.get_metrics_data()
+
+    input_tokens = get_metric_value(
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "litellm"}
+    )
+
+    output_tokens = get_metric_value(
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "litellm"}
+    )
+
+    # LiteLLM with Ollama backend should always provide token counts
+    assert input_tokens is not None, "Input tokens should be recorded"
+    assert input_tokens > 0, f"Input tokens should be > 0, got {input_tokens}"
+
+    assert output_tokens is not None, "Output tokens should be recorded"
+    assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.huggingface
+async def test_huggingface_token_metrics_integration(
+    enable_metrics, metric_reader, gh_run
+):
+    """Test that HuggingFace backend records token metrics correctly."""
+    if gh_run:
+        pytest.skip("Skipping in CI - requires model download")
+
+    from mellea.backends.huggingface import LocalHFBackend
+    from mellea.telemetry import metrics as metrics_module
+
+    provider = MeterProvider(metric_readers=[metric_reader])
+    metrics_module._meter_provider = provider
+    metrics_module._meter = provider.get_meter("mellea")
+    metrics_module._input_token_counter = None
+    metrics_module._output_token_counter = None
+
+    from mellea.backends.cache import SimpleLRUCache
+
+    backend = LocalHFBackend(
+        model_id="ibm-granite/granite-4.0-micro", cache=SimpleLRUCache(5)
+    )
+    ctx = SimpleContext()
+    ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
+
+    mot, _ = await backend.generate_from_context(
+        Message(role="assistant", content=""), ctx
+    )
+    await mot.avalue()
+
+    provider.force_flush()
+    metrics_data = metric_reader.get_metrics_data()
+
+    # HuggingFace computes token counts locally
+    input_tokens = get_metric_value(
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "huggingface"}
+    )
+
+    output_tokens = get_metric_value(
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "huggingface"}
+    )
+
+    assert input_tokens is not None, "Input tokens should be recorded"
+    assert input_tokens > 0, f"Input tokens should be > 0, got {input_tokens}"
+
+    assert output_tokens is not None, "Output tokens should be recorded"
+    assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"
