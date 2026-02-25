@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-generate-ast.py (INSTALL mode, then mdxify + postprocess)
+"""generate-ast.py (INSTALL mode, then mdxify + postprocess)
 
 Key fix vs your prior script:
   - mdxify is executed with cwd set to a clean temp directory OUTSIDE the repo root,
@@ -30,17 +29,16 @@ Notes:
   - --pypi-version may be "v0.3.0" or "0.3.0". If omitted, installs latest.
 """
 
-import os
-import sys
-import json
-import glob
-import re
-import subprocess
 import argparse
+import glob
+import json
+import os
+import re
 import shutil
+import subprocess
+import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-
+from typing import Any
 
 NAV_TAB = "API Reference"
 PACKAGES = ["mellea", "cli"]
@@ -63,13 +61,13 @@ REPO_URL = "https://github.com/generative-computing/mellea"
 # -----------------------------
 # Helpers
 # -----------------------------
-def normalize_version(v: Optional[str]) -> Optional[str]:
+def normalize_version(v: str | None) -> str | None:
     if not v:
         return None
     return v[1:] if v.startswith("v") else v
 
 
-def yaml_quote(value: Optional[str]) -> str:
+def yaml_quote(value: str | None) -> str:
     if value is None:
         return '""'
     v = str(value).replace("\\", "\\\\").replace('"', '\\"')
@@ -86,7 +84,7 @@ def safe_write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def strip_frontmatter(lines: List[str]) -> List[str]:
+def strip_frontmatter(lines: list[str]) -> list[str]:
     if lines and lines[0].strip() == "---":
         try:
             end_idx = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
@@ -106,7 +104,7 @@ def is_meaningful_body_line(line: str) -> bool:
     return True
 
 
-def find_docs_json(cli_path: Optional[str]) -> Path:
+def find_docs_json(cli_path: str | None) -> Path:
     if cli_path:
         p = Path(cli_path)
         if not p.is_absolute():
@@ -128,7 +126,9 @@ def find_docs_json(cli_path: Optional[str]) -> Path:
     )
 
 
-def merge_api_reference_into_docs_json(docs_json_path: Path, api_tab_obj: Dict[str, Any]) -> None:
+def merge_api_reference_into_docs_json(
+    docs_json_path: Path, api_tab_obj: dict[str, Any]
+) -> None:
     data = json.loads(docs_json_path.read_text(encoding="utf-8"))
     nav = data.get("navigation") or {}
     tabs = nav.get("tabs") or []
@@ -166,13 +166,15 @@ def ensure_venv() -> Path:
     return py
 
 
-def pip_install(venv_python: Path, pypi_name: str, pypi_version: Optional[str]) -> None:
+def pip_install(venv_python: Path, pypi_name: str, pypi_version: str | None) -> None:
     ver = normalize_version(pypi_version)
     spec = pypi_name if not ver else f"{pypi_name}=={ver}"
 
     print(f"📦 Installing into venv: mdxify + {spec}", flush=True)
     subprocess.run([str(venv_python), "-m", "pip", "install", "-U", "pip"], check=True)
-    subprocess.run([str(venv_python), "-m", "pip", "install", "-U", "mdxify", spec], check=True)
+    subprocess.run(
+        [str(venv_python), "-m", "pip", "install", "-U", "mdxify", spec], check=True
+    )
 
 
 # -----------------------------
@@ -187,7 +189,10 @@ def run_mdxify_generation(venv_python: Path, root_module: str) -> None:
         shutil.rmtree(MDXIFY_CWD)
     MDXIFY_CWD.mkdir(parents=True, exist_ok=True)
 
-    print(f"➡️ Generating documentation for root module: {root_module} into {output_dir}", flush=True)
+    print(
+        f"➡️ Generating documentation for root module: {root_module} into {output_dir}",
+        flush=True,
+    )
 
     cmd = [
         str(venv_python),
@@ -258,12 +263,17 @@ def reorganize_to_nested_structure() -> None:
 
 def rename_init_files_to_parent() -> None:
     print("-" * 30, flush=True)
-    print("📛 Renaming __init__.mdx files to folder-name.mdx (dedupe if identical)...", flush=True)
+    print(
+        "📛 Renaming __init__.mdx files to folder-name.mdx (dedupe if identical)...",
+        flush=True,
+    )
 
     init_files = glob.glob(str(STAGING_API_DIR / "**" / "__init__.mdx"), recursive=True)
 
     def normalize_text(s: str) -> str:
-        return "\n".join(line.rstrip() for line in s.replace("\r\n", "\n").split("\n")).strip()
+        return "\n".join(
+            line.rstrip() for line in s.replace("\r\n", "\n").split("\n")
+        ).strip()
 
     for old in init_files:
         old_path = Path(old)
@@ -279,15 +289,23 @@ def rename_init_files_to_parent() -> None:
         new_txt = normalize_text(safe_read_text(new_path))
 
         if old_txt == new_txt:
-            print(f"   🗑️ Duplicate content: removing {old_path} (same as {new_path})", flush=True)
+            print(
+                f"   🗑️ Duplicate content: removing {old_path} (same as {new_path})",
+                flush=True,
+            )
             old_path.unlink(missing_ok=True)
         else:
-            print(f"   ⚠️ Content differs: keeping {old_path} (leaving existing {new_path})", flush=True)
+            print(
+                f"   ⚠️ Content differs: keeping {old_path} (leaving existing {new_path})",
+                flush=True,
+            )
 
     print("✅ __init__.mdx rename/dedupe pass complete.", flush=True)
 
 
-def extract_title_and_description(body_lines: List[str]) -> Tuple[Optional[str], Optional[str], Optional[int], Optional[int]]:
+def extract_title_and_description(
+    body_lines: list[str],
+) -> tuple[str | None, str | None, int | None, int | None]:
     h1_pattern = re.compile(r"^#\s+`?(.+?)`?\s*$")
 
     title_value = None
@@ -321,7 +339,10 @@ def extract_title_and_description(body_lines: List[str]) -> Tuple[Optional[str],
 
 def update_frontmatter_metadata() -> None:
     print("-" * 30, flush=True)
-    print("📝 Updating frontmatter title/description/sidebarTitle from content...", flush=True)
+    print(
+        "📝 Updating frontmatter title/description/sidebarTitle from content...",
+        flush=True,
+    )
 
     mdx_files = glob.glob(str(STAGING_API_DIR / "**" / "*.mdx"), recursive=True)
 
@@ -341,18 +362,20 @@ def update_frontmatter_metadata() -> None:
         front_lines = lines[1:end_idx]
         body_lines = lines[end_idx + 1 :]
 
-        title_value, desc_value, h1_idx, desc_idx = extract_title_and_description(body_lines)
+        title_value, desc_value, h1_idx, desc_idx = extract_title_and_description(
+            body_lines
+        )
         if not title_value:
             continue
 
         preserved = []
         for line in front_lines:
             k = line.strip()
-            if k.startswith("title:") or k.startswith("sidebarTitle:") or k.startswith("description:"):
+            if k.startswith(("title:", "sidebarTitle:", "description:")):
                 continue
             preserved.append(line)
 
-        cleaned_body: List[str] = []
+        cleaned_body: list[str] = []
         for idx, line in enumerate(body_lines):
             if h1_idx is not None and idx == h1_idx:
                 continue
@@ -418,10 +441,10 @@ def move_api_to_docs_root(target_docs_root: Path) -> Path:
     return target_api_dir
 
 
-def build_tree_from_paths(paths: List[str]) -> Dict[str, Any]:
-    root: Dict[str, Any] = {}
+def build_tree_from_paths(paths: list[str]) -> dict[str, Any]:
+    root: dict[str, Any] = {}
 
-    def insert(node: Dict[str, Any], parts: List[str], page_path: str) -> None:
+    def insert(node: dict[str, Any], parts: list[str], page_path: str) -> None:
         if not parts:
             node.setdefault("__pages__", []).append(page_path)
             return
@@ -439,8 +462,8 @@ def build_tree_from_paths(paths: List[str]) -> Dict[str, Any]:
     return root
 
 
-def tree_to_mintlify(node: Dict[str, Any], group_name: str) -> Dict[str, Any]:
-    pages: List[Any] = []
+def tree_to_mintlify(node: dict[str, Any], group_name: str) -> dict[str, Any]:
+    pages: list[Any] = []
     file_pages = node.get("__pages__", [])
     if file_pages:
         pages.extend(sorted(file_pages))
@@ -451,11 +474,11 @@ def tree_to_mintlify(node: Dict[str, Any], group_name: str) -> Dict[str, Any]:
     return {"group": group_name, "pages": pages}
 
 
-def collect_pages_under(api_dir: Path, pkg: str, docs_root: Path) -> List[str]:
+def collect_pages_under(api_dir: Path, pkg: str, docs_root: Path) -> list[str]:
     base = api_dir / pkg
     files = glob.glob(str(base / "**" / "*.mdx"), recursive=True)
 
-    out: List[str] = []
+    out: list[str] = []
     for f in files:
         fp = Path(f)
         rel = fp.relative_to(docs_root)
@@ -463,7 +486,7 @@ def collect_pages_under(api_dir: Path, pkg: str, docs_root: Path) -> List[str]:
     return sorted(out)
 
 
-def build_api_reference_tab_object(api_dir: Path, docs_root: Path) -> Dict[str, Any]:
+def build_api_reference_tab_object(api_dir: Path, docs_root: Path) -> dict[str, Any]:
     cli_pages = collect_pages_under(api_dir, "cli", docs_root)
     mellea_pages = collect_pages_under(api_dir, "mellea", docs_root)
 
@@ -482,9 +505,13 @@ def build_api_reference_tab_object(api_dir: Path, docs_root: Path) -> Dict[str, 
     }
 
 
-def build_and_merge_navigation(docs_json_path: Path, api_dir: Path, docs_root: Path) -> None:
+def build_and_merge_navigation(
+    docs_json_path: Path, api_dir: Path, docs_root: Path
+) -> None:
     print("-" * 30, flush=True)
-    print("🛠️ Building API Reference navigation and merging into docs.json...", flush=True)
+    print(
+        "🛠️ Building API Reference navigation and merging into docs.json...", flush=True
+    )
     api_tab = build_api_reference_tab_object(api_dir, docs_root)
     merge_api_reference_into_docs_json(docs_json_path, api_tab)
 
@@ -496,15 +523,33 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Install mellea + mdxify in a venv, generate MDX API docs, postprocess, move to docs root, merge nav."
     )
-    parser.add_argument("--docs-json", required=False, help="Path to docs.json to update.")
-    parser.add_argument("--docs-root", required=False, help="Mintlify docs root (defaults to parent of docs.json).")
-    parser.add_argument("--pypi-name", default="mellea", help="PyPI project name to install (default: mellea).")
-    parser.add_argument("--pypi-version", required=False, help="Version like v0.3.0 or 0.3.0. Omit for latest.")
+    parser.add_argument(
+        "--docs-json", required=False, help="Path to docs.json to update."
+    )
+    parser.add_argument(
+        "--docs-root",
+        required=False,
+        help="Mintlify docs root (defaults to parent of docs.json).",
+    )
+    parser.add_argument(
+        "--pypi-name",
+        default="mellea",
+        help="PyPI project name to install (default: mellea).",
+    )
+    parser.add_argument(
+        "--pypi-version",
+        required=False,
+        help="Version like v0.3.0 or 0.3.0. Omit for latest.",
+    )
 
     args = parser.parse_args()
 
     docs_json_path = find_docs_json(args.docs_json)
-    docs_root = Path(args.docs_root).resolve() if args.docs_root else docs_json_path.parent.resolve()
+    docs_root = (
+        Path(args.docs_root).resolve()
+        if args.docs_root
+        else docs_json_path.parent.resolve()
+    )
 
     # Prep staging
     if STAGING_API_DIR.exists():

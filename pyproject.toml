@@ -198,6 +198,7 @@ split-on-trailing-comma = false
 "docs/**/*.ipynb" = ["D"]
 "test/**/*.py" = ["E402", "D"]
 "cli/**/*.py" = ["D"]
+"tooling/**/*.py" = ["D"]
 
 [[tool.mypy.overrides]]
 # Keep import-not-found suppressed for optional dependencies

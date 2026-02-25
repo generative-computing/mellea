@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-decorate_api_mdx_merged.py
+"""decorate_api_mdx_merged.py
 
 Merges the two behaviors you were running back-to-back:
 
@@ -29,7 +28,6 @@ import argparse
 import re
 from pathlib import Path
 
-
 # =========================
 # SidebarFix injection
 # =========================
@@ -44,7 +42,7 @@ IMPORT_RE = re.compile(
     r'(?m)^\s*import\s+\{\s*SidebarFix\s*\}\s+from\s+["\']\/snippets\/SidebarFix\.mdx["\']\s*;?\s*$'
 )
 RENDER_RE = re.compile(
-    r'(?m)^\s*<\s*SidebarFix\s*\/\s*>\s*$|^\s*<\s*SidebarFix\s*>\s*<\/\s*SidebarFix\s*>\s*$'
+    r"(?m)^\s*<\s*SidebarFix\s*\/\s*>\s*$|^\s*<\s*SidebarFix\s*>\s*<\/\s*SidebarFix\s*>\s*$"
 )
 
 SIDEBAR_BLOCK = SIDEBAR_IMPORT_LINE + "\n\n" + SIDEBAR_RENDER_LINE + "\n\n"
@@ -64,7 +62,12 @@ def inject_sidebar_fix(mdx_text: str) -> str:
     m = FRONTMATTER_RE.match(mdx_text)
     if m:
         insert_at = m.end()
-        return mdx_text[:insert_at] + "\n" + SIDEBAR_BLOCK + mdx_text[insert_at:].lstrip("\n")
+        return (
+            mdx_text[:insert_at]
+            + "\n"
+            + SIDEBAR_BLOCK
+            + mdx_text[insert_at:].lstrip("\n")
+        )
 
     return SIDEBAR_BLOCK + mdx_text.lstrip("\n")
 
@@ -75,21 +78,22 @@ def inject_sidebar_fix(mdx_text: str) -> str:
 
 CLASS_SPAN = (
     '<span className="ml-2 inline-flex items-center rounded-full '
-    'px-2 py-1 text-[0.7rem] font-bold tracking-wide '
+    "px-2 py-1 text-[0.7rem] font-bold tracking-wide "
     'bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span>'
 )
 
 FUNC_SPAN = (
     '<span className="ml-2 inline-flex items-center rounded-full '
-    'px-2 py-1 text-[0.7rem] font-bold tracking-wide '
+    "px-2 py-1 text-[0.7rem] font-bold tracking-wide "
     'bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span>'
 )
 
 SPAN_RE = re.compile(r'\s*<span className="[^"]*rounded-full[^"]*">.*?</span>\s*')
-LABEL_RE = re.compile(r'^\[(class|func|Class|funct)\]\s+')
+LABEL_RE = re.compile(r"^\[(class|func|Class|funct)\]\s+")
 # DIVIDER_LINE = '---'
 DIVIDER_LINE = '<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />'
 SPACER_BLOCK = '<div className="h-8" />'
+
 
 def pick_kind(name: str, level: int, current_section: str | None) -> str | None:
     if level >= 4:
@@ -104,7 +108,7 @@ def pick_kind(name: str, level: int, current_section: str | None) -> str | None:
 
 
 def label_heading(line: str, current_section: str | None) -> str:
-    head_match = re.match(r'^(#{2,6})\s+(.*)$', line)
+    head_match = re.match(r"^(#{2,6})\s+(.*)$", line)
     if not head_match:
         return line
 
@@ -113,7 +117,7 @@ def label_heading(line: str, current_section: str | None) -> str:
     body = SPAN_RE.sub(" ", body).strip()
 
     # Only decorate headings that look like: ## `Something`
-    m = re.match(r'^`([^`]+)`(.*)$', body)
+    m = re.match(r"^`([^`]+)`(.*)$", body)
     if not m:
         return line
 
@@ -133,9 +137,8 @@ def label_heading(line: str, current_section: str | None) -> str:
 
 
 def line_has_pill(line: str) -> bool:
-    return (
-        line.strip().startswith("#")
-        and ("bg-[#3064E3]/20" in line or "bg-[#4ADE8033]/20" in line)
+    return line.strip().startswith("#") and (
+        "bg-[#3064E3]/20" in line or "bg-[#4ADE8033]/20" in line
     )
 
 
@@ -147,18 +150,17 @@ def last_non_empty_is_divider(lines: list[str]) -> bool:
 
 
 def decorate_mdx_body(full_text: str) -> str:
-    """
-    Applies the pill/divider logic with tight HR placement, WITHOUT triggering
+    """Applies the pill/divider logic with tight HR placement, WITHOUT triggering
     Setext headings.
     """
     lines = full_text.splitlines()
     out: list[str] = []
 
     current_section: str | None = None  # None | "classes" | "functions"
-    in_item: bool = False               # inside a class/function block?
+    in_item: bool = False  # inside a class/function block?
 
     # Detect an "item heading" inside a section (class/function entry)
-    item_heading_re = re.compile(r'^(#{3,6})\s+.*`[^`]+`')
+    item_heading_re = re.compile(r"^(#{3,6})\s+.*`[^`]+`")
 
     def last_non_empty_is_divider_local() -> bool:
         for ln in reversed(out):
@@ -190,8 +192,8 @@ def decorate_mdx_body(full_text: str) -> str:
         # --- NEW LOGIC START ---
         # Inject spacer before "**Methods:**"
         if stripped == "**Methods:**":
-            out.append("") # Ensure we are on a new line
-            out.append(SPACER_BLOCK) # Insert the height div
+            out.append("")  # Ensure we are on a new line
+            out.append(SPACER_BLOCK)  # Insert the height div
             out.append(line)
             continue
         # --- NEW LOGIC END ---
@@ -212,7 +214,10 @@ def decorate_mdx_body(full_text: str) -> str:
             continue
 
         # Any other H2 header exits the section
-        if stripped.startswith("## ") and stripped not in ("## Classes", "## Functions"):
+        if stripped.startswith("## ") and stripped not in (
+            "## Classes",
+            "## Functions",
+        ):
             close_item_if_open()
             current_section = None
             in_item = False
@@ -224,7 +229,9 @@ def decorate_mdx_body(full_text: str) -> str:
         stripped_labeled = labeled.strip()
 
         # Within Classes/Functions: a new item heading closes the prior item
-        if current_section in ("classes", "functions") and item_heading_re.match(stripped_labeled):
+        if current_section in ("classes", "functions") and item_heading_re.match(
+            stripped_labeled
+        ):
             close_item_if_open()
             in_item = True
             out.append(labeled)
@@ -239,9 +246,11 @@ def decorate_mdx_body(full_text: str) -> str:
 
     return "\n".join(out) + "\n"
 
+
 # =========================
 # Path resolution + processing
 # =========================
+
 
 def resolve_api_dir(docs_root: Path | None, api_dir: Path | None) -> Path:
     if api_dir is not None:
@@ -250,10 +259,7 @@ def resolve_api_dir(docs_root: Path | None, api_dir: Path | None) -> Path:
         return docs_root / "api"
 
     cwd = Path.cwd()
-    candidates = [
-        cwd / "docs" / "api",
-        cwd / "docs" / "docs" / "api",
-    ]
+    candidates = [cwd / "docs" / "api", cwd / "docs" / "docs" / "api"]
     for c in candidates:
         if c.exists():
             return c
@@ -301,7 +307,9 @@ def main() -> None:
         if process_mdx_file(f):
             changed += 1
 
-    print(f"✅ Done. Processed {len(mdx_files)} MDX files under {api_dir}. Updated {changed}.")
+    print(
+        f"✅ Done. Processed {len(mdx_files)} MDX files under {api_dir}. Updated {changed}."
+    )
 
 
 if __name__ == "__main__":
