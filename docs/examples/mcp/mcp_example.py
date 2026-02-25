@@ -1,3 +1,4 @@
+# pytest: skip_always
 """Example of an MCP server.
 
 You need to install the mcp package:

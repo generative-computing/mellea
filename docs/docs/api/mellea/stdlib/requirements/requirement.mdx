@@ -1,0 +1,113 @@
+---
+title: "mellea.stdlib.requirements.requirement"
+sidebarTitle: "mellea.stdlib.requirements.requirement"
+description: "Requirements are a special type of Component used as input to the \"validate\" step in Instruct/Validate/Repair design patterns."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `requirement_check_to_bool` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/requirements/requirement.py#L17" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+requirement_check_to_bool(x: CBlock | str) -> bool
+```
+
+
+Checks if a given output should be marked converted to `True`.
+
+By default, the requirement check alora outputs: `{"requirement_likelihood": 0.0}`.
+True if >.5
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `reqify` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/requirements/requirement.py#L66" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+reqify(r: str | Requirement) -> Requirement
+```
+
+
+Maps strings to Requirements.
+
+This is a utility method for functions that allow you to pass in Requirements as either explicit Requirement objects or strings that you intend to be interpreted as requirements.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `req` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/requirements/requirement.py#L79" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+req(*args, **kwargs) -> Requirement
+```
+
+
+Shorthand for Requirement.__init__.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `check` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/requirements/requirement.py#L84" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+check(*args, **kwargs) -> Requirement
+```
+
+
+Shorthand for Requirement.__init__(..., check_only=True).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `simple_validate` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/requirements/requirement.py#L101" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+simple_validate(fn: Callable[[str], Any]) -> Callable[[Context], ValidationResult]
+```
+
+
+Syntactic sugar for writing validation functions that only operate over the last output from the model (interpreted as a string).
+
+This is useful when your validation logic only depends upon the most recent model output. For example:
+
+`Requirement("Answer 'yes' or 'no'", simple_validate(lambda x: x == 'yes' or x == 'no')`
+
+Validation functions operate over `Context`. Often you do not care about the entire context, and just want to consider the most recent output from the model.
+
+**Args:**
+- `fn`: the simple validation function that takes a string and returns either a bool or (bool, str)
+- `reason`: only used if the provided function returns a bool; if the validation function fails, a static reason for that failure to give to the llm when repairing
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `LLMaJRequirement` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/requirements/requirement.py#L11" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A requirement that always uses LLM-as-a-Judge. Any available constraint ALoRA will be ignored.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ALoraRequirement` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/requirements/requirement.py#L39" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A requirement that always uses an (possibly specified) ALora. If an exception is thrown during the ALora execution path, `mellea` will fall back to LLMaJ. But that is the only case where LLMaJ will be used.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

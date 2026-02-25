@@ -33,8 +33,6 @@ except ImportError as e:
 @pytest.fixture(scope="module")
 def backend():
     """Shared vllm backend for all tests in this module."""
-    if os.environ.get("VLLM_USE_V1", -1) != "0":
-        pytest.skip("skipping vllm tests; tests require `export VLLM_USE_V1=0`")
 
     backend = LocalVLLMBackend(
         model_id=model_ids.MISTRALAI_MISTRAL_0_3_7B,

@@ -1,0 +1,196 @@
+---
+title: "mellea.backends.openai"
+sidebarTitle: "mellea.backends.openai"
+description: "A generic OpenAI compatible backend that wraps around the openai python sdk."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `OpenAIBackend` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L68" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A generic OpenAI compatible backend.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `filter_openai_client_kwargs` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L208" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+filter_openai_client_kwargs(**kwargs) -> dict
+```
+
+Filter kwargs to only include valid OpenAI client parameters.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `filter_chat_completions_kwargs` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L214" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+filter_chat_completions_kwargs(self, model_options: dict) -> dict
+```
+
+Filter kwargs to only include valid OpenAI chat.completions.create parameters.
+
+https://platform.openai.com/docs/api-reference/chat/create
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `filter_completions_kwargs` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L225" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+filter_completions_kwargs(self, model_options: dict) -> dict
+```
+
+Filter kwargs to only include valid OpenAI completions.create parameters.
+
+https://platform.openai.com/docs/api-reference/completions
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `generate_from_context` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L297" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+generate_from_context(self, action: Component[C] | CBlock, ctx: Context) -> tuple[ModelOutputThunk[C], Context]
+```
+
+See `generate_from_chat_context`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `generate_from_chat_context` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L318" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+generate_from_chat_context(self, action: Component[C] | CBlock, ctx: Context) -> tuple[ModelOutputThunk[C], Context]
+```
+
+Generates a new completion from the provided Context using this backend's `Formatter`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `processing` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L670" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+processing(self, mot: ModelOutputThunk, chunk: ChatCompletion | ChatCompletionChunk)
+```
+
+Called during generation to add information from a single ChatCompletion or ChatCompletionChunk to the ModelOutputThunk.
+
+For OpenAI, tool call parsing is handled in the post processing step.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `post_processing` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L713" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+post_processing(self, mot: ModelOutputThunk, tools: dict[str, Callable], conversation: list[dict], thinking, seed, _format)
+```
+
+Called when generation is done.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `generate_from_raw` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L767" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+generate_from_raw(self, actions: list[Component[C]], ctx: Context) -> list[ModelOutputThunk[C]]
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `generate_from_raw` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L778" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+generate_from_raw(self, actions: list[Component[C] | CBlock], ctx: Context) -> list[ModelOutputThunk[C | str]]
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `generate_from_raw` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L788" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+generate_from_raw(self, actions: Sequence[Component[C] | CBlock], ctx: Context) -> list[ModelOutputThunk]
+```
+
+Generate using the completions api. Gives the input provided to the model without templating.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `base_model_name` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L874" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+base_model_name(self)
+```
+
+Returns the base_model_id of the model used by the backend. For example, `granite-3.3-8b-instruct` for `ibm-granite/granite-3.3-8b-instruct`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add_adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L881" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+add_adapter(self, adapter: OpenAIAdapter)
+```
+
+Adds the given adapter to the backend. Must not have been added to a different backend.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `load_adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L906" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+load_adapter(self, adapter_qualified_name: str)
+```
+
+Loads the given adapter for the backend. Must have previously been added.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `unload_adapter` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L943" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+unload_adapter(self, adapter_qualified_name: str)
+```
+
+Unloads the given adapter from the backend.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `list_adapters` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/backends/openai.py#L983" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+list_adapters(self) -> list[str]
+```
+
+Lists the adapters added via add_adapter().
+
+:returns: list of adapter names that are currently registered with this backend
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -15,12 +15,14 @@ from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, overload
 
 import granite_common
-import outlines
-import outlines_core
+import llguidance
+import llguidance.hf
+import llguidance.torch
 import peft
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.cache_utils import DynamicCache
+from transformers.generation.logits_process import LogitsProcessorList
 from transformers.generation.streamers import AsyncTextIteratorStreamer
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 from transformers.modeling_utils import PreTrainedModel
@@ -68,8 +70,6 @@ from .tools import (
 )
 from .utils import to_chat, to_tool_calls
 
-assert outlines, "outlines needs to be present to make outlines_core work"
-
 """A configuration type for the unhappy path: Tokenizer * Model * torch device string
 
 Huggingface backends can initialize themselves from a model string if the transformers `Auto*` classes can be used. Therefore, a TransformersTorchConfig usually isn't required. However, sometimes a model needs special care to instantiate properly, or a custom device type needs to bse used. Instead of trying to do a lot of partial magic, we basically have two modaliites: either the constructor can figure out everything from the model_id, or the user has to provide an entire config.
@@ -83,10 +83,114 @@ format: None = None  # typing this variable in order to shadow the global format
 class HFAloraCacheInfo:
     """A dataclass for holding some KV cache and associated information."""
 
-    kv_cache: DynamicCache
+    kv_cache: DynamicCache | None
     merged_token_ids: Any
     merged_attention: Any
     q_end: int = -1
+    scores: Any = None
+
+
+def _cleanup_kv_cache(cache_info: HFAloraCacheInfo) -> None:
+    """Free GPU memory when KV cache is evicted from LRU.
+
+    This function is called by SimpleLRUCache when an entry is evicted.
+    It explicitly deletes tensor references and calls torch.cuda.empty_cache()
+    to return pooled CUDA memory to the device.
+
+    Args:
+        cache_info: The HFAloraCacheInfo being evicted from cache.
+    """
+    import gc
+
+    if cache_info is None:
+        return
+
+    kv = cache_info.kv_cache
+    if kv is not None:
+        # Delete individual tensors from each layer
+        if hasattr(kv, "key_cache"):
+            for tensor in kv.key_cache:
+                del tensor
+            kv.key_cache.clear()
+        if hasattr(kv, "value_cache"):
+            for tensor in kv.value_cache:
+                del tensor
+            kv.value_cache.clear()
+        del cache_info.kv_cache
+
+    # Delete other tensors
+    if cache_info.merged_attention is not None:
+        del cache_info.merged_attention
+
+    # Delete score tensors if present
+    if cache_info.scores is not None:
+        for tensor in cache_info.scores:
+            del tensor
+        del cache_info.scores
+
+    # Force Python garbage collection and return CUDA memory to device
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+# modified from VLLM v0.9.2 code base
+# https://github.com/vllm-project/vllm/blob/v0.9.2/vllm/model_executor/guided_decoding/guidance_logits_processors.py
+class _GuidanceLogitsProcessor:
+    def __init__(self, grammar: str, ll_tokenizer: llguidance.LLTokenizer) -> None:
+        self.grammar = grammar
+        self.vocab_size: int = ll_tokenizer.vocab_size
+        self.ll_tokenizer: llguidance.LLTokenizer = ll_tokenizer
+        self.ll_matchers: list[llguidance.LLMatcher] = []
+        self.bitmasks: list[torch.Tensor] = []
+        self.new_sampling: bool = False
+        self.batch_size: int = -1
+
+    def __call__(
+        self, batch_input_ids: torch.Tensor, batch_scores: torch.Tensor
+    ) -> torch.Tensor:
+        i_batch, _ = batch_input_ids.shape
+        s_batch, _ = batch_scores.shape
+        assert i_batch == s_batch
+
+        # s_batch, s_vocab = batch_scores.shape
+        # assert s_vocab == self.vocab_size
+        #
+        # NOTE: somehow, this does not hold. s_vocab is not same as either of
+        # * self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=True) == self.vocab_size == ll_tokenizer.vocab_size
+        # * self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=False)
+
+        if self.batch_size != i_batch:
+            self.batch_size = i_batch
+            self.bitmasks = [
+                llguidance.torch.allocate_token_bitmask(1, self.vocab_size)  # type: ignore[attr-defined]
+                for _ in range(self.batch_size)
+            ]
+
+            self.ll_matchers = [
+                llguidance.LLMatcher(self.ll_tokenizer, self.grammar)
+                for _ in range(self.batch_size)
+            ]
+
+        for input_ids, scores, ll_matcher, bitmask in zip(
+            batch_input_ids, batch_scores, self.ll_matchers, self.bitmasks
+        ):
+            if self.new_sampling and len(input_ids) > 0:
+                ll_matcher.consume_token(  # type: ignore[attr-defined]
+                    input_ids.tolist()[-1]
+                )
+                err = ll_matcher.get_error()  # type: ignore[attr-defined]
+                if err:
+                    FancyLogger.get_logger().warning("Error in LLMatcher: %s", err)
+
+            llguidance.torch.fill_next_token_bitmask(ll_matcher, bitmask, 0)
+            llguidance.torch.apply_token_bitmask_inplace(
+                scores, bitmask.to(scores.device)
+            )  # type: ignore[attr-defined]
+
+        self.new_sampling = True
+
+        return batch_scores
 
 
 class LocalHFBackend(FormatterBackend, AdapterMixin):
@@ -177,8 +281,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             case _:
                 self._tokenizer, self._model, self._device = custom_config
 
+        self._llguidance_tokenizer: llguidance.LLTokenizer = (
+            llguidance.hf.from_tokenizer(self._tokenizer)  # type:ignore
+        )
+        assert (
+            self._llguidance_tokenizer.vocab_size
+            == self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=True)
+        ), "vocab size mismatch between llguidance and huggingface tokenizers ... wtf?"
+
         self._use_caches = use_caches
-        self._cache = cache if cache is not None else SimpleLRUCache(3)
+        self._cache = (
+            cache
+            if cache is not None
+            else SimpleLRUCache(0, on_evict=_cleanup_kv_cache)
+        )
 
         # Adapters can be made known to the backend (added) and loaded.
         self._added_adapters: dict[str, LocalHFAdapter] = {}
@@ -614,24 +730,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             format_kwargs = {}
             if _format:
-                # outlines.generate.json always parses the resulting json into a python dict.
-                # We however want to keep it as a json string for later storing it in ModelOutputThunk
-                schema: dict[str, Any] = _format.model_json_schema()  # type: ignore
-                schema_json: str = json.dumps(schema)
-                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
-                    schema_json
+                schema: dict[str, Any] = _format.model_json_schema()
+                grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
+                    schema, defaults={"whitespace_flexible": False}
                 )
-
-                from outlines.models.transformers import TransformerTokenizer
-                from outlines.processors.structured import RegexLogitsProcessor
-                from transformers import LogitsProcessorList  # type: ignore
-
+                logits_processor = _GuidanceLogitsProcessor(
+                    grammar, self._llguidance_tokenizer
+                )
                 format_kwargs["logits_processor"] = LogitsProcessorList(
-                    [
-                        RegexLogitsProcessor(
-                            regex_str, tokenizer=TransformerTokenizer(self._tokenizer)
-                        )
-                    ]
+                    [logits_processor]
                 )
 
             streaming_kwargs = {}
@@ -785,24 +892,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             format_kwargs = {}
             if _format:
-                # outlines.generate.json always parses the resulting json into a python dict.
-                # We however want to keep it as a json string for later storing it in ModelOutputThunk
-                schema: dict[str, Any] = _format.model_json_schema()  # type: ignore
-                schema_json: str = json.dumps(schema)
-                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
-                    schema_json
+                schema: dict[str, Any] = _format.model_json_schema()
+                grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
+                    schema, defaults={"whitespace_flexible": False}
                 )
-
-                from outlines.models.transformers import TransformerTokenizer
-                from outlines.processors.structured import RegexLogitsProcessor
-                from transformers import LogitsProcessorList  # type: ignore
-
+                logits_processor = _GuidanceLogitsProcessor(
+                    grammar, self._llguidance_tokenizer
+                )
                 format_kwargs["logits_processor"] = LogitsProcessorList(
-                    [
-                        RegexLogitsProcessor(
-                            regex_str, tokenizer=TransformerTokenizer(self._tokenizer)
-                        )
-                    ]
+                    [logits_processor]
                 )
 
             streaming_kwargs = {}
@@ -837,7 +935,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # Passed as args/kwargs to generate.
                 input_ids,
                 return_dict_in_generate=True,
-                output_scores=True,
+                use_cache=self._use_caches,  # Only create KV cache if caching is enabled
                 **self._make_backend_specific_and_remove(generate_options),
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
@@ -905,7 +1003,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # and already decoded.
         if isinstance(chunk, str):
             mot._underlying_value += chunk
-        else:
+        elif isinstance(chunk, GenerateDecoderOnlyOutput):
             # Otherwise, it's a non-streaming request. Decode it here.
             mot._meta["hf_output"] = chunk
             mot._underlying_value += self._tokenizer.decode(
@@ -932,19 +1030,31 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # The ModelOutputThunk must be computed by this point.
         assert mot.value is not None
 
-        # Add an entry to the cache for ALora reuse.
-        if self._use_caches and mot._meta.get("hf_output", None) is not None:
-            output_complete = mot._meta["hf_output"].sequences[0]
-            cache: DynamicCache = mot._meta["hf_output"].past_key_values  # type: ignore
+        # Store KV cache in LRU separately (not in mot._meta) to enable proper cleanup on eviction.
+        # This prevents GPU memory from being held by ModelOutputThunk references.
+        hf_output = mot._meta.get("hf_output", None)
+        if (
+            self._use_caches
+            and isinstance(hf_output, GenerateDecoderOnlyOutput)
+            and (hf_output.past_key_values is not None or hf_output.scores is not None)
+        ):
+            output_complete = hf_output.sequences[0]
+            kv_cache: DynamicCache | None = hf_output.past_key_values  # type: ignore
 
             cache_info = HFAloraCacheInfo(
-                kv_cache=cache,
+                kv_cache=kv_cache,
                 merged_token_ids=output_complete,
                 merged_attention=torch.ones_like(output_complete).to(self._device),
                 q_end=len(input_ids[0]),  # type: ignore
+                scores=hf_output.scores,
             )
 
-            self.cache_put(mot.value, cache_info)
+            cache_key = id(mot.value)
+            self.cache_put(cache_key, cache_info)
+
+            # Clear KV cache and scores from HF output - they're now owned by the LRU cache
+            hf_output.past_key_values = None
+            hf_output.scores = None
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
@@ -966,13 +1076,31 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             # HuggingFace local models don't typically provide token counts
             # but we can record response metadata if available
             hf_output = mot._meta.get("hf_output")
-            if hf_output is not None:
+            if isinstance(hf_output, GenerateDecoderOnlyOutput):
                 record_response_metadata(span, hf_output)
 
             # Close the span now that async operation is complete
             end_backend_span(span)
             # Clean up span reference
             del mot._meta["_telemetry_span"]
+
+        # When caching is disabled, clear hf_output from meta to free GPU memory.
+        # The sequences tensor is on GPU and accumulates if not cleared.
+        if not self._use_caches and isinstance(
+            mot._meta.get("hf_output"), GenerateDecoderOnlyOutput
+        ):
+            import gc
+
+            hf_out = mot._meta["hf_output"]
+            if hasattr(hf_out, "sequences") and hf_out.sequences is not None:
+                del hf_out.sequences
+            if hasattr(hf_out, "scores") and hf_out.scores is not None:
+                del hf_out.scores
+            del mot._meta["hf_output"]
+
+            # Force Python GC and return CUDA memory to device
+            gc.collect()
+            torch.cuda.empty_cache()
 
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
@@ -1056,24 +1184,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             format_kwargs = {}
             if format:
-                # outlines.generate.json always parses the resulting json into a python dict.
-                # We however want to keep it as a json string for later storing it in ModelOutputThunk
-                schema: dict[str, Any] = format.model_json_schema()  # type: ignore
-                schema_json: str = json.dumps(schema)
-                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
-                    schema_json
+                schema: dict[str, Any] = format.model_json_schema()
+                grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
+                    schema, defaults={"whitespace_flexible": False}
                 )
-
-                from outlines.models.transformers import TransformerTokenizer
-                from outlines.processors.structured import RegexLogitsProcessor
-                from transformers import LogitsProcessorList  # type: ignore
-
+                logits_processor = _GuidanceLogitsProcessor(
+                    grammar, self._llguidance_tokenizer
+                )
                 format_kwargs["logits_processor"] = LogitsProcessorList(
-                    [
-                        RegexLogitsProcessor(
-                            regex_str, tokenizer=TransformerTokenizer(self._tokenizer)
-                        )
-                    ]
+                    [logits_processor]
                 )
 
             outputs = await asyncio.to_thread(
@@ -1136,13 +1255,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         return results
 
     # region cache management
-    def cache_get(self, id: str) -> HFAloraCacheInfo | None:
+    def cache_get(self, id: str | int) -> HFAloraCacheInfo | None:
         """Retrieve from cache."""
         v = self._cache.get(id)
         assert v is None or type(v) is HFAloraCacheInfo
         return v
 
-    def cache_put(self, id: str, v: HFAloraCacheInfo):
+    def cache_put(self, id: str | int, v: HFAloraCacheInfo):
         """Put into cache."""
         self._cache.put(id, v)
 

@@ -1,0 +1,85 @@
+---
+title: "mellea.stdlib.context"
+sidebarTitle: "mellea.stdlib.context"
+description: "Basic Contexts."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ChatContext` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/context.py#L9" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Initializes a chat context with unbounded window_size and is_chat=True by default.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/context.py#L17" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+add(self, c: Component | CBlock) -> ChatContext
+```
+
+Add a new component/cblock to the context. Returns the new context.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `view_for_generation` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/context.py#L23" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+view_for_generation(self) -> list[Component | CBlock] | None
+```
+
+Returns the context in a linearized form. Uses the window_size set during initialization.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SimpleContext` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/context.py#L28" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved..
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/context.py#L31" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+add(self, c: Component | CBlock) -> SimpleContext
+```
+
+Add a new component/cblock to the context. Returns the new context.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `view_for_generation` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/context.py#L35" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+view_for_generation(self) -> list[Component | CBlock] | None
+```
+
+Returns an empty list.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

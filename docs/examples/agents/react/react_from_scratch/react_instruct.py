@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, llm, qualitative
 
 import datetime
 import inspect
@@ -89,7 +89,7 @@ class ReactToolbox(pydantic.BaseModel):
     def get_tool_from_schema(self, content: str):
         schema = self.tool_name_schema()
         validated = schema.model_validate_json(content)
-        return self.get_tool_from_name(validated.tool)
+        return self.get_tool_from_name(validated.tool.value)
 
 
 class IsDoneModel(pydantic.BaseModel):

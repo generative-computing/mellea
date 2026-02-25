@@ -63,16 +63,7 @@ def get_system_capabilities():
         return fallback()
 
 
-examples_to_skip = {
-    "__init__.py",
-    "simple_rag_with_filter.py",
-    "mcp_example.py",
-    "client.py",
-    "pii_serve.py",
-    "mellea_pdf.py",  # External URL returns 403 Forbidden
-    "m_decomp_result.py",
-    "python_decompose_result.py",
-}
+examples_to_skip: dict[str, str] = {}
 
 
 def _extract_markers_from_file(file_path):
@@ -108,9 +99,9 @@ def _should_skip_collection(markers):
     if not markers:
         return False, None
 
-    # Check for explicit skip marker first
-    if "skip" in markers:
-        return True, "Example marked with skip marker"
+    # Skip tests marked with skip_always
+    if "skip_always" in markers:
+        return True, "Example marked to always skip (skip_always marker)"
 
     try:
         capabilities = get_system_capabilities()
@@ -172,6 +163,19 @@ def _check_optional_imports(file_path):
                 import langchain_core
             except ImportError:
                 return True, "langchain_core not installed"
+
+            # Check for langchain_community specifically
+            if (
+                "from langchain_community" in content
+                or "import langchain_community" in content
+            ):
+                try:
+                    import langchain_community
+                except ImportError:
+                    return (
+                        True,
+                        "langchain_community not installed (install with: uv pip install mellea[tools])",
+                    )
 
     except Exception:
         pass
@@ -260,7 +264,6 @@ def _run_vllm_examples_isolated(session, vllm_files: list[str]) -> int:
 
     # Set environment variables for vLLM
     env = os.environ.copy()
-    env["VLLM_USE_V1"] = "0"
     env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
     all_passed = True
@@ -327,10 +330,9 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 
     terminalreporter.ensure_newline()
     terminalreporter.section("Skipped Examples", sep="=", blue=True, bold=True)
-    newline = "\n"
-    terminalreporter.line(
-        f"Examples with the following names were skipped because they cannot be easily run in the pytest framework; please run them manually:\n{newline.join(examples_to_skip)}"
-    )
+    terminalreporter.line("The following examples were skipped during collection:\n")
+    for filename, reason in examples_to_skip.items():
+        terminalreporter.line(f"  • {filename}: {reason}")
 
 
 def pytest_pycollect_makemodule(module_path, parent):
@@ -408,8 +410,10 @@ def pytest_ignore_collect(collection_path, config):
         # Extract markers and check if we should skip
         try:
             markers = _extract_markers_from_file(collection_path)
-            should_skip, _reason = _should_skip_collection(markers)
-            if should_skip:
+            should_skip, reason = _should_skip_collection(markers)
+            if should_skip and reason:
+                # Add to skip list with reason for terminal summary
+                examples_to_skip[collection_path.name] = reason
                 # Return True to ignore this file completely
                 return True
         except Exception as e:

@@ -13,7 +13,11 @@ from .openai_compatible_helpers import (
     message_to_openai_message,
     messages_to_docs,
 )
-from .server_type import _server_type, _ServerType
+from .server_type import (
+    _server_type,
+    _ServerType,
+    is_vllm_server_with_structured_output,
+)
 
 __all__ = [
     "ClientCache",
@@ -23,6 +27,7 @@ __all__ = [
     "chat_completion_delta_merge",
     "extract_model_tool_requests",
     "get_current_event_loop",
+    "is_vllm_server_with_structured_output",
     "message_to_openai_message",
     "messages_to_docs",
     "send_to_queue",

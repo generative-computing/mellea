@@ -1,0 +1,57 @@
+---
+title: "mellea.stdlib.sampling.budget_forcing"
+sidebarTitle: "mellea.stdlib.sampling.budget_forcing"
+description: "Sampling Strategies for budget forcing generation."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `BudgetForcingSamplingStrategy` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/sampling/budget_forcing.py#L25" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Budget forcing sampling class.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `sample` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/sampling/budget_forcing.py#L80" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+sample(self, action: Component[S], context: Context, backend: Backend, requirements: list[Requirement] | None) -> SamplingResult[S]
+```
+
+This method performs a sampling operation based on the given instruction.
+
+**Args:**
+- `action `: The action object to be sampled.
+- `context`: The context to be passed to the sampling strategy.
+- `backend`: The backend used for generating samples.
+- `requirements`: List of requirements to test against (merged with global requirements).
+- `validation_ctx`: Optional context to use for validation. If None, validation_ctx = ctx.
+- `format`: output format for structured outputs.
+- `model_options`: model options to pass to the backend during generation / validation.
+- `tool_calls`: True if tool calls should be used during this sampling strategy.
+- `show_progress`: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
+
+**Returns:**
+- A result object indicating the success or failure of the sampling process.
+
+**Raises:**
+- `AssertionError`: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
