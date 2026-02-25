@@ -1,0 +1,177 @@
+{
+  "original_task_prompt": "I need help planning a complete birthday party for my 8-year-old daughter who loves unicorns and\nwants to invite 15 kids from her class, and I need you to create a detailed shopping list with\nestimated costs for decorations, food, drinks, party favors, and a cake that serves at least 20 people,\nthen suggest 5-7 age-appropriate party games or activities that fit the unicorn theme and can keep the\nkids entertained for about 3 hours, also write out a timeline for the party day starting from 2 hours\nbefore guests arrive until cleanup is done showing exactly when to do food prep, decoration setup,\nwhen each activity should happen, and when to serve food and cake, plus I need you to draft a cute\ninvitation text that I can send to parents that includes all the important details like date, time,\nlocation, RSVP information, and any special instructions about allergies or what kids should bring or\nwear, and finally create a backup plan in case it rains since I was planning to have some activities\noutside in the backyard, and make sure everything stays within a total budget of about ~$400 and follows basic\nfood safety guidelines especially for kids with common allergies like nuts and dairy, and the party theme\ncolors should be pink, purple, and gold to match the unicorn decorations.\n",
+  "subtask_list": [
+    "1. Create a detailed shopping list with estimated costs for decorations, food, drinks, party favors, and a cake that serves at least 20 people, ensuring the total budget stays within $400. -",
+    "2. Suggest 5-7 age-appropriate party games or activities that fit the unicorn theme and can keep the kids entertained for about 3 hours. -",
+    "3. Draft a timeline for the party day starting from 2 hours before guests arrive until cleanup is done, including food prep, decoration setup, and scheduling of activities. -",
+    "4. Create a cute invitation text that includes all the important details like date, time, location, RSVP information, and any special instructions about allergies or what kids should bring or wear. -",
+    "5. Develop a backup plan in case it rains, ensuring all activities can be moved indoors. -",
+    "6. Compile the shopping list, party games, timeline, invitation text, and backup plan into a single cohesive output. -"
+  ],
+  "identified_constraints": [
+    {
+      "constraint": "The shopping list must include decorations, food, drinks, party favors, and a cake that serves at least 20 people",
+      "validation_strategy": "llm"
+    },
+    {
+      "constraint": "Suggest 5-7 age-appropriate party games or activities that fit the unicorn theme and can keep the kids entertained for about 3 hours",
+      "validation_strategy": "llm"
+    },
+    {
+      "constraint": "Write out a timeline for the party day starting from 2 hours before guests arrive until cleanup is done showing exactly when to do food prep, decoration setup, when each activity should happen, and when to serve food and cake",
+      "validation_strategy": "llm"
+    },
+    {
+      "constraint": "Draft a cute invitation text that includes all the important details like date, time, location, RSVP information, and any special instructions about allergies or what kids should bring or wear",
+      "validation_strategy": "llm"
+    },
+    {
+      "constraint": "Create a backup plan in case it rains",
+      "validation_strategy": "llm"
+    },
+    {
+      "constraint": "Everything must stay within a total budget of about ~$400",
+      "validation_strategy": "code"
+    },
+    {
+      "constraint": "Follow basic food safety guidelines especially for kids with common allergies like nuts and dairy",
+      "validation_strategy": "llm"
+    },
+    {
+      "constraint": "The party theme colors should be pink, purple, and gold to match the unicorn decorations",
+      "validation_strategy": "llm"
+    }
+  ],
+  "subtasks": [
+    {
+      "subtask": "1. Create a detailed shopping list with estimated costs for decorations, food, drinks, party favors, and a cake that serves at least 20 people, ensuring the total budget stays within $400. -",
+      "tag": "SHOPPING_LIST",
+      "constraints": [
+        {
+          "constraint": "The shopping list must include decorations, food, drinks, party favors, and a cake that serves at least 20 people",
+          "validation_strategy": "llm"
+        },
+        {
+          "constraint": "Everything must stay within a total budget of about ~$400",
+          "validation_strategy": "code"
+        },
+        {
+          "constraint": "Follow basic food safety guidelines especially for kids with common allergies like nuts and dairy",
+          "validation_strategy": "llm"
+        },
+        {
+          "constraint": "The party theme colors should be pink, purple, and gold to match the unicorn decorations",
+          "validation_strategy": "llm"
+        }
+      ],
+      "prompt_template": "Your task is to create a detailed shopping list with estimated costs for decorations, food, drinks, party favors, and a cake that serves at least 20 people, ensuring the total budget stays within $400. Follow these steps to accomplish your task:\n\n1. **Understand the Requirements**:\n   - The party is for an 8-year-old daughter who loves unicorns.\n   - The party theme colors are pink, purple, and gold.\n   - The party will have 15 kids from her class, but the cake should serve at least 20 people.\n   - The total budget should not exceed $400.\n   - Follow basic food safety guidelines, especially for kids with common allergies like nuts and dairy.\n\n2. **Categories to Include**:\n   - **Decorations**: Unicorn-themed decorations in pink, purple, and gold.\n   - **Food**: Finger foods and snacks suitable for kids.\n   - **Drinks**: Beverages that are kid-friendly.\n   - **Party Favors**: Small gifts or treats for each child.\n   - **Cake**: A unicorn-themed cake that serves at least 20 people.\n\n3. **Estimate Costs**:\n   - Research and list the estimated costs for each item.\n   - Ensure the total cost of all items does not exceed $400.\n\n4. **Create the Shopping List**:\n   - Organize the list by categories (decorations, food, drinks, party favors, cake).\n   - Include the name of each item, the estimated cost, and the quantity needed.\n   - Ensure all items fit within the unicorn theme and the specified colors.\n\n5. **Review the List**:\n   - Double-check that all necessary items are included.\n   - Verify that the total estimated cost is within the $400 budget.\n\n6. **Output the Shopping List**:\n   - Present the shopping list in a clear and organized format.\n   - Include the estimated cost for each item and the total estimated cost.\n\nHere is an example structure to guide your writing:\n- **Decorations**:\n  - Item 1: [Description], Quantity: [Number], Estimated Cost: [$Amount]\n  - Item 2: [Description], Quantity: [Number], Estimated Cost: [$Amount]\n- **Food**:\n  - Item 1: [Description], Quantity: [Number], Estimated Cost: [$Amount]\n  - Item 2: [Description], Quantity: [Number], Estimated Cost: [$Amount]\n- **Drinks**:\n  - Item 1: [Description], Quantity: [Number], Estimated Cost: [$Amount]\n  - Item 2: [Description], Quantity: [Number], Estimated Cost: [$Amount]\n- **Party Favors**:\n  - Item 1: [Description], Quantity: [Number], Estimated Cost: [$Amount]\n  - Item 2: [Description], Quantity: [Number], Estimated Cost: [$Amount]\n- **Cake**:\n  - Item 1: [Description], Quantity: [Number], Estimated Cost: [$Amount]\n\nEnsure that the shopping list is comprehensive and meets all the specified requirements.",
+      "input_vars_required": [],
+      "depends_on": []
+    },
+    {
+      "subtask": "2. Suggest 5-7 age-appropriate party games or activities that fit the unicorn theme and can keep the kids entertained for about 3 hours. -",
+      "tag": "PARTY_GAMES",
+      "constraints": [
+        {
+          "constraint": "Suggest 5-7 age-appropriate party games or activities that fit the unicorn theme and can keep the kids entertained for about 3 hours",
+          "validation_strategy": "llm"
+        },
+        {
+          "constraint": "The party theme colors should be pink, purple, and gold to match the unicorn decorations",
+          "validation_strategy": "llm"
+        }
+      ],
+      "prompt_template": "Your task is to suggest 5-7 age-appropriate party games or activities that fit the unicorn theme and can keep the kids entertained for about 3 hours. Follow these steps to accomplish your task:\n\n1. **Understand the Theme and Audience**:\n   - The party theme is unicorns, and the target audience is 8-year-old kids.\n   - The party should be fun, engaging, and age-appropriate.\n   - The theme colors are pink, purple, and gold.\n\n2. **Consider the Duration**:\n   - The activities should keep the kids entertained for about 3 hours.\n   - Plan a mix of active and passive games to maintain engagement.\n\n3. **Brainstorm Activity Ideas**:\n   - Think of games and activities that fit the unicorn theme.\n   - Ensure the activities are safe, fun, and suitable for 8-year-olds.\n   - Consider both indoor and outdoor activities in case of rain.\n\n4. **List the Activities**:\n   - Provide a list of 5-7 activities with brief descriptions.\n   - Include any necessary materials or preparations for each activity.\n   - Ensure the activities are varied to keep the kids interested.\n\n5. **Review the Shopping List**:\n   - Refer to the shopping list created in the previous step to ensure you have all the necessary materials for the activities:\n   <shopping_list>\n   {{SHOPPING_LIST}}\n   </shopping_list>\n\n6. **Finalize the Activities**:\n   - Ensure the activities are feasible within the budget and theme.\n   - Make sure the activities are safe and consider any common allergies or dietary restrictions.\n\nHere is an example structure to guide your suggestions:\n- **Activity 1**: [Description]\n- **Activity 2**: [Description]\n- **Activity 3**: [Description]\n- **Activity 4**: [Description]\n- **Activity 5**: [Description]\n- **Activity 6**: [Description]\n- **Activity 7**: [Description]\n\nEnsure each activity is clearly described and fits the unicorn theme. You should write only the activities, do not include the guidance structure.",
+      "input_vars_required": [],
+      "depends_on": [
+        "SHOPPING_LIST"
+      ]
+    },
+    {
+      "subtask": "3. Draft a timeline for the party day starting from 2 hours before guests arrive until cleanup is done, including food prep, decoration setup, and scheduling of activities. -",
+      "tag": "PARTY_TIMELINE",
+      "constraints": [
+        {
+          "constraint": "Write out a timeline for the party day starting from 2 hours before guests arrive until cleanup is done showing exactly when to do food prep, decoration setup, when each activity should happen, and when to serve food and cake",
+          "validation_strategy": "llm"
+        },
+        {
+          "constraint": "Follow basic food safety guidelines especially for kids with common allergies like nuts and dairy",
+          "validation_strategy": "llm"
+        }
+      ],
+      "prompt_template": "Your task is to draft a detailed timeline for the birthday party day, starting from 2 hours before guests arrive until cleanup is done. The timeline should include food prep, decoration setup, and scheduling of activities, ensuring the party runs smoothly and stays within the allocated time.\n\nTo accomplish this, follow these steps:\n\n1. **Review the Shopping List and Party Games**:\n   First, review the shopping list and party games that have been prepared in the previous steps. This will help you understand the tasks that need to be scheduled and the activities that will take place during the party.\n   <shopping_list>\n   {{SHOPPING_LIST}}\n   </shopping_list>\n   <party_games>\n   {{PARTY_GAMES}}\n   </party_games>\n\n2. **Plan the Timeline**:\n   Create a timeline that starts 2 hours before the guests arrive and ends with the cleanup after the party. Include the following key elements:\n   - **Decoration Setup**: Schedule the setup of decorations, ensuring they are in place before guests arrive.\n   - **Food Prep**: Plan the preparation of food and drinks, including any last-minute tasks that need to be done just before serving.\n   - **Activity Schedule**: Allocate time slots for each of the 5-7 party games or activities, ensuring they are spaced out appropriately to keep the kids entertained for about 3 hours.\n   - **Food and Cake Serving**: Schedule the serving of food and cake, making sure it fits well within the activity timeline.\n   - **Cleanup**: Include a time slot for cleanup after the party, ensuring all tasks are completed efficiently.\n\n3. **Ensure Logical Flow**:\n   Make sure the timeline flows logically, with each task leading smoothly into the next. Consider the time required for each activity and the transitions between them.\n\n4. **Include Buffer Time**:\n   Add buffer time between activities to account for any unexpected delays or transitions.\n\n5. **Finalize the Timeline**:\n   Compile all the scheduled tasks into a clear and concise timeline. Ensure it is easy to follow and includes all necessary details.\n\nHere is an example structure to guide your writing:\n- **2 Hours Before Guests Arrive**: Start decoration setup and initial food prep.\n- **1.5 Hours Before Guests Arrive**: Complete decoration setup and continue food prep.\n- **1 Hour Before Guests Arrive**: Final touches on decorations and food prep.\n- **Guests Arrive**: Welcome guests and begin the first activity.\n- **Activity 1**: [Describe the activity and its duration]\n- **Activity 2**: [Describe the activity and its duration]\n- **Serve Food**: [Schedule the serving of food]\n- **Activity 3**: [Describe the activity and its duration]\n- **Serve Cake**: [Schedule the serving of cake]\n- **Activity 4**: [Describe the activity and its duration]\n- **Activity 5**: [Describe the activity and its duration]\n- **Cleanup**: [Schedule the cleanup tasks]\n\nEnsure that each time slot is clearly defined and that the timeline is easy to follow. You should write only the timeline, do not include the guidance structure.",
+      "input_vars_required": [],
+      "depends_on": [
+        "SHOPPING_LIST",
+        "PARTY_GAMES"
+      ]
+    },
+    {
+      "subtask": "4. Create a cute invitation text that includes all the important details like date, time, location, RSVP information, and any special instructions about allergies or what kids should bring or wear. -",
+      "tag": "INVITATION_TEXT",
+      "constraints": [
+        {
+          "constraint": "Draft a cute invitation text that includes all the important details like date, time, location, RSVP information, and any special instructions about allergies or what kids should bring or wear",
+          "validation_strategy": "llm"
+        },
+        {
+          "constraint": "The party theme colors should be pink, purple, and gold to match the unicorn decorations",
+          "validation_strategy": "llm"
+        }
+      ],
+      "prompt_template": "Your task is to create a cute invitation text for an 8-year-old's unicorn-themed birthday party. The invitation should include all the important details and follow the party's theme colors: pink, purple, and gold.\n\nTo accomplish this, follow these steps:\n\n1. **Gather Party Details**:\n   - Review the shopping list, party games, and timeline created in the previous steps to gather all necessary information:\n   <shopping_list>\n   {{SHOPPING_LIST}}\n   </shopping_list>\n   <party_games>\n   {{PARTY_GAMES}}\n   </party_games>\n   <party_timeline>\n   {{PARTY_TIMELINE}}\n   </party_timeline>\n\n2. **Include Essential Information**:\n   - **Date and Time**: Clearly state the date and time of the party.\n   - **Location**: Provide the address and any specific instructions for getting to the party location.\n   - **RSVP Information**: Include a contact email or phone number for RSVP and any deadline for responding.\n   - **Special Instructions**: Mention any allergies, what kids should bring or wear, and any other important notes.\n\n3. **Theme and Tone**:\n   - Use a cute and playful tone that fits the unicorn theme.\n   - Incorporate the theme colors (pink, purple, and gold) into the design and wording of the invitation.\n\n4. **Format the Invitation**:\n   - Use a clear and organized format, such as bullet points or paragraphs, to present the information.\n   - Make sure the invitation is easy to read and visually appealing.\n\n5. **Example Structure**:\n   - **Header**: A fun and colorful header that says \"Unicorn Birthday Party!\"\n   - **Body**:\n     - \"You're invited to [Child's Name]'s Unicorn Birthday Party!\"\n     - \"Date: [Date]\"\n     - \"Time: [Time]\"\n     - \"Location: [Location]\"\n     - \"RSVP by [Date] to [Email/Phone Number]\"\n     - \"Special Instructions: [Allergies, what to bring or wear, etc.]\"\n   - **Footer**: A cute closing line like \"Hope to see you there for a magical time!\"\n\n6. **Review and Finalize**:\n   - Ensure all important details are included and the invitation is error-free.\n   - Make any necessary adjustments to ensure the invitation is clear, cute, and fits the unicorn theme.\n\nFinally, write the cute invitation text based on the above guidelines and provide it as your answer.",
+      "input_vars_required": [],
+      "depends_on": [
+        "SHOPPING_LIST",
+        "PARTY_GAMES",
+        "PARTY_TIMELINE"
+      ]
+    },
+    {
+      "subtask": "5. Develop a backup plan in case it rains, ensuring all activities can be moved indoors. -",
+      "tag": "BACKUP_PLAN",
+      "constraints": [
+        {
+          "constraint": "Create a backup plan in case it rains",
+          "validation_strategy": "llm"
+        }
+      ],
+      "prompt_template": "Your task is to develop a backup plan in case it rains, ensuring all activities can be moved indoors. Follow these steps to accomplish your task:\n\nFirst, review the shopping list, party games, timeline, and invitation text from the previous steps to understand the party setup and activities:\n<shopping_list>\n{{SHOPPING_LIST}}\n</shopping_list>\n<party_games>\n{{PARTY_GAMES}}\n</party_games>\n<party_timeline>\n{{PARTY_TIMELINE}}\n</party_timeline>\n<invitation_text>\n{{INVITATION_TEXT}}\n</invitation_text>\n\nNext, consider the following factors for the backup plan:\n1. **Indoor Space**: Ensure that the indoor space is large enough to accommodate all the activities and guests comfortably.\n2. **Activity Adjustments**: Modify the party games and activities to fit the indoor space. Consider the following:\n   - **Space Constraints**: Ensure that games like \"Pin the Horn on the Unicorn\" or \"Unicorn Ring Toss\" can be played indoors without any hazards.\n   - **Noise Levels**: Adjust activities to minimize noise, especially if the party is in a residential area.\n   - **Safety**: Ensure that all indoor activities are safe and age-appropriate.\n3. **Food and Drinks**: Plan how to serve food and drinks indoors. Consider using tables or a buffet-style setup to minimize clutter.\n4. **Decorations**: Adjust the decoration setup to fit the indoor space. Ensure that the decorations are still visually appealing and fit the unicorn theme.\n5. **Timeline Adjustments**: Modify the party timeline to account for indoor activities. Ensure that the timeline is still efficient and keeps the kids entertained.\n\nFinally, write a detailed backup plan that includes:\n- **Indoor Activity Schedule**: A list of adjusted activities with their respective times.\n- **Indoor Setup Instructions**: Detailed instructions on how to set up the indoor space, including decorations, food, and drink stations.\n- **Safety Guidelines**: Any additional safety guidelines or considerations for indoor activities.\n\nEnsure that the backup plan is clear, concise, and easy to follow. The plan should allow for a smooth transition from outdoor to indoor activities in case of rain.",
+      "input_vars_required": [],
+      "depends_on": [
+        "SHOPPING_LIST",
+        "PARTY_GAMES",
+        "PARTY_TIMELINE",
+        "INVITATION_TEXT"
+      ]
+    },
+    {
+      "subtask": "6. Compile the shopping list, party games, timeline, invitation text, and backup plan into a single cohesive output. -",
+      "tag": "FINAL_PARTY_PLAN",
+      "constraints": [
+        {
+          "constraint": "Everything must stay within a total budget of about ~$400",
+          "validation_strategy": "code"
+        },
+        {
+          "constraint": "Follow basic food safety guidelines especially for kids with common allergies like nuts and dairy",
+          "validation_strategy": "llm"
+        },
+        {
+          "constraint": "The party theme colors should be pink, purple, and gold to match the unicorn decorations",
+          "validation_strategy": "llm"
+        }
+      ],
+      "prompt_template": "Your task is to compile the shopping list, party games, timeline, invitation text, and backup plan into a single cohesive output for the birthday party. Follow these steps to accomplish your task:\n\n1. **Review the Shopping List**:\n   Carefully review the detailed shopping list with estimated costs for decorations, food, drinks, party favors, and a cake that serves at least 20 people. Ensure the total budget stays within $400.\n   <shopping_list>\n   {{SHOPPING_LIST}}\n   </shopping_list>\n\n2. **Review the Party Games**:\n   Review the suggested 5-7 age-appropriate party games or activities that fit the unicorn theme and can keep the kids entertained for about 3 hours.\n   <party_games>\n   {{PARTY_GAMES}}\n   </party_games>\n\n3. **Review the Party Timeline**:\n   Review the timeline for the party day starting from 2 hours before guests arrive until cleanup is done, including food prep, decoration setup, and scheduling of activities.\n   <party_timeline>\n   {{PARTY_TIMELINE}}\n   </party_timeline>\n\n4. **Review the Invitation Text**:\n   Review the cute invitation text that includes all the important details like date, time, location, RSVP information, and any special instructions about allergies or what kids should bring or wear.\n   <invitation_text>\n   {{INVITATION_TEXT}}\n   </invitation_text>\n\n5. **Review the Backup Plan**:\n   Review the backup plan in case it rains, ensuring all activities can be moved indoors.\n   <backup_plan>\n   {{BACKUP_PLAN}}\n   </backup_plan>\n\n6. **Compile the Information**:\n   Combine all the reviewed information into a single cohesive output. Ensure that the output is well-organized and easy to follow. Include the following sections in your final output:\n   - **Shopping List**: Detailed list with estimated costs.\n   - **Party Games**: Suggested activities with descriptions.\n   - **Party Timeline**: Step-by-step schedule for the party day.\n   - **Invitation Text**: Cute and informative text for parents.\n   - **Backup Plan**: Plan for indoor activities in case of rain.\n\n7. **Final Output**:\n   Present the compiled information in a clear and concise manner. Ensure that all details are included and that the output is easy to read and understand.\n\nYour final output should be a comprehensive guide that includes all the necessary information for planning and executing the birthday party.",
+      "input_vars_required": [],
+      "depends_on": [
+        "SHOPPING_LIST",
+        "PARTY_GAMES",
+        "PARTY_TIMELINE",
+        "INVITATION_TEXT",
+        "BACKUP_PLAN"
+      ]
+    }
+  ]
+}

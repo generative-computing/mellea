@@ -1,5 +1,7 @@
 from typing import Any
+
 import pytest
+
 from mellea.core import CBlock, Component, ModelOutputThunk
 from mellea.stdlib.components import Message
 

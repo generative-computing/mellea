@@ -1,3 +1,5 @@
+# pytest: skip_always
+
 import mellea
 from mellea.stdlib.components.docs.richdocument import RichDocument
 

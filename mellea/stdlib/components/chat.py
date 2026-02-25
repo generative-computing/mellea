@@ -109,11 +109,13 @@ class Message(Component["Message"]):
             elif "oai_chat_response" in computed._meta:
                 # OpenAI and Watsonx.
                 return Message(
-                    role=computed._meta["oai_chat_response"]["message"]["role"],
+                    role=computed._meta["oai_chat_response"]["choices"][0]["message"][
+                        "role"
+                    ],
                     content=str(
-                        computed._meta["oai_chat_response"]["message"].get(
-                            "tool_calls", []
-                        )
+                        computed._meta["oai_chat_response"]["choices"][0][
+                            "message"
+                        ].get("tool_calls", [])
                     ),
                 )
             else:
@@ -129,10 +131,32 @@ class Message(Component["Message"]):
                 content=computed._meta["chat_response"].message.content,
             )
         elif "oai_chat_response" in computed._meta:
-            return Message(
-                role=computed._meta["oai_chat_response"]["message"]["role"],
-                content=computed._meta["oai_chat_response"]["message"]["content"],
+            role = (
+                computed._meta["oai_chat_response"]
+                .get("choices", [{}])[0]
+                .get("message", {})
+                .get("role", "")
             )
+            if role == "":
+                role = (
+                    computed._meta["oai_chat_response"]
+                    .get("message", {})
+                    .get("role", "")
+                )
+
+            content = (
+                computed._meta["oai_chat_response"]
+                .get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+            )
+            if content == "":
+                content = (
+                    computed._meta["oai_chat_response"]
+                    .get("message", {})
+                    .get("content", "")
+                )
+            return Message(role=role, content=content)
         else:
             assert computed.value is not None
             return Message(role="assistant", content=computed.value)

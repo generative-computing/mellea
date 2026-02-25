@@ -1,3 +1,51 @@
+## [v0.3.1](https://github.com/generative-computing/mellea/releases/tag/v0.3.1) - 2026-02-11
+
+### Feature
+
+* Migrate from Granite 3 to Granite 4 hybrid models ([#357](https://github.com/generative-computing/mellea/issues/357)) ([`8f9e18c`](https://github.com/generative-computing/mellea/commit/8f9e18caf5e7cce38a0e3634eb07c8d98ba520db))
+* Add MelleaTool.from_smolagents() for smolagents integration ([#430](https://github.com/generative-computing/mellea/issues/430)) ([`0471006`](https://github.com/generative-computing/mellea/commit/0471006ae174744a194f1e43129802ed749c15bb))
+* Add tool calling argument validation ([#364](https://github.com/generative-computing/mellea/issues/364)) ([`840a02d`](https://github.com/generative-computing/mellea/commit/840a02d877d7a147f5db14f2c57492d9074fbb15))
+* Instrument telemetry ([#355](https://github.com/generative-computing/mellea/issues/355)) ([`b2e5a52`](https://github.com/generative-computing/mellea/commit/b2e5a5288717535708aa53fb72a4fd958c29056e))
+* Add query clarification RAG intrinsic support ([#391](https://github.com/generative-computing/mellea/issues/391)) ([`d38698a`](https://github.com/generative-computing/mellea/commit/d38698a4c71ed49c71e8d9efe0420a379185f3dd))
+* Add mellea react agent ([#402](https://github.com/generative-computing/mellea/issues/402)) ([`7884b8d`](https://github.com/generative-computing/mellea/commit/7884b8dbb3985ec03a3c8bd10aa82dbf0e932ffc))
+* Optimize example test discovery and execution speed ([#372](https://github.com/generative-computing/mellea/issues/372)) ([`e9aefaf`](https://github.com/generative-computing/mellea/commit/e9aefaf7b066179d8062076c41db650569e92d43))
+* New MelleaTool class and adoption across mellea ([#380](https://github.com/generative-computing/mellea/issues/380)) ([`ffb8b6c`](https://github.com/generative-computing/mellea/commit/ffb8b6c797b20ec387a2c2257e88900b4e498f0f))
+* Add code coverage tracking with pytest-cov ([#353](https://github.com/generative-computing/mellea/issues/353)) ([`b45a4b6`](https://github.com/generative-computing/mellea/commit/b45a4b6a214de9e4f632ef34f51fecade6abf3b6))
+* Add pytest markers for test categorization (#322) ([#326](https://github.com/generative-computing/mellea/issues/326)) ([`0d8d020`](https://github.com/generative-computing/mellea/commit/0d8d02052192ea0153792ecd2e1ee9fa764b18b5))
+
+### Fix
+
+* Lint/format issues ([#536](https://github.com/generative-computing/mellea/issues/536)) ([`781bb6b`](https://github.com/generative-computing/mellea/commit/781bb6b7d8028611c5ea66c702f4c5f2f52eccbc))
+* Tools in examples ([#535](https://github.com/generative-computing/mellea/issues/535)) ([`a49bdf8`](https://github.com/generative-computing/mellea/commit/a49bdf8a7f450a22a9c337b64f007b5e07e205ea))
+* Quick fix to get the role / content from specifically parsed messages ([#533](https://github.com/generative-computing/mellea/issues/533)) ([`2f54cc8`](https://github.com/generative-computing/mellea/commit/2f54cc8daf5fbdca0d47420ff54f944416428364))
+* Migrate from IBM alora to PEFT 0.18.1 native aLoRA ([#422](https://github.com/generative-computing/mellea/issues/422)) ([`c6a3e64`](https://github.com/generative-computing/mellea/commit/c6a3e643b092b5d4f09f7003d6a9c347d92d8052))
+* Flag more tests that require ollama ([#420](https://github.com/generative-computing/mellea/issues/420)) ([`b06851f`](https://github.com/generative-computing/mellea/commit/b06851fd4d1134bae0ad253536a994269327c2f6))
+* Guarantee proper ordering of decompose subtask dependencies ([#407](https://github.com/generative-computing/mellea/issues/407)) ([`f0b1346`](https://github.com/generative-computing/mellea/commit/f0b1346d3e7aafdd2ca83979bfb723df081255d5))
+* Astream output ([#358](https://github.com/generative-computing/mellea/issues/358)) ([`9cafe05`](https://github.com/generative-computing/mellea/commit/9cafe053a6fc1ec2fa90fd5c35be12527f4cda45))
+* Update ci for merge-queue ([#417](https://github.com/generative-computing/mellea/issues/417)) ([`5cf8eee`](https://github.com/generative-computing/mellea/commit/5cf8eee83cc46e04defa070a6d0f31d43dbb001e))
+* Some examples needed update ([#408](https://github.com/generative-computing/mellea/issues/408)) ([`3d5ab56`](https://github.com/generative-computing/mellea/commit/3d5ab56eeb6760e8608289cf5d9de989bb727f24))
+* Formatting model_ids for better readability ([#386](https://github.com/generative-computing/mellea/issues/386)) ([`318a962`](https://github.com/generative-computing/mellea/commit/318a9623f6da046c9547cd41816933f113b853e3))
+* Update agents.md to strongly encourage using uv ([#388](https://github.com/generative-computing/mellea/issues/388)) ([`8b2e2cf`](https://github.com/generative-computing/mellea/commit/8b2e2cfa6b48b39016a11e5d3839abf8dc93a2a4))
+* Restrict transformers version to 4.x ([#379](https://github.com/generative-computing/mellea/issues/379)) ([`67f8bc0`](https://github.com/generative-computing/mellea/commit/67f8bc075ebdf061da29ee5db6caba81e786aa7a))
+* Friendly error messages for optional backend dependencies ([#343](https://github.com/generative-computing/mellea/issues/343)) ([`4f7091f`](https://github.com/generative-computing/mellea/commit/4f7091f1a2b22143705ce3b87e893722efba40f1))
+* Add missing await keywords in async tests ([#346](https://github.com/generative-computing/mellea/issues/346)) ([`a7442a6`](https://github.com/generative-computing/mellea/commit/a7442a6fd799a676beb4c290dfc9c93f3ef9d47e))
+* Use __repr__ for helpful debug display in Message/ToolMessage ([#339](https://github.com/generative-computing/mellea/issues/339)) ([`f15fadb`](https://github.com/generative-computing/mellea/commit/f15fadb3cfa5d47fab2bb7283eb5a648c397188e))
+* Add skip to timeout test for python < 3.11 ([#333](https://github.com/generative-computing/mellea/issues/333)) ([`2cc3352`](https://github.com/generative-computing/mellea/commit/2cc3352473bdde9b44e1e533125ee71e0dbc0ab2))
+* Don't overwrite user-configured logging levels ([#298](https://github.com/generative-computing/mellea/issues/298)) ([`119ea86`](https://github.com/generative-computing/mellea/commit/119ea86d9da3d74bd966c9757315cf3a0c724087))
+
+### Documentation
+
+* Bedrock example. ([#410](https://github.com/generative-computing/mellea/issues/410)) ([`3204b3a`](https://github.com/generative-computing/mellea/commit/3204b3a82877eabe83451f8038df80334058c623))
+* Add decompose to tutorial with example ([#366](https://github.com/generative-computing/mellea/issues/366)) ([`ef0a964`](https://github.com/generative-computing/mellea/commit/ef0a96499346dd3cddc20ca461a8490c4164cfca))
+* Create contributing doc ([#369](https://github.com/generative-computing/mellea/issues/369)) ([`1cacbf9`](https://github.com/generative-computing/mellea/commit/1cacbf9c2fbb4c5e8d035683e99c8f04671824b4))
+* Add security policy ([#363](https://github.com/generative-computing/mellea/issues/363)) ([`afbda1d`](https://github.com/generative-computing/mellea/commit/afbda1d5dc90dd9c9d0cfadbc7785c0656389141))
+* Add code of conduct ([#365](https://github.com/generative-computing/mellea/issues/365)) ([`94b21d9`](https://github.com/generative-computing/mellea/commit/94b21d97ae7215605f7fb0170b3abdb930b34b66))
+* Add discord badge to readme ([#362](https://github.com/generative-computing/mellea/issues/362)) ([`168ccca`](https://github.com/generative-computing/mellea/commit/168ccca6d2d7f13ee5c8ad7ab28bac7c58222cb6))
+
+### Performance
+
+* Use module-scoped fixture for RAG tests ([#337](https://github.com/generative-computing/mellea/issues/337)) ([`d72ecfd`](https://github.com/generative-computing/mellea/commit/d72ecfd280051a679b26683e7b170458033238e2))
+
 ## [v0.3.0](https://github.com/generative-computing/mellea/releases/tag/v0.3.0) - 2026-01-21
 
 ### Feature

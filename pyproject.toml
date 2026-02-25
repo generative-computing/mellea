@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "mellea"
-version = "0.3.0"
+version = "0.3.1"
 authors = [
     { name = "Nathan Fulton", email = "nathan@ibm.com" },
     { name = "Hendrik Strobelt", email = "hendrik.strobelt@ibm.com" },
@@ -57,49 +57,48 @@ m = "cli.m:cli"
 # uv pip install -e ".[hf, watsonx]"
 # if you want to install all dependencies, use uv sync --all-extras
 
-
-# note on outlines versions:
-# outlines>=1.2.0 requires outlines-core==0.2.11
-# outlines<=1.1.* requires outlines-core==0.1.26
-# vllm==0.10.0    requires outlines-core==0.2.10
-# vllm==0.9.*     requires outlines-core==0.1.26
-#
-# thus the following version combination allows installing vllm and outlines
-# (main library) at the same time.
-
 hf = [
     "accelerate>=1.9.0",
-    "alora==0.2.0",
     "datasets>=4.0.0",
-    "outlines-core==0.1.26",
-    "outlines",                 # intentionally un-versioned, expecting a minor update. coutlines-core version should be enough to specify it
-    "peft>=0.18.0", # aLoRA support was added in Peft 0.18.0
-    "transformers>=4.53.2",
+    "llguidance",
+    "peft>=0.18.1",  # Native aLoRA support added in PEFT 0.18.0
+    "transformers>=4.53.2,<5",
     "trl==0.19.1",
     "granite-common[transformers]",
 ]
 
 vllm = [
-    "transformers<4.54.0",
-    # see https://github.com/vllm-project/vllm-ascend/issues/2046
-    "numpy<2.0.0",              # patching incorrect dependencies in vllm and outlines.
-    # see https://github.com/vllm-project/vllm/issues/5587
-    "outlines-core==0.1.26",
-    "vllm>=0.9.1",
+    "vllm>=0.13.0; sys_platform != 'darwin'",
+    "numpy<=2.2",               # ImportError: Numba needs NumPy 2.2 or less. Got NumPy 2.4.
 ]
 
 litellm = [
-    "litellm>=1.76"
+    "litellm>=1.76",
+    "boto3", # for Bedrock support.
 ]
 
 watsonx = [
     "ibm-watsonx-ai>=1.3.31",
 ]
+
 docling = [
     "docling>=2.45.0",
 ]
 
-all = ["mellea[watsonx,docling,hf,vllm,litellm]"]
+tools = [
+    "smolagents>=1.0.0",
+    "langchain-community>=0.3.0",
+    "ddgs>=9.0.0",  # Required by DuckDuckGoSearchResults in langchain-community
+]
+
+telemetry = [
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp>=1.20.0",
+    "opentelemetry-distro>=0.59b0",
+]
+
+all = ["mellea[watsonx,docling,hf,vllm,litellm,tools,telemetry]"]
 
 [dependency-groups]
 # Use these like:
@@ -113,10 +112,13 @@ dev = [
     "pdm>=2.24.0",
     "pytest",
     "pytest-asyncio",
+    "pytest-cov>=6.0.0",
+    "pytest-timeout",  # For test suite timeout configuration
     "psutil",  # For test infrastructure: RAM detection in conftest.py
     "mypy>=1.17.0",
     "python-semantic-release~=7.32",
     "nbmake>=1.5.5",
+    "langchain-core>=1.2.7", # Necessary for mypy and some tool tests
 ]
 
 notebook = [
@@ -173,7 +175,7 @@ ignore = [
 #   "UP006",  # List vs list, etc
 #   "UP007",  # Option and Union
 #   "UP035",  # `typing.Set` is deprecated, use `set` instead"
-  "PD901",  # Avoid using the generic variable name `df` for DataFrames
+  "PD901",  # Generic variable name 'df' for DataFrames (deprecated rule, but needed while PD is enabled)
   "C901", # Complexity warnings
 ]
 
@@ -187,18 +189,45 @@ max-complexity = 20
 combine-as-imports = true
 split-on-trailing-comma = false
 
+[tool.ruff.lint.per-file-ignores]
+# E402: Module level import not at top of file
+# Intentional in examples (pedagogical structure) and tests (pytestmark before imports)
+# D: Docstring errors
+# Not required in examples, tests, and notebooks (core mellea/ has complete docstrings)
+"docs/**/*.py" = ["E402", "D"]
+"docs/**/*.ipynb" = ["D"]
+"test/**/*.py" = ["E402", "D"]
+"cli/**/*.py" = ["D"]
+
+[[tool.mypy.overrides]]
+# Keep import-not-found suppressed for optional dependencies
+module = "docs.*"
+disable_error_code = [
+    "import-not-found",
+]
+
+[[tool.mypy.overrides]]
+# vLLM is an optional backend that doesn't work on macOS
+module = "mellea.backends.vllm"
+disable_error_code = [
+    "import-not-found",
+]
+
 [tool.codespell]
-ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat'
+ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,Wight'
 check-filenames = true
 check-hidden = false
 regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=[A-Z])|\\d+"
 skip = 'requirements.txt,uv.lock,CHANGELOG.md'
 
 [tool.mypy]
+install_types = true
+non_interactive = true
 disable_error_code = ["empty-body", "import-untyped"]
 python_version = "3.10"
 
 [tool.pytest.ini_options]
+testpaths = ["test", "docs"]  # Run test/ first (fail fast), then docs/
 markers = [
     # Backend markers
     "ollama: Tests requiring Ollama backend (local, light)",
@@ -207,17 +236,73 @@ markers = [
     "huggingface: Tests requiring HuggingFace backend (local, heavy)",
     "vllm: Tests requiring vLLM backend (local, GPU required)",
     "litellm: Tests requiring LiteLLM backend",
-    
+
     # Capability markers
     "requires_api_key: Tests requiring external API keys",
     "requires_gpu: Tests requiring GPU",
     "requires_heavy_ram: Tests requiring 48GB+ RAM",
     "qualitative: Non-deterministic quality tests",
-    
+    "slow: Tests taking >5 minutes (e.g., dataset loading)",
+
     # Composite markers
     "llm: Tests that make LLM calls (needs at least Ollama)",
 ]
 asyncio_mode = "auto"  # Don't require explicitly marking async tests.
+addopts = [
+    # Skip slow tests by default (use pytest without -m to include them)
+    "-m", "not slow",
+    # Run qualitative tests by default (use -m "not qualitative" for fast tests)
+    "--cov=mellea",
+    "--cov=cli",
+    "--cov-report=term",
+    "--cov-report=html",
+    "--cov-report=json",
+    # Set timeout to 15 minutes for full test suite
+    "--timeout=900",
+]
+filterwarnings = [
+    # Show each deprecation warning only once per session
+    "once::DeprecationWarning",
+    "once::PendingDeprecationWarning",
+
+    # Deduplicate noisy Pydantic serialization warnings
+    "once:.*PydanticSerializationUnexpectedValue.*:UserWarning",
+
+    # Ignore SWIG C/C++ binding warnings from vLLM (Python 3.12 issue)
+    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
+
+    # Keep Watsonx deprecation visible (important for migration)
+    "default:.*Watsonx Backend is deprecated.*:DeprecationWarning",
+]
+
+[tool.coverage.run]
+branch = true  # Measure branch coverage, not just line coverage
+source = ["mellea", "cli"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/scratchpad/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+precision = 2
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "\\.\\.\\.",  # Ellipsis in function bodies
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
 
 [tool.semantic_release]
 # for default values check:

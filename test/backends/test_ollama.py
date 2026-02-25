@@ -25,7 +25,7 @@ def session():
 
 
 @pytest.mark.qualitative
-def test_simple_instruct(session):
+def test_simple_instruct(session) -> None:
     result = session.instruct(
         "Write an email to Hendrik trying to sell him self-sealing stembolts."
     )
@@ -37,8 +37,8 @@ def test_simple_instruct(session):
 
 
 @pytest.mark.qualitative
-def test_instruct_with_requirement(session):
-    response = session.instruct(
+def test_instruct_with_requirement(session) -> None:
+    session.instruct(
         "Write an email to Hendrik convincing him to buy some self-sealing stembolts."
     )
 
@@ -61,7 +61,7 @@ def test_instruct_with_requirement(session):
 
 
 @pytest.mark.qualitative
-def test_chat(session):
+def test_chat(session) -> None:
     output_message = session.chat("What is 1+1?")
     assert "2" in output_message.content, (
         f"Expected a message with content containing 2 but found {output_message}"
@@ -69,7 +69,7 @@ def test_chat(session):
 
 
 @pytest.mark.qualitative
-def test_format(session):
+def test_format(session) -> None:
     class Person(pydantic.BaseModel):
         name: str
         # it does not support regex patterns in json schema
@@ -102,7 +102,7 @@ def test_format(session):
 
 
 @pytest.mark.qualitative
-async def test_generate_from_raw(session):
+async def test_generate_from_raw(session) -> None:
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
     results = await session.backend.generate_from_raw(
@@ -114,7 +114,7 @@ async def test_generate_from_raw(session):
 
 
 @pytest.mark.xfail(reason="ollama sometimes fails generated structured outputs")
-async def test_generate_from_raw_with_format(session):
+async def test_generate_from_raw_with_format(session) -> None:
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
     class Answer(pydantic.BaseModel):
@@ -131,14 +131,14 @@ async def test_generate_from_raw_with_format(session):
 
     random_result = results[0]
     try:
-        answer = Answer.model_validate_json(random_result.value)
+        Answer.model_validate_json(random_result.value)
     except pydantic.ValidationError as e:
         assert False, (
             f"formatting directive failed for {random_result.value}: {e.json()}"
         )
 
 
-async def test_async_parallel_requests(session):
+async def test_async_parallel_requests(session) -> None:
     model_opts = {ModelOption.STREAM: True}
     mot1, _ = await session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext(), model_options=model_opts
@@ -173,7 +173,7 @@ async def test_async_parallel_requests(session):
     assert m2_final_val == mot2.value
 
 
-async def test_async_avalue(session):
+async def test_async_avalue(session) -> None:
     mot1, _ = await session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext()
     )
@@ -182,7 +182,7 @@ async def test_async_avalue(session):
     assert m1_final_val == mot1.value
 
 
-def test_multiple_asyncio_runs(session):
+def test_multiple_asyncio_runs(session) -> None:
     async def test():
         result = await session.achat("hello")
         assert result is not None
@@ -191,7 +191,7 @@ def test_multiple_asyncio_runs(session):
     asyncio.run(test())
 
 
-def test_client_cache(session):
+def test_client_cache(session) -> None:
     backend: OllamaModelBackend = session.backend
     first_client = backend._async_client
 

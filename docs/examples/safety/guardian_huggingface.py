@@ -1,3 +1,5 @@
+# pytest: ollama, huggingface, requires_heavy_ram, llm
+
 """Example of using GuardianCheck with HuggingFace backend for direct model inference
 
 This example shows how to reuse the Guardian backend across multiple validators
@@ -6,11 +8,12 @@ to avoid reloading the model multiple times.
 
 from mellea import MelleaSession
 from mellea.backends import model_ids
-from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.ollama import OllamaModelBackend
+from mellea.backends.tools import MelleaTool
 from mellea.core import ModelOutputThunk, ModelToolCall
-from mellea.stdlib.context import ChatContext
 from mellea.stdlib.components import Message
+from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 
 print("=== GuardianCheck HuggingFace Backend Example ===")
@@ -46,7 +49,7 @@ print(f"Content is safe: {validation_result[0]._result}")
 print(f"Guardian detected harm: {not validation_result[0]._result}")
 
 if validation_result[0]._reason:
-    print(f"\nGuardian feedback:")
+    print("\nGuardian feedback:")
     print(validation_result[0]._reason[:200] + "...")
 
 # Test 2: Groundedness detection
@@ -109,7 +112,9 @@ def dummy_func(**kwargs):
 
 hallucinated_tool_calls = {
     "get_stock_price": ModelToolCall(
-        name="get_stock_price", func=dummy_func, args={"symbol": "AAPL"}
+        name="get_stock_price",
+        func=MelleaTool.from_callable(dummy_func),
+        args={"symbol": "AAPL"},
     )
 }
 

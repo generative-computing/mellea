@@ -1,12 +1,11 @@
-import asyncio
-from mellea.core import Context, CBlock, ModelOutputThunk
+# pytest: ollama, llm
 
+import asyncio
+
+from mellea.backends.ollama import OllamaModelBackend
+from mellea.core import Backend, CBlock, Context, ModelOutputThunk
 from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.context import SimpleContext
-
-from mellea.core import Backend
-from mellea.backends.ollama import OllamaModelBackend
-from typing import Tuple
 
 backend = OllamaModelBackend("granite4:latest")
 
@@ -26,7 +25,7 @@ async def _fib_sample(
     try:
         int(value)
         return answer_mot
-    except:
+    except Exception:
         return None
 
 
@@ -43,13 +42,14 @@ async def fib_sampling_version(
 
 
 async def fib_sampling_version_main(backend: Backend, ctx: Context):
-    fibs = []
+    fibs: list[CBlock | ModelOutputThunk] = []
     for i in range(20):
         if i == 0 or i == 1:
             fibs.append(CBlock(f"{i}"))
         else:
             mot = await fib_sampling_version(backend, ctx, fibs[i - 1], fibs[i - 2])
-            fibs.append(mot)
+            if mot is not None:
+                fibs.append(mot)
 
     for x_i, x in enumerate(fibs):
         match x:

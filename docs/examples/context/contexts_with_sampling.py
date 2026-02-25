@@ -1,3 +1,5 @@
+# pytest: ollama, llm
+
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.stdlib.session import start_session
 
@@ -26,7 +28,7 @@ print()
 print(f"Total Generation Attempts: {len(res.sample_generations)}")
 print()
 
-print(f"Getting index of another result.")
+print("Getting index of another result.")
 index = 0  # Just choose the first one.
 
 print(

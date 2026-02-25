@@ -1,3 +1,5 @@
+# pytest: ollama, qualitative, llm, requires_heavy_ram
+
 """SOFAI Sampling Strategy Example: Graph Coloring Problem.
 
 This example demonstrates the SOFAI (Slow and Fast AI)

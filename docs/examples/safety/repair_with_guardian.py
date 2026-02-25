@@ -1,10 +1,12 @@
-"""
-RepairTemplateStrategy Example with Actual Function Call Validation
+# pytest: ollama, huggingface, requires_heavy_ram, llm
+
+"""RepairTemplateStrategy Example with Actual Function Call Validation
 Demonstrates how RepairTemplateStrategy repairs responses using actual function calls.
 """
 
 from mellea import MelleaSession
 from mellea.backends.ollama import OllamaModelBackend
+from mellea.backends.tools import MelleaTool
 from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 from mellea.stdlib.sampling import RepairTemplateStrategy
 
@@ -55,7 +57,7 @@ def demo_repair_with_actual_function_calling():
         model_options={
             "temperature": 0.7,
             "seed": 789,
-            "tools": [get_stock_price],
+            "tools": [MelleaTool.from_callable(get_stock_price)],
             # Intentionally misconfigured to demonstrate repair
             "system": "When users ask about stock prices, use the full company name as the symbol parameter. For example, use 'Tesla Motors' instead of 'TSLA'.",
         },
@@ -78,10 +80,10 @@ def demo_repair_with_actual_function_calling():
             if hasattr(m.backend, "formatter"):
                 try:
                     rendered = m.backend.formatter.print(action)
-                    print(f"  Instruction sent to model:")
-                    print(f"  ---")
+                    print("  Instruction sent to model:")
+                    print("  ---")
                     print(f"  {rendered}")
-                    print(f"  ---")
+                    print("  ---")
                 except Exception:
                     pass
 

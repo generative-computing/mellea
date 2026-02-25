@@ -62,8 +62,17 @@ pytest --ignore-gpu-check --ignore-ram-check -m "huggingface"
 ## Quick Start
 
 ```bash
-# Run all tests (auto-skips based on your system)
+# Default: qualitative tests, skip slow tests
 pytest
+
+# Fast tests only (no qualitative, no slow)
+pytest -m "not qualitative"
+
+# Run only slow tests
+pytest -m "slow"
+
+# Run ALL tests including slow (bypass config)
+pytest --co -q
 
 # Run only fast unit tests (no LLM calls)
 pytest -m "not llm"
@@ -74,12 +83,11 @@ pytest -m "ollama"
 # Run tests that don't require API keys
 pytest -m "not requires_api_key"
 
-# Run infrastructure tests only (skip quality tests)
-pytest -m "not qualitative"
-
 # Run quality tests for Ollama
 pytest -m "ollama and qualitative"
 ```
+
+**Note:** By default, `pytest` excludes slow tests (>5 min) but includes qualitative tests (configured in `pyproject.toml`). Use `pytest --co -q` to run all tests including slow ones.
 
 ## Marker Categories
 
@@ -115,7 +123,6 @@ Specify which backend the test uses:
 - **`@pytest.mark.vllm`**: Tests requiring vLLM backend
   - Local execution
   - Heavy resources (GPU required, 16-32GB RAM, 8GB+ VRAM)
-  - Requires `VLLM_USE_V1=0` environment variable
   - Example: `test/backends/test_vllm.py`
 
 - **`@pytest.mark.litellm`**: Tests requiring LiteLLM backend
@@ -140,8 +147,15 @@ Specify resource or authentication requirements:
 
 - **`@pytest.mark.qualitative`**: Non-deterministic quality tests
   - Tests LLM output quality rather than infrastructure
+  - **Included by default** (run with standard `pytest`)
   - Skipped in CI (when `CICD=1`)
   - May be flaky due to model variability
+  - Use `pytest -m "not qualitative"` to exclude these tests
+
+- **`@pytest.mark.slow`**: Tests taking >5 minutes
+  - Tests that load large datasets, run extensive evaluations, etc.
+  - **Excluded by default** (configured in `pyproject.toml` addopts)
+  - Use `pytest -m slow` or `pytest --co -q` to include these tests
 
 ### Composite Markers
 
@@ -295,11 +309,11 @@ jobs:
   unit-tests:
     # Fast unit tests, no LLM
     run: pytest -m "not llm"
-  
+
   ollama-tests:
     # Ollama infrastructure tests
     run: pytest -m "ollama and not qualitative"
-  
+
   quality-tests:
     # Optional: Run quality tests on schedule
     if: github.event_name == 'schedule'

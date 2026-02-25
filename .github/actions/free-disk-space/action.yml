@@ -15,11 +15,14 @@ runs:
           /usr/share/dotnet /usr/local/lib/android /opt/ghc \
           /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup \
           /usr/lib/jvm || true
+        sudo apt update >/dev/null 2>&1
         sudo apt install aptitude -y >/dev/null 2>&1
         sudo aptitude purge '~n ^mysql' -f -y >/dev/null 2>&1
         sudo aptitude purge '~n ^dotnet' -f -y >/dev/null 2>&1
         sudo apt-get autoremove -y >/dev/null 2>&1
         sudo apt-get autoclean -y >/dev/null 2>&1
+        sudo apt-get clean >/dev/null 2>&1
+        sudo rm -rf /var/lib/apt/lists/* || true
       shell: bash
     - name: Print disk space after cleanup
       run: |

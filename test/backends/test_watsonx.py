@@ -18,7 +18,7 @@ pytestmark = [
 ]
 
 from mellea import MelleaSession
-from mellea.backends import ModelOption
+from mellea.backends import ModelOption, model_ids
 from mellea.backends.watsonx import WatsonxAIBackend
 from mellea.core import CBlock, ModelOutputThunk
 from mellea.formatters import TemplateFormatter
@@ -32,8 +32,8 @@ def backend():
         pytest.skip("Skipping watsonx tests.")
     else:
         return WatsonxAIBackend(
-            model_id="ibm/granite-3-3-8b-instruct",
-            formatter=TemplateFormatter(model_id="ibm-granite/granite-3.3-8b-instruct"),
+            model_id=model_ids.IBM_GRANITE_4_HYBRID_SMALL,
+            formatter=TemplateFormatter(model_id=model_ids.IBM_GRANITE_4_HYBRID_SMALL),
         )
 
 
@@ -102,6 +102,16 @@ def test_multiturn(session: MelleaSession):
 @pytest.mark.qualitative
 def test_chat(session):
     output_message = session.chat("What is 1+1?")
+    assert "2" in output_message.content, (
+        f"Expected a message with content containing 2 but found {output_message}"
+    )
+
+
+@pytest.mark.qualitative
+def test_chat_stream(session):
+    output_message = session.chat(
+        "What is 1+1?", model_options={ModelOption.STREAM: True}
+    )
     assert "2" in output_message.content, (
         f"Expected a message with content containing 2 but found {output_message}"
     )
@@ -221,6 +231,21 @@ def test_client_cache(backend):
     fourth_client = asyncio.run(get_client_async())
     assert fourth_client in backend._client_cache.cache.values()
     assert len(backend._client_cache.cache.values()) == 2
+
+
+def test_default_model():
+    """Verify WatsonxAIBackend uses correct default model."""
+    if int(os.environ.get("CICD", 0)) == 1:
+        pytest.skip("Skipping watsonx tests.")
+
+    # Create backend without specifying model_id
+    default_backend = WatsonxAIBackend()
+
+    # Verify it uses IBM_GRANITE_4_HYBRID_SMALL as default
+    assert default_backend._model_id == model_ids.IBM_GRANITE_4_HYBRID_SMALL, (
+        f"Expected default model to be IBM_GRANITE_4_HYBRID_SMALL, "
+        f"but got {default_backend._model_id}"
+    )
 
 
 if __name__ == "__main__":

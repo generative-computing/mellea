@@ -4,8 +4,8 @@ import typer
 
 from cli.alora.commands import alora_app
 from cli.decompose import app as decompose_app
-from cli.serve.app import serve
 from cli.eval.commands import eval_app
+from cli.serve.app import serve
 
 cli = typer.Typer(name="m", no_args_is_help=True)
 

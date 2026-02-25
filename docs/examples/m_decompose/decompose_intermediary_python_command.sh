@@ -1,0 +1,1 @@
+python ./m_decomp_result.py > final_output.txt

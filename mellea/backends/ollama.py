@@ -22,10 +22,15 @@ from ..core import (
     ModelOutputThunk,
     ModelToolCall,
 )
+from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import ClientCache, get_current_event_loop, send_to_queue
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
+from ..telemetry.backend_instrumentation import (
+    instrument_generate_from_context,
+    instrument_generate_from_raw,
+)
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import add_tools_from_context_actions, add_tools_from_model_options
@@ -255,6 +260,11 @@ class OllamaModelBackend(FormatterBackend):
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
         """See `generate_from_chat_context`."""
+        from ..telemetry.backend_instrumentation import start_generate_span
+
+        # Start span without auto-closing (will be closed in post_processing)
+        span = start_generate_span(self, action, ctx, format, tool_calls)
+
         assert ctx.is_chat_context, (
             "The ollama backend only supports chat-like contexts."
         )
@@ -265,6 +275,10 @@ class OllamaModelBackend(FormatterBackend):
             model_options=model_options,
             tool_calls=tool_calls,
         )
+
+        # Store span for telemetry recording and closing in post_processing
+        if span is not None:
+            mot._meta["_telemetry_span"] = span
 
         return mot, ctx.add(action).add(mot)
 
@@ -322,7 +336,7 @@ class OllamaModelBackend(FormatterBackend):
         )
 
         # Append tool call information if applicable.
-        tools: dict[str, Callable] = dict()
+        tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
             if _format:
                 FancyLogger.get_logger().warning(
@@ -343,7 +357,7 @@ class OllamaModelBackend(FormatterBackend):
         ] = self._async_client.chat(
             model=self._get_ollama_model_id(),
             messages=conversation,
-            tools=list(tools.values()),
+            tools=[t.as_json_tool for t in tools.values()],
             think=model_opts.get(ModelOption.THINKING, None),
             stream=model_opts.get(ModelOption.STREAM, False),
             options=self._make_backend_specific_and_remove(model_opts),
@@ -432,20 +446,23 @@ class OllamaModelBackend(FormatterBackend):
         # Ollama doesn't support "batching". There's some ability for concurrency. Use that here.
         # See https://github.com/ollama/ollama/blob/main/docs/faq.md#how-does-ollama-handle-concurrent-requests.
 
-        # Run async so that we can make use of Ollama's concurrency.
-        coroutines: list[Coroutine[Any, Any, ollama.GenerateResponse]] = []
-        for prompt in prompts:
-            co = self._async_client.generate(
-                model=self._get_ollama_model_id(),
-                prompt=prompt,
-                raw=True,
-                think=model_opts.get(ModelOption.THINKING, None),
-                format=format.model_json_schema() if format is not None else None,  # type: ignore
-                options=self._make_backend_specific_and_remove(model_opts),
-            )
-            coroutines.append(co)
+        with instrument_generate_from_raw(
+            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
+        ):
+            # Run async so that we can make use of Ollama's concurrency.
+            coroutines: list[Coroutine[Any, Any, ollama.GenerateResponse]] = []
+            for prompt in prompts:
+                co = self._async_client.generate(
+                    model=self._get_ollama_model_id(),
+                    prompt=prompt,
+                    raw=True,
+                    think=model_opts.get(ModelOption.THINKING, None),
+                    format=format.model_json_schema() if format is not None else None,  # type: ignore
+                    options=self._make_backend_specific_and_remove(model_opts),
+                )
+                coroutines.append(co)
 
-        responses = await asyncio.gather(*coroutines, return_exceptions=True)
+            responses = await asyncio.gather(*coroutines, return_exceptions=True)
 
         results = []
         date = datetime.datetime.now()
@@ -499,8 +516,10 @@ class OllamaModelBackend(FormatterBackend):
         return results
 
     def _extract_model_tool_requests(
-        self, tools: dict[str, Callable], chat_response: ollama.ChatResponse
+        self, tools: dict[str, AbstractMelleaTool], chat_response: ollama.ChatResponse
     ) -> dict[str, ModelToolCall] | None:
+        from .tools import validate_tool_arguments
+
         model_tool_calls: dict[str, ModelToolCall] = {}
 
         if chat_response.message.tool_calls:
@@ -513,8 +532,11 @@ class OllamaModelBackend(FormatterBackend):
                     continue  # skip this function if we can't find it.
 
                 args = tool.function.arguments
+
+                # Validate and coerce argument types
+                validated_args = validate_tool_arguments(func, args, strict=False)
                 model_tool_calls[tool.function.name] = ModelToolCall(
-                    tool.function.name, func, args
+                    tool.function.name, func, validated_args
                 )
 
         if len(model_tool_calls) > 0:
@@ -525,7 +547,7 @@ class OllamaModelBackend(FormatterBackend):
         self,
         mot: ModelOutputThunk,
         chunk: ollama.ChatResponse,
-        tools: dict[str, Callable],
+        tools: dict[str, AbstractMelleaTool],
     ):
         """Called during generation to add information from a single ChatResponse to the ModelOutputThunk."""
         if mot._thinking is None:
@@ -557,7 +579,7 @@ class OllamaModelBackend(FormatterBackend):
         self,
         mot: ModelOutputThunk,
         conversation: list[dict],
-        tools: dict[str, Callable],
+        tools: dict[str, AbstractMelleaTool],
         _format,
     ):
         """Called when generation is done."""
@@ -587,6 +609,33 @@ class OllamaModelBackend(FormatterBackend):
 
         mot._generate_log = generate_log
         mot._generate = None
+
+        # Record telemetry and close span now that response is available
+        span = mot._meta.get("_telemetry_span")
+        if span is not None:
+            from ..telemetry import end_backend_span
+            from ..telemetry.backend_instrumentation import (
+                record_response_metadata,
+                record_token_usage,
+            )
+
+            response = mot._meta.get("chat_response")
+            if response:
+                # Ollama responses may have usage information
+                usage = (
+                    response.get("usage")
+                    if isinstance(response, dict)
+                    else getattr(response, "usage", None)
+                )
+                if usage:
+                    record_token_usage(span, usage)
+                record_response_metadata(span, response)
+
+            # Close the span now that telemetry is recorded
+            end_backend_span(span)
+
+            # Clean up the span reference
+            del mot._meta["_telemetry_span"]
 
 
 def chat_response_delta_merge(mot: ModelOutputThunk, delta: ollama.ChatResponse):

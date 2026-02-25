@@ -18,20 +18,24 @@ pytestmark = [
     ),
 ]
 
-import mellea.backends.model_ids as model_ids
-from mellea import MelleaSession
-from mellea.backends import ModelOption
-from mellea.backends.vllm import LocalVLLMBackend
-from mellea.core import CBlock
-from mellea.stdlib.context import ChatContext, SimpleContext
+# Try to import vLLM backend - skip all tests if not available
+try:
+    import mellea.backends.model_ids as model_ids
+    from mellea import MelleaSession
+    from mellea.backends import ModelOption
+    from mellea.backends.vllm import LocalVLLMBackend
+    from mellea.core import CBlock
+    from mellea.stdlib.context import ChatContext, SimpleContext
+except ImportError as e:
+    pytest.skip(
+        f"vLLM backend not available: {e}. Install with: pip install mellea[vllm]",
+        allow_module_level=True,
+    )
 
 
 @pytest.fixture(scope="module")
 def backend():
     """Shared vllm backend for all tests in this module."""
-    if os.environ.get("VLLM_USE_V1", -1) != "0":
-        pytest.skip("skipping vllm tests; tests require `export VLLM_USE_V1=0`")
-
     backend = LocalVLLMBackend(
         model_id=model_ids.QWEN3_0_6B,
         # formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
@@ -43,7 +47,12 @@ def backend():
             "max_num_seqs": 8,
         },
     )
-    return backend
+    yield backend
+
+    # Cleanup using shared function (best-effort within module)
+    from test.conftest import cleanup_vllm_backend
+
+    cleanup_vllm_backend(backend)
 
 
 @pytest.fixture(scope="function")
@@ -55,7 +64,7 @@ def session(backend):
 
 
 @pytest.mark.qualitative
-def test_system_prompt(session):
+def test_system_prompt(session) -> None:
     result = session.chat(
         "Where are we going?",
         model_options={ModelOption.SYSTEM_PROMPT: "Talk like a pirate."},
@@ -64,15 +73,15 @@ def test_system_prompt(session):
 
 
 @pytest.mark.qualitative
-def test_instruct(session):
+def test_instruct(session) -> None:
     result = session.instruct("Compute 1+1.")
     print(result)
 
 
 @pytest.mark.qualitative
-def test_multiturn(session):
+def test_multiturn(session) -> None:
     session.instruct("Compute 1+1")
-    beta = session.instruct(
+    session.instruct(
         "Take the result of the previous sum and find the corresponding letter in the greek alphabet."
     )
     words = session.instruct("Now list five English words that start with that letter.")
@@ -80,7 +89,7 @@ def test_multiturn(session):
 
 
 @pytest.mark.qualitative
-def test_format(session):
+def test_format(session) -> None:
     class Person(pydantic.BaseModel):
         name: str
         email_address: Annotated[
@@ -111,7 +120,7 @@ def test_format(session):
 
 
 @pytest.mark.qualitative
-async def test_generate_from_raw(session):
+async def test_generate_from_raw(session) -> None:
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
     results = await session.backend.generate_from_raw(
@@ -123,7 +132,7 @@ async def test_generate_from_raw(session):
 
 
 @pytest.mark.qualitative
-async def test_generate_from_raw_with_format(session):
+async def test_generate_from_raw_with_format(session) -> None:
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
     class Answer(pydantic.BaseModel):
@@ -134,13 +143,14 @@ async def test_generate_from_raw_with_format(session):
         actions=[CBlock(value=prompt) for prompt in prompts],
         ctx=session.ctx,
         format=Answer,
+        model_options={ModelOption.MAX_NEW_TOKENS: 100},
     )
 
     assert len(results) == len(prompts)
 
     random_result = results[0]
     try:
-        answer = Answer.model_validate_json(random_result.value)
+        Answer.model_validate_json(random_result.value)
     except pydantic.ValidationError as e:
         assert False, (
             f"formatting directive failed for {random_result.value}: {e.json()}"
@@ -148,7 +158,7 @@ async def test_generate_from_raw_with_format(session):
 
 
 @pytest.mark.qualitative
-def test_async_parallel_requests(session):
+def test_async_parallel_requests(session) -> None:
     async def parallel_requests():
         model_opts = {ModelOption.STREAM: True}
         mot1, _ = await session.backend.generate_from_context(
@@ -187,7 +197,7 @@ def test_async_parallel_requests(session):
 
 
 @pytest.mark.qualitative
-def test_async_avalue(session):
+def test_async_avalue(session) -> None:
     async def avalue():
         mot1, _ = await session.backend.generate_from_context(
             CBlock("Say Hello."), SimpleContext()

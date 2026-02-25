@@ -9,6 +9,9 @@ from mellea.stdlib.sampling.majority_voting import (
     MBRDRougeLStrategy,
 )
 
+# Mark all tests as requiring Ollama (start_session defaults to Ollama)
+pytestmark = [pytest.mark.ollama, pytest.mark.llm, pytest.mark.qualitative]
+
 
 @pytest.fixture(scope="module")
 def m_session(gh_run):

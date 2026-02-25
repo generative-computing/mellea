@@ -4,12 +4,14 @@ import json
 from collections.abc import Callable
 from typing import Any
 
+from ..backends.tools import validate_tool_arguments
 from ..core import FancyLogger, ModelToolCall
+from ..core.base import AbstractMelleaTool
 from ..stdlib.components import Document, Message
 
 
 def extract_model_tool_requests(
-    tools: dict[str, Callable], response: dict[str, Any]
+    tools: dict[str, AbstractMelleaTool], response: dict[str, Any]
 ) -> dict[str, ModelToolCall] | None:
     """Extracts tool calls from the dict representation of an OpenAI-like chat response object."""
     model_tool_calls: dict[str, ModelToolCall] = {}
@@ -30,7 +32,10 @@ def extract_model_tool_requests(
             if tool_args is not None:
                 # Returns the args as a string. Parse it here.
                 args = json.loads(tool_args)
-            model_tool_calls[tool_name] = ModelToolCall(tool_name, func, args)
+
+            # Validate and coerce argument types
+            validated_args = validate_tool_arguments(func, args, strict=False)
+            model_tool_calls[tool_name] = ModelToolCall(tool_name, func, validated_args)
 
     if len(model_tool_calls) > 0:
         return model_tool_calls

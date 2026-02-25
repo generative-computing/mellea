@@ -6,9 +6,10 @@ import inspect
 from collections.abc import Callable
 
 from ..core import CBlock, Component, Context, FancyLogger, ModelToolCall
+from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter
 from ..stdlib.components import Message
-from .tools import parse_tools
+from .tools import parse_tools, validate_tool_arguments
 
 # Chat = dict[Literal["role", "content"], str] # external apply_chat_template type hint is weaker
 # Chat = dict[str, str | list[dict[str, Any]] ] # for multi-modal models
@@ -56,7 +57,7 @@ def to_chat(
 
 
 def to_tool_calls(
-    tools: dict[str, Callable], decoded_result: str
+    tools: dict[str, AbstractMelleaTool], decoded_result: str
 ) -> dict[str, ModelToolCall] | None:
     """Parse a tool call string."""
     model_tool_calls: dict[str, ModelToolCall] = dict()
@@ -70,11 +71,13 @@ def to_tool_calls(
 
         # Clean up the function args slightly. Some models seem to
         # hallucinate parameters when none are required.
-        sig = inspect.signature(func)
-        if len(sig.parameters) == 0:
+        param_map = func.as_json_tool["function"]["parameters"]["properties"]
+        if len(param_map) == 0:
             tool_args = {}
 
-        model_tool_calls[tool_name] = ModelToolCall(tool_name, func, tool_args)
+        # Validate and coerce argument types
+        validated_args = validate_tool_arguments(func, tool_args, strict=False)
+        model_tool_calls[tool_name] = ModelToolCall(tool_name, func, validated_args)
 
     if len(model_tool_calls) > 0:
         return model_tool_calls

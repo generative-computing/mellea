@@ -1,5 +1,7 @@
+# pytest: ollama, llm
+
 from mellea import start_session
-from mellea.stdlib.base import ChatContext
+from mellea.stdlib.context import ChatContext
 
 m = start_session(ctx=ChatContext())
 m.chat("Make up a math problem.")

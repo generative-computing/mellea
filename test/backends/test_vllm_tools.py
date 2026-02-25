@@ -2,6 +2,8 @@ import os
 
 import pytest
 
+from mellea.backends.tools import MelleaTool
+
 # Skip entire module in CI since the single test is qualitative
 pytestmark = [
     pytest.mark.vllm,
@@ -14,18 +16,23 @@ pytestmark = [
     ),
 ]
 
-import mellea.backends.model_ids as model_ids
-from mellea import MelleaSession
-from mellea.backends import ModelOption
-from mellea.backends.vllm import LocalVLLMBackend
-from mellea.stdlib.context import ChatContext
+# Try to import vLLM backend - skip all tests if not available
+try:
+    import mellea.backends.model_ids as model_ids
+    from mellea import MelleaSession
+    from mellea.backends import ModelOption
+    from mellea.backends.vllm import LocalVLLMBackend
+    from mellea.stdlib.context import ChatContext
+except ImportError as e:
+    pytest.skip(
+        f"vLLM backend not available: {e}. Install with: pip install mellea[vllm]",
+        allow_module_level=True,
+    )
 
 
 @pytest.fixture(scope="module")
 def backend():
     """Shared vllm backend for all tests in this module."""
-    if os.environ.get("VLLM_USE_V1", -1) != "0":
-        pytest.skip("skipping vllm tests; tests require `export VLLM_USE_V1=0`")
 
     backend = LocalVLLMBackend(
         model_id=model_ids.MISTRALAI_MISTRAL_0_3_7B,
@@ -37,7 +44,12 @@ def backend():
             "max_num_seqs": 8,
         },
     )
-    return backend
+    yield backend
+
+    # Cleanup using shared function (best-effort within module)
+    from test.conftest import cleanup_vllm_backend
+
+    cleanup_vllm_backend(backend)
 
 
 @pytest.fixture(scope="function")
@@ -64,7 +76,7 @@ def test_tool(session):
     output = session.instruct(
         "What is today's temperature in Boston? Answer in Celsius. Reply the number only.",
         model_options={
-            ModelOption.TOOLS: [get_temperature],
+            ModelOption.TOOLS: [MelleaTool.from_callable(get_temperature)],
             ModelOption.MAX_NEW_TOKENS: 1000,
         },
         tool_calls=True,
