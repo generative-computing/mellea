@@ -28,6 +28,9 @@ def test_alora_config_creation():
         mock_tokenizer_class.from_pretrained.return_value = mock_tokenizer
 
         mock_model = Mock()
+        mock_param = Mock()
+        mock_param.device.type = "cuda"
+        mock_model.parameters.return_value = [mock_param]
         mock_model_class.from_pretrained.return_value = mock_model
 
         mock_peft_model = Mock()
@@ -102,6 +105,9 @@ def test_lora_config_creation():
         mock_tokenizer_class.from_pretrained.return_value = mock_tokenizer
 
         mock_model = Mock()
+        mock_param = Mock()
+        mock_param.device.type = "cuda"
+        mock_model.parameters.return_value = [mock_param]
         mock_model_class.from_pretrained.return_value = mock_model
 
         mock_peft_model = Mock()
@@ -175,7 +181,11 @@ def test_invocation_prompt_tokenization():
         mock_tokenizer_class.from_pretrained.return_value = mock_tokenizer
 
         # Setup other mocks
-        mock_model_class.from_pretrained.return_value = Mock()
+        mock_model = Mock()
+        mock_param = Mock()
+        mock_param.device.type = "cuda"
+        mock_model.parameters.return_value = [mock_param]
+        mock_model_class.from_pretrained.return_value = mock_model
         mock_get_peft_model.return_value = Mock()
 
         mock_ds = MagicMock()

@@ -1,0 +1,256 @@
+{
+  "$schema": "https://leaves.mintlify.com/schema/docs.json",
+  "theme": "maple",
+  "name": "Mellea",
+  "colors": {
+    "primary": "#000000",
+    "light": "#c5c5c5",
+    "dark": "#000000"
+  },
+  "fonts": {
+    "heading": {
+      "family": "IBM Plex Sans"
+    },
+    "body": {
+      "family": "IBM Plex Sans"
+    }
+  },
+  "favicon": "/images/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Docs",
+        "groups": [
+          {
+            "group": "Introduction",
+            "pages": [
+              "overview/mellea-welcome",
+              "overview/architecture",
+              "overview/generative-programming"
+            ]
+          },
+          {
+            "group": "Quick Start",
+            "pages": [
+              "overview/overview",
+              "core-concept/requirements",
+              "core-concept/instruct-validate-repair",
+              "core-concept/modeloptions"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core-concept/generative-slots",
+              "core-concept/mobjects",
+              "core-concept/context-management",
+              "core-concept/agents",
+              "core-concept/prompt-engineering"
+            ]
+          },
+          {
+            "group": "Extending Mellea",
+            "pages": [
+              "core-concept/tuning",
+              "core-concept/adapters",
+              "core-concept/alora",
+              "core-concept/interoperability"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "pages": [
+          {
+            "group": "mellea",
+            "pages": [
+              {
+                "group": "backends",
+                "pages": [
+                  "api/mellea/backends/backend",
+                  "api/mellea/backends/cache",
+                  "api/mellea/backends/dummy",
+                  "api/mellea/backends/huggingface",
+                  "api/mellea/backends/kv_block_helpers",
+                  "api/mellea/backends/litellm",
+                  "api/mellea/backends/model_ids",
+                  "api/mellea/backends/model_options",
+                  "api/mellea/backends/ollama",
+                  "api/mellea/backends/openai",
+                  "api/mellea/backends/tools",
+                  "api/mellea/backends/utils",
+                  "api/mellea/backends/vllm",
+                  "api/mellea/backends/watsonx",
+                  {
+                    "group": "adapters",
+                    "pages": [
+                      "api/mellea/backends/adapters/adapter",
+                      "api/mellea/backends/adapters/catalog"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "core",
+                "pages": [
+                  "api/mellea/core/backend",
+                  "api/mellea/core/base",
+                  "api/mellea/core/formatter",
+                  "api/mellea/core/requirement",
+                  "api/mellea/core/sampling",
+                  "api/mellea/core/utils"
+                ]
+              },
+              {
+                "group": "formatters",
+                "pages": [
+                  "api/mellea/formatters/chat_formatter",
+                  "api/mellea/formatters/template_formatter"
+                ]
+              },
+              {
+                "group": "helpers",
+                "pages": [
+                  "api/mellea/helpers/async_helpers",
+                  "api/mellea/helpers/openai_compatible_helpers"
+                ]
+              },
+              {
+                "group": "stdlib",
+                "pages": [
+                  "api/mellea/stdlib/context",
+                  "api/mellea/stdlib/functional",
+                  "api/mellea/stdlib/session",
+                  {
+                    "group": "components",
+                    "pages": [
+                      "api/mellea/stdlib/components/chat",
+                      "api/mellea/stdlib/components/genslot",
+                      "api/mellea/stdlib/components/instruction",
+                      "api/mellea/stdlib/components/mify",
+                      "api/mellea/stdlib/components/mobject",
+                      "api/mellea/stdlib/components/simple",
+                      "api/mellea/stdlib/components/unit_test_eval",
+                      {
+                        "group": "docs",
+                        "pages": [
+                          "api/mellea/stdlib/components/docs/document",
+                          "api/mellea/stdlib/components/docs/richdocument"
+                        ]
+                      },
+                      {
+                        "group": "intrinsic",
+                        "pages": [
+                          "api/mellea/stdlib/components/intrinsic/intrinsic",
+                          "api/mellea/stdlib/components/intrinsic/rag"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "group": "requirements",
+                    "pages": [
+                      "api/mellea/stdlib/requirements/md",
+                      "api/mellea/stdlib/requirements/python_reqs",
+                      "api/mellea/stdlib/requirements/requirement",
+                      "api/mellea/stdlib/requirements/tool_reqs",
+                      {
+                        "group": "safety",
+                        "pages": [
+                          "api/mellea/stdlib/requirements/safety/guardian"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "group": "sampling",
+                    "pages": [
+                      "api/mellea/stdlib/sampling/base",
+                      "api/mellea/stdlib/sampling/budget_forcing",
+                      "api/mellea/stdlib/sampling/majority_voting",
+                      "api/mellea/stdlib/sampling/sofai",
+                      {
+                        "group": "sampling_algos",
+                        "pages": [
+                          "api/mellea/stdlib/sampling/sampling_algos/budget_forcing_alg"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "group": "tools",
+                    "pages": [
+                      "api/mellea/stdlib/tools/interpreter"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "group": "cli",
+            "pages": [
+              "api/cli/m",
+              {
+                "group": "alora",
+                "pages": [
+                  "api/cli/alora/commands",
+                  "api/cli/alora/train",
+                  "api/cli/alora/upload"
+                ]
+              },
+              {
+                "group": "decompose",
+                "pages": [
+                  "api/cli/decompose/decompose",
+                  "api/cli/decompose/pipeline",
+                  "api/cli/decompose/utils"
+                ]
+              },
+              {
+                "group": "eval",
+                "pages": [
+                  "api/cli/eval/commands",
+                  "api/cli/eval/runner"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/logo-light.svg",
+    "dark": "/logo/logo-dark.svg"
+  },
+  "navbar": {
+    "primary": {
+      "type": "button",
+      "label": "GitHub",
+      "href": "https://github.com/generative-computing/mellea"
+    },
+    "links": [
+      {
+        "label": "Blog",
+        "href": "https://generative-computing.github.io/blog/"
+      },
+      {
+        "label": "Community",
+        "href": "https://github.com/generative-computing/mellea/discussions"
+      },
+      {
+        "label": "Contribution Guide",
+        "href": "/core-concept/contribution-guide"
+      },
+      {
+        "label": "Support",
+        "href": "https://github.com/generative-computing/mellea/issues"
+      }
+    ]
+  },
+  "search": {
+    "prompt": "Search documentation..."
+  }
+}

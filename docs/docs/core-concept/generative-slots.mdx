@@ -1,0 +1,185 @@
+---
+title: "Generative Slots"
+description: "A method to generate outputs based on python functions and a Generative Slot function."
+---
+
+In classical programming, pure (stateless) functions are a simple and powerful abstraction. A pure function takes inputs, computes outputs, and has no side effects. Generative programs can also use functions as abstraction boundaries, but in a generative program the meaning of the function can be given by an LLM instead of an interpreter or compiler. This is the idea behind a **GenerativeSlot**.
+
+A `GenerativeSlot` is a function whose implementation is provided by an LLM. In Mellea, you define these using the `@generative` decorator. The function signature specifies the interface, and the docstring (or type annotations) guide the LLM in producing the output.
+
+#### Example: Sentiment Classifier
+
+Let's start with a simple example: a function that classifies the sentiment of a string as "positive" or "negative".
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/sentiment_classifier.py#L1-L13
+from typing import Literal
+from mellea import generative, start_session
+
+@generative
+def classify_sentiment(text: str) -> Literal["positive", "negative"]:
+  """Classify the sentiment of the input text as 'positive' or 'negative'."""
+  ...
+
+m = start_session()
+sentiment = classify_sentiment(m, text="I love this!")
+print("Output sentiment is:", sentiment)
+```
+
+Here, `classify_sentiment` is a GenerativeSlot: it looks like a normal function, but its implementation is handled by the LLM. The type annotation (`Literal["positive", "negative"]`) constrains the output, and the prompt is automatically constructed from the function signature and docstring.
+
+Many more examples of generative slots are provided in the `docs/examples` directory.
+
+<Note>
+
+Generative slots can also be implemented as code-generation calls instead of black-box structured output generators. This is most useful when correct code generation is difficult without some dynamic analysis (i.e., runtime information). In these cases, the problem can be solved by prompting with a FiTM code generation request, augmented with pieces of runtime state. This advanced functionality may result in untrusted code execution, and should therefore be used with caution and/or in conjunction with some combination of sandboxing and human validation prior to execution.
+
+</Note>
+
+#### Using Generative slots to Provide Compositionality Across Module Boundaries
+
+Instruct-validate-repair provides compositionality within a given module. As the examples listed above demonstrate, generative slots can do the same. But generative slots are not just about local validity; their real power comes from safe interoperability between independently designed systems.
+
+Consider the following two independently developed libraries: a **Summarizer** library that contains a set of functions for summarizing various types of documents, and a **Decision Aides** library that aides in decision making for particular situations.
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/compositionality_with_generative_slots.py#L1-L18
+from mellea import generative
+
+## The Summarizer Library
+@generative
+def summarize_meeting(transcript: str) -> str:
+  """Summarize the meeting transcript into a concise paragraph of main points."""
+
+@generative
+def summarize_contract(contract_text: str) -> str:
+  """Produce a natural language summary of contract obligations and risks."""
+
+@generative
+def summarize_short_story(story: str) -> str:
+  """Summarize a short story, with one paragraph on plot and one paragraph on broad themes."""
+```
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/compositionality_with_generative_slots.py#L20-L33
+from mellea import generative
+
+## The Decision Aides Library
+@generative
+def propose_business_decision(summary: str) -> str:
+  """Given a structured summary with clear recommendations, propose a business decision."""
+
+@generative
+def generate_risk_mitigation(summary: str) -> str:
+  """If the summary contains risk elements, propose mitigation strategies."""
+
+@generative
+def generate_novel_recommendations(summary: str) -> str:
+  """Provide a list of novel recommendations that are similar in plot or theme to the short story summary."""
+```
+
+Notice that these two libraries do not necessarily always compose -- meeting notes may or may not contain semantic content for which risk analysis even makes sense.
+
+To help us compose these libraries, we introduce a set of contracts that gate function composition and then use those contracts to short-circuit non-sensical compositions of library components:
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/compositionality_with_generative_slots.py#L36-L52
+from mellea import generative
+from typing import Literal
+
+## Compose the libraries.
+@generative
+def has_structured_conclusion(summary: str) -> Literal["yes", "no"]:
+  """Determine whether the summary contains a clearly marked conclusion or recommendation."""
+
+@generative
+def contains_actionable_risks(summary: str) -> Literal["yes", "no"]:
+  """Check whether the summary contains references to business risks or exposure."""
+
+@generative
+def has_theme_and_plot(summary: str) -> Literal["yes", "no"]:
+  """Check whether the summary contains both a plot and thematic elements."""
+```
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/compositionality_with_generative_slots.py#L55-L129
+from mellea import start_session
+
+m = start_session()
+transcript = """Meeting Transcript: Market Risk Review -- Self-Sealing Stembolts Division
+Date: December 1, 3125
+Attendees:
+
+Karen Rojas, VP of Product Strategy
+
+Derek Madsen, Director of Global Procurement
+
+Felicia Zheng, Head of Market Research
+
+Tom Vega, CFO
+
+Luis Tran, Engineering Liaison
+
+Karen Rojas:
+Thanks, everyone, for making time on short notice. As you've all seen, we've got three converging market risks we need to address: tariffs on micro-carburetors, increased adoption of the self-interlocking leafscrew, and, believe it or not, the "hipsterfication" of the construction industry. I need all on deck and let's not waste time. Derek, start.
+
+Derek Madsen:
+Right. As of Monday, the 25% tariff on micro-carburetors sourced from the Pan-Alpha Centauri confederacy is active. We tried to pre-purchase a three-month buffer, but after that, our unit cost rises by $1.72. That's a 9% increase in the BOM cost of our core model 440 stembolt. Unless we find alternative suppliers or pass on the cost, we're eating into our already narrow margin.
+
+Tom Vega:
+We cannot absorb that without consequences. If we pass the cost downstream, we risk losing key mid-tier OEM clients. And with the market already sniffing around leafscrew alternatives, this makes us more vulnerable.
+
+Karen:
+Lets pause there. Felicia, give us the quick-and-dirty on the leafscrew.
+
+Felicia Zheng:
+It's ugly. Sales of the self-interlocking leafscrew—particularly in modular and prefab construction—are up 38% year-over-year. It's not quite a full substitute for our self-sealing stembolts, but they are close enough in function that some contractors are making the switch. Their appeal? No micro-carburetors, lower unit complexity, and easier training for install crews. We estimate we've lost about 12% of our industrial segment to the switch in the last two quarters.
+
+Karen:
+Engineering, Luis; your take on how real that risk is?
+
+Luis Tran:
+Technically, leafscrews are not as robust under high-vibration loads. But here's the thing: most of the modular prefab sites don not need that level of tolerance. If the design spec calls for durability over 10 years, we win. But for projects looking to move fast and hit 5-year lifespans? The leafscrew wins on simplicity and cost.
+
+Tom:
+So they're eating into our low-end. That's our volume base.
+
+Karen:
+Exactly. Now let's talk about this last one: the “hipsterfication” of construction. Felicia?
+
+Felicia:
+So this is wild. We're seeing a cultural shift in boutique and residential construction—especially in markets like Beckley, West Sullivan, parts of Osborne County, where clients are requesting "authentic" manual fasteners. They want hand-sealed bolts, visible threads, even mismatched patinas. It's an aesthetic thing. Function is almost secondary. Our old manual-seal line from the 3180s? People are hunting them down on auction sites.
+
+Tom:
+Well, I'm glad I don't have to live in the big cities... nothing like this would ever happen in downt-to-earth places Brooklyn, Portland, or Austin.
+
+Luis:
+We literally got a request from a design-build firm in Keough asking if we had any bolts “pre-distressed.”
+
+Karen:
+Can we spin this?
+
+Tom:
+If we keep our vintage tooling and market it right, maybe. But that's niche. It won't offset losses in industrial and prefab.
+
+Karen:
+Not yet. But we may need to reframe it as a prestige line—low volume, high margin. Okay, action items. Derek, map alternative micro-carburetor sources. Felicia, get me a forecast on leafscrew erosion by sector. Luis, feasibility of reviving manual seal production. Tom, let's scenario-plan cost pass-through vs. feature-based differentiation.
+
+Let's reconvene next week with hard numbers. Thanks, all."""
+summary = summarize_meeting(m, transcript=transcript)
+
+if contains_actionable_risks(m, summary=summary) == "yes":
+    mitigation = generate_risk_mitigation(m, summary=summary)
+    print(f"Mitigation: {mitigation}")
+else:
+    print("Summary does not contain actionable risks.")
+if has_structured_conclusion(m, summary=summary) == "yes":
+    decision = propose_business_decision(m, summary=summary)
+    print(f"Decision: {decision}")
+else:
+    print("Summary lacks a structured conclusion.")
+```
+
+Without these Hoare-style contracts, the only way to ensure composition is to couple the libraries, either by rewriting `summarize_meeting` to conform to `propose_business_decision`, or adding Requirements to `propose_business_decision` that may silently fail if unmet. These approaches can work, but require tight coupling between these two otherwise loosely coupled libraries.
+
+With contracts, we **decouple** the libraries without sacrificing safe dynamic composition, by moving the coupling logic into pre- and post-condition checks. This is another LLM-native software engineering pattern: **guarded nondeterminism**.
