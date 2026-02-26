@@ -79,7 +79,7 @@ IBM_GRANITE_3_3_8B = ModelIdentifier(
 IBM_GRANITE_4_MICRO_3B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-4.0-micro",
     ollama_name="granite4:micro",
-    watsonx_name="ibm/granite-4-small",
+    watsonx_name="ibm/granite-4-h-small",  # Keeping hybrid version here for backwards compatibility.
 )
 
 # Granite 3.3 Vision Model (2B)

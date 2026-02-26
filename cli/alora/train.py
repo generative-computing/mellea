@@ -133,6 +133,13 @@ def train_model(
         model_base = AutoModelForCausalLM.from_pretrained(
             base_model, device_map=device_map, use_cache=False
         )
+
+        # `fp16=True` enables CUDA-specific mixed precision via GradScaler, which doesn't function properly on cpu or mps.
+        # Check all the model's parameters to ensure it's okay to use.
+        use_fp16 = all(
+            param.device.type != "cpu" and param.device.type != "mps"
+            for param in model_base.parameters()
+        )
     except NotImplementedError as e:
         if "meta tensor" in str(e):
             raise RuntimeError(
@@ -176,7 +183,7 @@ def train_model(
             max_seq_length=max_length,
             per_device_train_batch_size=batch_size,
             gradient_accumulation_steps=grad_accum,
-            fp16=True,
+            fp16=use_fp16,
         )
 
         trainer = SafeSaveTrainer(
@@ -210,7 +217,7 @@ def train_model(
             max_seq_length=max_length,
             per_device_train_batch_size=batch_size,
             gradient_accumulation_steps=grad_accum,
-            fp16=True,
+            fp16=use_fp16,
         )
 
         trainer = SafeSaveTrainer(
