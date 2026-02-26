@@ -42,7 +42,6 @@ from ..telemetry.backend_instrumentation import (
     instrument_generate_from_raw,
     start_generate_span,
 )
-from ..telemetry.metrics import is_metrics_enabled
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -497,6 +496,8 @@ class WatsonxAIBackend(FormatterBackend):
             )
 
         # Record metrics if enabled
+        from ..telemetry.metrics import is_metrics_enabled
+
         if is_metrics_enabled() and usage:
             from ..telemetry.backend_instrumentation import (
                 get_model_id_str,

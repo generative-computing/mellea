@@ -51,7 +51,6 @@ from ..telemetry.backend_instrumentation import (
     instrument_generate_from_raw,
     start_generate_span,
 )
-from ..telemetry.metrics import is_metrics_enabled
 from .adapters import (
     AdapterMixin,
     AdapterType,
@@ -1056,6 +1055,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         span = mot._meta.get("_telemetry_span")
+        from ..telemetry.metrics import is_metrics_enabled
+
         metrics_enabled = is_metrics_enabled()
 
         # Extract token counts only if needed

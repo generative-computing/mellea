@@ -48,7 +48,6 @@ from ..telemetry.backend_instrumentation import (
     instrument_generate_from_context,
     instrument_generate_from_raw,
 )
-from ..telemetry.metrics import is_metrics_enabled
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
@@ -610,6 +609,8 @@ class OpenAIBackend(FormatterBackend):
         usage = response.get("usage") if isinstance(response, dict) else None
 
         # Record metrics if enabled
+        from ..telemetry.metrics import is_metrics_enabled
+
         if is_metrics_enabled() and usage:
             from ..telemetry.backend_instrumentation import (
                 get_model_id_str,
