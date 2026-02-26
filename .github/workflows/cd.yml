@@ -2,6 +2,12 @@ name: "Run CD"
 
 on:
   workflow_dispatch:
+    inputs:
+        force_release:
+            description: 'Force release even if previous checks fail.'
+            type: boolean
+            required: false
+            default: false
 
 env:
   UV_FROZEN: "1"
@@ -36,7 +42,11 @@ jobs:
         run: uv run --no-sync semantic-release changelog --unreleased
   release:
     needs: [code-checks, pre-release-check]
-    if: needs.pre-release-check.outputs.TARGET_TAG_V != ''
+    # Run this job only if the `TARGET_TAG_V` is set AND (the previous jobs
+    # were successful OR we are forcing the release).
+    if: >-
+        ${{ needs.pre-release-check.outputs.TARGET_TAG_V != '' &&
+        ( success() || inputs.force_release ) }}
     environment: auto-release
     runs-on: ubuntu-latest
     concurrency: release
