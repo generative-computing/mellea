@@ -1,5 +1,6 @@
 import json
 import keyword
+import re
 import shutil
 from enum import Enum
 from graphlib import TopologicalSorter
@@ -17,6 +18,7 @@ class DecompVersion(str, Enum):
     latest = "latest"
     v1 = "v1"
     v2 = "v2"
+    # v3 = "v3"
 
 
 this_file_dir = Path(__file__).resolve().parent
@@ -331,13 +333,6 @@ def run(
                 + "\n"
             )
     except Exception:
-        # created_json = Path(out_dir / f"{out_name}.json")
-        # created_py = Path(out_dir / f"{out_name}.py")
-
-        # if created_json.exists() and created_json.is_file():
-        #     created_json.unlink()
-        # if created_py.exists() and created_py.is_file():
-        #     created_py.unlink()
 
         decomp_dir = out_dir / out_name
         if decomp_dir.exists() and decomp_dir.is_dir():
