@@ -64,7 +64,11 @@ REPO_URL = "https://github.com/generative-computing/mellea"
 def normalize_version(v: str | None) -> str | None:
     if not v:
         return None
-    return v[1:] if v.startswith("v") else v
+    v = v[1:] if v.startswith("v") else v
+    # Return None for branch names or non-version strings (must start with digit)
+    if not v or not v[0].isdigit():
+        return None
+    return v
 
 
 def yaml_quote(value: str | None) -> str:
