@@ -31,18 +31,27 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="module")
 def setup_telemetry():
     """Set up telemetry for all tests in this module."""
-    import os
+    import importlib
 
-    # Enable backend tracing and metrics before any imports
-    os.environ["MELLEA_TRACE_BACKEND"] = "true"
-    os.environ["MELLEA_METRICS_ENABLED"] = "true"
+    mp = pytest.MonkeyPatch()
+    mp.setenv("MELLEA_TRACE_BACKEND", "true")
+    mp.setenv("MELLEA_METRICS_ENABLED", "true")
+
+    import mellea.telemetry.tracing
+
+    importlib.reload(mellea.telemetry.tracing)
+
+    yield
+
+    mp.undo()
+    importlib.reload(mellea.telemetry.tracing)
 
 
 @pytest.fixture
-def span_exporter():
+def span_exporter(setup_telemetry):
     """Create an in-memory span exporter for testing."""
     # Import mellea.telemetry.tracing to ensure it's initialized
     from mellea.telemetry import tracing
@@ -495,7 +504,7 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader, 
     metrics_module._output_token_counter = None
 
     backend = WatsonxAIBackend(
-        model_id="ibm/granite-3-8b-instruct",
+        model_id="ibm/granite-4-h-small",
         project_id=os.getenv("WATSONX_PROJECT_ID", "test-project"),
     )
     ctx = SimpleContext()
