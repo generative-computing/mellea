@@ -1,15 +1,12 @@
 """Intrinsic functions related to retrieval-augmented generation."""
 
 import collections.abc
-import json
 
-from ....backends import ModelOption
-from ....backends.adapters import AdapterMixin, AdapterType, GraniteCommonAdapter
-from ....stdlib import functional as mfuncs
+from ....backends.adapters import AdapterMixin
 from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
-from .intrinsic import Intrinsic
+from ._util import call_intrinsic
 
 _ANSWER_RELEVANCE_CORRECTION_METHODS = {
     "Excessive unnecessary information": "removing the excessive information from the "
@@ -28,54 +25,6 @@ _ANSWER_RELEVANCE_CORRECTION_METHODS = {
 }
 """Prompting strings for the answer relevance rewriter. This model is a (a)LoRA adapter,
 so it's important to stick to in-domain prompts."""
-
-
-def _call_intrinsic(
-    intrinsic_name: str,
-    context: ChatContext,
-    backend: AdapterMixin,
-    /,
-    kwargs: dict | None = None,
-):
-    """Shared code for invoking intrinsics.
-
-    :returns: Result of the call in JSON format.
-    """
-    # Adapter needs to be present in the backend before it can be invoked.
-    # We must create the Adapter object in order to determine whether we need to create
-    # the Adapter object.
-    base_model_name = backend.base_model_name
-    if base_model_name is None:
-        raise ValueError("Backend has no model ID")
-    adapter = GraniteCommonAdapter(
-        intrinsic_name, adapter_type=AdapterType.LORA, base_model_name=base_model_name
-    )
-    if adapter.qualified_name not in backend.list_adapters():
-        backend.add_adapter(adapter)
-
-    # Create the AST node for the action we wish to perform.
-    intrinsic = Intrinsic(intrinsic_name, intrinsic_kwargs=kwargs)
-
-    # Execute the AST node.
-    model_output_thunk, _ = mfuncs.act(
-        intrinsic,
-        context,
-        backend,
-        model_options={ModelOption.TEMPERATURE: 0.0},
-        # No rejection sampling, please
-        strategy=None,
-    )
-
-    # act() can return a future. Don't know how to handle one from non-async code.
-    assert model_output_thunk.is_computed()
-
-    # Output of an Intrinsic action is the string representation of the output of the
-    # intrinsic. Parse the string.
-    result_str = model_output_thunk.value
-    if result_str is None:
-        raise ValueError("Model output is None.")
-    result_json = json.loads(result_str)
-    return result_json
 
 
 def check_answerability(
@@ -99,7 +48,7 @@ def check_answerability(
 
     :return: Answerability score as a floating-point value from 0 to 1.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "answerability",
         context.add(Message("user", question, documents=list(documents))),
         backend,
@@ -122,7 +71,7 @@ def rewrite_question(
 
     :return: Rewritten version of ``question``.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "query_rewrite", context.add(Message("user", question)), backend
     )
     return result_json["rewritten_question"]
@@ -149,7 +98,7 @@ def clarify_query(
     :return: Clarification question string (e.g., "Do you mean A or B?"), or
         the string "CLEAR" if no clarification is needed
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "query_clarification",
         context.add(Message("user", question, documents=list(documents))),
         backend,
@@ -186,7 +135,7 @@ def find_citations(
         * ``citation_text``
     Begin and end offsets are character offsets into their respective UTF-8 strings.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "citations",
         context.add(Message("assistant", response, documents=list(documents))),
         backend,
@@ -211,7 +160,7 @@ def check_context_relevance(
 
     :return: Context relevance score as a floating-point value from 0 to 1.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "context_relevance",
         context.add(Message("user", question)),
         backend,
@@ -247,7 +196,7 @@ def flag_hallucinated_content(
         * faithfulness_likelihood
         * explanation
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "hallucination_detection",
         context.add(Message("assistant", response, documents=list(documents))),
         backend,
@@ -283,7 +232,7 @@ def rewrite_answer_for_relevance(
     # * answer_relevance_analysis
     # * answer_relevance_category
     # * answer_relevance_likelihood
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "answer_relevance_classifier",
         context.add(Message("assistant", response, documents=list(documents))),
         backend,
@@ -299,7 +248,7 @@ def rewrite_answer_for_relevance(
         result_json["answer_relevance_category"]
     ]
 
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "answer_relevance_rewriter",
         context.add(Message("assistant", response, documents=list(documents))),
         backend,

@@ -31,6 +31,9 @@ Detects when model outputs contain hallucinated information.
 ### query_rewrite.py
 Rewrites queries for better retrieval or understanding.
 
+### uncertainty.py
+Estimates the model's certainty about answering a question.
+
 ## Concepts Demonstrated
 
 - **Intrinsic Functions**: Specialized model capabilities beyond text generation
@@ -71,6 +74,7 @@ out, new_ctx = mfuncs.act(
 - **context_relevance**: Assess context-query relevance
 - **hallucination_detection**: Detect hallucinated content
 - **query_rewrite**: Improve query formulation
+- **uncertainty**: Estimate certainty about answering a question
 
 ## Related Documentation
 
