@@ -1,11 +1,14 @@
 ## OpenTelemetry Instrumentation in Mellea
 
-Mellea provides built-in OpenTelemetry instrumentation with two independent trace scopes that can be enabled separately. The instrumentation follows the [OpenTelemetry Gen-AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) for standardized observability across LLM applications.
+Mellea provides built-in OpenTelemetry instrumentation with comprehensive observability features that can be enabled independently. The instrumentation follows the [OpenTelemetry Gen-AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) for standardized observability across LLM applications.
 
 **Note**: OpenTelemetry is an optional dependency. If not installed, telemetry features are automatically disabled with no impact on functionality.
 
+### Observability Features
+
 1. **Application Trace** (`mellea.application`) - Tracks user-facing operations
 2. **Backend Trace** (`mellea.backend`) - Tracks LLM backend interactions with Gen-AI semantic conventions
+3. **Token Usage Metrics** - Tracks token consumption across all backends with Gen-AI semantic conventions
 
 ### Installation
 
@@ -27,8 +30,10 @@ Telemetry is configured via environment variables:
 |----------|-------------|---------|
 | `MELLEA_TRACE_APPLICATION` | Enable application-level tracing | `false` |
 | `MELLEA_TRACE_BACKEND` | Enable backend-level tracing | `false` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint for trace export | None |
-| `OTEL_SERVICE_NAME` | Service name for traces | `mellea` |
+| `MELLEA_METRICS_ENABLED` | Enable metrics collection | `false` |
+| `MELLEA_METRICS_CONSOLE` | Print metrics to console (debugging) | `false` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint for trace/metric export | None |
+| `OTEL_SERVICE_NAME` | Service name for traces and metrics | `mellea` |
 | `MELLEA_TRACE_CONSOLE` | Print traces to console (debugging) | `false` |
 
 ### Application Trace Scope
@@ -82,7 +87,117 @@ The backend tracer (`mellea.backend`) instruments LLM interactions following [Op
 - `mellea.tool_calls_enabled`: Whether tool calling is enabled
 - `mellea.num_actions`: Number of actions in batch (for `generate_from_raw`)
 
-### Usage Examples
+### Token Usage Metrics
+
+Mellea automatically tracks token consumption across backends using OpenTelemetry metrics counters. Token metrics follow the [Gen-AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) for standardized observability.
+
+#### Metrics
+
+| Metric Name | Type | Unit | Description |
+|-------------|------|------|-------------|
+| `mellea.llm.tokens.input` | Counter | `tokens` | Total input/prompt tokens processed |
+| `mellea.llm.tokens.output` | Counter | `tokens` | Total output/completion tokens generated |
+
+#### Attributes
+
+All token metrics include these attributes following Gen-AI semantic conventions:
+
+| Attribute | Description | Example Values |
+|-----------|-------------|----------------|
+| `gen_ai.system` | Backend system name | `openai`, `ollama`, `watsonx`, `litellm`, `huggingface` |
+| `gen_ai.request.model` | Model identifier | `gpt-4`, `llama3.2:7b`, `granite-3.1-8b-instruct` |
+| `mellea.backend` | Backend class name | `OpenAIBackend`, `OllamaBackend`, `WatsonxBackend` |
+
+#### Backend Support
+
+| Backend | Support | Notes |
+|---------|---------|-------|
+| OpenAI | ✅ Full | Via `usage.prompt_tokens` and `usage.completion_tokens` |
+| Ollama | ✅ Full | Via `prompt_eval_count` and `eval_count` |
+| WatsonX | ✅ Full | Via `input_token_count` and `generated_token_count` |
+| LiteLLM | ✅ Full | Via `usage.prompt_tokens` and `usage.completion_tokens` from response |
+| HuggingFace | ✅ Full | Calculated from input_ids and output sequences |
+
+#### Configuration
+
+Token metrics are **disabled by default** for zero overhead. Enable with:
+
+```bash
+export MELLEA_METRICS_ENABLED=true
+```
+
+Metrics are automatically recorded after each LLM call completes. No code changes required.
+
+**Export Configuration:**
+
+```bash
+# Enable metrics
+export MELLEA_METRICS_ENABLED=true
+
+# Export to OTLP endpoint (required for production use)
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+
+# Optional: Set service name
+export OTEL_SERVICE_NAME=my-mellea-app
+
+# Optional: Debug mode - print metrics to console
+export MELLEA_METRICS_CONSOLE=true
+```
+
+**Important**: If `MELLEA_METRICS_ENABLED=true` but no exporter is configured, you'll see a warning. Metrics will be collected but not exported. Set either `OTEL_EXPORTER_OTLP_ENDPOINT` or `MELLEA_METRICS_CONSOLE=true`.
+
+#### Console Output for Debugging
+
+```bash
+export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_CONSOLE=true
+python docs/examples/telemetry/metrics_example.py
+```
+
+This prints metrics as JSON at the end of execution, useful for local debugging without setting up an observability backend.
+
+#### Export to OTLP Endpoint
+
+```bash
+export MELLEA_METRICS_ENABLED=true
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export OTEL_SERVICE_NAME=my-mellea-app
+python docs/examples/telemetry/metrics_example.py
+```
+
+Metrics are exported to your OTLP collector. Consult your observability platform's documentation for query syntax and visualization.
+
+#### Programmatic Access
+
+Check if metrics are enabled:
+
+```python
+from mellea.telemetry import is_metrics_enabled
+
+if is_metrics_enabled():
+    print("Token metrics are being collected")
+```
+
+#### Performance
+
+- **Zero overhead when disabled**: When `MELLEA_METRICS_ENABLED=false` (default), `record_token_usage_metrics()` returns immediately with no processing
+- **Minimal overhead when enabled**: Counter increments are extremely fast (~nanoseconds per operation)
+- **Async export**: Metrics are batched and exported asynchronously (default: every 60 seconds)
+- **Non-blocking**: Metric recording never blocks LLM calls
+
+#### Use Cases
+
+**Cost Monitoring**: Track token consumption to estimate and control LLM costs across models and backends.
+
+**Performance Optimization**: Identify operations consuming excessive tokens and optimize prompts.
+
+**Model Comparison**: Compare token efficiency across different models for the same tasks.
+
+**Budget Enforcement**: Set up alerts when token usage exceeds thresholds.
+
+**Capacity Planning**: Analyze token usage patterns to plan infrastructure capacity.
+
+### Trace Usage Examples
 
 #### Enable Application Tracing Only
 
@@ -224,8 +339,15 @@ The Gen-AI semantic conventions make it easy to:
 
 Planned improvements to telemetry:
 
+**Metrics (in progress):**
+- Latency histograms: Request duration and time-to-first-token (TTFB) for streaming
+- Cost tracking: Automatic cost estimation based on token usage and model pricing
+- Error counters: Categorized by semantic error type (rate limits, timeouts, content policy, etc.)
+- Operational metrics: Sampling attempts, requirement validation outcomes, tool calls
+- Prometheus export: Native Prometheus scrape endpoint
+
+**Tracing:**
 - Sampling rate configuration
 - Custom span attributes via decorators
-- Metrics export (token counts, latency percentiles)
 - Trace context propagation for distributed systems
 - Integration with LangSmith and other LLM observability tools
