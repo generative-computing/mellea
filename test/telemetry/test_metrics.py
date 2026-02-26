@@ -106,7 +106,7 @@ def test_metrics_disabled_with_falsy_values(monkeypatch):
         assert not is_metrics_enabled(), f"Failed for value: {value}"
 
 
-# Lazy Initialization Tests
+# Initialization Tests
 
 
 def test_meter_provider_not_created_when_disabled(clean_metrics_env):
@@ -114,22 +114,6 @@ def test_meter_provider_not_created_when_disabled(clean_metrics_env):
     from mellea.telemetry.metrics import _meter_provider
 
     assert _meter_provider is None
-
-
-def test_meter_provider_created_on_first_instrument(enable_metrics):
-    """Test that MeterProvider is created lazily on first instrument creation."""
-    from mellea.telemetry.metrics import _meter_provider, create_counter
-
-    # Initially None
-    assert _meter_provider is None
-
-    # Create first instrument
-    create_counter("test.counter")
-
-    # Now should be initialized
-    from mellea.telemetry.metrics import _meter_provider
-
-    assert _meter_provider is not None
 
 
 def test_meter_reused_across_instruments(enable_metrics):

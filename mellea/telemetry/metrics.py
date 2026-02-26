@@ -65,10 +65,6 @@ _METRICS_CONSOLE = os.getenv("MELLEA_METRICS_CONSOLE", "false").lower() in (
 _OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 _SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "mellea")
 
-# Lazy initialization - MeterProvider created on first metric creation
-_meter_provider: Any = None
-_meter: Any = None
-
 
 def _setup_meter_provider() -> Any:
     """Set up the MeterProvider with configured exporters.
@@ -111,23 +107,14 @@ def _setup_meter_provider() -> Any:
     return provider
 
 
-def _get_meter() -> Any:
-    """Get or create the Mellea meter instance.
+# Initialize meter provider if metrics are enabled
+_meter_provider = None
+_meter = None
 
-    Returns:
-        Meter instance or None if metrics are disabled
-    """
-    global _meter_provider, _meter
-
-    if not _METRICS_ENABLED:
-        return None
-
-    if _meter is None:
-        _meter_provider = _setup_meter_provider()
-        if _meter_provider is not None:
-            _meter = metrics.get_meter("mellea.metrics", version("mellea"))  # type: ignore
-
-    return _meter
+if _OTEL_AVAILABLE and _METRICS_ENABLED:
+    _meter_provider = _setup_meter_provider()
+    if _meter_provider is not None:
+        _meter = metrics.get_meter("mellea.metrics", version("mellea"))  # type: ignore
 
 
 # No-op instrument classes for when metrics are disabled
@@ -182,11 +169,10 @@ def create_counter(name: str, description: str = "", unit: str = "1") -> Any:
         )
         counter.add(1, {"backend": "ollama", "status": "success"})
     """
-    meter = _get_meter()
-    if meter is None:
+    if _meter is None:
         return _NoOpCounter()
 
-    return meter.create_counter(name, description=description, unit=unit)
+    return _meter.create_counter(name, description=description, unit=unit)
 
 
 def create_histogram(name: str, description: str = "", unit: str = "1") -> Any:
@@ -213,11 +199,10 @@ def create_histogram(name: str, description: str = "", unit: str = "1") -> Any:
         )
         histogram.record(150.5, {"backend": "ollama", "model": "llama2"})
     """
-    meter = _get_meter()
-    if meter is None:
+    if _meter is None:
         return _NoOpHistogram()
 
-    return meter.create_histogram(name, description=description, unit=unit)
+    return _meter.create_histogram(name, description=description, unit=unit)
 
 
 def create_up_down_counter(name: str, description: str = "", unit: str = "1") -> Any:
@@ -245,11 +230,10 @@ def create_up_down_counter(name: str, description: str = "", unit: str = "1") ->
         counter.add(1)   # Session started
         counter.add(-1)  # Session ended
     """
-    meter = _get_meter()
-    if meter is None:
+    if _meter is None:
         return _NoOpUpDownCounter()
 
-    return meter.create_up_down_counter(name, description=description, unit=unit)
+    return _meter.create_up_down_counter(name, description=description, unit=unit)
 
 
 def is_metrics_enabled() -> bool:
