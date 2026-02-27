@@ -60,6 +60,8 @@ class SimpleLRUCache(Cache):
 
     def put(self, key: str | int, value: Any):
         """Put a value into the cache."""
+        if self.capacity <= 0:
+            return
         if key in self.cache:
             # If the key exists, move it to the end (most recent)
             self.cache.pop(key)
