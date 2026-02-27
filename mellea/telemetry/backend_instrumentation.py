@@ -6,7 +6,7 @@ https://opentelemetry.io/docs/specs/semconv/gen-ai/
 
 from typing import Any
 
-from ..telemetry import set_span_attribute, trace_backend
+from .tracing import set_span_attribute, trace_backend
 
 
 def get_model_id_str(backend: Any) -> str:
@@ -127,7 +127,7 @@ def start_generate_span(
     Returns:
         Span object or None if tracing is disabled
     """
-    from . import start_backend_span
+    from .tracing import start_backend_span
 
     model_id = get_model_id_str(backend)
     system_name = get_system_name(backend)

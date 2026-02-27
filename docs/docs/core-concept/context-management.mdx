@@ -1,0 +1,67 @@
+---
+title: "Context Management"
+description: "Context management using Mellea sessions"
+---
+
+Mellea manages context using two complementary mechanisms:
+
+1. `Component`s themselves, which generally contain all of the context needed for a single-turn request. MObjects manage context using fields and methods, Instructions have a grounding_context for RAG-style requests, etc.
+
+2. The `Context`, which stores and represents a (sometimes partial) history of all previous requests to the LLM made during the current session.
+
+We have already seen a lot about how Components can be used to define the context of an LLM request, so in this chapter we will focus on the `Context` mechanism.
+
+When you use the `start_session()` method, you are actually instantiating a `Mellea` with a default inference engine, a default model choice, and a default context manager. The following code is equivalent to `m.start_session()`:
+
+```python
+from mellea import MelleaSession
+
+m = mellea.MelleaSession(
+    backend=OllamaBackend(model_id=IBM_GRANITE_3_3_8B)
+    context=SimpleContext()
+)
+```
+
+The `SimpleContext` -- which is the only context we have used so far -- is a context manager that resets the chat message history on each model call. That is, the model's context is entirely determined by the current Component. Mellea also provides a `ChatContext`, which behaves like a chat history. We can use the ChatContext to interact with chat models:
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/context_example.py#L1-L5
+from mellea import start_session
+
+m = mellea.start_session(ctx=ChatContext())
+m.chat("Make up a math problem.")
+m.chat("Solve your math problem.")
+```
+
+The `Context` object provides a few useful helpers for introspecting on the current model context; for example, you can always get the last model output:
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/context_example.py#L7
+print(m.ctx.last_output())
+```
+
+or the entire last turn (user query + assistant response):
+
+```python
+## file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/context_example.py#L9
+print(m.ctx.last_turn())
+```
+
+You can also use `session.clone()` to create a copy of a given session with its context at given point in time. This allows you to make multiple generation requests with the same objects in your context:
+
+```python
+m = start_session(ctx=ChatContext())
+m.instruct("Multiply 2x2.")
+
+m1 = m.clone()
+m2 = m.clone()
+
+## Need to run this code in an async event loop.
+co1 = m1.ainstruct("Multiply that by 3")
+co2 = m2.ainstruct("Multiply that by 5")
+
+print(await co1)  # 12
+print(await co2)  # 20
+```
+
+In the above example, both requests have `Multiply 2x2` and the LLM's response to that (presumably `4`) in their context. By cloning the session, the new requests both operate independently on that context to get the correct answers to 4 x 3 and 4 x 5.

@@ -1,0 +1,56 @@
+---
+title: "mellea.stdlib.requirements.tool_reqs"
+sidebarTitle: "mellea.stdlib.requirements.tool_reqs"
+description: "Requirements for tool-use workflows."
+---
+
+
+
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `uses_tool` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/requirements/tool_reqs.py#L18" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+uses_tool(tool_name: str | Callable, check_only = False)
+```
+
+
+Forces the model to call a given tool.
+
+**Args:**
+- `tool_name`: The tool that must be called; this can be either the name of the tool or the Callable for the tool.
+- `check_only`: Propagates to the Requirement.
+
+Use `tool_choice` if the OpenAI `tool_choice` model option is supported by your model and inference engine.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `tool_arg_validator` <sup><a href="https://github.com/generative-computing/mellea/blob/main/mellea/stdlib/requirements/tool_reqs.py#L43" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+tool_arg_validator(description: str, tool_name: str | Callable | None, arg_name: str, validation_fn: Callable, check_only: bool = False) -> Requirement
+```
+
+
+A requirement that passes only if `validation_fn` returns a True value for the *value* of the `arg_name` argument to `tool_name`.
+
+If `tool_name` is not specified, then this requirement is enforced for *every* tool that
+
+**Args:**
+- `description`: The Requirement description.
+- `tool_name`: The (optional) tool name for .
+- `arg_name`: The argument to check.
+- `validation_fn`: A validation function for validating the value of the `arg_name` argument.
+- `check_only`: propagates the `check_only` flag to the requirement.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
