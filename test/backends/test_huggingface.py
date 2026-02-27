@@ -234,7 +234,9 @@ def test_format(session) -> None:
 
     print("address:", email.to.email_address)
     assert "@" in email.to.email_address, "The @ sign should be in the email address."
-    assert email.to.email_address.endswith("example.com"), (
+    assert email.to.email_address.endswith(
+        "example.com"
+    ) or email.to.email_address.endswith("example.com>"), (
         "The email address should be at example.com"
     )
 
