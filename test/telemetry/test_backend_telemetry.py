@@ -635,3 +635,55 @@ async def test_huggingface_token_metrics_integration(
 
     assert output_tokens is not None, "Output tokens should be recorded"
     assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.ollama
+async def test_ollama_token_metrics_streaming(enable_metrics, metric_reader, gh_run):
+    """Test that token metrics are recorded after a streaming response completes.
+
+    Verifies that the post_processing hook fires correctly when consuming a
+    streaming response, not just non-streaming (avalue) responses.
+    """
+    if gh_run:
+        pytest.skip("Skipping in CI - requires Ollama")
+
+    from mellea.backends.model_options import ModelOption
+    from mellea.backends.ollama import OllamaModelBackend
+    from mellea.telemetry import metrics as metrics_module
+
+    provider = MeterProvider(metric_readers=[metric_reader])
+    metrics_module._meter_provider = provider
+    metrics_module._meter = provider.get_meter("mellea")
+    metrics_module._input_token_counter = None
+    metrics_module._output_token_counter = None
+
+    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    ctx = SimpleContext()
+    ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
+
+    mot, _ = await backend.generate_from_context(
+        Message(role="assistant", content=""),
+        ctx,
+        model_options={ModelOption.STREAM: True},
+    )
+
+    # Consume the stream fully - post_processing (and metrics) fires after stream completes
+    await mot.astream()
+    await mot.avalue()
+
+    provider.force_flush()
+    metrics_data = metric_reader.get_metrics_data()
+
+    input_tokens = get_metric_value(
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "ollama"}
+    )
+    output_tokens = get_metric_value(
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "ollama"}
+    )
+
+    assert input_tokens is not None, "Input tokens should be recorded after streaming"
+    assert input_tokens > 0, f"Input tokens should be > 0, got {input_tokens}"
+
+    assert output_tokens is not None, "Output tokens should be recorded after streaming"
+    assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"

@@ -128,6 +128,25 @@ export MELLEA_METRICS_ENABLED=true
 
 Metrics are automatically recorded after each LLM call completes. No code changes required.
 
+#### When Metrics Are Recorded
+
+Token metrics are recorded **after the full response is received**, not incrementally during streaming:
+
+- **Non-streaming**: Metrics recorded immediately after `await mot.avalue()` completes
+- **Streaming**: Metrics recorded after the stream is fully consumed (all chunks received)
+
+This ensures accurate token counts are captured from the backend's usage metadata, which is only available after the complete response.
+
+```python
+mot, _ = await backend.generate_from_context(msg, ctx)
+
+# Metrics NOT recorded yet (stream still in progress)
+await mot.astream()
+
+# Metrics recorded here (after stream completion)
+await mot.avalue()
+```
+
 **Export Configuration:**
 
 ```bash
