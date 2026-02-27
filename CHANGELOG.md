@@ -1,3 +1,23 @@
+## [v0.3.2](https://github.com/generative-computing/mellea/releases/tag/v0.3.2) - 2026-02-26
+
+### Feature
+
+* Add tool decorator ([#387](https://github.com/generative-computing/mellea/issues/387)) ([`bfbbe46`](https://github.com/generative-computing/mellea/commit/bfbbe46638942a2a814cf19d6745b89e8e089ecc))
+
+### Fix
+
+* Issues found in comprehensive tests: cache capacity, watsonx ([#560](https://github.com/generative-computing/mellea/issues/560)) ([`ff00e89`](https://github.com/generative-computing/mellea/commit/ff00e890c5b984e778aa256743be7d70eb6fe480))
+* Nonhybrid granite model id ([#546](https://github.com/generative-computing/mellea/issues/546)) ([`dc94364`](https://github.com/generative-computing/mellea/commit/dc94364667540e502da9b0f83126e5d5511fc599))
+* Huggingface memory leak ([#544](https://github.com/generative-computing/mellea/issues/544)) ([`2f74853`](https://github.com/generative-computing/mellea/commit/2f748534f7efd659095c189f39a00659351f517b))
+* Self._tokenizer is unset ([#549](https://github.com/generative-computing/mellea/issues/549)) ([`5ac4b2f`](https://github.com/generative-computing/mellea/commit/5ac4b2f28d3ada4c638c9063acf02824688bca37))
+* Avoid instantiating an additional tokenizer ([#548](https://github.com/generative-computing/mellea/issues/548)) ([`05f0a91`](https://github.com/generative-computing/mellea/commit/05f0a91c3621ab2864c7c2af8cd2776ea8604aaf))
+* Allow mypy to install type stubs ([#487](https://github.com/generative-computing/mellea/issues/487)) ([`2bb34d6`](https://github.com/generative-computing/mellea/commit/2bb34d6c4426cf51006c1f1fc610dc6af45061e8))
+* **mellea decomp:** Solve ConstraintExtractor parsing fails and improve robustness ([#445](https://github.com/generative-computing/mellea/issues/445)) ([`ca3a7f2`](https://github.com/generative-computing/mellea/commit/ca3a7f288eb5fa0c95e863656ee7020f4f65a61d))
+
+### Documentation
+
+* **api:** Generate API docs from latest PyPI release ([#361](https://github.com/generative-computing/mellea/issues/361)) ([`0cf5d37`](https://github.com/generative-computing/mellea/commit/0cf5d37f5d89ef391256f871f867625e6285d20d))
+
 ## [v0.3.1](https://github.com/generative-computing/mellea/releases/tag/v0.3.1) - 2026-02-11
 
 ### Feature
