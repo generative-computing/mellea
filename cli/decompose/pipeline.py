@@ -142,7 +142,9 @@ def decompose(
             constraints=[
                 {
                     "constraint": cons_str,
-                    "validation_strategy": constraint_validation_strategies[cons_str],
+                    "validation_strategy": constraint_validation_strategies.get(
+                        cons_str, "llm"
+                    ),
                 }
                 for cons_str in subtask_data.constraints
             ],
