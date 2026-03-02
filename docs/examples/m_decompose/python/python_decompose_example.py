@@ -32,7 +32,7 @@ def run_decompose(task_prompt: str) -> DecompPipelineResult:
 
     result = decompose(
         task_prompt=task_prompt,
-        model_id="granite4:micro",
+        model_id="granite3.3:8b",
         backend=DecompBackend.ollama,  # Use Ollama backend
         backend_req_timeout=300,  # 5 minute timeout
     )
@@ -84,7 +84,9 @@ def generate_python_script(
     print("\n📝 Generating executable Python script...")
 
     # Load the template from the CLI decompose directory
-    cli_decompose_dir = Path(__file__).parent.parent.parent.parent / "cli" / "decompose"
+    cli_decompose_dir = (
+        Path(__file__).parent.parent.parent.parent.parent / "cli" / "decompose"
+    )
     environment = Environment(
         loader=FileSystemLoader(cli_decompose_dir), autoescape=False
     )
