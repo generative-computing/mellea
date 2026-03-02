@@ -40,12 +40,12 @@ def setup_telemetry():
 @pytest.fixture
 def span_exporter():
     """Create an in-memory span exporter for testing."""
-    # Import mellea.telemetry to ensure it's initialized
-    from mellea import telemetry
+    # Import mellea.telemetry.tracing to ensure it's initialized
+    from mellea.telemetry import tracing
 
-    # Get the real tracer provider from mellea.telemetry module
+    # Get the real tracer provider from mellea.telemetry.tracing module
     # The global trace.get_tracer_provider() returns a ProxyTracerProvider
-    provider = telemetry._tracer_provider
+    provider = tracing._tracer_provider
 
     if provider is None:
         pytest.skip("Telemetry not initialized")
