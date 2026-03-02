@@ -333,7 +333,6 @@ def run(
                 + "\n"
             )
     except Exception:
-
         decomp_dir = out_dir / out_name
         if decomp_dir.exists() and decomp_dir.is_dir():
             shutil.rmtree(decomp_dir)
