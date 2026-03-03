@@ -1016,8 +1016,8 @@ toml = [
 
 [[package]]
 name = "cpex"
-version = "0.1.0.dev1"
-source = { git = "https://github.com/contextforge-org/contextforge-plugins-framework.git?tag=0.1.0.dev1#c85f87ed210fa66285d40e4bb42eadf7433515b4" }
+version = "0.1.0.dev2"
+source = { git = "https://github.com/contextforge-org/contextforge-plugins-framework.git?tag=0.1.0.dev2#47c0f41a1676e9038262da8313dc7b7a120e01cd" }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx", extra = ["http2"] },
@@ -3728,7 +3728,7 @@ typecheck = [
 requires-dist = [
     { name = "accelerate", marker = "extra == 'hf'", specifier = ">=1.9.0" },
     { name = "boto3", marker = "extra == 'litellm'" },
-    { name = "cpex", marker = "python_full_version >= '3.11' and extra == 'cpex'", git = "https://github.com/contextforge-org/contextforge-plugins-framework.git?tag=0.1.0.dev1" },
+    { name = "cpex", marker = "python_full_version >= '3.11' and extra == 'cpex'", git = "https://github.com/contextforge-org/contextforge-plugins-framework.git?tag=0.1.0.dev2" },
     { name = "datasets", marker = "extra == 'hf'", specifier = ">=4.0.0" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.45.0" },
     { name = "elasticsearch", marker = "extra == 'granite-retriever'", specifier = ">=8.0.0,<9.0.0" },
