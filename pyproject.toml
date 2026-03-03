@@ -119,6 +119,7 @@ dev = [
     "python-semantic-release~=7.32",
     "nbmake>=1.5.5",
     "langchain-core>=1.2.7", # Necessary for mypy and some tool tests
+    "sentencepiece==0.2.1", # Necessary for test_huggingface_tools test because of Mistral model
 ]
 
 notebook = [
