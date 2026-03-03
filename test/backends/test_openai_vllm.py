@@ -79,17 +79,24 @@ def vllm_process():
 
         yield process
 
+    except Exception as e:
+        pytest.skip(
+            f"vLLM process not available: {e}. May need to install with: pip install mellea[vllm]",
+            allow_module_level=True,
+        )
+
     # --- Teardown (always runs) ---
     finally:
-        try:
-            os.killpg(process.pid, signal.SIGTERM)  # kill the session group
-            process.wait(timeout=30)
-        except Exception:
+        if process is not None:
             try:
-                os.killpg(process.pid, signal.SIGKILL)
+                os.killpg(process.pid, signal.SIGTERM)  # kill the session group
+                process.wait(timeout=30)
             except Exception:
-                pass
-            process.wait()
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except Exception:
+                    pass
+                process.wait()
 
 
 @pytest.fixture(scope="module")

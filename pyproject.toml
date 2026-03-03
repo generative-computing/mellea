@@ -63,6 +63,7 @@ hf = [
     "peft>=0.18.1", # Native aLoRA support added in PEFT 0.18.0
     "transformers>=4.53.2,<5",
     "trl==0.19.1",
+    "xgrammar", # Necessary for granite_common intrinsics.
 ]
 
 vllm = [
@@ -117,6 +118,8 @@ dev = [
     "python-semantic-release~=7.32",
     "nbmake>=1.5.5",
     "langchain-core>=1.2.7", # Necessary for mypy and some tool tests
+    "sentencepiece==0.2.1", # Necessary for test_huggingface_tools test because of Mistral model
+    "jsonschema",
 ]
 
 notebook = [
@@ -129,6 +132,13 @@ docs = [
     "sphinx_rtd_theme",
     "sphinx-autodoc-typehints",
     "sphinx_mdinclude",
+]
+
+# Necessary for granite retriever.
+granite_common_retriever = [
+    "sentence-transformers",
+    "pyarrow",
+    "elasticsearch>=8.0.0,<9.0.0"
 ]
 
 [tool.ruff]

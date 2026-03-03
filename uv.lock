@@ -4103,6 +4103,7 @@ dev = [
     { name = "pytest-timeout" },
     { name = "python-semantic-release" },
     { name = "ruff" },
+    { name = "sentencepiece" },
 ]
 docs = [
     { name = "sphinx-autodoc-typehints", version = "3.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -4177,6 +4178,7 @@ dev = [
     { name = "pytest-timeout" },
     { name = "python-semantic-release", specifier = "~=7.32" },
     { name = "ruff", specifier = ">=0.11.6" },
+    { name = "sentencepiece", specifier = "==0.2.1" },
 ]
 docs = [
     { name = "sphinx-autodoc-typehints" },
