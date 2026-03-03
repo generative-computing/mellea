@@ -14,6 +14,7 @@ from mellea.stdlib.session import start_session
 
 @pytest.mark.ollama
 @pytest.mark.llm
+@pytest.mark.qualitative
 async def test_astream_returns_incremental_chunks():
     """Test that astream() returns only new content, not accumulated content.
 
@@ -68,6 +69,7 @@ async def test_astream_returns_incremental_chunks():
 
 @pytest.mark.ollama
 @pytest.mark.llm
+@pytest.mark.qualitative
 async def test_astream_multiple_calls_accumulate_correctly():
     """Test that multiple astream() calls accumulate to the final value.
 
@@ -120,6 +122,7 @@ async def test_astream_multiple_calls_accumulate_correctly():
 
 @pytest.mark.ollama
 @pytest.mark.llm
+@pytest.mark.qualitative
 async def test_astream_beginning_length_tracking():
     """Test that beginning_length is correctly tracked across astream calls.
 
@@ -150,6 +153,7 @@ async def test_astream_beginning_length_tracking():
 
 @pytest.mark.ollama
 @pytest.mark.llm
+@pytest.mark.qualitative
 async def test_astream_empty_beginning():
     """Test astream when _underlying_value starts as None."""
     session = start_session()
@@ -174,6 +178,7 @@ async def test_astream_empty_beginning():
 
 @pytest.mark.ollama
 @pytest.mark.llm
+@pytest.mark.qualitative
 async def test_astream_computed_returns_full_value():
     """Test that astream returns full value when already computed."""
     # Create a pre-computed thunk
@@ -188,6 +193,7 @@ async def test_astream_computed_returns_full_value():
 
 @pytest.mark.ollama
 @pytest.mark.llm
+@pytest.mark.qualitative
 async def test_astream_final_call_returns_full_value():
     """Test that the final astream call returns the full value when computed.
 
