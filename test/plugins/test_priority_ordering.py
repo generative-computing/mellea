@@ -13,13 +13,12 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("mcpgateway.plugins.framework")
+pytest.importorskip("cpex.framework")
 
-from mellea.plugins import PluginResult, PluginSet, hook, plugin, register
+from mellea.plugins import PluginSet, hook, plugin, register
 from mellea.plugins.hooks.session import SessionPreInitPayload
 from mellea.plugins.manager import invoke_hook, shutdown_plugins
 from mellea.plugins.types import HookType
-
 
 # ---------------------------------------------------------------------------
 # Helpers

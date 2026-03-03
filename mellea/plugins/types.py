@@ -6,8 +6,8 @@ from enum import Enum
 from typing import Any
 
 try:
-    from mcpgateway.plugins.framework.hooks.registry import get_hook_registry
-    from mcpgateway.plugins.framework.models import PluginResult
+    from cpex.framework.hooks.registry import get_hook_registry
+    from cpex.framework.models import PluginResult
 
     _HAS_PLUGIN_FRAMEWORK = True
 except ImportError:
@@ -156,7 +156,7 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
     }
 
 
-def _register_mellea_hooks() -> None:
+def register_mellea_hooks() -> None:
     """Register all Mellea hook types with the ContextForge HookRegistry.
 
     Idempotent — skips already-registered hook types.

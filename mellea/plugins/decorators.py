@@ -8,7 +8,6 @@ from typing import Any
 
 from mellea.plugins.types import PluginMode
 
-
 # ---------------------------------------------------------------------------
 # Context-manager helpers injected into @plugin-decorated classes
 # ---------------------------------------------------------------------------

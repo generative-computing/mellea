@@ -24,7 +24,6 @@ dependencies = [
     "ollama>=0.5.1",
     "requests>=2.32.3",
     "typer",
-    "click<8.2.0", # Newer versions will cause errors with --help in typer CLIs.
     "mistletoe>=1.4.0",
     "pillow", # Needed for Intrinsics (HF and OpenAI Backends).
     "math_verify", # Needed for Majority Voting Sampling Strategies.
@@ -98,8 +97,8 @@ sandbox = [
 
 backends = ["mellea[watsonx,hf,vllm,litellm]"]
 
-contextforge = [
-    "mcp-contextforge-gateway; python_version >= '3.11' and python_version < '3.14'",
+cpex = [
+    "cpex; python_version >= '3.11'",
 ]
 
 all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever]"]
@@ -364,14 +363,5 @@ parser_angular_allowed_types = "build,chore,ci,docs,feat,fix,perf,style,refactor
 parser_angular_minor_types = "release"
 parser_angular_patch_types = "fix,perf,feat"
 
-[tool.uv]
-conflicts = [
-    [
-        { extra = "contextforge" },
-        { extra = "docling" },
-        { extra = "all" },
-    ],
-]
-
 [tool.uv.sources]
-mcp-contextforge-gateway = { git = "https://github.com/IBM/mcp-context-forge.git", branch = "refactor/plugins_data_models" }
+cpex = { git = "https://github.com/contextforge-org/contextforge-plugins-framework.git", tag = "0.1.0.dev1" }

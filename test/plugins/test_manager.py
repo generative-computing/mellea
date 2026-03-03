@@ -3,16 +3,12 @@
 import pytest
 
 from mellea.plugins.base import MelleaBasePayload
-from mellea.plugins.manager import (
-    _ensure_plugin_manager,
-    has_plugins,
-    invoke_hook,
-    shutdown_plugins,
-)
+from mellea.plugins.manager import (ensure_plugin_manager, has_plugins,
+                                    invoke_hook, shutdown_plugins)
 from mellea.plugins.types import HookType, PluginMode
 
 # These tests require the contextforge plugin framework
-pytest.importorskip("mcpgateway.plugins.framework")
+pytest.importorskip("cpex.framework")
 
 
 @pytest.fixture(autouse=True)
@@ -39,13 +35,13 @@ class TestNoOpGuards:
 
 class TestPluginManagerInit:
     def test_ensure_plugin_manager_creates_manager(self):
-        pm = _ensure_plugin_manager()
+        pm = ensure_plugin_manager()
         assert pm is not None
         assert has_plugins()
 
     def test_ensure_plugin_manager_idempotent(self):
-        pm1 = _ensure_plugin_manager()
-        pm2 = _ensure_plugin_manager()
+        pm1 = ensure_plugin_manager()
+        pm2 = ensure_plugin_manager()
         # They may not be the same object due to Borg pattern, but should be functional
         assert pm1 is not None
         assert pm2 is not None

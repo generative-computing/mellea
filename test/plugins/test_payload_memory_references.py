@@ -16,11 +16,10 @@ from __future__ import annotations
 
 from typing import Any
 from unittest.mock import MagicMock
-import gc
 
 import pytest
 
-pytest.importorskip("mcpgateway.plugins.framework")
+pytest.importorskip("cpex.framework")
 
 
 # ---------------------------------------------------------------------------

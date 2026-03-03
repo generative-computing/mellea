@@ -8,12 +8,9 @@ from typing import TYPE_CHECKING, Any, TypeAlias
 from pydantic import Field
 
 try:
-    from mcpgateway.plugins.framework.base import Plugin
-    from mcpgateway.plugins.framework.models import (
-        PluginContext,
-        PluginPayload,
-        PluginResult as _CFPluginResult,
-    )
+    from cpex.framework.base import Plugin
+    from cpex.framework.models import PluginContext, PluginPayload
+    from cpex.framework.models import PluginResult as _CFPluginResult
 
     _HAS_PLUGIN_FRAMEWORK = True
 except ImportError:

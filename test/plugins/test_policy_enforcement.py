@@ -10,22 +10,16 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("mcpgateway.plugins.framework")
+pytest.importorskip("cpex.framework")
 
 from mellea.plugins import PluginResult, hook, register
-from mellea.plugins.hooks.component import (
-    ComponentPostErrorPayload,
-    ComponentPreCreatePayload,
-)
+from mellea.plugins.hooks.component import (ComponentPostErrorPayload,
+                                            ComponentPreCreatePayload)
 from mellea.plugins.hooks.generation import GenerationPreCallPayload
-from mellea.plugins.hooks.sampling import (
-    SamplingIterationPayload,
-    SamplingLoopStartPayload,
-)
+from mellea.plugins.hooks.sampling import SamplingIterationPayload
 from mellea.plugins.hooks.session import SessionPreInitPayload
 from mellea.plugins.manager import invoke_hook, shutdown_plugins
 from mellea.plugins.types import HookType
-
 
 # ---------------------------------------------------------------------------
 # Helpers

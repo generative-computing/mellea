@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 try:
-    from mcpgateway.plugins.framework.models import GlobalContext
+    from cpex.framework.models import GlobalContext
 
     _HAS_PLUGIN_FRAMEWORK = True
 except ImportError:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 try:
-    from mcpgateway.plugins.framework.hooks.policies import HookPayloadPolicy
+    from cpex.framework.hooks.policies import HookPayloadPolicy
 
     _HAS_PLUGIN_FRAMEWORK = True
 except ImportError:

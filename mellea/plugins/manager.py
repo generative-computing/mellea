@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING, Any
 from mellea.plugins.base import MelleaBasePayload, PluginViolationError
 from mellea.plugins.context import build_global_context
 from mellea.plugins.policies import MELLEA_HOOK_PAYLOAD_POLICIES
-from mellea.plugins.types import HookType, _register_mellea_hooks
+from mellea.plugins.types import HookType, register_mellea_hooks
 
 try:
-    from mcpgateway.plugins.framework.manager import PluginManager
+    from cpex.framework.manager import PluginManager
 
     _HAS_PLUGIN_FRAMEWORK = True
 except ImportError:
@@ -29,9 +29,12 @@ _plugin_manager: Any | None = None
 _plugins_enabled: bool = False
 _session_tags: dict[str, set[str]] = {}  # session_id -> set of plugin names
 
+DEFAULT_PLUGIN_TIMEOUT: int = 5  # seconds
+
 
 def has_plugins() -> bool:
     """Fast check: are plugins configured and available?"""
+    # TODO: check if there are any plugins registered in this scope
     return _plugins_enabled
 
 
@@ -40,7 +43,7 @@ def get_plugin_manager() -> Any | None:
     return _plugin_manager
 
 
-def _ensure_plugin_manager() -> Any:
+def ensure_plugin_manager() -> Any:
     """Lazily initialize the PluginManager if not already created."""
     global _plugin_manager, _plugins_enabled
 
@@ -51,12 +54,11 @@ def _ensure_plugin_manager() -> Any:
         )
 
     if _plugin_manager is None:
-        _register_mellea_hooks()
+        register_mellea_hooks()
         # Reset PluginManager singleton state to ensure clean init
         PluginManager.reset()
         pm = PluginManager(
-            "",
-            timeout=5,
+            timeout=DEFAULT_PLUGIN_TIMEOUT,
             hook_policies=MELLEA_HOOK_PAYLOAD_POLICIES,  # type: ignore[arg-type]
         )
         from mellea.helpers import _run_async_in_thread
@@ -68,7 +70,7 @@ def _ensure_plugin_manager() -> Any:
 
 
 async def initialize_plugins(
-    config_path: str | None = None, *, timeout: float = 5.0
+    config_path: str | None = None, *, timeout: int = DEFAULT_PLUGIN_TIMEOUT
 ) -> Any:
     """Initialize the PluginManager with Mellea hook registrations and optional YAML config.
 
@@ -84,11 +86,11 @@ async def initialize_plugins(
             "Install it with: pip install 'mellea[contextforge]'"
         )
 
-    _register_mellea_hooks()
+    register_mellea_hooks()
     PluginManager.reset()
     pm = PluginManager(
         config_path or "",
-        timeout=int(timeout),
+        timeout=timeout,
         hook_policies=MELLEA_HOOK_PAYLOAD_POLICIES,  # type: ignore[arg-type]
     )
     await pm.initialize()
@@ -108,7 +110,7 @@ async def shutdown_plugins() -> None:
     _session_tags.clear()
 
 
-def _track_session_plugin(session_id: str, plugin_name: str) -> None:
+def track_session_plugin(session_id: str, plugin_name: str) -> None:
     """Track a plugin as belonging to a session for later deregistration."""
     _session_tags.setdefault(session_id, set()).add(plugin_name)
 

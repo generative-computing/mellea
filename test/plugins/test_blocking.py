@@ -12,15 +12,15 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("mcpgateway.plugins.framework")
+pytest.importorskip("cpex.framework")
 
 from mellea.plugins import block, hook, register
 from mellea.plugins.base import PluginViolationError
 from mellea.plugins.context import build_global_context
 from mellea.plugins.hooks.session import SessionPreInitPayload
-from mellea.plugins.manager import _ensure_plugin_manager, invoke_hook, shutdown_plugins
+from mellea.plugins.manager import (ensure_plugin_manager, invoke_hook,
+                                    shutdown_plugins)
 from mellea.plugins.types import HookType
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -40,7 +40,7 @@ async def _invoke_no_raise(payload: SessionPreInitPayload):
     To observe the raw ``PluginResult`` without raising, we bypass the wrapper and call
     ``PluginManager.invoke_hook`` directly.
     """
-    pm = _ensure_plugin_manager()
+    pm = ensure_plugin_manager()
     ctx = build_global_context(request_id="test-req")
     # Stamp the hook field the same way Mellea's wrapper would
     stamped = payload.model_copy(update={"hook": HookType.SESSION_PRE_INIT.value})

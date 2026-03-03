@@ -13,13 +13,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-pytest.importorskip("mcpgateway.plugins.framework")
+pytest.importorskip("cpex.framework")
 
 from mellea.core.backend import Backend
 from mellea.core.base import GenerateLog, ModelOutputThunk
 from mellea.plugins.manager import shutdown_plugins
 from mellea.stdlib.context import SimpleContext
-
 
 EXAMPLES_DIR = Path(__file__).parent.parent.parent / "docs" / "examples" / "plugins"
 

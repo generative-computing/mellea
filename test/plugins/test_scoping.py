@@ -4,23 +4,13 @@ from typing import Any
 
 import pytest
 
-pytest.importorskip("mcpgateway.plugins.framework")
+pytest.importorskip("cpex.framework")
 
-from mellea.plugins import (
-    MelleaPlugin,
-    PluginResult,
-    PluginSet,
-    hook,
-    plugin,
-    plugin_scope,
-    register,
-)
+from mellea.plugins import (MelleaPlugin, PluginResult, PluginSet, hook,
+                            plugin, plugin_scope, register)
 from mellea.plugins.hooks.session import SessionPreInitPayload
-from mellea.plugins.manager import (
-    deregister_session_plugins,
-    invoke_hook,
-    shutdown_plugins,
-)
+from mellea.plugins.manager import (deregister_session_plugins, invoke_hook,
+                                    shutdown_plugins)
 from mellea.plugins.types import HookType
 
 

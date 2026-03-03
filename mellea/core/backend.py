@@ -150,7 +150,9 @@ class Backend(abc.ABC):
             post_payload = GenerationPostCallPayload(
                 prompt=glog.prompt if glog else "",
                 model_output=out_result,
-                latency_ms=int((time.monotonic() - t0) * 1000),
+                latency_ms=int(
+                    (time.monotonic() - t0) * 1000
+                ),  # TODO: drop latency here
             )
             await invoke_hook(
                 HookType.GENERATION_POST_CALL,

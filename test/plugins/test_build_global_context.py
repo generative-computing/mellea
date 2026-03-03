@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-pytest.importorskip("mcpgateway.plugins.framework")
+pytest.importorskip("cpex.framework")
 
 from mellea.plugins.context import build_global_context
 

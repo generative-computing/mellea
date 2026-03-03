@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
-pytest.importorskip("mcpgateway.plugins.framework")
+pytest.importorskip("cpex.framework")
 
 from mellea.plugins import hook, plugin, register
-from mellea.plugins.base import MelleaPlugin, PluginResult
+from mellea.plugins.hooks.session import SessionPreInitPayload
 from mellea.plugins.manager import invoke_hook, shutdown_plugins
 from mellea.plugins.types import HookType
-from mellea.plugins.hooks.session import SessionPreInitPayload
 
 
 @pytest.fixture(autouse=True)

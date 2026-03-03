@@ -12,13 +12,10 @@ from mellea.plugins.pluginset import PluginSet
 from mellea.plugins.types import PluginMode
 
 try:
-    from mcpgateway.plugins.framework.base import Plugin
-    from mcpgateway.plugins.framework.models import (
-        PluginConfig,
-        PluginMode as _CFPluginMode,
-        PluginResult,
-        PluginViolation,
-    )
+    from cpex.framework.base import Plugin
+    from cpex.framework.models import PluginConfig
+    from cpex.framework.models import PluginMode as _CFPluginMode
+    from cpex.framework.models import PluginResult, PluginViolation
 
     _HAS_PLUGIN_FRAMEWORK = True
 except ImportError:
@@ -91,9 +88,9 @@ def register(
             "Install it with: pip install 'mellea[contextforge]'"
         )
 
-    from mellea.plugins.manager import _ensure_plugin_manager
+    from mellea.plugins.manager import ensure_plugin_manager
 
-    pm = _ensure_plugin_manager()
+    pm = ensure_plugin_manager()
 
     if not isinstance(items, list):
         items = [items]
@@ -125,9 +122,9 @@ def _register_single(
         )
         pm._registry.register(adapter)
         if session_id:
-            from mellea.plugins.manager import _track_session_plugin
+            from mellea.plugins.manager import track_session_plugin
 
-            _track_session_plugin(session_id, adapter.name)
+            track_session_plugin(session_id, adapter.name)
         logger.debug(
             "Registered standalone hook: %s for %s", item.__qualname__, meta.hook_type
         )
@@ -142,18 +139,18 @@ def _register_single(
         )
         pm._registry.register(adapter)
         if session_id:
-            from mellea.plugins.manager import _track_session_plugin
+            from mellea.plugins.manager import track_session_plugin
 
-            _track_session_plugin(session_id, adapter.name)
+            track_session_plugin(session_id, adapter.name)
         logger.debug("Registered class plugin: %s", plugin_meta.name)
 
     elif isinstance(item, Plugin):
         # MelleaPlugin / ContextForge Plugin instance
         pm._registry.register(item)
         if session_id:
-            from mellea.plugins.manager import _track_session_plugin
+            from mellea.plugins.manager import track_session_plugin
 
-            _track_session_plugin(session_id, item.name)
+            track_session_plugin(session_id, item.name)
         logger.debug("Registered MelleaPlugin: %s", item.name)
 
     else:
@@ -204,7 +201,7 @@ class _FunctionHookAdapter(Plugin):
     async def _invoke(self, payload: Any, context: Any) -> Any:
         result = await self._fn(payload, context)
         if result is None:
-            return PluginResult(continue_processing=True, modified_payload=payload)
+            return PluginResult(continue_processing=True)
         return result
 
 
@@ -262,9 +259,7 @@ class _ClassPluginAdapter(Plugin):
             async def _wrapped(payload: Any, context: Any) -> Any:
                 result = await bound_method(payload, context)
                 if result is None:
-                    return PluginResult(
-                        continue_processing=True, modified_payload=payload
-                    )
+                    return PluginResult(continue_processing=True)
                 return result
 
             return _wrapped

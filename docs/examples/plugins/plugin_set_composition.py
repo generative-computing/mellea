@@ -14,15 +14,8 @@ import logging
 import sys
 
 from mellea import start_session
-from mellea.plugins import (
-    HookType,
-    PluginMode,
-    PluginSet,
-    PluginViolationError,
-    block,
-    hook,
-    register,
-)
+from mellea.plugins import (HookType, PluginMode, PluginSet,
+                            PluginViolationError, block, hook, register)
 
 logging.basicConfig(
     level=logging.INFO,

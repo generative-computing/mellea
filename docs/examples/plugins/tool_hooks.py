@@ -18,9 +18,9 @@ import sys
 
 from mellea import start_session
 from mellea.backends import ModelOption, tool
+from mellea.plugins import HookType, PluginMode, PluginSet, block, hook
 from mellea.stdlib.functional import _call_tools
 from mellea.stdlib.requirements import uses_tool
-from mellea.plugins import HookType, PluginMode, PluginSet, block, hook
 
 logging.basicConfig(
     level=logging.INFO,

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("mcpgateway.plugins.framework")
+pytest.importorskip("cpex.framework")
 
 from mellea.plugins import PluginResult, block, hook, register
 from mellea.plugins.base import PluginViolationError
@@ -30,7 +30,6 @@ from mellea.plugins.hooks.generation import GenerationPreCallPayload
 from mellea.plugins.hooks.session import SessionPreInitPayload
 from mellea.plugins.manager import invoke_hook, shutdown_plugins
 from mellea.plugins.types import HookType, PluginMode
-
 
 # ---------------------------------------------------------------------------
 # Helpers
