@@ -388,12 +388,17 @@ def get_metric_value(metrics_data, metric_name, attributes=None):
 
 
 @pytest.mark.asyncio
+@pytest.mark.llm
 @pytest.mark.ollama
-async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, gh_run):
+@pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
+async def test_ollama_token_metrics_integration(
+    enable_metrics, metric_reader, gh_run, stream
+):
     """Test that Ollama backend records token metrics correctly."""
     if gh_run:
         pytest.skip("Skipping in CI - requires Ollama")
 
+    from mellea.backends.model_options import ModelOption
     from mellea.backends.ollama import OllamaModelBackend
     from mellea.telemetry import metrics as metrics_module
 
@@ -407,9 +412,14 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, g
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
+    model_options = {ModelOption.STREAM: True} if stream else {}
     mot, _ = await backend.generate_from_context(
-        Message(role="assistant", content=""), ctx
+        Message(role="assistant", content=""), ctx, model_options=model_options
     )
+
+    # For streaming, consume the stream fully before checking metrics
+    if stream:
+        await mot.astream()
     await mot.avalue()
 
     # Force metrics export and collection
@@ -435,12 +445,17 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, g
 
 
 @pytest.mark.asyncio
+@pytest.mark.llm
 @pytest.mark.ollama
-async def test_openai_token_metrics_integration(enable_metrics, metric_reader, gh_run):
+@pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
+async def test_openai_token_metrics_integration(
+    enable_metrics, metric_reader, gh_run, stream
+):
     """Test that OpenAI backend records token metrics correctly using Ollama's OpenAI-compatible endpoint."""
     if gh_run:
         pytest.skip("Skipping in CI - requires Ollama")
 
+    from mellea.backends.model_options import ModelOption
     from mellea.backends.openai import OpenAIBackend
     from mellea.telemetry import metrics as metrics_module
 
@@ -459,9 +474,14 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, g
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
+    model_options = {ModelOption.STREAM: True} if stream else {}
     mot, _ = await backend.generate_from_context(
-        Message(role="assistant", content=""), ctx
+        Message(role="assistant", content=""), ctx, model_options=model_options
     )
+
+    # For streaming, consume the stream fully before checking metrics
+    if stream:
+        await mot.astream()
     await mot.avalue()
 
     provider.force_flush()
@@ -484,6 +504,7 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, g
 
 
 @pytest.mark.asyncio
+@pytest.mark.llm
 @pytest.mark.watsonx
 @pytest.mark.requires_api_key
 async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader, gh_run):
@@ -534,16 +555,19 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader, 
 
 
 @pytest.mark.asyncio
+@pytest.mark.llm
 @pytest.mark.litellm
 @pytest.mark.ollama
+@pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_litellm_token_metrics_integration(
-    enable_metrics, metric_reader, gh_run, monkeypatch
+    enable_metrics, metric_reader, gh_run, monkeypatch, stream
 ):
     """Test that LiteLLM backend records token metrics correctly using OpenAI-compatible endpoint."""
     if gh_run:
         pytest.skip("Skipping in CI - requires Ollama")
 
     from mellea.backends.litellm import LiteLLMBackend
+    from mellea.backends.model_options import ModelOption
     from mellea.telemetry import metrics as metrics_module
 
     # Set environment variables for LiteLLM to use Ollama's OpenAI-compatible endpoint
@@ -563,9 +587,14 @@ async def test_litellm_token_metrics_integration(
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
+    model_options = {ModelOption.STREAM: True} if stream else {}
     mot, _ = await backend.generate_from_context(
-        Message(role="assistant", content=""), ctx
+        Message(role="assistant", content=""), ctx, model_options=model_options
     )
+
+    # For streaming, consume the stream fully before checking metrics
+    if stream:
+        await mot.astream()
     await mot.avalue()
 
     provider.force_flush()
@@ -588,15 +617,18 @@ async def test_litellm_token_metrics_integration(
 
 
 @pytest.mark.asyncio
+@pytest.mark.llm
 @pytest.mark.huggingface
+@pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_huggingface_token_metrics_integration(
-    enable_metrics, metric_reader, gh_run
+    enable_metrics, metric_reader, gh_run, stream
 ):
     """Test that HuggingFace backend records token metrics correctly."""
     if gh_run:
         pytest.skip("Skipping in CI - requires model download")
 
     from mellea.backends.huggingface import LocalHFBackend
+    from mellea.backends.model_options import ModelOption
     from mellea.telemetry import metrics as metrics_module
 
     provider = MeterProvider(metric_readers=[metric_reader])
@@ -613,9 +645,14 @@ async def test_huggingface_token_metrics_integration(
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
+    model_options = {ModelOption.STREAM: True} if stream else {}
     mot, _ = await backend.generate_from_context(
-        Message(role="assistant", content=""), ctx
+        Message(role="assistant", content=""), ctx, model_options=model_options
     )
+
+    # For streaming, consume the stream fully before checking metrics
+    if stream:
+        await mot.astream()
     await mot.avalue()
 
     provider.force_flush()
@@ -634,56 +671,4 @@ async def test_huggingface_token_metrics_integration(
     assert input_tokens > 0, f"Input tokens should be > 0, got {input_tokens}"
 
     assert output_tokens is not None, "Output tokens should be recorded"
-    assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"
-
-
-@pytest.mark.asyncio
-@pytest.mark.ollama
-async def test_ollama_token_metrics_streaming(enable_metrics, metric_reader, gh_run):
-    """Test that token metrics are recorded after a streaming response completes.
-
-    Verifies that the post_processing hook fires correctly when consuming a
-    streaming response, not just non-streaming (avalue) responses.
-    """
-    if gh_run:
-        pytest.skip("Skipping in CI - requires Ollama")
-
-    from mellea.backends.model_options import ModelOption
-    from mellea.backends.ollama import OllamaModelBackend
-    from mellea.telemetry import metrics as metrics_module
-
-    provider = MeterProvider(metric_readers=[metric_reader])
-    metrics_module._meter_provider = provider
-    metrics_module._meter = provider.get_meter("mellea")
-    metrics_module._input_token_counter = None
-    metrics_module._output_token_counter = None
-
-    backend = OllamaModelBackend(model_id="llama3.2:1b")
-    ctx = SimpleContext()
-    ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
-
-    mot, _ = await backend.generate_from_context(
-        Message(role="assistant", content=""),
-        ctx,
-        model_options={ModelOption.STREAM: True},
-    )
-
-    # Consume the stream fully - post_processing (and metrics) fires after stream completes
-    await mot.astream()
-    await mot.avalue()
-
-    provider.force_flush()
-    metrics_data = metric_reader.get_metrics_data()
-
-    input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "ollama"}
-    )
-    output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "ollama"}
-    )
-
-    assert input_tokens is not None, "Input tokens should be recorded after streaming"
-    assert input_tokens > 0, f"Input tokens should be > 0, got {input_tokens}"
-
-    assert output_tokens is not None, "Output tokens should be recorded after streaming"
     assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"

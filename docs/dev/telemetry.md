@@ -110,13 +110,13 @@ All token metrics include these attributes following Gen-AI semantic conventions
 
 #### Backend Support
 
-| Backend | Support | Notes |
-|---------|---------|-------|
-| OpenAI | ✅ Full | Via `usage.prompt_tokens` and `usage.completion_tokens` |
-| Ollama | ✅ Full | Via `prompt_eval_count` and `eval_count` |
-| WatsonX | ✅ Full | Via `input_token_count` and `generated_token_count` |
-| LiteLLM | ✅ Full | Via `usage.prompt_tokens` and `usage.completion_tokens` from response |
-| HuggingFace | ✅ Full | Calculated from input_ids and output sequences |
+| Backend | Streaming | Non-Streaming | Source |
+|---------|-----------|---------------|--------|
+| OpenAI | ✅ | ✅ | `usage.prompt_tokens` and `usage.completion_tokens` |
+| Ollama | ✅ | ✅ | `prompt_eval_count` and `eval_count` |
+| WatsonX | ❌ | ✅ | `input_token_count` and `generated_token_count` (streaming API limitation) |
+| LiteLLM | ✅ | ✅ | `usage.prompt_tokens` and `usage.completion_tokens` |
+| HuggingFace | ✅ | ✅ | Calculated from input_ids and output sequences |
 
 #### Configuration
 

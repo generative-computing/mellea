@@ -297,6 +297,10 @@ class LiteLLMBackend(FormatterBackend):
                 },
             }
 
+        # Request usage information in streaming responses
+        if model_opts.get(ModelOption.STREAM, False):
+            extra_params["stream_options"] = {"include_usage": True}
+
         thinking = model_opts.get(ModelOption.THINKING, None)
         if type(thinking) is bool and thinking:
             # OpenAI uses strings for its reasoning levels.
@@ -413,6 +417,10 @@ class LiteLLMBackend(FormatterBackend):
                 chunk.choices[0].model_dump()
             )
 
+            # Store usage information from the chunk if available (typically in the last chunk)
+            if hasattr(chunk, "usage") and chunk.usage is not None:
+                mot._meta["litellm_streaming_usage"] = chunk.usage.model_dump()
+
     async def post_processing(
         self,
         mot: ModelOutputThunk,
@@ -471,9 +479,13 @@ class LiteLLMBackend(FormatterBackend):
         generate_log.result = mot
         mot._generate_log = generate_log
 
-        # Extract token usage from full response dict
+        # Extract token usage from full response dict or streaming usage
         full_response = mot._meta.get("litellm_full_response")
         usage = full_response.get("usage") if isinstance(full_response, dict) else None
+
+        # For streaming responses, usage is stored separately
+        if usage is None:
+            usage = mot._meta.get("litellm_streaming_usage")
 
         # Record metrics if enabled
         from ..telemetry.metrics import is_metrics_enabled

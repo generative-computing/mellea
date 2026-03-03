@@ -453,6 +453,10 @@ class OpenAIBackend(FormatterBackend):
         if thinking is not None:
             reasoning_params["reasoning_effort"] = thinking
 
+        # Request usage information in streaming responses
+        if model_opts.get(ModelOption.STREAM, False):
+            extra_params["stream_options"] = {"include_usage": True}
+
         chat_response: Coroutine[
             Any, Any, ChatCompletion | openai.AsyncStream[ChatCompletionChunk]
         ] = self._async_client.chat.completions.create(
@@ -530,6 +534,14 @@ class OpenAIBackend(FormatterBackend):
             mot._meta["oai_chat_response_choice"] = chunk.choices[0].model_dump()
 
         elif isinstance(chunk, ChatCompletionChunk):
+            # Store usage information from the chunk if available (typically in the last chunk)
+            if hasattr(chunk, "usage") and chunk.usage is not None:
+                mot._meta["oai_streaming_usage"] = chunk.usage.model_dump()
+
+            # Some chunks (like the final usage chunk) may not have choices
+            if len(chunk.choices) == 0:
+                return
+
             message_delta = chunk.choices[0].delta
             if hasattr(message_delta, "reasoning_content"):
                 thinking_chunk = message_delta.reasoning_content  # type: ignore
@@ -604,9 +616,13 @@ class OpenAIBackend(FormatterBackend):
         generate_log.result = mot
         mot._generate_log = generate_log
 
-        # Extract token usage from response
+        # Extract token usage from response or streaming usage
         response = mot._meta["oai_chat_response"]
         usage = response.get("usage") if isinstance(response, dict) else None
+
+        # For streaming responses, usage is stored separately
+        if usage is None:
+            usage = mot._meta.get("oai_streaming_usage")
 
         # Record metrics if enabled
         from ..telemetry.metrics import is_metrics_enabled
