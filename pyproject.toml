@@ -255,7 +255,6 @@ addopts = [
     # Run qualitative tests by default (use -m "not qualitative" for fast tests)
     "--cov=mellea",
     "--cov=cli",
-    "--cov-report=term",
     "--cov-report=html",
     "--cov-report=json",
     # Set timeout to 15 minutes for full test suite
