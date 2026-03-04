@@ -39,6 +39,21 @@ Shows how to use custom validation functions for complex requirements.
 - Using `simple_validate()` helper
 - Combining multiple validation strategies
 
+### qiskit_code_validation.py
+Advanced example demonstrating IVR pattern for code generation with external validation tools.
+
+**Key Features:**
+- Pre-condition validation (prompt and input code)
+- Post-condition validation (generated code against QKT rules)
+- Integration with external linters (flake8-qiskit-migration)
+- Automatic repair loop with detailed error feedback
+- Code extraction from markdown blocks
+- Real-world use case: fixing deprecated Qiskit APIs
+
+**Requirements:**
+- `flake8-qiskit-migration`: Install with `uv pip install flake8-qiskit-migration`
+- Ollama backend with a Qiskit-capable model (e.g., mistral-small-3.2-24b-qiskit-GGUF)
+
 ## Concepts Demonstrated
 
 - **Instruct**: Generating outputs with natural language instructions
