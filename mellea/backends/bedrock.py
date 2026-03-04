@@ -5,6 +5,7 @@ import os
 from openai import OpenAI
 from openai.pagination import SyncPage
 
+from mellea.backends.litellm import LiteLLMBackend
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.openai import OpenAIBackend
 
@@ -38,7 +39,46 @@ def stringify_mantle_model_ids(region: str | None = None) -> str:
     return f" * {model_names}"
 
 
-def create_bedrock_mantle_backend(
+def create_bedrock_litellm_backend(
+    model_id: ModelIdentifier | str, region: str | None = None
+) -> LiteLLMBackend:
+    """Returns a LiteLLM backend that points to Bedrock for model `model_id`.
+
+    Use this instead of `create_bedrock_openai_backend` when you need auth with an AWS_ACCESS_KEY_ID.
+    """
+    assert "AWS_ACCESS_KEY_ID" in os.environ, (
+        "You must specify a AWS_ACCESS_KEY_ID environment variable. To use a Bedrock API Key instead, use create_bedrock_openai_backend"
+    )
+    assert "AWS_SECRET_ACCESS_KEY" in os.environ, (
+        "You must specify a AWS_SECRET_ACCESS_KEY environment variable. To use a Bedrock API Key instead, use create_bedrock_openai_backend"
+    )
+
+    assert region is not None or "AWS_REGION_NAME" in os.environ, (
+        "you must specify a region."
+    )
+    region = region if region is not None else os.environ["AWS_REGION_NAME"]
+
+    model_name = ""
+    match model_id:
+        case ModelIdentifier() if model_id.bedrock_name is None:
+            raise Exception(
+                f"We do not have a known bedrock model identifier for {model_id}. If Bedrock supports this model, please pass the model_id string directly and  open an issue to add the model id: https://github.com/generative-computing/mellea/issues/new"
+            )
+        case ModelIdentifier() if model_id.bedrock_name is not None:
+            assert model_id.bedrock_name is not None  # for type checker help.
+            model_name = model_id.bedrock_name
+        case str():
+            model_name = model_id
+    assert model_name != "", (
+        f"Model identifier {model_id} does not psecify a bedrock_name."
+    )
+
+    backend = LiteLLMBackend(model_id=model_name)
+    backend._base_url = None  # TODO litellm doesn't even appear to use this...?
+    return backend
+
+
+def create_bedrock_openai_backend(
     model_id: ModelIdentifier | str, region: str | None = None
 ) -> OpenAIBackend:
     """Returns an OpenAI backend that points to Bedrock mantle for model `model_id`."""

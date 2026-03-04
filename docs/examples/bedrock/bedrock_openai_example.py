@@ -11,7 +11,7 @@ import os
 
 from mellea import MelleaSession
 from mellea.backends import model_ids
-from mellea.backends.bedrock import create_bedrock_mantle_backend
+from mellea.backends.bedrock import create_bedrock_openai_backend
 from mellea.backends.openai import OpenAIBackend
 from mellea.stdlib.context import ChatContext
 
@@ -22,7 +22,7 @@ assert "AWS_BEARER_TOKEN_BEDROCK" in os.environ.keys(), (
 )
 
 m = MelleaSession(
-    backend=create_bedrock_mantle_backend(model_id=model_ids.OPENAI_GPT_OSS_120B),
+    backend=create_bedrock_openai_backend(model_id=model_ids.OPENAI_GPT_OSS_120B),
     ctx=ChatContext(),
 )
 
