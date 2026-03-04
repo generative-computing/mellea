@@ -423,7 +423,8 @@ class TestFireAndForgetMode:
 
         await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
 
-        assert order == ["faf", "enforce"]
+        await asyncio.sleep(0.05)
+        assert order == ["enforce", "faf"]
 
     @pytest.mark.asyncio
     async def test_fire_and_forget_mode_stored_correctly_in_hook_meta(self):

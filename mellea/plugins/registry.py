@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 _MODE_MAP: dict[PluginMode, Any] = {}
 if _HAS_PLUGIN_FRAMEWORK:
     _MODE_MAP = {
-        PluginMode.ENFORCE: _CFPluginMode.ENFORCE,
+        PluginMode.ENFORCE: _CFPluginMode.SEQUENTIAL,
         PluginMode.PERMISSIVE: _CFPluginMode.PERMISSIVE,
-        PluginMode.FIRE_AND_FORGET: _CFPluginMode.OBSERVE,
+        PluginMode.FIRE_AND_FORGET: _CFPluginMode.FIRE_AND_FORGET,
     }
 
 
