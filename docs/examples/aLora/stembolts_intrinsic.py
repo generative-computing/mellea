@@ -5,7 +5,7 @@
 import mellea.stdlib.functional as mfuncs
 from mellea.backends import Backend
 from mellea.backends.adapters import AdapterMixin
-from mellea.backends.adapters.adapter import CustomGraniteCommonAdapter
+from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
 from mellea.core import Context
 from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import Intrinsic
@@ -15,7 +15,7 @@ _INTRINSIC_MODEL_ID = "nfulton/stembolts"
 _INTRINSIC_ADAPTER_NAME = "stembolts"
 
 
-class StemboltAdapter(CustomGraniteCommonAdapter):
+class StemboltAdapter(CustomIntrinsicAdapter):
     def __init__(self, base_model_name: str):
         super().__init__(
             model_id=_INTRINSIC_MODEL_ID,

@@ -1,10 +1,9 @@
-# pytest: skip, huggingface, requires_heavy_ram, llm
-# SKIP REASON: Example broken since intrinsics refactor - see issue #385
+# pytest: huggingface, requires_heavy_ram, llm
 
 import time
 
 from mellea import MelleaSession
-from mellea.backends.adapters.adapter import CustomGraniteCommonAdapter
+from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
 from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core import GenerateLog
@@ -18,7 +17,7 @@ backend = LocalHFBackend(
 m = MelleaSession(backend=backend, ctx=ChatContext())
 
 
-class StemboltAdapter(CustomGraniteCommonAdapter):
+class StemboltAdapter(CustomIntrinsicAdapter):
     def __init__(self):
         super().__init__(
             model_id="nfulton/stembolts",

@@ -1,3 +1,6 @@
+# pytest: skip, huggingface, requires_heavy_ram, llm
+# SKIP REASON: Requires user input; tests same functionality as 101_example.py.
+
 from stembolts_intrinsic import (
     async_stembolt_failure_analysis,
     stembolt_failure_analysis,

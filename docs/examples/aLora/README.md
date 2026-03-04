@@ -91,9 +91,9 @@ The generator will display the README and ask for confirmation before uploading 
 You can now create a new adapter class for this model somewhere in your python project:
 
 ```python
-from mellea.backends.adapters.adapter import CustomGraniteCommonAdapter
+from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
 
-class StemboltAdapter(CustomGraniteCommonAdapter):
+class StemboltAdapter(CustomIntrinsicAdapter):
     def __init__(self, base_model_name:str="granite-4.0-micro"):
         super().__init__(
             model_id="$USERNAME/stembolts", # REPLACE $USERNAME WITH YOUR HUGGINGFACE USERNAME

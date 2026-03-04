@@ -41,8 +41,7 @@ dependencies = [
     "click<8.2.0", # Newer versions will cause errors with --help in typer CLIs.
     "mistletoe>=1.4.0",
     "huggingface-hub>=0.33.4",
-    "pillow",
-    "granite-common>=0.3.6", # Needed for Intrinsics (HF and OpenAI Backends).
+    "pillow", # Needed for Intrinsics (HF and OpenAI Backends).
     "math_verify", # Needed for Majority Voting Sampling Strategies.
     "rouge_score", # Needed for Majority Voting Sampling Strategies.
     "llm-sandbox[docker]>=0.3.23",
@@ -61,10 +60,10 @@ hf = [
     "accelerate>=1.9.0",
     "datasets>=4.0.0",
     "llguidance",
-    "peft>=0.18.1",  # Native aLoRA support added in PEFT 0.18.0
+    "peft>=0.18.1", # Native aLoRA support added in PEFT 0.18.0
     "transformers>=4.53.2,<5",
     "trl==0.19.1",
-    "granite-common[transformers]",
+    "xgrammar", # Necessary for granite_common intrinsics.
 ]
 
 vllm = [
@@ -119,6 +118,8 @@ dev = [
     "python-semantic-release~=7.32",
     "nbmake>=1.5.5",
     "langchain-core>=1.2.7", # Necessary for mypy and some tool tests
+    "sentencepiece==0.2.1", # Necessary for test_huggingface_tools test because of Mistral model
+    "jsonschema",
 ]
 
 notebook = [
@@ -131,6 +132,13 @@ docs = [
     "sphinx_rtd_theme",
     "sphinx-autodoc-typehints",
     "sphinx_mdinclude",
+]
+
+# Necessary for granite retriever.
+granite_common_retriever = [
+    "sentence-transformers",
+    "pyarrow",
+    "elasticsearch>=8.0.0,<9.0.0"
 ]
 
 [tool.ruff]
@@ -255,7 +263,6 @@ addopts = [
     # Run qualitative tests by default (use -m "not qualitative" for fast tests)
     "--cov=mellea",
     "--cov=cli",
-    "--cov-report=term",
     "--cov-report=html",
     "--cov-report=json",
     # Set timeout to 15 minutes for full test suite
