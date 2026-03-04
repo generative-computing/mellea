@@ -395,9 +395,7 @@ def get_metric_value(metrics_data, metric_name, attributes=None):
 @pytest.mark.llm
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
-async def test_ollama_token_metrics_integration(
-    enable_metrics, metric_reader, stream
-):
+async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, stream):
     """Test that Ollama backend records token metrics correctly."""
     from mellea.backends.model_options import ModelOption
     from mellea.backends.ollama import OllamaModelBackend
@@ -449,9 +447,7 @@ async def test_ollama_token_metrics_integration(
 @pytest.mark.llm
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
-async def test_openai_token_metrics_integration(
-    enable_metrics, metric_reader, stream
-):
+async def test_openai_token_metrics_integration(enable_metrics, metric_reader, stream):
     """Test that OpenAI backend records token metrics correctly using Ollama's OpenAI-compatible endpoint."""
     from mellea.backends.model_options import ModelOption
     from mellea.backends.openai import OpenAIBackend
