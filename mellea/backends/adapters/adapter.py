@@ -5,10 +5,10 @@ import pathlib
 import re
 from typing import TypeVar
 
-import granite_common.intrinsics
 import yaml
 
 from ...core import Backend
+from ...formatters.granite import intrinsics as intrinsics
 from ...helpers import _ServerType
 from .catalog import AdapterType, fetch_intrinsic_metadata
 
@@ -46,13 +46,21 @@ class LocalHFAdapter(Adapter):
         """Returns the path needed to load the adapter.
 
         Args:
-            base_model_name: the base model; typically the last part of the huggingface model id like "granite-3.3-8b-instruct"
+            base_model_name: the base model; typically the last part of the Hugging Face model id like "granite-4.0-micro"
         """
         ...
 
 
-class GraniteCommonAdapter(LocalHFAdapter):
-    """Adapter for intrinsics that utilize the ``granite-common`` library."""
+class IntrinsicAdapter(LocalHFAdapter):
+    """Base class for adapters that implement intrinsics.
+
+    Subtype of :class:`Adapter` for models that:
+    * implement intrinsic functions
+    * are packaged as LoRA or aLoRA adapters on top of a base model
+    * use the shared model loading code in ``mellea.formatters.granite.intrinsics``
+    * use the shared input and output processing code in
+      ``mellea.formatters.granite.intrinsics``
+    """
 
     def __init__(
         self,
@@ -62,7 +70,7 @@ class GraniteCommonAdapter(LocalHFAdapter):
         config_dict: dict | None = None,
         base_model_name: str | None = None,
     ):
-        """Entry point for creating GraniteCommonAdapter objects.
+        """Entry point for creating IntrinsicAdapter objects.
 
         An adapter that can be added to either an `OpenAIBackend` or a `LocalHFBackend`.
         Most intrinsics support LoRA or aLoRA adapter types.
@@ -74,7 +82,7 @@ class GraniteCommonAdapter(LocalHFAdapter):
             config_file: optional; file for defining the intrinsic / transformations
             config_dict: optional; dict for defining the intrinsic / transformations
             base_model_name: optional; if provided with no config_file/config_dict,
-                will be used to look up the granite_common config for this adapter
+                will be used to look up the IO processing config for this adapter
         """
         super().__init__(intrinsic_name, adapter_type)
 
@@ -112,7 +120,7 @@ class GraniteCommonAdapter(LocalHFAdapter):
                 f"{adapter_type} not supported"
             )
             is_alora = self.adapter_type == AdapterType.ALORA
-            config_file = granite_common.intrinsics.obtain_io_yaml(
+            config_file = intrinsics.obtain_io_yaml(
                 self.intrinsic_name,
                 self.base_model_name,
                 self.intrinsic_metadata.repo_id,
@@ -150,7 +158,7 @@ class GraniteCommonAdapter(LocalHFAdapter):
         """
         is_alora = self.adapter_type == AdapterType.ALORA
         return str(
-            granite_common.intrinsics.obtain_lora(
+            intrinsics.obtain_lora(
                 self.intrinsic_name,
                 base_model_name,
                 self.intrinsic_metadata.repo_id,
@@ -220,8 +228,19 @@ class AdapterMixin(Backend, abc.ABC):
         )
 
 
-class CustomGraniteCommonAdapter(GraniteCommonAdapter):
-    """A custom granite adapter."""
+class CustomIntrinsicAdapter(IntrinsicAdapter):
+    """Special class for users to subclass.
+
+    The documentation says that any developer who creates an intrinsic should create
+    a subclass of this class. Creating a subclass of this class appears to be a cosmetic
+    boilerplate development task that isn't actually to be necessary for any existing
+    use case.
+
+    This class has the same functionality as `IntrinsicsAdapter`, except that its
+    constructor monkey-patches Mellea global variables to enable the backend to load
+    the user's adapter. The code that performs this monkey-patching is marked as a
+    temporary hack.
+    """
 
     def __init__(
         self, *, model_id: str, intrinsic_name: str | None = None, base_model_name: str

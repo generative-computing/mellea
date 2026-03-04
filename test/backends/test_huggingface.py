@@ -28,7 +28,7 @@ pytestmark = [
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
-from mellea.backends.adapters import GraniteCommonAdapter
+from mellea.backends.adapters import IntrinsicAdapter
 from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.huggingface import LocalHFBackend, _assert_correct_adapters
 from mellea.core import (
@@ -58,12 +58,10 @@ def backend():
         cache=SimpleLRUCache(5),
     )
     backend.add_adapter(
-        GraniteCommonAdapter(
-            "requirement_check", base_model_name=backend.base_model_name
-        )
+        IntrinsicAdapter("requirement_check", base_model_name=backend.base_model_name)
     )
     backend.add_adapter(
-        GraniteCommonAdapter("answerability", base_model_name=backend.base_model_name)
+        IntrinsicAdapter("answerability", base_model_name=backend.base_model_name)
     )
     return backend
 
@@ -344,11 +342,9 @@ async def test_generate_with_lock(backend) -> None:
     b._added_adapters = {}
     b._loaded_adapters = {}
     b.add_adapter(
-        GraniteCommonAdapter("requirement_check", base_model_name=b.base_model_name)
+        IntrinsicAdapter("requirement_check", base_model_name=b.base_model_name)
     )
-    b.add_adapter(
-        GraniteCommonAdapter("answerability", base_model_name=b.base_model_name)
-    )
+    b.add_adapter(IntrinsicAdapter("answerability", base_model_name=b.base_model_name))
 
     memoized: dict[torch.Tensor, str] = dict()
     gen_func = model.generate
@@ -520,7 +516,7 @@ async def test_error_during_generate_with_lock(backend) -> None:
     b._added_adapters = {}
     b._loaded_adapters = {}
     b.add_adapter(
-        GraniteCommonAdapter("requirement_check", base_model_name=b.base_model_name)
+        IntrinsicAdapter("requirement_check", base_model_name=b.base_model_name)
     )
 
     regular_generate = b._model.generate
