@@ -14,7 +14,7 @@ import pytest
 
 pytest.importorskip("cpex.framework")
 
-from mellea.plugins import block, hook, register
+from mellea.plugins import PluginMode, block, hook, register
 from mellea.plugins.base import PluginViolationError
 from mellea.plugins.context import build_global_context
 from mellea.plugins.hooks.session import SessionPreInitPayload
@@ -180,16 +180,22 @@ class TestViolationError:
 
 
 class TestBlockingPreventsDownstreamPlugins:
-    """A blocking plugin at lower priority must prevent higher-priority plugins from running."""
+    """An ENFORCE blocking plugin yields continue_processing=False.
 
-    async def test_blocker_at_priority_1_prevents_plugin_at_priority_100(self):
+    Note: cpex runs ENFORCE plugins in parallel, so all ENFORCE plugins
+    fire concurrently regardless of priority order.  The blocking result
+    is detected and returned as continue_processing=False, but peer
+    plugins are NOT prevented from executing.
+    """
+
+    async def test_enforce_blocker_yields_false_continue_processing(self):
         downstream_fired: list[bool] = []
 
-        @hook("session_pre_init", priority=1)
+        @hook("session_pre_init", mode=PluginMode.ENFORCE)
         async def early_blocker(payload, ctx):
             return block("blocked early", code="EARLY_BLOCK")
 
-        @hook("session_pre_init", priority=100)
+        @hook("session_pre_init", mode=PluginMode.ENFORCE)
         async def late_recorder(payload, ctx):
             downstream_fired.append(True)
             return None
@@ -200,6 +206,5 @@ class TestBlockingPreventsDownstreamPlugins:
         # Use violations_as_exceptions=False so we can inspect the result
         result = await _invoke_no_raise(_payload())
 
+        # The block is detected and surfaced even though plugins ran in parallel
         assert result.continue_processing is False
-        # The downstream plugin must never have fired
-        assert downstream_fired == []

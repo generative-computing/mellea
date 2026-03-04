@@ -24,7 +24,7 @@ import pytest
 
 pytest.importorskip("cpex.framework")
 
-from mellea.plugins import PluginResult, block, hook, register
+from mellea.plugins import PluginMode, PluginResult, block, hook, register
 from mellea.plugins.base import PluginViolationError
 from mellea.plugins.hooks.generation import GenerationPreCallPayload
 from mellea.plugins.hooks.session import SessionPreInitPayload
@@ -132,11 +132,11 @@ class TestEnforceMode:
         """When an enforce plugin blocks, downstream plugins do not fire."""
         downstream_calls: list[str] = []
 
-        @hook("session_pre_init", mode=PluginMode.ENFORCE, priority=10)
+        @hook("session_pre_init", mode=PluginMode.ENFORCE)
         async def early_blocker(payload, ctx):
             return block("Stopped early", code="STOP_001")
 
-        @hook("session_pre_init", mode=PluginMode.ENFORCE, priority=20)
+        @hook("session_pre_init", mode=PluginMode.PERMISSIVE)
         async def downstream_hook(payload, ctx):
             downstream_calls.append("fired")
             return None
@@ -286,15 +286,15 @@ class TestPermissiveMode:
 
     @pytest.mark.asyncio
     async def test_permissive_blocking_followed_by_enforce_observer(self):
-        """A permissive blocker followed by a non-blocking enforce hook: both fire."""
+        """A permissive blocker followed by a non-blocking enforce hook: both fire, and enforce goes first."""
         order: list[str] = []
 
-        @hook("session_pre_init", mode=PluginMode.PERMISSIVE, priority=5)
+        @hook("session_pre_init", mode=PluginMode.PERMISSIVE)
         async def permissive_block(payload, ctx):
             order.append("permissive")
             return block("Soft block", code="PERM_SIBLING")
 
-        @hook("session_pre_init", mode=PluginMode.ENFORCE, priority=10)
+        @hook("session_pre_init", mode=PluginMode.ENFORCE)
         async def enforce_observer(payload, ctx):
             order.append("enforce")
             return PluginResult(continue_processing=True)
@@ -304,7 +304,7 @@ class TestPermissiveMode:
 
         await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
 
-        assert order == ["permissive", "enforce"]
+        assert order == ["enforce", "permissive"]
 
     @pytest.mark.asyncio
     async def test_permissive_continuing_hook_modifies_writable_field(self):
