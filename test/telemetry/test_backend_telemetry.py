@@ -7,6 +7,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from mellea.backends.model_ids import (
+    IBM_GRANITE_4_HYBRID_MICRO,
+    IBM_GRANITE_4_HYBRID_SMALL,
+)
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
@@ -100,7 +104,7 @@ async def test_span_duration_captures_async_operation(span_exporter, gh_run):
     if gh_run:
         pytest.skip("Skipping in CI - requires Ollama")
 
-    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
@@ -146,7 +150,7 @@ async def test_context_propagation_parent_child(span_exporter, gh_run):
     if gh_run:
         pytest.skip("Skipping in CI - requires Ollama")
 
-    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
@@ -191,7 +195,7 @@ async def test_token_usage_recorded_after_completion(span_exporter, gh_run):
     if gh_run:
         pytest.skip("Skipping in CI - requires Ollama")
 
-    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
@@ -242,7 +246,7 @@ async def test_span_not_closed_prematurely(span_exporter, gh_run):
     if gh_run:
         pytest.skip("Skipping in CI - requires Ollama")
 
-    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Count to 5"))
 
@@ -278,7 +282,7 @@ async def test_multiple_generations_separate_spans(span_exporter, gh_run):
     if gh_run:
         pytest.skip("Skipping in CI - requires Ollama")
 
-    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test'"))
 
@@ -314,7 +318,7 @@ async def test_streaming_span_duration(span_exporter, gh_run):
 
     from mellea.backends.model_options import ModelOption
 
-    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Count to 3"))
 
@@ -392,12 +396,9 @@ def get_metric_value(metrics_data, metric_name, attributes=None):
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_ollama_token_metrics_integration(
-    enable_metrics, metric_reader, gh_run, stream
+    enable_metrics, metric_reader, stream
 ):
     """Test that Ollama backend records token metrics correctly."""
-    if gh_run:
-        pytest.skip("Skipping in CI - requires Ollama")
-
     from mellea.backends.model_options import ModelOption
     from mellea.backends.ollama import OllamaModelBackend
     from mellea.telemetry import metrics as metrics_module
@@ -408,7 +409,7 @@ async def test_ollama_token_metrics_integration(
     metrics_module._input_token_counter = None
     metrics_module._output_token_counter = None
 
-    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
@@ -449,12 +450,9 @@ async def test_ollama_token_metrics_integration(
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_openai_token_metrics_integration(
-    enable_metrics, metric_reader, gh_run, stream
+    enable_metrics, metric_reader, stream
 ):
     """Test that OpenAI backend records token metrics correctly using Ollama's OpenAI-compatible endpoint."""
-    if gh_run:
-        pytest.skip("Skipping in CI - requires Ollama")
-
     from mellea.backends.model_options import ModelOption
     from mellea.backends.openai import OpenAIBackend
     from mellea.telemetry import metrics as metrics_module
@@ -467,7 +465,7 @@ async def test_openai_token_metrics_integration(
 
     # Use Ollama's OpenAI-compatible endpoint
     backend = OpenAIBackend(
-        model_id="llama3.2:1b",
+        model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name,  # type: ignore
         base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
         api_key="ollama",
     )
@@ -507,11 +505,8 @@ async def test_openai_token_metrics_integration(
 @pytest.mark.llm
 @pytest.mark.watsonx
 @pytest.mark.requires_api_key
-async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader, gh_run):
+async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
     """Test that WatsonX backend records token metrics correctly."""
-    if gh_run:
-        pytest.skip("Skipping in CI - requires WatsonX credentials")
-
     if not os.getenv("WATSONX_API_KEY"):
         pytest.skip("WATSONX_API_KEY not set")
 
@@ -525,7 +520,7 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader, 
     metrics_module._output_token_counter = None
 
     backend = WatsonxAIBackend(
-        model_id="ibm/granite-4-h-small",
+        model_id=IBM_GRANITE_4_HYBRID_SMALL.watsonx_name,  # type: ignore
         project_id=os.getenv("WATSONX_PROJECT_ID", "test-project"),
     )
     ctx = SimpleContext()
@@ -560,12 +555,9 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader, 
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_litellm_token_metrics_integration(
-    enable_metrics, metric_reader, gh_run, monkeypatch, stream
+    enable_metrics, metric_reader, monkeypatch, stream
 ):
     """Test that LiteLLM backend records token metrics correctly using OpenAI-compatible endpoint."""
-    if gh_run:
-        pytest.skip("Skipping in CI - requires Ollama")
-
     from mellea.backends.litellm import LiteLLMBackend
     from mellea.backends.model_options import ModelOption
     from mellea.telemetry import metrics as metrics_module
@@ -583,7 +575,9 @@ async def test_litellm_token_metrics_integration(
 
     # Use LiteLLM with openai/ prefix - it will use the OPENAI_BASE_URL env var
     # This tests LiteLLM with a provider that properly returns token usage
-    backend = LiteLLMBackend(model_id="openai/llama3.2:1b")
+    backend = LiteLLMBackend(
+        model_id=f"openai/{IBM_GRANITE_4_HYBRID_MICRO.ollama_name}"
+    )  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
@@ -621,12 +615,9 @@ async def test_litellm_token_metrics_integration(
 @pytest.mark.huggingface
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_huggingface_token_metrics_integration(
-    enable_metrics, metric_reader, gh_run, stream
+    enable_metrics, metric_reader, stream
 ):
     """Test that HuggingFace backend records token metrics correctly."""
-    if gh_run:
-        pytest.skip("Skipping in CI - requires model download")
-
     from mellea.backends.huggingface import LocalHFBackend
     from mellea.backends.model_options import ModelOption
     from mellea.telemetry import metrics as metrics_module
@@ -640,7 +631,8 @@ async def test_huggingface_token_metrics_integration(
     from mellea.backends.cache import SimpleLRUCache
 
     backend = LocalHFBackend(
-        model_id="ibm-granite/granite-4.0-micro", cache=SimpleLRUCache(5)
+        model_id=IBM_GRANITE_4_HYBRID_MICRO.hf_model_name,  # type: ignore
+        cache=SimpleLRUCache(5),
     )
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
