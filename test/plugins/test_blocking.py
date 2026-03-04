@@ -18,8 +18,7 @@ from mellea.plugins import PluginMode, block, hook, register
 from mellea.plugins.base import PluginViolationError
 from mellea.plugins.context import build_global_context
 from mellea.plugins.hooks.session import SessionPreInitPayload
-from mellea.plugins.manager import (ensure_plugin_manager, invoke_hook,
-                                    shutdown_plugins)
+from mellea.plugins.manager import ensure_plugin_manager, invoke_hook, shutdown_plugins
 from mellea.plugins.types import HookType
 
 # ---------------------------------------------------------------------------

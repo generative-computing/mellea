@@ -11,14 +11,15 @@ behavior summary
   result returned to Mellea always has ``continue_processing=True``, so ``invoke_hook``
   does NOT raise.
 
-- ``mode=FIRE_AND_FORGET``: currently mapped to ``PluginMode.ENFORCE`` at the
-  ContextForge level (implementation deferred; see registry.py comment).  It therefore
-  behaves identically to enforce in the current codebase: a blocking result raises
-  ``PluginViolationError``, and the hook is awaited inline (not dispatched as a
-  background task).
+- ``mode=FIRE_AND_FORGET``: mapped to ``PluginMode.OBSERVE`` at the ContextForge level.
+  The hook is dispatched as a background ``asyncio.create_task`` and the pipeline
+  continues immediately.  Violations are logged but never raised as exceptions, and
+  payload modifications are discarded (the pipeline sees the original payload).
 """
 
 from __future__ import annotations
+
+import asyncio
 
 import pytest
 
@@ -331,21 +332,19 @@ class TestPermissiveMode:
 
 
 class TestFireAndForgetMode:
-    """mode=FIRE_AND_FORGET: currently mapped to ENFORCE at the ContextForge level.
+    """mode=FIRE_AND_FORGET: mapped to PluginMode.OBSERVE at the ContextForge level.
 
     The Mellea registry maps PluginMode.FIRE_AND_FORGET to the ContextForge
-    PluginMode.ENFORCE (see mellea/plugins/registry.py: "fire_and_forget deferred --
-    store as enforce for now").  Consequently, the runtime behavior is identical
-    to enforce mode:
+    PluginMode.OBSERVE (see mellea/plugins/registry.py).  Consequently:
 
-    - The hook is awaited inline (not dispatched as a background task).
-    - A violation raises PluginViolationError.
-    - A non-blocking result does not raise and modifications are applied normally.
+    - The hook is dispatched as a background asyncio.create_task (not awaited inline).
+    - Violations are logged but never raised as PluginViolationError.
+    - Payload modifications are discarded; the pipeline sees the original payload.
     """
 
     @pytest.mark.asyncio
-    async def test_fire_and_forget_hook_executes_inline(self):
-        """A non-blocking fire-and-forget hook fires and records its invocation."""
+    async def test_fire_and_forget_hook_executes_as_background_task(self):
+        """A fire-and-forget hook fires as a background task and records its invocation."""
         invocations: list[str] = []
 
         @hook("session_pre_init", mode=PluginMode.FIRE_AND_FORGET)
@@ -357,17 +356,17 @@ class TestFireAndForgetMode:
 
         await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
 
-        # Under the current ENFORCE mapping the hook is awaited inline; the side effect
-        # is guaranteed without any event-loop yield.
+        # The hook runs as a background asyncio task; yield to the event loop to
+        # allow it to complete before asserting.
+        await asyncio.sleep(0.05)
         assert invocations == ["fired"]
 
     @pytest.mark.asyncio
-    async def test_fire_and_forget_blocking_raises_violation_error(self):
-        """A blocking fire-and-forget hook raises PluginViolationError (current behavior).
+    async def test_fire_and_forget_blocking_does_not_raise(self):
+        """A blocking fire-and-forget hook does NOT raise PluginViolationError.
 
-        Note: this reflects the *current* implementation where FIRE_AND_FORGET is
-        mapped to ENFORCE at the ContextForge level.  A future implementation using
-        asyncio.create_task would change this; update the test at that point.
+        In OBSERVE mode violations are logged but never propagated — background
+        tasks cannot halt the pipeline.
         """
 
         @hook("session_pre_init", mode=PluginMode.FIRE_AND_FORGET)
@@ -376,18 +375,18 @@ class TestFireAndForgetMode:
 
         register(faf_blocker)
 
-        with pytest.raises(PluginViolationError) as exc_info:
-            await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
-
-        assert exc_info.value.code == "FAF_001"
-        assert exc_info.value.hook_type == "session_pre_init"
+        # Should complete without raising even though the hook returns block().
+        result, payload = await invoke_hook(
+            HookType.SESSION_PRE_INIT, _session_payload()
+        )
+        assert result.continue_processing is True
 
     @pytest.mark.asyncio
-    async def test_fire_and_forget_writable_field_modification_is_applied(self):
-        """A non-blocking fire-and-forget hook that modifies a writable field applies the change.
+    async def test_fire_and_forget_writable_field_modification_is_not_applied(self):
+        """A fire-and-forget hook that modifies a writable field does NOT affect the pipeline.
 
-        Because the hook is awaited inline under the current ENFORCE mapping, payload
-        modification follows the same code path as a standard enforce-mode hook.
+        In OBSERVE mode the hook receives a copy of the payload; its modifications are
+        discarded and the original payload is returned to the caller unchanged.
         """
 
         @hook("session_pre_init", mode=PluginMode.FIRE_AND_FORGET)
@@ -402,7 +401,7 @@ class TestFireAndForgetMode:
             HookType.SESSION_PRE_INIT, payload
         )
 
-        assert returned_payload.backend_name == "modified-backend"
+        assert returned_payload.backend_name == "original-backend"
 
     @pytest.mark.asyncio
     async def test_fire_and_forget_non_blocking_does_not_stop_downstream(self):

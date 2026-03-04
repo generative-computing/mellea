@@ -28,8 +28,7 @@ if _HAS_PLUGIN_FRAMEWORK:
     _MODE_MAP = {
         PluginMode.ENFORCE: _CFPluginMode.ENFORCE,
         PluginMode.PERMISSIVE: _CFPluginMode.PERMISSIVE,
-        # fire_and_forget deferred — store as enforce for now
-        PluginMode.FIRE_AND_FORGET: _CFPluginMode.ENFORCE,
+        PluginMode.FIRE_AND_FORGET: _CFPluginMode.OBSERVE,
     }
 
 

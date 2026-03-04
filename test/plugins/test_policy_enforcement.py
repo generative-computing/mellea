@@ -13,8 +13,10 @@ import pytest
 pytest.importorskip("cpex.framework")
 
 from mellea.plugins import PluginMode, PluginResult, hook, register
-from mellea.plugins.hooks.component import (ComponentPostErrorPayload,
-                                            ComponentPreCreatePayload)
+from mellea.plugins.hooks.component import (
+    ComponentPostErrorPayload,
+    ComponentPreCreatePayload,
+)
 from mellea.plugins.hooks.generation import GenerationPreCallPayload
 from mellea.plugins.hooks.sampling import SamplingIterationPayload
 from mellea.plugins.hooks.session import SessionPreInitPayload

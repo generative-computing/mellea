@@ -3,8 +3,12 @@
 import pytest
 
 from mellea.plugins.base import MelleaBasePayload
-from mellea.plugins.manager import (ensure_plugin_manager, has_plugins,
-                                    invoke_hook, shutdown_plugins)
+from mellea.plugins.manager import (
+    ensure_plugin_manager,
+    has_plugins,
+    invoke_hook,
+    shutdown_plugins,
+)
 from mellea.plugins.types import HookType, PluginMode
 
 # These tests require the contextforge plugin framework

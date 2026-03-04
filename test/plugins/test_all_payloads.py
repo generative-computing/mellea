@@ -17,23 +17,32 @@ from pydantic import ValidationError
 pytest.importorskip("cpex.framework")
 
 from mellea.plugins.base import MelleaBasePayload
-from mellea.plugins.hooks.component import (ComponentPostCreatePayload,
-                                            ComponentPostErrorPayload,
-                                            ComponentPostSuccessPayload,
-                                            ComponentPreExecutePayload)
-from mellea.plugins.hooks.generation import (GenerationPostCallPayload,
-                                             GenerationStreamChunkPayload)
-from mellea.plugins.hooks.sampling import (SamplingIterationPayload,
-                                           SamplingLoopEndPayload,
-                                           SamplingLoopStartPayload,
-                                           SamplingRepairPayload)
-from mellea.plugins.hooks.session import (SessionCleanupPayload,
-                                          SessionPostInitPayload,
-                                          SessionResetPayload)
-from mellea.plugins.hooks.tool import (ToolPostInvokePayload,
-                                       ToolPreInvokePayload)
-from mellea.plugins.hooks.validation import (ValidationPostCheckPayload,
-                                             ValidationPreCheckPayload)
+from mellea.plugins.hooks.component import (
+    ComponentPostCreatePayload,
+    ComponentPostErrorPayload,
+    ComponentPostSuccessPayload,
+    ComponentPreExecutePayload,
+)
+from mellea.plugins.hooks.generation import (
+    GenerationPostCallPayload,
+    GenerationStreamChunkPayload,
+)
+from mellea.plugins.hooks.sampling import (
+    SamplingIterationPayload,
+    SamplingLoopEndPayload,
+    SamplingLoopStartPayload,
+    SamplingRepairPayload,
+)
+from mellea.plugins.hooks.session import (
+    SessionCleanupPayload,
+    SessionPostInitPayload,
+    SessionResetPayload,
+)
+from mellea.plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
+from mellea.plugins.hooks.validation import (
+    ValidationPostCheckPayload,
+    ValidationPreCheckPayload,
+)
 
 # ---------------------------------------------------------------------------
 # Sentinel objects used as stand-ins for live Mellea references (Any fields).
