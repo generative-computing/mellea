@@ -339,11 +339,12 @@ class ModelOutputThunk(CBlock, Generic[S]):
             # Always call post_process if computed, even on exception
             # This ensures telemetry spans are properly closed
             if self._computed:
-                assert self._post_process is not None
-                await self._post_process(self)
-
                 # Only parse if no exception occurred
                 if exception_to_raise is None:
+                    # DO NOT post_process. This means that the entire finally block needs to bermoved.
+                    assert self._post_process is not None
+                    await self._post_process(self)
+
                     match self._action:
                         case Component():
                             self.parsed_repr = self._action._parse(self)
