@@ -523,7 +523,7 @@ MELLEA_HOOK_PAYLOAD_POLICIES: dict[str, HookPayloadPolicy] = {
 
     # Tool Execution
     "tool_pre_invoke": HookPayloadPolicy(
-        writable_fields=frozenset({"tool_args"}),
+        writable_fields=frozenset({"model_tool_call"}),
     ),
     "tool_post_invoke": HookPayloadPolicy(
         writable_fields=frozenset({"tool_output"}),
@@ -1179,7 +1179,7 @@ SamplingRepairPayload(
 
 | Hook | Location | Trigger | Result Handling |
 |------|----------|---------|-----------------|
-| `tool_pre_invoke` | Before `tool.call_func()` (~L917) | Before tool call | Supports `tool_args` modification. Violation blocks tool call. |
+| `tool_pre_invoke` | Before `tool.call_func()` (~L917) | Before tool call | Supports `model_tool_call` replacement. Violation blocks tool call. |
 | `tool_post_invoke` | After `tool.call_func()` (~L919) | After tool call | Supports `tool_output` modification. Primarily observability. |
 
 ### 5.7 Backend Adapter Operations

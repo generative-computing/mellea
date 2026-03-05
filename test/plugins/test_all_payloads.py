@@ -943,49 +943,28 @@ class TestSamplingLoopEndPayload:
 class TestToolPreInvokePayload:
     def test_defaults(self):
         payload = ToolPreInvokePayload()
-        assert payload.tool_name == ""
-        assert payload.tool_args == {}
-        assert payload.tool_callable is None
         assert payload.model_tool_call is None
 
     def test_construction_with_values(self):
         payload = ToolPreInvokePayload(
-            tool_name="search_web",
-            tool_args={"query": "Paris capital", "max_results": 5},
-            tool_callable=_SENTINEL_CALLABLE,
             model_tool_call=_SENTINEL_TOOL_CALL,
             request_id="r-tool-001",
             hook="tool_pre_invoke",
         )
-        assert payload.tool_name == "search_web"
-        assert payload.tool_args == {"query": "Paris capital", "max_results": 5}
-        assert payload.tool_callable is _SENTINEL_CALLABLE
         assert payload.model_tool_call is _SENTINEL_TOOL_CALL
         assert payload.hook == "tool_pre_invoke"
 
     def test_frozen(self):
-        payload = ToolPreInvokePayload(tool_name="search_web")
+        payload = ToolPreInvokePayload(model_tool_call=_SENTINEL_TOOL_CALL)
         with pytest.raises(ValidationError):
-            payload.tool_name = "other_tool"
-
-    def test_frozen_tool_args(self):
-        payload = ToolPreInvokePayload(tool_args={"query": "hello"})
-        with pytest.raises(ValidationError):
-            payload.tool_args = {}
+            payload.model_tool_call = None
 
     def test_model_copy_creates_modified_copy(self):
-        payload = ToolPreInvokePayload(
-            tool_name="search_web",
-            tool_args={"query": "original"},
-            tool_callable=_SENTINEL_CALLABLE,
-        )
-        modified = payload.model_copy(
-            update={"tool_args": {"query": "modified", "limit": 10}}
-        )
-        assert modified.tool_args == {"query": "modified", "limit": 10}
-        assert payload.tool_args == {"query": "original"}
-        assert modified.tool_name == "search_web"
-        assert modified.tool_callable is _SENTINEL_CALLABLE
+        payload = ToolPreInvokePayload(model_tool_call=_SENTINEL_TOOL_CALL)
+        replacement = object()
+        modified = payload.model_copy(update={"model_tool_call": replacement})
+        assert modified.model_tool_call is replacement
+        assert payload.model_tool_call is _SENTINEL_TOOL_CALL
 
     def test_inherits_base_fields(self):
         assert issubclass(ToolPreInvokePayload, MelleaBasePayload)
@@ -999,8 +978,7 @@ class TestToolPreInvokePayload:
 class TestToolPostInvokePayload:
     def test_defaults(self):
         payload = ToolPostInvokePayload()
-        assert payload.tool_name == ""
-        assert payload.tool_args == {}
+        assert payload.model_tool_call is None
         assert payload.tool_output is None
         assert payload.tool_message is None
         assert payload.execution_time_ms == 0
@@ -1009,8 +987,7 @@ class TestToolPostInvokePayload:
 
     def test_construction_successful(self):
         payload = ToolPostInvokePayload(
-            tool_name="search_web",
-            tool_args={"query": "Paris capital"},
+            model_tool_call=_SENTINEL_TOOL_CALL,
             tool_output={"results": ["Paris is the capital of France"]},
             tool_message=_SENTINEL_TOOL_MESSAGE,
             execution_time_ms=87,
@@ -1018,7 +995,7 @@ class TestToolPostInvokePayload:
             error=None,
             request_id="r-tool-post-001",
         )
-        assert payload.tool_name == "search_web"
+        assert payload.model_tool_call is _SENTINEL_TOOL_CALL
         assert payload.tool_output == {"results": ["Paris is the capital of France"]}
         assert payload.tool_message is _SENTINEL_TOOL_MESSAGE
         assert payload.execution_time_ms == 87
@@ -1027,8 +1004,7 @@ class TestToolPostInvokePayload:
 
     def test_construction_failed(self):
         payload = ToolPostInvokePayload(
-            tool_name="search_web",
-            tool_args={"query": "bad query"},
+            model_tool_call=_SENTINEL_TOOL_CALL,
             success=False,
             error=_SENTINEL_ERROR,
             execution_time_ms=12,
@@ -1042,10 +1018,10 @@ class TestToolPostInvokePayload:
         with pytest.raises(ValidationError):
             payload.success = False
 
-    def test_frozen_tool_name(self):
-        payload = ToolPostInvokePayload(tool_name="search_web")
+    def test_frozen_model_tool_call(self):
+        payload = ToolPostInvokePayload(model_tool_call=_SENTINEL_TOOL_CALL)
         with pytest.raises(ValidationError):
-            payload.tool_name = "other_tool"
+            payload.model_tool_call = None
 
     def test_frozen_execution_time(self):
         payload = ToolPostInvokePayload(execution_time_ms=50)
@@ -1054,7 +1030,7 @@ class TestToolPostInvokePayload:
 
     def test_model_copy_creates_modified_copy(self):
         payload = ToolPostInvokePayload(
-            tool_name="search_web",
+            model_tool_call=_SENTINEL_TOOL_CALL,
             success=False,
             error=_SENTINEL_ERROR,
             execution_time_ms=10,
@@ -1068,7 +1044,7 @@ class TestToolPostInvokePayload:
         assert payload.success is False
         assert payload.error is _SENTINEL_ERROR
         assert payload.execution_time_ms == 10
-        assert modified.tool_name == "search_web"
+        assert modified.model_tool_call is _SENTINEL_TOOL_CALL
 
     def test_tool_output_various_types(self):
         payload_str = ToolPostInvokePayload(tool_output="plain string result")

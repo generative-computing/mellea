@@ -354,7 +354,7 @@ def apply_policy(
 | `sampling_repair` | `repair_action`, `repair_context` |
 | `sampling_loop_end` | `final_result` |
 | **Tool Execution** | |
-| `tool_pre_invoke` | `tool_args` |
+| `tool_pre_invoke` | `model_tool_call` |
 | `tool_post_invoke` | `tool_output` |
 | **Backend Adapter Ops** | |
 | `adapter_pre_load` | *(observe-only)* |
@@ -931,10 +931,7 @@ Hooks around tool/function execution. These operate on the (Backend, Context) tu
 - **Payload**:
   ```python
   class ToolPreInvokePayload(BasePayload):
-      tool_name: str                 # Name of tool to call
-      tool_args: dict[str, Any]      # Arguments to pass
-      tool_callable: Callable        # The actual function
-      model_tool_call: ModelToolCall # Raw model output
+      model_tool_call: ModelToolCall # Raw model output (contains name, args, callable)
   ```
 - **Context**:
   - `backend`: Backend
@@ -954,8 +951,7 @@ Hooks around tool/function execution. These operate on the (Backend, Context) tu
 - **Payload**:
   ```python
   class ToolPostInvokePayload(BasePayload):
-      tool_name: str
-      tool_args: dict[str, Any]
+      model_tool_call: ModelToolCall # Raw model output (contains name, args, callable)
       tool_output: Any               # Raw tool output
       tool_message: ToolMessage      # Formatted message
       execution_time_ms: int

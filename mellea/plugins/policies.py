@@ -92,7 +92,9 @@ def _build_policies() -> dict[str, object]:
             writable_fields=frozenset({"final_result"})
         ),
         # Tool Execution
-        "tool_pre_invoke": HookPayloadPolicy(writable_fields=frozenset({"tool_args"})),
+        "tool_pre_invoke": HookPayloadPolicy(
+            writable_fields=frozenset({"model_tool_call"})
+        ),
         "tool_post_invoke": HookPayloadPolicy(
             writable_fields=frozenset({"tool_output"})
         ),

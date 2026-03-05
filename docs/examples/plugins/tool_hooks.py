@@ -146,18 +146,19 @@ ALLOWED_TOOLS: frozenset[str] = frozenset({"get_weather", "calculator"})
 @hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.CONCURRENT, priority=5)
 async def enforce_tool_allowlist(payload, ctx):
     """Block any tool not on the explicit allow list."""
-    if payload.tool_name not in ALLOWED_TOOLS:
+    tool_name = payload.model_tool_call.name
+    if tool_name not in ALLOWED_TOOLS:
         log.warning(
             "[allowlist] BLOCKED tool=%r — not in allowed set %s",
-            payload.tool_name,
+            tool_name,
             sorted(ALLOWED_TOOLS),
         )
         return block(
-            f"Tool '{payload.tool_name}' is not permitted",
+            f"Tool '{tool_name}' is not permitted",
             code="TOOL_NOT_ALLOWED",
-            details={"tool": payload.tool_name, "allowed": sorted(ALLOWED_TOOLS)},
+            details={"tool": tool_name, "allowed": sorted(ALLOWED_TOOLS)},
         )
-    log.info("[allowlist] permitted tool=%r", payload.tool_name)
+    log.info("[allowlist] permitted tool=%r", tool_name)
 
 
 # ---------------------------------------------------------------------------
@@ -174,8 +175,10 @@ _CALCULATOR_ALLOWED_CHARS: frozenset[str] = frozenset("0123456789 +-*/(). ")
 @hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.CONCURRENT, priority=10)
 async def validate_tool_args(payload, ctx):
     """Validate tool arguments before invocation."""
-    if payload.tool_name == "calculator":
-        expression = payload.tool_args.get("expression", "")
+    tool_name = payload.model_tool_call.name
+    tool_args = payload.model_tool_call.args or {}
+    if tool_name == "calculator":
+        expression = tool_args.get("expression", "")
         disallowed = set(expression) - _CALCULATOR_ALLOWED_CHARS
         if disallowed:
             log.warning(
@@ -191,7 +194,7 @@ async def validate_tool_args(payload, ctx):
         log.info("[arg-validator] calculator expression=%r is safe", expression)
     else:
         log.info(
-            "[arg-validator] no arg validation required for tool=%r", payload.tool_name
+            "[arg-validator] no arg validation required for tool=%r", tool_name
         )
 
 
@@ -207,15 +210,16 @@ async def validate_tool_args(payload, ctx):
 async def audit_tool_calls(payload, ctx):
     """Log the result of every tool call for audit purposes."""
     status = "OK" if payload.success else "ERROR"
+    tool_name = payload.model_tool_call.name
     log.info(
         "[audit] tool=%r status=%s latency=%dms args=%s",
-        payload.tool_name,
+        tool_name,
         status,
         payload.execution_time_ms,
-        payload.tool_args,
+        payload.model_tool_call.args,
     )
     if not payload.success and payload.error is not None:
-        log.error("[audit] tool=%r error=%r", payload.tool_name, str(payload.error))
+        log.error("[audit] tool=%r error=%r", tool_name, str(payload.error))
 
 
 # ---------------------------------------------------------------------------

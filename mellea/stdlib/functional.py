@@ -19,6 +19,7 @@ from ..core import (
     GenerateLog,
     ImageBlock,
     ModelOutputThunk,
+    ModelToolCall,
     Requirement,
     S,
     SamplingResult,
@@ -1165,19 +1166,18 @@ async def _acall_tools(
     for name, tool in tool_calls.items():
         # --- tool_pre_invoke ---
         if has_plugins(HookType.TOOL_PRE_INVOKE):
-            pre_payload = ToolPreInvokePayload(
-                tool_name=name,
-                tool_args=tool.args or {},
-                tool_callable=tool.call_func,
-                model_tool_call=tool,
-            )
-            await invoke_hook(
+            pre_payload = ToolPreInvokePayload(model_tool_call=tool)
+            _, pre_payload = await invoke_hook(
                 HookType.TOOL_PRE_INVOKE,
                 pre_payload,
                 backend=backend,
                 context=context,
                 session_id=session_id,
             )
+            if pre_payload.model_tool_call is not tool and isinstance(
+                pre_payload.model_tool_call, ModelToolCall
+            ):
+                tool = pre_payload.model_tool_call
 
         # --- execute the tool ---
         t0 = time.monotonic()
@@ -1210,8 +1210,7 @@ async def _acall_tools(
         # --- tool_post_invoke ---
         if has_plugins(HookType.TOOL_POST_INVOKE):
             post_payload = ToolPostInvokePayload(
-                tool_name=name,
-                tool_args=tool.args or {},
+                model_tool_call=tool,
                 tool_output=output,
                 tool_message=tool_msg,
                 execution_time_ms=latency_ms,

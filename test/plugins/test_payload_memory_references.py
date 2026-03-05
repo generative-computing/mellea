@@ -208,27 +208,24 @@ class TestSamplingPayloadLiveRefs:
 class TestToolPayloadLiveRefs:
     """Tool payloads hold live references to callables and tool outputs."""
 
-    def test_pre_invoke_holds_live_callable(self):
-        """ToolPreInvokePayload.tool_callable IS the actual function (not a copy).
-
-        Risk: retaining this payload keeps the function (and its closure) alive.
-        """
-        from mellea.plugins.hooks.tool import ToolPreInvokePayload
-
-        def my_tool(x: int) -> int:
-            return x * 2
-
-        p = ToolPreInvokePayload(tool_callable=my_tool)
-        assert _same_object(p.tool_callable, my_tool)
-        # The callable is still functional via the payload
-        assert p.tool_callable(5) == 10
-
     def test_pre_invoke_holds_live_model_tool_call(self):
-        """ToolPreInvokePayload.model_tool_call holds a live ModelToolCall reference."""
+        """ToolPreInvokePayload.model_tool_call holds a live ModelToolCall reference.
+
+        Risk: retaining this payload keeps the ModelToolCall (and its callable
+        closure) alive.
+        """
         from mellea.plugins.hooks.tool import ToolPreInvokePayload
 
         mock_call = MagicMock()
         p = ToolPreInvokePayload(model_tool_call=mock_call)
+        assert _same_object(p.model_tool_call, mock_call)
+
+    def test_post_invoke_holds_live_model_tool_call(self):
+        """ToolPostInvokePayload.model_tool_call holds a live ModelToolCall reference."""
+        from mellea.plugins.hooks.tool import ToolPostInvokePayload
+
+        mock_call = MagicMock()
+        p = ToolPostInvokePayload(model_tool_call=mock_call)
         assert _same_object(p.model_tool_call, mock_call)
 
     def test_post_invoke_holds_live_output(self):
