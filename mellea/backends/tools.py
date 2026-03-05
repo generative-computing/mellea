@@ -76,7 +76,7 @@ class MelleaTool(AbstractMelleaTool):
         except ImportError as e:
             raise ImportError(
                 f"It appears you are attempting to utilize a langchain tool '{type(tool)}'. "
-                "Please install langchain core: uv pip install langchain-core"
+                "Please install mellea with tools support: pip install 'mellea[tools]'"
             ) from e
 
     @classmethod
@@ -131,7 +131,7 @@ class MelleaTool(AbstractMelleaTool):
         except ImportError as e:
             raise ImportError(
                 f"It appears you are attempting to utilize a smolagents tool '{type(tool)}'. "
-                "Please install mellea with smolagents support: uv pip install 'mellea[smolagents]'"
+                "Please install mellea with tools support: pip install 'mellea[tools]'"
             ) from e
 
     @classmethod

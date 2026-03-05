@@ -203,7 +203,7 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
                 stdout=None,
                 stderr=None,
                 skipped=True,
-                skip_message="llm-sandbox not installed. Install with: uv add 'llm-sandbox[docker]'",
+                skip_message="llm-sandbox not installed. Install with: pip install 'mellea[sandbox]'",
             )
 
         try:
