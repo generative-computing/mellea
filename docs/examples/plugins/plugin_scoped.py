@@ -39,14 +39,14 @@ log = logging.getLogger("plugin_scoped")
 # ---------------------------------------------------------------------------
 
 
-@hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.AUDIT, priority=10)
+@hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.FIRE_AND_FORGET, priority=10)
 async def log_request(payload, ctx):
     """Log every instruction description as it arrives."""
     preview = payload.description[:60].replace("\n", " ")
     log.info("[log_request] → %r", preview)
 
 
-@hook(HookType.COMPONENT_POST_SUCCESS, mode=PluginMode.AUDIT, priority=10)
+@hook(HookType.COMPONENT_POST_SUCCESS, mode=PluginMode.FIRE_AND_FORGET, priority=10)
 async def log_response(payload, ctx):
     """Log latency after each successful generation."""
     log.info(
