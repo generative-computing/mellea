@@ -596,7 +596,7 @@ class OllamaModelBackend(FormatterBackend):
         generate_log.backend = f"ollama::{self._get_ollama_model_id()}"
         generate_log.model_options = mot._model_options
         generate_log.date = datetime.datetime.now()
-        generate_log.model_output = mot._meta["chat_response"]
+        generate_log.model_output = mot._meta.get("chat_response")
         generate_log.extra = {
             "format": _format,
             "thinking": mot._model_options.get(ModelOption.THINKING, None),

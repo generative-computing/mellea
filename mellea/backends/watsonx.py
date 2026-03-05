@@ -469,7 +469,12 @@ class WatsonxAIBackend(FormatterBackend):
         # OpenAI streamed responses give you chunks of tool calls.
         # As a result, we have to store data between calls and only then
         # check for complete tool calls in the post_processing step.
-        tool_chunk = extract_model_tool_requests(tools, mot._meta["oai_chat_response"])
+        oai_response = mot._meta.get("oai_chat_response")
+        tool_chunk = (
+            extract_model_tool_requests(tools, oai_response)
+            if oai_response is not None
+            else None
+        )
         if tool_chunk is not None:
             if mot.tool_calls is None:
                 mot.tool_calls = {}
@@ -509,7 +514,7 @@ class WatsonxAIBackend(FormatterBackend):
         generate_log.backend = f"watsonx::{self.model_id!s}"
         generate_log.model_options = mot._model_options
         generate_log.date = datetime.datetime.now()
-        generate_log.model_output = mot._meta["oai_chat_response"]
+        generate_log.model_output = mot._meta.get("oai_chat_response")
         generate_log.extra = {
             "format": _format,
             "tools_available": tools,
