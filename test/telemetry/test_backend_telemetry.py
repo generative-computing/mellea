@@ -611,9 +611,12 @@ async def test_litellm_token_metrics_integration(
 @pytest.mark.huggingface
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_huggingface_token_metrics_integration(
-    enable_metrics, metric_reader, stream
+    enable_metrics, metric_reader, stream, gh_run
 ):
     """Test that HuggingFace backend records token metrics correctly."""
+    if gh_run:
+        pytest.skip("Skipping in CI - requires model download")
+
     from mellea.backends.huggingface import LocalHFBackend
     from mellea.backends.model_options import ModelOption
     from mellea.telemetry import metrics as metrics_module
