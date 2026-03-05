@@ -29,33 +29,23 @@ dependencies = [
     "pydantic",
     "openai",
     "jinja2",
-    "json5",
     "ollama>=0.5.1",
-    "ansicolors",
     "requests>=2.32.3",
-    "uvicorn",
-    "fastapi",
-    "types-requests",
-    "types-tqdm",
     "typer",
     "click<8.2.0", # Newer versions will cause errors with --help in typer CLIs.
     "mistletoe>=1.4.0",
-    "huggingface-hub>=0.33.4",
     "pillow", # Needed for Intrinsics (HF and OpenAI Backends).
     "math_verify", # Needed for Majority Voting Sampling Strategies.
     "rouge_score", # Needed for Majority Voting Sampling Strategies.
-    "llm-sandbox[docker]>=0.3.23",
 ]
 
 [project.scripts]
 m = "cli.m:cli"
 
 [project.optional-dependencies]
-# Use these like:
-# uv pip install "mellea[hf]"
-# uv pip install -e ".[hf, watsonx]"
-# if you want to install all dependencies, use uv sync --all-extras
+# Install optional features: pip install "mellea[all]" or uv sync --all-extras
 
+# Backend integrations
 hf = [
     "accelerate>=1.9.0",
     "datasets>=4.0.0",
@@ -64,11 +54,12 @@ hf = [
     "transformers>=4.53.2,<5",
     "trl==0.19.1",
     "xgrammar", # Necessary for granite_common intrinsics.
+    "huggingface-hub>=0.33.4",
 ]
 
 vllm = [
     "vllm>=0.13.0; sys_platform != 'darwin'",
-    "numpy<=2.2",               # ImportError: Numba needs NumPy 2.2 or less. Got NumPy 2.4.
+    "numpy<=2.2", # ImportError: Numba needs NumPy 2.2 or less. Got NumPy 2.4.
 ]
 
 litellm = [
@@ -80,14 +71,10 @@ watsonx = [
     "ibm-watsonx-ai>=1.3.31",
 ]
 
-docling = [
-    "docling>=2.45.0",
-]
-
+# Feature integrations
 tools = [
     "smolagents>=1.0.0",
-    "langchain-community>=0.3.0",
-    "ddgs>=9.0.0",  # Required by DuckDuckGoSearchResults in langchain-community
+    "langchain-core>=1.2.7",
 ]
 
 telemetry = [
@@ -97,31 +84,77 @@ telemetry = [
     "opentelemetry-distro>=0.59b0",
 ]
 
-all = ["mellea[watsonx,docling,hf,vllm,litellm,tools,telemetry]"]
+docling = [
+    "docling>=2.45.0",
+]
+
+granite_retriever = [
+    "sentence-transformers",
+    "pyarrow",
+    "elasticsearch>=8.0.0,<9.0.0",
+]
+
+# Infrastructure
+server = [
+    "uvicorn",
+    "fastapi",
+]
+
+sandbox = [
+    "llm-sandbox[docker]>=0.3.23",
+]
+
+all = ["mellea[watsonx,docling,hf,vllm,litellm,tools,telemetry,server,sandbox,granite_retriever]"]
 
 [dependency-groups]
-# Use these like:
-# pip install -e . --group dev
-# pip install mellea --group dev
-dev = [
+# Development groups: uv sync --all-groups
+
+# Code quality
+lint = [
+    "ruff>=0.11.6",
     "isort>=6.0.0",
     "pre-commit>=4.2.0",
     "pylint>=3.3.4",
-    "ruff>=0.11.6",
-    "pdm>=2.24.0",
+]
+
+test = [
     "pytest",
     "pytest-asyncio",
     "pytest-cov>=6.0.0",
     "pytest-timeout",  # For test suite timeout configuration
     "psutil",  # For test infrastructure: RAM detection in conftest.py
-    "mypy>=1.17.0",
-    "python-semantic-release~=7.32",
-    "nbmake>=1.5.5",
-    "langchain-core>=1.2.7", # Necessary for mypy and some tool tests
-    "sentencepiece==0.2.1", # Necessary for test_huggingface_tools test because of Mistral model
+    "nbmake>=1.5.5",  # Notebook testing
+    "sentencepiece==0.2.1",  # Necessary for test_huggingface_tools test because of Mistral model
     "jsonschema",
+    # Example-only dependencies (run via pytest)
+    "langchain-community>=0.3.0",
+    "ddgs>=9.0.0",  # Required by DuckDuckGoSearchResults in langchain-community
 ]
 
+typecheck = [
+    "mypy>=1.17.0",
+    "types-requests",
+    "types-tqdm",
+]
+
+build = [
+    "pdm>=2.24.0",
+]
+
+release = [
+    "python-semantic-release~=7.32",
+]
+
+# Convenience: includes all dev dependencies (used by default with uv run)
+dev = [
+    {include-group = "lint"},
+    {include-group = "test"},
+    {include-group = "typecheck"},
+    {include-group = "build"},
+    {include-group = "release"},
+]
+
+# Documentation and notebooks
 notebook = [
     "ipykernel>=6.29.5",
     "ipython>=8.36.0",
@@ -132,13 +165,6 @@ docs = [
     "sphinx_rtd_theme",
     "sphinx-autodoc-typehints",
     "sphinx_mdinclude",
-]
-
-# Necessary for granite retriever.
-granite_common_retriever = [
-    "sentence-transformers",
-    "pyarrow",
-    "elasticsearch>=8.0.0,<9.0.0"
 ]
 
 [tool.ruff]

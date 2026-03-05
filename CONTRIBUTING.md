@@ -63,11 +63,6 @@ to melleaadmin@ibm.com.
    uv sync --all-extras --all-groups
    ```
 
-   Or for minimal development setup:
-   ```bash
-   uv pip install -e ".[all]" --group dev --group notebook --group docs
-   ```
-
 4. **Install pre-commit hooks (Required):**
    ```bash
    pre-commit install
