@@ -186,7 +186,7 @@ def start_session(
         context_type=ctx.__class__.__name__ if ctx else "SimpleContext",
     ):
         # --- session_pre_init hook ---
-        if has_plugins():
+        if has_plugins(HookType.SESSION_PRE_INIT):
             from ..plugins.hooks.session import SessionPreInitPayload
 
             pre_payload = SessionPreInitPayload(
@@ -231,7 +231,7 @@ def start_session(
             register_plugins(plugins, session_id=session.id)
 
         # --- session_post_init hook ---
-        if has_plugins():
+        if has_plugins(HookType.SESSION_POST_INIT):
             from ..plugins.hooks.session import SessionPostInitPayload
 
             post_payload = SessionPostInitPayload(session=session)
@@ -337,7 +337,7 @@ class MelleaSession:
 
     def reset(self):
         """Reset the context state."""
-        if has_plugins():
+        if has_plugins(HookType.SESSION_RESET):
             from ..plugins.hooks.session import SessionResetPayload
 
             payload = SessionResetPayload(previous_context=self.ctx)
@@ -355,7 +355,7 @@ class MelleaSession:
 
     def cleanup(self) -> None:
         """Clean up session resources."""
-        if has_plugins():
+        if has_plugins(HookType.SESSION_CLEANUP):
             from ..plugins.hooks.session import SessionCleanupPayload
 
             payload = SessionCleanupPayload(
@@ -371,7 +371,10 @@ class MelleaSession:
                     context=self.ctx,
                 )
             )
-            # Deregister session-scoped plugins
+
+        # Deregister session-scoped plugins — must run whenever plugins are
+        # enabled, regardless of whether any plugin subscribes to SESSION_CLEANUP.
+        if has_plugins():
             from ..plugins.manager import deregister_session_plugins
 
             deregister_session_plugins(self.id)

@@ -498,7 +498,7 @@ async def aact(
             )
 
         # --- component_pre_execute hook ---
-        if has_plugins():
+        if has_plugins(HookType.COMPONENT_PRE_EXECUTE):
             from ..plugins.hooks.component import ComponentPreExecutePayload
 
             pre_exec_payload = ComponentPreExecutePayload(
@@ -614,7 +614,7 @@ async def aact(
                 pass
 
             # --- component_post_success hook ---
-            if has_plugins():
+            if has_plugins(HookType.COMPONENT_POST_SUCCESS):
                 from ..plugins.hooks.component import ComponentPostSuccessPayload
 
                 success_payload = ComponentPostSuccessPayload(
@@ -651,7 +651,7 @@ async def aact(
 
         except Exception as exc:
             # --- component_post_error hook ---
-            if has_plugins():
+            if has_plugins(HookType.COMPONENT_POST_ERROR):
                 from ..plugins.hooks.component import ComponentPostErrorPayload
 
                 error_payload = ComponentPostErrorPayload(
@@ -761,7 +761,7 @@ async def ainstruct(
     images = _parse_and_clean_image_args(images)
 
     # --- component_pre_create hook ---
-    if has_plugins():
+    if has_plugins(HookType.COMPONENT_PRE_CREATE):
         from ..plugins.hooks.component import ComponentPreCreatePayload
 
         pre_payload = ComponentPreCreatePayload(
@@ -798,7 +798,7 @@ async def ainstruct(
     )
 
     # --- component_post_create hook ---
-    if has_plugins():
+    if has_plugins(HookType.COMPONENT_POST_CREATE):
         from ..plugins.hooks.component import ComponentPostCreatePayload
 
         post_payload = ComponentPostCreatePayload(
@@ -848,7 +848,7 @@ async def achat(
     images = _parse_and_clean_image_args(images)
 
     # --- component_pre_create hook ---
-    if has_plugins():
+    if has_plugins(HookType.COMPONENT_PRE_CREATE):
         from ..plugins.hooks.component import ComponentPreCreatePayload
 
         pre_payload = ComponentPreCreatePayload(
@@ -863,7 +863,7 @@ async def achat(
     user_message = Message(role=role, content=content_resolved, images=images)
 
     # --- component_post_create hook ---
-    if has_plugins():
+    if has_plugins(HookType.COMPONENT_POST_CREATE):
         from ..plugins.hooks.component import ComponentPostCreatePayload
 
         post_payload = ComponentPostCreatePayload(
@@ -923,7 +923,7 @@ async def avalidate(
         validation_target_ctx = validation_target_ctx.add(output)
 
     # --- validation_pre_check hook ---
-    if has_plugins():
+    if has_plugins(HookType.VALIDATION_PRE_CHECK):
         from ..plugins.hooks.validation import ValidationPreCheckPayload
 
         pre_payload = ValidationPreCheckPayload(
@@ -967,7 +967,7 @@ async def avalidate(
                 generate_logs.append(None)  # type: ignore
 
     # --- validation_post_check hook ---
-    if has_plugins():
+    if has_plugins(HookType.VALIDATION_POST_CHECK):
         from ..plugins.hooks.validation import ValidationPostCheckPayload
 
         post_payload = ValidationPostCheckPayload(
@@ -1164,7 +1164,7 @@ async def _acall_tools(
 
     for name, tool in tool_calls.items():
         # --- tool_pre_invoke ---
-        if has_plugins():
+        if has_plugins(HookType.TOOL_PRE_INVOKE):
             pre_payload = ToolPreInvokePayload(
                 tool_name=name,
                 tool_args=tool.args or {},
@@ -1208,7 +1208,7 @@ async def _acall_tools(
         )
 
         # --- tool_post_invoke ---
-        if has_plugins():
+        if has_plugins(HookType.TOOL_POST_INVOKE):
             post_payload = ToolPostInvokePayload(
                 tool_name=name,
                 tool_args=tool.args or {},

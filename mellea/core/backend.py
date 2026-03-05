@@ -115,7 +115,7 @@ class Backend(abc.ABC):
         from mellea.plugins.manager import has_plugins, invoke_hook
         from mellea.plugins.types import HookType
 
-        if has_plugins():
+        if has_plugins(HookType.GENERATION_PRE_CALL):
             from mellea.plugins.hooks.generation import (
                 GenerationPostCallPayload,
                 GenerationPreCallPayload,
@@ -143,7 +143,7 @@ class Backend(abc.ABC):
             tool_calls=tool_calls,
         )
 
-        if has_plugins():
+        if has_plugins(HookType.GENERATION_POST_CALL):
             from mellea.plugins.hooks.generation import GenerationPostCallPayload
 
             glog = getattr(out_result, "_generate_log", None)

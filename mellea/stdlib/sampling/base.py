@@ -151,7 +151,7 @@ class BaseSamplingStrategy(SamplingStrategy):
 
         # --- sampling_loop_start hook ---
         effective_loop_budget = self.loop_budget
-        if has_plugins():
+        if has_plugins(HookType.SAMPLING_LOOP_START):
             from ...plugins.hooks.sampling import SamplingLoopStartPayload
 
             start_payload = SamplingLoopStartPayload(
@@ -223,7 +223,7 @@ class BaseSamplingStrategy(SamplingStrategy):
             all_valid = all(bool(s[1]) for s in constraint_scores)
 
             # --- sampling_iteration hook ---
-            if has_plugins():
+            if has_plugins(HookType.SAMPLING_ITERATION):
                 from ...plugins.hooks.sampling import SamplingIterationPayload
 
                 iter_payload = SamplingIterationPayload(
@@ -251,7 +251,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 result._generate_log.is_final_result = True
 
                 # --- sampling_loop_end hook (success) ---
-                if has_plugins():
+                if has_plugins(HookType.SAMPLING_LOOP_END):
                     from ...plugins.hooks.sampling import SamplingLoopEndPayload
 
                     end_payload = SamplingLoopEndPayload(
@@ -305,7 +305,7 @@ class BaseSamplingStrategy(SamplingStrategy):
             )
 
             # --- sampling_repair hook ---
-            if has_plugins():
+            if has_plugins(HookType.SAMPLING_REPAIR):
                 from ...plugins.hooks.sampling import SamplingRepairPayload
 
                 repair_payload = SamplingRepairPayload(
@@ -344,7 +344,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         sampled_results[best_failed_index]._generate_log.is_final_result = True  # type: ignore
 
         # --- sampling_loop_end hook (failure) ---
-        if has_plugins():
+        if has_plugins(HookType.SAMPLING_LOOP_END):
             from ...plugins.hooks.sampling import SamplingLoopEndPayload
 
             _final_ctx = (

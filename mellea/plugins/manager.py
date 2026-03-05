@@ -32,10 +32,18 @@ _session_tags: dict[str, set[str]] = {}  # session_id -> set of plugin names
 DEFAULT_PLUGIN_TIMEOUT: int = 5  # seconds
 
 
-def has_plugins() -> bool:
-    """Fast check: are plugins configured and available?"""
-    # TODO: check if there are any plugins registered in this scope
-    return _plugins_enabled
+def has_plugins(hook_type: HookType | None = None) -> bool:
+    """Fast check: are plugins configured and available for the given hook type.
+
+    When ``hook_type`` is provided, also checks whether any plugin has
+    registered a handler for that specific hook, enabling callers to skip
+    payload construction entirely when no plugin subscribes.
+    """
+    if not _plugins_enabled or _plugin_manager is None:
+        return False
+    if hook_type is not None:
+        return _plugin_manager.has_hooks_for(hook_type.value)
+    return True
 
 
 def get_plugin_manager() -> Any | None:
