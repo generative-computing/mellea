@@ -46,12 +46,16 @@ def create_bedrock_litellm_backend(
 
     Use this instead of `create_bedrock_openai_backend` when you need auth with an AWS_ACCESS_KEY_ID.
     """
-    assert "AWS_ACCESS_KEY_ID" in os.environ, (
-        "You must specify a AWS_ACCESS_KEY_ID environment variable. To use a Bedrock API Key instead, use create_bedrock_openai_backend"
-    )
-    assert "AWS_SECRET_ACCESS_KEY" in os.environ, (
-        "You must specify a AWS_SECRET_ACCESS_KEY environment variable. To use a Bedrock API Key instead, use create_bedrock_openai_backend"
-    )
+    if "AWS_BEARER_TOKEN_BEDROCK" in os.environ and "AWS_ACCESS_KEY_ID" in os.environ:
+        # TODO maybe warn and note we default to AWS_BEARER_TOKEN_BEDROCK (that's what litellm does).
+        pass
+    elif "AWS_BEARER_TOKEN_BEDROCK" not in os.environ:
+        assert "AWS_ACCESS_KEY_ID" in os.environ, (
+            "You must specify a AWS_ACCESS_KEY_ID environment variable. To use a Bedrock API Key instead, use create_bedrock_openai_backend"
+        )
+        assert "AWS_SECRET_ACCESS_KEY" in os.environ, (
+            "You must specify a AWS_SECRET_ACCESS_KEY environment variable. To use a Bedrock API Key instead, use create_bedrock_openai_backend"
+        )
 
     assert region is not None or "AWS_REGION_NAME" in os.environ, (
         "you must specify a region."
@@ -60,17 +64,21 @@ def create_bedrock_litellm_backend(
 
     model_name = ""
     match model_id:
-        case ModelIdentifier() if model_id.bedrock_name is None:
-            raise Exception(
-                f"We do not have a known bedrock model identifier for {model_id}. If Bedrock supports this model, please pass the model_id string directly and  open an issue to add the model id: https://github.com/generative-computing/mellea/issues/new"
-            )
-        case ModelIdentifier() if model_id.bedrock_name is not None:
-            assert model_id.bedrock_name is not None  # for type checker help.
-            model_name = model_id.bedrock_name
+        case ModelIdentifier():
+            if model_id.bedrock_name is None:
+                raise Exception(
+                    f"We do not have a known bedrock model identifier for {model_id}. If Bedrock supports this model, please pass the model_id string directly and  open an issue to add the model id: https://github.com/generative-computing/mellea/issues/new"
+                )
+            elif "AWS_BEARER_TOKEN_BEDROCK" not in os.environ:
+                raise Exception(
+                    "You cannot use ModelIdentifier classes when using Bedrock with IAM. Pass a raw string as `model_id` instead."
+                )
+            else:
+                model_name = model_id.bedrock_name
         case str():
             model_name = model_id
     assert model_name != "", (
-        f"Model identifier {model_id} does not psecify a bedrock_name."
+        f"Model identifier {model_id} does not specify a bedrock_name."
     )
 
     backend = LiteLLMBackend(model_id=model_name)

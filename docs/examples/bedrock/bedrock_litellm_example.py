@@ -11,6 +11,8 @@
 import os
 
 import mellea
+from mellea.backends.bedrock import create_bedrock_litellm_backend
+from mellea.stdlib.context import SimpleContext
 
 try:
     import boto3
@@ -20,16 +22,12 @@ except Exception:
         "Run `uv pip install mellea[litellm]`"
     )
 
-assert "AWS_BEARER_TOKEN_BEDROCK" in os.environ.keys(), (
-    "Using AWS Bedrock requires setting a AWS_BEARER_TOKEN_BEDROCK environment variable. "
-    "Generate a key from the AWS console at: https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/api-keys?tab=long-term "
-    "Then run `export AWS_BEARER_TOKEN_BEDROCK=<insert your key here>"
-)
+MODEL_ID = "bedrock/converse/mistral.devstral-2-123b"
 
-MODEL_ID = "bedrock/converse/us.amazon.nova-pro-v1:0"
+backend = create_bedrock_litellm_backend(MODEL_ID)
+ctx = SimpleContext()
+m = mellea.MelleaSession(backend, ctx)
 
-m = mellea.start_session(backend_name="litellm", model_id=MODEL_ID)
-
-result = m.chat("Give me three facts about Amazon.")
+result = m.chat("What model am I talking to rn?")
 
 print(result.content)
