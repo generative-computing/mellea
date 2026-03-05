@@ -82,7 +82,8 @@ def create_bedrock_litellm_backend(
     )
 
     backend = LiteLLMBackend(model_id=model_name)
-    backend._base_url = None  # TODO litellm doesn't even appear to use this...?
+    # TODO litellm doesn't even appear to use this...?
+    backend._base_url = None  # type: ignore
     return backend
 
 
