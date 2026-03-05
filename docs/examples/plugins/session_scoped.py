@@ -31,7 +31,7 @@ log = logging.getLogger("session_scoped")
 # --- Global hook: fires for every session ---
 
 
-@hook(HookType.SESSION_POST_INIT, mode=PluginMode.PERMISSIVE)
+@hook(HookType.SESSION_POST_INIT, mode=PluginMode.AUDIT)
 async def log_session_init(payload, ctx):
     """Log when any session is initialized."""
     log.info("[global] session initialized (session_id=%s)", payload.session_id)
@@ -45,7 +45,7 @@ register(log_session_init)
 BLOCKED_TOPICS = ["weaponry", "explosives"]
 
 
-@hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.ENFORCE, priority=10)
+@hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.SEQUENTIAL, priority=10)
 async def enforce_content_policy(payload, ctx):
     """Block components whose descriptions mention restricted topics."""
     desc = payload.description.lower()
@@ -56,7 +56,7 @@ async def enforce_content_policy(payload, ctx):
     log.info("[content-policy] description is clean — allowing")
 
 
-@hook(HookType.COMPONENT_POST_SUCCESS, mode=PluginMode.PERMISSIVE)
+@hook(HookType.COMPONENT_POST_SUCCESS, mode=PluginMode.AUDIT)
 async def log_component_result(payload, ctx):
     """Log the result of each successful component execution."""
     log.info(

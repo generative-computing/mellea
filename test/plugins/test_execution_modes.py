@@ -2,11 +2,11 @@
 
 behavior summary
 -----------------
-- ``mode=ENFORCE`` (default): hook is awaited inline. If ``continue_processing=False``
+- ``mode=SEQUENTIAL`` (default): hook is awaited inline. If ``continue_processing=False``
   the ContextForge executor stops the chain and returns the blocking result; Mellea's
   ``invoke_hook`` then raises ``PluginViolationError``.
 
-- ``mode=PERMISSIVE``: hook is awaited inline. If ``continue_processing=False`` the
+- ``mode=AUDIT``: hook is awaited inline. If ``continue_processing=False`` the
   ContextForge executor logs the violation but lets the loop continue.  The aggregate
   result returned to Mellea always has ``continue_processing=True``, so ``invoke_hook``
   does NOT raise.
@@ -68,14 +68,14 @@ async def cleanup_plugins():
 # ---------------------------------------------------------------------------
 
 
-class TestEnforceMode:
-    """mode=ENFORCE is the default. Violations raise PluginViolationError."""
+class TestSequentialMode:
+    """mode=SEQUENTIAL is the default. Violations raise PluginViolationError."""
 
     @pytest.mark.asyncio
     async def test_blocking_plugin_raises_violation_error(self):
         """A hook that returns block() in enforce mode causes invoke_hook to raise."""
 
-        @hook("session_pre_init", mode=PluginMode.ENFORCE)
+        @hook("session_pre_init", mode=PluginMode.SEQUENTIAL)
         async def enforced_blocker(payload, ctx):
             return block("Access denied", code="AUTH_001")
 
@@ -94,7 +94,7 @@ class TestEnforceMode:
         """A hook that returns continue_processing=True does not raise."""
         invocations: list[str] = []
 
-        @hook("session_pre_init", mode=PluginMode.ENFORCE)
+        @hook("session_pre_init", mode=PluginMode.SEQUENTIAL)
         async def observe_hook(payload, ctx):
             invocations.append("fired")
             return PluginResult(continue_processing=True)
@@ -113,7 +113,7 @@ class TestEnforceMode:
     async def test_enforce_mode_writable_field_modification_is_accepted(self):
         """A hook that modifies a writable field (model_id) has the change applied."""
 
-        @hook("session_pre_init", mode=PluginMode.ENFORCE)
+        @hook("session_pre_init", mode=PluginMode.SEQUENTIAL)
         async def rewrite_model(payload, ctx):
             modified = payload.model_copy(update={"model_id": "gpt-4-turbo"})
             return PluginResult(continue_processing=True, modified_payload=modified)
@@ -133,11 +133,11 @@ class TestEnforceMode:
         """When an enforce plugin blocks, downstream plugins do not fire."""
         downstream_calls: list[str] = []
 
-        @hook("session_pre_init", mode=PluginMode.ENFORCE)
+        @hook("session_pre_init", mode=PluginMode.SEQUENTIAL)
         async def early_blocker(payload, ctx):
             return block("Stopped early", code="STOP_001")
 
-        @hook("session_pre_init", mode=PluginMode.PERMISSIVE)
+        @hook("session_pre_init", mode=PluginMode.AUDIT)
         async def downstream_hook(payload, ctx):
             downstream_calls.append("fired")
             return None
@@ -148,14 +148,14 @@ class TestEnforceMode:
         with pytest.raises(PluginViolationError):
             await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
 
-        # Downstream hook must not have executed because ENFORCE short-circuits the chain
+        # Downstream hook must not have executed because SEQUENTIAL short-circuits the chain
         assert downstream_calls == []
 
     @pytest.mark.asyncio
     async def test_enforce_violation_error_carries_plugin_name(self):
         """PluginViolationError includes the plugin_name set by ContextForge."""
 
-        @hook("generation_pre_call", mode=PluginMode.ENFORCE)
+        @hook("generation_pre_call", mode=PluginMode.SEQUENTIAL)
         async def named_blocker(payload, ctx):
             return block("Rate limit exceeded", code="RATE_001")
 
@@ -168,10 +168,10 @@ class TestEnforceMode:
         assert exc_info.value.plugin_name != ""
 
     @pytest.mark.asyncio
-    async def test_default_mode_is_enforce(self):
-        """@hook without an explicit mode defaults to ENFORCE and raises on violation."""
+    async def test_default_mode_is_sequential(self):
+        """@hook without an explicit mode defaults to SEQUENTIAL and raises on violation."""
 
-        @hook("session_pre_init")  # no mode= argument; default is ENFORCE
+        @hook("session_pre_init")  # no mode= argument; default is SEQUENTIAL
         async def default_mode_blocker(payload, ctx):
             return block("Blocked by default-mode hook", code="DEFAULT_001")
 
@@ -184,7 +184,7 @@ class TestEnforceMode:
     async def test_enforce_none_return_does_not_raise(self):
         """A hook returning None (no-op) in enforce mode does not raise."""
 
-        @hook("session_pre_init", mode=PluginMode.ENFORCE)
+        @hook("session_pre_init", mode=PluginMode.SEQUENTIAL)
         async def silent_hook(payload, ctx):
             return None
 
@@ -202,14 +202,14 @@ class TestEnforceMode:
 # ---------------------------------------------------------------------------
 
 
-class TestPermissiveMode:
-    """mode=PERMISSIVE: violations are logged but do not raise or stop execution."""
+class TestAuditMode:
+    """mode=AUDIT: violations are logged but do not raise or stop execution."""
 
     @pytest.mark.asyncio
     async def test_blocking_permissive_plugin_does_not_raise(self):
         """A blocking plugin in permissive mode must not raise PluginViolationError."""
 
-        @hook("session_pre_init", mode=PluginMode.PERMISSIVE)
+        @hook("session_pre_init", mode=PluginMode.AUDIT)
         async def permissive_blocker(payload, ctx):
             return block("Would block, but permissive", code="PERM_001")
 
@@ -229,11 +229,11 @@ class TestPermissiveMode:
         """Downstream plugins still fire after a permissive plugin signals a violation."""
         downstream_calls: list[str] = []
 
-        @hook("session_pre_init", mode=PluginMode.PERMISSIVE, priority=5)
+        @hook("session_pre_init", mode=PluginMode.AUDIT, priority=5)
         async def early_permissive_blocker(payload, ctx):
             return block("Soft block", code="SOFT_001")
 
-        @hook("session_pre_init", mode=PluginMode.ENFORCE, priority=10)
+        @hook("session_pre_init", mode=PluginMode.SEQUENTIAL, priority=10)
         async def downstream_hook(payload, ctx):
             downstream_calls.append("fired")
             return None
@@ -252,7 +252,7 @@ class TestPermissiveMode:
         """A permissive hook that continues fires and the call succeeds."""
         invocations: list[str] = []
 
-        @hook("session_pre_init", mode=PluginMode.PERMISSIVE)
+        @hook("session_pre_init", mode=PluginMode.AUDIT)
         async def permissive_observer(payload, ctx):
             invocations.append(payload.backend_name)
             return PluginResult(continue_processing=True)
@@ -268,12 +268,12 @@ class TestPermissiveMode:
         """Multiple permissive blocking plugins all execute; no exception is raised."""
         fires: list[str] = []
 
-        @hook("session_pre_init", mode=PluginMode.PERMISSIVE, priority=5)
+        @hook("session_pre_init", mode=PluginMode.AUDIT, priority=5)
         async def first_permissive(payload, ctx):
             fires.append("first")
             return block("First block", code="P001")
 
-        @hook("session_pre_init", mode=PluginMode.PERMISSIVE, priority=10)
+        @hook("session_pre_init", mode=PluginMode.AUDIT, priority=10)
         async def second_permissive(payload, ctx):
             fires.append("second")
             return block("Second block", code="P002")
@@ -290,12 +290,12 @@ class TestPermissiveMode:
         """A permissive blocker followed by a non-blocking enforce hook: both fire, and enforce goes first."""
         order: list[str] = []
 
-        @hook("session_pre_init", mode=PluginMode.PERMISSIVE)
+        @hook("session_pre_init", mode=PluginMode.AUDIT)
         async def permissive_block(payload, ctx):
             order.append("permissive")
             return block("Soft block", code="PERM_SIBLING")
 
-        @hook("session_pre_init", mode=PluginMode.ENFORCE)
+        @hook("session_pre_init", mode=PluginMode.SEQUENTIAL)
         async def enforce_observer(payload, ctx):
             order.append("enforce")
             return PluginResult(continue_processing=True)
@@ -311,7 +311,7 @@ class TestPermissiveMode:
     async def test_permissive_continuing_hook_modifies_writable_field(self):
         """A permissive hook that does NOT block and modifies a writable field applies the change."""
 
-        @hook("session_pre_init", mode=PluginMode.PERMISSIVE)
+        @hook("session_pre_init", mode=PluginMode.AUDIT)
         async def permissive_modifier(payload, ctx):
             modified = payload.model_copy(update={"model_id": "permissive-model"})
             return PluginResult(continue_processing=True, modified_payload=modified)
@@ -413,7 +413,7 @@ class TestFireAndForgetMode:
             order.append("faf")
             return PluginResult(continue_processing=True)
 
-        @hook("session_pre_init", mode=PluginMode.ENFORCE, priority=10)
+        @hook("session_pre_init", mode=PluginMode.SEQUENTIAL, priority=10)
         async def enforce_second(payload, ctx):
             order.append("enforce")
             return PluginResult(continue_processing=True)

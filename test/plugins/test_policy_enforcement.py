@@ -313,7 +313,7 @@ class TestPayloadChaining:
     async def test_plugin_b_receives_plugin_a_changes(self):
         received_by_b: list[str] = []
 
-        @hook("session_pre_init", mode=PluginMode.PERMISSIVE, priority=1)
+        @hook("session_pre_init", mode=PluginMode.AUDIT, priority=1)
         async def plugin_a(payload, ctx):
             return PluginResult(
                 continue_processing=True,
@@ -322,7 +322,7 @@ class TestPayloadChaining:
                 ),
             )
 
-        @hook("session_pre_init", mode=PluginMode.PERMISSIVE, priority=100)
+        @hook("session_pre_init", mode=PluginMode.AUDIT, priority=100)
         async def plugin_b(payload, ctx):
             # Record the backend_name seen by Plugin B, then write model_id
             received_by_b.append(payload.backend_name)

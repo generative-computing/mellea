@@ -30,7 +30,7 @@ log = logging.getLogger("standalone_hooks")
 TOKEN_BUDGET = 4000
 
 
-@hook(HookType.GENERATION_PRE_CALL, mode=PluginMode.ENFORCE, priority=10)
+@hook(HookType.GENERATION_PRE_CALL, mode=PluginMode.SEQUENTIAL, priority=10)
 async def enforce_token_budget(payload, ctx):
     """Block generation calls that exceed the token budget."""
     # Rough token estimate: ~4 chars per token
@@ -57,7 +57,7 @@ async def enforce_token_budget(payload, ctx):
     log.info("[enforce_token_budget] within budget — allowing generation")
 
 
-@hook(HookType.COMPONENT_POST_SUCCESS, mode=PluginMode.PERMISSIVE, priority=50)
+@hook(HookType.COMPONENT_POST_SUCCESS, mode=PluginMode.AUDIT, priority=50)
 async def log_latency(payload, ctx):
     """Log latency after each successful component execution."""
     log.info(

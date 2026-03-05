@@ -17,8 +17,9 @@ except ImportError:
 class PluginMode(str, Enum):
     """Execution modes for Mellea plugins."""
 
-    ENFORCE = "enforce"
-    PERMISSIVE = "permissive"
+    SEQUENTIAL = "sequential"
+    CONCURRENT = "concurrent"
+    AUDIT = "audit"
     FIRE_AND_FORGET = "fire_and_forget"
 
 

@@ -14,16 +14,16 @@ class TestHookDecorator:
         meta = my_hook._mellea_hook_meta
         assert isinstance(meta, HookMeta)
         assert meta.hook_type == "generation_pre_call"
-        assert meta.mode == PluginMode.ENFORCE
+        assert meta.mode == PluginMode.SEQUENTIAL
         assert meta.priority == 50
 
     def test_hook_custom_mode_and_priority(self):
-        @hook("component_post_success", mode=PluginMode.PERMISSIVE, priority=10)
+        @hook("component_post_success", mode=PluginMode.AUDIT, priority=10)
         async def my_hook(payload, ctx):
             pass
 
         meta = my_hook._mellea_hook_meta
-        assert meta.mode == PluginMode.PERMISSIVE
+        assert meta.mode == PluginMode.AUDIT
         assert meta.priority == 10
 
     def test_hook_fire_and_forget_mode(self):

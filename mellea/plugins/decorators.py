@@ -53,19 +53,19 @@ class HookMeta:
     """Metadata attached by the @hook decorator."""
 
     hook_type: str
-    mode: PluginMode = PluginMode.ENFORCE
+    mode: PluginMode = PluginMode.SEQUENTIAL
     priority: int = 50
 
 
 def hook(
-    hook_type: str, *, mode: PluginMode = PluginMode.ENFORCE, priority: int = 50
+    hook_type: str, *, mode: PluginMode = PluginMode.SEQUENTIAL, priority: int = 50
 ) -> Callable:
     """Register an async function or method as a hook handler.
 
     Args:
         hook_type: The hook point name (e.g., ``"generation_pre_call"``).
-        mode: Execution mode — ``PluginMode.ENFORCE`` (default), ``PluginMode.PERMISSIVE``,
-              or ``PluginMode.FIRE_AND_FORGET``.
+        mode: Execution mode — ``PluginMode.SEQUENTIAL`` (default), ``PluginMode.CONCURRENT``,
+              ``PluginMode.AUDIT``, or ``PluginMode.FIRE_AND_FORGET``.
         priority: Lower numbers execute first (default: 50).
     """
 

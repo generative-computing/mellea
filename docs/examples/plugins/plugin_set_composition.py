@@ -33,7 +33,7 @@ log = logging.getLogger("plugin_set")
 TOKEN_BUDGET = 4000
 
 
-@hook(HookType.GENERATION_PRE_CALL, mode=PluginMode.ENFORCE, priority=10)
+@hook(HookType.GENERATION_PRE_CALL, mode=PluginMode.SEQUENTIAL, priority=10)
 async def enforce_token_budget(payload, ctx):
     """Enforce a conservative token budget."""
     # Rough token estimate: ~4 chars per token
@@ -56,7 +56,7 @@ async def enforce_token_budget(payload, ctx):
         )
 
 
-@hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.ENFORCE, priority=20)
+@hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.SEQUENTIAL, priority=20)
 async def enforce_description_length(payload, ctx):
     """Reject component descriptions that are too long."""
     max_len = 2000
@@ -77,7 +77,7 @@ async def enforce_description_length(payload, ctx):
 # --- Observability hooks ---
 
 
-@hook(HookType.SESSION_POST_INIT, mode=PluginMode.PERMISSIVE)
+@hook(HookType.SESSION_POST_INIT, mode=PluginMode.AUDIT)
 async def trace_session_start(payload, ctx):
     """Trace session initialization."""
     log.info(
@@ -85,7 +85,7 @@ async def trace_session_start(payload, ctx):
     )
 
 
-@hook(HookType.COMPONENT_POST_SUCCESS, mode=PluginMode.PERMISSIVE)
+@hook(HookType.COMPONENT_POST_SUCCESS, mode=PluginMode.AUDIT)
 async def trace_component_success(payload, ctx):
     """Trace successful component executions."""
     log.info(
@@ -95,7 +95,7 @@ async def trace_component_success(payload, ctx):
     )
 
 
-@hook(HookType.SESSION_CLEANUP, mode=PluginMode.PERMISSIVE)
+@hook(HookType.SESSION_CLEANUP, mode=PluginMode.AUDIT)
 async def trace_session_end(payload, ctx):
     """Trace session cleanup."""
     log.info(

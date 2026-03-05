@@ -179,22 +179,21 @@ class TestViolationError:
 
 
 class TestBlockingPreventsDownstreamPlugins:
-    """An ENFORCE blocking plugin yields continue_processing=False.
+    """A SEQUENTIAL blocking plugin yields continue_processing=False.
 
-    Note: cpex runs ENFORCE plugins in parallel, so all ENFORCE plugins
-    fire concurrently regardless of priority order.  The blocking result
-    is detected and returned as continue_processing=False, but peer
-    plugins are NOT prevented from executing.
+    Note: cpex runs SEQUENTIAL plugins serially, so a blocking plugin at
+    lower priority stops downstream plugins from executing.  The blocking
+    result is detected and returned as continue_processing=False.
     """
 
     async def test_enforce_blocker_yields_false_continue_processing(self):
         downstream_fired: list[bool] = []
 
-        @hook("session_pre_init", mode=PluginMode.ENFORCE)
+        @hook("session_pre_init", mode=PluginMode.SEQUENTIAL)
         async def early_blocker(payload, ctx):
             return block("blocked early", code="EARLY_BLOCK")
 
-        @hook("session_pre_init", mode=PluginMode.ENFORCE)
+        @hook("session_pre_init", mode=PluginMode.SEQUENTIAL)
         async def late_recorder(payload, ctx):
             downstream_fired.append(True)
             return None

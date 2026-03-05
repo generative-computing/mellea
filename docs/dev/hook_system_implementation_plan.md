@@ -1,11 +1,8 @@
 # Mellea Hook System Implementation Plan
 
-This document describes the implementation plan for the extensibility hook system specified in [`docs/dev/hook_system.md`](hook_system.md). The implementation uses the [ContextForge plugin framework](https://github.com/IBM/mcp-context-forge) (`mcpgateway.plugins.framework`) as an optional external dependency for core plumbing, while all Mellea-specific types — hook enums, payload models, and the plugin base class — are owned by Mellea under a new `mellea/plugins/` subpackage.
+This document describes the implementation plan for the extensibility hook system specified in [`docs/dev/hook_system.md`](hook_system.md). The implementation uses [CPEX](https://github.com/contextforge-org/contextforge-plugins-framework) as an optional external dependency for core plumbing, while all Mellea-specific types — hook enums, payload models, and the plugin base class — are owned by Mellea under a new `mellea/plugins/` subpackage.
 
 The primary developer-facing API is Python decorators (`@hook`, `@plugin`) and programmatic registration (`register()`, `PluginSet`). YAML configuration is supported as a secondary mechanism for deployment-time overrides. Plugins work identically whether invoked through a session or via the functional API (`instruct(backend, context, ...)`).
-
-**Note**: The plugin framework is in the process of being extracted as a standalone Python package. Once completed, the package import path prefix will look like `cpex.framework`.
-
 
 ## 1. Package Structure
 
@@ -33,9 +30,9 @@ mellea/plugins/
     └── error.py            # error handling payload
 ```
 
-## 2. ContextForge Plugin Framework (Key Interfaces Used)
+## 2. CPEX (Key Interfaces Used)
 
-The following types from `mcpgateway.plugins.framework` form the plumbing layer. Mellea uses these but does **not** import any ContextForge-specific hook types (prompts, tools, resources, agents, http).
+The following types from `cpex.framework` form the plumbing layer. Mellea uses these but does **not** import any CPEX-specific hook types (prompts, tools, resources, agents, http).
 
 | Type | Role |
 |------|------|
@@ -45,7 +42,7 @@ The following types from `mcpgateway.plugins.framework` form the plumbing layer.
 | `PluginResult[T]` | Generic result: `continue_processing: bool`, `modified_payload: T | None`, `violation: PluginViolation | None`, `metadata: dict`. |
 | `PluginViolation` | `reason`, `description`, `code`, `details`. |
 | `PluginConfig` | `name`, `kind`, `hooks`, `mode`, `priority`, `conditions`, `config`, ... |
-| `PluginMode` | `ENFORCE`, `ENFORCE_IGNORE_ERROR`, `PERMISSIVE`, `FIRE_AND_FORGET`, `DISABLED`. |
+| `PluginMode` | `SEQUENTIAL`, `CONCURRENT`, `AUDIT`, `FIRE_AND_FORGET`, `DISABLED`. |
 | `PluginContext` | `state: dict`, `global_context: GlobalContext`, `metadata: dict`. |
 | `HookPayloadPolicy` | Frozen dataclass with `writable_fields: frozenset[str]`. Defines which payload fields plugins may modify for a given hook type. |
 | `DefaultHookPolicy` | Enum: `ALLOW` (accept all modifications), `DENY` (reject all modifications). Controls behavior for hooks without an explicit policy. |
@@ -95,9 +92,9 @@ classDiagram
 
       class PluginMode {
           <<enumeration>>
-          ENFORCE
-          ENFORCE_IGNORE_ERROR
-          PERMISSIVE
+          SEQUENTIAL
+          CONCURRENT
+          AUDIT
           FIRE_AND_FORGET
           DISABLED
       }
@@ -175,7 +172,7 @@ plugins:
     hooks:
       - component_pre_create
       - generation_post_call
-    mode: enforce
+    mode: sequential
     priority: 10
     config:
       blocked_terms: ["term1", "term2"]
@@ -193,18 +190,18 @@ plugins:
 
 ### Mellea Wrapper Layer
 
-Mellea exposes its own `@hook` and `@plugin` decorators that translate to ContextForge registrations internally. This serves two purposes:
+Mellea exposes its own `@hook` and `@plugin` decorators that translate to CPEX registrations internally. This serves two purposes:
 
-1. **Mellea-aligned API**: The `@hook` decorator accepts a `mode` parameter with three string values (`"enforce"`, `"permissive"`, `"fire_and_forget"`) that map directly to ContextForge's `PluginMode` enum (`ENFORCE`, `PERMISSIVE`, `FIRE_AND_FORGET`), matching Mellea's code-first ergonomics without requiring users to import the enum.
-2. **Session tagging**: Mellea's wrapper adds session-scoping metadata that ContextForge's `PluginManager` does not natively support. The `_manager.py` layer filters hooks at dispatch time based on session tags.
+1. **Mellea-aligned API**: The `@hook` decorator accepts a `mode` parameter with four string values (`"sequential"`, `"concurrent"`, `"audit"`, `"fire_and_forget"`) that map directly to CPEX's `PluginMode` enum (`SEQUENTIAL`, `CONCURRENT`, `AUDIT`, `FIRE_AND_FORGET`), matching Mellea's code-first ergonomics without requiring users to import the enum.
+2. **Session tagging**: Mellea's wrapper adds session-scoping metadata that CPEX's `PluginManager` does not natively support. The `_manager.py` layer filters hooks at dispatch time based on session tags.
 
-Users never import from `mcpgateway.plugins.framework` directly.
+Users never import from `cpex.framework` directly.
 
 ## 3. Core Types
 
 ### 3.1 `MelleaHookType` enum (`mellea/plugins/_types.py`)
 
-A single `MelleaHookType(str, Enum)` containing all 27 hook types. String-based values for compatibility with ContextForge's `invoke_hook(hook_type: str, ...)`.
+A single `MelleaHookType(str, Enum)` containing all 27 hook types. String-based values for compatibility with CPEX's `invoke_hook(hook_type: str, ...)`.
 
 ```python
 class MelleaHookType(str, Enum):
@@ -280,7 +277,7 @@ class MelleaBasePayload(PluginPayload):
 
 ### 3.3 Hook Registration (`mellea/plugins/_types.py`)
 
-A `_register_mellea_hooks()` function registers all hook types with the ContextForge `HookRegistry`. Called once during plugin initialization. Idempotent via `is_registered()` check. Follows the same pattern used by ContextForge's own hook modules (e.g., `mcpgateway/plugins/framework/hooks/tools.py`).
+A `_register_mellea_hooks()` function registers all hook types with CPEX `HookRegistry`. Called once during plugin initialization. Idempotent via `is_registered()` check.
 
 ```python
 def _register_mellea_hooks() -> None:
@@ -292,7 +289,7 @@ def _register_mellea_hooks() -> None:
 
 ### 3.4 Context Mapping (`mellea/plugins/_context.py`)
 
-The hook system spec defines domain-specific `PluginContext` fields (`session`, `backend`, `context`) that vary by hook category. ContextForge provides a generic `GlobalContext` with a `state: dict`. The mapping uses `GlobalContext.state` as the carrier for Mellea-specific context:
+The hook system spec defines domain-specific `PluginContext` fields (`session`, `backend`, `context`) that vary by hook category. CPEX provides a generic `GlobalContext` with a `state: dict`. The mapping uses `GlobalContext.state` as the carrier for Mellea-specific context:
 
 ```python
 def build_global_context(
@@ -319,7 +316,7 @@ def build_global_context(
 
 `MelleaPlugin` is one of three ways to define plugins, alongside `@hook` on standalone functions (primary) and `@plugin` on plain classes. Use `MelleaPlugin` when you need lifecycle hooks (`initialize`/`shutdown`) or typed context accessors.
 
-Extends ContextForge `Plugin` with typed context accessor helpers so plugin authors don't need to know about the `GlobalContext.state` mapping:
+Extends CPEX `Plugin` with typed context accessor helpers so plugin authors don't need to know about the `GlobalContext.state` mapping:
 
 ```python
 class MelleaPlugin(Plugin):
@@ -339,7 +336,7 @@ class MelleaPlugin(Plugin):
         return self._config.config or {}
 ```
 
-No new abstract methods. ContextForge's `initialize()` and `shutdown()` suffice.
+No new abstract methods. CPEX's `initialize()` and `shutdown()` suffice.
 
 ### 3.6 `@hook` Decorator (`mellea/plugins/_decorators.py`)
 
@@ -349,13 +346,13 @@ The `@hook` decorator works on both standalone async functions and class methods
 @dataclass(frozen=True)
 class HookMeta:
     hook_type: str
-    mode: Literal["enforce", "permissive", "fire_and_forget"] = "enforce"
+    mode: Literal["sequential", "concurrent", "audit", "fire_and_forget"] = "sequential"
     priority: int = 50
 
 def hook(
     hook_type: str,
     *,
-    mode: Literal["enforce", "permissive", "fire_and_forget"] = "enforce",
+    mode: Literal["sequential", "concurrent", "audit", "fire_and_forget"] = "sequential",
     priority: int = 50,
 ) -> Callable:
     """Register an async function or method as a hook handler."""
@@ -369,9 +366,11 @@ def hook(
     return decorator
 ```
 
-The `mode` parameter controls both execution strategy and result handling. These map directly to ContextForge's `PluginMode` enum:
-- `"enforce"` → `PluginMode.ENFORCE` / `"permissive"` → `PluginMode.PERMISSIVE`: Hook is awaited inline (blocking). Difference is whether violations halt execution or are logged only.
-- `"fire_and_forget"` → `PluginMode.FIRE_AND_FORGET`: Hook is dispatched as a background `asyncio.create_task()`. Result is ignored. This is handled by ContextForge's `PluginManager` dispatch logic.
+The `mode` parameter controls both execution strategy and result handling. These map to CPEX's `PluginMode` enum:
+- `"sequential"` → `PluginMode.SEQUENTIAL`: Hook is awaited inline, executed serially. Violations halt the chain.
+- `"concurrent"` → `PluginMode.CONCURRENT`: Hook is awaited inline, but run concurrently with other `concurrent` hooks. Violations are honored.
+- `"audit"` → `PluginMode.AUDIT`: Hook is awaited inline. Violations are logged but execution continues.
+- `"fire_and_forget"` → `PluginMode.FIRE_AND_FORGET`: Hook is dispatched as a background `asyncio.create_task()`. Result is ignored. This is handled by CPEX's `PluginManager` dispatch logic.
 
 When used on a standalone function, the metadata is read at `register()` time or when passed to `start_session(plugins=[...])`. When used on a class method, it is discovered during class registration (either via `@plugin` or `MelleaPlugin` introspection).
 
@@ -461,7 +460,7 @@ def block(
 Defines the concrete per-hook-type policies for Mellea hooks. These are injected into the `PluginManager` at initialization time via the `hook_policies` parameter.
 
 ```python
-from mcpgateway.plugins.framework.hooks.policies import HookPayloadPolicy
+from cpex.framework.hooks.policies import HookPayloadPolicy
 
 MELLEA_HOOK_PAYLOAD_POLICIES: dict[str, HookPayloadPolicy] = {
     # Session Lifecycle
@@ -792,7 +791,7 @@ async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
 
 #### `MelleaPlugin` (`mellea/plugins/_base.py`)
 
-`MelleaPlugin` gains the same protocol. Because `MelleaPlugin` subclasses ContextForge `Plugin` (which owns `__init__`), the scope ID is stored as an instance attribute accessed via `getattr` with a default rather than declared in `__init__`:
+`MelleaPlugin` gains the same protocol. Because `MelleaPlugin` subclasses CPEX `Plugin` (which owns `__init__`), the scope ID is stored as an instance attribute accessed via `getattr` with a default rather than declared in `__init__`:
 
 ```python
 def __enter__(self) -> MelleaPlugin:
@@ -894,16 +893,16 @@ def _register_single(
 
     - Standalone functions with _mellea_hook_meta: wrapped in _FunctionHookAdapter
     - @plugin-decorated class instances: methods with _mellea_hook_meta discovered and registered
-    - MelleaPlugin instances: registered directly with ContextForge
+    - MelleaPlugin instances: registered directly with CPEX
     """
     ...
 ```
 
-A `_FunctionHookAdapter` internal class wraps a standalone `@hook`-decorated function into a ContextForge `Plugin` for the `PluginManager`:
+A `_FunctionHookAdapter` internal class wraps a standalone `@hook`-decorated function into a CPEX `Plugin` for the `PluginManager`:
 
 ```python
 class _FunctionHookAdapter(Plugin):
-    """Adapts a standalone @hook-decorated function into a ContextForge Plugin."""
+    """Adapts a standalone @hook-decorated function into a CPEX Plugin."""
 
     def __init__(self, fn: Callable, session_id: str | None = None):
         meta = fn._mellea_hook_meta

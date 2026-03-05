@@ -21,7 +21,7 @@ All hooks follow this consistent async pattern:
 
 ```python
 # Standalone function hook (primary)
-@hook("hook_name", mode="enforce", priority=50)
+@hook("hook_name", mode="sequential", priority=50)
 async def my_hook(
     payload: PluginPayload,
     context: PluginContext
@@ -39,7 +39,7 @@ class MyPlugin(MelleaPlugin):
 
 - **`payload`**: Immutable (frozen), strongly-typed data specific to the hook point. Plugins use `model_copy(update={...})` to propose modifications
 - **`context`**: Read-only shared context with session metadata and utilities
-- **`mode`**: `"enforce"` (default), `"permissive"`, or `"fire_and_forget"` — controls execution behavior (see Execution Mode below)
+- **`mode`**: `"sequential"` (default), `"concurrent"`, `"audit"`, or `"fire_and_forget"` — controls execution behavior (see Execution Mode below)
 - **`priority`**: Lower numbers execute first (default: 50)
 - **Returns**: A `PluginResult` with continuation flag, modified payload, and violation/explanation — or `None` to continue unchanged
 
@@ -53,17 +53,18 @@ Hooks use Python's `async`/`await` cooperative multitasking. Because Python's ev
 
 ### Execution Mode
 
-Hooks support three execution modes, configurable per-registration via the `mode` parameter on the `@hook` decorator:
+Hooks support four execution modes, configurable per-registration via the `mode` parameter on the `@hook` decorator:
 
 | Mode | Behavior |
 |------|----------|
-| **`enforce`** (default) | Awaited inline. If the hook returns `PluginResult(continue_processing=False)`, execution is blocked. Use for policy enforcement, budget controls, and authorization. |
-| **`permissive`** | Awaited inline. Violations are logged but do not block execution. Use for monitoring, auditing, and gradual rollout of policies. |
+| **`sequential`** (default) | Awaited inline, executed serially in priority order. If the hook returns `PluginResult(continue_processing=False)`, execution is blocked and downstream hooks do not run. Use for policy enforcement, budget controls, and authorization. |
+| **`concurrent`** | Awaited inline, but dispatched concurrently alongside other `concurrent` hooks at the same priority level. Violations are honored. Use when hooks are independent and ordering does not matter. |
+| **`audit`** | Awaited inline. Violations are logged but do not block execution. Use for monitoring, auditing, and gradual rollout of policies. |
 | **`fire_and_forget`** | Dispatched via `asyncio.create_task()` and runs in the background. The `PluginResult` is ignored — cannot modify payloads or block execution. Use for logging, telemetry, and non-critical side effects where latency matters more than ordering guarantees. |
 
-Fire-and-forget hooks receive the payload snapshot as it existed at dispatch time; `enforce`/`permissive` hooks in the same chain that execute earlier (higher priority) can modify the payload before fire-and-forget hooks see it. Any exceptions in fire-and-forget hooks are logged but do not propagate.
+Fire-and-forget hooks receive the payload snapshot as it existed at dispatch time; `sequential`/`concurrent`/`audit` hooks in the same chain that execute earlier (higher priority) can modify the payload before fire-and-forget hooks see it. Any exceptions in fire-and-forget hooks are logged but do not propagate.
 
-> **Note**: All three modes (`enforce`, `permissive`, `fire_and_forget`) are supported by the ContextForge Plugin Framework's `PluginMode` enum. The additional modes `enforce_ignore_error` and `disabled` remain available in the `PluginMode` enum and YAML configuration for deployment-time control, but are not exposed as `@hook` decorator values. They are deployment concerns, not definition-time concerns.
+> **Note**: All four modes (`sequential`, `concurrent`, `audit`, `fire_and_forget`) are supported by CPEX's `PluginMode` enum. The additional `disabled` mode remains available in the `PluginMode` enum and YAML configuration for deployment-time control, but is not exposed as a `@hook` decorator value. It is a deployment concern, not a definition-time concern.
 
 ### Plugin Framework
 
@@ -379,7 +380,7 @@ Mellea uses `DefaultHookPolicy.DENY` as the default for hooks without an explici
 Because payloads are frozen, plugins must use `model_copy(update={...})` to create a modified copy:
 
 ```python
-@hook("generation_pre_call", mode="enforce", priority=10)
+@hook("generation_pre_call", mode="sequential", priority=10)
 async def enforce_budget(payload, ctx):
     if (_estimate_tokens(payload) or 0) > 4000:
         return block("Token budget exceeded")
@@ -1328,7 +1329,7 @@ The simplest way to define a hook handler is with the `@hook` decorator on a pla
 ```python
 from mellea.plugins import hook, block
 
-@hook("generation_pre_call", mode="enforce", priority=10)
+@hook("generation_pre_call", mode="sequential", priority=10)
 async def enforce_budget(payload, ctx):
     if (_estimate_tokens(payload) or 0) > 4000:
         return block("Token budget exceeded")
@@ -1340,7 +1341,7 @@ async def log_result(payload, ctx):
 
 **Parameters**:
 - `hook_type: str` — the hook point name (required, first positional argument)
-- `mode: str` — `"enforce"` (default), `"permissive"`, or `"fire_and_forget"`
+- `mode: str` — `"sequential"` (default), `"concurrent"`, `"audit"`, or `"fire_and_forget"`
 - `priority: int` — lower numbers execute first (default: 50)
 
 The `block()` helper is shorthand for returning `PluginResult(continue_processing=False, violation=PluginViolation(reason=...))`. It accepts an optional `code`, `description`, and `details` for structured violation information.
@@ -1476,7 +1477,7 @@ plugins:
     hooks:
       - component_pre_create
       - generation_post_call
-    mode: enforce
+    mode: sequential
     priority: 10
     config:
       blocked_terms: ["term1", "term2"]
@@ -1495,15 +1496,15 @@ plugins:
 
 ### Execution Modes (YAML / PluginMode Enum)
 
-The following modes are available in the ContextForge `PluginMode` enum and YAML configuration:
+The following modes are available in CPEX's `PluginMode` enum and YAML configuration:
 
-- **`enforce`** (`PluginMode.ENFORCE`): Awaited inline, block execution on violation
-- **`permissive`** (`PluginMode.PERMISSIVE`): Awaited inline, log violations without blocking
+- **`sequential`** (`PluginMode.SEQUENTIAL`): Awaited inline, serial execution, block on violation
+- **`concurrent`** (`PluginMode.CONCURRENT`): Awaited inline, concurrent execution, violations honored
+- **`audit`** (`PluginMode.AUDIT`): Awaited inline, log violations without blocking
 - **`fire_and_forget`** (`PluginMode.FIRE_AND_FORGET`): Background task, result ignored
-- **`enforce_ignore_error`** (`PluginMode.ENFORCE_IGNORE_ERROR`): Like `enforce`, but tolerate plugin errors
-- **`disabled`** (`PluginMode.DISABLED`): Skip hook execution
+- **`disabled`** (`PluginMode.DISABLED`): Skip hook execution (deployment-time only)
 
-The `@hook` decorator exposes `enforce`, `permissive`, and `fire_and_forget` — all backed by ContextForge's `PluginMode` enum. The others (`enforce_ignore_error`, `disabled`) are deployment-time concerns configured via YAML or programmatic `PluginConfig`.
+The `@hook` decorator exposes `sequential`, `concurrent`, `audit`, and `fire_and_forget` — all backed by CPEX's `PluginMode` enum. The `disabled` mode is a deployment-time concern configured via YAML or programmatic `PluginConfig`.
 
 ### Custom Hook Types
 
@@ -1526,7 +1527,7 @@ Custom hooks follow the same calling convention, payload chaining, and result se
 ```python
 from mellea.plugins import hook, block
 
-@hook("generation_pre_call", mode="enforce", priority=10)
+@hook("generation_pre_call", mode="sequential", priority=10)
 async def enforce_token_budget(payload, ctx):
     budget = 4000
     estimated = _estimate_tokens(payload) or 0
@@ -1545,7 +1546,7 @@ from mellea.plugins import hook, block
 
 BLOCKED_TERMS = ["term1", "term2"]
 
-@hook("component_pre_create", mode="enforce", priority=10)
+@hook("component_pre_create", mode="sequential", priority=10)
 async def enforce_content_policy(payload, ctx):
     # Only enforce on Instructions and GenerativeSlots
     if payload.component_type not in ("Instruction", "GenerativeSlot"):

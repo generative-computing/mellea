@@ -39,14 +39,14 @@ log = logging.getLogger("plugin_scoped")
 # ---------------------------------------------------------------------------
 
 
-@hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.PERMISSIVE, priority=10)
+@hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.AUDIT, priority=10)
 async def log_request(payload, ctx):
     """Log every instruction description as it arrives."""
     preview = payload.description[:60].replace("\n", " ")
     log.info("[log_request] → %r", preview)
 
 
-@hook(HookType.COMPONENT_POST_SUCCESS, mode=PluginMode.PERMISSIVE, priority=10)
+@hook(HookType.COMPONENT_POST_SUCCESS, mode=PluginMode.AUDIT, priority=10)
 async def log_response(payload, ctx):
     """Log latency after each successful generation."""
     log.info(
@@ -62,7 +62,7 @@ class ContentGuard:
 
     BLOCKED = ["financial advice", "medical diagnosis"]
 
-    @hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.ENFORCE, priority=5)
+    @hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.SEQUENTIAL, priority=5)
     async def check_description(self, payload, ctx):
         desc = payload.description.lower()
         for topic in self.BLOCKED:

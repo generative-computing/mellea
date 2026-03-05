@@ -364,4 +364,4 @@ parser_angular_minor_types = "release"
 parser_angular_patch_types = "fix,perf,feat"
 
 [tool.uv.sources]
-cpex = { git = "https://github.com/contextforge-org/contextforge-plugins-framework.git", rev = "40d4935798e195d758de7a59d123b87837039b81" }
+cpex = { git = "https://github.com/contextforge-org/contextforge-plugins-framework.git", rev = "e2cbcde43d1fa9854f44de546f11e3070d0f2c5d" }

@@ -1013,7 +1013,7 @@ toml = [
 [[package]]
 name = "cpex"
 version = "0.1.0.dev2"
-source = { git = "https://github.com/contextforge-org/contextforge-plugins-framework.git?rev=40d4935798e195d758de7a59d123b87837039b81#40d4935798e195d758de7a59d123b87837039b81" }
+source = { git = "https://github.com/contextforge-org/contextforge-plugins-framework.git?rev=e2cbcde43d1fa9854f44de546f11e3070d0f2c5d#e2cbcde43d1fa9854f44de546f11e3070d0f2c5d" }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx", extra = ["http2"] },
@@ -3768,7 +3768,7 @@ typecheck = [
 requires-dist = [
     { name = "accelerate", marker = "extra == 'hf'", specifier = ">=1.9.0" },
     { name = "boto3", marker = "extra == 'litellm'" },
-    { name = "cpex", marker = "python_full_version >= '3.11' and extra == 'cpex'", git = "https://github.com/contextforge-org/contextforge-plugins-framework.git?rev=40d4935798e195d758de7a59d123b87837039b81" },
+    { name = "cpex", marker = "python_full_version >= '3.11' and extra == 'cpex'", git = "https://github.com/contextforge-org/contextforge-plugins-framework.git?rev=e2cbcde43d1fa9854f44de546f11e3070d0f2c5d" },
     { name = "datasets", marker = "extra == 'hf'", specifier = ">=4.0.0" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.45.0" },
     { name = "elasticsearch", marker = "extra == 'granite-retriever'", specifier = ">=8.0.0,<9.0.0" },

@@ -59,7 +59,7 @@ class TestHookRegistration:
 
         invocations = []
 
-        @hook("session_pre_init", mode=PluginMode.ENFORCE, priority=10)
+        @hook("session_pre_init", mode=PluginMode.SEQUENTIAL, priority=10)
         async def test_hook(payload, ctx):
             invocations.append(payload)
             return None

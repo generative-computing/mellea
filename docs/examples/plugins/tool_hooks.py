@@ -136,7 +136,7 @@ def _safe_calc(expression: str) -> float:
 ALLOWED_TOOLS: frozenset[str] = frozenset({"get_weather", "calculator"})
 
 
-@hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.ENFORCE, priority=5)
+@hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.SEQUENTIAL, priority=5)
 async def enforce_tool_allowlist(payload, ctx):
     """Block any tool not on the explicit allow list."""
     if payload.tool_name not in ALLOWED_TOOLS:
@@ -164,7 +164,7 @@ async def enforce_tool_allowlist(payload, ctx):
 _CALCULATOR_ALLOWED_CHARS: frozenset[str] = frozenset("0123456789 +-*/(). ")
 
 
-@hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.ENFORCE, priority=10)
+@hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.SEQUENTIAL, priority=10)
 async def validate_tool_args(payload, ctx):
     """Validate tool arguments before invocation."""
     if payload.tool_name == "calculator":

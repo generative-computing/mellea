@@ -26,15 +26,16 @@ logger = logging.getLogger(__name__)
 _MODE_MAP: dict[PluginMode, Any] = {}
 if _HAS_PLUGIN_FRAMEWORK:
     _MODE_MAP = {
-        PluginMode.ENFORCE: _CFPluginMode.SEQUENTIAL,
-        PluginMode.PERMISSIVE: _CFPluginMode.PERMISSIVE,
+        PluginMode.SEQUENTIAL: _CFPluginMode.SEQUENTIAL,
+        PluginMode.CONCURRENT: _CFPluginMode.CONCURRENT,
+        PluginMode.AUDIT: _CFPluginMode.AUDIT,
         PluginMode.FIRE_AND_FORGET: _CFPluginMode.FIRE_AND_FORGET,
     }
 
 
 def _map_mode(mode: PluginMode) -> Any:
     """Map Mellea PluginMode to ContextForge PluginMode."""
-    return _MODE_MAP.get(mode, _MODE_MAP.get(PluginMode.ENFORCE))
+    return _MODE_MAP.get(mode, _MODE_MAP.get(PluginMode.SEQUENTIAL))
 
 
 def block(
@@ -233,7 +234,7 @@ class _ClassPluginAdapter(Plugin):
             name=plugin_meta.name,
             kind=f"{type(instance).__module__}.{type(instance).__qualname__}",
             hooks=list(hook_methods.keys()),
-            mode=PluginMode.ENFORCE,
+            mode=PluginMode.SEQUENTIAL,
             priority=priority,
         )
         super().__init__(config)
