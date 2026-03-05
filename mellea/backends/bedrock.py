@@ -65,16 +65,12 @@ def create_bedrock_litellm_backend(
     model_name = ""
     match model_id:
         case ModelIdentifier():
-            if model_id.bedrock_name is None:
+            if model_id.bedrock_litellm_name is None:
                 raise Exception(
                     f"We do not have a known bedrock model identifier for {model_id}. If Bedrock supports this model, please pass the model_id string directly and  open an issue to add the model id: https://github.com/generative-computing/mellea/issues/new"
                 )
-            elif "AWS_BEARER_TOKEN_BEDROCK" not in os.environ:
-                raise Exception(
-                    "You cannot use ModelIdentifier classes when using Bedrock with IAM. Pass a raw string as `model_id` instead."
-                )
             else:
-                model_name = model_id.bedrock_name
+                model_name = model_id.bedrock_litellm_name
         case str():
             model_name = model_id
     assert model_name != "", (

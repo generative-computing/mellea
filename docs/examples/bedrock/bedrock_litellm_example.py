@@ -12,6 +12,7 @@ import os
 
 import mellea
 from mellea.backends.bedrock import create_bedrock_litellm_backend
+from mellea.backends.model_ids import MISTRALAI_DEVSTRAL_2_123B
 from mellea.stdlib.context import SimpleContext
 
 try:
@@ -22,7 +23,7 @@ except Exception:
         "Run `uv pip install mellea[litellm]`"
     )
 
-MODEL_ID = "bedrock/converse/mistral.devstral-2-123b"
+MODEL_ID = MISTRALAI_DEVSTRAL_2_123B
 
 backend = create_bedrock_litellm_backend(MODEL_ID)
 ctx = SimpleContext()
