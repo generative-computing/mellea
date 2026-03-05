@@ -14,8 +14,14 @@ import logging
 import sys
 
 from mellea import start_session
-from mellea.plugins import (HookType, PluginMode, PluginViolationError, block,
-                            hook, register)
+from mellea.plugins import (
+    HookType,
+    PluginMode,
+    PluginViolationError,
+    block,
+    hook,
+    register,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -94,7 +100,7 @@ if __name__ == "__main__":
             result = m.instruct("What is the speed of light?")
             log.info("Result: %s", result)
         except PluginViolationError as e:
-            log.error(
+            log.warning(
                 "Execution blocked on %s: [%s] %s (plugin=%s)",
                 e.hook_type,
                 e.code,

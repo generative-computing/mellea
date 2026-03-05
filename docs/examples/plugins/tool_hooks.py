@@ -18,7 +18,14 @@ import sys
 
 from mellea import start_session
 from mellea.backends import ModelOption, tool
-from mellea.plugins import HookType, PluginMode, PluginSet, block, hook
+from mellea.plugins import (
+    HookType,
+    PluginMode,
+    PluginSet,
+    block,
+    hook,
+    PluginViolationError,
+)
 from mellea.stdlib.functional import _call_tools
 from mellea.stdlib.requirements import uses_tool
 
@@ -230,70 +237,84 @@ if __name__ == "__main__":
 
     all_tools = [get_weather, search_web, calculate]
 
-    # --- Scenario 1: allowed tool call (get_weather) ---
-    log.info("=== Scenario 1: allowed tool — get_weather ===")
-    with start_session(plugins=[tool_security]) as m:
-        result = m.instruct(
-            description="What is the weather in Boston for the next 3 days?",
-            requirements=[uses_tool("get_weather")],
-            model_options={ModelOption.TOOLS: all_tools},
-            tool_calls=True,
-        )
-        tool_outputs = _call_tools(result, m.backend)
-        if tool_outputs:
-            log.info("Tool returned: %s", tool_outputs[0].content)
-        else:
-            log.error("Expected tool call but none were executed — exiting")
-            sys.exit(1)
-    log.info("")
+    try:
+        # --- Scenario 1: allowed tool call (get_weather) ---
+        log.info("=== Scenario 1: allowed tool — get_weather ===")
+        with start_session(plugins=[tool_security]) as m:
+            result = m.instruct(
+                description="What is the weather in Boston for the next 3 days?",
+                requirements=[uses_tool("get_weather")],
+                model_options={ModelOption.TOOLS: all_tools},
+                tool_calls=True,
+            )
+            tool_outputs = _call_tools(result, m.backend)
+            if tool_outputs:
+                log.info("Tool returned: %s", tool_outputs[0].content)
+            else:
+                log.error("Expected tool call but none were executed — exiting")
+                sys.exit(1)
+        log.info("")
 
-    # --- Scenario 2: blocked tool call (search_web is not on the allow list) ---
-    log.info("=== Scenario 2: blocked tool — search_web not on allow list ===")
-    with start_session(plugins=[tool_security]) as m:
-        result = m.instruct(
-            description="Search the web for the latest Python news.",
-            requirements=[uses_tool("search_web")],
-            model_options={ModelOption.TOOLS: all_tools},
-            tool_calls=True,
-        )
-        tool_outputs = _call_tools(result, m.backend)
-        if not tool_outputs:
-            log.info("Tool call was blocked — outputs list is empty, as expected")
-        else:
-            log.warning("Expected tool to be blocked but it executed: %s", tool_outputs)
-    log.info("")
+        # --- Scenario 2: blocked tool call (search_web is not on the allow list) ---
+        log.info("=== Scenario 2: blocked tool — search_web not on allow list ===")
+        with start_session(plugins=[tool_security]) as m:
+            result = m.instruct(
+                description="Search the web for the latest Python news.",
+                requirements=[uses_tool("search_web")],
+                model_options={ModelOption.TOOLS: all_tools},
+                tool_calls=True,
+            )
+            tool_outputs = _call_tools(result, m.backend)
+            if not tool_outputs:
+                log.info("Tool call was blocked — outputs list is empty, as expected")
+            else:
+                log.warning(
+                    "Expected tool to be blocked but it executed: %s", tool_outputs
+                )
+        log.info("")
 
-    # --- Scenario 3: safe calculator expression goes through ---
-    log.info("=== Scenario 3: safe calculator expression ===")
-    with start_session(plugins=[tool_security]) as m:
-        result = m.instruct(
-            description="Use the calculator to compute 6 * 7.",
-            requirements=[uses_tool("calculator")],
-            model_options={ModelOption.TOOLS: all_tools},
-            tool_calls=True,
-        )
-        tool_outputs = _call_tools(result, m.backend)
-        if tool_outputs:
-            log.info("Tool returned: %s", tool_outputs[0].content)
-        else:
-            log.error("Expected tool call but none were executed — exiting")
-            sys.exit(1)
-    log.info("")
+        # --- Scenario 3: safe calculator expression goes through ---
+        log.info("=== Scenario 3: safe calculator expression ===")
+        with start_session(plugins=[tool_security]) as m:
+            result = m.instruct(
+                description="Use the calculator to compute 6 * 7.",
+                requirements=[uses_tool("calculator")],
+                model_options={ModelOption.TOOLS: all_tools},
+                tool_calls=True,
+            )
+            tool_outputs = _call_tools(result, m.backend)
+            if tool_outputs:
+                log.info("Tool returned: %s", tool_outputs[0].content)
+            else:
+                log.error("Expected tool call but none were executed — exiting")
+                sys.exit(1)
+        log.info("")
 
-    # --- Scenario 4: unsafe calculator expression is blocked ---
-    log.info("=== Scenario 4: unsafe calculator expression blocked ===")
-    with start_session(plugins=[tool_security]) as m:
-        result = m.instruct(
-            description=(
-                "Use the calculator on this expression: "
-                "__builtins__['print']('injected')"
-            ),
-            requirements=[uses_tool("calculator")],
-            model_options={ModelOption.TOOLS: all_tools},
-            tool_calls=True,
+        # --- Scenario 4: unsafe calculator expression is blocked ---
+        log.info("=== Scenario 4: unsafe calculator expression blocked ===")
+        with start_session(plugins=[tool_security]) as m:
+            result = m.instruct(
+                description=(
+                    "Use the calculator on this expression: "
+                    "__builtins__['print']('injected')"
+                ),
+                requirements=[uses_tool("calculator")],
+                model_options={ModelOption.TOOLS: all_tools},
+                tool_calls=True,
+            )
+            tool_outputs = _call_tools(result, m.backend)
+            if not tool_outputs:
+                log.info("Tool call was blocked — outputs list is empty, as expected")
+            else:
+                log.warning(
+                    "Expected tool to be blocked but it executed: %s", tool_outputs
+                )
+    except PluginViolationError as e:
+        log.warning(
+            "Execution blocked on %s: [%s] %s (plugin=%s)",
+            e.hook_type,
+            e.code,
+            e.reason,
+            e.plugin_name,
         )
-        tool_outputs = _call_tools(result, m.backend)
-        if not tool_outputs:
-            log.info("Tool call was blocked — outputs list is empty, as expected")
-        else:
-            log.warning("Expected tool to be blocked but it executed: %s", tool_outputs)
+        sys.exit(1)

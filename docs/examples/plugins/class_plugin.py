@@ -14,8 +14,14 @@ import re
 import sys
 
 from mellea import start_session
-from mellea.plugins import (HookType, PluginResult, PluginViolationError, hook,
-                            plugin, register)
+from mellea.plugins import (
+    HookType,
+    PluginResult,
+    PluginViolationError,
+    hook,
+    plugin,
+    register,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -91,7 +97,7 @@ if __name__ == "__main__":
             log.info("")
             log.info("Total redactions applied: %d", redactor.redaction_count)
         except PluginViolationError as e:
-            log.error(
+            log.warning(
                 "Execution blocked on %s: [%s] %s (plugin=%s)",
                 e.hook_type,
                 e.code,

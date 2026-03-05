@@ -36,9 +36,6 @@ class MelleaTool(AbstractMelleaTool):
 
     def run(self, *args, **kwargs) -> Any:
         """Run the tool with the given arguments."""
-        # TODO: implement the invoke_hooks for tool calls here.
-        # @final decorator
-        # We could also interpose after the model has returned the list of tools to be invoke.
         return self._call_tool(*args, **kwargs)
 
     @property

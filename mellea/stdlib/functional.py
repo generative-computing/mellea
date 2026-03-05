@@ -1171,16 +1171,13 @@ async def _acall_tools(
                 tool_callable=tool.call_func,
                 model_tool_call=tool,
             )
-            try:
-                await invoke_hook(
-                    HookType.TOOL_PRE_INVOKE,
-                    pre_payload,
-                    backend=backend,
-                    context=context,
-                    session_id=session_id,
-                )
-            except PluginViolationError:
-                continue  # tool call blocked by plugin — skip silently
+            await invoke_hook(
+                HookType.TOOL_PRE_INVOKE,
+                pre_payload,
+                backend=backend,
+                context=context,
+                session_id=session_id,
+            )
 
         # --- execute the tool ---
         t0 = time.monotonic()
