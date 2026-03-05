@@ -71,3 +71,36 @@ async def test_astream_post_process_only_called_on_success():
     await mot.astream()
 
     assert post_process_called, "post_process should be called on successful completion"
+
+
+async def test_astream_closes_telemetry_span_on_error():
+    """Telemetry span must be ended and error recorded when generation fails."""
+    from unittest.mock import MagicMock
+
+    mock_span = MagicMock()
+    mot = _make_thunk()
+    mot._meta["_telemetry_span"] = mock_span
+
+    error = ConnectionError("server unavailable")
+    await mot._async_queue.put(error)
+
+    with pytest.raises(ConnectionError, match="server unavailable"):
+        await mot.astream()
+
+    # Span should have been ended and cleaned up
+    mock_span.record_exception.assert_called_once_with(error)
+    mock_span.set_status.assert_called_once()
+    mock_span.end.assert_called_once()
+    assert "_telemetry_span" not in mot._meta
+
+
+async def test_astream_no_span_leak_when_no_telemetry():
+    """When no telemetry span is present, error propagation still works."""
+    mot = _make_thunk()
+    assert "_telemetry_span" not in mot._meta
+
+    error = ValueError("test error")
+    await mot._async_queue.put(error)
+
+    with pytest.raises(ValueError, match="test error"):
+        await mot.astream()

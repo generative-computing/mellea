@@ -321,6 +321,16 @@ class ModelOutputThunk(CBlock, Generic[S]):
             # and set fields to None.
 
         elif isinstance(chunks[-1], Exception):
+            # Close any open telemetry span before propagating the error.
+            # We can't call full post_process here (it assumes success invariants),
+            # but we must not leak the span.
+            span = self._meta.get("_telemetry_span")
+            if span is not None:
+                from ..telemetry import end_backend_span, set_span_error
+
+                set_span_error(span, chunks[-1])
+                end_backend_span(span)
+                del self._meta["_telemetry_span"]
             raise chunks[-1]
 
         for chunk in chunks:
