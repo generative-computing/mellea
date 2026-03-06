@@ -40,6 +40,7 @@ return anything else.
 Generative functions can also return Pydantic models for structured multi-field output:
 
 ```python
+from typing import Literal
 from pydantic import BaseModel
 from mellea import generative, start_session
 
@@ -155,7 +156,7 @@ functions, which can be maintained and tested independently.
 `@generative` and `m.instruct()` serve different purposes:
 
 | | `@generative` | `m.instruct()` |
-|---|---|---|
+| --- | --- | --- |
 | Interface | Named function with typed signature | Inline prompt string |
 | Return type | Python type annotation | String (or constrained by requirements) |
 | Reusability | High — call like any function | Low — prompt embedded at call site |

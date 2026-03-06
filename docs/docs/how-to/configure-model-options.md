@@ -46,12 +46,12 @@ Options set on the backend apply to every call on that session. Options passed t
 `m.*` call apply only to that call and take precedence over the session-level values.
 
 You can also pass backend-native key names directly — Mellea forwards any key it does not
-recognise to the underlying API unchanged. This means you can copy model option dicts from
+recognize to the underlying API unchanged. This means you can copy model option dicts from
 existing codebases without translation:
 
 ```python
 answer = m.instruct(
-    "Summarise this in one sentence.",
+    "Summarize this in one sentence.",
     model_options={
         "temperature": 0.3,
         "num_predict": 50,   # Ollama-native key
@@ -131,7 +131,7 @@ answer = m.instruct("Explain what a context manager is in Python.")
 ```
 
 Using `ModelOption.SYSTEM_PROMPT` is recommended over constructing a system-role message
-manually. Some backend APIs do not serialise system-role messages correctly and expect the
+manually. Some backend APIs do not serialize system-role messages correctly and expect the
 system prompt as a separate parameter — `ModelOption.SYSTEM_PROMPT` handles this correctly
 across all backends.
 
