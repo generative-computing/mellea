@@ -8,7 +8,7 @@
 - [ ] Other
 
 ## Description
-- [ ] Link to Issue: 
+- [ ] Link to Issue: Fixes <!-- issue number -->
 
 <!-- Brief description of the change being made along with an explanation. -->
 
