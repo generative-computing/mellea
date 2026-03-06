@@ -1,5 +1,5 @@
 ---
-title: "Welcome to Mellea"
+title: "Mellea — build predictable AI without guesswork"
 description: "A Python library for writing reliable generative programs."
 ---
 
@@ -16,70 +16,93 @@ description: "A Python library for writing reliable generative programs."
   height="48"
 />
 
-**Mellea** helps you write *generative programs* — software that strategically integrates
-LLM calls in a structured, maintainable way. The library's core insight is that LLM calls
-are non-deterministic operations that need to be *circumscribed* by requirement verification,
-repair loops, and careful context management. Mellea gives you the tools to do that without
-boilerplate.
+The unreliable part of every AI-powered pipeline is the same: the LLM call itself.
+**Mellea** replaces ad-hoc prompt chains and brittle agents with structured
+*generative programs* — Python code where LLM calls are first-class operations
+governed by type annotations, requirement verifiers, and principled repair loops.
+
+```bash
+uv pip install mellea
+```
 
 <CardGroup cols={2}>
   <Card title="Get started" icon="rocket" href="/getting-started/installation">
     Install Mellea and run your first generative program in minutes.
   </Card>
   <Card title="Tutorial" icon="graduation-cap" href="/tutorials/01-your-first-generative-program">
-    Build a working generative program step by step, with requirements and repair.
+    Build a complete program with generation, validation, and repair.
   </Card>
   <Card title="Code examples" icon="github" href="https://github.com/generative-computing/mellea/tree/main/docs/examples">
-    Browse complete, runnable examples on GitHub.
+    Runnable examples: RAG, agents, sampling, MObjects, and more.
   </Card>
   <Card title="API reference" icon="code" href="/api/mellea/backends/backend">
     Full public API — backends, session, components, requirements, sampling.
   </Card>
 </CardGroup>
 
-## Core ideas
+## How Mellea works
+
+Mellea's design rests on three interlocking ideas.
 
 <CardGroup cols={3}>
+  <Card title="Python, not prose" icon="function" href="/concepts/generative-functions">
+    `@generative` turns a typed function signature into an LLM-backed implementation.
+    Docstrings become prompts. Type hints become output schemas. No DSL required.
+  </Card>
+  <Card title="Requirements driven" icon="list-check" href="/concepts/requirements-system">
+    Declare what good output looks like with `req()`. Mellea checks every response
+    before it leaves the session — using LLM verifiers, programmatic checks, or
+    domain-trained adapters.
+  </Card>
   <Card title="Instruct · Validate · Repair" icon="shield-check" href="/concepts/instruct-validate-repair">
-    The fundamental pattern: generate, check requirements, repair on failure.
-  </Card>
-  <Card title="Generative functions" icon="function" href="/concepts/generative-functions">
-    Typed, composable LLM-backed functions using `@generative`.
-  </Card>
-  <Card title="Requirements system" icon="list-check" href="/concepts/requirements-system">
-    Declarative output constraints — LLM-checked or programmatic.
-  </Card>
-  <Card title="MObjects and mify" icon="cube" href="/concepts/mobjects-and-mify">
-    Make any Python object LLM-queryable with `@mify`.
-  </Card>
-  <Card title="Context and sessions" icon="timeline" href="/concepts/context-and-sessions">
-    Manage conversation history across multi-turn workflows.
-  </Card>
-  <Card title="Generative programming" icon="lightbulb" href="/concepts/generative-programming">
-    The theoretical grounding — why structured programs beat ad-hoc prompting.
+    When a requirement fails, Mellea feeds the failure back and tries again.
+    Rejection sampling, majority voting, and SOFAI are built in.
   </Card>
 </CardGroup>
 
-## Backends and integrations
+## Key patterns
 
 <CardGroup cols={3}>
-  <Card title="Ollama" icon="server" href="/integrations/ollama">
-    Local models, zero cloud costs — works out of the box.
+  <Card title="Generative slots" icon="brackets-curly" href="/guide/generative-functions">
+    Compose typed LLM-backed functions the same way you compose ordinary Python —
+    no coupling between libraries.
   </Card>
-  <Card title="OpenAI" icon="sparkles" href="/integrations/openai">
-    GPT-4o, o3, and any OpenAI-compatible API.
+  <Card title="MObjects and mify" icon="cube" href="/concepts/mobjects-and-mify">
+    Add `@mify` to any class to make it LLM-queryable and tool-accessible
+    without rewriting your data model.
   </Card>
-  <Card title="Bedrock and watsonx" icon="cloud" href="/integrations/bedrock-and-watsonx">
-    AWS Bedrock or IBM watsonx for enterprise deployments.
+  <Card title="Context and sessions" icon="timeline" href="/concepts/context-and-sessions">
+    Explicit context threading with push/pop state keeps multi-turn
+    workflows reproducible and debuggable.
   </Card>
-  <Card title="MCP and m serve" icon="plug" href="/integrations/mcp-and-m-serve">
-    Expose Mellea programs as MCP tools or an OpenAI-compatible endpoint.
+  <Card title="Intrinsics and adapters" icon="sliders" href="/advanced/intrinsics">
+    Drop in trained LoRA / aLoRA adapters as fast, lightweight requirement
+    validators over domain-specific data.
   </Card>
   <Card title="Inference-time scaling" icon="chart-line" href="/advanced/inference-time-scaling">
-    Majority voting, rejection sampling, SOFAI, best-of-n strategies.
+    Best-of-n, SOFAI, majority voting — swap strategies in one line.
   </Card>
-  <Card title="LoRA and aLoRA adapters" icon="sliders" href="/advanced/lora-and-alora-adapters">
-    Train domain-specific requirement validators on your own labeled data.
+  <Card title="MCP and m serve" icon="plug" href="/integrations/mcp-and-m-serve">
+    Expose any Mellea program as an MCP tool or OpenAI-compatible endpoint.
+  </Card>
+</CardGroup>
+
+## Backends
+
+Mellea is backend-agnostic. The same program runs on any inference engine.
+
+<CardGroup cols={4}>
+  <Card title="Ollama" icon="server" href="/integrations/ollama">
+    Local inference, zero cloud costs.
+  </Card>
+  <Card title="OpenAI" icon="sparkles" href="/integrations/openai">
+    GPT-4o, o3-mini, any OpenAI-compatible API.
+  </Card>
+  <Card title="Bedrock / watsonx" icon="cloud" href="/integrations/bedrock-and-watsonx">
+    AWS Bedrock and IBM watsonx.
+  </Card>
+  <Card title="HuggingFace / vLLM" icon="database" href="/advanced/lora-and-alora-adapters">
+    Local HF models with adapter support.
   </Card>
 </CardGroup>
 
