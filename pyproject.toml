@@ -141,6 +141,10 @@ granite_common_retriever = [
     "elasticsearch>=8.0.0,<9.0.0"
 ]
 
+# -----------------------------
+# Ruff - Linting and Formatting
+# -----------------------------
+
 [tool.ruff]
 target-version = "py310"
 respect-gitignore = true
@@ -150,41 +154,33 @@ skip-magic-trailing-comma = true
 
 [tool.ruff.lint]
 select = [
-  # "B",  # flake8-bugbear
-  "C",  # flake8-comprehensions
-  "C9", # mccabe
-  "D",  # flake8-docstrings
-  "E",   # pycodestyle errors (default)
-  "F",   # pyflakes (default)
-  "I",   # isort
-  "PD",  # pandas-vet
-  "PIE", # pie
-  # "PTH", # pathlib
-  "Q", # flake8-quotes
-  # "RET", # return
-  "RUF", # Enable all ruff-specific checks
-  # "SIM", # simplify
-  "S307", # eval
+  "C",      # flake8-comprehensions
+  "C9",     # mccabe
+  "D",      # flake8-docstrings
+  "E",      # pycodestyle errors (default)
+  "F",      # pyflakes (default)
+  "I",      # isort
+  "PD",     # pandas-vet
+  "PIE",    # pie
+  "Q",      # flake8-quotes
+  "RUF",    # Enable all ruff-specific checks
+  "S307",   # eval
+  "W",      # pycodestyle warnings
+  "ASYNC",  # async
+  "UP",     # pyupgrade
   # "T20",  # (disallow print statements) keep debugging statements out of the codebase
-  "W",     # pycodestyle warnings
-  "ASYNC", # async
-  "UP",    # pyupgrade
 ]
 
 ignore = [
-  "RUF001", # ambiguous unicode characters (these occur in examples).
-  "C408",   # Unnecessary `dict()` call (rewrite as a literal)
-  "E501",   # Line too long, handled by ruff formatter
-  # "D107",   # "Missing docstring in __init__",
-  "F401",   # imported but unused; consider using `importlib.util.find_spec` to test for "
-  "F811",   # "redefinition of the same function"
-  "PL",     # Pylint
-  "RUF012", # Mutable Class Attributes
-#   "UP006",  # List vs list, etc
-#   "UP007",  # Option and Union
-#   "UP035",  # `typing.Set` is deprecated, use `set` instead"
-  "PD901",  # Generic variable name 'df' for DataFrames (deprecated rule, but needed while PD is enabled)
-  "C901", # Complexity warnings
+  "RUF001",  # ambiguous unicode characters (these occur in examples)
+  "C408",    # Unnecessary `dict()` call (rewrite as a literal)
+  "E501",    # Line too long, handled by ruff formatter
+  "F401",    # imported but unused; consider using `importlib.util.find_spec` to test for
+  "F811",    # redefinition of the same function
+  "PL",      # Pylint
+  "RUF012",  # Mutable Class Attributes
+  "PD901",   # Generic variable name 'df' for DataFrames (deprecated rule, but needed while PD is enabled)
+  "C901",    # Complexity warnings
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -208,6 +204,16 @@ split-on-trailing-comma = false
 "cli/**/*.py" = ["D"]
 "tooling/**/*.py" = ["D"]
 
+# -----------------------------
+# MyPy - Type Checking
+# -----------------------------
+
+[tool.mypy]
+install_types = true
+non_interactive = true
+disable_error_code = ["empty-body", "import-untyped"]
+python_version = "3.10"
+
 [[tool.mypy.overrides]]
 # Keep import-not-found suppressed for optional dependencies
 module = "docs.*"
@@ -222,6 +228,10 @@ disable_error_code = [
     "import-not-found",
 ]
 
+# -----------------------------
+# Codespell - Spell Checking
+# -----------------------------
+
 [tool.codespell]
 ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,Wight'
 check-filenames = true
@@ -229,11 +239,9 @@ check-hidden = false
 regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=[A-Z])|\\d+"
 skip = 'requirements.txt,uv.lock,CHANGELOG.md'
 
-[tool.mypy]
-install_types = true
-non_interactive = true
-disable_error_code = ["empty-body", "import-untyped"]
-python_version = "3.10"
+# -----------------------------
+# Pytest - Testing Framework
+# -----------------------------
 
 [tool.pytest.ini_options]
 testpaths = ["test", "docs"]  # Run test/ first (fail fast), then docs/
@@ -285,6 +293,10 @@ filterwarnings = [
     "default:.*Watsonx Backend is deprecated.*:DeprecationWarning",
 ]
 
+# -----------------------------
+# Coverage - Code Coverage
+# -----------------------------
+
 [tool.coverage.run]
 branch = true  # Measure branch coverage, not just line coverage
 source = ["mellea", "cli"]
@@ -311,6 +323,10 @@ exclude_lines = [
 
 [tool.coverage.html]
 directory = "htmlcov"
+
+# -----------------------------
+# Semantic Release - Versioning
+# -----------------------------
 
 [tool.semantic_release]
 # for default values check:
