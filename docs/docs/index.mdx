@@ -1,0 +1,91 @@
+---
+title: "Mellea documentation"
+description: "The library for writing reliable generative programs."
+---
+
+<img
+  className="block dark:hidden"
+  src="/logo/logo-light.svg"
+  alt="Mellea"
+  height="48"
+/>
+<img
+  className="hidden dark:block"
+  src="/logo/logo-dark.svg"
+  alt="Mellea"
+  height="48"
+/>
+
+**Mellea** is a Python library for writing generative programs. Rather than chaining prompts or
+wiring up agents by hand, you define structured workflows that are maintainable, testable,
+and backend-agnostic.
+
+<CardGroup cols={2}>
+  <Card title="Quick start" icon="rocket" href="/getting-started/quickstart">
+    Install Mellea and run your first generative program in under five minutes.
+  </Card>
+  <Card title="Tutorial" icon="graduation-cap" href="/tutorials/01-your-first-generative-program">
+    Walk through building a working generative program step by step.
+  </Card>
+  <Card title="Instruct · Validate · Repair" icon="shield-check" href="/concepts/instruct-validate-repair">
+    Understand the core pattern that makes Mellea programs reliable.
+  </Card>
+  <Card title="API reference" icon="code" href="/api/mellea/backends/backend">
+    Browse the full public API for backends, session, components, and more.
+  </Card>
+</CardGroup>
+
+## Core concepts
+
+Mellea replaces ad hoc prompt chains with structured, composable workflows.
+
+<CardGroup cols={3}>
+  <Card title="Generative functions" icon="function" href="/concepts/generative-functions">
+    Turn a typed function signature into an LLM-backed implementation.
+  </Card>
+  <Card title="Requirements system" icon="list-check" href="/concepts/requirements-system">
+    Express output constraints and let Mellea enforce them automatically.
+  </Card>
+  <Card title="MObjects and mify" icon="cube" href="/concepts/mobjects-and-mify">
+    Expose structured Python objects to the model with controlled field access.
+  </Card>
+  <Card title="Context and sessions" icon="timeline" href="/concepts/context-and-sessions">
+    Manage conversation history and session state across multi-turn workflows.
+  </Card>
+  <Card title="Architecture vs agents" icon="sitemap" href="/concepts/architecture-vs-agents">
+    When to use Mellea's structured approach instead of an agent framework.
+  </Card>
+  <Card title="Generative programming" icon="lightbulb" href="/concepts/generative-programming">
+    The ideas behind generative programs and why reliability requires structure.
+  </Card>
+</CardGroup>
+
+## Backends and integrations
+
+<CardGroup cols={3}>
+  <Card title="Ollama" icon="server" href="/integrations/ollama">
+    Run any model locally with zero cloud costs.
+  </Card>
+  <Card title="OpenAI" icon="sparkles" href="/integrations/openai">
+    GPT-4o, o3, and any OpenAI-compatible API.
+  </Card>
+  <Card title="Bedrock and watsonx" icon="cloud" href="/integrations/bedrock-and-watsonx">
+    Deploy on AWS Bedrock or IBM watsonx.
+  </Card>
+  <Card title="MCP and m serve" icon="plug" href="/integrations/mcp-and-m-serve">
+    Expose Mellea programs as MCP tools or an OpenAI-compatible endpoint.
+  </Card>
+  <Card title="Inference-time scaling" icon="chart-line" href="/advanced/inference-time-scaling">
+    Majority voting, rejection sampling, SOFAI, and best-of-n strategies.
+  </Card>
+  <Card title="LoRA and aLoRA adapters" icon="sliders" href="/advanced/lora-and-alora-adapters">
+    Train lightweight adapters on proprietary data for requirement validation.
+  </Card>
+</CardGroup>
+
+---
+
+[GitHub](https://github.com/generative-computing/mellea) ·
+[PyPI](https://pypi.org/project/mellea/) ·
+[Discussions](https://github.com/generative-computing/mellea/discussions) ·
+[Discord](https://ibm.biz/mellea-discord)
