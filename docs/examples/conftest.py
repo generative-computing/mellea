@@ -115,6 +115,10 @@ def _should_skip_collection(markers):
     if "qualitative" in markers and gh_run == 1:
         return True, "Skipping qualitative test in CI (CICD=1)"
 
+    # Explicitly skip if 'skip' marker is present
+    if "skip" in markers:
+        return True, "Example marked with skip marker"
+
     # Skip slow tests if SKIP_SLOW=1 environment variable is set
     if "slow" in markers and int(os.environ.get("SKIP_SLOW", 0)) == 1:
         return True, "Skipping slow test (SKIP_SLOW=1)"
