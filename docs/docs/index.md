@@ -4,13 +4,53 @@ Mellea is a Python library for writing generative programs. Rather than chaining
 wiring up agents by hand, you define structured workflows that are maintainable, testable,
 and backend-agnostic.
 
-## Where to start
+The rendered documentation site is at <https://docs.mellea.ai>.
 
-- [Installation](getting-started/installation.md) — install Mellea and verify your setup
-- [Quick start](getting-started/quickstart.md) — a working generative program in five minutes
-- [Your first generative program](tutorials/01-your-first-generative-program.md) — guided tutorial
-- [Concepts](concepts/generative-programming.md) — how Mellea models generative programs
+---
 
-## Full documentation
+## Getting started
 
-The complete documentation is published at <https://docs.mellea.ai>.
+- [Installation](getting-started/installation.md)
+- [Quick start](getting-started/quickstart.md)
+
+## Tutorials
+
+- [Your first generative program](tutorials/01-your-first-generative-program.md)
+
+## Concepts
+
+- [Generative programming](concepts/generative-programming.md)
+- [Architecture vs agents](concepts/architecture-vs-agents.md)
+- [The requirements system](concepts/requirements-system.md)
+- [Instruct-validate-repair](concepts/instruct-validate-repair.md)
+- [Context and sessions](concepts/context-and-sessions.md)
+
+## How-to guides
+
+- [Enforce structured output](how-to/enforce-structured-output.md)
+- [Write custom verifiers](how-to/write-custom-verifiers.md)
+- [Use context and sessions](how-to/use-context-and-sessions.md)
+- [Use async and streaming](how-to/use-async-and-streaming.md)
+
+## Integrations
+
+- [Ollama](integrations/ollama.md)
+- [OpenAI](integrations/openai.md)
+- [AWS Bedrock and IBM watsonx](integrations/bedrock-and-watsonx.md)
+- [MCP and m-serve](integrations/mcp-and-m-serve.md)
+
+## Evaluation and observability
+
+- [Handling exceptions](evaluation-and-observability/handling-exceptions.md)
+- [Metrics and telemetry](evaluation-and-observability/metrics-and-telemetry.md)
+
+## Advanced
+
+- [Inference-time scaling](advanced/inference-time-scaling.md)
+- [Intrinsics](advanced/intrinsics.md)
+- [Security and taint tracking](advanced/security-and-taint-tracking.md)
+- [Mellea core internals](advanced/mellea-core-internals.md)
+
+## Troubleshooting
+
+- [Common errors](troubleshooting/common-errors.md)
