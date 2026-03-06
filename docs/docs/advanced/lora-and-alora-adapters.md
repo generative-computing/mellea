@@ -158,6 +158,6 @@ backend.default_to_constraint_checking_alora = False
 Set it back to `True` to re-enable. This flag is per-backend instance and does not
 affect other sessions.
 
-**See also:** [Intrinsics](./intrinsics.md) |
-[The Requirements System](../concepts/requirements-system.md) |
-[Write Custom Verifiers](../how-to/write-custom-verifiers.md)
+**See also:** [Intrinsics](./intrinsics) |
+[The Requirements System](../concepts/requirements-system) |
+[Write Custom Verifiers](../how-to/write-custom-verifiers)

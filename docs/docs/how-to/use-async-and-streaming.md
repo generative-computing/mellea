@@ -6,7 +6,7 @@ description: "Use async methods, parallel generation, and streaming output with 
 
 # Async and Streaming
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally.
 
 ## Async methods

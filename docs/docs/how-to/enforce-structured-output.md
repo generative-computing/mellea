@@ -6,7 +6,7 @@ description: "Get JSON, Pydantic models, and typed values from LLM calls using @
 
 # Enforce Structured Output
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally.
 
 Mellea provides two paths to structured output. Choose based on how the call fits
@@ -268,5 +268,5 @@ Both patterns support the full IVR loop, requirements, sampling strategies, and
 ---
 
 
-**See also:** [Generative Functions](../guide/generative-functions.md) |
-[The Requirements System](../concepts/requirements-system.md)
+**See also:** [Generative Functions](../guide/generative-functions) |
+[The Requirements System](../concepts/requirements-system)

@@ -18,7 +18,7 @@ By the end you will have covered:
 - [`@generative`](../guide/glossary#generative) with `Literal` and [Pydantic](https://docs.pydantic.dev/) return types
 - Composing generative functions into a pipeline
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally with `granite4:micro` downloaded.
 
 ---
@@ -365,10 +365,10 @@ call is self-contained.
 
 ## Next steps
 
-- [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md) — deep dive
+- [Instruct, Validate, Repair](../concepts/instruct-validate-repair) — deep dive
   into the IVR loop and sampling strategies
-- [The Requirements System](../concepts/requirements-system.md) — advanced validators,
+- [The Requirements System](../concepts/requirements-system) — advanced validators,
   preconditions, and debugging
-- [Generative Functions](../guide/generative-functions.md) — `@generative` in depth
-- [Working with Data](../guide/working-with-data.md) — passing documents and images
+- [Generative Functions](../guide/generative-functions) — `@generative` in depth
+- [Working with Data](../guide/working-with-data) — passing documents and images
   into generative programs

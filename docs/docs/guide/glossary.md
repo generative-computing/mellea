@@ -20,7 +20,7 @@ when working with custom components or building your own inference loops.
 
 `aact()` is the async counterpart — same signature, same return types.
 
-See: [act() and aact()](./act-and-aact.md)
+See: [act() and aact()](./act-and-aact)
 
 ---
 
@@ -31,7 +31,7 @@ An **Activated LoRA** (aLoRA) is a LoRA adapter dynamically loaded by
 Instead of running a full LLM call to check a requirement, the adapter is activated
 on the same model weights already in memory.
 
-See: [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md)
+See: [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters)
 
 ---
 
@@ -55,7 +55,7 @@ m = start_session()
 lang = classify_language(m, code="print('hello')")
 ```
 
-See: [Generative Functions](./generative-functions.md)
+See: [Generative Functions](./generative-functions)
 
 ---
 
@@ -66,7 +66,7 @@ A backend is an inference engine that Mellea uses to run LLM calls. Examples:
 `WatsonxAIBackend`. Backends are configured via `MelleaSession` or
 `start_session()`.
 
-See: [Backends and Configuration](./backends-and-configuration.md)
+See: [Backends and Configuration](./backends-and-configuration)
 
 ---
 
@@ -76,7 +76,7 @@ A `CBlock` (content block) is the low-level unit of content in Mellea. A `CBlock
 holds text (or image data) and is assembled by a `Component` into the prompt sent
 to the backend. Multiple CBlocks compose into a single LLM request.
 
-See: [Mellea Core Internals](../advanced/mellea-core-internals.md)
+See: [Mellea Core Internals](../advanced/mellea-core-internals)
 
 ---
 
@@ -95,7 +95,7 @@ A `Context` holds the conversation history threaded through a `MelleaSession`.
 Mellea provides `SimpleContext` (single-turn) and `ChatContext` (multi-turn). Push
 and pop operations let you branch and restore context state across calls.
 
-See: [Context and Sessions](../concepts/context-and-sessions.md)
+See: [Context and Sessions](../concepts/context-and-sessions)
 
 ---
 
@@ -106,7 +106,7 @@ annotation as the output schema and its docstring as the prompt. Generative
 functions are called with a `MelleaSession` as the first argument and return the
 annotated type.
 
-See: [Generative Functions](./generative-functions.md)
+See: [Generative Functions](./generative-functions)
 
 ---
 
@@ -115,7 +115,7 @@ See: [Generative Functions](./generative-functions.md)
 Any computer program that contains calls to an LLM. Mellea is a library for writing
 robust, composable generative programs.
 
-See: [Generative Programming](../concepts/generative-programming.md)
+See: [Generative Programming](../concepts/generative-programming)
 
 ---
 
@@ -125,7 +125,7 @@ A safety requirement in Mellea that validates LLM outputs against defined safety
 rules before they are returned to the caller. Uses the Granite Guardian model as a
 verifier.
 
-See: [Security and Taint Tracking](../advanced/security-and-taint-tracking.md)
+See: [Security and Taint Tracking](../advanced/security-and-taint-tracking)
 
 ---
 
@@ -146,7 +146,7 @@ m = mellea.start_session(
 )
 ```
 
-See: [Backends and Configuration](./backends-and-configuration.md)
+See: [Backends and Configuration](./backends-and-configuration)
 
 ---
 
@@ -160,7 +160,7 @@ accepted in the `images=[...]` parameter of `instruct()` and `chat()`.
 Use `ImageBlock` when you need an already-encoded representation, or when the PIL image
 is not directly available (e.g., passing between functions or caching).
 
-See: [Use Images and Vision Models](../how-to/use-images-and-vision.md)
+See: [Use Images and Vision Models](../how-to/use-images-and-vision)
 
 ---
 
@@ -171,7 +171,7 @@ operation with special handling (e.g., constrained decoding, RAG retrieval). The
 `LocalHFBackend` exposes Intrinsics directly; server backends route them through
 adapter endpoints.
 
-See: [Intrinsics](../advanced/intrinsics.md)
+See: [Intrinsics](../advanced/intrinsics)
 
 ---
 
@@ -183,7 +183,7 @@ A core generative programming pattern in Mellea:
 2. **Validate** — check the output against a `Requirement`.
 3. **Repair** — if validation fails, retry or fix the output.
 
-See: [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md)
+See: [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
 
 ---
 
@@ -222,7 +222,7 @@ The `@mify` decorator turns any Python class into an **MObject** — an
 LLM-queryable, tool-accessible wrapper around your data. You specify which fields
 and methods are visible to the LLM; everything else remains hidden.
 
-See: [MObjects and mify](../concepts/mobjects-and-mify.md)
+See: [MObjects and mify](../concepts/mobjects-and-mify)
 
 ---
 
@@ -233,7 +233,7 @@ objects so they can be queried and transformed by the LLM via `m.query()` and
 `m.transform()`. Unlike `@generative`, `@mify` does not change the class's Python
 interface — it adds a layer that the LLM can see and call.
 
-See: [MObjects and mify](../concepts/mobjects-and-mify.md)
+See: [MObjects and mify](../concepts/mobjects-and-mify)
 
 ---
 
@@ -247,7 +247,7 @@ keys ensures the same options work across all backends.
 from mellea.backends import ModelOption
 ```
 
-See: [Configure Model Options](../how-to/configure-model-options.md)
+See: [Configure Model Options](../how-to/configure-model-options)
 
 ---
 
@@ -281,7 +281,7 @@ from mellea.stdlib.frameworks.react import react
 result, _ = await react(goal="...", context=ChatContext(), backend=m.backend, tools=[...])
 ```
 
-See: [Tools and Agents](./tools-and-agents.md)
+See: [Tools and Agents](./tools-and-agents)
 
 ---
 
@@ -301,7 +301,7 @@ output. Requirements can be programmatic (lambda, regex, type check) or generati
 - **`simple_validate(fn)`** — wraps a lambda or function into a `validation_fn`,
   bypassing LLM-as-a-judge for fast deterministic checks.
 
-See: [Requirements System](../concepts/requirements-system.md)
+See: [Requirements System](../concepts/requirements-system)
 
 ---
 
@@ -315,7 +315,7 @@ to make PDFs, tables, and structured files queryable by the LLM. Extract tables 
 pip install 'mellea[docling]'
 ```
 
-See: [Working with Data](./working-with-data.md)
+See: [Working with Data](./working-with-data)
 
 ---
 
@@ -331,7 +331,7 @@ Mellea's built-in strategies:
 | `SOFAISamplingStrategy` | Fast System-1 generation verified by a slower System-2 model |
 | `BudgetForcingSamplingStrategy` | Inject thinking tokens to expand reasoning budget |
 
-See: [Inference-Time Scaling](../advanced/inference-time-scaling.md)
+See: [Inference-Time Scaling](../advanced/inference-time-scaling)
 
 ---
 
@@ -350,7 +350,7 @@ candidates generated).
 dual-process cognition: a fast "System 1" model generates candidates and a slower
 "System 2" model verifies them. Uses `SOFAISamplingStrategy`.
 
-See: [Inference-Time Scaling](../advanced/inference-time-scaling.md)
+See: [Inference-Time Scaling](../advanced/inference-time-scaling)
 
 ---
 
@@ -360,7 +360,7 @@ A Python function decorated with `@tool` (or registered via `MelleaSession`) tha
 Mellea exposes to an LLM for function calling. Tools have typed inputs and outputs
 so the LLM can call them reliably without free-form parsing.
 
-See: [Tools and Agents](./tools-and-agents.md)
+See: [Tools and Agents](./tools-and-agents)
 
 ---
 

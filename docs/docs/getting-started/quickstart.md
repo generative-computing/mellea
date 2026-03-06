@@ -7,7 +7,7 @@ description: "Run your first generative program in minutes."
 # Quick Start
 
 **Prerequisites:** [Ollama](https://ollama.ai) installed and running locally,
-[Installation](./installation.md) complete.
+[Installation](./installation) complete.
 
 ## Hello world
 
@@ -78,7 +78,7 @@ print(write_email(m, name="Olivia", notes="Organized intern events."))
 ```
 
 The repair loop retries up to two times by default. See
-[Instruct, Validate, Repair](../concepts/instruct-validate-repair.md) for control
+[Instruct, Validate, Repair](../concepts/instruct-validate-repair) for control
 over loop budget, custom validators, and the full `instruct()` API.
 
 ## Core concepts
@@ -96,7 +96,7 @@ chat.
 
 **Backends** — Pluggable model providers. Ollama is the default. OpenAI, [LiteLLM](../guide/glossary#litellm--litellmbackend),
 HuggingFace, and WatsonX are also supported. See
-[Backends and Configuration](../guide/backends-and-configuration.md).
+[Backends and Configuration](../guide/backends-and-configuration).
 
 ## Troubleshooting
 

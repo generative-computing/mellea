@@ -6,8 +6,8 @@ description: "Write validation functions that inspect LLM output and return pass
 
 # Write Custom Verifiers
 
-**Prerequisites:** [The Requirements System](../concepts/requirements-system.md),
-[Quick Start](../getting-started/quickstart.md) complete, `pip install mellea`.
+**Prerequisites:** [The Requirements System](../concepts/requirements-system),
+[Quick Start](../getting-started/quickstart) complete, `pip install mellea`.
 
 Custom verifiers are Python functions that inspect LLM output and return a
 `ValidationResult`. Mellea calls them as part of the IVR loop: when a verifier
@@ -274,5 +274,5 @@ right time and produces helpful repair guidance.
 ---
 
 
-**See also:** [The Requirements System](../concepts/requirements-system.md) |
-[Instruct, Validate, Repair](../concepts/instruct-validate-repair.md)
+**See also:** [The Requirements System](../concepts/requirements-system) |
+[Instruct, Validate, Repair](../concepts/instruct-validate-repair)

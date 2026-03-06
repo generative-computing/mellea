@@ -55,14 +55,14 @@ description and parameter types are preserved exactly.
 
 | Scenario | Use |
 | -------- | --- |
-| Your tool exists as a LangChain `BaseTool` | [`MelleaTool.from_langchain(tool)`](./langchain.md) |
+| Your tool exists as a LangChain `BaseTool` | [`MelleaTool.from_langchain(tool)`](./langchain) |
 | Your tool exists as a smolagents `Tool` | `MelleaTool.from_smolagents(tool)` |
-| You have a plain Python function to expose | [`@tool` decorator](../guide/tools-and-agents.md) |
+| You have a plain Python function to expose | [`@tool` decorator](../guide/tools-and-agents) |
 | You have LangChain message history to continue | [`convert_to_openai_messages` → `ChatContext`](./langchain.md#seeding-a-session-with-langchain-message-history) |
-| You want Mellea as an OpenAI endpoint for another framework | [`m serve`](./m-serve.md) |
+| You want Mellea as an OpenAI endpoint for another framework | [`m serve`](./m-serve) |
 
 ---
 
 
-**See also:** [Tools and Agents](../guide/tools-and-agents.md) |
-[Context and Sessions](../concepts/context-and-sessions.md)
+**See also:** [Tools and Agents](../guide/tools-and-agents) |
+[Context and Sessions](../concepts/context-and-sessions)

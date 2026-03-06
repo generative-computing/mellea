@@ -7,7 +7,7 @@ description: "Extend MelleaSession to add custom validation, logging, and filter
 
 # Context and Sessions
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally.
 
 `MelleaSession` is a regular Python class. You can subclass it to add custom behavior

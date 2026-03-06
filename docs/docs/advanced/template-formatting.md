@@ -119,5 +119,5 @@ The model-specific template will be used for that model; all others fall back to
 > [`docs/examples/mify/rich_document_advanced.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/mify/rich_document_advanced.py)
 > in the source repository.
 
-**See also:** [MObjects and mify](../concepts/mobjects-and-mify.md) |
-[Mellea core internals](./mellea-core-internals.md)
+**See also:** [MObjects and mify](../concepts/mobjects-and-mify) |
+[Mellea core internals](./mellea-core-internals)

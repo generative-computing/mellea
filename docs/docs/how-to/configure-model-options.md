@@ -11,7 +11,7 @@ these through the `ModelOption` enum, which works uniformly across all backends,
 lets you pass backend-native keys directly.
 
 **Prerequisites:** `pip install mellea` complete, a backend available (see
-[Installation](../getting-started/installation.md)).
+[Installation](../getting-started/installation)).
 
 ## The ModelOption enum
 

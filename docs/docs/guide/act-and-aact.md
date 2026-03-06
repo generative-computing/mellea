@@ -6,7 +6,7 @@ description: "Work directly with Components using act(), aact(), and the functio
 
 # act() and aact()
 
-**Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md) complete,
+**Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair) complete,
 `pip install mellea`, Ollama running locally.
 
 `act()` is the generic method on `MelleaSession` that runs any `Component` and
@@ -100,7 +100,7 @@ print(str(result))
 ```
 
 For rich document processing (PDFs, tables), see
-[Working with Data](./working-with-data.md).
+[Working with Data](./working-with-data).
 
 ## Validation and sampling strategies
 
@@ -129,8 +129,8 @@ else:
     print(str(candidate.sample_generations[0].value))
 ```
 
-See [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md) and
-[Inference-Time Scaling](../advanced/inference-time-scaling.md) for full details on requirements
+See [Instruct, Validate, Repair](../concepts/instruct-validate-repair) and
+[Inference-Time Scaling](../advanced/inference-time-scaling) for full details on requirements
 and validation.
 
 ## Structured output
@@ -208,4 +208,4 @@ result, new_ctx = await mfuncs.aact(instruction, context=ctx, backend=backend)
 ```
 
 For parallel generation and streaming patterns, see
-[Async and Streaming](../how-to/use-async-and-streaming.md).
+[Async and Streaming](../how-to/use-async-and-streaming).

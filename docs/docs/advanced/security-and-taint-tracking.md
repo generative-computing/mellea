@@ -6,7 +6,7 @@ description: "Use GuardianCheck with IBM Granite Guardian to validate LLM output
 
 # Security and Taint Tracking
 
-**Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md)
+**Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
 complete, `pip install mellea`, Ollama running locally with a Granite Guardian model
 pulled.
 
@@ -148,7 +148,7 @@ print(str(result))
 ## As an input gate
 
 Validate incoming user messages before generation. See
-[Context and Sessions](../how-to/use-context-and-sessions.md) for an example of
+[Context and Sessions](../how-to/use-context-and-sessions) for an example of
 wrapping this in a session subclass that checks all inputs automatically.
 
 ```python

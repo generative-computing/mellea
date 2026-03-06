@@ -238,7 +238,7 @@ m = MelleaSession(
 > **Note (review needed):** Direct Anthropic API compatibility via this path has not
 > been verified against the current Mellea version. If you are using Anthropic,
 > LiteLLM provides a verified integration — see
-> [Backends and Configuration](../guide/backends-and-configuration.md).
+> [Backends and Configuration](../guide/backends-and-configuration).
 
 ## Troubleshooting
 
@@ -261,5 +261,5 @@ local servers, list available models from the server's API or UI.
 ---
 
 
-**See also:** [Backends and Configuration](../guide/backends-and-configuration.md) |
-[Enforce Structured Output](../how-to/enforce-structured-output.md)
+**See also:** [Backends and Configuration](../guide/backends-and-configuration) |
+[Enforce Structured Output](../how-to/enforce-structured-output)

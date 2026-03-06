@@ -104,9 +104,9 @@ pip install 'mellea[watsonx]'
 
 > **Note:** `WatsonxAIBackend` does not currently support image input. Passing
 > `images=[...]` to `instruct()` or `chat()` will raise an error. Use the
-> [OpenAI backend](./openai.md) or [Ollama](./ollama.md) for vision tasks.
+> [OpenAI backend](./openai) or [Ollama](./ollama) for vision tasks.
 
 ---
 
 
-**See also:** [Backends and Configuration](../guide/backends-and-configuration.md)
+**See also:** [Backends and Configuration](../guide/backends-and-configuration)

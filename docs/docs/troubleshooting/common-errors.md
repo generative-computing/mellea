@@ -239,12 +239,12 @@ ollama pull granite-guardian-3.2-5b
 - **GitHub Issues:** [github.com/generative-computing/mellea/issues](https://github.com/generative-computing/mellea/issues)
 - **Examples:** [`docs/examples/`](https://github.com/generative-computing/mellea/tree/main/docs/examples)
 - Enable telemetry to inspect what is happening at each step — see
-  [Metrics and Telemetry](../evaluation-and-observability/metrics-and-telemetry.md).
+  [Metrics and Telemetry](../evaluation-and-observability/metrics-and-telemetry).
 
 ---
 
 
 **See also:**
-[Quick Start](../getting-started/quickstart.md) |
-[Inference-Time Scaling](../advanced/inference-time-scaling.md) |
-[Security and Taint Tracking](../advanced/security-and-taint-tracking.md)
+[Quick Start](../getting-started/quickstart) |
+[Inference-Time Scaling](../advanced/inference-time-scaling) |
+[Security and Taint Tracking](../advanced/security-and-taint-tracking)

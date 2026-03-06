@@ -6,7 +6,7 @@ description: "How instruct(), requirements, and the IVR loop work in Mellea."
 
 # The Instruction Model
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally.
 
 `instruct()` is the primary API in Mellea. It builds a structured [`Instruction`](../guide/glossary#component)
@@ -168,7 +168,7 @@ all intermediate generations.
 
 > **Advanced:** SOFAI (`SOFAISamplingStrategy`) is a dual-model strategy that routes
 > between a fast and a slow model based on confidence. See
-> [Inference-Time Scaling](../advanced/inference-time-scaling.md).
+> [Inference-Time Scaling](../advanced/inference-time-scaling).
 
 ## Grounding context
 
@@ -188,7 +188,7 @@ print(str(answer))
 ```
 
 `grounding_context` maps string keys to document text. These are injected as
-reference material in the prompt. See [Working with Data](../guide/working-with-data.md)
+reference material in the prompt. See [Working with Data](../guide/working-with-data)
 for richer document handling using MObjects and `RichDocument`.
 
 ## ICL examples
