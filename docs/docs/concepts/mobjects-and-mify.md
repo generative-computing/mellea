@@ -17,7 +17,8 @@ methods are visible to the LLM — nothing else is exposed.
 
 ```python
 import mellea
-from mellea.stdlib.mify import mify, MifiedProtocol
+from mellea.stdlib.components import mify
+from mellea.stdlib.components.mify import MifiedProtocol
 
 @mify(fields_include={"table"}, template="{{ table }}")
 class SalesDatabase:
@@ -54,7 +55,7 @@ tool the LLM can call. Use `funcs_include` or `funcs_exclude` to control which m
 are exposed:
 
 ```python
-from mellea.stdlib.mify import mify
+from mellea.stdlib.components import mify
 
 @mify(funcs_include={"from_markdown"})
 class DocumentLoader:
@@ -110,7 +111,7 @@ print(table.to_markdown())
 `Table` is already an MObject, so you can pass it directly to `m.transform()` or `m.query()`:
 
 ```python
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption
 from mellea import start_session
 
 m = start_session()

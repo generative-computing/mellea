@@ -15,18 +15,17 @@ lets you pass backend-native keys directly.
 
 ## The ModelOption enum
 
-Import `ModelOption` from `mellea.backends.types`. The enum provides cross-backend names
+Import `ModelOption` from `mellea.backends`. The enum provides cross-backend names
 for the most common parameters:
 
 ```python
 import mellea
-from mellea.backends.types import ModelOption
+from mellea.backends import ModelOption, model_ids
 from mellea.backends.ollama import OllamaModelBackend
-from mellea.backends import model_ids
 
 m = mellea.MelleaSession(
     backend=OllamaModelBackend(
-        model_id=model_ids.IBM_GRANITE_3_2_8B,
+        model_id=model_ids.IBM_GRANITE_4_HYBRID_SMALL,
         model_options={ModelOption.SEED: 42},
     )
 )
@@ -120,7 +119,7 @@ subsequent calls; at call level it applies only to that call.
 ```python
 m = mellea.MelleaSession(
     backend=OllamaModelBackend(
-        model_id=model_ids.IBM_GRANITE_4_MICRO_3B,
+        model_id=model_ids.IBM_GRANITE_4_HYBRID_MICRO,
         model_options={
             ModelOption.SYSTEM_PROMPT: "You are a concise technical assistant. Never use bullet points."
         },
