@@ -270,8 +270,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
                 # Get the model and tokenizer.
                 self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-                    self._hf_model_id
-                ).to(self._device)  # type: ignore
+                    self._hf_model_id, device_map=str(self._device)
+                )
                 self._tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
                     self._hf_model_id
                 )

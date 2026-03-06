@@ -222,6 +222,7 @@ async def test_generate_from_raw_with_format(m_session: MelleaSession) -> None:
         actions=[CBlock(value=prompt) for prompt in prompts],
         format=Answer,
         ctx=m_session.ctx,
+        model_options={ModelOption.MAX_NEW_TOKENS: 256},
     )
 
     assert len(results) == len(prompts)
