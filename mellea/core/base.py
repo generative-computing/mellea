@@ -282,88 +282,84 @@ class ModelOutputThunk(CBlock, Generic[S]):
             0 if self._underlying_value is None else len(str(self._underlying_value))
         )  # type: ignore
 
-        exception_to_raise = None
-        try:
-            # Type of the chunk depends on the backend.
-            chunks: list[Any | None] = []
-            while True:
-                try:
-                    item = self._async_queue.get_nowait()
-                    chunks.append(item)
-                except asyncio.QueueEmpty:
-                    # We've exhausted the current items in the queue.
-                    break
-
-            # Make sure we always get the minimum chunk size.
-            while len(chunks) <= self._chunk_size:
-                if len(chunks) > 0:
-                    if chunks[-1] is None or isinstance(chunks[-1], Exception):
-                        break  # Hit sentinel value or an error.
-                    # We could switch to relying on the `done` / `finish_reason` field of chunks,
-                    # but that forces us to know about the chunk type here. Prefer sentinel values
-                    # for now.
-
-                item = await self._async_queue.get()
+        # Type of the chunk depends on the backend.
+        chunks: list[Any | None] = []
+        while True:
+            try:
+                item = self._async_queue.get_nowait()
                 chunks.append(item)
+            except asyncio.QueueEmpty:
+                # We've exhausted the current items in the queue.
+                break
 
-            # Process the sentinel value if it's there.
-            if chunks[-1] is None:
-                chunks.pop()  # Remove the sentinel value.
-                do_set_computed = True
+        # Make sure we always get the minimum chunk size.
+        while len(chunks) <= self._chunk_size:
+            if len(chunks) > 0:
+                if chunks[-1] is None or isinstance(chunks[-1], Exception):
+                    break  # Hit sentinel value or an error.
+                # We could switch to relying on the `done` / `finish_reason` field of chunks,
+                # but that forces us to know about the chunk type here. Prefer sentinel values
+                # for now.
 
-                # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk relied on.
-                if self._generate is not None:
-                    self._generate.cancel()
-                if self._generate_extra is not None:
-                    # Covers an hf edge case. The task is done generating anything useful but isn't `done` yet.
-                    await self._generate_extra
-                    self._generate_extra.cancel()
+            item = await self._async_queue.get()
+            chunks.append(item)
 
-                # If ModelOutputThunks get too bulky, we can do additional cleanup here
-                # and set fields to None.
+        # Process the sentinel value if it's there.
+        if chunks[-1] is None:
+            chunks.pop()  # Remove the sentinel value.
+            do_set_computed = True
 
-            elif isinstance(chunks[-1], Exception):
-                # Mark as computed so post_process runs in finally block
-                self._computed = True
-                # Store exception to re-raise after cleanup
-                exception_to_raise = chunks[-1]
+            # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk relied on.
+            if self._generate is not None:
+                self._generate.cancel()
+            if self._generate_extra is not None:
+                # Covers an hf edge case. The task is done generating anything useful but isn't `done` yet.
+                await self._generate_extra
+                self._generate_extra.cancel()
 
-            for chunk in chunks:
-                assert self._process is not None
-                await self._process(self, chunk)
+            # If ModelOutputThunks get too bulky, we can do additional cleanup here
+            # and set fields to None.
 
-            if do_set_computed:
-                assert self._underlying_value is not None
-                self._computed = True
-        finally:
-            # Always call post_process if computed, even on exception
-            # This ensures telemetry spans are properly closed
-            if self._computed:
-                assert self._post_process is not None
-                await self._post_process(self)
+        elif isinstance(chunks[-1], Exception):
+            # Close any open telemetry span before propagating the error.
+            # We can't call full post_process here (it assumes success invariants),
+            # but we must not leak the span.
+            span = self._meta.get("_telemetry_span")
+            if span is not None:
+                from ..telemetry import end_backend_span, set_span_error
 
-                # Only parse if no exception occurred
-                if exception_to_raise is None:
-                    match self._action:
-                        case Component():
-                            self.parsed_repr = self._action._parse(self)
-                        case CBlock():
-                            assert self.value is not None, (
-                                "value must be non-None since this thunk is computed"
-                            )
-                            self.parsed_repr = self.value  # type: ignore
-                        case _:
-                            raise ValueError(
-                                "attempted to astream from a model output thunk with no ._action set"
-                            )
-                    assert self.parsed_repr is not None, (
-                        "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
+                set_span_error(span, chunks[-1])
+                end_backend_span(span)
+                del self._meta["_telemetry_span"]
+            raise chunks[-1]
+
+        for chunk in chunks:
+            assert self._process is not None
+            await self._process(self, chunk)
+
+        if do_set_computed:
+            assert self._underlying_value is not None
+            self._computed = True
+
+            assert self._post_process is not None
+            await self._post_process(self)
+
+            match self._action:
+                case Component():
+                    self.parsed_repr = self._action._parse(self)
+                case CBlock():
+                    assert self.value is not None, (
+                        "value must be non-None since this thunk is computed"
                     )
-                    return self._underlying_value  # type: ignore
-
-        # Re-raise exception after cleanup if one occurred
-        if exception_to_raise is not None:
-            raise exception_to_raise
+                    self.parsed_repr = self.value  # type: ignore
+                case _:
+                    raise ValueError(
+                        "attempted to astream from a model output thunk with no ._action set"
+                    )
+            assert self.parsed_repr is not None, (
+                "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
+            )
+            return self._underlying_value  # type: ignore
 
         return (
             self._underlying_value
