@@ -9,10 +9,10 @@ description: "How instruct(), requirements, and the IVR loop work in Mellea."
 **Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
 `pip install mellea`, Ollama running locally.
 
-`instruct()` is the primary API in Mellea. It builds a structured `Instruction`
+`instruct()` is the primary API in Mellea. It builds a structured [`Instruction`](../guide/glossary#component)
 component — not a raw chat message — with a description, requirements, user variables,
 grounding context, few-shot examples, and images. The instruction is rendered through
-Jinja2 templates and run through an instruct–validate–repair (IVR) loop by default.
+[Jinja2](https://jinja.palletsprojects.com/) templates and run through an [instruct–validate–repair (IVR)](../guide/glossary#ivr-instruct-validate-repair) loop by default.
 
 ## Basic `instruct()`
 
@@ -25,7 +25,7 @@ print(str(email))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-`instruct()` returns a `ModelOutputThunk`. Access the result as a string with
+`instruct()` returns a [`ModelOutputThunk`](../guide/glossary#modeloutputthunk). Access the result as a string with
 `str(email)` or via `email.value`.
 
 ## User variables
@@ -78,7 +78,7 @@ print(str(email))
 
 ## Custom validation functions
 
-For deterministic checks, attach a `validation_fn` to a `Requirement`:
+For deterministic checks, attach a `validation_fn` to a [`Requirement`](../guide/glossary#requirement):
 
 ```python
 from mellea import start_session
@@ -131,7 +131,7 @@ print(str(email))
 
 ## Sampling strategies and the IVR loop
 
-By default, `instruct()` uses `RejectionSamplingStrategy(loop_budget=2)`: it
+By default, `instruct()` uses [`RejectionSamplingStrategy`](../guide/glossary#sampling-strategy)`(loop_budget=2)`: it
 generates once, validates all requirements, and retries up to two times if any fail.
 
 Configure the loop explicitly with `strategy`:
@@ -162,7 +162,7 @@ else:
     print(str(result.sample_generations[0].value))
 ```
 
-With `return_sampling_results=True`, `instruct()` returns a `SamplingResult` instead
+With `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../guide/glossary#samplingresult) instead
 of a `ModelOutputThunk`. This lets you inspect whether validation passed and access
 all intermediate generations.
 
@@ -242,7 +242,7 @@ print(str(m.ctx.last_output()))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-`ChatContext` accumulates turns. `SimpleContext` (the default) discards the previous
+[`ChatContext`](../guide/glossary#context) accumulates turns. `SimpleContext` (the default) discards the previous
 turn on each call.
 
 ## `chat()` vs `instruct()`

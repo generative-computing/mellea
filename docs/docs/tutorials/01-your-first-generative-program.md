@@ -15,7 +15,7 @@ By the end you will have covered:
 
 - `instruct()` with user variables and requirements
 - Rejection sampling and `SamplingResult`
-- `@generative` with `Literal` and Pydantic return types
+- [`@generative`](../guide/glossary#generative) with `Literal` and [Pydantic](https://docs.pydantic.dev/) return types
 - Composing generative functions into a pipeline
 
 **Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
@@ -40,7 +40,7 @@ print(str(summary))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-`instruct()` returns a `ModelOutputThunk`. Calling `str()` on it (or accessing
+`instruct()` returns a [`ModelOutputThunk`](../guide/glossary#modeloutputthunk). Calling `str()` on it (or accessing
 `.value`) gives you the string. This is already a generative program: it calls an
 LLM and returns structured text.
 
@@ -74,7 +74,7 @@ print(summarize_feedback(m, feedback))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-The description is now a Jinja2 template. Variables are rendered at generation time,
+The description is now a [Jinja2](https://jinja.palletsprojects.com/) template. Variables are rendered at generation time,
 not embedded in the source code.
 
 ---
@@ -162,7 +162,7 @@ to code reliably.
 ## Step 5: Rejection sampling and inspecting results
 
 By default, `instruct()` retries up to twice if any requirement fails. Use
-`RejectionSamplingStrategy` to control the budget and inspect results:
+[`RejectionSamplingStrategy`](../guide/glossary#sampling-strategy) to control the budget and inspect results:
 
 ```python
 import mellea
@@ -200,7 +200,7 @@ m = mellea.start_session()
 print(summarize_feedback(m, "The onboarding was confusing and took far too long."))
 ```
 
-With `return_sampling_results=True`, `instruct()` returns a `SamplingResult` with
+With `return_sampling_results=True`, `instruct()` returns a [`SamplingResult`](../guide/glossary#samplingresult) with
 `.success`, `.result`, and `.sample_generations`. This gives you programmatic
 control over what to do when the model can not satisfy your requirements.
 
@@ -208,7 +208,7 @@ control over what to do when the model can not satisfy your requirements.
 
 ## Step 6: Typed classification with `@generative`
 
-Switch to `@generative` when you want the return type enforced at the Python level.
+Switch to [`@generative`](../guide/glossary#generative) when you want the return type enforced at the Python level.
 Add a sentiment classification step to the pipeline:
 
 ```python

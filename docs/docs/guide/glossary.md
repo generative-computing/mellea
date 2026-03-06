@@ -267,6 +267,16 @@ A `Requirement` is a validation constraint applied to a generative function's
 output. Requirements can be programmatic (lambda, regex, type check) or generative
 (another LLM call). Used in the IVR pattern.
 
+`req()` and `check()` are the common shorthand constructors from `mellea.stdlib.requirements`:
+
+- **`req(description)`** — creates a `Requirement` whose description is included in the prompt,
+  so the model knows to aim for it.
+- **`check(description)`** — creates a check-only `Requirement` whose description is
+  *not* included in the prompt (avoids the "purple elephant effect" — mentioning a
+  forbidden thing often makes the model produce it).
+- **`simple_validate(fn)`** — wraps a lambda or function into a `validation_fn`,
+  bypassing LLM-as-a-judge for fast deterministic checks.
+
 See: [Requirements System](../concepts/requirements-system.md)
 
 ---

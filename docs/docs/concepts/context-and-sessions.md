@@ -6,8 +6,8 @@ description: "How Component, Backend, Context, and Session fit together in Melle
 
 # Context and Sessions
 
-Every call to an LLM in Mellea passes through four layers: **Component**, **Backend**,
-**Context**, and **Session**. Understanding how these fit together explains both why
+Every call to an LLM in Mellea passes through four layers: [**Component**](../guide/glossary#component), [**Backend**](../guide/glossary#backend),
+[**Context**](../guide/glossary#context), and **Session**. Understanding how these fit together explains both why
 Mellea is structured the way it is and how to extend it effectively.
 
 ## The four layers
@@ -30,7 +30,7 @@ raw text or a parsed representation of a model output.
 ### Backends
 
 A `Backend` takes a `Component`, formats it into a prompt, sends it to an LLM, and
-returns the model output as a `ModelOutputThunk`. The `Thunk` is a lazy wrapper: it
+returns the model output as a [`ModelOutputThunk`](../guide/glossary#modeloutputthunk). The `Thunk` is a lazy wrapper: it
 holds the raw model output and parses it on access (via `.value` or `str()`).
 
 The backend is responsible for:
@@ -60,7 +60,7 @@ The context serves two purposes:
 
 ### Sessions
 
-`MelleaSession` is the developer-facing layer. It wraps a backend and a context,
+[`MelleaSession`](../guide/glossary#melleasession) is the developer-facing layer. It wraps a backend and a context,
 exposes the `instruct()`, `chat()`, `validate()`, and other methods you use in your
 code, and handles the bookkeeping that ties components, context updates, and backend
 calls together.
