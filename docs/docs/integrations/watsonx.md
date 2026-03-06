@@ -109,6 +109,6 @@ pip install 'mellea[watsonx]'
 ---
 
 **Previous:** [AWS Bedrock](./bedrock.md) |
-**Next:** [HuggingFace and vLLM](./huggingface-and-vllm.md)
+**Next:** [HuggingFace Transformers](./huggingface.md)
 
 **See also:** [Backends and Configuration](../guide/backends-and-configuration.md)

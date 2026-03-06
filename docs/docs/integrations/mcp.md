@@ -117,7 +117,7 @@ uv run your_server.py
 
 ---
 
-**Previous:** [HuggingFace and vLLM](./huggingface-and-vllm.md) |
+**Previous:** [vLLM](./vllm.md) |
 **Next:** [m serve](./m-serve.md)
 
 **See also:** [Backends and Configuration](../guide/backends-and-configuration.md)
