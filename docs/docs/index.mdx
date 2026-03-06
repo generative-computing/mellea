@@ -91,7 +91,7 @@ Mellea's design rests on three interlocking ideas.
 
 Mellea is backend-agnostic. The same program runs on any inference engine.
 
-<CardGroup cols={4}>
+<CardGroup cols={3}>
   <Card title="Ollama" icon="server" href="/integrations/ollama">
     Local inference, zero cloud costs.
   </Card>
@@ -101,8 +101,30 @@ Mellea is backend-agnostic. The same program runs on any inference engine.
   <Card title="Bedrock / watsonx" icon="cloud" href="/integrations/bedrock-and-watsonx">
     AWS Bedrock and IBM watsonx.
   </Card>
-  <Card title="HuggingFace / vLLM" icon="database" href="/advanced/lora-and-alora-adapters">
-    Local HF models with adapter support.
+</CardGroup>
+
+See [Backends and configuration](/guide/backends-and-configuration) for the full list of supported backends and how to configure them.
+
+## How-to guides
+
+<CardGroup cols={3}>
+  <Card title="Enforce structured output" icon="brackets-curly" href="/how-to/enforce-structured-output">
+    Pydantic models, `Literal` types, and `@generative` for guaranteed schemas.
+  </Card>
+  <Card title="Write custom verifiers" icon="check-circle" href="/how-to/write-custom-verifiers">
+    Python functions, `ValidationResult`, and multi-field validation logic.
+  </Card>
+  <Card title="Async and streaming" icon="bolt" href="/how-to/use-async-and-streaming">
+    `aact()`, `ainstruct()`, and token-by-token streaming output.
+  </Card>
+  <Card title="Use context and sessions" icon="layers" href="/how-to/use-context-and-sessions">
+    `ChatContext`, explicit context threading, and multi-session workflows.
+  </Card>
+  <Card title="Configure model options" icon="sliders-horizontal" href="/how-to/configure-model-options">
+    Temperature, seed, max tokens, system prompts — cross-backend with `ModelOption`.
+  </Card>
+  <Card title="Handling exceptions" icon="triangle-alert" href="/evaluation-and-observability/handling-exceptions">
+    Retry budgets, exception types, and graceful degradation patterns.
   </Card>
 </CardGroup>
 
