@@ -58,9 +58,13 @@ to melleaadmin@ibm.com.
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
-3. **Install with all dependencies:**
+3. **Install dependencies:**
    ```bash
+   # Install all dependencies (recommended for development)
    uv sync --all-extras --all-groups
+   
+   # Or install just the backend dependencies
+   uv sync --extra backends --all-groups
    ```
 
 4. **Install pre-commit hooks (Required):**

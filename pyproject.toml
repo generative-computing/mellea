@@ -104,7 +104,9 @@ sandbox = [
     "llm-sandbox[docker]>=0.3.23",
 ]
 
-all = ["mellea[watsonx,docling,hf,vllm,litellm,tools,telemetry,server,sandbox,granite_retriever]"]
+backends = ["mellea[watsonx,hf,vllm,litellm]"]
+
+all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever]"]
 
 [dependency-groups]
 # Development groups: uv sync --all-groups

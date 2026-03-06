@@ -17,16 +17,17 @@ AGENTS.md — Instructions for AI coding assistants (Claude, Cursor, Copilot, Co
 - The virtual environment is `.venv/` — `uv run` automatically uses it
 
 ```bash
-pre-commit install                  # Required: install git hooks
-uv sync --all-extras --all-groups   # Install all deps (required for tests)
-ollama serve                        # Start Ollama (required for most tests)
-uv run pytest                       # Default: qualitative tests, skip slow tests
-uv run pytest -m "not qualitative"  # Fast tests only (~2 min)
-uv run pytest -m slow               # Run only slow tests (>5 min)
-uv run pytest --co -q               # Run ALL tests including slow (bypass config)
-uv run ruff format .                # Format code
-uv run ruff check .                 # Lint code
-uv run mypy .                       # Type check
+pre-commit install                    # Required: install git hooks
+uv sync --all-extras --all-groups     # Install all deps (required for tests)
+uv sync --extra backends --all-groups # Install just backend deps (lighter)
+ollama serve                          # Start Ollama (required for most tests)
+uv run pytest                         # Default: qualitative tests, skip slow tests
+uv run pytest -m "not qualitative"    # Fast tests only (~2 min)
+uv run pytest -m slow                 # Run only slow tests (>5 min)
+uv run pytest --co -q                 # Run ALL tests including slow (bypass config)
+uv run ruff format .                  # Format code
+uv run ruff check .                   # Lint code
+uv run mypy .                         # Type check
 ```
 **Branches**: `feat/topic`, `fix/issue-id`, `docs/topic`
 
