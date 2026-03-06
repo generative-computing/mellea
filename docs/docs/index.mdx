@@ -3,6 +3,9 @@ title: "Mellea — build predictable AI without guesswork"
 description: "A Python library for writing reliable generative programs."
 ---
 
+<img src="/logo/logo-dark.svg" alt="Mellea" height="36" className="block dark:hidden" />
+<img src="/logo/logo-light.svg" alt="Mellea" height="36" className="hidden dark:block" />
+
 The unreliable part of every AI-powered pipeline is the same: the LLM call itself.
 **Mellea** replaces ad-hoc prompt chains and brittle agents with structured
 *generative programs* — Python code where LLM calls are first-class operations
@@ -69,7 +72,7 @@ Mellea's design rests on three interlocking ideas.
   <Card title="Inference-time scaling" icon="chart-line" href="/advanced/inference-time-scaling">
     Best-of-n, SOFAI, majority voting — swap strategies in one line.
   </Card>
-  <Card title="MCP and m serve" icon="plug" href="/integrations/mcp-and-m-serve">
+  <Card title="MCP and m serve" icon="plug" href="/integrations/mcp">
     Expose any Mellea program as an MCP tool or OpenAI-compatible endpoint.
   </Card>
 </CardGroup>
@@ -78,7 +81,7 @@ Mellea's design rests on three interlocking ideas.
 
 Mellea is backend-agnostic. The same program runs on any inference engine.
 
-<CardGroup cols={3}>
+<CardGroup cols={4}>
   <Card title="Ollama" icon="server" href="/integrations/ollama">
     Local inference, zero cloud costs.
   </Card>
@@ -87,6 +90,9 @@ Mellea is backend-agnostic. The same program runs on any inference engine.
   </Card>
   <Card title="Bedrock / watsonx" icon="cloud" href="/integrations/bedrock-and-watsonx">
     AWS Bedrock and IBM watsonx.
+  </Card>
+  <Card title="HuggingFace / vLLM" icon="microchip" href="/integrations/huggingface-and-vllm">
+    Local GPU inference — aLoRA, constrained decoding, and high-throughput batching.
   </Card>
 </CardGroup>
 
