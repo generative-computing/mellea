@@ -506,6 +506,9 @@ output. Requirements can be programmatic (lambda, regex, type check) or generati
   forbidden thing often makes the model produce it).
 - **`simple_validate(fn)`** — wraps a lambda or function into a `validation_fn`,
   bypassing LLM-as-a-judge for fast deterministic checks.
+- **`PythonExecutionReq`** — verifies that Python code in the LLM's output runs
+  without raising an exception. Import from `mellea.stdlib.requirements.python_reqs`.
+  Accepts `timeout`, `allowed_imports`, and `use_sandbox` (Docker-based isolation).
 
 See: [Requirements System](../concepts/requirements-system)
 
@@ -572,9 +575,13 @@ Mellea's built-in strategies:
 | Strategy | Behaviour |
 | --- | --- |
 | `RejectionSamplingStrategy` | Retry up to `loop_budget` times; return first passing result |
-| `MajorityVotingStrategy` | Generate N candidates; return the one supported by most |
+| `RepairTemplateStrategy` | Like rejection sampling but appends failure reasons to the original instruction |
+| `MultiTurnStrategy` | Add validation failures as a new chat turn; model revises its previous attempt |
+| `MajorityVotingStrategyForMath` | Generate N candidates; return the one supported by most (math expressions) |
+| `MBRDRougeLStrategy` | Minimum Bayes Risk decoding using ROUGE-L; best for text generation tasks |
 | `SOFAISamplingStrategy` | Fast System-1 generation verified by a slower System-2 model |
 | `BudgetForcingSamplingStrategy` | Inject thinking tokens to expand reasoning budget |
+| `BaseSamplingStrategy` | Abstract base; extend to implement custom repair and selection logic |
 
 See: [Inference-Time Scaling](../advanced/inference-time-scaling)
 
