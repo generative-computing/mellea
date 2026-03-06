@@ -7,6 +7,9 @@ description: "Write reliable tests for @generative functions using pytest marker
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally, `pytest` installed.
 
+> **Contributing to Mellea itself?** See the [Contributing Guide](../community/contributing-guide#testing)
+> for Mellea's own test markers, fixtures, and CI setup.
+
 Testing generative code requires you to separate concerns: some assertions are
 always deterministic (the output is the right type), while others depend on model
 behaviour and are inherently qualitative. This page shows you how to structure
@@ -32,29 +35,19 @@ Use a `backend` fixture to handle CI versus local configuration, and a
 function-scoped `session` fixture to give each test a clean slate:
 
 ```python
+import os
 import pytest
 from mellea import MelleaSession
-from mellea.backends.litellm import LiteLLMBackend
-from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
+from mellea.backends.ollama import OllamaModelBackend
 
-_MODEL_ID = f"ollama_chat/{IBM_GRANITE_4_HYBRID_MICRO.ollama_name}"
+_MODEL_ID = "granite4:micro"
 
 
 @pytest.fixture(scope="module")
-def backend(gh_run: int):
-    """LiteLLM backend pointed at a local Ollama instance."""
-    if gh_run == 1:
-        # In CI the Ollama host may be set explicitly via OLLAMA_HOST.
-        import os
-
-        url = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-        url = url.replace("127.0.0.1", "http://localhost")
-        return LiteLLMBackend(
-            model_id=_MODEL_ID,
-            base_url=url,
-            model_options={"api_base": url},
-        )
-    return LiteLLMBackend(model_id=_MODEL_ID)
+def backend():
+    """Ollama backend — swap for any backend your app uses."""
+    host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+    return OllamaModelBackend(model_id=_MODEL_ID, host=host)
 
 
 @pytest.fixture(scope="function")
@@ -65,9 +58,6 @@ def session(backend):
     m.reset()
 ```
 
-The `gh_run` fixture comes from `test/conftest.py`. It returns `1` when the
-environment variable `CICD=1` is set (GitHub Actions) and `0` otherwise.
-
 > **Note:** Scoping `backend` to `module` and `session` to `function` strikes a
 > balance between setup cost and test isolation. Each test gets a clean context,
 > but the backend connection is created once per module.
@@ -75,18 +65,21 @@ environment variable `CICD=1` is set (GitHub Actions) and `0` otherwise.
 ## Module-level markers
 
 Declare markers at the top of your test file with `pytestmark` so they apply to
-every test in the module without repetition:
+every test in the module without repetition. Register your own markers in
+`pyproject.toml` under `[tool.pytest.ini_options] markers` to avoid warnings:
+
+```toml
+[tool.pytest.ini_options]
+markers = [
+    "qualitative: tests that assert on LLM output content (skipped in CI)",
+    "requires_ollama: tests that need Ollama running locally",
+]
+```
 
 ```python
 import pytest
 
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
-```
-
-Use `pytest.mark.litellm` as well if the module uses `LiteLLMBackend`:
-
-```python
-pytestmark = [pytest.mark.litellm, pytest.mark.ollama, pytest.mark.llm]
+pytestmark = [pytest.mark.requires_ollama]
 ```
 
 ## Testing `@generative` functions
@@ -344,24 +337,47 @@ for eval_case in test_evals:
 
 ## CI strategy
 
-Follow these rules when deciding which tests run in CI:
+A simple `conftest.py` that skips qualitative tests in CI:
 
-| Test category | Marker | Runs in CI (`CICD=1`)? |
-| ------------- | ------ | ---------------------- |
-| Type and structural checks | `@pytest.mark.llm` | Yes |
-| Qualitative content checks | `@pytest.mark.qualitative` | No — skipped automatically |
-| Tests needing Ollama | `@pytest.mark.ollama` | Yes, if Ollama is in the CI environment |
-| Tests taking >5 minutes | `@pytest.mark.slow` | Excluded from standard CI runs |
+```python
+# conftest.py
+import os
+import pytest
 
-The skip is automatic: `conftest.py` calls `pytest.skip()` for any test marked
-`qualitative` when `CICD=1`. You do not need to add any skip logic yourself.
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "qualitative: assert on LLM output content — skip in CI"
+    )
 
-> **Tip:** Run the full suite including qualitative tests before merging a prompt
-> change. Use `CICD=0 pytest -m qualitative` locally to target only those tests.
->
-> **Advanced:** To add a dedicated quality gate that runs qualitative tests on a
-> separate schedule, create a GitHub Actions workflow that omits `CICD=1` and
-> uses `-m qualitative` as the pytest filter.
+def pytest_collection_modifyitems(config, items):
+    if os.environ.get("CI"):
+        skip = pytest.mark.skip(reason="qualitative tests skipped in CI")
+        for item in items:
+            if "qualitative" in item.keywords:
+                item.add_marker(skip)
+```
+
+Then in your GitHub Actions workflow:
+
+```yaml
+- name: Run tests
+  run: pytest
+  env:
+    CI: "true"   # qualitative tests are automatically skipped
+```
+
+To run the full suite including qualitative tests locally:
+
+```bash
+pytest -m qualitative
+```
+
+| Test category | Marker | Runs in CI? |
+| ------------- | ------ | ----------- |
+| Type and structural checks | (none needed) | Yes |
+| Qualitative content checks | `@pytest.mark.qualitative` | No — skipped when `CI=true` |
+| Tests needing a running backend | `@pytest.mark.requires_ollama` | Only if Ollama is in CI |
+| Long-running tests | `@pytest.mark.slow` | Optionally excluded |
 
 ## Next steps
 

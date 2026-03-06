@@ -364,7 +364,7 @@ applicable:
 
 - Set `OTEL_SERVICE_NAME=my-app` to customise the service name in your trace
   backend.
-- See the full telemetry reference at `docs/dev/telemetry.md` in the repository
+- See [OpenTelemetry Tracing](../evaluation-and-observability/opentelemetry-tracing)
   for attribute schemas and advanced configuration.
 - Add `MELLEA_TRACE_CONSOLE=true` alongside an OTLP endpoint to confirm spans
   are generated even when the remote collector is unavailable.
