@@ -51,7 +51,8 @@
             "group": "How-To",
             "pages": [
               "how-to/use-async-and-streaming",
-              "how-to/use-context-and-sessions"
+              "how-to/use-context-and-sessions",
+              "how-to/enforce-structured-output"
             ]
           },
           {
