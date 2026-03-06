@@ -107,8 +107,3 @@ Either install [Rust](https://www.rust-lang.org/tools/install) or pin Python to 
 
 **Intel Mac torch errors** — create a conda environment and run
 `conda install 'torchvision>=0.22.0'`, then `uv pip install mellea` inside it.
-
----
-
-**Previous:** [Installation](./installation.md) |
-**Next:** [Tutorial: Your First Generative Program](../tutorials/01-your-first-generative-program.md)

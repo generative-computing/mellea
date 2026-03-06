@@ -113,8 +113,6 @@ print(response.choices[0].message.content)
 
 ---
 
-**Previous:** [MCP Integration](./mcp.md) |
-**Next:** [LangChain](./langchain.md)
 
 **See also:** [Context and Sessions](../concepts/context-and-sessions.md) |
 [Backends and Configuration](../guide/backends-and-configuration.md)

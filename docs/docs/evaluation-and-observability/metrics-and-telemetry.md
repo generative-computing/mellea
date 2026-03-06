@@ -189,8 +189,3 @@ Application spans add Mellea-specific attributes:
 | `response` | Model response (truncated to 500 chars) |
 
 > **Full example:** [`docs/examples/telemetry/telemetry_example.py`](../../examples/telemetry/telemetry_example.py)
-
----
-
-**Previous:** [smolagents](../integrations/smolagents.md) |
-**Next:** [Handling Exceptions and Failures](./handling-exceptions.md)

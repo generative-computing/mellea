@@ -209,8 +209,3 @@ result, new_ctx = await mfuncs.aact(instruction, context=ctx, backend=backend)
 
 For parallel generation and streaming patterns, see
 [Async and Streaming](../how-to/use-async-and-streaming.md).
-
----
-
-**Previous:** [Backends and Configuration](./backends-and-configuration.md) |
-**Next:** [Async and Streaming](../how-to/use-async-and-streaming.md)

@@ -108,8 +108,6 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 ---
 
-**Previous:** [IBM WatsonX](./watsonx.md) |
-**Next:** [vLLM](./vllm.md)
 
 **See also:** [Backends and Configuration](../guide/backends-and-configuration.md) |
 [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md)

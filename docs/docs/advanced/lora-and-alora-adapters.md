@@ -161,8 +161,3 @@ affect other sessions.
 **See also:** [Intrinsics](./intrinsics.md) |
 [The Requirements System](../concepts/requirements-system.md) |
 [Write Custom Verifiers](../how-to/write-custom-verifiers.md)
-
----
-
-**Previous:** [Intrinsics](./intrinsics.md) |
-**Next:** [Inference-Time Scaling](./inference-time-scaling.md)

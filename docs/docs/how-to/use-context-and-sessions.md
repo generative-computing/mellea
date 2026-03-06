@@ -178,8 +178,3 @@ methods are:
 > management and telemetry instrumentation.
 >
 > **Full example:** [`docs/examples/sessions/creating_a_new_type_of_session.py`](../../examples/sessions/creating_a_new_type_of_session.py)
-
----
-
-**Previous:** [Async and Streaming](./use-async-and-streaming.md) |
-**Next:** [Enforce Structured Output](./enforce-structured-output.md)

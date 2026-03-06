@@ -249,8 +249,3 @@ if tables:
 tools during `transform()` calls automatically.
 
 > **Full example:** [`docs/examples/tutorial/document_mobject.py`](../../examples/tutorial/document_mobject.py)
-
----
-
-**Previous:** [Tools and Agents](./tools-and-agents.md) |
-**Next:** [Backends and Configuration](./backends-and-configuration.md)

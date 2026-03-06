@@ -147,7 +147,5 @@ so vision-capable models (e.g., `amazon.nova-pro-v1:0`) support image input via
 
 ---
 
-**Previous:** [OpenAI and OpenAI-Compatible APIs](./openai.md) |
-**Next:** [IBM WatsonX](./watsonx.md)
 
 **See also:** [Backends and Configuration](../guide/backends-and-configuration.md)

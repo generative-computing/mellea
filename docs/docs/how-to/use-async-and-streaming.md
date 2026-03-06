@@ -165,8 +165,3 @@ asyncio.run(sequential_chat())
 ```
 
 For parallel generation, use `SimpleContext`.
-
----
-
-**Previous:** [act() and aact()](../guide/act-and-aact.md) |
-**Next:** [Context and Sessions](./use-context-and-sessions.md)

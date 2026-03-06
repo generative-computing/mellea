@@ -357,8 +357,3 @@ See: [Tools and Agents](./tools-and-agents.md)
 ## Thunk
 
 See [ModelOutputThunk](#modeloutputthunk).
-
----
-
-**Previous:** [Mellea Core Internals](../advanced/mellea-core-internals.md) |
-**Next:** [Common Errors](../troubleshooting/common-errors.md)

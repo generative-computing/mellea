@@ -63,8 +63,6 @@ description and parameter types are preserved exactly.
 
 ---
 
-**Previous:** [LangChain](./langchain.md) |
-**Next:** [Metrics and Telemetry](../evaluation-and-observability/metrics-and-telemetry.md)
 
 **See also:** [Tools and Agents](../guide/tools-and-agents.md) |
 [Context and Sessions](../concepts/context-and-sessions.md)

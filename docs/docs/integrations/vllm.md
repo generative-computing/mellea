@@ -87,8 +87,6 @@ model_options={ModelOption.MAX_NEW_TOKENS: 512}
 
 ---
 
-**Previous:** [HuggingFace Transformers](./huggingface.md) |
-**Next:** [MCP Integration](./mcp.md)
 
 **See also:** [Backends and Configuration](../guide/backends-and-configuration.md) |
 [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md)

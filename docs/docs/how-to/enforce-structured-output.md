@@ -267,8 +267,6 @@ Both patterns support the full IVR loop, requirements, sampling strategies, and
 
 ---
 
-**Previous:** [Use Context and Sessions](./use-context-and-sessions.md) |
-**Next:** [Write Custom Verifiers](./write-custom-verifiers.md)
 
 **See also:** [Generative Functions](../guide/generative-functions.md) |
 [The Requirements System](../concepts/requirements-system.md)

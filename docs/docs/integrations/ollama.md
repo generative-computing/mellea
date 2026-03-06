@@ -242,8 +242,6 @@ pip install mellea
 
 ---
 
-**Previous:** [Use Images and Vision Models](../how-to/use-images-and-vision.md) |
-**Next:** [OpenAI](./openai.md)
 
 **See also:** [Backends and Configuration](../guide/backends-and-configuration.md) |
 [Getting Started](../getting-started/installation.md)

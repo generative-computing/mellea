@@ -207,8 +207,3 @@ print(str(result.result))
 > Neither is exported from `mellea.stdlib.sampling` directly — import from
 > `mellea.stdlib.sampling.majority_voting`. Full parameter documentation needs
 > verification with Hendrik.
-
----
-
-**Previous:** [Intrinsics](./intrinsics.md) |
-**Next:** [Security and Taint Tracking](./security-and-taint-tracking.md)

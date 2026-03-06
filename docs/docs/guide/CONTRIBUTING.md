@@ -247,7 +247,6 @@ Every page ends with a navigation footer:
 ```markdown
 ---
 
-**Next:** [Next Page Title](./next-page.md)
 
 **See also:** [Related Page](./related.md), [Another Page](./another.md)
 ```

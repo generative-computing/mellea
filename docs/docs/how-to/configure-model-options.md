@@ -133,8 +133,3 @@ Using `ModelOption.SYSTEM_PROMPT` is recommended over constructing a system-role
 manually. Some backend APIs do not serialize system-role messages correctly and expect the
 system prompt as a separate parameter — `ModelOption.SYSTEM_PROMPT` handles this correctly
 across all backends.
-
----
-
-**Previous:** [Write Custom Verifiers](./write-custom-verifiers.md) |
-**Next:** [Use Images and Vision Models](./use-images-and-vision.md)
