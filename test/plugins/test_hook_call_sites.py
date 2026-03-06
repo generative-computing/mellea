@@ -18,7 +18,7 @@ pytest.importorskip("cpex.framework")
 
 from mellea.core.backend import Backend
 from mellea.core.base import CBlock, Context, GenerateLog, ModelOutputThunk
-from mellea.plugins import hook, register
+from mellea.plugins import PluginResult, hook, register
 from mellea.plugins.manager import shutdown_plugins
 from mellea.stdlib.context import SimpleContext
 
@@ -852,3 +852,158 @@ class TestSessionHookCallSites:
             start_session("ollama", model_id="test-model")
 
         assert order == ["pre_init", "post_init"]
+
+
+# ---------------------------------------------------------------------------
+# Mutation tests — verify that hook-modified payloads are actually applied
+# ---------------------------------------------------------------------------
+
+
+class TestGenerationPostCallMutation:
+    """GENERATION_POST_CALL: a hook that replaces model_output is applied."""
+
+    async def test_hook_can_replace_model_output(self):
+        """A plugin that returns a modified model_output replaces the returned thunk."""
+        replacement = MagicMock(spec=ModelOutputThunk)
+        replacement._generate_log = None
+
+        @hook("generation_post_call")
+        async def swap_output(payload, *_):
+            modified = payload.model_copy(update={"model_output": replacement})
+            return PluginResult(continue_processing=True, modified_payload=modified)
+
+        register(swap_output)
+        backend = _MockBackend()
+        result, _ = await backend.generate_from_context_with_hooks(
+            CBlock("mutation test"), MagicMock(spec=Context)
+        )
+
+        assert result is replacement
+
+    async def test_no_modification_returns_original_output(self):
+        """When the hook returns None the original thunk is returned unchanged."""
+
+        @hook("generation_post_call")
+        async def observe_only(*_):
+            return None
+
+        register(observe_only)
+        backend = _MockBackend()
+        result, _ = await backend.generate_from_context_with_hooks(
+            CBlock("no-op test"), MagicMock(spec=Context)
+        )
+
+        assert result is not None
+        assert isinstance(result, ModelOutputThunk)
+
+
+class TestSamplingLoopEndMutation:
+    """SAMPLING_LOOP_END: a hook that replaces final_result is applied."""
+
+    async def test_hook_can_replace_final_result_on_success_path(self):
+        """On success, a plugin that replaces final_result is reflected in SamplingResult.result."""
+        from mellea.stdlib.components import Instruction
+        from mellea.stdlib.sampling.base import RejectionSamplingStrategy
+
+        replacement = MagicMock(spec=ModelOutputThunk)
+        glog = GenerateLog()
+        glog.prompt = "replaced"
+        replacement._generate_log = glog
+        replacement.value = "replaced output"
+
+        @hook("sampling_loop_end")
+        async def swap_result(payload, *_):
+            modified = payload.model_copy(update={"final_result": replacement})
+            return PluginResult(continue_processing=True, modified_payload=modified)
+
+        register(swap_result)
+        backend = _MockBackend()
+        ctx = SimpleContext()
+        strategy = RejectionSamplingStrategy(loop_budget=1)
+
+        sampling_result = await strategy.sample(
+            Instruction("mutation test"),
+            context=ctx,
+            backend=backend,
+            requirements=[],
+            format=None,
+            model_options=None,
+            tool_calls=False,
+            show_progress=False,
+        )
+
+        assert sampling_result.result is replacement
+
+    async def test_no_modification_returns_original_result_on_success_path(self):
+        """When the hook returns None on success, the original result is unchanged."""
+        from mellea.stdlib.components import Instruction
+        from mellea.stdlib.sampling.base import RejectionSamplingStrategy
+
+        @hook("sampling_loop_end")
+        async def observe_only(*_):
+            return None
+
+        register(observe_only)
+        backend = _MockBackend()
+        ctx = SimpleContext()
+        strategy = RejectionSamplingStrategy(loop_budget=1)
+
+        sampling_result = await strategy.sample(
+            Instruction("no-op test"),
+            context=ctx,
+            backend=backend,
+            requirements=[],
+            format=None,
+            model_options=None,
+            tool_calls=False,
+            show_progress=False,
+        )
+
+        assert sampling_result.result is not None
+        assert isinstance(sampling_result.result, ModelOutputThunk)
+
+    async def test_hook_can_replace_final_result_on_failure_path(self):
+        """On failure (budget exhausted), replacing final_result is reflected in SamplingResult.result."""
+        from mellea.core.requirement import Requirement, ValidationResult
+        from mellea.stdlib.components import Instruction
+        from mellea.stdlib.sampling.base import RejectionSamplingStrategy
+
+        replacement = MagicMock(spec=ModelOutputThunk)
+        glog = GenerateLog()
+        glog.prompt = "replaced failure"
+        replacement._generate_log = glog
+        replacement.value = "replaced failure output"
+
+        @hook("sampling_loop_end")
+        async def swap_result(payload, *_):
+            if not payload.success:
+                modified = payload.model_copy(update={"final_result": replacement})
+                return PluginResult(continue_processing=True, modified_payload=modified)
+            return None
+
+        register(swap_result)
+        backend = _MockBackend()
+        ctx = SimpleContext()
+
+        # A requirement that always fails via validation_fn forces the failure path.
+        always_fail = Requirement(
+            description="always fails",
+            validation_fn=lambda _ctx: ValidationResult(
+                result=False, reason="forced failure"
+            ),
+        )
+        strategy = RejectionSamplingStrategy(loop_budget=1)
+
+        sampling_result = await strategy.sample(
+            Instruction("failure mutation test"),
+            context=ctx,
+            backend=backend,
+            requirements=[always_fail],
+            format=None,
+            model_options=None,
+            tool_calls=False,
+            show_progress=False,
+        )
+
+        assert not sampling_result.success
+        assert sampling_result.result is replacement

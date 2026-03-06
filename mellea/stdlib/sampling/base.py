@@ -263,12 +263,18 @@ class BaseSamplingStrategy(SamplingStrategy):
                         all_results=sampled_results,
                         all_validations=sampled_scores,
                     )
-                    await invoke_hook(
+                    _, end_payload = await invoke_hook(
                         HookType.SAMPLING_LOOP_END,
                         end_payload,
                         backend=backend,
                         context=result_ctx,
                     )
+                    if (
+                        end_payload.final_result is not None
+                        and end_payload.final_result is not result
+                    ):
+                        result = end_payload.final_result
+                        sampled_results[-1] = result
 
                 # SUCCESS !!!!
                 return SamplingResult(
@@ -360,12 +366,17 @@ class BaseSamplingStrategy(SamplingStrategy):
                 all_results=sampled_results,
                 all_validations=sampled_scores,
             )
-            await invoke_hook(
+            _, end_payload = await invoke_hook(
                 HookType.SAMPLING_LOOP_END,
                 end_payload,
                 backend=backend,
                 context=_final_ctx,
             )
+            if (
+                end_payload.final_result is not None
+                and end_payload.final_result is not sampled_results[best_failed_index]
+            ):
+                sampled_results[best_failed_index] = end_payload.final_result
 
         return SamplingResult(
             result_index=best_failed_index,

@@ -154,12 +154,17 @@ class Backend(abc.ABC):
                     (time.monotonic() - t0) * 1000
                 ),  # TODO: drop latency here
             )
-            await invoke_hook(
+            _, post_payload = await invoke_hook(
                 HookType.GENERATION_POST_CALL,
                 post_payload,
                 backend=self,
                 context=new_ctx,
             )
+            if (
+                post_payload.model_output is not None
+                and post_payload.model_output is not out_result
+            ):
+                out_result = post_payload.model_output
 
         return out_result, new_ctx
 
