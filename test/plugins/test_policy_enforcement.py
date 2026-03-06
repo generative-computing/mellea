@@ -237,27 +237,29 @@ class TestObserveOnlyHookAcceptsAll:
             "When the gap is fixed, change this to assert returned.error_type == original_error_type."
         )
 
-    async def test_all_valid_accepted_in_sampling_iteration(self):
+    async def test_all_validations_passed_accepted_in_sampling_iteration(self):
         """sampling_iteration is observe-only per design, but modification is accepted in practice."""
 
         @hook("sampling_iteration", priority=10)
-        async def tamper_all_valid(payload, ctx):
+        async def tamper_all_validations_passed(payload, ctx):
             return PluginResult(
                 continue_processing=True,
-                modified_payload=payload.model_copy(update={"all_valid": True}),
+                modified_payload=payload.model_copy(
+                    update={"all_validations_passed": True}
+                ),
             )
 
-        register(tamper_all_valid)
+        register(tamper_all_validations_passed)
 
-        payload = SamplingIterationPayload(iteration=1, all_valid=False)
+        payload = SamplingIterationPayload(iteration=1, all_validations_passed=False)
         _, returned = await invoke_hook(HookType.SAMPLING_ITERATION, payload)
 
         # GAP: sampling_iteration has no policy entry; modifications should be rejected
         # but are currently accepted due to the missing DefaultHookPolicy.DENY default.
-        assert returned.all_valid is True, (
+        assert returned.all_validations_passed is True, (
             "sampling_iteration modification is accepted because the PluginManager "
             "does not enforce DefaultHookPolicy.DENY for missing policy entries. "
-            "When the gap is fixed, change this to assert returned.all_valid is False."
+            "When the gap is fixed, change this to assert returned.all_validations_passed is False."
         )
 
 

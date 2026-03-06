@@ -118,7 +118,7 @@ if _HAS_PLUGIN_FRAMEWORK:
                 from mellea.plugins.manager import deregister_session_plugins
 
                 deregister_session_plugins(scope_id)
-                self._scope_id = None
+                self._scope_id = None  # type: ignore[assignment]
 
         async def __aenter__(self) -> MelleaPlugin:
             """Async variant — delegates to the synchronous ``__enter__``."""
@@ -128,7 +128,7 @@ if _HAS_PLUGIN_FRAMEWORK:
             """Async variant — delegates to the synchronous ``__exit__``."""
             self.__exit__(exc_type, exc_val, exc_tb)
 
-    PluginResult: TypeAlias = _CFPluginResult
+    PluginResult: TypeAlias = _CFPluginResult  # type: ignore[misc]
 
 else:
     # Provide a stub when the plugin framework is not installed.
@@ -142,4 +142,4 @@ else:
             )
 
     # Provide an alias when the plugin framework is not installed.
-    PluginResult: TypeAlias = Any
+    PluginResult: TypeAlias = Any  # type: ignore[no-redef, misc]

@@ -347,7 +347,7 @@ def apply_policy(
 | `generation_stream_chunk` | `chunk`, `accumulated` |
 | **Validation** | |
 | `validation_pre_check` | `requirements`, `model_options` |
-| `validation_post_check` | `results`, `all_passed` |
+| `validation_post_check` | `results`, `all_validations_passed` |
 | **Sampling Pipeline** | |
 | `sampling_loop_start` | `loop_budget` |
 | `sampling_iteration` | *(observe-only)* |
@@ -694,7 +694,7 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
 
 #### `generation_post_call`
 
-- **Trigger**: Immediately after receiving the raw response from the LLM API, before parsing.
+- **Trigger**: Immediately after `generate_from_context` returns, before any post-processing.
 - **Use Cases**:
   - Output filtering/sanitization
   - PII detection and redaction
@@ -706,9 +706,9 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
 - **Payload**:
   ```python
   class GenerationPostCallPayload(BasePayload):
-      prompt: str | list[dict]       # Sent prompt
-      model_output: ModelOutputThunk # Output thunk
-      latency_ms: int                # Generation time
+      prompt: str | list[dict]       # Sent prompt (from linearization)
+      model_output: ModelOutputThunk # Output thunk (typically uncomputed/lazy)
+      latency_ms: int                # Always 0 — see note below
   ```
 - **Context**:
   - `backend`: Backend
@@ -718,6 +718,8 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
   - `status_code`: int | None - HTTP status from provider
   - `stream_chunks`: int | None - Number of chunks if streaming
 - **Notes**:
+  - The `ModelOutputThunk` is typically **uncomputed (lazy)** when this hook fires — `model_output.value` may be `None`. Plugins should not assume the output text is available.
+  - `latency_ms` is always `0` because timing the `generate_from_context` call is meaningless when the thunk is lazy. Accurate latency measurement requires moving the post-call hook into `ModelOutputThunk.astream` (after `post_process`). See TODO in `backend.py`.
   - Field `raw_response: dict # Full JSON response from provider` not implemented
   - Field `processed_output: str # Processed output text` not implemented
   - Field `token_usage: dict | None # Token counts` not implemented
@@ -788,7 +790,7 @@ Hooks around requirement verification and output validation. These operate on th
   class ValidationPostCheckPayload(BasePayload):
       requirements: list[Requirement]
       results: list[ValidationResult]
-      all_passed: bool
+      all_validations_passed: bool
       passed_count: int
       failed_count: int
       generate_logs: list[GenerateLog | None]  # Logs from LLM-as-judge
@@ -842,7 +844,7 @@ Hooks around sampling strategies and failure recovery. These operate on the (Bac
       action: Component              # Action used this iteration
       result: ModelOutputThunk       # Generation result
       validation_results: list[tuple[Requirement, ValidationResult]]
-      all_valid: bool                # Did all requirements pass
+      all_validations_passed: bool    # Did all requirements pass
       valid_count: int
       total_count: int
   ```
@@ -1601,10 +1603,13 @@ class PIIRedactor:
 
     @hook("generation_post_call")
     async def redact_output(self, payload, ctx):
-        redacted = self._redact(payload.processed_output)
-        if redacted != payload.processed_output:
-            modified = payload.model_copy(update={"processed_output": redacted})
-            return PluginResult(continue_processing=True, modified_payload=modified)
+        # model_output is a ModelOutputThunk — value may be None (lazy/uncomputed)
+        output_value = getattr(payload.model_output, "value", None)
+        if output_value is None:
+            return  # thunk not yet computed, nothing to redact
+        redacted = self._redact(output_value)
+        if redacted != output_value:
+            payload.model_output.value = redacted
 
     def _redact(self, text: str) -> str:
         for pattern in self.patterns:

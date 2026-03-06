@@ -8,19 +8,34 @@ from mellea.plugins.base import MelleaBasePayload
 
 
 class ValidationPreCheckPayload(MelleaBasePayload):
-    """Payload for ``validation_pre_check`` — before requirement validation."""
+    """Payload for ``validation_pre_check`` — before requirement validation.
 
-    requirements: list[Any] = []  # list[Requirement]
-    target: Any = None  # CBlock | None
-    context: Any = None  # Context
+    Attributes:
+        requirements: List of ``Requirement`` instances to validate (writable).
+        target: The ``CBlock`` being validated, or ``None`` when validating the full context.
+        context: The ``Context`` used for validation.
+        model_options: Dict of model options for backend-based validators (writable).
+    """
+
+    requirements: list[Any] = []
+    target: Any = None
+    context: Any = None
     model_options: dict[str, Any] = {}
 
 
 class ValidationPostCheckPayload(MelleaBasePayload):
-    """Payload for ``validation_post_check`` — after validation completes."""
+    """Payload for ``validation_post_check`` — after validation completes.
 
-    requirements: list[Any] = []  # list[Requirement]
-    results: list[Any] = []  # list[ValidationResult]
-    all_passed: bool = False
+    Attributes:
+        requirements: List of ``Requirement`` instances that were evaluated.
+        results: List of ``ValidationResult`` instances (writable).
+        all_validations_passed: ``True`` when every requirement passed (writable).
+        passed_count: Number of requirements that passed.
+        failed_count: Number of requirements that failed.
+    """
+
+    requirements: list[Any] = []
+    results: list[Any] = []
+    all_validations_passed: bool = False
     passed_count: int = 0
     failed_count: int = 0

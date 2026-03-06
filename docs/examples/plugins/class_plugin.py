@@ -36,7 +36,14 @@ log = logging.getLogger("class_plugin")
 
 @plugin("pii-redactor", priority=5)
 class PIIRedactor:
-    """Redacts PII patterns from both input and output."""
+    """Redacts PII patterns from both input and output.
+
+    .. warning:: Shared mutable state
+        ``redaction_count`` is shared across all hook invocations.  This is
+        safe today because all hooks run on the same ``asyncio`` event loop,
+        but would require a lock or ``contextvars`` if hooks ever execute in
+        parallel threads.
+    """
 
     def __init__(self, patterns: list[str] | None = None):
         self.patterns = patterns or [
@@ -59,11 +66,22 @@ class PIIRedactor:
 
     @hook(HookType.GENERATION_POST_CALL)
     async def redact_output(self, payload, ctx):
-        """Scan and redact PII from LLM output before it reaches the caller."""
-        original = str(payload.model_output.value)
+        """Scan LLM output for PII and log a warning if found.
+
+        Note: This hook fires while the ``ModelOutputThunk`` is still lazy
+        (uncomputed), so ``payload.model_output.value`` may be ``None``.
+        Modifying the thunk's value from here is not currently supported —
+        use ``COMPONENT_PRE_CREATE`` to redact *inputs* before they reach the
+        LLM instead.
+        """
+        mot_value = getattr(payload.model_output, "value", None)
+        if mot_value is None:
+            log.info("[pii-redactor] output not yet computed — skipping output scan")
+            return
+        original = str(mot_value)
         redacted = self._redact(original)
         if redacted != original:
-            log.info("[pii-redactor] redacted PII from LLM output")
+            log.warning("[pii-redactor] PII detected in LLM output")
             self.redaction_count += 1
         else:
             log.info("[pii-redactor] no PII found in output")

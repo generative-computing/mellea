@@ -78,7 +78,7 @@ def _build_policies() -> dict[str, object]:
             writable_fields=frozenset({"requirements", "model_options"})
         ),
         "validation_post_check": HookPayloadPolicy(
-            writable_fields=frozenset({"results", "all_passed"})
+            writable_fields=frozenset({"results", "all_validations_passed"})
         ),
         # Sampling Pipeline
         "sampling_loop_start": HookPayloadPolicy(

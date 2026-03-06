@@ -357,6 +357,12 @@ def hook(
 ) -> Callable:
     """Register an async function or method as a hook handler."""
     def decorator(fn):
+        import inspect
+        if not inspect.iscoroutinefunction(fn):
+            raise TypeError(
+                f"@hook-decorated function {fn.__qualname__!r} must be async "
+                f"(defined with 'async def'), got a regular function."
+            )
         fn._mellea_hook_meta = HookMeta(
             hook_type=hook_type,
             mode=mode,
@@ -506,7 +512,7 @@ MELLEA_HOOK_PAYLOAD_POLICIES: dict[str, HookPayloadPolicy] = {
         writable_fields=frozenset({"requirements", "model_options"}),
     ),
     "validation_post_check": HookPayloadPolicy(
-        writable_fields=frozenset({"results", "all_passed"}),
+        writable_fields=frozenset({"results", "all_validations_passed"}),
     ),
 
     # Sampling Pipeline
@@ -1069,17 +1075,19 @@ async def generate_from_context_with_hooks(
         model_options = pre_payload.model_options
         format = pre_payload.format
 
-    t0 = time.monotonic()
     out_result, new_ctx = await self.generate_from_context(
         action, ctx, format=format, model_options=model_options, tool_calls=tool_calls,
     )
 
     if has_plugins():
         glog = getattr(out_result, "_generate_log", None)
+        # latency_ms is 0 — the ModelOutputThunk is lazy/uncomputed at this point,
+        # so timing is meaningless. Accurate latency requires moving this hook
+        # into ModelOutputThunk.astream (after post_process).
         post_payload = GenerationPostCallPayload(
             prompt=glog.prompt if glog else "",  # Sent prompt (from linearization)
             model_output=out_result,
-            latency_ms=int((time.monotonic() - t0) * 1000),
+            latency_ms=0,
         )
         await invoke_hook(
             MelleaHookType.GENERATION_POST_CALL, post_payload,
@@ -1123,7 +1131,7 @@ ValidationPreCheckPayload(
 ValidationPostCheckPayload(
     requirements=reqs,
     results=rvs,
-    all_passed=all(bool(r) for r in rvs),
+    all_validations_passed=all(bool(r) for r in rvs),
     passed_count=sum(1 for r in rvs if bool(r)),
     failed_count=sum(1 for r in rvs if not bool(r)),
 )

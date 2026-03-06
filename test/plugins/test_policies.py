@@ -45,7 +45,7 @@ class TestPolicies:
         policy = MELLEA_HOOK_PAYLOAD_POLICIES.get("validation_post_check")
         assert policy is not None
         assert "results" in policy.writable_fields
-        assert "all_passed" in policy.writable_fields
+        assert "all_validations_passed" in policy.writable_fields
 
     def test_sampling_policies(self):
         policy = MELLEA_HOOK_PAYLOAD_POLICIES.get("sampling_loop_start")

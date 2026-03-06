@@ -596,7 +596,7 @@ class TestValidationPostCheckPayload:
         payload = ValidationPostCheckPayload()
         assert payload.requirements == []
         assert payload.results == []
-        assert payload.all_passed is False
+        assert payload.all_validations_passed is False
         assert payload.passed_count == 0
         assert payload.failed_count == 0
 
@@ -606,29 +606,29 @@ class TestValidationPostCheckPayload:
         payload = ValidationPostCheckPayload(
             requirements=reqs,
             results=results,
-            all_passed=True,
+            all_validations_passed=True,
             passed_count=2,
             failed_count=0,
             request_id="r-val-post-001",
         )
         assert len(payload.requirements) == 2
         assert len(payload.results) == 2
-        assert payload.all_passed is True
+        assert payload.all_validations_passed is True
         assert payload.passed_count == 2
         assert payload.failed_count == 0
 
     def test_partial_pass(self):
         payload = ValidationPostCheckPayload(
-            passed_count=1, failed_count=1, all_passed=False
+            passed_count=1, failed_count=1, all_validations_passed=False
         )
-        assert payload.all_passed is False
+        assert payload.all_validations_passed is False
         assert payload.passed_count == 1
         assert payload.failed_count == 1
 
     def test_frozen(self):
-        payload = ValidationPostCheckPayload(all_passed=False)
+        payload = ValidationPostCheckPayload(all_validations_passed=False)
         with pytest.raises(ValidationError):
-            payload.all_passed = True
+            payload.all_validations_passed = True
 
     def test_frozen_counts(self):
         payload = ValidationPostCheckPayload(passed_count=2, failed_count=0)
@@ -637,17 +637,21 @@ class TestValidationPostCheckPayload:
 
     def test_model_copy_creates_modified_copy(self):
         payload = ValidationPostCheckPayload(
-            passed_count=1, failed_count=2, all_passed=False
+            passed_count=1, failed_count=2, all_validations_passed=False
         )
         modified = payload.model_copy(
-            update={"passed_count": 3, "failed_count": 0, "all_passed": True}
+            update={
+                "passed_count": 3,
+                "failed_count": 0,
+                "all_validations_passed": True,
+            }
         )
         assert modified.passed_count == 3
         assert modified.failed_count == 0
-        assert modified.all_passed is True
+        assert modified.all_validations_passed is True
         assert payload.passed_count == 1
         assert payload.failed_count == 2
-        assert payload.all_passed is False
+        assert payload.all_validations_passed is False
 
     def test_inherits_base_fields(self):
         assert issubclass(ValidationPostCheckPayload, MelleaBasePayload)
@@ -714,7 +718,7 @@ class TestSamplingIterationPayload:
         assert payload.action is None
         assert payload.result is None
         assert payload.validation_results == []
-        assert payload.all_valid is False
+        assert payload.all_validations_passed is False
         assert payload.valid_count == 0
         assert payload.total_count == 0
 
@@ -728,7 +732,7 @@ class TestSamplingIterationPayload:
             action=_SENTINEL_ACTION,
             result=_SENTINEL_RESULT,
             validation_results=val_results,
-            all_valid=True,
+            all_validations_passed=True,
             valid_count=2,
             total_count=2,
             request_id="r-iter-001",
@@ -737,7 +741,7 @@ class TestSamplingIterationPayload:
         assert payload.action is _SENTINEL_ACTION
         assert payload.result is _SENTINEL_RESULT
         assert len(payload.validation_results) == 2
-        assert payload.all_valid is True
+        assert payload.all_validations_passed is True
         assert payload.valid_count == 2
         assert payload.total_count == 2
 
@@ -746,11 +750,11 @@ class TestSamplingIterationPayload:
         payload = SamplingIterationPayload(
             iteration=1,
             validation_results=val_results,
-            all_valid=False,
+            all_validations_passed=False,
             valid_count=0,
             total_count=1,
         )
-        assert payload.all_valid is False
+        assert payload.all_validations_passed is False
         assert payload.valid_count == 0
 
     def test_frozen(self):
@@ -758,24 +762,24 @@ class TestSamplingIterationPayload:
         with pytest.raises(ValidationError):
             payload.iteration = 2
 
-    def test_frozen_all_valid(self):
-        payload = SamplingIterationPayload(all_valid=False)
+    def test_frozen_all_validations_passed(self):
+        payload = SamplingIterationPayload(all_validations_passed=False)
         with pytest.raises(ValidationError):
-            payload.all_valid = True
+            payload.all_validations_passed = True
 
     def test_model_copy_creates_modified_copy(self):
         payload = SamplingIterationPayload(
-            iteration=0, valid_count=0, total_count=2, all_valid=False
+            iteration=0, valid_count=0, total_count=2, all_validations_passed=False
         )
         modified = payload.model_copy(
-            update={"iteration": 1, "valid_count": 2, "all_valid": True}
+            update={"iteration": 1, "valid_count": 2, "all_validations_passed": True}
         )
         assert modified.iteration == 1
         assert modified.valid_count == 2
-        assert modified.all_valid is True
+        assert modified.all_validations_passed is True
         assert payload.iteration == 0
         assert payload.valid_count == 0
-        assert payload.all_valid is False
+        assert payload.all_validations_passed is False
         assert modified.total_count == 2
 
     def test_inherits_base_fields(self):

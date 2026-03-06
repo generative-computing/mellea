@@ -70,6 +70,13 @@ def hook(
     """
 
     def decorator(fn: Callable) -> Callable:
+        import inspect
+
+        if not inspect.iscoroutinefunction(fn):
+            raise TypeError(
+                f"@hook-decorated function {fn.__qualname__!r} must be async "
+                f"(defined with 'async def'), got a regular function."
+            )
         fn._mellea_hook_meta = HookMeta(  # type: ignore[attr-defined]
             hook_type=hook_type, mode=mode, priority=priority
         )

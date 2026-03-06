@@ -589,7 +589,7 @@ class TestSamplingHookCallSites:
         )
         assert len(observed) == 1
         assert observed[0].iteration == 1
-        assert observed[0].all_valid is True  # no requirements → all pass
+        assert observed[0].all_validations_passed is True  # no requirements → all pass
 
     async def test_sampling_loop_end_fires_on_success_path(self):
         """SAMPLING_LOOP_END fires with success=True when sampling succeeds."""

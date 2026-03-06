@@ -11,7 +11,15 @@ if TYPE_CHECKING:
 
 
 class SessionPreInitPayload(MelleaBasePayload):
-    """Payload for ``session_pre_init`` — before backend initialization."""
+    """Payload for ``session_pre_init`` — before backend initialization.
+
+    Attributes:
+        backend_name: Name of the backend (e.g. ``"ollama"``, ``"openai"``) (writable).
+        model_id: Model identifier string (writable).
+        model_options: Optional dict of model options like temperature, max_tokens (writable).
+        backend_kwargs: Additional keyword arguments passed to the backend constructor (writable).
+        context_type: Class name of the context being used (e.g. ``"SimpleContext"``).
+    """
 
     backend_name: str
     model_id: str
@@ -21,19 +29,32 @@ class SessionPreInitPayload(MelleaBasePayload):
 
 
 class SessionPostInitPayload(MelleaBasePayload):
-    """Payload for ``session_post_init`` — after session is fully initialized."""
+    """Payload for ``session_post_init`` — after session is fully initialized.
 
-    session: Any = None  # MelleaSession (Any to avoid import issues with frozen model)
+    Attributes:
+        session: The fully initialized ``MelleaSession`` instance (observe-only).
+    """
+
+    session: Any = None
 
 
 class SessionResetPayload(MelleaBasePayload):
-    """Payload for ``session_reset`` — when session context is reset."""
+    """Payload for ``session_reset`` — when session context is reset.
 
-    previous_context: Any = None  # Context
+    Attributes:
+        previous_context: The ``Context`` that is about to be discarded (observe-only).
+    """
+
+    previous_context: Any = None
 
 
 class SessionCleanupPayload(MelleaBasePayload):
-    """Payload for ``session_cleanup`` — before session cleanup/teardown."""
+    """Payload for ``session_cleanup`` — before session cleanup/teardown.
 
-    context: Any = None  # Context
+    Attributes:
+        context: The ``Context`` at the time of cleanup (observe-only).
+        interaction_count: Number of items in the context at cleanup time.
+    """
+
+    context: Any = None
     interaction_count: int = 0

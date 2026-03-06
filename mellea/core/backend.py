@@ -109,9 +109,17 @@ class Backend(abc.ABC):
         """Wraps ``generate_from_context`` with generation_pre_call / generation_post_call hooks.
 
         Falls through to ``generate_from_context`` directly when no plugins are configured.
-        """
-        import time
 
+        .. note::
+            The ``generation_post_call`` hook fires immediately after
+            ``generate_from_context`` returns, at which point the
+            ``ModelOutputThunk`` is typically **uncomputed** (lazy).
+            ``latency_ms`` is always ``0`` here for that reason.
+
+            TODO: Move the post-call hook into ``ModelOutputThunk.astream``
+            (after ``post_process``) so it fires once the value is materialized
+            and ``latency_ms`` can be measured accurately.
+        """
         from mellea.plugins.manager import has_plugins, invoke_hook
         from mellea.plugins.types import HookType
 
@@ -134,7 +142,6 @@ class Backend(abc.ABC):
             model_options = pre_payload.model_options
             format = pre_payload.format
 
-        t0 = time.monotonic()
         out_result, new_ctx = await self.generate_from_context(
             action,
             ctx,
@@ -150,9 +157,7 @@ class Backend(abc.ABC):
             post_payload = GenerationPostCallPayload(
                 prompt=glog.prompt if glog else "",
                 model_output=out_result,
-                latency_ms=int(
-                    (time.monotonic() - t0) * 1000
-                ),  # TODO: drop latency here
+                latency_ms=0,
             )
             _, post_payload = await invoke_hook(
                 HookType.GENERATION_POST_CALL,

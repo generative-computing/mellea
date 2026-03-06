@@ -220,7 +220,7 @@ class BaseSamplingStrategy(SamplingStrategy):
             sampled_actions.append(next_action)
             sample_contexts.append(result_ctx)
 
-            all_valid = all(bool(s[1]) for s in constraint_scores)
+            all_validations_passed = all(bool(s[1]) for s in constraint_scores)
 
             # --- sampling_iteration hook ---
             if has_plugins(HookType.SAMPLING_ITERATION):
@@ -231,7 +231,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                     action=next_action,
                     result=result,
                     validation_results=constraint_scores,
-                    all_valid=all_valid,
+                    all_validations_passed=all_validations_passed,
                     valid_count=sum(1 for s in constraint_scores if bool(s[1])),
                     total_count=len(constraint_scores),
                 )
@@ -243,7 +243,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 )
 
             # if all vals are true -- break and return success
-            if all_valid:
+            if all_validations_passed:
                 flog.info("SUCCESS")
                 assert (
                     result._generate_log is not None

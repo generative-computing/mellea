@@ -195,35 +195,25 @@ def instruct(
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
     """
-    requirements = [] if requirements is None else requirements
-    icl_examples = [] if icl_examples is None else icl_examples
-    grounding_context = dict() if grounding_context is None else grounding_context
-
-    images = _parse_and_clean_image_args(images)
-
-    # All instruction options are forwarded to create a new Instruction object.
-    i = Instruction(
-        description=description,
-        requirements=requirements,
-        icl_examples=icl_examples,
-        grounding_context=grounding_context,
-        user_variables=user_variables,
-        prefix=prefix,
-        output_prefix=output_prefix,
-        images=images,
-    )
-
-    return act(
-        i,
-        context=context,
-        backend=backend,
-        requirements=i.requirements,
-        strategy=strategy,
-        return_sampling_results=return_sampling_results,
-        format=format,
-        model_options=model_options,
-        tool_calls=tool_calls,
-    )  # type: ignore[call-overload]
+    return _run_async_in_thread(
+        ainstruct(  # type: ignore[call-overload, misc]
+            description,
+            context=context,
+            backend=backend,
+            images=images,
+            requirements=requirements,
+            icl_examples=icl_examples,
+            grounding_context=grounding_context,
+            user_variables=user_variables,
+            prefix=prefix,
+            output_prefix=output_prefix,
+            strategy=strategy,
+            return_sampling_results=return_sampling_results,
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )
+    )  # type: ignore[return-value]
 
 
 def chat(
@@ -239,28 +229,19 @@ def chat(
     tool_calls: bool = False,
 ) -> tuple[Message, Context]:
     """Sends a simple chat message and returns the response. Adds both messages to the Context."""
-    if user_variables is not None:
-        content_resolved = Instruction.apply_user_dict_from_jinja(
-            user_variables, content
+    return _run_async_in_thread(
+        achat(
+            content=content,
+            context=context,
+            backend=backend,
+            role=role,
+            images=images,
+            user_variables=user_variables,
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
         )
-    else:
-        content_resolved = content
-    images = _parse_and_clean_image_args(images)
-    user_message = Message(role=role, content=content_resolved, images=images)
-
-    result, new_ctx = act(
-        user_message,
-        context=context,
-        backend=backend,
-        strategy=None,  # Explicitly pass `None` since this can't pass requirements.
-        format=format,
-        model_options=model_options,
-        tool_calls=tool_calls,
     )
-    parsed_assistant_message = result.parsed_repr
-    assert isinstance(parsed_assistant_message, Message)
-
-    return parsed_assistant_message, new_ctx
 
 
 def validate(
@@ -974,7 +955,7 @@ async def avalidate(
         post_payload = ValidationPostCheckPayload(
             requirements=reqs,
             results=rvs,
-            all_passed=all(bool(r) for r in rvs),
+            all_validations_passed=all(bool(r) for r in rvs),
             passed_count=sum(1 for r in rvs if bool(r)),
             failed_count=sum(1 for r in rvs if not bool(r)),
         )
