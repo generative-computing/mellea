@@ -40,7 +40,7 @@ print(f"Content is safe: {results[0]._result}")
 ```
 
 `thinking=True` enables extended reasoning mode in the Guardian model for more
-accurate results. `results` is a list of `ValidationResult` objects — one per
+accurate results. `results` is a list of [`ValidationResult`](../guide/glossary#validationresult) objects — one per
 requirement passed to `validate()`.
 
 ## Risk types
