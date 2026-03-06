@@ -4,7 +4,7 @@ Mellea is a Python library for writing generative programs. Rather than chaining
 wiring up agents by hand, you define structured workflows that are maintainable, testable,
 and backend-agnostic.
 
-The rendered documentation site is at <https://docs.mellea.ai>.
+The rendered documentation site is at [docs.mellea.ai](https://docs.mellea.ai).
 
 ---
 
@@ -20,10 +20,12 @@ The rendered documentation site is at <https://docs.mellea.ai>.
 ## Concepts
 
 - [Generative programming](concepts/generative-programming.md)
-- [Architecture vs agents](concepts/architecture-vs-agents.md)
-- [The requirements system](concepts/requirements-system.md)
+- [Generative functions](concepts/generative-functions.md)
 - [Instruct-validate-repair](concepts/instruct-validate-repair.md)
+- [The requirements system](concepts/requirements-system.md)
+- [Architecture vs agents](concepts/architecture-vs-agents.md)
 - [Context and sessions](concepts/context-and-sessions.md)
+- [MObjects and mify](concepts/mobjects-and-mify.md)
 
 ## How-to guides
 
@@ -31,6 +33,7 @@ The rendered documentation site is at <https://docs.mellea.ai>.
 - [Write custom verifiers](how-to/write-custom-verifiers.md)
 - [Use context and sessions](how-to/use-context-and-sessions.md)
 - [Use async and streaming](how-to/use-async-and-streaming.md)
+- [Configure model options](how-to/configure-model-options.md)
 
 ## Integrations
 
@@ -50,6 +53,7 @@ The rendered documentation site is at <https://docs.mellea.ai>.
 - [Intrinsics](advanced/intrinsics.md)
 - [Security and taint tracking](advanced/security-and-taint-tracking.md)
 - [Mellea core internals](advanced/mellea-core-internals.md)
+- [Template formatting](advanced/template-formatting.md)
 
 ## Troubleshooting
 
