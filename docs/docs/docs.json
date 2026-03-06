@@ -59,6 +59,7 @@
           {
             "group": "Integrations",
             "pages": [
+              "integrations/ollama",
               "integrations/mcp-and-m-serve"
             ]
           },
