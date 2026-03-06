@@ -53,10 +53,6 @@ Mellea's design rests on three interlocking ideas.
 ## Key patterns
 
 <CardGroup cols={3}>
-  <Card title="Generative slots" icon="brackets-curly" href="/guide/generative-functions">
-    Compose typed LLM-backed functions the same way you compose ordinary Python —
-    no coupling between libraries.
-  </Card>
   <Card title="MObjects and mify" icon="cube" href="/concepts/mobjects-and-mify">
     Add `@mify` to any class to make it LLM-queryable and tool-accessible
     without rewriting your data model.
@@ -65,9 +61,13 @@ Mellea's design rests on three interlocking ideas.
     Explicit context threading with push/pop state keeps multi-turn
     workflows reproducible and debuggable.
   </Card>
-  <Card title="Intrinsics and adapters" icon="sliders" href="/advanced/intrinsics">
-    Drop in trained LoRA / aLoRA adapters as fast, lightweight requirement
-    validators over domain-specific data.
+  <Card title="Async and streaming" icon="bolt" href="/how-to/use-async-and-streaming">
+    `ainstruct()`, `aact()`, and token-by-token streaming for production
+    throughput and responsive UIs.
+  </Card>
+  <Card title="Safety checks" icon="shield" href="/tutorials/04-making-agents-reliable">
+    `GuardianCheck` detects harmful, off-topic, or hallucinated outputs
+    before they reach downstream code.
   </Card>
   <Card title="Inference-time scaling" icon="chart-line" href="/advanced/inference-time-scaling">
     Best-of-n, SOFAI, majority voting — swap strategies in one line.
@@ -102,6 +102,9 @@ Mellea is backend-agnostic. The same program runs on any inference engine.
   </Card>
   <Card title="LiteLLM / Vertex AI" icon="cloud" href="/integrations/vertex-ai">
     Google Vertex AI, Anthropic, and 100+ providers via LiteLLM.
+  </Card>
+  <Card title="LangChain" icon="link" href="/integrations/langchain">
+    Use LangChain tools in Mellea sessions or call Mellea from LangChain chains.
   </Card>
 </CardGroup>
 
