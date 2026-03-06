@@ -108,6 +108,28 @@ structure, its requirements, and its parsing logic. `Instruction`, `Message`,
 `MObject`, and `Document` are all Component subclasses. Components are the building
 blocks of generative programs.
 
+See: [Building Custom Components](../advanced/custom-components)
+
+---
+
+## ComponentParseError
+
+The exception raised by `Component.parse()` when the model's output cannot be
+parsed into the component's declared return type `S`. `parse()` catches any
+exception from `_parse()` and re-raises it as `ComponentParseError` so all callers
+get a consistent error type regardless of the underlying parse implementation.
+
+```python
+from mellea.core import ComponentParseError
+
+try:
+    result = form.parse(thunk)
+except ComponentParseError as e:
+    print(f"Parsing failed: {e}")
+```
+
+See: [Building Custom Components](../advanced/custom-components)
+
 ---
 
 ## ContextTurn
@@ -195,9 +217,30 @@ See: [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-wit
 
 A safety requirement in Mellea that validates LLM outputs against defined safety
 rules before they are returned to the caller. Uses the Granite Guardian model as a
-verifier.
+verifier. Constructed with a `GuardianRisk` value and optional `backend` and
+`context_text` parameters.
 
-See: [Security and Taint Tracking](../advanced/security-and-taint-tracking)
+See: [Making Agents Reliable](../tutorials/04-making-agents-reliable) |
+[Security and Taint Tracking](../advanced/security-and-taint-tracking)
+
+---
+
+## GuardianRisk
+
+An enum that specifies which safety risk category `GuardianCheck` should detect.
+Each check runs as an independent inference call against the Guardian model.
+
+Available values: `HARM`, `GROUNDEDNESS`, `PROFANITY`, `ANSWER_RELEVANCE`,
+`JAILBREAK`, `FUNCTION_CALL`, `SOCIAL_BIAS`, `VIOLENCE`, `SEXUAL_CONTENT`,
+`UNETHICAL_BEHAVIOR`.
+
+```python
+from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
+
+harm_check = GuardianCheck(GuardianRisk.HARM, backend_type="ollama")
+```
+
+See: [Making Agents Reliable](../tutorials/04-making-agents-reliable)
 
 ---
 
@@ -557,6 +600,25 @@ summary = m.query(tables[0], "What is the total in the last row?")
 ```
 
 See: [Working with Data](./working-with-data)
+
+---
+
+## TestBasedEval
+
+A `Component` in `mellea.stdlib.components.unit_test_eval` that formats an
+LLM-as-a-judge evaluation task for structured test cases loaded from JSON. Use it
+in offline evaluation pipelines to verify model behaviour against a set of
+input/target pairs.
+
+```python
+from mellea.stdlib.components.unit_test_eval import TestBasedEval
+
+test_evals = TestBasedEval.from_json_file("tests/eval_data/cases.json")
+for eval_case in test_evals:
+    verdict = judge_session.instruct(eval_case)
+```
+
+See: [Unit Test Generative Code](../how-to/unit-test-generative-code)
 
 ---
 
