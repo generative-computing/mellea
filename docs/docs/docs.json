@@ -29,6 +29,12 @@
             ]
           },
           {
+            "group": "Tutorials",
+            "pages": [
+              "tutorials/01-your-first-generative-program"
+            ]
+          },
+          {
             "group": "Concepts",
             "pages": [
               "concepts/generative-programming",
