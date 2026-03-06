@@ -111,4 +111,4 @@ Either install [Rust](https://www.rust-lang.org/tools/install) or pin Python to 
 ---
 
 **Previous:** [Installation](./installation.md) |
-**Next:** [Generative Programming](../concepts/generative-programming.md)
+**Next:** [Tutorial: Your First Generative Program](../tutorials/01-your-first-generative-program.md)

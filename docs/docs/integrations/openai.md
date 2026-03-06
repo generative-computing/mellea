@@ -261,7 +261,7 @@ local servers, list available models from the server's API or UI.
 ---
 
 **Previous:** [Ollama](./ollama.md) |
-**Next:** [MCP and m serve](./mcp-and-m-serve.md)
+**Next:** [AWS Bedrock and IBM WatsonX](./bedrock-and-watsonx.md)
 
 **See also:** [Backends and Configuration](../guide/backends-and-configuration.md) |
 [Enforce Structured Output](../how-to/enforce-structured-output.md)

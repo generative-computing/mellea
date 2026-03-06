@@ -274,7 +274,7 @@ right time and produces helpful repair guidance.
 ---
 
 **Previous:** [Enforce Structured Output](./enforce-structured-output.md) |
-**Next:** [Use Async and Streaming](./use-async-and-streaming.md)
+**Next:** [Ollama](../integrations/ollama.md)
 
 **See also:** [The Requirements System](../concepts/requirements-system.md) |
 [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md)

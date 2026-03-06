@@ -346,7 +346,7 @@ output of `summarize_feedback` feeds `classify_sentiment`; the original feedback
 feeds `extract_issues`. There is no global state, no prompt accumulation — each
 call is self-contained.
 
-> **Full example:** [`docs/examples/tutorial/simple_email.py`](../../examples/tutorial/simple_email.py)
+> **Full example:** [`docs/examples/instruct_validate_repair/101_email_with_requirements.py`](../../examples/instruct_validate_repair/101_email_with_requirements.py)
 
 ---
 
@@ -375,4 +375,4 @@ call is self-contained.
 
 ---
 
-**Next:** [Tutorial: Mifying Legacy Code](./02-mifying-legacy-code.md)
+**Next:** [Generative Programming](../concepts/generative-programming.md)

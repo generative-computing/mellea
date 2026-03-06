@@ -42,7 +42,7 @@ m = MelleaSession(
 )
 
 result = m.chat("Give me three facts about the Amazon rainforest.")
-print(result.content)
+print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
