@@ -6,7 +6,7 @@ description: "Give LLMs access to tools, build ReACT agents, and validate tool c
 
 # Tools and Agents
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete, `pip install mellea`,
+**Prerequisites:** [Quick Start](../getting-started/quickstart) complete, `pip install mellea`,
 Ollama running locally. LangChain interop requires `pip install langchain-community`.
 
 > **Note:** An _agent_ is a generative program in which an LLM determines the control

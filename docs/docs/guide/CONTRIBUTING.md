@@ -248,7 +248,7 @@ Every page ends with a navigation footer:
 ---
 
 
-**See also:** [Related Page](./related.md), [Another Page](./another.md)
+**See also:** [Related Page](./related), [Another Page](./another)
 ```
 
 ---

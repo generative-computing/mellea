@@ -12,7 +12,7 @@ to aim for, and they are evaluated after generation so Mellea can detect and rep
 failures automatically.
 
 This page explains the requirements system in depth. For a quick introduction,
-see [The Instruction Model](./instruct-validate-repair.md).
+see [The Instruction Model](./instruct-validate-repair).
 
 ## What a requirement is
 
@@ -258,7 +258,7 @@ reserve LLM-based requirements for subjective criteria that cannot be coded dire
 
 > **Advanced:** `ALoraRequirement` (from `mellea.stdlib.requirements`) uses a fine-tuned
 > LoRA adapter for validation instead of LLM-as-a-judge. It falls back to LLM-as-a-judge
-> if the adapter is unavailable. See [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md).
+> if the adapter is unavailable. See [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters).
 
 ## Composing requirements
 

@@ -144,6 +144,6 @@ These principles recur throughout Mellea:
 
 
 **See also:**
-[Instruct, Validate, Repair](./instruct-validate-repair.md) |
-[Inference-Time Scaling](../advanced/inference-time-scaling.md) |
-[Working with Data](../guide/working-with-data.md)
+[Instruct, Validate, Repair](./instruct-validate-repair) |
+[Inference-Time Scaling](../advanced/inference-time-scaling) |
+[Working with Data](../guide/working-with-data)

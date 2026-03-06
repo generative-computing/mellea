@@ -147,5 +147,5 @@ MObjects are well-suited for:
 For simple one-off generation, `m.instruct()` is usually sufficient. MObjects add value when
 you have structured data or methods that the model needs to reason about or call.
 
-**See also:** [Context and Sessions](./context-and-sessions.md) |
-[Generative Functions](./generative-functions.md)
+**See also:** [Context and Sessions](./context-and-sessions) |
+[Generative Functions](./generative-functions)

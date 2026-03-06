@@ -6,7 +6,7 @@ description: "Add OpenTelemetry tracing and metrics to Mellea programs."
 
 # Metrics and Telemetry
 
-**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea[telemetry]`, Ollama running locally.
 
 Mellea provides built-in [OpenTelemetry](https://opentelemetry.io/) instrumentation.

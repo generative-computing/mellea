@@ -143,9 +143,9 @@ or pass a different `region` to `create_bedrock_mantle_backend`.
 Bedrock models accessed via the Mantle endpoint use the `OpenAIBackend` under the hood,
 so vision-capable models (e.g., `amazon.nova-pro-v1:0`) support image input via
 `images=[...]`. Pass a PIL image or an [`ImageBlock`](../guide/glossary#imageblock) to
-`instruct()` or `chat()`. See [Use Images and Vision Models](../how-to/use-images-and-vision.md).
+`instruct()` or `chat()`. See [Use Images and Vision Models](../how-to/use-images-and-vision).
 
 ---
 
 
-**See also:** [Backends and Configuration](../guide/backends-and-configuration.md)
+**See also:** [Backends and Configuration](../guide/backends-and-configuration)

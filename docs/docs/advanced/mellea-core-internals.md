@@ -279,6 +279,6 @@ for a worked example.
 
 
 **See also:**
-[Generative Programming](../concepts/generative-programming.md) |
-[Working with Data](../guide/working-with-data.md) |
-[Async and Streaming](../how-to/use-async-and-streaming.md)
+[Generative Programming](../concepts/generative-programming) |
+[Working with Data](../guide/working-with-data) |
+[Async and Streaming](../how-to/use-async-and-streaming)

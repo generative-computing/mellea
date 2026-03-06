@@ -209,11 +209,11 @@ produced.
 
 `MelleaSession` is a regular Python class. Subclassing it lets you inject custom
 behaviour — input filtering, output validation, logging, rate limiting — into
-every call. See [Context and Sessions how-to](../how-to/use-context-and-sessions.md)
+every call. See [Context and Sessions how-to](../how-to/use-context-and-sessions)
 for a worked example.
 
 ---
 
 
-**See also:** [Context and Sessions how-to](../how-to/use-context-and-sessions.md) |
-[Async and Streaming](../how-to/use-async-and-streaming.md)
+**See also:** [Context and Sessions how-to](../how-to/use-context-and-sessions) |
+[Async and Streaming](../how-to/use-async-and-streaming)

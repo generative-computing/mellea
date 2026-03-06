@@ -6,7 +6,7 @@ description: "Control how Mellea generates and validates outputs: rejection samp
 
 # Inference-Time Scaling
 
-**Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md)
+**Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
 complete, `pip install mellea`, Ollama running locally.
 
 A sampling strategy controls what happens after the first generation: whether to

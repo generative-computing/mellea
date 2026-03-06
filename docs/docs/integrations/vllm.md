@@ -14,7 +14,7 @@ sustains higher throughput once warm.
 **Prerequisites:** `pip install 'mellea[vllm]'`, Linux, CUDA GPU.
 
 > **Platform note:** vLLM is not supported on macOS. Use
-> [`LocalHFBackend`](./huggingface.md) or [Ollama](./ollama.md) on Apple Silicon.
+> [`LocalHFBackend`](./huggingface) or [Ollama](./ollama) on Apple Silicon.
 
 ## Install
 
@@ -72,7 +72,7 @@ async def run_batch(prompts: list[str]) -> list[str]:
 
 Vision support for `LocalVLLMBackend` is model-dependent. Pass a PIL image or an
 [`ImageBlock`](../guide/glossary#imageblock) via `images=[...]` when using a
-vision-capable model. See [Use Images and Vision Models](../how-to/use-images-and-vision.md).
+vision-capable model. See [Use Images and Vision Models](../how-to/use-images-and-vision).
 
 ## Troubleshooting
 
@@ -88,5 +88,5 @@ model_options={ModelOption.MAX_NEW_TOKENS: 512}
 ---
 
 
-**See also:** [Backends and Configuration](../guide/backends-and-configuration.md) |
-[LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md)
+**See also:** [Backends and Configuration](../guide/backends-and-configuration) |
+[LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters)

@@ -14,7 +14,7 @@ server-based backends.
 **Prerequisites:** `pip install 'mellea[hf]'`, Python 3.10+, local model weights.
 
 > **Tip:** For everyday local inference without experimental features, use
-> [Ollama](./ollama.md) — it is simpler to set up and well suited for development.
+> [Ollama](./ollama) — it is simpler to set up and well suited for development.
 
 ## Install
 
@@ -70,7 +70,7 @@ m_backend = LocalHFBackend(model_ids.IBM_GRANITE_4_HYBRID_MICRO, use_caches=Fals
 
 ## aLoRA adapters
 
-`LocalHFBackend` supports [Activated LoRA (aLoRA)](../advanced/lora-and-alora-adapters.md)
+`LocalHFBackend` supports [Activated LoRA (aLoRA)](../advanced/lora-and-alora-adapters)
 adapters — lightweight domain-specific requirement validators that run on local GPU
 hardware. See the aLoRA guide for training and usage.
 
@@ -80,7 +80,7 @@ Vision support for `LocalHFBackend` is model-dependent and experimental. Pass a 
 image or an [`ImageBlock`](../guide/glossary#imageblock) via `images=[...]` to
 `instruct()` or `chat()` when using a vision-capable model. Not all models loaded via
 `LocalHFBackend` support image input. See
-[Use Images and Vision Models](../how-to/use-images-and-vision.md).
+[Use Images and Vision Models](../how-to/use-images-and-vision).
 
 ## Troubleshooting
 
@@ -109,5 +109,5 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ---
 
 
-**See also:** [Backends and Configuration](../guide/backends-and-configuration.md) |
-[LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md)
+**See also:** [Backends and Configuration](../guide/backends-and-configuration) |
+[LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters)
