@@ -86,6 +86,7 @@
             "group": "Advanced",
             "pages": [
               "advanced/intrinsics",
+              "advanced/lora-and-alora-adapters",
               "advanced/inference-time-scaling",
               "advanced/security-and-taint-tracking",
               "advanced/mellea-core-internals",
