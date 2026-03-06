@@ -188,7 +188,7 @@ model_options={ModelOption.MAX_NEW_TOKENS: 512}
 
 ---
 
-**Previous:** [AWS Bedrock and IBM watsonx](./bedrock-and-watsonx.md) |
+**Previous:** [IBM WatsonX](./watsonx.md) |
 **Next:** [MCP Integration](./mcp.md)
 
 **See also:** [Backends and Configuration](../guide/backends-and-configuration.md) |

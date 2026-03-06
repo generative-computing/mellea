@@ -72,7 +72,8 @@
             "pages": [
               "integrations/ollama",
               "integrations/openai",
-              "integrations/bedrock-and-watsonx",
+              "integrations/bedrock",
+              "integrations/watsonx",
               "integrations/huggingface-and-vllm",
               "integrations/mcp",
               "integrations/m-serve",
@@ -326,6 +327,7 @@
     { "source": "/integrations/mcp-and-m-serve", "destination": "/integrations/mcp" },
     { "source": "/core-concept/adapters", "destination": "/guide/tools-and-agents" },
     { "source": "/core-concept/contribution-guide", "destination": "/guide/CONTRIBUTING" },
-    { "source": "/core-concept/prompt-engineering", "destination": "/advanced/mellea-core-internals" }
+    { "source": "/core-concept/prompt-engineering", "destination": "/advanced/mellea-core-internals" },
+    { "source": "/integrations/bedrock-and-watsonx", "destination": "/integrations/bedrock" }
   ]
 }
