@@ -1,13 +1,14 @@
 ---
 title: "Context and Sessions"
+sidebarTitle: "Extending Sessions"
 description: "Extend MelleaSession to add custom validation, logging, and filtering behavior."
 # diataxis: how-to
 ---
 
 # Context and Sessions
 
-**Prerequisites:** [Security and Taint Tracking](../advanced/security-and-taint-tracking.md)
-recommended, `pip install mellea`, Ollama running locally.
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
+`pip install mellea`, Ollama running locally.
 
 `MelleaSession` is a regular Python class. You can subclass it to add custom behavior
 to any session method — input filtering, output validation, logging, rate limiting, or
@@ -181,4 +182,4 @@ methods are:
 ---
 
 **Previous:** [Async and Streaming](./use-async-and-streaming.md) |
-**Next:** [MCP and m serve](../integrations/mcp-and-m-serve.md)
+**Next:** [Enforce Structured Output](./enforce-structured-output.md)

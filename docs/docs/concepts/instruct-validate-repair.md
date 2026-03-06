@@ -1,7 +1,7 @@
 ---
 title: "The Instruction Model"
 description: "How instruct(), requirements, and the IVR loop work in Mellea."
-# diataxis: how-to
+# diataxis: explanation
 ---
 
 # The Instruction Model

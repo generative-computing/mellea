@@ -216,7 +216,7 @@ tools or steps.
 ---
 
 **Previous:** [The Requirements System](./requirements-system.md) |
-**Next:** [Generative Functions](../guide/generative-functions.md)
+**Next:** [Context and Sessions](./context-and-sessions.md)
 
 **See also:** [Tools and Agents](../guide/tools-and-agents.md) |
 [Security and Taint Tracking](../advanced/security-and-taint-tracking.md)

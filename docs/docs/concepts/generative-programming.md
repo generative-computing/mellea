@@ -142,7 +142,7 @@ These principles recur throughout Mellea:
 
 ---
 
-**Previous:** [Quick Start](../getting-started/quickstart.md) |
+**Previous:** [Tutorial: Your First Generative Program](../tutorials/01-your-first-generative-program.md) |
 **Next:** [Instruct, Validate, Repair](./instruct-validate-repair.md)
 
 **See also:**

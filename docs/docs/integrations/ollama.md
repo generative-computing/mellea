@@ -242,7 +242,7 @@ pip install mellea
 
 ---
 
-**Previous:** [MCP and m serve](./mcp-and-m-serve.md) |
+**Previous:** [Write Custom Verifiers](../how-to/write-custom-verifiers.md) |
 **Next:** [OpenAI](./openai.md)
 
 **See also:** [Backends and Configuration](../guide/backends-and-configuration.md) |
