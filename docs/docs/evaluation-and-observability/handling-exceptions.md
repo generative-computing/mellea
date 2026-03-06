@@ -95,11 +95,9 @@ from mellea.core import Requirement
 from mellea.stdlib.components.genslot import PreconditionException
 from mellea.stdlib.requirements import simple_validate
 
-
 @generative
 def classify_sentiment(text: str) -> Literal["positive", "negative", "neutral"]:
     """Classify the sentiment of the text."""
-
 
 m = start_session()
 
@@ -188,11 +186,9 @@ from typing import Literal
 from mellea import generative, start_session
 from mellea.core.base import ComponentParseError
 
-
 @generative
 def classify(text: str) -> Literal["a", "b", "c"]:
     """Classify the text into category a, b, or c."""
-
 
 m = start_session()
 
@@ -303,7 +299,6 @@ For structured telemetry across all calls, see
 [Metrics and Telemetry](./metrics-and-telemetry).
 
 ---
-
 
 **See also:** [The Requirements System](../concepts/requirements-system) |
 [Write Custom Verifiers](../how-to/write-custom-verifiers)

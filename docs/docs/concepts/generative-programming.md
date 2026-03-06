@@ -140,7 +140,6 @@ These principles recur throughout Mellea:
 
 ---
 
-
 **See also:**
 [Instruct, Validate, Repair](./instruct-validate-repair) |
 [Inference-Time Scaling](../advanced/inference-time-scaling) |

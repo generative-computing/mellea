@@ -241,7 +241,6 @@ ollama pull granite-guardian-3.2-5b
 
 ---
 
-
 **See also:**
 [Quick Start](../getting-started/quickstart) |
 [Inference-Time Scaling](../advanced/inference-time-scaling) |

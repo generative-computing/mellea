@@ -52,11 +52,9 @@ from mellea.stdlib.requirements import req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 from mellea.backends.tools import MelleaTool
 
-
 @generative
 def summarize(text: str, max_words: int) -> str:
     """Summarize the text in at most max_words words."""
-
 
 # Wrap the Mellea function as a smolagents tool
 # (the decorator gives it a docstring and type signature smolagents can read)
@@ -101,7 +99,6 @@ from mellea import start_session
 from mellea.stdlib.requirements import req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
-
 def extract_entities(text: str) -> str:
     """Extract named entities from text, returning comma-separated names."""
     m = start_session()
@@ -116,7 +113,6 @@ def extract_entities(text: str) -> str:
         user_variables={"text": text},
     )
     return str(result)
-
 
 entity_tool = StructuredTool.from_function(
     func=extract_entities,
@@ -212,7 +208,6 @@ Build your Mellea instrumented functions, then wire them into the orchestrator a
 tools or steps.
 
 ---
-
 
 **See also:** [Tools and Agents](../guide/tools-and-agents) |
 [Security and Taint Tracking](../advanced/security-and-taint-tracking)

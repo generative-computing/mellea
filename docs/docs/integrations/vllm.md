@@ -85,6 +85,5 @@ model_options={ModelOption.MAX_NEW_TOKENS: 512}
 
 ---
 
-
 **See also:** [Backends and Configuration](../guide/backends-and-configuration) |
 [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters)

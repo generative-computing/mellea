@@ -106,5 +106,4 @@ pip install 'mellea[watsonx]'
 
 ---
 
-
 **See also:** [Backends and Configuration](../guide/backends-and-configuration)

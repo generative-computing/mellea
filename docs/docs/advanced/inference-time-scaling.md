@@ -172,10 +172,11 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-> **Note (review needed):** `BudgetForcingSamplingStrategy` is not exported from
+> **Note:** `BudgetForcingSamplingStrategy` is not exported from
 > `mellea.stdlib.sampling` directly — import from
-> `mellea.stdlib.sampling.budget_forcing`. Full parameter documentation and model
-> compatibility needs verification.
+> `mellea.stdlib.sampling.budget_forcing`. Token defaults are `think_max_tokens=4096`
+> and `answer_max_tokens=None`. The strategy wraps `RejectionSamplingStrategy` so
+> you can combine it with requirements and `loop_budget`.
 
 ## Majority voting
 
@@ -200,8 +201,110 @@ print(str(result.result))
 # Expected: 391
 ```
 
-> **Note (review needed):** `MajorityVotingStrategyForMath` is designed for numeric
-> math expressions. `MBRDRougeLStrategy` uses ROUGE-L scoring for text tasks.
-> Neither is exported from `mellea.stdlib.sampling` directly — import from
-> `mellea.stdlib.sampling.majority_voting`. Full parameter documentation needs
-> verification with Hendrik.
+> **Note:** `MajorityVotingStrategyForMath` is designed for numeric math expressions
+> (it normalises and compares parsed values). `MBRDRougeLStrategy` uses ROUGE-L
+> scoring for text tasks — pass `number_of_samples` to control how many independent
+> generations are compared. Neither is exported from `mellea.stdlib.sampling`
+> directly — import from `mellea.stdlib.sampling.majority_voting`.
+
+## Other built-in strategies
+
+Two additional strategies are exported from `mellea.stdlib.sampling`:
+
+**`RepairTemplateStrategy`** — like `RejectionSamplingStrategy` but appends
+validation failure reasons to a copy of the original instruction rather than
+retrying from a clean state. Use this when you want the repair prompt to include
+the full original instruction plus a "what went wrong" addendum:
+
+```python
+from mellea import start_session
+from mellea.stdlib.requirements import req, simple_validate
+from mellea.stdlib.sampling import RepairTemplateStrategy
+
+m = start_session()
+result = m.instruct(
+    "List three fruits, one per line.",
+    requirements=[
+        req(
+            "Must contain exactly three lines.",
+            validation_fn=simple_validate(
+                lambda x: (len(x.strip().splitlines()) == 3, "Not exactly three lines.")
+            ),
+        )
+    ],
+    strategy=RepairTemplateStrategy(loop_budget=3),
+)
+print(str(result))
+# Output will vary — LLM responses depend on model and temperature.
+```
+
+**`MultiTurnStrategy`** — multi-turn repair that adds validation failures as a
+new chat turn rather than rewriting the original instruction. The model sees
+its previous attempt in the context and is asked to revise it. Use with
+`ChatContext` for agentic repair loops:
+
+```python
+from mellea import start_session
+from mellea.stdlib.context import ChatContext
+from mellea.stdlib.requirements import req, simple_validate
+from mellea.stdlib.sampling import MultiTurnStrategy
+
+m = start_session(ctx=ChatContext())
+result = m.instruct(
+    "List three fruits, one per line.",
+    requirements=[
+        req(
+            "Must contain exactly three lines.",
+            validation_fn=simple_validate(
+                lambda x: (len(x.strip().splitlines()) == 3, "Not exactly three lines.")
+            ),
+        )
+    ],
+    strategy=MultiTurnStrategy(loop_budget=3),
+)
+print(str(result))
+# Output will vary — LLM responses depend on model and temperature.
+```
+
+## Building a custom strategy
+
+Extend `BaseSamplingStrategy` to implement your own repair logic. You must
+implement two static methods:
+
+- `repair(old_ctx, new_ctx, past_actions, past_results, past_val)` — returns a
+  `(Component, Context)` tuple for the next generation attempt.
+- `select_from_failure(sampled_actions, sampled_results, sampled_val)` — returns
+  the index of the best result when the budget is exhausted with no success.
+
+```python
+from mellea.stdlib.sampling import BaseSamplingStrategy
+from mellea.core import Component, Context, ModelOutputThunk, ValidationResult
+from mellea.stdlib.requirements import Requirement
+
+
+class MyStrategy(BaseSamplingStrategy):
+    @staticmethod
+    def repair(old_ctx, new_ctx, past_actions, past_results, past_val):
+        # Return the original action and context unchanged — equivalent to
+        # plain rejection sampling.
+        return past_actions[-1], old_ctx
+
+    @staticmethod
+    def select_from_failure(sampled_actions, sampled_results, sampled_val):
+        # Return the last attempt as the fallback.
+        return len(sampled_results) - 1
+```
+
+Pass your custom strategy to `instruct()` just like the built-in ones:
+
+```python
+from mellea import start_session
+
+m = start_session()
+result = m.instruct(
+    "Describe a tree in one sentence.",
+    strategy=MyStrategy(loop_budget=2),
+)
+print(str(result))
+# Output will vary — LLM responses depend on model and temperature.
+```

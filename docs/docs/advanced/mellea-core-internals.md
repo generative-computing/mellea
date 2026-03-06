@@ -275,7 +275,6 @@ for a worked example.
 
 ---
 
-
 **See also:**
 [Generative Programming](../concepts/generative-programming) |
 [Working with Data](../guide/working-with-data) |
