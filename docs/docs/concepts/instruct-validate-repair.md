@@ -261,8 +261,3 @@ print(str(response))
 
 Use `chat()` for conversational back-and-forth where you don't need the IVR machinery.
 Use `instruct()` when you want requirements, validation, or structured output.
-
----
-
-**Previous:** [Generative Functions](./generative-functions.md) |
-**Next:** [The Requirements System](./requirements-system.md)

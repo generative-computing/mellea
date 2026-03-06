@@ -46,7 +46,3 @@ Install Ollama and pull the default model before running any examples:
 ```bash
 ollama pull granite4:micro
 ```
-
----
-
-**Next:** [Quick Start](./quickstart.md)

@@ -306,8 +306,6 @@ For structured telemetry across all calls, see
 
 ---
 
-**Previous:** [Metrics and Telemetry](./metrics-and-telemetry.md) |
-**Next:** [Intrinsics](../advanced/intrinsics.md)
 
 **See also:** [The Requirements System](../concepts/requirements-system.md) |
 [Write Custom Verifiers](../how-to/write-custom-verifiers.md)

@@ -286,8 +286,3 @@ requirements = [
 All requirements are validated after each generation attempt. The repair request lists
 every requirement that failed, not just the first one, so the model can address all
 issues in a single repair pass.
-
----
-
-**Previous:** [The Instruction Model](./instruct-validate-repair.md) |
-**Next:** [Mellea vs Orchestration Frameworks](./architecture-vs-agents.md)

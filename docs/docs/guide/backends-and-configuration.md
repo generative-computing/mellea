@@ -222,8 +222,3 @@ m = mellea.start_session(
 ```
 
 Valid `backend_name` values: `"ollama"`, `"openai"`, `"hf"`, `"litellm"`, `"watsonx"`.
-
----
-
-**Previous:** [Working with Data](./working-with-data.md) |
-**Next:** [act() and aact()](./act-and-aact.md)

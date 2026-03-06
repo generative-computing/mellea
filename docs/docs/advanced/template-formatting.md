@@ -121,8 +121,3 @@ The model-specific template will be used for that model; all others fall back to
 
 **See also:** [MObjects and mify](../concepts/mobjects-and-mify.md) |
 [Mellea core internals](./mellea-core-internals.md)
-
----
-
-**Previous:** [Mellea core internals](./mellea-core-internals.md) |
-**Next:** [Glossary](../guide/glossary.md)

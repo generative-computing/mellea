@@ -372,7 +372,3 @@ call is self-contained.
 - [Generative Functions](../guide/generative-functions.md) — `@generative` in depth
 - [Working with Data](../guide/working-with-data.md) — passing documents and images
   into generative programs
-
----
-
-**Next:** [Generative Programming](../concepts/generative-programming.md)

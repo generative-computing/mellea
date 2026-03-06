@@ -203,8 +203,3 @@ print(answer)
 
 The structured `Thought` titles can be surfaced in a UI for observability into the
 model's reasoning process.
-
----
-
-**Previous:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md) |
-**Next:** [Tools and Agents](./tools-and-agents.md)

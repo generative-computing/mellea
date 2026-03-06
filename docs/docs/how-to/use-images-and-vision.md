@@ -124,8 +124,6 @@ To remove images from context on the next turn, pass `images=[]` explicitly.
 
 ---
 
-**Previous:** [Configure Model Options](./configure-model-options.md) |
-**Next:** [Ollama](../integrations/ollama.md)
 
 **See also:** [Working with Data](../guide/working-with-data.md) |
 [The Instruction Model](../concepts/instruct-validate-repair.md)

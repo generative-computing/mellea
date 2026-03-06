@@ -149,8 +149,3 @@ you have structured data or methods that the model needs to reason about or call
 
 **See also:** [Context and Sessions](./context-and-sessions.md) |
 [Generative Functions](./generative-functions.md)
-
----
-
-**Previous:** [Context and Sessions](./context-and-sessions.md) |
-**Next:** [Generative Functions](../guide/generative-functions.md)

@@ -260,8 +260,6 @@ local servers, list available models from the server's API or UI.
 
 ---
 
-**Previous:** [Ollama](./ollama.md) |
-**Next:** [AWS Bedrock](./bedrock.md)
 
 **See also:** [Backends and Configuration](../guide/backends-and-configuration.md) |
 [Enforce Structured Output](../how-to/enforce-structured-output.md)

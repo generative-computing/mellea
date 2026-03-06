@@ -211,8 +211,3 @@ print(out)  # {"requirement_likelihood": 1.0}
 
 The `Intrinsic` component loads aLoRA adapters (falling back to LoRA) by task name.
 Output format is task-specific — `requirement_check` returns a likelihood score.
-
----
-
-**Previous:** [Metrics and Telemetry](../evaluation-and-observability/metrics-and-telemetry.md) |
-**Next:** [LoRA and aLoRA adapters](./lora-and-alora-adapters.md)

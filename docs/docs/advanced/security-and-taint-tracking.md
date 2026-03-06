@@ -172,8 +172,3 @@ else:
 ```
 
 > **Full example:** [`docs/examples/safety/guardian.py`](../../examples/safety/guardian.py)
-
----
-
-**Previous:** [Inference-Time Scaling](./inference-time-scaling.md) |
-**Next:** [Mellea Core Internals](./mellea-core-internals.md)

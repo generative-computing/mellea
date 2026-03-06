@@ -142,8 +142,6 @@ These principles recur throughout Mellea:
 
 ---
 
-**Previous:** [Tutorial: Your First Generative Program](../tutorials/01-your-first-generative-program.md) |
-**Next:** [Instruct, Validate, Repair](./instruct-validate-repair.md)
 
 **See also:**
 [Instruct, Validate, Repair](./instruct-validate-repair.md) |

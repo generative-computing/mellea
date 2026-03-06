@@ -243,7 +243,6 @@ ollama pull granite-guardian-3.2-5b
 
 ---
 
-**Previous:** [Glossary](../guide/glossary.md)
 
 **See also:**
 [Quick Start](../getting-started/quickstart.md) |

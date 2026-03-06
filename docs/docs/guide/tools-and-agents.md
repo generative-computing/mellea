@@ -254,8 +254,3 @@ gets generated (see examples above).
 
 > **Warning:** `local_code_interpreter` executes Python code in the current process.
 > Do not use it in production contexts without sandboxing.
-
----
-
-**Previous:** [Generative Functions](./generative-functions.md) |
-**Next:** [Working with Data](./working-with-data.md)

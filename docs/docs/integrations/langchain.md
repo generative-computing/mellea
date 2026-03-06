@@ -113,8 +113,6 @@ OpenAI chat format — LlamaIndex, Haystack, Semantic Kernel — works with the 
 
 ---
 
-**Previous:** [m serve](./m-serve.md) |
-**Next:** [smolagents](./smolagents.md)
 
 **See also:** [Tools and Agents](../guide/tools-and-agents.md) |
 [Context and Sessions](../concepts/context-and-sessions.md)

@@ -277,8 +277,6 @@ for a worked example.
 
 ---
 
-**Previous:** [Security and Taint Tracking](./security-and-taint-tracking.md) |
-**Next:** [Glossary](../guide/glossary.md)
 
 **See also:**
 [Generative Programming](../concepts/generative-programming.md) |
