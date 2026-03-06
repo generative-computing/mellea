@@ -60,11 +60,20 @@ m_backend = LocalHFBackend(
 ## KV cache
 
 `LocalHFBackend` caches KV blocks across calls by default (`use_caches=True`). This
-speeds up repeated calls that share a common prefix. Disable it for debugging:
+speeds up repeated calls that share a common prefix. Pass a [`SimpleLRUCache`](../guide/glossary#simplelrucache)
+to control capacity, or disable caching entirely for debugging:
 
 ```python
+from mellea.backends.cache import SimpleLRUCache
+
+# Enable with explicit capacity
+m_backend = LocalHFBackend(model_ids.IBM_GRANITE_4_HYBRID_MICRO, cache=SimpleLRUCache(5))
+
+# Disable entirely
 m_backend = LocalHFBackend(model_ids.IBM_GRANITE_4_HYBRID_MICRO, use_caches=False)
 ```
+
+See [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks) for full details on marking blocks for caching and how [KV smashing](../guide/glossary#kv-smashing) works.
 
 ## aLoRA adapters
 

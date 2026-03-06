@@ -173,6 +173,22 @@ See: [Security and Taint Tracking](../advanced/security-and-taint-tracking)
 
 ---
 
+## KV smashing
+
+The technique of concatenating key-value attention caches from separately prefilled
+prompt chunks along the time axis, producing a single merged `DynamicCache` that
+covers the full context. Used by `LocalHFBackend` to avoid re-running forward
+passes on content that has already been cached.
+
+When a prompt contains a mix of cached and uncached `CBlock` objects, Mellea
+prefills each block independently, then smashes the resulting caches together
+before generation — giving results identical to a single full-context forward pass
+at a fraction of the prefill cost.
+
+See: [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks)
+
+---
+
 ## LiteLLM / LiteLLMBackend
 
 `LiteLLMBackend` wraps [LiteLLM](https://docs.litellm.ai/) — a unified interface
@@ -398,6 +414,28 @@ pip install 'mellea[docling]'
 ```
 
 See: [Working with Data](./working-with-data)
+
+---
+
+## SimpleLRUCache
+
+An LRU (least-recently-used) cache for storing `DynamicCache` KV blocks in
+`LocalHFBackend`. Pass one at construction time to enable prefix caching:
+
+```python
+from mellea.backends.cache import SimpleLRUCache
+
+backend = LocalHFBackend(
+    model_id="ibm-granite/granite-3.3-2b-instruct",
+    cache=SimpleLRUCache(capacity=5),
+)
+```
+
+When the cache reaches `capacity`, the least recently used block is evicted and
+its GPU memory freed. Choose capacity based on available VRAM and block size —
+1–3 for large documents, up to 10 for small reused fragments.
+
+See: [Prefix Caching and KV Blocks](../advanced/prefix-caching-and-kv-blocks)
 
 ---
 
