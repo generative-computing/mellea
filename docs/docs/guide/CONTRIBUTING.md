@@ -344,6 +344,7 @@ markdownlint docs/docs/guide/your-page.md
 - [ ] Mellea-specific terms linked to `glossary.md` on first use (see "Glossary and terminology" section).
 - [ ] Navigation footer present (Next + See also).
 - [ ] `docs.json` updated if new page added; old MDX page removed from nav if replaced.
+- [ ] `index.mdx` landing page cards reviewed — add a card if the new page is a major entry point (key pattern, integration, or prominent how-to); keep total cards per section to ≤ 8.
 - [ ] Previewed locally with `mint dev`.
 - [ ] Non-deterministic LLM output noted.
 - [ ] Backend-specific code blocks flagged with `> **Backend note:**`.
