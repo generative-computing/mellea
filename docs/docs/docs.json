@@ -31,7 +31,9 @@
           {
             "group": "Tutorials",
             "pages": [
-              "tutorials/01-your-first-generative-program"
+              "tutorials/01-your-first-generative-program",
+              "tutorials/02-mifying-legacy-code",
+              "tutorials/03-using-generative-slots"
             ]
           },
           {
@@ -87,7 +89,8 @@
           {
             "group": "Evaluation and Observability",
             "pages": [
-              "evaluation-and-observability/metrics-and-telemetry"
+              "evaluation-and-observability/metrics-and-telemetry",
+              "evaluation-and-observability/evaluate-with-llm-as-a-judge"
             ]
           },
           {

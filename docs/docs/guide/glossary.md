@@ -163,6 +163,34 @@ See: [Generative Programming](../concepts/generative-programming)
 
 ---
 
+## GenerateLog
+
+A dataclass that captures a single model call in detail. Pass a `list[GenerateLog]`
+to `m.validate()` via the `generate_logs=` parameter to record the judge prompt and
+raw verdict for each requirement validation:
+
+```python
+from mellea import start_session
+from mellea.core import GenerateLog
+from mellea.stdlib.requirements import req
+
+logs: list[GenerateLog] = []
+m = start_session()
+result = m.instruct("Summarise this text.")
+m.validate([req("Must be under 30 words.")], generate_logs=logs)
+
+for log in logs:
+    print(log.prompt)   # full judge prompt sent to the model
+    print(log.result.value if log.result else None)  # raw verdict string
+```
+
+Key fields: `prompt`, `result` (`ModelOutputThunk | None`), `backend`,
+`model_options`, `is_final_result`.
+
+See: [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge)
+
+---
+
 ## GuardianCheck
 
 A safety requirement in Mellea that validates LLM outputs against defined safety
@@ -207,6 +235,20 @@ m = mellea.start_session(
 ```
 
 See: [Backends and Configuration](./backends-and-configuration)
+
+---
+
+## LLM-as-a-judge
+
+The default validation strategy for `req()` in Mellea. After the model generates
+an output, a second LLM call is made using the requirement's `description` as the
+evaluation criterion. Mellea converts the judge's response to `True` / `False` by
+looking for `"yes"` (case-insensitive) in the reply.
+
+Use `simple_validate` instead when the criterion is deterministic (word count,
+regex, type check) — no second LLM call is needed.
+
+See: [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge)
 
 ---
 
@@ -364,6 +406,29 @@ except PreconditionException as e:
 ```
 
 See: [Handling Exceptions and Failures](../evaluation-and-observability/handling-exceptions)
+
+---
+
+## Purple elephant effect
+
+The tendency for a model to produce the very thing you instructed it to avoid,
+because the instruction draws attention to it. Named after the cognitive phenomenon:
+"Don't think about a purple elephant" — and now you are.
+
+In Mellea, avoid it by using `check()` instead of `req()` for negative constraints.
+`check()` validates the output without including the constraint description in the
+generation prompt:
+
+```python
+from mellea.stdlib.requirements import req, check
+
+requirements=[
+    req("Mention key features."),                        # model is told this
+    check("Must not use the phrase 'industry-leading'"), # model is not told this
+]
+```
+
+See: [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge)
 
 ---
 
