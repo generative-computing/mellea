@@ -34,4 +34,12 @@ repos:
         additional_dependencies:
           - tomli
 
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.44.0
+    hooks:
+      - id: markdownlint
+        name: markdownlint (docs)
+        args: [--config, docs/docs/.markdownlint.json]
+        files: ^docs/docs/.*\.md$
+
 
