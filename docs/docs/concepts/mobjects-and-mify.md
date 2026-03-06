@@ -6,7 +6,7 @@ description: "How the @mify decorator turns any Python class into an LLM-queryab
 
 # MObjects and mify
 
-Object-oriented programming organises related data and the methods that operate on it into
+Object-oriented programming organizes related data and the methods that operate on it into
 classes. Mellea applies the same principle to LLM interactions: an **MObject** is a Python
 class whose fields and methods can be exposed to a model in a controlled, structured way.
 

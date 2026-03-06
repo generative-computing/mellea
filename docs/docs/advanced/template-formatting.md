@@ -10,7 +10,7 @@ Most backends operate on text. Mellea converts Python objects to text using the
 `TemplateFormatter` — a Jinja2-based system that lets you control exactly how each component
 type is rendered for the model.
 
-This page is for contributors and advanced users who need to customise how objects are
+This page is for contributors and advanced users who need to customize how objects are
 represented in prompts.
 
 ## Templates
@@ -78,16 +78,16 @@ def format_for_llm(self) -> TemplateRepresentation:
 `TemplateRepresentation` fields:
 
 | Field | Description |
-|-------|-------------|
+| ----- | ----------- |
 | `component` | The object being rendered (usually `self`) |
 | `args` | Dict of variables passed to the Jinja2 template |
 | `tools` | List of tool/function descriptors exposed to the model |
 | `template` | Inline Jinja2 template string (alternative to `template_order`) |
 | `template_order` | List of template filenames to search for, in priority order |
 
-## Customising templates for a component
+## Customizing templates for a component
 
-To customise how an existing component is formatted for a specific model, subclass it and
+To customize how an existing component is formatted for a specific model, subclass it and
 override `format_for_llm()`, then create a new `.jinja2` template file.
 
 ```python
@@ -115,7 +115,7 @@ your_package/templates/prompts/granite/granite-3-2/instruct/my_custom_table.jinj
 
 The model-specific template will be used for that model; all others fall back to `default/`.
 
-> **Advanced:** For a worked example of advanced template customisation, see
+> **Advanced:** For a worked example of advanced template customization, see
 > [`docs/examples/mify/rich_document_advanced.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/mify/rich_document_advanced.py)
 > in the source repository.
 
