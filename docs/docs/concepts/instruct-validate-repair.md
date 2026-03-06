@@ -264,5 +264,5 @@ Use `instruct()` when you want requirements, validation, or structured output.
 
 ---
 
-**Previous:** [Generative Programming](./generative-programming.md) |
+**Previous:** [Generative Functions](./generative-functions.md) |
 **Next:** [The Requirements System](./requirements-system.md)

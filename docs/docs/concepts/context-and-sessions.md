@@ -215,7 +215,7 @@ for a worked example.
 ---
 
 **Previous:** [Mellea vs Orchestration Frameworks](./architecture-vs-agents.md) |
-**Next:** [Generative Functions](../guide/generative-functions.md)
+**Next:** [MObjects and mify](./mobjects-and-mify.md)
 
 **See also:** [Context and Sessions how-to](../how-to/use-context-and-sessions.md) |
 [Async and Streaming](../how-to/use-async-and-streaming.md)

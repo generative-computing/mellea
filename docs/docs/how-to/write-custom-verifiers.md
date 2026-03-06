@@ -274,7 +274,7 @@ right time and produces helpful repair guidance.
 ---
 
 **Previous:** [Enforce Structured Output](./enforce-structured-output.md) |
-**Next:** [Ollama](../integrations/ollama.md)
+**Next:** [Configure model options](./configure-model-options.md)
 
 **See also:** [The Requirements System](../concepts/requirements-system.md) |
 [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md)
