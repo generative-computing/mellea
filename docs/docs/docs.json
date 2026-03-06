@@ -33,7 +33,8 @@
             "pages": [
               "concepts/generative-programming",
               "concepts/instruct-validate-repair",
-              "concepts/requirements-system"
+              "concepts/requirements-system",
+              "concepts/architecture-vs-agents"
             ]
           },
           {
