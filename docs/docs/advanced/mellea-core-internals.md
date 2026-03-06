@@ -212,7 +212,7 @@ in parallel if the backend supports it), and returns `z`'s result.
 | ----- | ----------- | ----------- |
 | `MelleaSession` | `m.chat()`, `m.instruct()` | Application developers |
 | `mfuncs` synchronous | `mfuncs.chat()`, `mfuncs.act()` | Application developers needing context control |
-| `mfuncs` async | `mfuncs.aact()`, `mfuncs.achat()` | Mellea contributors |
+| `mfuncs` async | `mfuncs.aact()`, `mfuncs.achat()` | Advanced users building async pipelines |
 | `backend.generate_from_context()` | Thunks, `is_computed()`, `avalue()` | Backend developers, advanced users |
 | Composition | `SimpleComponent` with thunk inputs | Backend developers |
 

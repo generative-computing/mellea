@@ -8,7 +8,7 @@ Most backends operate on text. Mellea converts Python objects to text using the
 `TemplateFormatter` — a Jinja2-based system that lets you control exactly how each component
 type is rendered for the model.
 
-This page is for contributors and advanced users who need to customize how objects are
+This page is for advanced users and library authors who need to customize how objects are
 represented in prompts.
 
 ## Templates
