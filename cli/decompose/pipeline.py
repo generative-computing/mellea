@@ -1,8 +1,6 @@
 import re
-from enum import Enum
-from typing import Literal, TypedDict
-
-from typing_extensions import NotRequired
+from enum import StrEnum
+from typing import Literal, NotRequired, TypedDict
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
@@ -46,7 +44,7 @@ class DecompPipelineResult(TypedDict):
     final_response: NotRequired[str]
 
 
-class DecompBackend(str, Enum):
+class DecompBackend(StrEnum):
     ollama = "ollama"
     openai = "openai"
     rits = "rits"
