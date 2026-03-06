@@ -1,6 +1,6 @@
 ---
-title: "Mellea documentation"
-description: "The library for writing reliable generative programs."
+title: "Welcome to Mellea"
+description: "A Python library for writing reliable generative programs."
 ---
 
 <img
@@ -16,47 +16,47 @@ description: "The library for writing reliable generative programs."
   height="48"
 />
 
-**Mellea** is a Python library for writing generative programs. Rather than chaining prompts or
-wiring up agents by hand, you define structured workflows that are maintainable, testable,
-and backend-agnostic.
+**Mellea** helps you write *generative programs* — software that strategically integrates
+LLM calls in a structured, maintainable way. The library's core insight is that LLM calls
+are non-deterministic operations that need to be *circumscribed* by requirement verification,
+repair loops, and careful context management. Mellea gives you the tools to do that without
+boilerplate.
 
 <CardGroup cols={2}>
-  <Card title="Quick start" icon="rocket" href="/getting-started/quickstart">
-    Install Mellea and run your first generative program in under five minutes.
+  <Card title="Get started" icon="rocket" href="/getting-started/installation">
+    Install Mellea and run your first generative program in minutes.
   </Card>
   <Card title="Tutorial" icon="graduation-cap" href="/tutorials/01-your-first-generative-program">
-    Walk through building a working generative program step by step.
+    Build a working generative program step by step, with requirements and repair.
   </Card>
-  <Card title="Instruct · Validate · Repair" icon="shield-check" href="/concepts/instruct-validate-repair">
-    Understand the core pattern that makes Mellea programs reliable.
+  <Card title="Code examples" icon="github" href="https://github.com/generative-computing/mellea/tree/main/docs/examples">
+    Browse complete, runnable examples on GitHub.
   </Card>
   <Card title="API reference" icon="code" href="/api/mellea/backends/backend">
-    Browse the full public API for backends, session, components, and more.
+    Full public API — backends, session, components, requirements, sampling.
   </Card>
 </CardGroup>
 
-## Core concepts
-
-Mellea replaces ad hoc prompt chains with structured, composable workflows.
+## Core ideas
 
 <CardGroup cols={3}>
+  <Card title="Instruct · Validate · Repair" icon="shield-check" href="/concepts/instruct-validate-repair">
+    The fundamental pattern: generate, check requirements, repair on failure.
+  </Card>
   <Card title="Generative functions" icon="function" href="/concepts/generative-functions">
-    Turn a typed function signature into an LLM-backed implementation.
+    Typed, composable LLM-backed functions using `@generative`.
   </Card>
   <Card title="Requirements system" icon="list-check" href="/concepts/requirements-system">
-    Express output constraints and let Mellea enforce them automatically.
+    Declarative output constraints — LLM-checked or programmatic.
   </Card>
   <Card title="MObjects and mify" icon="cube" href="/concepts/mobjects-and-mify">
-    Expose structured Python objects to the model with controlled field access.
+    Make any Python object LLM-queryable with `@mify`.
   </Card>
   <Card title="Context and sessions" icon="timeline" href="/concepts/context-and-sessions">
-    Manage conversation history and session state across multi-turn workflows.
-  </Card>
-  <Card title="Architecture vs agents" icon="sitemap" href="/concepts/architecture-vs-agents">
-    When to use Mellea's structured approach instead of an agent framework.
+    Manage conversation history across multi-turn workflows.
   </Card>
   <Card title="Generative programming" icon="lightbulb" href="/concepts/generative-programming">
-    The ideas behind generative programs and why reliability requires structure.
+    The theoretical grounding — why structured programs beat ad-hoc prompting.
   </Card>
 </CardGroup>
 
@@ -64,22 +64,22 @@ Mellea replaces ad hoc prompt chains with structured, composable workflows.
 
 <CardGroup cols={3}>
   <Card title="Ollama" icon="server" href="/integrations/ollama">
-    Run any model locally with zero cloud costs.
+    Local models, zero cloud costs — works out of the box.
   </Card>
   <Card title="OpenAI" icon="sparkles" href="/integrations/openai">
     GPT-4o, o3, and any OpenAI-compatible API.
   </Card>
   <Card title="Bedrock and watsonx" icon="cloud" href="/integrations/bedrock-and-watsonx">
-    Deploy on AWS Bedrock or IBM watsonx.
+    AWS Bedrock or IBM watsonx for enterprise deployments.
   </Card>
   <Card title="MCP and m serve" icon="plug" href="/integrations/mcp-and-m-serve">
     Expose Mellea programs as MCP tools or an OpenAI-compatible endpoint.
   </Card>
   <Card title="Inference-time scaling" icon="chart-line" href="/advanced/inference-time-scaling">
-    Majority voting, rejection sampling, SOFAI, and best-of-n strategies.
+    Majority voting, rejection sampling, SOFAI, best-of-n strategies.
   </Card>
   <Card title="LoRA and aLoRA adapters" icon="sliders" href="/advanced/lora-and-alora-adapters">
-    Train lightweight adapters on proprietary data for requirement validation.
+    Train domain-specific requirement validators on your own labeled data.
   </Card>
 </CardGroup>
 
@@ -87,5 +87,5 @@ Mellea replaces ad hoc prompt chains with structured, composable workflows.
 
 [GitHub](https://github.com/generative-computing/mellea) ·
 [PyPI](https://pypi.org/project/mellea/) ·
-[Discussions](https://github.com/generative-computing/mellea/discussions) ·
-[Discord](https://ibm.biz/mellea-discord)
+[Discord](https://ibm.biz/mellea-discord) ·
+[Discussions](https://github.com/generative-computing/mellea/discussions)
