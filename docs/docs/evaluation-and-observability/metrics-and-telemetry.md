@@ -192,5 +192,5 @@ Application spans add Mellea-specific attributes:
 
 ---
 
-**Previous:** [m serve](../integrations/m-serve.md) |
+**Previous:** [LangChain and smolagents](../integrations/langchain-and-smolagents.md) |
 **Next:** [Handling Exceptions and Failures](./handling-exceptions.md)
