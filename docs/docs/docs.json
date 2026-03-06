@@ -68,6 +68,7 @@
             "pages": [
               "integrations/ollama",
               "integrations/openai",
+              "integrations/bedrock-and-watsonx",
               "integrations/mcp-and-m-serve"
             ]
           },
