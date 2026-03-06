@@ -114,7 +114,7 @@ print(response.choices[0].message.content)
 ---
 
 **Previous:** [MCP Integration](./mcp.md) |
-**Next:** [Metrics and Telemetry](../evaluation-and-observability/metrics-and-telemetry.md)
+**Next:** [LangChain and smolagents](./langchain-and-smolagents.md)
 
 **See also:** [Context and Sessions](../concepts/context-and-sessions.md) |
 [Backends and Configuration](../guide/backends-and-configuration.md)

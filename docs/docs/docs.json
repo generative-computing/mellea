@@ -75,7 +75,8 @@
               "integrations/bedrock-and-watsonx",
               "integrations/huggingface-and-vllm",
               "integrations/mcp",
-              "integrations/m-serve"
+              "integrations/m-serve",
+              "integrations/langchain-and-smolagents"
             ]
           },
           {
