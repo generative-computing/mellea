@@ -4,8 +4,6 @@ description: "Common errors, diagnostic steps, and fixes for Mellea programs."
 # diataxis: reference
 ---
 
-# Common Errors
-
 ## Installation
 
 ### `granite4:micro` not found

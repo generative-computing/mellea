@@ -4,8 +4,6 @@ description: "Handle SamplingResult failures, PreconditionException, and parse e
 # diataxis: how-to
 ---
 
-# Handling Exceptions and Failures
-
 **Prerequisites:** [The Requirements System](../concepts/requirements-system),
 [Quick Start](../getting-started/quickstart) complete, `pip install mellea`.
 

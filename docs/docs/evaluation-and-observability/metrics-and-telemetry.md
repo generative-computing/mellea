@@ -4,8 +4,6 @@ description: "Add OpenTelemetry tracing and metrics to Mellea programs."
 # diataxis: how-to
 ---
 
-# Metrics and Telemetry
-
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea[telemetry]`, Ollama running locally.
 

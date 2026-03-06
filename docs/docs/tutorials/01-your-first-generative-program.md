@@ -4,8 +4,6 @@ description: "Build a document analysis pipeline step by step — from a single 
 # diataxis: tutorial
 ---
 
-# Tutorial: Your First Generative Program
-
 In this tutorial you build a document analysis pipeline that extracts a summary,
 classifies sentiment, and surfaces key issues from customer feedback. You start
 with the simplest possible Mellea program and add reliability and structure at each

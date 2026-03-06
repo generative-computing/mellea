@@ -4,8 +4,6 @@ description: "Work directly with Components using act(), aact(), and the functio
 # diataxis: how-to
 ---
 
-# act() and aact()
-
 **Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair) complete,
 `pip install mellea`, Ollama running locally.
 

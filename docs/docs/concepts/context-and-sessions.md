@@ -4,8 +4,6 @@ description: "How Component, Backend, Context, and Session fit together in Melle
 # diataxis: explanation
 ---
 
-# Context and Sessions
-
 Every call to an LLM in Mellea passes through four layers: [**Component**](../guide/glossary#component), [**Backend**](../guide/glossary#backend),
 [**Context**](../guide/glossary#context), and **Session**. Understanding how these fit together explains both why
 Mellea is structured the way it is and how to extend it effectively.

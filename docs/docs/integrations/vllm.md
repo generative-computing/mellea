@@ -4,8 +4,6 @@ description: "Run Mellea with high-throughput local inference using LocalVLLMBac
 # diataxis: how-to
 ---
 
-# vLLM
-
 `LocalVLLMBackend` uses [vLLM](https://vllm.ai/) for higher-throughput local inference.
 It is a good choice when you are running many requests in parallel — for example, batch
 evaluation or load testing. vLLM takes longer to initialise than `LocalHFBackend` but

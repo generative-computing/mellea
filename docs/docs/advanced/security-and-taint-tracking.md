@@ -4,8 +4,6 @@ description: "Use GuardianCheck with IBM Granite Guardian to validate LLM output
 # diataxis: how-to
 ---
 
-# Security and Taint Tracking
-
 **Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
 complete, `pip install mellea`, Ollama running locally with a Granite Guardian model
 pulled.

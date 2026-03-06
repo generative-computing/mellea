@@ -4,8 +4,6 @@ description: "Run your first generative program in minutes."
 # diataxis: tutorial
 ---
 
-# Quick Start
-
 **Prerequisites:** [Ollama](https://ollama.ai) installed and running locally,
 [Installation](./installation) complete.
 

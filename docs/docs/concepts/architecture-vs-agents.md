@@ -4,8 +4,6 @@ description: "What makes Mellea different from LangChain, smolagents, and other 
 # diataxis: explanation
 ---
 
-# Mellea vs Orchestration Frameworks
-
 Mellea is not an orchestration framework. This distinction shapes how you design
 systems with it.
 

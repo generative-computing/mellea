@@ -4,8 +4,6 @@ description: "Train lightweight adapters on your own labeled data and use them a
 # diataxis: how-to
 ---
 
-# LoRA and aLoRA adapters
-
 Off-the-shelf language models sometimes fail on domain-specific tasks — particularly
 requirement validation over proprietary terminology or specialized classification
 schemes not well-represented in general training data. Mellea lets you train a

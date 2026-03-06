@@ -4,8 +4,6 @@ description: "Run Mellea on local hardware with LocalHFBackend and HuggingFace T
 # diataxis: how-to
 ---
 
-# HuggingFace Transformers
-
 `LocalHFBackend` uses [HuggingFace Transformers](https://huggingface.co/docs/transformers)
 for local inference. It is designed for experimental Mellea features — aLoRA adapters,
 constrained decoding, and span-based context — that are not yet available on

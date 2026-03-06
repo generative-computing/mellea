@@ -65,7 +65,7 @@ Add a `# diataxis:` comment in every page's frontmatter:
 
 ## Headings
 
-- One H1 per page — repeats the frontmatter title exactly.
+- No H1 — Mintlify renders the frontmatter `title` as the page heading automatically. Start body content with H2.
 - H2 = major sections; H3 = subsections. Never skip heading levels.
 - Sentence case: "Working with data", not "Working With Data".
 

@@ -4,8 +4,6 @@ description: "Configure Mellea to use Ollama, OpenAI, LiteLLM, HuggingFace, or W
 # diataxis: how-to
 ---
 
-# Backends and Configuration
-
 **Prerequisites:** `pip install mellea`, [Ollama](https://ollama.ai) for local inference
 or appropriate credentials for cloud backends.
 

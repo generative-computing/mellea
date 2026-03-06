@@ -4,8 +4,6 @@ description: "Ground instructions with documents, build RAG pipelines, and use M
 # diataxis: how-to
 ---
 
-# Working with Data
-
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete, `pip install mellea`,
 Ollama running locally. RAG examples require `faiss-cpu` and `sentence-transformers`.
 `RichDocument` requires `pip install mellea[docling]` or `docling` installed separately.
