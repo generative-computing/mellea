@@ -60,6 +60,7 @@
             "group": "Integrations",
             "pages": [
               "integrations/ollama",
+              "integrations/openai",
               "integrations/mcp-and-m-serve"
             ]
           },
