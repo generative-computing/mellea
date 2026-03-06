@@ -79,7 +79,8 @@
               "integrations/vllm",
               "integrations/mcp",
               "integrations/m-serve",
-              "integrations/langchain-and-smolagents"
+              "integrations/langchain",
+              "integrations/smolagents"
             ]
           },
           {
@@ -331,6 +332,7 @@
     { "source": "/core-concept/contribution-guide", "destination": "/guide/CONTRIBUTING" },
     { "source": "/core-concept/prompt-engineering", "destination": "/advanced/mellea-core-internals" },
     { "source": "/integrations/bedrock-and-watsonx", "destination": "/integrations/bedrock" },
-    { "source": "/integrations/huggingface-and-vllm", "destination": "/integrations/huggingface" }
+    { "source": "/integrations/huggingface-and-vllm", "destination": "/integrations/huggingface" },
+    { "source": "/integrations/langchain-and-smolagents", "destination": "/integrations/langchain" }
   ]
 }
