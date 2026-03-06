@@ -277,7 +277,10 @@ for a worked example.
 
 ---
 
+**Previous:** [Security and Taint Tracking](./security-and-taint-tracking.md) |
+**Next:** [Glossary](../guide/glossary.md)
+
 **See also:**
-[Generative Programming](./generative-programming.md) |
-[Working with Data](./working-with-data.md) |
-[Async and Streaming](./async-and-streaming.md)
+[Generative Programming](../concepts/generative-programming.md) |
+[Working with Data](../guide/working-with-data.md) |
+[Async and Streaming](../how-to/use-async-and-streaming.md)

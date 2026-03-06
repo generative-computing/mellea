@@ -22,40 +22,67 @@
         "tab": "Docs",
         "groups": [
           {
-            "group": "Introduction",
+            "group": "Getting Started",
             "pages": [
-              "overview/mellea-welcome",
-              "overview/architecture",
-              "overview/generative-programming"
+              "getting-started/installation",
+              "getting-started/quickstart"
             ]
           },
           {
-            "group": "Quick Start",
+            "group": "Concepts",
             "pages": [
-              "overview/overview",
-              "core-concept/requirements",
-              "core-concept/instruct-validate-repair",
-              "core-concept/modeloptions"
+              "concepts/generative-programming",
+              "concepts/instruct-validate-repair"
             ]
           },
           {
-            "group": "Core Concepts",
+            "group": "Core Reference",
             "pages": [
-              "core-concept/generative-slots",
-              "core-concept/mobjects",
-              "core-concept/context-management",
-              "core-concept/agents",
-              "core-concept/prompt-engineering"
+              "guide/generative-functions",
+              "guide/tools-and-agents",
+              "guide/working-with-data",
+              "guide/backends-and-configuration",
+              "guide/act-and-aact"
             ]
           },
           {
-            "group": "Extending Mellea",
+            "group": "How-To",
             "pages": [
-              "core-concept/tuning",
-              "core-concept/adapters",
-              "core-concept/alora",
-              "core-concept/interoperability",
-              "core-concept/plugins"
+              "how-to/use-async-and-streaming",
+              "how-to/use-context-and-sessions"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/mcp-and-m-serve"
+            ]
+          },
+          {
+            "group": "Evaluation and Observability",
+            "pages": [
+              "evaluation-and-observability/metrics-and-telemetry"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/intrinsics",
+              "advanced/inference-time-scaling",
+              "advanced/security-and-taint-tracking",
+              "advanced/mellea-core-internals"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "guide/glossary"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "troubleshooting/common-errors"
             ]
           }
         ]
@@ -243,7 +270,7 @@
       },
       {
         "label": "Contribution Guide",
-        "href": "/core-concept/contribution-guide"
+        "href": "/guide/CONTRIBUTING"
       },
       {
         "label": "Support",

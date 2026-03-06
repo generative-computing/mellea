@@ -1,13 +1,14 @@
 ---
-title: "Safety and Validation"
+title: "Security and Taint Tracking"
 description: "Use GuardianCheck with IBM Granite Guardian to validate LLM outputs for safety risks."
 # diataxis: how-to
 ---
 
-# Safety and Validation
+# Security and Taint Tracking
 
-**Prerequisites:** [The Instruction Model](./the-instruction-model.md) complete,
-`pip install mellea`, Ollama running locally with a Granite Guardian model pulled.
+**Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md)
+complete, `pip install mellea`, Ollama running locally with a Granite Guardian model
+pulled.
 
 Mellea integrates [IBM Granite Guardian](https://github.com/ibm-granite/granite-guardian)
 via `GuardianCheck` — a `Requirement` subclass that validates LLM outputs for a wide
@@ -147,8 +148,8 @@ print(str(result))
 ## As an input gate
 
 Validate incoming user messages before generation. See
-[Custom Sessions](./custom-sessions.md) for an example of wrapping this in a
-session subclass that checks all inputs automatically.
+[Context and Sessions](../how-to/use-context-and-sessions.md) for an example of
+wrapping this in a session subclass that checks all inputs automatically.
 
 ```python
 from mellea import MelleaSession
@@ -174,5 +175,5 @@ else:
 
 ---
 
-**Previous:** [act() and aact()](./act-and-aact.md) |
-**Next:** [MCP Integration](./mcp-integration.md)
+**Previous:** [Inference-Time Scaling](./inference-time-scaling.md) |
+**Next:** [Mellea Core Internals](./mellea-core-internals.md)

@@ -153,5 +153,5 @@ def classify_sentiment(text: str) -> str:
 
 ---
 
-**Previous:** [Safety and Validation](./safety-and-validation.md) |
-**Next:** [Telemetry](./telemetry.md)
+**Previous:** [Context and Sessions](../how-to/use-context-and-sessions.md) |
+**Next:** [Metrics and Telemetry](../evaluation-and-observability/metrics-and-telemetry.md)

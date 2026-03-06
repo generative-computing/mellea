@@ -142,7 +142,10 @@ These principles recur throughout Mellea:
 
 ---
 
+**Previous:** [Quick Start](../getting-started/quickstart.md) |
+**Next:** [Instruct, Validate, Repair](./instruct-validate-repair.md)
+
 **See also:**
-[The Instruction Model](./the-instruction-model.md) |
-[Sampling Strategies](./sampling-strategies.md) |
-[Working with Data](./working-with-data.md)
+[Instruct, Validate, Repair](./instruct-validate-repair.md) |
+[Inference-Time Scaling](../advanced/inference-time-scaling.md) |
+[Working with Data](../guide/working-with-data.md)

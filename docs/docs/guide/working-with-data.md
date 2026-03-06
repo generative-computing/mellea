@@ -6,7 +6,7 @@ description: "Ground instructions with documents, build RAG pipelines, and use M
 
 # Working with Data
 
-**Prerequisites:** [Getting Started](./getting-started.md) complete, `pip install mellea`,
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete, `pip install mellea`,
 Ollama running locally. RAG examples require `faiss-cpu` and `sentence-transformers`.
 `RichDocument` requires `pip install mellea[docling]` or `docling` installed separately.
 
@@ -253,4 +253,4 @@ tools during `transform()` calls automatically.
 ---
 
 **Previous:** [Tools and Agents](./tools-and-agents.md) |
-**Next:** [Intrinsics](./intrinsics.md)
+**Next:** [Backends and Configuration](./backends-and-configuration.md)

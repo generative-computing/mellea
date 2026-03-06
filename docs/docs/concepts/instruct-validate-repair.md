@@ -6,8 +6,8 @@ description: "How instruct(), requirements, and the IVR loop work in Mellea."
 
 # The Instruction Model
 
-**Prerequisites:** [Getting Started](./getting-started.md) complete, `pip install mellea`,
-Ollama running locally.
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
+`pip install mellea`, Ollama running locally.
 
 `instruct()` is the primary API in Mellea. It builds a structured `Instruction`
 component — not a raw chat message — with a description, requirements, user variables,
@@ -168,7 +168,7 @@ all intermediate generations.
 
 > **Advanced:** SOFAI (`SOFAISamplingStrategy`) is a dual-model strategy that routes
 > between a fast and a slow model based on confidence. See
-> [Sampling Strategies](./sampling-strategies.md).
+> [Inference-Time Scaling](../advanced/inference-time-scaling.md).
 
 ## Grounding context
 
@@ -188,8 +188,8 @@ print(str(answer))
 ```
 
 `grounding_context` maps string keys to document text. These are injected as
-reference material in the prompt. See [Working with Data](./working-with-data.md) for
-richer document handling using MObjects and `RichDocument`.
+reference material in the prompt. See [Working with Data](../guide/working-with-data.md)
+for richer document handling using MObjects and `RichDocument`.
 
 ## ICL examples
 
@@ -264,5 +264,5 @@ Use `instruct()` when you want requirements, validation, or structured output.
 
 ---
 
-**Previous:** [Getting Started](./getting-started.md) |
-**Next:** [Backends and Configuration](./backends-and-configuration.md)
+**Previous:** [Generative Programming](./generative-programming.md) |
+**Next:** [Generative Functions](../guide/generative-functions.md)

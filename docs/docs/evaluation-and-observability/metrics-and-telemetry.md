@@ -1,12 +1,12 @@
 ---
-title: "Telemetry"
+title: "Metrics and Telemetry"
 description: "Add OpenTelemetry tracing and metrics to Mellea programs."
 # diataxis: how-to
 ---
 
-# Telemetry
+# Metrics and Telemetry
 
-**Prerequisites:** [Getting Started](./getting-started.md) complete,
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
 `pip install mellea[telemetry]`, Ollama running locally.
 
 Mellea provides built-in [OpenTelemetry](https://opentelemetry.io/) instrumentation.
@@ -192,5 +192,5 @@ Application spans add Mellea-specific attributes:
 
 ---
 
-**Previous:** [MCP Integration](./mcp-integration.md) |
-**Next:** [Custom Sessions](./custom-sessions.md)
+**Previous:** [MCP and m serve](../integrations/mcp-and-m-serve.md) |
+**Next:** [Intrinsics](../advanced/intrinsics.md)

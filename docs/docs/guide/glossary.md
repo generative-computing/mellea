@@ -31,7 +31,7 @@ See: [Backends and Configuration](./backends-and-configuration.md)
 
 A `CBlock` (computation block) is the low-level unit of computation in Mellea's execution model. CBlocks represent individual LLM calls or tool invocations and are composed into Components.
 
-See: [Mellea Core Internals](./mellea-core-internals.md)
+See: [Mellea Core Internals](../advanced/mellea-core-internals.md)
 
 ---
 
@@ -53,7 +53,7 @@ See: [Generative Functions](./generative-functions.md)
 
 Any computer program that contains calls to an LLM. Mellea is a library for writing robust, composable generative programs.
 
-See: [Generative Programming](./generative-programming.md)
+See: [Generative Programming](../concepts/generative-programming.md)
 
 ---
 
@@ -61,7 +61,7 @@ See: [Generative Programming](./generative-programming.md)
 
 A safety mechanism in Mellea that validates LLM outputs against defined safety rules before they are returned to the caller.
 
-See: [Safety and Validation](./safety-and-validation.md)
+See: [Security and Taint Tracking](../advanced/security-and-taint-tracking.md)
 
 ---
 
@@ -69,7 +69,7 @@ See: [Safety and Validation](./safety-and-validation.md)
 
 An `Intrinsic` is a backend-level primitive in Mellea — a low-level operation with special handling for structured generation (e.g., constrained decoding). Intrinsics give fine-grained control over how generation happens.
 
-See: [Intrinsics](./intrinsics.md)
+See: [Intrinsics](../advanced/intrinsics.md)
 
 ---
 
@@ -118,7 +118,7 @@ A `Requirement` is a validation constraint applied to a generative function's ou
 
 The algorithm used to select outputs during LLM inference. Mellea provides standard strategies (greedy, top-k, top-p) and advanced ones including `RejectionSamplingStrategy` and `SOFAISamplingStrategy`.
 
-See: [Sampling Strategies](./sampling-strategies.md)
+See: [Inference-Time Scaling](../advanced/inference-time-scaling.md)
 
 ---
 
@@ -126,7 +126,7 @@ See: [Sampling Strategies](./sampling-strategies.md)
 
 **SOFAI** (System-1 / System-2 AI) is an advanced sampling strategy in Mellea that uses a fast "System 1" model for initial generation and a slower "System 2" model to verify and potentially repair outputs — mirroring dual-process cognition theory.
 
-See: [Sampling Strategies](./sampling-strategies.md)
+See: [Inference-Time Scaling](../advanced/inference-time-scaling.md)
 
 ---
 
@@ -143,3 +143,6 @@ See: [Tools and Agents](./tools-and-agents.md)
 See [ModelOutputThunk](#modeloutputthunk).
 
 ---
+
+**Previous:** [Mellea Core Internals](../advanced/mellea-core-internals.md) |
+**Next:** [Common Errors](../troubleshooting/common-errors.md)

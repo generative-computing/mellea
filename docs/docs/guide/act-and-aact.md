@@ -6,7 +6,7 @@ description: "Work directly with Components using act(), aact(), and the functio
 
 # act() and aact()
 
-**Prerequisites:** [The Instruction Model](./the-instruction-model.md) complete,
+**Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md) complete,
 `pip install mellea`, Ollama running locally.
 
 `act()` is the generic method on `MelleaSession` that runs any `Component` and
@@ -129,8 +129,8 @@ else:
     print(str(candidate.sample_generations[0].value))
 ```
 
-See [The Instruction Model](./the-instruction-model.md) and
-[Sampling Strategies](./sampling-strategies.md) for full details on requirements
+See [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md) and
+[Inference-Time Scaling](../advanced/inference-time-scaling.md) for full details on requirements
 and validation.
 
 ## Structured output
@@ -208,9 +208,9 @@ result, new_ctx = await mfuncs.aact(instruction, context=ctx, backend=backend)
 ```
 
 For parallel generation and streaming patterns, see
-[Async and Streaming](./async-and-streaming.md).
+[Async and Streaming](../how-to/use-async-and-streaming.md).
 
 ---
 
-**Previous:** [Async and Streaming](./async-and-streaming.md) |
-**Next:** [Safety and Validation](./safety-and-validation.md)
+**Previous:** [Backends and Configuration](./backends-and-configuration.md) |
+**Next:** [Async and Streaming](../how-to/use-async-and-streaming.md)
