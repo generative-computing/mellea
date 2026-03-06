@@ -11,7 +11,9 @@ Configuration via environment variables:
 - MELLEA_METRICS_OTLP: Enable OTLP metrics exporter (default: false)
 - OTEL_EXPORTER_OTLP_ENDPOINT: OTLP endpoint for metric export (optional)
 - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: OTLP metrics-specific endpoint (optional, overrides OTEL_EXPORTER_OTLP_ENDPOINT)
-- MELLEA_METRICS_EXPORT_INTERVAL: Export interval in seconds (default: 60)
+- OTEL_EXPORTER_PROMETHEUS_PORT: Port for Prometheus HTTP scrape endpoint (optional, e.g., 9464)
+- OTEL_EXPORTER_PROMETHEUS_HOST: Host/address for Prometheus HTTP server (default: 0.0.0.0)
+- OTEL_METRIC_EXPORT_INTERVAL: Export interval in milliseconds (default: 60000)
 - OTEL_SERVICE_NAME: Service name for metrics (default: mellea)
 
 Example usage:
@@ -74,30 +76,29 @@ _METRICS_OTLP = os.getenv("MELLEA_METRICS_OTLP", "false").lower() in (
 _OTLP_METRICS_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") or os.getenv(
     "OTEL_EXPORTER_OTLP_ENDPOINT"
 )
+_PROMETHEUS_PORT = os.getenv("OTEL_EXPORTER_PROMETHEUS_PORT")
+_PROMETHEUS_HOST = os.getenv("OTEL_EXPORTER_PROMETHEUS_HOST", "0.0.0.0")
 _SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "mellea")
 
-# Parse export interval (default 60 seconds)
+# Parse export interval (default 60000 milliseconds = 60 seconds)
 try:
-    _EXPORT_INTERVAL_SECONDS = int(os.getenv("MELLEA_METRICS_EXPORT_INTERVAL", "60"))
-    if _EXPORT_INTERVAL_SECONDS <= 0:
+    _EXPORT_INTERVAL_MILLIS = int(os.getenv("OTEL_METRIC_EXPORT_INTERVAL", "60000"))
+    if _EXPORT_INTERVAL_MILLIS <= 0:
         warnings.warn(
-            f"Invalid MELLEA_METRICS_EXPORT_INTERVAL value: {_EXPORT_INTERVAL_SECONDS}. "
-            "Must be positive. Using default of 60 seconds.",
+            f"Invalid OTEL_METRIC_EXPORT_INTERVAL value: {_EXPORT_INTERVAL_MILLIS}. "
+            "Must be positive. Using default of 60000 milliseconds.",
             UserWarning,
             stacklevel=2,
         )
-        _EXPORT_INTERVAL_SECONDS = 60
+        _EXPORT_INTERVAL_MILLIS = 60000
 except ValueError:
     warnings.warn(
-        f"Invalid MELLEA_METRICS_EXPORT_INTERVAL value: {os.getenv('MELLEA_METRICS_EXPORT_INTERVAL')}. "
-        "Must be an integer. Using default of 60 seconds.",
+        f"Invalid OTEL_METRIC_EXPORT_INTERVAL value: {os.getenv('OTEL_METRIC_EXPORT_INTERVAL')}. "
+        "Must be an integer. Using default of 60000 milliseconds.",
         UserWarning,
         stacklevel=2,
     )
-    _EXPORT_INTERVAL_SECONDS = 60
-
-# Convert to milliseconds for OpenTelemetry
-_EXPORT_INTERVAL_MILLIS = _EXPORT_INTERVAL_SECONDS * 1000
+    _EXPORT_INTERVAL_MILLIS = 60000
 
 
 def _setup_meter_provider() -> Any:
@@ -111,6 +112,47 @@ def _setup_meter_provider() -> Any:
 
     resource = Resource.create({"service.name": _SERVICE_NAME})  # type: ignore
     readers = []
+
+    # Add Prometheus exporter if port is configured
+    if _PROMETHEUS_PORT:
+        try:
+            from opentelemetry.exporter.prometheus import PrometheusMetricReader
+            from prometheus_client import start_http_server
+
+            port = int(_PROMETHEUS_PORT)
+            start_http_server(port=port, addr=_PROMETHEUS_HOST)
+
+            prometheus_reader = PrometheusMetricReader()
+            readers.append(prometheus_reader)
+        except ImportError:
+            warnings.warn(
+                "Prometheus exporter is configured (OTEL_EXPORTER_PROMETHEUS_PORT is set) "
+                "but opentelemetry-exporter-prometheus is not installed. "
+                "Install it with: pip install mellea[telemetry]",
+                UserWarning,
+                stacklevel=2,
+            )
+        except ValueError as e:
+            warnings.warn(
+                f"Invalid OTEL_EXPORTER_PROMETHEUS_PORT value: {_PROMETHEUS_PORT}. "
+                f"Must be a valid port number. Error: {e}",
+                UserWarning,
+                stacklevel=2,
+            )
+        except OSError as e:
+            warnings.warn(
+                f"Failed to start Prometheus HTTP server on port {_PROMETHEUS_PORT}: {e}. "
+                "The port may already be in use or you may lack permissions.",
+                UserWarning,
+                stacklevel=2,
+            )
+        except Exception as e:
+            warnings.warn(
+                f"Failed to initialize Prometheus metrics exporter: {e}. "
+                "Metrics will not be exported via Prometheus.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     # Add OTLP exporter if explicitly enabled
     if _METRICS_OTLP:
@@ -161,8 +203,9 @@ def _setup_meter_provider() -> Any:
         warnings.warn(
             "Metrics are enabled (MELLEA_METRICS_ENABLED=true) but no exporters are configured. "
             "Metrics will be collected but not exported. "
-            "Set MELLEA_METRICS_OTLP=true with an endpoint (OTEL_EXPORTER_OTLP_METRICS_ENDPOINT or "
-            "OTEL_EXPORTER_OTLP_ENDPOINT) or set MELLEA_METRICS_CONSOLE=true to export metrics.",
+            "Set MELLEA_METRICS_PROMETHEUS_PORT to a port number (e.g., 9464), "
+            "set MELLEA_METRICS_OTLP=true with an endpoint (OTEL_EXPORTER_OTLP_METRICS_ENDPOINT or "
+            "OTEL_EXPORTER_OTLP_ENDPOINT), or set MELLEA_METRICS_CONSOLE=true to export metrics.",
             UserWarning,
             stacklevel=2,
         )
