@@ -166,7 +166,8 @@ Use `@generative` when you want a named, typed, reusable LLM-backed operation. U
 `m.instruct()` for one-off generation where a function abstraction would be overhead.
 
 **See also:** [Instruct, Validate, Repair](./instruct-validate-repair.md) |
-[The Requirements System](./requirements-system.md)
+[The Requirements System](./requirements-system.md) |
+[Tools and Agents](../guide/tools-and-agents.md)
 
 ---
 
