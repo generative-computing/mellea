@@ -72,8 +72,8 @@ Mellea's design rests on three interlocking ideas.
   <Card title="Inference-time scaling" icon="chart-line" href="/advanced/inference-time-scaling">
     Best-of-n, SOFAI, majority voting — swap strategies in one line.
   </Card>
-  <Card title="MCP and m serve" icon="plug" href="/integrations/mcp">
-    Expose any Mellea program as an MCP tool or OpenAI-compatible endpoint.
+  <Card title="Tools and agents" icon="wrench" href="/guide/tools-and-agents">
+    `@tool`, `MelleaTool`, and the ReACT loop for goal-driven multi-step agents.
   </Card>
 </CardGroup>
 
@@ -100,6 +100,9 @@ Mellea is backend-agnostic. The same program runs on any inference engine.
   <Card title="vLLM" icon="microchip" href="/integrations/vllm">
     High-throughput batched local inference on Linux + CUDA.
   </Card>
+  <Card title="LiteLLM / Vertex AI" icon="cloud" href="/integrations/vertex-ai">
+    Google Vertex AI, Anthropic, and 100+ providers via LiteLLM.
+  </Card>
 </CardGroup>
 
 See [Backends and configuration](/guide/backends-and-configuration) for the full list of supported backends and how to configure them.
@@ -122,8 +125,8 @@ See [Backends and configuration](/guide/backends-and-configuration) for the full
   <Card title="Configure model options" icon="sliders-horizontal" href="/how-to/configure-model-options">
     Temperature, seed, max tokens, system prompts — cross-backend with `ModelOption`.
   </Card>
-  <Card title="Handling exceptions" icon="triangle-alert" href="/evaluation-and-observability/handling-exceptions">
-    Retry budgets, exception types, and graceful degradation patterns.
+  <Card title="Use images and vision" icon="image" href="/how-to/use-images-and-vision">
+    Pass images to `instruct()` and `chat()` with any vision-capable backend.
   </Card>
 </CardGroup>
 
