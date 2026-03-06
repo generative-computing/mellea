@@ -27,6 +27,14 @@ The rendered documentation site is at [docs.mellea.ai](https://docs.mellea.ai).
 - [Context and sessions](concepts/context-and-sessions.md)
 - [MObjects and mify](concepts/mobjects-and-mify.md)
 
+## Core reference
+
+- [Generative functions](guide/generative-functions.md)
+- [Tools and agents](guide/tools-and-agents.md)
+- [Working with data](guide/working-with-data.md)
+- [Backends and configuration](guide/backends-and-configuration.md)
+- [act() and aact()](guide/act-and-aact.md)
+
 ## How-to guides
 
 - [Enforce structured output](how-to/enforce-structured-output.md)
