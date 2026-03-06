@@ -68,6 +68,29 @@ See: [Backends and Configuration](./backends-and-configuration)
 
 ---
 
+## ChatContext
+
+The standard multi-turn context implementation. `ChatContext` accumulates the full
+conversation history and passes it to the backend on each call. Create one at the
+start of a session and pass it through all calls to maintain state:
+
+```python
+from mellea.stdlib import ChatContext
+ctx = ChatContext()
+```
+
+Use `window_size` to cap how many turns are sent to the backend:
+
+```python
+ctx = ChatContext(window_size=10)
+```
+
+Use `SimpleContext` instead for stateless, single-turn calls.
+
+See: [Context and Sessions](../concepts/context-and-sessions)
+
+---
+
 ## CBlock
 
 A `CBlock` (content block) is the low-level unit of content in Mellea. A `CBlock`
@@ -87,6 +110,15 @@ blocks of generative programs.
 
 ---
 
+## ContextTurn
+
+A single turn of model input and model output stored inside a `Context`. Each call
+to `m.instruct()`, `m.chat()`, or `m.act()` appends a `ContextTurn` to the active
+context. Turns are consumed by the backend formatter to build the conversation
+history sent to the model.
+
+---
+
 ## Context
 
 A `Context` holds the conversation history threaded through a `MelleaSession`.
@@ -94,6 +126,20 @@ Mellea provides `SimpleContext` (single-turn) and `ChatContext` (multi-turn). Pu
 and pop operations let you branch and restore context state across calls.
 
 See: [Context and Sessions](../concepts/context-and-sessions)
+
+---
+
+## Document
+
+A `Component` that wraps a plain-text reference document for inclusion in a prompt.
+Pass one or more `Document` objects in the `_docs` field of a `Message` or directly
+as grounding context in an `Instruction`. Unlike `RichDocument`, `Document` holds
+pre-extracted text rather than a parsed file.
+
+```python
+from mellea.stdlib.components.docs.document import Document
+doc = Document(text="...", title="My doc", doc_id="ref-1")
+```
 
 ---
 
@@ -170,6 +216,25 @@ operation with special handling (e.g., constrained decoding, RAG retrieval). The
 adapter endpoints.
 
 See: [Intrinsics](../advanced/intrinsics)
+
+---
+
+## Instruction
+
+The core `Component` in the IVR loop. An `Instruction` wraps a prompt description,
+optional requirements, in-context examples, and grounding context into a single
+object that `m.act()` can execute. `m.instruct()` is a convenience wrapper that
+builds an `Instruction` for you.
+
+```python
+from mellea.stdlib.components.instruction import Instruction
+instr = Instruction(
+    description="Summarise the following text: {{text}}",
+    requirements=[req("Must be under 50 words.")],
+    user_variables={"text": "..."},
+)
+result = m.act(instr)
+```
 
 ---
 
@@ -267,6 +332,25 @@ without triggering evaluation.
 
 ---
 
+## PreconditionException
+
+Raised when a requirement attached to a `@generative` function's input arguments
+fails — i.e., before the LLM call is made. Catch it to handle pre-call validation
+failures gracefully.
+
+```python
+from mellea.stdlib.components.genslot import PreconditionException
+
+try:
+    result = my_generative_fn(m, ...)
+except PreconditionException as e:
+    print(e.validation)  # list of ValidationResult
+```
+
+See: [Handling Exceptions and Failures](../evaluation-and-observability/handling-exceptions)
+
+---
+
 ## ReAct
 
 **Reason + Act** — a goal-driven agentic loop where the LLM alternates between
@@ -317,6 +401,23 @@ See: [Working with Data](./working-with-data)
 
 ---
 
+## SimpleContext
+
+A stateless context where each call is independent — no conversation history is
+accumulated or sent to the backend. Use it for single-shot tasks where prior turns
+are irrelevant.
+
+```python
+from mellea.stdlib import SimpleContext
+ctx = SimpleContext()
+```
+
+For multi-turn conversations, use `ChatContext` instead.
+
+See: [Context and Sessions](../concepts/context-and-sessions)
+
+---
+
 ## Sampling strategy
 
 A `SamplingStrategy` controls how the IVR loop behaves when a requirement fails.
@@ -342,6 +443,41 @@ candidates generated).
 
 ---
 
+## Table
+
+An `MObject` wrapping a single table extracted from a `RichDocument`. Supports
+`m.query()` and `m.transform()` directly, plus `.to_markdown()` and `.transpose()`.
+
+```python
+tables = rich_doc.get_tables()
+summary = m.query(tables[0], "What is the total in the last row?")
+```
+
+See: [Working with Data](./working-with-data)
+
+---
+
+## TemplateFormatter
+
+A `ChatFormatter` subclass that renders prompts using Jinja2 templates instead of
+the default chat-message format. Use it when you need precise control over how
+components are serialised into the final prompt string. Configured per-backend.
+
+See: [Template Formatting](../advanced/template-formatting)
+
+---
+
+## TemplateRepresentation
+
+The data class a `Component` returns from `format_for_llm()` to describe itself to
+the `TemplateFormatter`. It carries the component's template string, named
+arguments, tool definitions, and field list — everything the formatter needs to
+render the component into a prompt fragment.
+
+See: [Mellea Core Internals](../advanced/mellea-core-internals)
+
+---
+
 ## SOFAI
 
 **SOFAI** (System-1 / System-2 AI) is a sampling strategy in Mellea that mirrors
@@ -359,6 +495,24 @@ Mellea exposes to an LLM for function calling. Tools have typed inputs and outpu
 so the LLM can call them reliably without free-form parsing.
 
 See: [Tools and Agents](./tools-and-agents)
+
+---
+
+## ValidationResult
+
+The return type of a custom verifier function. Holds a boolean `result` (pass/fail)
+and optional metadata — `reason` (string explanation), `score` (float), and
+`thunk` (the raw `ModelOutputThunk` if the verifier used an LLM call internally).
+
+```python
+from mellea.core.requirement import ValidationResult
+
+def my_verifier(output: str) -> ValidationResult:
+    passed = len(output.split()) < 50
+    return ValidationResult(passed, reason="Too long" if not passed else None)
+```
+
+See: [Write Custom Verifiers](../how-to/write-custom-verifiers)
 
 ---
 

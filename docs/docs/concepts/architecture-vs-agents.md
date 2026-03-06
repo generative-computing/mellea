@@ -134,7 +134,7 @@ Mellea also supports building agentic programs directly, without an external
 orchestrator:
 
 - **ReACT loops** — implement thought/action/observation cycles using `m.chat()`
-  with `ChatContext` and the `@tool` decorator. See
+  with [`ChatContext`](../guide/glossary#chatcontext) and the `@tool` decorator. See
   [Tools and Agents](../guide/tools-and-agents).
 - **Guarded agents** — combine the ReACT pattern with `requirements` and
   `GuardianCheck` to enforce safety constraints at every step. See

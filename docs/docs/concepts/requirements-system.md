@@ -152,7 +152,7 @@ model make a targeted repair rather than regenerating blindly.
 
 The [`@generative`](../guide/glossary#generative) decorator supports `precondition_requirements` alongside the
 standard `requirements`. Preconditions are validated against the *inputs* to the
-function before generation starts. If they fail, Mellea raises `PreconditionException`
+function before generation starts. If they fail, Mellea raises [`PreconditionException`](../guide/glossary#preconditionexception)
 immediately — no generation attempt is made and no IVR loop runs.
 
 ```python

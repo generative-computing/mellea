@@ -50,7 +50,7 @@ The context serves two purposes:
 
 1. **Prompt construction** — the backend calls `ctx.view_for_generation()` to get
    the components that should appear in the prompt. For `ChatContext`, this includes
-   all prior turns. For `SimpleContext`, it includes only the current instruction.
+   all prior turns. For [`SimpleContext`](../guide/glossary#simplecontext), it includes only the current instruction.
 
 2. **Validation** — during the IVR loop, requirement validators receive the
    `Context` object. They can call `ctx.last_output()` to inspect the most recent
@@ -199,7 +199,7 @@ print(last.value)
 turn = m.ctx.last_turn()
 ```
 
-`last_turn()` returns a `ContextTurn` with `.input` and `.output` fields. It is
+`last_turn()` returns a [`ContextTurn`](../guide/glossary#contextturn) with `.input` and `.output` fields. It is
 useful for observability or when you need to log exactly what the model received and
 produced.
 
