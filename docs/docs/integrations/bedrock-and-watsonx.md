@@ -239,6 +239,6 @@ pip install 'mellea[watsonx]'
 ---
 
 **Previous:** [OpenAI and OpenAI-Compatible APIs](./openai.md) |
-**Next:** [MCP and m serve](./mcp-and-m-serve.md)
+**Next:** [HuggingFace and vLLM](./huggingface-and-vllm.md)
 
 **See also:** [Backends and Configuration](../guide/backends-and-configuration.md)
