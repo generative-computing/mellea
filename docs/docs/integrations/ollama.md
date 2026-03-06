@@ -242,7 +242,7 @@ pip install mellea
 
 ---
 
-**Previous:** [Write Custom Verifiers](../how-to/write-custom-verifiers.md) |
+**Previous:** [Use Images and Vision Models](../how-to/use-images-and-vision.md) |
 **Next:** [OpenAI](./openai.md)
 
 **See also:** [Backends and Configuration](../guide/backends-and-configuration.md) |

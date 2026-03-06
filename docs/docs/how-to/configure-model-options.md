@@ -137,4 +137,4 @@ across all backends.
 ---
 
 **Previous:** [Write Custom Verifiers](./write-custom-verifiers.md) |
-**Next:** [Ollama](../integrations/ollama.md)
+**Next:** [Use Images and Vision Models](./use-images-and-vision.md)

@@ -64,7 +64,8 @@
               "how-to/use-context-and-sessions",
               "how-to/enforce-structured-output",
               "how-to/write-custom-verifiers",
-              "how-to/configure-model-options"
+              "how-to/configure-model-options",
+              "how-to/use-images-and-vision"
             ]
           },
           {
