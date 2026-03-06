@@ -4,8 +4,6 @@ description: "Install Mellea and set up your Python environment."
 # diataxis: tutorial
 ---
 
-# Installation
-
 **Prerequisites:** Python 3.10+, `pip` or `uv` available.
 
 ## Install

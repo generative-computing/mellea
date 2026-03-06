@@ -4,8 +4,6 @@ description: "Break complex tasks into ordered, executable subtasks with the m d
 # diataxis: how-to
 ---
 
-# m decompose
-
 `m decompose` takes a complex task description and uses an LLM to:
 
 1. Extract the constraints the output must satisfy

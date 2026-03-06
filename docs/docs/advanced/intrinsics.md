@@ -4,8 +4,6 @@ description: "Adapter-accelerated RAG quality checks using LoRA/aLoRA adapters w
 # diataxis: how-to
 ---
 
-# Intrinsics
-
 **Prerequisites:** `pip install mellea[hf]`, a GPU or Apple Silicon Mac recommended for
 acceptable inference speed. All intrinsics require a `LocalHFBackend` with a
 [Granite](https://huggingface.co/ibm-granite) model.

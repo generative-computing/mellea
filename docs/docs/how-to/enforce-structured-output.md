@@ -4,8 +4,6 @@ description: "Get JSON, Pydantic models, and typed values from LLM calls using @
 # diataxis: how-to
 ---
 
-# Enforce Structured Output
-
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally.
 

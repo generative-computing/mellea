@@ -4,8 +4,6 @@ description: "Definitions of Mellea-specific terms and concepts."
 # diataxis: reference
 ---
 
-# Glossary
-
 Mellea-specific terms used throughout this guide. Terms are listed alphabetically.
 Cross-links from guide pages point here on **first use only**.
 

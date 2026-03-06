@@ -4,8 +4,6 @@ description: "Pass images to instruct() and chat() calls, and configure vision-c
 # diataxis: how-to
 ---
 
-# Use Images and Vision Models
-
 Mellea supports multimodal input: pass images alongside your text prompt to any
 `instruct()` or `chat()` call using the `images` parameter.
 

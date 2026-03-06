@@ -4,8 +4,6 @@ description: "Expose Mellea functions as Model Context Protocol tools, callable 
 # diataxis: how-to
 ---
 
-# MCP Integration
-
 [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is an open standard
 for exposing tools to AI clients. Mellea integrates with MCP via
 [FastMCP](https://github.com/jlowin/fastmcp): wrap any Mellea function as an MCP tool

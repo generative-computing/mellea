@@ -4,8 +4,6 @@ description: "Define type-safe LLM functions with @generative and Pydantic struc
 # diataxis: how-to
 ---
 
-# Generative Functions
-
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally.
 

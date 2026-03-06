@@ -4,8 +4,6 @@ description: "Use HuggingFace smolagents tools inside a Mellea session."
 # diataxis: how-to
 ---
 
-# smolagents
-
 `MelleaTool.from_smolagents()` wraps any [smolagents](https://huggingface.co/docs/smolagents)
 `Tool` instance so it can be passed to any [`MelleaSession`](../guide/glossary#melleasession)
 call. The HuggingFace ecosystem provides many pre-built tools — `PythonInterpreterTool`,

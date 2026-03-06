@@ -4,8 +4,6 @@ description: "How instruct(), requirements, and the IVR loop work in Mellea."
 # diataxis: explanation
 ---
 
-# The Instruction Model
-
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally.
 

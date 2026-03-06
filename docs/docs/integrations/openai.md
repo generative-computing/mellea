@@ -4,8 +4,6 @@ description: "Use Mellea with OpenAI's API and any OpenAI-compatible endpoint â€
 # diataxis: how-to
 ---
 
-# OpenAI and OpenAI-Compatible APIs
-
 `OpenAIBackend` connects Mellea to the OpenAI API and to any server that implements
 the OpenAI HTTP API â€” including LM Studio, Ollama's OpenAI endpoint, vLLM, and
 OpenAI-compatible providers.

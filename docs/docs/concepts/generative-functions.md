@@ -4,8 +4,6 @@ description: "How the @generative decorator turns a Python function signature in
 # diataxis: explanation
 ---
 
-# Generative functions
-
 In classical programming, a pure function takes inputs and produces outputs deterministically.
 In a generative program, a function can have the same interface but delegate its implementation
 to an LLM. Mellea calls these [**generative functions**](../guide/glossary#generative-function) and provides the [`@generative`](../guide/glossary#generative) decorator

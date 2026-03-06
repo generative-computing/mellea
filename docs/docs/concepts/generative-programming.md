@@ -4,8 +4,6 @@ description: "The ideas behind Mellea — what generative programs are, why they
 # diataxis: explanation
 ---
 
-# Generative Programming
-
 A [_generative program_](../guide/glossary#generative-program) is any program that contains calls to an LLM. This covers
 everything from a simple prompt wrapper to a complex multi-step reasoning system.
 The term is deliberately broad: what matters is not how many LLM calls a program

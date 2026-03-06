@@ -4,8 +4,6 @@ description: "Use LangChain tools inside Mellea and seed a Mellea session with L
 # diataxis: how-to
 ---
 
-# LangChain
-
 Mellea integrates with LangChain in two ways:
 
 1. **Tool bridging** — wrap existing LangChain tools as [`MelleaTool`](../guide/glossary#tool)

@@ -5,8 +5,6 @@ description: "Extend MelleaSession to add custom validation, logging, and filter
 # diataxis: how-to
 ---
 
-# Context and Sessions
-
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally.
 

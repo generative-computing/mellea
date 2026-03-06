@@ -4,8 +4,6 @@ description: "Run Mellea with IBM WatsonX AI using the WatsonxAIBackend."
 # diataxis: how-to
 ---
 
-# IBM WatsonX
-
 The WatsonX backend connects to IBM's managed AI platform. It requires an API key,
 project ID, and service URL.
 

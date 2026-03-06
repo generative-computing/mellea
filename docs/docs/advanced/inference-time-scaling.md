@@ -4,8 +4,6 @@ description: "Control how Mellea generates and validates outputs: rejection samp
 # diataxis: how-to
 ---
 
-# Inference-Time Scaling
-
 **Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
 complete, `pip install mellea`, Ollama running locally.
 

@@ -4,8 +4,6 @@ description: "Set temperature, seed, max tokens, system prompts, and other backe
 # diataxis: how-to
 ---
 
-# Configure model options
-
 Most LLM APIs accept parameters such as temperature, max tokens, and seed. Mellea exposes
 these through the `ModelOption` enum, which works uniformly across all backends, and also
 lets you pass backend-native keys directly.

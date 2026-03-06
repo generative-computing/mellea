@@ -4,8 +4,6 @@ description: "Run Mellea with local models via Ollama — the default backend."
 # diataxis: how-to
 ---
 
-# Ollama
-
 [Ollama](https://ollama.ai) is the default backend for Mellea. It runs models locally
 with no API key, making it the fastest way to get started.
 

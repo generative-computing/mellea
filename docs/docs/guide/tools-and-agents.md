@@ -4,8 +4,6 @@ description: "Give LLMs access to tools, build ReACT agents, and validate tool c
 # diataxis: how-to
 ---
 
-# Tools and Agents
-
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete, `pip install mellea`,
 Ollama running locally. LangChain interop requires `pip install langchain-community`.
 

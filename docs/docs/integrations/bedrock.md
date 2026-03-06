@@ -4,8 +4,6 @@ description: "Run Mellea with AWS Bedrock models using the Bedrock Mantle backen
 # diataxis: how-to
 ---
 
-# AWS Bedrock
-
 Mellea accesses AWS Bedrock via the **Bedrock Mantle** endpoint, which exposes an
 OpenAI-compatible API authenticated with an AWS Bearer Token.
 

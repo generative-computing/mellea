@@ -5,8 +5,6 @@ sidebarTitle: "Core Internals"
 # diataxis: explanation
 ---
 
-# Mellea Core Internals
-
 > **Advanced:** This page is for contributors, backend developers, and anyone who
 > wants to understand what happens when Mellea executes a request. If you are
 > building applications with Mellea, you do not need this material.

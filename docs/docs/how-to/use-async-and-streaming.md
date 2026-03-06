@@ -4,8 +4,6 @@ description: "Use async methods, parallel generation, and streaming output with 
 # diataxis: how-to
 ---
 
-# Async and Streaming
-
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally.
 
