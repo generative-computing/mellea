@@ -32,7 +32,8 @@
             "group": "Concepts",
             "pages": [
               "concepts/generative-programming",
-              "concepts/instruct-validate-repair"
+              "concepts/instruct-validate-repair",
+              "concepts/requirements-system"
             ]
           },
           {
