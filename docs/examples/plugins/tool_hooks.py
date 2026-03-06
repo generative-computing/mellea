@@ -27,9 +27,9 @@ from mellea.plugins import (
     PluginMode,
     PluginResult,
     PluginSet,
+    PluginViolationError,
     block,
     hook,
-    PluginViolationError,
 )
 from mellea.stdlib.functional import _call_tools
 from mellea.stdlib.requirements import uses_tool
@@ -39,7 +39,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
-logging.getLogger("mcpgateway").setLevel(logging.ERROR)
 logging.getLogger("httpx").setLevel(logging.ERROR)
 logging.getLogger("fancy_logger").setLevel(logging.ERROR)
 log = logging.getLogger("tool_hooks")
@@ -89,7 +88,7 @@ def calculate(expression: str) -> str:
     # applies its own check as a defence-in-depth measure.
     allowed = set("0123456789 +-*/(). ")
     if not set(expression).issubset(allowed):
-        return f"Error: expression contains disallowed characters"
+        return "Error: expression contains disallowed characters"
     try:
         # Safe: only reaches here when characters are in the allowed set
         result = _safe_calc(expression)

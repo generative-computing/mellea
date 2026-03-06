@@ -23,7 +23,6 @@ from mellea.plugins.manager import shutdown_plugins
 from mellea.plugins.types import HookType
 from mellea.stdlib.functional import _acall_tools
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

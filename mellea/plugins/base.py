@@ -9,8 +9,11 @@ from pydantic import Field
 
 try:
     from cpex.framework.base import Plugin
-    from cpex.framework.models import PluginContext, PluginPayload
-    from cpex.framework.models import PluginResult as _CFPluginResult
+    from cpex.framework.models import (
+        PluginContext,
+        PluginPayload,
+        PluginResult as _CFPluginResult,
+    )
 
     _HAS_PLUGIN_FRAMEWORK = True
 except ImportError:

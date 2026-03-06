@@ -7,11 +7,6 @@ Public API::
 
 from __future__ import annotations
 
-import logging
-
-logging.getLogger("mcpgateway.config").setLevel(logging.ERROR)
-logging.getLogger("mcpgateway.observability").setLevel(logging.ERROR)
-
 from mellea.plugins.base import MelleaPlugin, PluginResult, PluginViolationError
 from mellea.plugins.decorators import hook, plugin
 from mellea.plugins.pluginset import PluginSet

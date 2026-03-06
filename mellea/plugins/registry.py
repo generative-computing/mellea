@@ -13,9 +13,12 @@ from mellea.plugins.types import PluginMode
 
 try:
     from cpex.framework.base import Plugin
-    from cpex.framework.models import PluginConfig
-    from cpex.framework.models import PluginMode as _CFPluginMode
-    from cpex.framework.models import PluginResult, PluginViolation
+    from cpex.framework.models import (
+        PluginConfig,
+        PluginMode as _CFPluginMode,
+        PluginResult,
+        PluginViolation,
+    )
 
     _HAS_PLUGIN_FRAMEWORK = True
 except ImportError:
