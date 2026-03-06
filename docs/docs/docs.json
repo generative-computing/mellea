@@ -38,10 +38,12 @@
             "group": "Concepts",
             "pages": [
               "concepts/generative-programming",
+              "concepts/generative-functions",
               "concepts/instruct-validate-repair",
               "concepts/requirements-system",
               "concepts/architecture-vs-agents",
-              "concepts/context-and-sessions"
+              "concepts/context-and-sessions",
+              "concepts/mobjects-and-mify"
             ]
           },
           {
@@ -60,7 +62,8 @@
               "how-to/use-async-and-streaming",
               "how-to/use-context-and-sessions",
               "how-to/enforce-structured-output",
-              "how-to/write-custom-verifiers"
+              "how-to/write-custom-verifiers",
+              "how-to/configure-model-options"
             ]
           },
           {
@@ -85,7 +88,8 @@
               "advanced/intrinsics",
               "advanced/inference-time-scaling",
               "advanced/security-and-taint-tracking",
-              "advanced/mellea-core-internals"
+              "advanced/mellea-core-internals",
+              "advanced/template-formatting"
             ]
           },
           {
