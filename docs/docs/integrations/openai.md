@@ -172,12 +172,10 @@ from pydantic import BaseModel
 from mellea import MelleaSession
 from mellea.backends.openai import OpenAIBackend
 
-
 class Summary(BaseModel):
     title: str
     key_points: list[str]
     word_count: int
-
 
 m = MelleaSession(OpenAIBackend(model_id="gpt-4o", api_key="sk-..."))
 result = m.instruct(
@@ -257,7 +255,6 @@ refer to the [OpenAI models page](https://platform.openai.com/docs/models). For
 local servers, list available models from the server's API or UI.
 
 ---
-
 
 **See also:** [Backends and Configuration](../guide/backends-and-configuration) |
 [Enforce Structured Output](../how-to/enforce-structured-output)

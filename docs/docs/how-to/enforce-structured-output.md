@@ -124,10 +124,8 @@ from mellea import start_session
 from mellea.stdlib.requirements import check, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
-
 class NameResponse(BaseModel):
     names: list[str]
-
 
 m = start_session()
 result = m.instruct(
@@ -165,10 +163,8 @@ from mellea import start_session
 from mellea.stdlib.requirements import check, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
-
 class NameResponse(BaseModel):
     names: list[str]
-
 
 def at_least_n_names(n: int) -> Callable[[str], tuple[bool, str]]:
     """Factory: returns a validator that checks the names list has >= n entries."""
@@ -181,7 +177,6 @@ def at_least_n_names(n: int) -> Callable[[str], tuple[bool, str]]:
             return (True, "")
         return (False, f"Found {len(parsed.names)} name(s); expected at least {n}.")
     return _validate
-
 
 m = start_session()
 result = m.instruct(
@@ -264,7 +259,6 @@ Both patterns support the full IVR loop, requirements, sampling strategies, and
 `SamplingResult` inspection.
 
 ---
-
 
 **See also:** [Generative Functions](../guide/generative-functions) |
 [The Requirements System](../concepts/requirements-system)

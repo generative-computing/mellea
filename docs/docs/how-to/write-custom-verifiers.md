@@ -44,7 +44,6 @@ A validation function receives the `Context` object and returns a
 import re
 from mellea.core import Context, ValidationResult
 
-
 def validate_email_format(ctx: Context) -> ValidationResult:
     """Check that the output is a valid email address."""
     output = ctx.last_output()
@@ -84,7 +83,6 @@ print(str(result))
 import json
 from mellea.core import Context, ValidationResult
 
-
 def validate_json(ctx: Context) -> ValidationResult:
     output = ctx.last_output()
     text = output.value if output and output.value else ""
@@ -105,12 +103,10 @@ def validate_json(ctx: Context) -> ValidationResult:
 from pydantic import BaseModel, ValidationError
 from mellea.core import Context, ValidationResult
 
-
 class PersonInfo(BaseModel):
     name: str
     age: int
     email: str
-
 
 def validate_person_schema(ctx: Context) -> ValidationResult:
     output = ctx.last_output()
@@ -133,7 +129,6 @@ def validate_person_schema(ctx: Context) -> ValidationResult:
 import re
 from mellea.core import Context, ValidationResult
 
-
 def validate_iso_date(ctx: Context) -> ValidationResult:
     output = ctx.last_output()
     text = output.value.strip() if output and output.value else ""
@@ -154,7 +149,6 @@ make the call inline:
 ```python
 import requests
 from mellea.core import Context, ValidationResult
-
 
 def validate_url_reachable(ctx: Context) -> ValidationResult:
     output = ctx.last_output()
@@ -185,7 +179,6 @@ Include it for observability and to support scoring-based sampling strategies:
 
 ```python
 from mellea.core import Context, ValidationResult
-
 
 def validate_length_score(ctx: Context) -> ValidationResult:
     """Pass if under 100 words; score reflects how far under the limit."""
@@ -270,7 +263,6 @@ This pattern is useful during development to confirm your verifier fires at the
 right time and produces helpful repair guidance.
 
 ---
-
 
 **See also:** [The Requirements System](../concepts/requirements-system) |
 [Instruct, Validate, Repair](../concepts/instruct-validate-repair)

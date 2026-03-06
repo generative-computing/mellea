@@ -46,7 +46,7 @@ description and parameter types are preserved exactly.
 > **Backend note:** Tool calling requires a backend and model that support function
 > calling (e.g., Ollama with `granite4:micro`, OpenAI with `gpt-4o`). The default
 > Ollama setup supports this.
-
+>
 > **Full example:** [`docs/examples/tools/smolagents_example.py`](../../examples/tools/smolagents_example.py)
 
 ## Which approach to use
@@ -60,7 +60,6 @@ description and parameter types are preserved exactly.
 | You want Mellea as an OpenAI endpoint for another framework | [`m serve`](./m-serve) |
 
 ---
-
 
 **See also:** [Tools and Agents](../guide/tools-and-agents) |
 [Context and Sessions](../concepts/context-and-sessions)

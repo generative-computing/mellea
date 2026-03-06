@@ -240,6 +240,5 @@ pip install mellea
 
 ---
 
-
 **See also:** [Backends and Configuration](../guide/backends-and-configuration) |
 [Getting Started](../getting-started/installation)

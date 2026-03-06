@@ -111,6 +111,5 @@ OpenAI chat format — LlamaIndex, Haystack, Semantic Kernel — works with the 
 
 ---
 
-
 **See also:** [Tools and Agents](../guide/tools-and-agents) |
 [Context and Sessions](../concepts/context-and-sessions)

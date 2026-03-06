@@ -82,12 +82,12 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-> **Note (review needed):** The `vertex_project` and `vertex_location` keys
-> shown above follow the LiteLLM convention for per-call overrides. Hendrik,
-> please confirm whether these keys are correct and whether they are required
-> when `VERTEXAI_PROJECT` / `VERTEXAI_LOCATION` are already set in the
-> environment, or whether they are only needed to override the environment
-> values.
+> **Note:** The `vertex_project` and `vertex_location` keys are the LiteLLM
+> per-call override names. They take precedence over the `VERTEXAI_PROJECT` and
+> `VERTEXAI_LOCATION` environment variables. If the environment variables are
+> already set, you do not need to pass them explicitly — they are shown here for
+> clarity and to support cases where you want to override the environment at
+> runtime.
 
 ## Model string format
 
