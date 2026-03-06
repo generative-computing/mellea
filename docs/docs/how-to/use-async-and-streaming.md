@@ -6,8 +6,8 @@ description: "Use async methods, parallel generation, and streaming output with 
 
 # Async and Streaming
 
-**Prerequisites:** [Getting Started](./getting-started.md) complete, `pip install mellea`,
-Ollama running locally.
+**Prerequisites:** [Quick Start](../getting-started/quickstart.md) complete,
+`pip install mellea`, Ollama running locally.
 
 ## Async methods
 
@@ -168,5 +168,5 @@ For parallel generation, use `SimpleContext`.
 
 ---
 
-**Previous:** [Sampling Strategies](./sampling-strategies.md) |
-**Next:** [act() and aact()](./act-and-aact.md)
+**Previous:** [act() and aact()](../guide/act-and-aact.md) |
+**Next:** [Context and Sessions](./use-context-and-sessions.md)

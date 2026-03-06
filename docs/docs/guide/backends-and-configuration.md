@@ -108,7 +108,7 @@ print(str(result))
 
 > **Backend note:** Requires `pip install mellea[hf]`. Models are downloaded from
 > HuggingFace Hub on first use. GPU recommended for reasonable inference speed.
-> Required for [Intrinsics](./intrinsics.md).
+> Required for [Intrinsics](../advanced/intrinsics.md).
 
 Run models locally using HuggingFace transformers:
 
@@ -225,5 +225,5 @@ Valid `backend_name` values: `"ollama"`, `"openai"`, `"hf"`, `"litellm"`, `"wats
 
 ---
 
-**Previous:** [The Instruction Model](./the-instruction-model.md) |
-**Next:** [Generative Functions](./generative-functions.md)
+**Previous:** [Working with Data](./working-with-data.md) |
+**Next:** [act() and aact()](./act-and-aact.md)

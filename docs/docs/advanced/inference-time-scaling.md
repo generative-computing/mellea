@@ -1,13 +1,13 @@
 ---
-title: "Sampling Strategies"
+title: "Inference-Time Scaling"
 description: "Control how Mellea generates and validates outputs: rejection sampling, SOFAI, budget forcing, and majority voting."
 # diataxis: how-to
 ---
 
-# Sampling Strategies
+# Inference-Time Scaling
 
-**Prerequisites:** [The Instruction Model](./the-instruction-model.md) complete,
-`pip install mellea`, Ollama running locally.
+**Prerequisites:** [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md)
+complete, `pip install mellea`, Ollama running locally.
 
 A sampling strategy controls what happens after the first generation: whether to
 retry on failure, how to repair output, and whether to escalate to a more powerful
@@ -211,4 +211,4 @@ print(str(result.result))
 ---
 
 **Previous:** [Intrinsics](./intrinsics.md) |
-**Next:** [Async and Streaming](./async-and-streaming.md)
+**Next:** [Security and Taint Tracking](./security-and-taint-tracking.md)

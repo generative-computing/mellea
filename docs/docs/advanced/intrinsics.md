@@ -214,5 +214,5 @@ Output format is task-specific — `requirement_check` returns a likelihood scor
 
 ---
 
-**Previous:** [Working with Data](./working-with-data.md) |
-**Next:** [Sampling Strategies](./sampling-strategies.md)
+**Previous:** [Metrics and Telemetry](../evaluation-and-observability/metrics-and-telemetry.md) |
+**Next:** [Inference-Time Scaling](./inference-time-scaling.md)

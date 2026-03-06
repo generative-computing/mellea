@@ -1,10 +1,10 @@
 ---
-title: "Troubleshooting"
+title: "Common Errors"
 description: "Common errors, diagnostic steps, and fixes for Mellea programs."
 # diataxis: reference
 ---
 
-# Troubleshooting
+# Common Errors
 
 ## Installation
 
@@ -238,11 +238,14 @@ ollama pull granite-guardian-3.2-5b
 
 - **GitHub Issues:** [github.com/generative-computing/mellea/issues](https://github.com/generative-computing/mellea/issues)
 - **Examples:** [`docs/examples/`](https://github.com/generative-computing/mellea/tree/main/docs/examples)
-- Enable telemetry to inspect what is happening at each step — see [Telemetry](./telemetry.md).
+- Enable telemetry to inspect what is happening at each step — see
+  [Metrics and Telemetry](../evaluation-and-observability/metrics-and-telemetry.md).
 
 ---
 
+**Previous:** [Glossary](../guide/glossary.md)
+
 **See also:**
-[Getting Started](./getting-started.md) |
-[Sampling Strategies](./sampling-strategies.md) |
-[Safety and Validation](./safety-and-validation.md)
+[Quick Start](../getting-started/quickstart.md) |
+[Inference-Time Scaling](../advanced/inference-time-scaling.md) |
+[Security and Taint Tracking](../advanced/security-and-taint-tracking.md)
