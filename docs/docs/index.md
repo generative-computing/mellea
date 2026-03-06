@@ -57,6 +57,7 @@ The rendered documentation site is at [docs.mellea.ai](https://docs.mellea.ai).
 
 ## Advanced
 
+- [LoRA and aLoRA adapters](advanced/lora-and-alora-adapters.md)
 - [Inference-time scaling](advanced/inference-time-scaling.md)
 - [Intrinsics](advanced/intrinsics.md)
 - [Security and taint tracking](advanced/security-and-taint-tracking.md)

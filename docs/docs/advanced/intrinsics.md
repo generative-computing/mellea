@@ -215,4 +215,4 @@ Output format is task-specific — `requirement_check` returns a likelihood scor
 ---
 
 **Previous:** [Metrics and Telemetry](../evaluation-and-observability/metrics-and-telemetry.md) |
-**Next:** [Inference-Time Scaling](./inference-time-scaling.md)
+**Next:** [LoRA and aLoRA adapters](./lora-and-alora-adapters.md)
