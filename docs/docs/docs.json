@@ -47,14 +47,15 @@
             ]
           },
           {
-            "group": "Core Reference",
+            "group": "Guides",
             "pages": [
               "guide/generative-functions",
               "guide/tools-and-agents",
               "guide/working-with-data",
               "guide/backends-and-configuration",
               "guide/act-and-aact",
-              "guide/m-decompose"
+              "guide/m-decompose",
+              "integrations/m-serve"
             ]
           },
           {
@@ -65,20 +66,20 @@
               "how-to/enforce-structured-output",
               "how-to/write-custom-verifiers",
               "how-to/configure-model-options",
-              "how-to/use-images-and-vision"
+              "how-to/use-images-and-vision",
+              "evaluation-and-observability/handling-exceptions"
             ]
           },
           {
             "group": "Integrations",
             "pages": [
               "integrations/ollama",
+              "integrations/huggingface",
+              "integrations/vllm",
               "integrations/openai",
               "integrations/bedrock",
               "integrations/watsonx",
-              "integrations/huggingface",
-              "integrations/vllm",
               "integrations/mcp",
-              "integrations/m-serve",
               "integrations/langchain",
               "integrations/smolagents"
             ]
@@ -86,8 +87,7 @@
           {
             "group": "Evaluation and Observability",
             "pages": [
-              "evaluation-and-observability/metrics-and-telemetry",
-              "evaluation-and-observability/handling-exceptions"
+              "evaluation-and-observability/metrics-and-telemetry"
             ]
           },
           {
