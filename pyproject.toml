@@ -98,12 +98,12 @@ sandbox = [
 
 backends = ["mellea[watsonx,hf,vllm,litellm]"]
 
-cpex = [
+hooks = [
     "cpex; python_version >= '3.11'",
     "grpcio>=1.78.0",
 ]
 
-all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever,cpex]"]
+all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever,hooks]"]
 
 [dependency-groups]
 # Development groups: uv sync --all-groups
