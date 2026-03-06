@@ -41,8 +41,8 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-`create_bedrock_mantle_backend` returns an `OpenAIBackend` pointed at the Bedrock
-Mantle endpoint. It reads `AWS_BEARER_TOKEN_BEDROCK` from the environment and checks
+`create_bedrock_mantle_backend` returns an [`OpenAIBackend`](../guide/glossary#backend) pointed at the Bedrock
+Mantle endpoint. Pass it to [`MelleaSession`](../guide/glossary#melleasession) as shown above. It reads `AWS_BEARER_TOKEN_BEDROCK` from the environment and checks
 that the requested model is available in the target region before returning.
 
 ## Specifying a region
@@ -137,6 +137,13 @@ Model X is not supported in region us-east-1.
 Either enable model access for the requested model in your AWS account at
 [Bedrock Model Access](https://us-east-1.console.aws.amazon.com/bedrock/home#/model-access),
 or pass a different `region` to `create_bedrock_mantle_backend`.
+
+## Vision support
+
+Bedrock models accessed via the Mantle endpoint use the `OpenAIBackend` under the hood,
+so vision-capable models (e.g., `amazon.nova-pro-v1:0`) support image input via
+`images=[...]`. Pass a PIL image or an [`ImageBlock`](../guide/glossary#imageblock) to
+`instruct()` or `chat()`. See [Use Images and Vision Models](../how-to/use-images-and-vision.md).
 
 ---
 

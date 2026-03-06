@@ -27,7 +27,7 @@ Obtain these from the IBM Cloud console:
 
 ## Connecting
 
-The quickest path is `start_session()` with `backend_name="watsonx"`:
+The quickest path is [`start_session()`](../guide/glossary#melleasession) with `backend_name="watsonx"`:
 
 ```python
 from mellea import start_session
@@ -41,7 +41,7 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-Or construct the backend directly for full control:
+Or construct the [`Backend`](../guide/glossary#backend) directly for full control:
 
 ```python
 from mellea import MelleaSession
@@ -99,6 +99,12 @@ installed by default:
 ```bash
 pip install 'mellea[watsonx]'
 ```
+
+## Vision support
+
+> **Note:** `WatsonxAIBackend` does not currently support image input. Passing
+> `images=[...]` to `instruct()` or `chat()` will raise an error. Use the
+> [OpenAI backend](./openai.md) or [Ollama](./ollama.md) for vision tasks.
 
 ---
 

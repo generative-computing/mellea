@@ -150,6 +150,20 @@ See: [Backends and Configuration](./backends-and-configuration.md)
 
 ---
 
+## ImageBlock
+
+A Mellea type that represents an image in a backend-agnostic, encoded form. Use
+`ImageBlock.from_pil_image(pil_image)` to convert a [Pillow](https://python-pillow.org/)
+`Image` object into an `ImageBlock`. Both raw PIL images and `ImageBlock` objects are
+accepted in the `images=[...]` parameter of `instruct()` and `chat()`.
+
+Use `ImageBlock` when you need an already-encoded representation, or when the PIL image
+is not directly available (e.g., passing between functions or caching).
+
+See: [Use Images and Vision Models](../how-to/use-images-and-vision.md)
+
+---
+
 ## Intrinsic
 
 An `Intrinsic` is a backend-level primitive in Mellea — a structured generation
