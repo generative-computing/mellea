@@ -62,9 +62,6 @@ async def test_generate_from_raw(session) -> None:
 
 
 @pytest.mark.qualitative
-@pytest.mark.xfail(
-    reason="litellm has a bug with watsonx; once that is fixed, this should pass."
-)
 async def test_multiple_async_funcs(session) -> None:
     """If this test passes, remove the _has_potential_event_loop_errors func from litellm."""
     session.chat(

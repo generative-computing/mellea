@@ -244,7 +244,7 @@ markers = [
     "requires_gpu: Tests requiring GPU",
     "requires_heavy_ram: Tests requiring 48GB+ RAM",
     "qualitative: Non-deterministic quality tests",
-    "slow: Tests taking >5 minutes (e.g., dataset loading)",
+    "slow: Tests taking >1 minute (e.g., multi-step pipelines like researcher)",
 
     # Composite markers
     "llm: Tests that make LLM calls (needs at least Ollama)",

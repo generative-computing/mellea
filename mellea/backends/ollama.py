@@ -470,6 +470,10 @@ class OllamaModelBackend(FormatterBackend):
             result = None
             error = None
             if isinstance(response, BaseException):
+                FancyLogger.get_logger().warning(
+                    f"generate_from_raw: request {i} failed with "
+                    f"{type(response).__name__}: {response}"
+                )
                 result = ModelOutputThunk(value="")
                 error = response
             else:
