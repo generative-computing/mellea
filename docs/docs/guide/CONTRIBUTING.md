@@ -159,7 +159,34 @@ Verify before merge: relative links resolve, absolute URLs return HTTP 200.
 
 ## Glossary and terminology
 
-`glossary.md` defines all Mellea-specific terms. Cross-link on **first use only** of complex terms — not every occurrence. Use canonical terms from the glossary; never invent synonyms. Add new terms to `glossary.md` as you write each page.
+`glossary.md` defines all Mellea-specific terms. Use canonical terms from the glossary; never invent synonyms. Add new terms to `glossary.md` as you write each page.
+
+**Linking rule:** Cross-link to the glossary on **first use only** of a term on each page — not every occurrence. Use anchor links, e.g. `[`MelleaSession`](../guide/glossary#melleasession)`.
+
+Terms that **must** be linked on first use wherever they appear in guide pages (getting-started, tutorials, concepts, how-to, integrations, advanced):
+
+| Term | Anchor |
+| ---- | ------ |
+| `@generative` / generative function | `#generative` |
+| `MelleaSession` / `start_session()` | `#melleasession` |
+| `ModelOutputThunk` | `#modeloutputthunk` |
+| `SamplingResult` | `#samplingresult` |
+| `SimpleContext` / `ChatContext` | `#context` |
+| `Component` | `#component` |
+| `Backend` | `#backend` |
+| `Requirement` / `req()` / `check()` | `#requirement` |
+| IVR / Instruct–Validate–Repair | `#ivr-instruct-validate-repair` |
+| Sampling strategy / `RejectionSamplingStrategy` etc. | `#sampling-strategy` |
+| `ModelOption` | `#modeloption` |
+| `MObject` / `@mify` | `#mobject` / `#mify--mify` |
+| `aLoRA` | `#alora-activated-lora` |
+| `ReAct` | `#react` |
+| `RichDocument` | `#richdocument` |
+| `LiteLLM` / `LiteLLMBackend` | `#litellm--litellmbackend` |
+| `GuardianCheck` / `GuardianRisk` | `#guardiancheck` |
+| `m decompose` | `#m-decompose` |
+
+Linking within the **glossary page itself** is not required (the glossary is the definition source).
 
 ---
 
@@ -315,6 +342,7 @@ markdownlint docs/docs/guide/your-page.md
 - [ ] US English throughout, including code comments.
 - [ ] `markdownlint` passes with zero warnings.
 - [ ] New glossary terms added to `glossary.md`.
+- [ ] Mellea-specific terms linked to `glossary.md` on first use (see "Glossary and terminology" section).
 - [ ] Navigation footer present (Next + See also).
 - [ ] `docs.json` updated if new page added; old MDX page removed from nav if replaced.
 - [ ] Previewed locally with `mint dev`.

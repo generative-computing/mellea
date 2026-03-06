@@ -24,14 +24,14 @@ print(str(email))
 ```
 
 Three lines: create a session, instruct, print. The `instruct()` call returns a
-`ModelOutputThunk`; call `str()` on it (or access `.value`) to get the string.
+[`ModelOutputThunk`](../guide/glossary#modeloutputthunk); call `str()` on it (or access `.value`) to get the string.
 
 > **Full example:** [`docs/examples/tutorial/simple_email.py`](../../examples/tutorial/simple_email.py)
 
 ## User variables
 
 Embed dynamic values in instructions using `{{double_braces}}`. The description is
-treated as a Jinja2 template:
+treated as a [Jinja2](https://jinja.palletsprojects.com/) template:
 
 ```python
 import mellea
@@ -83,18 +83,18 @@ over loop budget, custom validators, and the full `instruct()` API.
 
 ## Core concepts
 
-**Sessions** — `MelleaSession` is the main entry point. `start_session()` creates one
-with defaults: Ollama backend, Granite 4 Micro, `SimpleContext` (single-turn).
+**Sessions** — [`MelleaSession`](../guide/glossary#melleasession) is the main entry point. `start_session()` creates one
+with defaults: Ollama backend, Granite 4 Micro, [`SimpleContext`](../guide/glossary#context) (single-turn).
 
 **Instructions** — `instruct()` builds a structured `Instruction` component, not a
 raw chat message. It supports a description, requirements, user variables, grounding
 context, and few-shot examples.
 
-**Contexts** — `SimpleContext` holds a single turn. `ChatContext` accumulates turns for
+**Contexts** — `SimpleContext` holds a single turn. [`ChatContext`](../guide/glossary#context) accumulates turns for
 multi-turn conversations. Pass `ctx=ChatContext()` to `start_session()` for stateful
 chat.
 
-**Backends** — Pluggable model providers. Ollama is the default. OpenAI, LiteLLM,
+**Backends** — Pluggable model providers. Ollama is the default. OpenAI, [LiteLLM](../guide/glossary#litellm--litellmbackend),
 HuggingFace, and WatsonX are also supported. See
 [Backends and Configuration](../guide/backends-and-configuration.md).
 

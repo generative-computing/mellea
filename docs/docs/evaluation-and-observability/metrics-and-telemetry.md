@@ -192,5 +192,5 @@ Application spans add Mellea-specific attributes:
 
 ---
 
-**Previous:** [MCP and m serve](../integrations/mcp-and-m-serve.md) |
+**Previous:** [m serve](../integrations/m-serve.md) |
 **Next:** [Handling Exceptions and Failures](./handling-exceptions.md)

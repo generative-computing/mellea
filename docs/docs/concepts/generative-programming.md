@@ -6,7 +6,7 @@ description: "The ideas behind Mellea — what generative programs are, why they
 
 # Generative Programming
 
-A _generative program_ is any program that contains calls to an LLM. This covers
+A [_generative program_](../guide/glossary#generative-program) is any program that contains calls to an LLM. This covers
 everything from a simple prompt wrapper to a complex multi-step reasoning system.
 The term is deliberately broad: what matters is not how many LLM calls a program
 makes, but the structural challenges that arise when you combine stochastic LLM
@@ -34,7 +34,7 @@ unchecked through the system.
 
 ## Requirements as the core tool
 
-The primary mechanism Mellea provides for managing stochasticity is _requirements_.
+The primary mechanism Mellea provides for managing stochasticity is [_requirements_](../guide/glossary#requirement).
 A requirement is a validation function that checks whether an LLM output meets a
 specified criterion:
 
@@ -53,7 +53,7 @@ result = m.instruct(
 ```
 
 When the model's output fails a requirement, Mellea can retry the generation with
-feedback — the _Instruct–Validate–Repair_ (IVR) loop. This transforms a
+feedback — the [_Instruct–Validate–Repair_ (IVR)](../guide/glossary#ivr-instruct-validate-repair) loop. This transforms a
 probabilistically unreliable call into one with measurable, controllable reliability:
 set a `loop_budget` and the probability of the output satisfying your requirements
 approaches 1 as budget increases.
@@ -68,7 +68,7 @@ Not all requirements can be checked cheaply. A constraint like "this JSON is
 syntactically valid" can be verified in microseconds; a constraint like "this
 answer is grounded in the provided context" may require a second model call.
 
-Mellea's sampling strategies control how retries work:
+Mellea's [sampling strategies](../guide/glossary#sampling-strategy) control how retries work:
 
 - **`RejectionSamplingStrategy`** — retry until a requirement passes or the budget
   is exhausted. The simplest strategy; good for cheap validators.
@@ -102,10 +102,10 @@ large enough to exceed model limits or degrade output quality.
 
 Mellea addresses this through explicit context management:
 
-- **`SimpleContext`** (default) resets history on each call. The model sees only
+- **[`SimpleContext`](../guide/glossary#context)** (default) resets history on each call. The model sees only
   the current instruction. This is usually the right choice for independent calls.
-- **`ChatContext`** preserves history for multi-turn conversations.
-- **Components** (`@mify`, `@generative`) encapsulate the context needed for a
+- **[`ChatContext`](../guide/glossary#context)** preserves history for multi-turn conversations.
+- **[Components](../guide/glossary#component)** ([`@mify`](../guide/glossary#mify--mify), [`@generative`](../guide/glossary#generative)) encapsulate the context needed for a
   single call, keeping context management compositional rather than global.
 
 ## Mellea's position in the ecosystem
