@@ -41,7 +41,7 @@ from mellea.core import Context
 from mellea.backends import Backend
 from mellea.stdlib.components.simple import SimpleComponent
 from mellea.backends.adapters import AdapterMixin
-from mellea.backends.adapters.adapter import CustomGraniteCommonAdapter
+from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
 from mellea.stdlib.components.intrinsic import Intrinsic
 
 
@@ -49,7 +49,7 @@ _INTRINSIC_MODEL_ID = "{{ userid }}/{{ intrinsic_name }}"
 _INTRINSIC_ADAPTER_NAME = "{{ intrinsic_name }}"
 
 
-class {{ intrinsic_name_camelcase }}Adapter(CustomGraniteCommonAdapter):
+class {{ intrinsic_name_camelcase }}Adapter(CustomIntrinsicAdapter):
     def __init__(self, base_model_name: str):
         super().__init__(
             model_id=_INTRINSIC_MODEL_ID,

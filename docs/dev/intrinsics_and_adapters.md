@@ -1,5 +1,5 @@
 # Intrinsics and Adapters
-Note: Mellea currently only supports GraniteCommonAdapters and Intrinsics.
+Note: Mellea currently only supports IntrinsicAdapters and Intrinsics.
 
 ## Basics
 In Mellea, intrinsics are a type of Component that signals one or more of the following to a backend:
@@ -24,7 +24,7 @@ Adapters specify:
 - functions for getting a path to load them
 
 ## Using Intrinsics
-Mellea Intrinsics currently utilize the granite-common package for loading adapters and formatting input/outputs (https://github.com/ibm-granite/granite-common). This means Mellea only allows intrinsics/adapters that follow this pattern.
+Mellea Intrinsics currently use the routines under `mellea.formatters.granite` for loading adapters and formatting input/outputs. This means Mellea only allows intrinsics/adapters that follow this pattern.
 
 ## Needed Future Work
 ### Custom Adapters / Intrinsics

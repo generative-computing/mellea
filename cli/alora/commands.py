@@ -47,11 +47,13 @@ def alora_upload(
     ),
     intrinsic: bool = typer.Option(
         default=False,
-        help="Formats model upload using granite-intrinsic. An io.yaml file must be provided.",
+        help="True if the uploaded adapter implements an intrinsic. "
+        "If true, the caller must provide an io.yaml file.",
     ),
     io_yaml: str = typer.Option(
         default=None,
-        help="Location of a granite-common io.yaml file. See https://nfulton.org/blog/alora_io_yaml.html",
+        help="Location of the io.yaml file that configures input and output "
+        "processing if the model is invoked as an intrinsic.",
     ),
 ):
     """Upload trained adapter to remote model registry."""
@@ -99,7 +101,8 @@ def alora_add_readme(
     ),
     io_yaml: str = typer.Option(
         default=None,
-        help="Location of a granite-common io.yaml file. See https://nfulton.org/blog/alora_io_yaml.html",
+        help="Location of the io.yaml file that configures input and output "
+        "processing if the model is invoked as an intrinsic.",
     ),
 ):
     """Generate and upload an INTRINSIC_README.md for a trained adapter."""
