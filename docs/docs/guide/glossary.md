@@ -254,8 +254,18 @@ See: [Configure Model Options](../how-to/configure-model-options.md)
 ## ModelOutputThunk
 
 The return type of `m.instruct()`, `m.act()`, and most session-level generative
-calls. Access the result via `.value` (returns the typed output) or `str(thunk)`.
-The value is evaluated lazily — not computed until first accessed.
+calls. It wraps the model's raw output and an optional parsed representation typed
+to your output schema (accessible via `.result`).
+
+The value is computed lazily — the underlying inference call may not have completed
+when the thunk is returned. Accessing `.value` blocks until the result is ready.
+For async code, use `await thunk.avalue()` to await completion, or
+`await thunk.astream()` to consume output chunk by chunk as it arrives.
+
+You can also call `str(thunk)` to get the raw string output directly.
+
+Use `thunk.is_computed()` to check whether the value has already been filled
+without triggering evaluation.
 
 ---
 
