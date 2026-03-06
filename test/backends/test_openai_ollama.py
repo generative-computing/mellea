@@ -104,7 +104,7 @@ def test_format(m_session) -> None:
     output = m_session.instruct(
         "Write a short email to Olivia, thanking her for organizing a sailing activity. Her email server is example.com. No more than two sentences. ",
         format=Email,
-        model_options={ModelOption.MAX_NEW_TOKENS: 2**8},
+        model_options={ModelOption.MAX_NEW_TOKENS: 2**10},
     )
     print("Formatted output:")
     email = Email.model_validate_json(
