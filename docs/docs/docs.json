@@ -290,7 +290,7 @@
       },
       {
         "label": "Contribution Guide",
-        "href": "/guide/CONTRIBUTING"
+        "href": "https://github.com/generative-computing/mellea/blob/main/docs/docs/guide/CONTRIBUTING.md"
       },
       {
         "label": "Support",
@@ -300,5 +300,27 @@
   },
   "search": {
     "prompt": "Search documentation..."
-  }
+  },
+  "feedback": {
+    "thumbsRating": true
+  },
+  "redirects": [
+    { "source": "/overview/overview", "destination": "/getting-started/quickstart" },
+    { "source": "/overview/mellea-welcome", "destination": "/concepts/generative-programming" },
+    { "source": "/overview/generative-programming", "destination": "/concepts/generative-programming" },
+    { "source": "/overview/architecture", "destination": "/guide/backends-and-configuration" },
+    { "source": "/core-concept/instruct-validate-repair", "destination": "/concepts/instruct-validate-repair" },
+    { "source": "/core-concept/requirements", "destination": "/concepts/requirements-system" },
+    { "source": "/core-concept/generative-slots", "destination": "/guide/generative-functions" },
+    { "source": "/core-concept/mobjects", "destination": "/concepts/mobjects-and-mify" },
+    { "source": "/core-concept/agents", "destination": "/guide/tools-and-agents" },
+    { "source": "/core-concept/context-management", "destination": "/how-to/use-context-and-sessions" },
+    { "source": "/core-concept/alora", "destination": "/advanced/lora-and-alora-adapters" },
+    { "source": "/core-concept/tuning", "destination": "/advanced/lora-and-alora-adapters" },
+    { "source": "/core-concept/modeloptions", "destination": "/how-to/configure-model-options" },
+    { "source": "/core-concept/interoperability", "destination": "/integrations/mcp-and-m-serve" },
+    { "source": "/core-concept/adapters", "destination": "/guide/tools-and-agents" },
+    { "source": "/core-concept/contribution-guide", "destination": "/guide/CONTRIBUTING" },
+    { "source": "/core-concept/prompt-engineering", "destination": "/advanced/mellea-core-internals" }
+  ]
 }
