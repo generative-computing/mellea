@@ -367,6 +367,7 @@ call is self-contained.
   into the IVR loop and sampling strategies
 - [The Requirements System](../concepts/requirements-system) — advanced validators,
   preconditions, and debugging
-- [Generative Functions](../guide/generative-functions) — `@generative` in depth
-- [Working with Data](../guide/working-with-data) — passing documents and images
+- [Generative Functions](../concepts/generative-functions) — `@generative` in depth
+- [MObjects and mify](../concepts/mobjects-and-mify) — passing structured data
   into generative programs
+- [Use Images and Vision](../how-to/use-images-and-vision) — multimodal inputs
