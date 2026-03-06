@@ -40,7 +40,8 @@
               "concepts/generative-programming",
               "concepts/instruct-validate-repair",
               "concepts/requirements-system",
-              "concepts/architecture-vs-agents"
+              "concepts/architecture-vs-agents",
+              "concepts/context-and-sessions"
             ]
           },
           {
