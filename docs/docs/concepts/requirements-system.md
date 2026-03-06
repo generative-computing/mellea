@@ -289,4 +289,4 @@ issues in a single repair pass.
 ---
 
 **Previous:** [The Instruction Model](./instruct-validate-repair.md) |
-**Next:** [Generative Functions](../guide/generative-functions.md)
+**Next:** [Mellea vs Orchestration Frameworks](./architecture-vs-agents.md)
