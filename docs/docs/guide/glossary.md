@@ -35,6 +35,30 @@ See: [LoRA and aLoRA Adapters](../advanced/lora-and-alora-adapters.md)
 
 ---
 
+## @generative
+
+A decorator that converts a typed Python function into an AI-powered function.
+`@generative` uses the function's name, docstring, parameters, and return type
+annotation to instruct the LLM. The output is constrained to match the return type.
+Write the function in idiomatic Python — the more natural the signature and
+docstring, the better the model understands and imitates it.
+
+```python
+from mellea import generative, start_session
+
+@generative
+def classify_language(code: str) -> str:
+    """Return the programming language of the code snippet."""
+    ...
+
+m = start_session()
+lang = classify_language(m, code="print('hello')")
+```
+
+See: [Generative Functions](./generative-functions.md)
+
+---
+
 ## Backend
 
 A backend is an inference engine that Mellea uses to run LLM calls. Examples:
@@ -105,6 +129,27 @@ See: [Security and Taint Tracking](../advanced/security-and-taint-tracking.md)
 
 ---
 
+## LiteLLM / LiteLLMBackend
+
+`LiteLLMBackend` wraps [LiteLLM](https://docs.litellm.ai/) — a unified interface
+over 100+ model providers. Use it to reach providers not covered by Mellea's
+native backends: Bedrock via IAM, Vertex AI, Together AI, Cohere, and others.
+
+```bash
+pip install 'mellea[litellm]'
+```
+
+```python
+m = mellea.start_session(
+    backend_name="litellm",
+    model_id="bedrock/converse/us.amazon.nova-pro-v1:0",
+)
+```
+
+See: [Backends and Configuration](./backends-and-configuration.md)
+
+---
+
 ## Intrinsic
 
 An `Intrinsic` is a backend-level primitive in Mellea — a structured generation
@@ -125,6 +170,22 @@ A core generative programming pattern in Mellea:
 3. **Repair** — if validation fails, retry or fix the output.
 
 See: [Instruct, Validate, Repair](../concepts/instruct-validate-repair.md)
+
+---
+
+## m decompose
+
+`m decompose` is a CLI tool that takes a complex task description and uses an LLM
+to break it into ordered subtasks, extract constraints, and generate a ready-to-run
+Python script.
+
+```bash
+m decompose run --prompt-file task.txt --out-dir ./output/
+```
+
+The output includes a JSON breakdown of subtasks and a `result.py` you can run
+immediately. Also available programmatically via
+`cli.decompose.pipeline.decompose()`.
 
 ---
 
@@ -184,6 +245,22 @@ The value is evaluated lazily — not computed until first accessed.
 
 ---
 
+## ReAct
+
+**Reason + Act** — a goal-driven agentic loop where the LLM alternates between
+reasoning about the next step and calling a tool, repeating until the goal is
+achieved. Mellea provides `mellea.stdlib.frameworks.react.react()` as a built-in
+async implementation:
+
+```python
+from mellea.stdlib.frameworks.react import react
+result, _ = await react(goal="...", context=ChatContext(), backend=m.backend, tools=[...])
+```
+
+See: [Tools and Agents](./tools-and-agents.md)
+
+---
+
 ## Requirement
 
 A `Requirement` is a validation constraint applied to a generative function's
@@ -191,6 +268,20 @@ output. Requirements can be programmatic (lambda, regex, type check) or generati
 (another LLM call). Used in the IVR pattern.
 
 See: [Requirements System](../concepts/requirements-system.md)
+
+---
+
+## RichDocument
+
+A `RichDocument` wraps a [Docling](https://ds4sd.github.io/docling/) parsed document
+to make PDFs, tables, and structured files queryable by the LLM. Extract tables as
+`Table` objects and pass them directly to `m.transform()` or `m.query()`.
+
+```bash
+pip install 'mellea[docling]'
+```
+
+See: [Working with Data](./working-with-data.md)
 
 ---
 

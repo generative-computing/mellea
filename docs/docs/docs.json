@@ -53,7 +53,8 @@
               "guide/tools-and-agents",
               "guide/working-with-data",
               "guide/backends-and-configuration",
-              "guide/act-and-aact"
+              "guide/act-and-aact",
+              "guide/m-decompose"
             ]
           },
           {
