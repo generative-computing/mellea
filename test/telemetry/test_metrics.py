@@ -25,7 +25,10 @@ def clean_metrics_env(monkeypatch):
     """Clean metrics environment variables before each test."""
     monkeypatch.delenv("MELLEA_METRICS_ENABLED", raising=False)
     monkeypatch.delenv("MELLEA_METRICS_CONSOLE", raising=False)
+    monkeypatch.delenv("MELLEA_METRICS_OTLP", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", raising=False)
+    monkeypatch.delenv("MELLEA_METRICS_EXPORT_INTERVAL", raising=False)
     monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
     # Force reload of metrics module to pick up env vars
     import importlib
@@ -374,6 +377,92 @@ def test_console_exporter_disabled_by_default(enable_metrics):
     from mellea.telemetry.metrics import _METRICS_CONSOLE
 
     assert _METRICS_CONSOLE is False
+
+
+# OTLP Exporter Tests
+
+
+def test_otlp_explicit_enablement(monkeypatch):
+    """Test that OTLP exporter requires explicit enablement via MELLEA_METRICS_OTLP."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_METRICS_OTLP", "true")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+
+    import importlib
+
+    import mellea.telemetry.metrics
+
+    importlib.reload(mellea.telemetry.metrics)
+
+    from mellea.telemetry.metrics import _METRICS_OTLP
+
+    assert _METRICS_OTLP is True
+
+
+def test_metrics_specific_endpoint_precedence(monkeypatch):
+    """Test that OTEL_EXPORTER_OTLP_METRICS_ENDPOINT takes precedence over general endpoint."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "http://localhost:4318")
+
+    import importlib
+
+    import mellea.telemetry.metrics
+
+    importlib.reload(mellea.telemetry.metrics)
+
+    from mellea.telemetry.metrics import _OTLP_METRICS_ENDPOINT
+
+    assert _OTLP_METRICS_ENDPOINT == "http://localhost:4318"
+
+
+def test_custom_export_interval(monkeypatch):
+    """Test that custom export interval is configured correctly."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_METRICS_EXPORT_INTERVAL", "30")
+
+    import importlib
+
+    import mellea.telemetry.metrics
+
+    importlib.reload(mellea.telemetry.metrics)
+
+    from mellea.telemetry.metrics import _EXPORT_INTERVAL_SECONDS
+
+    assert _EXPORT_INTERVAL_SECONDS == 30
+
+
+def test_invalid_export_interval_warning(monkeypatch):
+    """Test that invalid export interval produces warning and uses default."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_METRICS_EXPORT_INTERVAL", "invalid")
+
+    import importlib
+
+    import mellea.telemetry.metrics
+
+    with pytest.warns(UserWarning, match="Invalid MELLEA_METRICS_EXPORT_INTERVAL"):
+        importlib.reload(mellea.telemetry.metrics)
+
+    from mellea.telemetry.metrics import _EXPORT_INTERVAL_SECONDS
+
+    assert _EXPORT_INTERVAL_SECONDS == 60
+
+
+def test_otlp_enabled_without_endpoint_warning(monkeypatch):
+    """Test that enabling OTLP without endpoint produces helpful warning."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_METRICS_OTLP", "true")
+
+    import importlib
+
+    import mellea.telemetry.metrics
+
+    with pytest.warns(
+        UserWarning,
+        match="OTLP metrics exporter is enabled.*but no endpoint is configured",
+    ):
+        importlib.reload(mellea.telemetry.metrics)
 
 
 # Token Counter Tests
