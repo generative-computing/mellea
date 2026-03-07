@@ -25,6 +25,7 @@ uv run pytest                         # Default: qualitative tests, skip slow te
 uv run pytest -m "not qualitative"    # Fast tests only (~2 min)
 uv run pytest -m slow                 # Run only slow tests (>5 min)
 uv run pytest --co -q                 # Run ALL tests including slow (bypass config)
+uv run pytest --isolate-heavy         # Enable GPU process isolation (opt-in)
 uv run ruff format .                  # Format code
 uv run ruff check .                   # Lint code
 uv run mypy .                         # Type check
@@ -63,6 +64,9 @@ All tests and examples use markers to indicate requirements. The test infrastruc
 - `@pytest.mark.qualitative` — LLM output quality tests (skipped in CI via `CICD=1`)
 - `@pytest.mark.llm` — Makes LLM calls (needs at least Ollama)
 - `@pytest.mark.slow` — Tests taking >5 minutes (skipped via `SKIP_SLOW=1`)
+
+**Execution Strategy Markers:**
+- `@pytest.mark.requires_gpu_isolation` — Requires OS-level process isolation to clear CUDA memory (use with `--isolate-heavy` or `CICD=1`)
 
 **Examples in `docs/examples/`** use comment-based markers for clean code:
 ```python

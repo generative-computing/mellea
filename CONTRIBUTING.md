@@ -293,6 +293,9 @@ Tests are categorized using pytest markers:
 - `@pytest.mark.llm` - Makes LLM calls (needs at least Ollama)
 - `@pytest.mark.slow` - Tests taking >5 minutes (skipped via `SKIP_SLOW=1`)
 
+**Execution Strategy Markers:**
+- `@pytest.mark.requires_gpu_isolation` - Requires OS-level process isolation to clear CUDA memory (use with `--isolate-heavy` or `CICD=1`)
+
 **Default behavior:**
 - `uv run pytest` skips slow tests (>5 min) but runs qualitative tests
 - Use `pytest -m "not qualitative"` for fast tests only (~2 min)

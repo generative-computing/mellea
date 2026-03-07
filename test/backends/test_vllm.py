@@ -11,6 +11,7 @@ pytestmark = [
     pytest.mark.llm,
     pytest.mark.requires_gpu,
     pytest.mark.requires_heavy_ram,
+    pytest.mark.requires_gpu_isolation,  # Activate GPU memory isolation
     # Skip entire module in CI since all 8 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
