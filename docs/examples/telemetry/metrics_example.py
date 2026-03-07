@@ -1,21 +1,42 @@
 # pytest: ollama, llm
 
-"""Example demonstrating OpenTelemetry metrics in Mellea.
+"""Example demonstrating OpenTelemetry metrics exporters in Mellea.
 
-This example shows how to use token usage metrics to track LLM consumption.
+This example shows how to use token usage metrics with different exporters:
+- Console: Print metrics to console for debugging
+- OTLP: Export to OpenTelemetry Protocol collectors
+- Prometheus: Expose HTTP endpoint for Prometheus scraping
 
 Run with different configurations:
 
-# Enable metrics with console output (simplest)
+# 1. Console exporter (simplest - for debugging)
 export MELLEA_METRICS_ENABLED=true
 export MELLEA_METRICS_CONSOLE=true
 python metrics_example.py
 
-# Enable metrics with OTLP export (requires OTLP collector)
+# 2. OTLP exporter (production observability)
 export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_OTLP=true
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 export OTEL_SERVICE_NAME=mellea-metrics-example
 python metrics_example.py
+
+# 3. Prometheus exporter (Prometheus monitoring)
+export MELLEA_METRICS_ENABLED=true
+export OTEL_EXPORTER_PROMETHEUS_PORT=9464
+python metrics_example.py
+# Then access metrics at: curl http://localhost:9464/metrics
+
+# 4. Multiple exporters simultaneously
+export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_CONSOLE=true
+export MELLEA_METRICS_OTLP=true
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export OTEL_EXPORTER_PROMETHEUS_PORT=9464
+python metrics_example.py
+
+# For OTLP Collector and Prometheus setup instructions, see:
+# docs/dev/telemetry.md
 """
 
 from mellea import generative, start_session

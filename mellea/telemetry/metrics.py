@@ -1,22 +1,57 @@
 """OpenTelemetry metrics instrumentation for Mellea.
 
 Provides metrics collection using OpenTelemetry Metrics API with support for:
-- Counters: Monotonically increasing values (e.g., request counts)
+- Counters: Monotonically increasing values (e.g., request counts, token usage)
 - Histograms: Value distributions (e.g., latency, token counts)
 - UpDownCounters: Values that can increase or decrease (e.g., active sessions)
 
+Metrics Exporters:
+- Console: Print metrics to console for debugging
+- OTLP: Export to OpenTelemetry Protocol collectors (Jaeger, Grafana, etc.)
+- Prometheus: Expose HTTP endpoint for Prometheus scraping
+
 Configuration via environment variables:
+
+General:
 - MELLEA_METRICS_ENABLED: Enable/disable metrics collection (default: false)
-- MELLEA_METRICS_CONSOLE: Print metrics to console for debugging (default: false)
-- MELLEA_METRICS_OTLP: Enable OTLP metrics exporter (default: false)
-- OTEL_EXPORTER_OTLP_ENDPOINT: OTLP endpoint for metric export (optional)
-- OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: OTLP metrics-specific endpoint (optional, overrides OTEL_EXPORTER_OTLP_ENDPOINT)
-- OTEL_EXPORTER_PROMETHEUS_PORT: Port for Prometheus HTTP scrape endpoint (optional, e.g., 9464)
-- OTEL_EXPORTER_PROMETHEUS_HOST: Host/address for Prometheus HTTP server (default: 0.0.0.0)
-- OTEL_METRIC_EXPORT_INTERVAL: Export interval in milliseconds (default: 60000)
 - OTEL_SERVICE_NAME: Service name for metrics (default: mellea)
 
-Example usage:
+Console Exporter (debugging):
+- MELLEA_METRICS_CONSOLE: Print metrics to console (default: false)
+
+OTLP Exporter (production observability):
+- MELLEA_METRICS_OTLP: Enable OTLP metrics exporter (default: false)
+- OTEL_EXPORTER_OTLP_ENDPOINT: OTLP endpoint for all signals (optional)
+- OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: Metrics-specific endpoint (optional, overrides general)
+- OTEL_METRIC_EXPORT_INTERVAL: Export interval in milliseconds (default: 60000)
+
+Prometheus Exporter (Prometheus monitoring):
+- OTEL_EXPORTER_PROMETHEUS_PORT: Port for HTTP scrape endpoint (e.g., 9464)
+- OTEL_EXPORTER_PROMETHEUS_HOST: Host/address for HTTP server (default: 0.0.0.0)
+
+Multiple exporters can be enabled simultaneously.
+
+Example - Console debugging:
+    export MELLEA_METRICS_ENABLED=true
+    export MELLEA_METRICS_CONSOLE=true
+
+Example - OTLP production:
+    export MELLEA_METRICS_ENABLED=true
+    export MELLEA_METRICS_OTLP=true
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+
+Example - Prometheus monitoring:
+    export MELLEA_METRICS_ENABLED=true
+    export OTEL_EXPORTER_PROMETHEUS_PORT=9464
+
+Example - Multiple exporters:
+    export MELLEA_METRICS_ENABLED=true
+    export MELLEA_METRICS_CONSOLE=true
+    export MELLEA_METRICS_OTLP=true
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+    export OTEL_EXPORTER_PROMETHEUS_PORT=9464
+
+Programmatic usage:
     from mellea.telemetry.metrics import create_counter, create_histogram
 
     request_counter = create_counter(

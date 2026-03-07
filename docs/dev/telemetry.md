@@ -26,15 +26,32 @@ Without the `[telemetry]` extra, Mellea works normally but telemetry features ar
 
 Telemetry is configured via environment variables:
 
+#### General Telemetry Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OTEL_SERVICE_NAME` | Service name for all telemetry signals | `mellea` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint for all telemetry signals | None |
+
+#### Tracing Configuration
+
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `MELLEA_TRACE_APPLICATION` | Enable application-level tracing | `false` |
 | `MELLEA_TRACE_BACKEND` | Enable backend-level tracing | `false` |
+| `MELLEA_TRACE_CONSOLE` | Print traces to console (debugging) | `false` |
+
+#### Metrics Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
 | `MELLEA_METRICS_ENABLED` | Enable metrics collection | `false` |
 | `MELLEA_METRICS_CONSOLE` | Print metrics to console (debugging) | `false` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint for trace/metric export | None |
-| `OTEL_SERVICE_NAME` | Service name for traces and metrics | `mellea` |
-| `MELLEA_TRACE_CONSOLE` | Print traces to console (debugging) | `false` |
+| `MELLEA_METRICS_OTLP` | Enable OTLP metrics exporter | `false` |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | OTLP metrics-specific endpoint (overrides general endpoint) | None |
+| `OTEL_EXPORTER_PROMETHEUS_PORT` | Port for Prometheus HTTP scrape endpoint (e.g., `9464`) | None |
+| `OTEL_EXPORTER_PROMETHEUS_HOST` | Host/address for Prometheus HTTP server | `0.0.0.0` |
+| `OTEL_METRIC_EXPORT_INTERVAL` | Export interval in milliseconds | `60000` |
 
 ### Application Trace Scope
 
@@ -149,44 +166,158 @@ await mot.astream()
 await mot.avalue()
 ```
 
-**Export Configuration:**
+#### Metrics Export Configuration
+
+Mellea supports multiple metrics exporters that can be used independently or simultaneously:
+
+1. **Console Exporter** - For local debugging
+2. **OTLP Exporter** - For production observability platforms
+3. **Prometheus Exporter** - For Prometheus-based monitoring
+
+**Important**: If `MELLEA_METRICS_ENABLED=true` but no exporter is configured, you'll see a warning. Metrics will be collected but not exported.
+
+##### Console Exporter (Debugging)
+
+Print metrics to console for local debugging without setting up an observability backend:
 
 ```bash
-# Enable metrics
 export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_CONSOLE=true
+python docs/examples/telemetry/metrics_example.py
+```
 
-# Export to OTLP endpoint (required for production use)
+Metrics are printed as JSON at the configured export interval (default: 60 seconds).
+
+##### OTLP Exporter (Production)
+
+Export metrics to an OTLP collector for production observability platforms (Jaeger, Grafana, Datadog, etc.):
+
+```bash
+# Enable metrics and OTLP exporter
+export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_OTLP=true
+
+# Configure OTLP endpoint
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+
+# Optional: Use metrics-specific endpoint (overrides general endpoint)
+export OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:4318
 
 # Optional: Set service name
 export OTEL_SERVICE_NAME=my-mellea-app
 
-# Optional: Debug mode - print metrics to console
-export MELLEA_METRICS_CONSOLE=true
-```
+# Optional: Adjust export interval (milliseconds, default: 60000)
+export OTEL_METRIC_EXPORT_INTERVAL=30000
 
-**Important**: If `MELLEA_METRICS_ENABLED=true` but no exporter is configured, you'll see a warning. Metrics will be collected but not exported. Set either `OTEL_EXPORTER_OTLP_ENDPOINT` or `MELLEA_METRICS_CONSOLE=true`.
-
-#### Console Output for Debugging
-
-```bash
-export MELLEA_METRICS_ENABLED=true
-export MELLEA_METRICS_CONSOLE=true
 python docs/examples/telemetry/metrics_example.py
 ```
 
-This prints metrics as JSON at the end of execution, useful for local debugging without setting up an observability backend.
-
-#### Export to OTLP Endpoint
+**OTLP Collector Setup Example:**
 
 ```bash
+# Create otel-collector-config.yaml
+cat > otel-collector-config.yaml <<EOF
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:8889
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      exporters: [prometheus, debug]
+EOF
+
+# Start OTLP collector
+docker run -p 4317:4317 -p 8889:8889 \
+  -v $(pwd)/otel-collector-config.yaml:/etc/otelcol/config.yaml \
+  otel/opentelemetry-collector:latest
+```
+
+##### Prometheus Exporter (Prometheus Monitoring)
+
+Expose metrics via HTTP endpoint for Prometheus scraping:
+
+**⚠️ Important**: The Prometheus exporter requires your application to keep running. It's designed for long-running services (web APIs, workers, daemons), not short-lived scripts. For batch jobs or examples, use Console or OTLP exporters instead.
+
+```bash
+# Enable metrics and Prometheus exporter
 export MELLEA_METRICS_ENABLED=true
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export OTEL_EXPORTER_PROMETHEUS_PORT=9464
+
+# Optional: Bind to specific host (default: 0.0.0.0)
+export OTEL_EXPORTER_PROMETHEUS_HOST=localhost
+
+# Optional: Set service name
 export OTEL_SERVICE_NAME=my-mellea-app
+
+# For long-running applications (web servers, APIs, workers)
+python your_long_running_app.py
+```
+
+The Prometheus exporter starts an HTTP server on the specified port. Metrics are available at `http://localhost:9464/metrics` in Prometheus exposition format.
+
+**Verify Prometheus Endpoint:**
+
+```bash
+curl http://localhost:9464/metrics
+```
+
+**Prometheus Server Configuration:**
+
+```yaml
+# prometheus.yml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'mellea'
+    static_configs:
+      - targets: ['localhost:9464']
+```
+
+**Start Prometheus:**
+
+```bash
+docker run -p 9090:9090 \
+  -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml \
+  prom/prometheus
+```
+
+Access Prometheus UI at `http://localhost:9090` and query metrics like `mellea_llm_tokens_input`.
+
+##### Multiple Exporters Simultaneously
+
+You can enable multiple exporters at once for different use cases:
+
+```bash
+# Enable all exporters
+export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_CONSOLE=true          # Debug output
+export MELLEA_METRICS_OTLP=true             # Production observability
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export OTEL_EXPORTER_PROMETHEUS_PORT=9464   # Prometheus monitoring
+
 python docs/examples/telemetry/metrics_example.py
 ```
 
-Metrics are exported to your OTLP collector. Consult your observability platform's documentation for query syntax and visualization.
+This configuration:
+- Prints metrics to console for immediate feedback
+- Exports to OTLP collector for centralized observability
+- Exposes Prometheus endpoint for scraping
+
+**Use Cases:**
+- **Development**: Console + Prometheus for local testing
+- **Production**: OTLP + Prometheus for comprehensive monitoring
+- **Debugging**: Console only for quick verification
 
 #### Programmatic Access
 
@@ -340,6 +471,8 @@ The Gen-AI semantic conventions make it easy to:
 
 ### Troubleshooting
 
+#### Traces
+
 **Traces not appearing:**
 1. Verify environment variables are set correctly
 2. Check that OTLP endpoint is reachable
@@ -356,19 +489,76 @@ The Gen-AI semantic conventions make it easy to:
 2. Check that async operations are properly awaited
 3. Verify backend implementation has instrumentation
 
+#### Metrics
+
+**Metrics not appearing:**
+1. Verify `MELLEA_METRICS_ENABLED=true` is set
+2. Check that at least one exporter is configured (Console, OTLP, or Prometheus)
+3. For OTLP: Verify `MELLEA_METRICS_OTLP=true` and endpoint is reachable
+4. For Prometheus: Verify port is not in use and endpoint responds (`curl http://localhost:PORT/metrics`)
+5. Enable console output (`MELLEA_METRICS_CONSOLE=true`) to verify metrics are being collected
+
+**Missing OpenTelemetry dependency:**
+```
+ImportError: No module named 'opentelemetry'
+```
+Install telemetry dependencies:
+```bash
+pip install mellea[telemetry]
+# or
+uv pip install mellea[telemetry]
+```
+
+**Port already in use:**
+```
+OSError: [Errno 48] Address already in use
+```
+The Prometheus port is already in use. Either:
+1. Stop the process using the port
+2. Choose a different port with `OTEL_EXPORTER_PROMETHEUS_PORT`
+3. Check for other Mellea processes: `lsof -i :9464`
+
+**OTLP connection refused:**
+```
+Failed to export metrics via OTLP
+```
+1. Verify OTLP collector is running: `docker ps | grep otel`
+2. Check endpoint URL is correct (default: `http://localhost:4317`)
+3. Verify network connectivity: `curl http://localhost:4317`
+4. Check collector logs for errors
+
+**Metrics not updating:**
+1. Metrics are exported at intervals (default: 60 seconds). Wait for export cycle.
+2. Reduce export interval for testing: `export OTEL_METRIC_EXPORT_INTERVAL=10000` (10 seconds)
+3. For Prometheus: Metrics update on scrape, not continuously
+4. Verify LLM calls are actually being made and completing successfully
+
+**No exporter configured warning:**
+```
+WARNING: Metrics are enabled but no exporters are configured
+```
+Enable at least one exporter:
+- Console: `export MELLEA_METRICS_CONSOLE=true`
+- OTLP: `export MELLEA_METRICS_OTLP=true` + endpoint
+- Prometheus: `export OTEL_EXPORTER_PROMETHEUS_PORT=9464`
+
 ### Future Enhancements
 
 Planned improvements to telemetry:
 
-**Metrics (in progress):**
+**Metrics:**
 - Latency histograms: Request duration and time-to-first-token (TTFB) for streaming
 - Cost tracking: Automatic cost estimation based on token usage and model pricing
 - Error counters: Categorized by semantic error type (rate limits, timeouts, content policy, etc.)
 - Operational metrics: Sampling attempts, requirement validation outcomes, tool calls
-- Prometheus export: Native Prometheus scrape endpoint
 
 **Tracing:**
 - Sampling rate configuration
 - Custom span attributes via decorators
 - Trace context propagation for distributed systems
 - Integration with LangSmith and other LLM observability tools
+
+**Logging:**
+- Structured logging with OpenTelemetry Logs API
+- Log correlation with traces and metrics
+- Log export to OTLP collectors
