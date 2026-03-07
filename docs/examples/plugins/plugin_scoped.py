@@ -5,10 +5,10 @@
 # Three forms of scoped activation are shown:
 #
 #   1. plugin_scope(*items)  — the universal scope; accepts standalone hooks,
-#                              @plugin instances, PluginSets, or any mix
-#   2. with <@plugin instance>  — class-based plugin used directly as a context
-#                                 manager (equivalent to plugin_scope for one item)
-#   3. with <PluginSet>         — a named group used directly as a context manager
+#                              Plugin instances, PluginSets, or any mix
+#   2. with <Plugin instance>  — Plugin subclass used directly as a context
+#                                manager (equivalent to plugin_scope for one item)
+#   3. with <PluginSet>        — a named group used directly as a context manager
 #
 # All three guarantee that the plugins are registered on __enter__ and
 # deregistered on __exit__, even if the block raises an exception.
@@ -22,11 +22,11 @@ import sys
 from mellea import start_session
 from mellea.plugins import (
     HookType,
+    Plugin,
     PluginMode,
     PluginSet,
     PluginViolationError,
     hook,
-    plugin,
     plugin_scope,
 )
 
@@ -62,8 +62,7 @@ async def log_response(payload, ctx):
     )
 
 
-@plugin("content-guard", priority=5)
-class ContentGuard:
+class ContentGuard(Plugin, name="content-guard", priority=5):
     """Blocks instructions that mention restricted topics."""
 
     BLOCKED = ["financial advice", "medical diagnosis"]
@@ -112,7 +111,7 @@ if __name__ == "__main__":
     with start_session() as m:
         # -------------------------------------------------------------------
         # 1. plugin_scope — the universal scoped activation
-        #    Accepts standalone @hook functions, @plugin instances, PluginSets,
+        #    Accepts standalone @hook functions, Plugin instances, PluginSets,
         #    or any mix.  Nothing fires outside the block.
         # -------------------------------------------------------------------
         log.info("=== 1. plugin_scope ===")
@@ -128,10 +127,10 @@ if __name__ == "__main__":
         log.info("")
 
         # -------------------------------------------------------------------
-        # 2. @plugin instance as context manager
-        #    A single @plugin-decorated class instance can be entered directly.
+        # 2. Plugin instance as context manager
+        #    A single Plugin subclass instance can be entered directly.
         # -------------------------------------------------------------------
-        log.info("=== 2. @plugin instance as context manager ===")
+        log.info("=== 2. Plugin instance as context manager ===")
 
         guard = ContentGuard()
         with guard:

@@ -25,7 +25,7 @@ class PluginSet:
             result, ctx = await ainstruct("Generate code", ctx, backend)
     """
 
-    def __init__(
+    def __init__(  # noqa: D107
         self,
         name: str,
         items: list[Callable | Any | PluginSet],
@@ -79,5 +79,5 @@ class PluginSet:
         """Async variant — delegates to the synchronous ``__exit__``."""
         self.__exit__(exc_type, exc_val, exc_tb)
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> str:  # noqa: D105
         return f"PluginSet({self.name!r}, {len(self.items)} items)"

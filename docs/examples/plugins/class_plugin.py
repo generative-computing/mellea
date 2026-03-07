@@ -1,6 +1,6 @@
 # pytest: ollama, llm
 #
-# Class-based plugin — group related hooks in a single class with @plugin.
+# Class-based plugin — group related hooks in a single Plugin subclass.
 #
 # This example creates a PII redaction plugin that:
 #   1. Scans input descriptions for SSN patterns before component creation
@@ -16,10 +16,10 @@ import sys
 from mellea import start_session
 from mellea.plugins import (
     HookType,
+    Plugin,
     PluginResult,
     PluginViolationError,
     hook,
-    plugin,
     register,
 )
 
@@ -33,8 +33,7 @@ logging.getLogger("fancy_logger").setLevel(logging.ERROR)
 log = logging.getLogger("class_plugin")
 
 
-@plugin("pii-redactor", priority=5)
-class PIIRedactor:
+class PIIRedactor(Plugin, name="pii-redactor", priority=5):
     """Redacts PII patterns from both input and output.
 
     .. warning:: Shared mutable state
@@ -96,7 +95,7 @@ redactor = PIIRedactor()
 register(redactor)
 
 if __name__ == "__main__":
-    log.info("--- Class-based @plugin example (PII Redactor) ---")
+    log.info("--- Class-based Plugin example (PII Redactor) ---")
     log.info("")
 
     with start_session() as m:

@@ -4,7 +4,7 @@ Priority rules (actual framework behavior)
 --------------------------------------------
 - Lower priority numbers execute FIRST (priority=1 runs before priority=50 before priority=100).
 - Default priority is 50 when not specified on @hook.
-- @plugin class-level priority GOVERNS all methods; @hook(priority=N) on a method is NOT used.
+- Plugin class-level priority GOVERNS all methods; @hook(priority=N) on a method is NOT used.
 - PluginSet.priority OVERRIDES the priority of all items in the set, including items with
   explicit @hook priorities.
 """
@@ -15,7 +15,7 @@ import pytest
 
 pytest.importorskip("cpex.framework")
 
-from mellea.plugins import PluginSet, hook, plugin, register
+from mellea.plugins import Plugin, PluginSet, hook, register
 from mellea.plugins.hooks.session import SessionPreInitPayload
 from mellea.plugins.manager import invoke_hook, shutdown_plugins
 from mellea.plugins.types import HookType
@@ -52,7 +52,7 @@ class TestPriorityOrdering:
     """Lower numeric priority values run first."""
 
     @pytest.mark.asyncio
-    async def test_three_hooks_fire_in_ascending_priority_order(self):
+    async def test_three_hooks_fire_in_ascending_priority_order(self) -> None:
         """Hooks at priorities 30, 10, 50 execute in order [10, 30, 50]."""
         execution_order: list[int] = []
 
@@ -80,7 +80,7 @@ class TestPriorityOrdering:
         assert execution_order == [10, 30, 50]
 
     @pytest.mark.asyncio
-    async def test_two_hooks_at_same_priority_both_fire(self):
+    async def test_two_hooks_at_same_priority_both_fire(self) -> None:
         """Two hooks at the same priority both execute (order unspecified)."""
         fired: set[str] = set()
 
@@ -102,7 +102,9 @@ class TestPriorityOrdering:
         assert fired == {"a", "b"}
 
     @pytest.mark.asyncio
-    async def test_default_priority_50_fires_after_priority_1_before_priority_100(self):
+    async def test_default_priority_50_fires_after_priority_1_before_priority_100(
+        self,
+    ) -> None:
         """Default priority (50) fires after priority=1 and before priority=100."""
         execution_order: list[str] = []
 
@@ -135,7 +137,7 @@ class TestPriorityOrdering:
         )
 
     @pytest.mark.asyncio
-    async def test_priority_ordering_is_independent_of_registration_order(self):
+    async def test_priority_ordering_is_independent_of_registration_order(self) -> None:
         """Execution order is determined by priority, not the order hooks are registered."""
         execution_order: list[str] = []
 
@@ -160,7 +162,7 @@ class TestPriorityOrdering:
         assert execution_order == ["10", "90"]
 
     @pytest.mark.asyncio
-    async def test_five_hooks_fire_in_strict_ascending_order(self):
+    async def test_five_hooks_fire_in_strict_ascending_order(self) -> None:
         """Five hooks with distinct priorities fire in fully sorted order."""
         execution_order: list[int] = []
 
@@ -210,12 +212,11 @@ class TestPriorityInheritance:
     @pytest.mark.asyncio
     async def test_plugin_class_priority_applies_to_method_without_explicit_priority(
         self,
-    ):
+    ) -> None:
         """A @plugin with priority=5 makes its @hook method fire before a default-priority hook."""
         execution_order: list[str] = []
 
-        @plugin("high-priority-class-plugin", priority=5)
-        class EarlyPlugin:
+        class EarlyPlugin(Plugin, name="high-priority-class-plugin", priority=5):
             @hook(
                 "session_pre_init"
             )  # no explicit priority — inherits class priority=5
@@ -240,7 +241,7 @@ class TestPriorityInheritance:
     @pytest.mark.asyncio
     async def test_hook_decorator_priority_does_not_override_plugin_class_priority(
         self,
-    ):
+    ) -> None:
         """@hook(priority=80) on a method does NOT override @plugin(priority=5) on the class.
 
         The @plugin class-level priority takes precedence over any method-level @hook priority.
@@ -249,8 +250,9 @@ class TestPriorityInheritance:
         """
         execution_order: list[str] = []
 
-        @plugin("low-effective-priority-plugin", priority=5)
-        class PluginWithOverriddenPriority:
+        class PluginWithOverriddenPriority(
+            Plugin, name="low-effective-priority-plugin", priority=5
+        ):
             @hook(
                 "session_pre_init", priority=80
             )  # @hook priority is ignored; class priority=5 wins
@@ -274,19 +276,19 @@ class TestPriorityInheritance:
         )
 
     @pytest.mark.asyncio
-    async def test_class_plugin_priority_lower_number_fires_before_higher_number(self):
+    async def test_class_plugin_priority_lower_number_fires_before_higher_number(
+        self,
+    ) -> None:
         """Two @plugin classes with different priorities fire in the correct order."""
         execution_order: list[str] = []
 
-        @plugin("plugin-priority-3", priority=3)
-        class FirstPlugin:
+        class FirstPlugin(Plugin, name="plugin-priority-3", priority=3):
             @hook("session_pre_init")
             async def on_pre_init(self, payload, ctx):
                 execution_order.append("plugin_p3")
                 return None
 
-        @plugin("plugin-priority-99", priority=99)
-        class SecondPlugin:
+        class SecondPlugin(Plugin, name="plugin-priority-99", priority=99):
             @hook("session_pre_init")
             async def on_pre_init(self, payload, ctx):
                 execution_order.append("plugin_p99")
@@ -300,7 +302,9 @@ class TestPriorityInheritance:
         assert execution_order == ["plugin_p3", "plugin_p99"]
 
     @pytest.mark.asyncio
-    async def test_class_priority_governs_when_method_has_explicit_hook_priority(self):
+    async def test_class_priority_governs_when_method_has_explicit_hook_priority(
+        self,
+    ) -> None:
         """Class priority governs execution order even when methods have explicit @hook priorities.
 
         @plugin(priority=1) fires before @plugin(priority=100) regardless of any
@@ -308,8 +312,9 @@ class TestPriorityInheritance:
         """
         execution_order: list[str] = []
 
-        @plugin("multi-method-plugin-low-class", priority=100)
-        class LowClassPriority:
+        class LowClassPriority(
+            Plugin, name="multi-method-plugin-low-class", priority=100
+        ):
             @hook(
                 "session_pre_init", priority=10
             )  # @hook priority ignored; class=100 governs
@@ -317,8 +322,9 @@ class TestPriorityInheritance:
                 execution_order.append("class_p100")
                 return None
 
-        @plugin("multi-method-plugin-high-class", priority=1)
-        class HighClassPriority:
+        class HighClassPriority(
+            Plugin, name="multi-method-plugin-high-class", priority=1
+        ):
             @hook(
                 "session_pre_init", priority=90
             )  # @hook priority ignored; class=1 governs
@@ -344,7 +350,9 @@ class TestPluginSetPriority:
     """PluginSet.priority sets the default priority for items without their own @hook priority."""
 
     @pytest.mark.asyncio
-    async def test_pluginset_priority_applied_to_items_without_own_priority(self):
+    async def test_pluginset_priority_applied_to_items_without_own_priority(
+        self,
+    ) -> None:
         """Items in a PluginSet with priority=10 fire before an outside hook at priority=50."""
         execution_order: list[str] = []
 
@@ -371,7 +379,7 @@ class TestPluginSetPriority:
         )
 
     @pytest.mark.asyncio
-    async def test_pluginset_priority_overrides_per_item_hook_priority(self):
+    async def test_pluginset_priority_overrides_per_item_hook_priority(self) -> None:
         """PluginSet priority overrides the item's @hook priority, even when the item has an explicit one.
 
         An item decorated with @hook(priority=80) placed in a PluginSet(priority=5)
@@ -405,7 +413,7 @@ class TestPluginSetPriority:
         )
 
     @pytest.mark.asyncio
-    async def test_pluginset_without_priority_uses_item_own_priority(self):
+    async def test_pluginset_without_priority_uses_item_own_priority(self) -> None:
         """PluginSet with no priority (None) does not override the item's @hook priority."""
         execution_order: list[str] = []
 
@@ -430,7 +438,7 @@ class TestPluginSetPriority:
         )
 
     @pytest.mark.asyncio
-    async def test_nested_pluginsets_honour_inner_set_priority(self):
+    async def test_nested_pluginsets_honour_inner_set_priority(self) -> None:
         """In a nested PluginSet, the inner set's priority governs its items."""
         execution_order: list[str] = []
 
@@ -455,7 +463,7 @@ class TestPluginSetPriority:
         assert execution_order.index("inner") < execution_order.index("outer")
 
     @pytest.mark.asyncio
-    async def test_multiple_pluginsets_fire_in_set_priority_order(self):
+    async def test_multiple_pluginsets_fire_in_set_priority_order(self) -> None:
         """Items from a lower-priority PluginSet fire before items from a higher-priority one."""
         execution_order: list[str] = []
 

@@ -6,15 +6,8 @@ import pytest
 
 pytest.importorskip("cpex.framework")
 
-from mellea.plugins import (
-    MelleaPlugin,
-    PluginResult,
-    PluginSet,
-    hook,
-    plugin,
-    plugin_scope,
-    register,
-)
+from mellea.plugins import Plugin, PluginSet, hook, plugin_scope, register
+from mellea.plugins.base import MelleaPlugin, PluginResult
 from mellea.plugins.hooks.session import SessionPreInitPayload
 from mellea.plugins.manager import (
     deregister_session_plugins,
@@ -45,7 +38,7 @@ def _payload() -> SessionPreInitPayload:
 class TestSessionScopedPlugins:
     """Plugins registered via ``register(..., session_id=sid)``."""
 
-    async def test_fires_while_session_active(self):
+    async def test_fires_while_session_active(self) -> None:
         invocations = []
 
         @hook("session_pre_init")
@@ -57,7 +50,7 @@ class TestSessionScopedPlugins:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == 1
 
-    async def test_deregistered_after_session_cleanup(self):
+    async def test_deregistered_after_session_cleanup(self) -> None:
         invocations = []
 
         @hook("session_pre_init")
@@ -73,7 +66,7 @@ class TestSessionScopedPlugins:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == 1  # No new invocations after cleanup
 
-    async def test_global_plugin_unaffected_by_session_cleanup(self):
+    async def test_global_plugin_unaffected_by_session_cleanup(self) -> None:
         """Deregistering a session should leave globally registered plugins intact."""
         global_calls = []
         session_calls = []
@@ -100,15 +93,14 @@ class TestSessionScopedPlugins:
         assert len(global_calls) == 2  # Still firing
         assert len(session_calls) == 1  # Stopped
 
-    async def test_deregister_unknown_session_is_noop(self):
+    async def test_deregister_unknown_session_is_noop(self) -> None:
         """Deregistering a session ID that was never registered does not raise."""
         deregister_session_plugins("never-registered-session-xyz")
 
-    async def test_class_plugin_session_scoped(self):
+    async def test_class_plugin_session_scoped(self) -> None:
         invocations = []
 
-        @plugin("cls-session-plugin")
-        class MyPlugin:
+        class MyPlugin(Plugin, name="cls-session-plugin"):
             @hook("session_pre_init")
             async def on_pre_init(self, payload, ctx):
                 invocations.append(payload)
@@ -122,7 +114,7 @@ class TestSessionScopedPlugins:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == 1  # Stopped
 
-    async def test_pluginset_session_scoped(self):
+    async def test_pluginset_session_scoped(self) -> None:
         """PluginSet items honour session-scoped deregistration when passed to register()."""
         invocations = []
 
@@ -146,7 +138,7 @@ class TestSessionScopedPlugins:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == count_before  # No new calls
 
-    async def test_two_sessions_deregistered_independently(self):
+    async def test_two_sessions_deregistered_independently(self) -> None:
         calls_a = []
         calls_b = []
 
@@ -186,7 +178,7 @@ class TestSessionScopedPlugins:
 
 
 class TestPluginSetContextManager:
-    async def test_fires_inside_with_block(self):
+    async def test_fires_inside_with_block(self) -> None:
         invocations = []
 
         @hook("session_pre_init")
@@ -199,7 +191,7 @@ class TestPluginSetContextManager:
 
         assert len(invocations) == 1
 
-    async def test_deregistered_after_with_block(self):
+    async def test_deregistered_after_with_block(self) -> None:
         invocations = []
 
         @hook("session_pre_init")
@@ -214,7 +206,7 @@ class TestPluginSetContextManager:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == 1  # No new calls
 
-    async def test_deregistered_on_exception(self):
+    async def test_deregistered_on_exception(self) -> None:
         invocations = []
 
         @hook("session_pre_init")
@@ -233,14 +225,14 @@ class TestPluginSetContextManager:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == 1
 
-    def test_scope_id_cleared_after_exit(self):
+    def test_scope_id_cleared_after_exit(self) -> None:
         """_scope_id is reset to None once __exit__ is called."""
         # We need to check state change but __enter__ requires the framework —
         # just verify the initial state here; integration validated by other tests.
         ps = PluginSet("state-check", [])
         assert ps._scope_id is None
 
-    async def test_raises_on_reentrant_use_of_same_instance(self):
+    async def test_raises_on_reentrant_use_of_same_instance(self) -> None:
         invocations = []
 
         @hook("session_pre_init")
@@ -254,7 +246,7 @@ class TestPluginSetContextManager:
                 with ps:
                     pass
 
-    async def test_async_with_fires_inside_block(self):
+    async def test_async_with_fires_inside_block(self) -> None:
         invocations = []
 
         @hook("session_pre_init")
@@ -267,7 +259,7 @@ class TestPluginSetContextManager:
 
         assert len(invocations) == 1
 
-    async def test_async_with_deregisters_after_block(self):
+    async def test_async_with_deregisters_after_block(self) -> None:
         invocations = []
 
         @hook("session_pre_init")
@@ -281,7 +273,7 @@ class TestPluginSetContextManager:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == 1
 
-    async def test_nested_different_instances(self):
+    async def test_nested_different_instances(self) -> None:
         """Two different PluginSet instances can be nested."""
         invocations = []
 
@@ -315,14 +307,14 @@ class TestPluginSetContextManager:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert invocations == []
 
-    async def test_scope_id_set_on_enter_and_cleared_on_exit(self):
+    async def test_scope_id_set_on_enter_and_cleared_on_exit(self) -> None:
         ps = PluginSet("state-lifecycle", [])
         assert ps._scope_id is None
         with ps:
             assert ps._scope_id is not None
         assert ps._scope_id is None
 
-    async def test_reuse_after_exit(self):
+    async def test_reuse_after_exit(self) -> None:
         """The same PluginSet instance can be entered again after a previous exit."""
         invocations = []
 
@@ -349,7 +341,7 @@ class TestPluginSetContextManager:
 
 
 class TestPluginScopeContextManager:
-    async def test_standalone_hook_fires_inside_block(self):
+    async def test_standalone_hook_fires_inside_block(self) -> None:
         invocations = []
 
         @hook("session_pre_init")
@@ -362,7 +354,7 @@ class TestPluginScopeContextManager:
 
         assert len(invocations) == 1
 
-    async def test_deregistered_after_block(self):
+    async def test_deregistered_after_block(self) -> None:
         invocations = []
 
         @hook("session_pre_init")
@@ -376,7 +368,7 @@ class TestPluginScopeContextManager:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == 1  # No new calls outside the block
 
-    async def test_deregistered_on_exception(self):
+    async def test_deregistered_on_exception(self) -> None:
         invocations = []
 
         @hook("session_pre_init")
@@ -393,11 +385,10 @@ class TestPluginScopeContextManager:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == 1  # Deregistered despite the exception
 
-    async def test_class_plugin_fires_and_deregisters(self):
+    async def test_class_plugin_fires_and_deregisters(self) -> None:
         invocations = []
 
-        @plugin("scope-cls-plugin")
-        class MyPlugin:
+        class MyPlugin(Plugin, name="scope-cls-plugin"):
             @hook("session_pre_init")
             async def on_pre_init(self, payload, ctx):
                 invocations.append(payload)
@@ -411,7 +402,7 @@ class TestPluginScopeContextManager:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == 1  # Stopped
 
-    async def test_pluginset_fires_and_deregisters(self):
+    async def test_pluginset_fires_and_deregisters(self) -> None:
         invocations = []
 
         @hook("session_pre_init")
@@ -435,7 +426,7 @@ class TestPluginScopeContextManager:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == count_before
 
-    async def test_mixed_items(self):
+    async def test_mixed_items(self) -> None:
         """plugin_scope accepts standalone hooks, class plugins, and PluginSets together."""
         invocations = []
 
@@ -444,8 +435,7 @@ class TestPluginScopeContextManager:
             invocations.append("standalone")
             return None
 
-        @plugin("scope-mixed-cls")
-        class ClassPlugin:
+        class ClassPlugin(Plugin, name="scope-mixed-cls"):
             @hook("session_pre_init")
             async def on_pre_init(self, payload, ctx):
                 invocations.append("class")
@@ -468,7 +458,7 @@ class TestPluginScopeContextManager:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == count_before  # All deregistered
 
-    async def test_async_with_fires_inside_block(self):
+    async def test_async_with_fires_inside_block(self) -> None:
         invocations = []
 
         @hook("session_pre_init")
@@ -481,7 +471,7 @@ class TestPluginScopeContextManager:
 
         assert len(invocations) == 1
 
-    async def test_async_with_deregisters_after_block(self):
+    async def test_async_with_deregisters_after_block(self) -> None:
         invocations = []
 
         @hook("session_pre_init")
@@ -495,7 +485,7 @@ class TestPluginScopeContextManager:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == 1
 
-    async def test_sequential_scopes_are_independent(self):
+    async def test_sequential_scopes_are_independent(self) -> None:
         """Two consecutive plugin_scope blocks use separate scope IDs and don't interfere."""
         calls_a = []
         calls_b = []
@@ -519,7 +509,7 @@ class TestPluginScopeContextManager:
         assert len(calls_a) == 1
         assert len(calls_b) == 1
 
-    async def test_empty_plugin_scope_is_noop(self):
+    async def test_empty_plugin_scope_is_noop(self) -> None:
         """plugin_scope with no items enters and exits without error."""
         with plugin_scope():
             await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
@@ -531,11 +521,10 @@ class TestPluginScopeContextManager:
 # ---------------------------------------------------------------------------
 
 
-def _make_mellea_plugin(invocations: list) -> MelleaPlugin:
+def _make_mellea_plugin(invocations: list) -> Plugin:
     """Build a minimal concrete MelleaPlugin that records session_pre_init calls."""
 
-    @plugin("tracking-plugin")
-    class _TrackingPlugin:
+    class _TrackingPlugin(Plugin, name="tracking-plugin"):
         @hook(hook_type=HookType.SESSION_PRE_INIT)
         async def session_pre_init(self, payload: Any, context: Any):
             invocations.append(payload)
@@ -545,7 +534,7 @@ def _make_mellea_plugin(invocations: list) -> MelleaPlugin:
 
 
 class TestMelleaPluginContextManager:
-    async def test_fires_inside_with_block(self):
+    async def test_fires_inside_with_block(self) -> None:
         invocations: list = []
         p = _make_mellea_plugin(invocations)
 
@@ -554,7 +543,7 @@ class TestMelleaPluginContextManager:
 
         assert len(invocations) == 1
 
-    async def test_deregistered_after_with_block(self):
+    async def test_deregistered_after_with_block(self) -> None:
         invocations: list = []
         p = _make_mellea_plugin(invocations)
 
@@ -564,7 +553,7 @@ class TestMelleaPluginContextManager:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == 1  # No new calls outside the block
 
-    async def test_deregistered_on_exception(self):
+    async def test_deregistered_on_exception(self) -> None:
         invocations: list = []
         p = _make_mellea_plugin(invocations)
 
@@ -577,7 +566,7 @@ class TestMelleaPluginContextManager:
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(invocations) == 1  # Deregistered despite the exception
 
-    async def test_raises_on_reentrant_use(self):
+    async def test_raises_on_reentrant_use(self) -> None:
         invocations: list = []
         p = _make_mellea_plugin(invocations)
 
@@ -586,7 +575,7 @@ class TestMelleaPluginContextManager:
                 with p:
                     pass
 
-    async def test_scope_id_set_on_enter_and_cleared_on_exit(self):
+    async def test_scope_id_set_on_enter_and_cleared_on_exit(self) -> None:
         invocations: list = []
         p = _make_mellea_plugin(invocations)
 
@@ -595,7 +584,7 @@ class TestMelleaPluginContextManager:
             assert getattr(p, "_scope_id", None) is not None
         assert getattr(p, "_scope_id", None) is None
 
-    async def test_reuse_after_exit(self):
+    async def test_reuse_after_exit(self) -> None:
         invocations: list = []
         p = _make_mellea_plugin(invocations)
 
@@ -607,7 +596,7 @@ class TestMelleaPluginContextManager:
 
         assert len(invocations) == 2
 
-    async def test_async_with_fires_inside_block(self):
+    async def test_async_with_fires_inside_block(self) -> None:
         invocations: list = []
         p = _make_mellea_plugin(invocations)
 
@@ -616,7 +605,7 @@ class TestMelleaPluginContextManager:
 
         assert len(invocations) == 1
 
-    async def test_async_with_deregisters_after_block(self):
+    async def test_async_with_deregisters_after_block(self) -> None:
         invocations: list = []
         p = _make_mellea_plugin(invocations)
 

@@ -72,14 +72,14 @@ async def reset_plugins():
 class TestBlockHelper:
     """Unit tests for the ``block()`` convenience helper."""
 
-    def test_block_basic_returns_non_continue_plugin_result(self):
+    def test_block_basic_returns_non_continue_plugin_result(self) -> None:
         result = block("something went wrong")
 
         assert result.continue_processing is False
         assert result.violation is not None
         assert result.violation.reason == "something went wrong"
 
-    def test_block_with_all_args_populates_violation_fields(self):
+    def test_block_with_all_args_populates_violation_fields(self) -> None:
         extra = {"limit": 100, "used": 150}
         result = block(
             "Budget exceeded",
@@ -95,7 +95,7 @@ class TestBlockHelper:
         assert v.description == "The token budget for this request was exceeded."
         assert v.details == extra
 
-    def test_block_without_code_defaults_to_empty_string(self):
+    def test_block_without_code_defaults_to_empty_string(self) -> None:
         result = block("No code provided")
 
         assert result.violation.code == ""
@@ -109,7 +109,9 @@ class TestBlockHelper:
 class TestViolationError:
     """Tests for PluginViolationError raised by Mellea's invoke_hook when a plugin blocks."""
 
-    async def test_blocking_plugin_raises_plugin_violation_error_by_default(self):
+    async def test_blocking_plugin_raises_plugin_violation_error_by_default(
+        self,
+    ) -> None:
         @hook("session_pre_init", priority=10)
         async def blocking_plugin(payload, ctx):
             return block("Access denied", code="AUTH_001")
@@ -119,7 +121,7 @@ class TestViolationError:
         with pytest.raises(PluginViolationError):
             await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
 
-    async def test_violation_error_hook_type_matches_hook(self):
+    async def test_violation_error_hook_type_matches_hook(self) -> None:
         @hook("session_pre_init", priority=10)
         async def blocking_plugin(payload, ctx):
             return block("blocked")
@@ -131,7 +133,7 @@ class TestViolationError:
 
         assert exc_info.value.hook_type == HookType.SESSION_PRE_INIT.value
 
-    async def test_violation_error_reason_matches_block_reason(self):
+    async def test_violation_error_reason_matches_block_reason(self) -> None:
         @hook("session_pre_init", priority=10)
         async def blocking_plugin(payload, ctx):
             return block("rate limit exceeded", code="RATE_001")
@@ -143,7 +145,7 @@ class TestViolationError:
 
         assert exc_info.value.reason == "rate limit exceeded"
 
-    async def test_violation_error_str_contains_hook_type_and_reason(self):
+    async def test_violation_error_str_contains_hook_type_and_reason(self) -> None:
         @hook("session_pre_init", priority=10)
         async def blocking_plugin(payload, ctx):
             return block("forbidden content detected")
@@ -157,7 +159,9 @@ class TestViolationError:
         assert HookType.SESSION_PRE_INIT.value in error_str
         assert "forbidden content detected" in error_str
 
-    async def test_violations_as_exceptions_false_returns_result_without_raising(self):
+    async def test_violations_as_exceptions_false_returns_result_without_raising(
+        self,
+    ) -> None:
         @hook("session_pre_init", priority=10)
         async def blocking_plugin(payload, ctx):
             return block("blocked without raise", code="NO_RAISE_001")
@@ -186,7 +190,7 @@ class TestBlockingPreventsDownstreamPlugins:
     result is detected and returned as continue_processing=False.
     """
 
-    async def test_enforce_blocker_yields_false_continue_processing(self):
+    async def test_enforce_blocker_yields_false_continue_processing(self) -> None:
         downstream_fired: list[bool] = []
 
         @hook("session_pre_init", mode=PluginMode.SEQUENTIAL)

@@ -70,7 +70,7 @@ async def reset_plugins():
 class TestWritableFieldAccepted:
     """Modifications to writable fields must be reflected in the returned payload."""
 
-    async def test_backend_name_writable_in_session_pre_init(self):
+    async def test_backend_name_writable_in_session_pre_init(self) -> None:
         @hook("session_pre_init", priority=10)
         async def change_backend(payload, ctx):
             return PluginResult(
@@ -87,7 +87,7 @@ class TestWritableFieldAccepted:
 
         assert returned.backend_name == "plugin-backend"
 
-    async def test_model_options_writable_in_generation_pre_call(self):
+    async def test_model_options_writable_in_generation_pre_call(self) -> None:
         new_options = {"temperature": 0.9, "max_tokens": 512}
 
         @hook("generation_pre_call", priority=10)
@@ -106,7 +106,7 @@ class TestWritableFieldAccepted:
 
         assert returned.model_options == new_options
 
-    async def test_description_writable_in_component_pre_create(self):
+    async def test_description_writable_in_component_pre_create(self) -> None:
         @hook("component_pre_create", priority=10)
         async def change_description(payload, ctx):
             return PluginResult(
@@ -132,7 +132,7 @@ class TestWritableFieldAccepted:
 class TestNonWritableFieldDiscarded:
     """Modifications to non-writable base fields must be silently discarded."""
 
-    async def test_session_id_non_writable_in_session_pre_init(self):
+    async def test_session_id_non_writable_in_session_pre_init(self) -> None:
         original_session_id = "original-session-id"
 
         @hook("session_pre_init", priority=10)
@@ -152,7 +152,7 @@ class TestNonWritableFieldDiscarded:
         # session_id is a base payload field, not in the writable set — must be discarded
         assert returned.session_id == original_session_id
 
-    async def test_hook_field_non_writable_in_session_pre_init(self):
+    async def test_hook_field_non_writable_in_session_pre_init(self) -> None:
         @hook("session_pre_init", priority=10)
         async def tamper_hook_field(payload, ctx):
             return PluginResult(
@@ -170,7 +170,7 @@ class TestNonWritableFieldDiscarded:
         # hook field is set by the dispatcher — plugin cannot override it
         assert returned.hook == HookType.SESSION_PRE_INIT.value
 
-    async def test_component_type_non_writable_in_component_pre_create(self):
+    async def test_component_type_non_writable_in_component_pre_create(self) -> None:
         original_type = "Instruction"
 
         @hook("component_pre_create", priority=10)
@@ -209,7 +209,7 @@ class TestObserveOnlyHookAcceptsAll:
     known gap — the intended DENY default is not yet enforced.
     """
 
-    async def test_error_type_accepted_in_component_post_error(self):
+    async def test_error_type_accepted_in_component_post_error(self) -> None:
         """component_post_error is observe-only per design, but modification is accepted in practice."""
         original_error_type = "ValueError"
 
@@ -237,7 +237,7 @@ class TestObserveOnlyHookAcceptsAll:
             "When the gap is fixed, change this to assert returned.error_type == original_error_type."
         )
 
-    async def test_all_validations_passed_accepted_in_sampling_iteration(self):
+    async def test_all_validations_passed_accepted_in_sampling_iteration(self) -> None:
         """sampling_iteration is observe-only per design, but modification is accepted in practice."""
 
         @hook("sampling_iteration", priority=10)
@@ -271,7 +271,7 @@ class TestObserveOnlyHookAcceptsAll:
 class TestMixedModification:
     """When a plugin modifies both writable and non-writable fields, only writable ones survive."""
 
-    async def test_writable_accepted_non_writable_discarded(self):
+    async def test_writable_accepted_non_writable_discarded(self) -> None:
         original_session_id = "original-sid"
         original_request_id = "original-rid"
 
@@ -312,7 +312,7 @@ class TestMixedModification:
 class TestPayloadChaining:
     """Accepted changes from Plugin A must be visible to Plugin B during the same invocation."""
 
-    async def test_plugin_b_receives_plugin_a_changes(self):
+    async def test_plugin_b_receives_plugin_a_changes(self) -> None:
         received_by_b: list[str] = []
 
         @hook("session_pre_init", mode=PluginMode.AUDIT, priority=1)
@@ -357,7 +357,7 @@ class TestPayloadChaining:
 class TestReturnNoneIsNoop:
     """A plugin that returns ``None`` must leave the payload entirely unchanged."""
 
-    async def test_none_return_preserves_original_payload(self):
+    async def test_none_return_preserves_original_payload(self) -> None:
         @hook("session_pre_init", priority=10)
         async def noop_plugin(payload, ctx):
             return None  # Returning None signals: no change
@@ -379,7 +379,7 @@ class TestReturnNoneIsNoop:
 class TestReturnContinueTrueNoPayload:
     """PluginResult(continue_processing=True) with no modified_payload must be a no-op."""
 
-    async def test_continue_true_without_payload_leaves_original(self):
+    async def test_continue_true_without_payload_leaves_original(self) -> None:
         @hook("session_pre_init", priority=10)
         async def signal_only_plugin(payload, ctx):
             return PluginResult(continue_processing=True)  # no modified_payload

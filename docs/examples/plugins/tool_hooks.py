@@ -243,7 +243,7 @@ async def audit_tool_calls(payload, _):
 
 
 @hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.CONCURRENT, priority=15)
-async def sanitize_tool_args(payload, _):
+async def sanitize_tool_args(payload, _) -> PluginResult:
     """Auto-fix tool arguments rather than blocking on unsafe input."""
     mtc = payload.model_tool_call
     tool_name = mtc.name

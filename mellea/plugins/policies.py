@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 try:
     from cpex.framework.hooks.policies import HookPayloadPolicy
 
@@ -10,7 +12,7 @@ except ImportError:
     _HAS_PLUGIN_FRAMEWORK = False
 
 
-def _build_policies() -> dict[str, object]:
+def _build_policies() -> dict[str, Any]:
     """Build per-hook-type payload modification policies.
 
     Hooks absent from this table are observe-only.  With ``DefaultHookPolicy.DENY``
@@ -102,4 +104,4 @@ def _build_policies() -> dict[str, object]:
     }
 
 
-MELLEA_HOOK_PAYLOAD_POLICIES: dict[str, object] = _build_policies()
+MELLEA_HOOK_PAYLOAD_POLICIES: dict[str, Any] = _build_policies()

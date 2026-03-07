@@ -349,7 +349,9 @@ class TestComponentPostSuccessPayload:
         assert payload.component_type == "Instruction"
         assert payload.result is _SENTINEL_RESULT
         assert payload.latency_ms == 250
-        assert len(payload.sampling_results) == 2
+        assert (
+            payload.sampling_results is not None and len(payload.sampling_results) == 2
+        )
 
     def test_frozen(self):
         payload = ComponentPostSuccessPayload(latency_ms=100)
@@ -374,7 +376,10 @@ class TestComponentPostSuccessPayload:
         payload_none = ComponentPostSuccessPayload(sampling_results=None)
         payload_list = ComponentPostSuccessPayload(sampling_results=[object()])
         assert payload_none.sampling_results is None
-        assert len(payload_list.sampling_results) == 1
+        assert (
+            payload_list.sampling_results is not None
+            and len(payload_list.sampling_results) == 1
+        )
 
     def test_inherits_base_fields(self):
         assert issubclass(ComponentPostSuccessPayload, MelleaBasePayload)
@@ -519,7 +524,9 @@ class TestGenerationStreamChunkPayload:
 
     def test_model_copy_creates_modified_copy(self):
         payload = GenerationStreamChunkPayload(
-            chunk="hel", accumulated="hel", chunk_index=0
+            chunk="hel",  # codespell:ignore
+            accumulated="hel",  # codespell:ignore
+            chunk_index=0,
         )
         modified = payload.model_copy(
             update={"chunk": "lo", "accumulated": "hello", "chunk_index": 1}
@@ -527,8 +534,8 @@ class TestGenerationStreamChunkPayload:
         assert modified.chunk == "lo"
         assert modified.accumulated == "hello"
         assert modified.chunk_index == 1
-        assert payload.chunk == "hel"
-        assert payload.accumulated == "hel"
+        assert payload.chunk == "hel"  # codespell:ignore
+        assert payload.accumulated == "hel"  # codespell:ignore
 
     def test_inherits_base_fields(self):
         assert issubclass(GenerationStreamChunkPayload, MelleaBasePayload)

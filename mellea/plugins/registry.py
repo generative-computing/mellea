@@ -7,7 +7,8 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
-from mellea.plugins.decorators import HookMeta, PluginMeta
+from mellea.plugins.base import PluginMeta
+from mellea.plugins.decorators import HookMeta
 from mellea.plugins.pluginset import PluginSet
 from mellea.plugins.types import PluginMode
 

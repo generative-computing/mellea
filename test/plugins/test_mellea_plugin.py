@@ -1,4 +1,4 @@
-"""Tests for the MelleaPlugin base class typed accessors and lifecycle."""
+"""Tests for Plugin base class typed accessors and lifecycle."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("cpex.framework")
 
-from mellea.plugins import hook, plugin, register
+from mellea.plugins import Plugin, hook, register
 from mellea.plugins.hooks.session import SessionPreInitPayload
 from mellea.plugins.manager import invoke_hook, shutdown_plugins
 from mellea.plugins.types import HookType
@@ -35,12 +35,11 @@ def _make_payload() -> SessionPreInitPayload:
 class TestTypedContextAccessors:
     """get_backend(), get_mellea_context(), get_session() extract from GlobalContext.state."""
 
-    async def test_get_backend_returns_backend(self):
+    async def test_get_backend_returns_backend(self) -> None:
         """get_backend() returns the object passed as backend= to invoke_hook."""
         received_backend = []
 
-        @plugin("accessor-test-backend")
-        class AccessorPlugin:
+        class AccessorPlugin(Plugin, name="accessor-test-backend"):
             @hook("session_pre_init")
             async def on_pre_init(self, payload: Any, ctx: Any) -> Any:
                 # Access via GlobalContext.state directly
@@ -56,12 +55,11 @@ class TestTypedContextAccessors:
         assert len(received_backend) == 1
         assert received_backend[0] is mock_backend
 
-    async def test_get_mellea_context_returns_context(self):
+    async def test_get_mellea_context_returns_context(self) -> None:
         """get_mellea_context() returns the object passed as context= to invoke_hook."""
         received_context = []
 
-        @plugin("accessor-test-context")
-        class AccessorPlugin:
+        class AccessorPlugin(Plugin, name="accessor-test-context"):
             @hook("session_pre_init")
             async def on_pre_init(self, payload: Any, ctx: Any) -> Any:
                 received_context.append(ctx.global_context.state.get("context"))
@@ -75,12 +73,11 @@ class TestTypedContextAccessors:
         assert len(received_context) == 1
         assert received_context[0] is mock_context
 
-    async def test_get_session_returns_session(self):
+    async def test_get_session_returns_session(self) -> None:
         """get_session() returns the object passed as session= to invoke_hook."""
         received_session = []
 
-        @plugin("accessor-test-session")
-        class AccessorPlugin:
+        class AccessorPlugin(Plugin, name="accessor-test-session"):
             @hook("session_pre_init")
             async def on_pre_init(self, payload: Any, ctx: Any) -> Any:
                 received_session.append(ctx.global_context.state.get("session"))
@@ -94,12 +91,11 @@ class TestTypedContextAccessors:
         assert len(received_session) == 1
         assert received_session[0] is mock_session
 
-    async def test_backend_absent_when_not_passed(self):
+    async def test_backend_absent_when_not_passed(self) -> None:
         """State key 'backend' is absent when backend is not passed."""
         received = []
 
-        @plugin("accessor-absent-backend")
-        class AccessorPlugin:
+        class AccessorPlugin(Plugin, name="accessor-absent-backend"):
             @hook("session_pre_init")
             async def on_pre_init(self, payload: Any, ctx: Any) -> Any:
                 received.append("backend" in ctx.global_context.state)
@@ -109,12 +105,11 @@ class TestTypedContextAccessors:
         await invoke_hook(HookType.SESSION_PRE_INIT, _make_payload())
         assert received == [False]
 
-    async def test_session_absent_when_not_passed(self):
+    async def test_session_absent_when_not_passed(self) -> None:
         """State key 'session' is absent when session is not passed."""
         received = []
 
-        @plugin("accessor-absent-session")
-        class AccessorPlugin:
+        class AccessorPlugin(Plugin, name="accessor-absent-session"):
             @hook("session_pre_init")
             async def on_pre_init(self, payload: Any, ctx: Any) -> Any:
                 received.append("session" in ctx.global_context.state)
@@ -126,24 +121,18 @@ class TestTypedContextAccessors:
 
 
 # ---------------------------------------------------------------------------
-# MelleaPlugin as context manager (MelleaPlugin subclass)
+# Plugin as context manager
 # ---------------------------------------------------------------------------
 
 
 class TestMelleaPluginContextManager:
-    """MelleaPlugin (non-@plugin) instances can be used as context managers.
+    """Plugin subclass instances can be used as context managers."""
 
-    The test here uses @plugin-decorated class, which inherits the same
-    context manager contract as MelleaPlugin (see test_scoping.py for the
-    full suite; these tests focus on the accessors).
-    """
-
-    async def test_mellea_plugin_fires_in_with_block(self):
-        """@plugin instance used as context manager fires its hooks."""
+    async def test_mellea_plugin_fires_in_with_block(self) -> None:
+        """Plugin instance used as context manager fires its hooks."""
         invocations: list = []
 
-        @plugin("cm-accessor-plugin")
-        class CmPlugin:
+        class CmPlugin(Plugin, name="cm-accessor-plugin"):
             @hook("session_pre_init")
             async def on_pre_init(self, payload: Any, ctx: Any) -> Any:
                 invocations.append(payload)
@@ -155,12 +144,11 @@ class TestMelleaPluginContextManager:
 
         assert len(invocations) == 1
 
-    async def test_mellea_plugin_deregistered_after_with_block(self):
+    async def test_mellea_plugin_deregistered_after_with_block(self) -> None:
         """Hooks deregister on context manager exit."""
         invocations: list = []
 
-        @plugin("cm-deregister-plugin")
-        class CmPlugin:
+        class CmPlugin(Plugin, name="cm-deregister-plugin"):
             @hook("session_pre_init")
             async def on_pre_init(self, payload: Any, ctx: Any) -> Any:
                 invocations.append(payload)
@@ -182,7 +170,7 @@ class TestMelleaPluginContextManager:
 class TestPluginViolationError:
     """PluginViolationError carries structured information about the violation."""
 
-    async def test_violation_error_attributes(self):
+    async def test_violation_error_attributes(self) -> None:
         """PluginViolationError.hook_type, .reason, .code are set from the violation."""
         from mellea.plugins import block
         from mellea.plugins.base import PluginViolationError
@@ -200,7 +188,7 @@ class TestPluginViolationError:
         assert err.reason == "Too expensive"
         assert err.code == "BUDGET_001"
 
-    async def test_violation_error_message_contains_context(self):
+    async def test_violation_error_message_contains_context(self) -> None:
         """str(PluginViolationError) includes hook type and reason."""
         from mellea.plugins import block
         from mellea.plugins.base import PluginViolationError

@@ -1,6 +1,7 @@
-"""Tests for the @hook and @plugin decorators."""
+"""Tests for the @hook decorator and Plugin base class."""
 
-from mellea.plugins.decorators import HookMeta, PluginMeta, hook, plugin
+from mellea.plugins.base import Plugin, PluginMeta
+from mellea.plugins.decorators import HookMeta, hook
 from mellea.plugins.types import PluginMode
 
 
@@ -42,10 +43,9 @@ class TestHookDecorator:
         assert my_hook.__name__ == "my_hook"
 
 
-class TestPluginDecorator:
+class TestPluginBaseClass:
     def test_plugin_attaches_metadata(self):
-        @plugin("my-plugin")
-        class MyPlugin:
+        class MyPlugin(Plugin, name="my-plugin"):
             pass
 
         assert hasattr(MyPlugin, "_mellea_plugin_meta")
@@ -55,17 +55,30 @@ class TestPluginDecorator:
         assert meta.priority == 50
 
     def test_plugin_custom_priority(self):
-        @plugin("my-plugin", priority=5)
-        class MyPlugin:
+        class MyPlugin(Plugin, name="my-plugin", priority=5):
             pass
 
-        assert MyPlugin._mellea_plugin_meta.priority == 5
+        assert MyPlugin._mellea_plugin_meta.priority == 5  # type: ignore[attr-defined]
 
     def test_plugin_preserves_class(self):
-        @plugin("my-plugin")
-        class MyPlugin:
+        class MyPlugin(Plugin, name="my-plugin"):
             def __init__(self):
                 self.value = 42
 
         instance = MyPlugin()
         assert instance.value == 42
+
+    def test_plugin_has_context_manager(self):
+        class MyPlugin(Plugin, name="my-plugin"):
+            pass
+
+        assert hasattr(MyPlugin, "__enter__")
+        assert hasattr(MyPlugin, "__exit__")
+        assert hasattr(MyPlugin, "__aenter__")
+        assert hasattr(MyPlugin, "__aexit__")
+
+    def test_plugin_without_name_skips_metadata(self):
+        class MyBase(Plugin):
+            pass
+
+        assert not hasattr(MyBase, "_mellea_plugin_meta")

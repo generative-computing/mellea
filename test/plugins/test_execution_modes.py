@@ -72,7 +72,7 @@ class TestSequentialMode:
     """mode=SEQUENTIAL is the default. Violations raise PluginViolationError."""
 
     @pytest.mark.asyncio
-    async def test_blocking_plugin_raises_violation_error(self):
+    async def test_blocking_plugin_raises_violation_error(self) -> None:
         """A hook that returns block() in enforce mode causes invoke_hook to raise."""
 
         @hook("session_pre_init", mode=PluginMode.SEQUENTIAL)
@@ -90,7 +90,7 @@ class TestSequentialMode:
         assert err.code == "AUTH_001"
 
     @pytest.mark.asyncio
-    async def test_non_blocking_plugin_returns_normally(self):
+    async def test_non_blocking_plugin_returns_normally(self) -> None:
         """A hook that returns continue_processing=True does not raise."""
         invocations: list[str] = []
 
@@ -101,7 +101,7 @@ class TestSequentialMode:
 
         register(observe_hook)
 
-        result, returned_payload = await invoke_hook(
+        result, _returned_payload = await invoke_hook(
             HookType.SESSION_PRE_INIT, _session_payload()
         )
 
@@ -110,7 +110,7 @@ class TestSequentialMode:
         assert result.continue_processing is True
 
     @pytest.mark.asyncio
-    async def test_enforce_mode_writable_field_modification_is_accepted(self):
+    async def test_enforce_mode_writable_field_modification_is_accepted(self) -> None:
         """A hook that modifies a writable field (model_id) has the change applied."""
 
         @hook("session_pre_init", mode=PluginMode.SEQUENTIAL)
@@ -129,7 +129,7 @@ class TestSequentialMode:
         assert returned_payload.model_id == "gpt-4-turbo"
 
     @pytest.mark.asyncio
-    async def test_enforce_stops_downstream_plugin_when_blocking(self):
+    async def test_enforce_stops_downstream_plugin_when_blocking(self) -> None:
         """When an enforce plugin blocks, downstream plugins do not fire."""
         downstream_calls: list[str] = []
 
@@ -152,7 +152,7 @@ class TestSequentialMode:
         assert downstream_calls == []
 
     @pytest.mark.asyncio
-    async def test_enforce_violation_error_carries_plugin_name(self):
+    async def test_enforce_violation_error_carries_plugin_name(self) -> None:
         """PluginViolationError includes the plugin_name set by ContextForge."""
 
         @hook("generation_pre_call", mode=PluginMode.SEQUENTIAL)
@@ -168,7 +168,7 @@ class TestSequentialMode:
         assert exc_info.value.plugin_name != ""
 
     @pytest.mark.asyncio
-    async def test_default_mode_is_sequential(self):
+    async def test_default_mode_is_sequential(self) -> None:
         """@hook without an explicit mode defaults to SEQUENTIAL and raises on violation."""
 
         @hook("session_pre_init")  # no mode= argument; default is SEQUENTIAL
@@ -181,7 +181,7 @@ class TestSequentialMode:
             await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
 
     @pytest.mark.asyncio
-    async def test_enforce_none_return_does_not_raise(self):
+    async def test_enforce_none_return_does_not_raise(self) -> None:
         """A hook returning None (no-op) in enforce mode does not raise."""
 
         @hook("session_pre_init", mode=PluginMode.SEQUENTIAL)
@@ -190,7 +190,7 @@ class TestSequentialMode:
 
         register(silent_hook)
 
-        result, returned_payload = await invoke_hook(
+        _result, returned_payload = await invoke_hook(
             HookType.SESSION_PRE_INIT, _session_payload()
         )
         # No exception; payload is unchanged
@@ -206,7 +206,7 @@ class TestAuditMode:
     """mode=AUDIT: violations are logged but do not raise or stop execution."""
 
     @pytest.mark.asyncio
-    async def test_blocking_permissive_plugin_does_not_raise(self):
+    async def test_blocking_permissive_plugin_does_not_raise(self) -> None:
         """A blocking plugin in permissive mode must not raise PluginViolationError."""
 
         @hook("session_pre_init", mode=PluginMode.AUDIT)
@@ -225,7 +225,7 @@ class TestAuditMode:
         assert result.continue_processing is True
 
     @pytest.mark.asyncio
-    async def test_permissive_violation_does_not_stop_downstream_plugin(self):
+    async def test_permissive_violation_does_not_stop_downstream_plugin(self) -> None:
         """Downstream plugins still fire after a permissive plugin signals a violation."""
         downstream_calls: list[str] = []
 
@@ -248,7 +248,7 @@ class TestAuditMode:
         assert downstream_calls == ["fired"]
 
     @pytest.mark.asyncio
-    async def test_permissive_non_blocking_hook_fires_normally(self):
+    async def test_permissive_non_blocking_hook_fires_normally(self) -> None:
         """A permissive hook that continues fires and the call succeeds."""
         invocations: list[str] = []
 
@@ -264,7 +264,7 @@ class TestAuditMode:
         assert invocations == ["test-backend"]
 
     @pytest.mark.asyncio
-    async def test_multiple_permissive_blocking_plugins_all_fire(self):
+    async def test_multiple_permissive_blocking_plugins_all_fire(self) -> None:
         """Multiple permissive blocking plugins all execute; no exception is raised."""
         fires: list[str] = []
 
@@ -286,7 +286,7 @@ class TestAuditMode:
         assert fires == ["first", "second"]
 
     @pytest.mark.asyncio
-    async def test_permissive_blocking_followed_by_enforce_observer(self):
+    async def test_permissive_blocking_followed_by_enforce_observer(self) -> None:
         """A permissive blocker followed by a non-blocking enforce hook: both fire, and enforce goes first."""
         order: list[str] = []
 
@@ -308,7 +308,7 @@ class TestAuditMode:
         assert order == ["enforce", "permissive"]
 
     @pytest.mark.asyncio
-    async def test_permissive_continuing_hook_modifies_writable_field(self):
+    async def test_permissive_continuing_hook_modifies_writable_field(self) -> None:
         """A permissive hook that does NOT block and modifies a writable field applies the change."""
 
         @hook("session_pre_init", mode=PluginMode.AUDIT)
@@ -343,7 +343,7 @@ class TestFireAndForgetMode:
     """
 
     @pytest.mark.asyncio
-    async def test_fire_and_forget_hook_executes_as_background_task(self):
+    async def test_fire_and_forget_hook_executes_as_background_task(self) -> None:
         """A fire-and-forget hook fires as a background task and records its invocation."""
         invocations: list[str] = []
 
@@ -362,7 +362,7 @@ class TestFireAndForgetMode:
         assert invocations == ["fired"]
 
     @pytest.mark.asyncio
-    async def test_fire_and_forget_blocking_does_not_raise(self):
+    async def test_fire_and_forget_blocking_does_not_raise(self) -> None:
         """A blocking fire-and-forget hook does NOT raise PluginViolationError.
 
         In OBSERVE mode violations are logged but never propagated — background
@@ -376,13 +376,15 @@ class TestFireAndForgetMode:
         register(faf_blocker)
 
         # Should complete without raising even though the hook returns block().
-        result, payload = await invoke_hook(
+        result, _payload = await invoke_hook(
             HookType.SESSION_PRE_INIT, _session_payload()
         )
-        assert result.continue_processing is True
+        assert result is not None and result.continue_processing is True
 
     @pytest.mark.asyncio
-    async def test_fire_and_forget_writable_field_modification_is_not_applied(self):
+    async def test_fire_and_forget_writable_field_modification_is_not_applied(
+        self,
+    ) -> None:
         """A fire-and-forget hook that modifies a writable field does NOT affect the pipeline.
 
         In OBSERVE mode the hook receives a copy of the payload; its modifications are
@@ -404,7 +406,7 @@ class TestFireAndForgetMode:
         assert returned_payload.backend_name == "original-backend"
 
     @pytest.mark.asyncio
-    async def test_fire_and_forget_non_blocking_does_not_stop_downstream(self):
+    async def test_fire_and_forget_non_blocking_does_not_stop_downstream(self) -> None:
         """A non-blocking fire-and-forget hook lets downstream plugins fire."""
         order: list[str] = []
 
@@ -427,7 +429,7 @@ class TestFireAndForgetMode:
         assert order == ["enforce", "faf"]
 
     @pytest.mark.asyncio
-    async def test_fire_and_forget_mode_stored_correctly_in_hook_meta(self):
+    async def test_fire_and_forget_mode_stored_correctly_in_hook_meta(self) -> None:
         """HookMeta records PluginMode.FIRE_AND_FORGET on the decorated function.
 
         Verifies that the Mellea-layer decorator stores the correct mode enum value
@@ -445,7 +447,7 @@ class TestFireAndForgetMode:
         assert meta.priority == 25
 
     @pytest.mark.asyncio
-    async def test_fire_and_forget_none_return_is_noop(self):
+    async def test_fire_and_forget_none_return_is_noop(self) -> None:
         """A fire-and-forget hook returning None leaves the payload unchanged."""
 
         @hook("session_pre_init", mode=PluginMode.FIRE_AND_FORGET)

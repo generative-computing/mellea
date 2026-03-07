@@ -77,13 +77,12 @@ class TestHookRegistration:
 
     @pytest.mark.asyncio
     async def test_register_class_plugin(self):
-        from mellea.plugins import hook, plugin, register
+        from mellea.plugins import Plugin, hook, register
         from mellea.plugins.hooks.session import SessionPreInitPayload
 
         invocations = []
 
-        @plugin("test-class-plugin", priority=5)
-        class TestPlugin:
+        class TestPlugin(Plugin, name="test-class-plugin", priority=5):
             @hook("session_pre_init")
             async def on_pre_init(self, payload, ctx):
                 invocations.append(("pre_init", payload))

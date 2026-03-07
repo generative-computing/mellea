@@ -77,7 +77,7 @@ async def reset_plugins():
 class TestGenerationHookCallSites:
     """GENERATION_PRE_CALL and GENERATION_POST_CALL fire in Backend.generate_from_context_with_hooks()."""
 
-    async def test_generation_pre_call_fires_once(self):
+    async def test_generation_pre_call_fires_once(self) -> None:
         """GENERATION_PRE_CALL fires exactly once per generate_from_context_with_hooks() call."""
         observed: list[Any] = []
 
@@ -93,7 +93,7 @@ class TestGenerationHookCallSites:
 
         assert len(observed) == 1
 
-    async def test_generation_pre_call_payload_has_action_and_context(self):
+    async def test_generation_pre_call_payload_has_action_and_context(self) -> None:
         """GENERATION_PRE_CALL payload carries the action CBlock and the context."""
         observed: list[Any] = []
 
@@ -115,7 +115,7 @@ class TestGenerationHookCallSites:
         assert p.action.value == action.value
         assert p.context is not None
 
-    async def test_generation_post_call_fires_once(self):
+    async def test_generation_post_call_fires_once(self) -> None:
         """GENERATION_POST_CALL fires exactly once after generate_from_context() returns."""
         observed: list[Any] = []
 
@@ -132,7 +132,9 @@ class TestGenerationHookCallSites:
 
         assert len(observed) == 1
 
-    async def test_generation_post_call_model_output_is_the_returned_thunk(self):
+    async def test_generation_post_call_model_output_is_the_returned_thunk(
+        self,
+    ) -> None:
         """GENERATION_POST_CALL payload.model_output IS the ModelOutputThunk returned."""
         observed: list[Any] = []
 
@@ -143,14 +145,14 @@ class TestGenerationHookCallSites:
 
         register(recorder)
         backend = _MockBackend()
-        result, _ = await backend.generate_from_context_with_hooks(
+        _result, _ = await backend.generate_from_context_with_hooks(
             CBlock("test"), MagicMock(spec=Context)
         )
 
         # cpex deep-copies payloads, so check structural equivalence
         assert observed[0].model_output is not None
 
-    async def test_generation_post_call_latency_ms_is_non_negative(self):
+    async def test_generation_post_call_latency_ms_is_non_negative(self) -> None:
         """GENERATION_POST_CALL payload.latency_ms >= 0."""
         observed: list[Any] = []
 
@@ -167,7 +169,7 @@ class TestGenerationHookCallSites:
 
         assert observed[0].latency_ms >= 0
 
-    async def test_both_generation_hooks_fire_in_order(self):
+    async def test_both_generation_hooks_fire_in_order(self) -> None:
         """GENERATION_PRE_CALL fires before GENERATION_POST_CALL."""
         order: list[str] = []
 
@@ -199,7 +201,7 @@ class TestGenerationHookCallSites:
 class TestComponentHookCallSites:
     """Component hooks fire in ainstruct() and aact() in stdlib/functional.py."""
 
-    async def test_component_pre_create_fires_in_ainstruct(self):
+    async def test_component_pre_create_fires_in_ainstruct(self) -> None:
         """COMPONENT_PRE_CREATE fires exactly once per ainstruct() call."""
         from mellea.stdlib.functional import ainstruct
 
@@ -217,7 +219,9 @@ class TestComponentHookCallSites:
 
         assert len(observed) == 1
 
-    async def test_component_pre_create_payload_component_type_is_instruction(self):
+    async def test_component_pre_create_payload_component_type_is_instruction(
+        self,
+    ) -> None:
         """COMPONENT_PRE_CREATE payload has component_type='Instruction' in ainstruct()."""
         from mellea.stdlib.functional import ainstruct
 
@@ -235,7 +239,7 @@ class TestComponentHookCallSites:
 
         assert observed[0].component_type == "Instruction"
 
-    async def test_component_pre_create_payload_description_matches_input(self):
+    async def test_component_pre_create_payload_description_matches_input(self) -> None:
         """COMPONENT_PRE_CREATE payload.description matches the description passed to ainstruct()."""
         from mellea.stdlib.functional import ainstruct
 
@@ -253,7 +257,7 @@ class TestComponentHookCallSites:
 
         assert observed[0].description == "Specific description string"
 
-    async def test_component_post_create_fires_in_ainstruct(self):
+    async def test_component_post_create_fires_in_ainstruct(self) -> None:
         """COMPONENT_POST_CREATE fires after Instruction is created in ainstruct()."""
         from mellea.stdlib.functional import ainstruct
 
@@ -271,7 +275,7 @@ class TestComponentHookCallSites:
 
         assert len(observed) == 1
 
-    async def test_component_post_create_payload_has_live_component(self):
+    async def test_component_post_create_payload_has_live_component(self) -> None:
         """COMPONENT_POST_CREATE payload.component is the live Instruction object."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.functional import ainstruct
@@ -293,7 +297,7 @@ class TestComponentHookCallSites:
         assert isinstance(p.component, Instruction)
         assert p.component_type == "Instruction"
 
-    async def test_component_pre_execute_fires_in_aact(self):
+    async def test_component_pre_execute_fires_in_aact(self) -> None:
         """COMPONENT_PRE_EXECUTE fires in aact() before generation is called."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.functional import aact
@@ -313,7 +317,7 @@ class TestComponentHookCallSites:
         await aact(action, ctx, backend, strategy=None)
         assert len(observed) == 1
 
-    async def test_component_pre_execute_payload_has_live_action(self):
+    async def test_component_pre_execute_payload_has_live_action(self) -> None:
         """COMPONENT_PRE_EXECUTE payload.action IS the same Component instance."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.functional import aact
@@ -333,9 +337,9 @@ class TestComponentHookCallSites:
         await aact(action, ctx, backend, strategy=None)
         # cpex deep-copies payloads, so check structural equivalence
         assert isinstance(observed[0].action, Instruction)
-        assert observed[0].action._description.value == action._description.value
+        assert observed[0].action._description.value == action._description.value  # type: ignore[union-attr]
 
-    async def test_component_pre_execute_payload_component_type(self):
+    async def test_component_pre_execute_payload_component_type(self) -> None:
         """COMPONENT_PRE_EXECUTE payload.component_type matches the action class name."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.functional import aact
@@ -355,7 +359,7 @@ class TestComponentHookCallSites:
         await aact(action, ctx, backend, strategy=None)
         assert observed[0].component_type == "Instruction"
 
-    async def test_component_post_success_fires_in_aact(self):
+    async def test_component_post_success_fires_in_aact(self) -> None:
         """COMPONENT_POST_SUCCESS fires in aact() after successful generation."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.functional import aact
@@ -372,10 +376,12 @@ class TestComponentHookCallSites:
         ctx = SimpleContext()
         action = Instruction("Success test")
 
-        result, new_ctx = await aact(action, ctx, backend, strategy=None)
+        _result, _new_ctx = await aact(action, ctx, backend, strategy=None)
         assert len(observed) == 1
 
-    async def test_component_post_success_payload_has_correct_result_and_contexts(self):
+    async def test_component_post_success_payload_has_correct_result_and_contexts(
+        self,
+    ) -> None:
         """COMPONENT_POST_SUCCESS payload carries result, context_before, context_after."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.functional import aact
@@ -392,7 +398,7 @@ class TestComponentHookCallSites:
         ctx = SimpleContext()
         action = Instruction("Payload check")
 
-        result, new_ctx = await aact(action, ctx, backend, strategy=None)
+        _result, _new_ctx = await aact(action, ctx, backend, strategy=None)
 
         p = observed[0]
         # cpex deep-copies payloads, so check structural equivalence
@@ -402,7 +408,9 @@ class TestComponentHookCallSites:
         assert p.action is not None
         assert p.latency_ms >= 0
 
-    async def test_component_pre_create_and_post_create_both_fire_in_ainstruct(self):
+    async def test_component_pre_create_and_post_create_both_fire_in_ainstruct(
+        self,
+    ) -> None:
         """Both COMPONENT_PRE_CREATE and COMPONENT_POST_CREATE fire per ainstruct() call."""
         from mellea.stdlib.functional import ainstruct
 
@@ -426,7 +434,7 @@ class TestComponentHookCallSites:
 
         assert order == ["pre_create", "post_create"]
 
-    async def test_all_four_component_hooks_fire_in_ainstruct(self):
+    async def test_all_four_component_hooks_fire_in_ainstruct(self) -> None:
         """All four component hooks fire in the correct order during ainstruct()."""
         from mellea.stdlib.functional import ainstruct
 
@@ -472,7 +480,7 @@ class TestSamplingHookCallSites:
     """SAMPLING_LOOP_START, SAMPLING_ITERATION, SAMPLING_LOOP_END fire in
     BaseSamplingStrategy.sample()."""
 
-    async def test_sampling_loop_start_fires(self):
+    async def test_sampling_loop_start_fires(self) -> None:
         """SAMPLING_LOOP_START fires when RejectionSamplingStrategy.sample() begins."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
@@ -501,7 +509,7 @@ class TestSamplingHookCallSites:
         )
         assert len(observed) == 1
 
-    async def test_sampling_loop_start_payload_has_strategy_name(self):
+    async def test_sampling_loop_start_payload_has_strategy_name(self) -> None:
         """SAMPLING_LOOP_START payload.strategy_name contains the strategy class name."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
@@ -530,7 +538,7 @@ class TestSamplingHookCallSites:
         )
         assert "RejectionSampling" in observed[0].strategy_name
 
-    async def test_sampling_loop_start_payload_has_correct_loop_budget(self):
+    async def test_sampling_loop_start_payload_has_correct_loop_budget(self) -> None:
         """SAMPLING_LOOP_START payload.loop_budget matches the strategy's loop_budget."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
@@ -559,7 +567,7 @@ class TestSamplingHookCallSites:
         )
         assert observed[0].loop_budget == 3
 
-    async def test_sampling_iteration_fires_once_per_loop_iteration(self):
+    async def test_sampling_iteration_fires_once_per_loop_iteration(self) -> None:
         """SAMPLING_ITERATION fires once per loop iteration."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
@@ -591,7 +599,7 @@ class TestSamplingHookCallSites:
         assert observed[0].iteration == 1
         assert observed[0].all_validations_passed is True  # no requirements → all pass
 
-    async def test_sampling_loop_end_fires_on_success_path(self):
+    async def test_sampling_loop_end_fires_on_success_path(self) -> None:
         """SAMPLING_LOOP_END fires with success=True when sampling succeeds."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
@@ -621,7 +629,9 @@ class TestSamplingHookCallSites:
         assert len(observed) == 1
         assert observed[0].success is True
 
-    async def test_sampling_loop_end_success_payload_has_final_result_and_context(self):
+    async def test_sampling_loop_end_success_payload_has_final_result_and_context(
+        self,
+    ) -> None:
         """SAMPLING_LOOP_END success payload has final_result and final_context populated."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
@@ -654,7 +664,7 @@ class TestSamplingHookCallSites:
         assert isinstance(p.all_results, list)
         assert len(p.all_results) == 1  # one iteration, one result
 
-    async def test_sampling_loop_end_context_in_plugin_ctx_is_result_ctx(self):
+    async def test_sampling_loop_end_context_in_plugin_ctx_is_result_ctx(self) -> None:
         """On success, SAMPLING_LOOP_END invoke_hook passes context=result_ctx (post-generation)."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
@@ -688,7 +698,7 @@ class TestSamplingHookCallSites:
                 "Success path: plugin context should be result_ctx, not the original input context"
             )
 
-    async def test_all_three_sampling_hooks_fire_in_order(self):
+    async def test_all_three_sampling_hooks_fire_in_order(self) -> None:
         """SAMPLING_LOOP_START → SAMPLING_ITERATION → SAMPLING_LOOP_END order."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
@@ -743,7 +753,7 @@ class TestSessionHookCallSites:
     instantiating a real LLM backend.
     """
 
-    def test_session_pre_init_fires_during_start_session(self):
+    def test_session_pre_init_fires_during_start_session(self) -> None:
         """SESSION_PRE_INIT fires once before the backend is instantiated."""
         from mellea.stdlib.session import start_session
 
@@ -763,7 +773,7 @@ class TestSessionHookCallSites:
 
         assert len(observed) == 1
 
-    def test_session_pre_init_payload_has_backend_name_and_model_id(self):
+    def test_session_pre_init_payload_has_backend_name_and_model_id(self) -> None:
         """SESSION_PRE_INIT payload carries the backend_name and model_id passed to start_session."""
         from mellea.stdlib.session import start_session
 
@@ -785,7 +795,7 @@ class TestSessionHookCallSites:
         assert p.backend_name == "ollama"
         assert p.model_id == "granite-3b-instruct"
 
-    def test_session_post_init_fires_after_session_created(self):
+    def test_session_post_init_fires_after_session_created(self) -> None:
         """SESSION_POST_INIT fires once after the MelleaSession object is created."""
         from mellea.stdlib.session import start_session
 
@@ -805,7 +815,7 @@ class TestSessionHookCallSites:
 
         assert len(observed) == 1
 
-    def test_session_post_init_payload_has_live_session(self):
+    def test_session_post_init_payload_has_live_session(self) -> None:
         """SESSION_POST_INIT payload.session IS the live MelleaSession object."""
         from mellea.stdlib.session import MelleaSession, start_session
 
@@ -827,7 +837,7 @@ class TestSessionHookCallSites:
         assert p.session is session
         assert isinstance(p.session, MelleaSession)
 
-    def test_pre_init_fires_before_post_init(self):
+    def test_pre_init_fires_before_post_init(self) -> None:
         """SESSION_PRE_INIT fires before SESSION_POST_INIT."""
         from mellea.stdlib.session import start_session
 
@@ -862,7 +872,7 @@ class TestSessionHookCallSites:
 class TestGenerationPostCallMutation:
     """GENERATION_POST_CALL: a hook that replaces model_output is applied."""
 
-    async def test_hook_can_replace_model_output(self):
+    async def test_hook_can_replace_model_output(self) -> None:
         """A plugin that returns a modified model_output replaces the returned thunk."""
         replacement = MagicMock(spec=ModelOutputThunk)
         replacement._generate_log = None
@@ -880,7 +890,7 @@ class TestGenerationPostCallMutation:
 
         assert result is replacement
 
-    async def test_no_modification_returns_original_output(self):
+    async def test_no_modification_returns_original_output(self) -> None:
         """When the hook returns None the original thunk is returned unchanged."""
 
         @hook("generation_post_call")
@@ -900,7 +910,7 @@ class TestGenerationPostCallMutation:
 class TestSamplingLoopEndMutation:
     """SAMPLING_LOOP_END: a hook that replaces final_result is applied."""
 
-    async def test_hook_can_replace_final_result_on_success_path(self):
+    async def test_hook_can_replace_final_result_on_success_path(self) -> None:
         """On success, a plugin that replaces final_result is reflected in SamplingResult.result."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
@@ -934,7 +944,9 @@ class TestSamplingLoopEndMutation:
 
         assert sampling_result.result is replacement
 
-    async def test_no_modification_returns_original_result_on_success_path(self):
+    async def test_no_modification_returns_original_result_on_success_path(
+        self,
+    ) -> None:
         """When the hook returns None on success, the original result is unchanged."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
@@ -962,7 +974,7 @@ class TestSamplingLoopEndMutation:
         assert sampling_result.result is not None
         assert isinstance(sampling_result.result, ModelOutputThunk)
 
-    async def test_hook_can_replace_final_result_on_failure_path(self):
+    async def test_hook_can_replace_final_result_on_failure_path(self) -> None:
         """On failure (budget exhausted), replacing final_result is reflected in SamplingResult.result."""
         from mellea.core.requirement import Requirement, ValidationResult
         from mellea.stdlib.components import Instruction

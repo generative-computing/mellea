@@ -72,7 +72,7 @@ class TestToolArgRedactionViaHook:
     """A tool_pre_invoke hook that modifies model_tool_call.args causes the
     tool to be invoked with the redacted arguments."""
 
-    async def test_hook_redacts_sensitive_arg(self):
+    async def test_hook_redacts_sensitive_arg(self) -> None:
         """Hook replaces a sensitive arg value; the ToolMessage reflects the redacted value."""
         recording_tool = _RecordingTool()
         original_call = ModelToolCall(
@@ -98,7 +98,7 @@ class TestToolArgRedactionViaHook:
         assert "[REDACTED]" in tool_messages[0].content
         assert "my secret password" not in tool_messages[0].content
 
-    async def test_hook_receives_original_args_in_payload(self):
+    async def test_hook_receives_original_args_in_payload(self) -> None:
         """The hook payload contains the original (un-redacted) args."""
         recording_tool = _RecordingTool()
         original_call = ModelToolCall(
@@ -119,7 +119,7 @@ class TestToolArgRedactionViaHook:
         assert len(observed_args) == 1
         assert observed_args[0]["token"] == "abc123"
 
-    async def test_no_hook_modification_leaves_args_unchanged(self):
+    async def test_no_hook_modification_leaves_args_unchanged(self) -> None:
         """When the hook returns None the original args are used unchanged."""
         recording_tool = _RecordingTool()
         original_call = ModelToolCall(
@@ -137,7 +137,7 @@ class TestToolArgRedactionViaHook:
 
         assert recording_tool.calls[0]["value"] == "keep-me"
 
-    async def test_hook_can_redact_multiple_fields(self):
+    async def test_hook_can_redact_multiple_fields(self) -> None:
         """A hook that redacts several fields; all redacted values appear in the output."""
         recording_tool = _RecordingTool()
         original_call = ModelToolCall(
@@ -169,7 +169,7 @@ class TestToolOutputRedactionViaHook:
     """A tool_post_invoke hook that modifies tool_output causes the ToolMessage
     content to reflect the redacted value."""
 
-    async def test_hook_redacts_sensitive_output(self):
+    async def test_hook_redacts_sensitive_output(self) -> None:
         """Hook replaces tool_output; ToolMessage content reflects the redacted value."""
         recording_tool = _RecordingTool()
         original_call = ModelToolCall(
@@ -193,7 +193,7 @@ class TestToolOutputRedactionViaHook:
         assert "supersecret" not in tool_messages[0].content
         assert "[REDACTED]" in tool_messages[0].content
 
-    async def test_hook_receives_raw_output_in_payload(self):
+    async def test_hook_receives_raw_output_in_payload(self) -> None:
         """The hook payload contains the un-redacted tool output."""
         recording_tool = _RecordingTool()
         original_call = ModelToolCall(
@@ -215,7 +215,7 @@ class TestToolOutputRedactionViaHook:
         assert len(observed_outputs) == 1
         assert "password=hunter2" in observed_outputs[0]
 
-    async def test_no_hook_modification_leaves_output_unchanged(self):
+    async def test_no_hook_modification_leaves_output_unchanged(self) -> None:
         """When the hook returns None the original tool output is used unchanged."""
         recording_tool = _RecordingTool()
         original_call = ModelToolCall(

@@ -2,27 +2,26 @@
 
 Public API::
 
-    from mellea.plugins import hook, plugin, block, PluginSet, register, MelleaPlugin
+    from mellea.plugins import Plugin, hook, block, PluginSet, register
 """
 
 from __future__ import annotations
 
-from mellea.plugins.base import MelleaPlugin, PluginResult, PluginViolationError
-from mellea.plugins.decorators import hook, plugin
+from mellea.plugins.base import Plugin, PluginResult, PluginViolationError
+from mellea.plugins.decorators import hook
 from mellea.plugins.pluginset import PluginSet
 from mellea.plugins.registry import block, plugin_scope, register
 from mellea.plugins.types import HookType, PluginMode
 
 __all__ = [
     "HookType",
-    "MelleaPlugin",
+    "Plugin",
     "PluginMode",
     "PluginResult",
     "PluginSet",
     "PluginViolationError",
     "block",
     "hook",
-    "plugin",
     "plugin_scope",
     "register",
 ]

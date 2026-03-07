@@ -97,6 +97,7 @@ class Backend(abc.ABC):
             tool_calls: Always set to false unless supported by backend.
         """
 
+    # TODO: FSA generate_from_context_with_hooks -> generate_from_context
     async def generate_from_context_with_hooks(
         self,
         action: Component[C] | CBlock,
@@ -142,6 +143,7 @@ class Backend(abc.ABC):
             model_options = pre_payload.model_options
             format = pre_payload.format
 
+        # TODO: generate_from_context -> _generate_from_context
         out_result, new_ctx = await self.generate_from_context(
             action,
             ctx,
