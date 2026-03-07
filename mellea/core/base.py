@@ -212,6 +212,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         )
         self._process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
         self._post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
+        self._on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
 
         self._generate_log: GenerateLog | None = None
 
@@ -359,6 +360,10 @@ class ModelOutputThunk(CBlock, Generic[S]):
             assert self.parsed_repr is not None, (
                 "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
             )
+
+            if self._on_computed is not None:
+                await self._on_computed(self)
+
             return self._underlying_value  # type: ignore
 
         return (

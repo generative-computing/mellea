@@ -4,6 +4,7 @@ import abc
 import asyncio
 import functools
 import itertools
+import time
 from collections.abc import Sequence
 from typing import overload
 
@@ -132,14 +133,17 @@ class Backend(abc.ABC):
         """Injects generation hooks in concrete backends.
 
         .. note::
-            The ``generation_post_call`` hook fires immediately after
-            ``generate_from_context`` returns, at which point the
-            ``ModelOutputThunk`` is typically **uncomputed** (lazy).
-            ``latency_ms`` is always ``0`` here for that reason.
+            The ``generation_post_call`` hook fires via ``_on_computed``, a
+            callback set on the returned ``ModelOutputThunk``:
 
-            TODO: Move the post-call hook into ``ModelOutputThunk.astream``
-            (after ``post_process``) so it fires once the value is materialized
-            and ``latency_ms`` can be measured accurately.
+            - **Lazy MOTs** (normal path): ``_on_computed`` is called inside
+              ``ModelOutputThunk.astream`` after ``post_process`` completes and
+              the value is fully materialized. ``latency_ms`` reflects the full
+              time from the ``generate_from_context`` call to value availability.
+            - **Already-computed MOTs** (e.g. cached responses): ``astream``
+              returns early and never invokes ``_on_computed``, so the hook is
+              fired inline here before returning. ``model_output`` replacement is
+              supported in this path.
 
         """
         if "generate_from_context" in cls.__dict__:
@@ -174,6 +178,7 @@ class Backend(abc.ABC):
                     model_options = pre_payload.model_options
                     format = pre_payload.format
                     tool_calls = pre_payload.tool_calls
+                start_time = time.monotonic()
                 out_result, new_ctx = await original(
                     self,
                     action,
@@ -182,24 +187,44 @@ class Backend(abc.ABC):
                     model_options=model_options,
                     tool_calls=tool_calls,
                 )
-                if has_plugins(HookType.GENERATION_POST_CALL):
+
+                _backend_ref = self
+                _ctx_ref = new_ctx
+
+                async def _fire_post_call(mot: ModelOutputThunk) -> ModelOutputThunk:
+                    """Fires GENERATION_POST_CALL and returns the (possibly replaced) MOT."""
+                    mot._on_computed = None  # prevent double-firing
+                    if not has_plugins(HookType.GENERATION_POST_CALL):
+                        return mot
                     from ..plugins.hooks.generation import GenerationPostCallPayload
 
-                    glog = getattr(out_result, "_generate_log", None)
+                    latency_ms = (time.monotonic() - start_time) * 1000
+                    glog = getattr(mot, "_generate_log", None)
                     post_payload = GenerationPostCallPayload(
-                        prompt=glog.prompt if glog else "", model_output=out_result
+                        prompt=glog.prompt if glog else "",
+                        model_output=mot,
+                        latency_ms=latency_ms,
                     )
                     _, post_payload = await invoke_hook(
                         HookType.GENERATION_POST_CALL,
                         post_payload,
-                        backend=self,
-                        context=new_ctx,
+                        backend=_backend_ref,
+                        context=_ctx_ref,
                     )
                     if (
                         post_payload.model_output is not None
-                        and post_payload.model_output is not out_result
+                        and post_payload.model_output is not mot
                     ):
-                        out_result = post_payload.model_output
+                        return post_payload.model_output
+                    return mot
+
+                out_result._on_computed = _fire_post_call
+
+                # For already-computed MOTs (e.g. cached responses or test mocks),
+                # astream() returns early so _on_computed never fires. Fire here
+                # and use the return value to support model_output replacement.
+                if getattr(out_result, "is_computed", lambda: False)():
+                    out_result = await _fire_post_call(out_result)
 
                 return out_result, new_ctx
 

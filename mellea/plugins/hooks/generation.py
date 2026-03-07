@@ -27,15 +27,21 @@ class GenerationPreCallPayload(MelleaBasePayload):
 
 
 class GenerationPostCallPayload(MelleaBasePayload):
-    """Payload for ``generation_post_call`` — after LLM response received.
+    """Payload for ``generation_post_call`` — fires once the model output is fully computed.
+
+    For lazy ``ModelOutputThunk`` objects this hook fires inside
+    ``ModelOutputThunk.astream`` after ``post_process`` completes, so
+    ``model_output.value`` is guaranteed to be available. For already-computed
+    thunks (e.g. cached responses) it fires before ``generate_from_context``
+    returns.
 
     Attributes:
         prompt: The formatted prompt sent to the backend (str or list of message dicts).
-        model_output: The ``ModelOutputThunk`` returned by the backend (writable).
-        latency_ms: Always ``0`` at this call site — the ``ModelOutputThunk`` is
-            uncomputed (lazy) when the hook fires. TODO: move hook into
-            ``ModelOutputThunk.astream`` (after ``post_process``) where real
-            latency can be measured.
+        model_output: The fully-computed ``ModelOutputThunk`` (writable — replacing
+            it is supported only for already-computed thunks; the replacement is
+            ignored on the lazy path since the caller already holds the reference).
+        latency_ms: Elapsed milliseconds from the ``generate_from_context`` call
+            to when the value was fully materialized.
     """
 
     prompt: str | list[dict[str, Any]] = ""
