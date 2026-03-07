@@ -2,6 +2,7 @@
 
 import abc
 import asyncio
+import functools
 import itertools
 from collections.abc import Sequence
 from typing import overload
@@ -9,6 +10,8 @@ from typing import overload
 import pydantic
 import typing_extensions
 
+from ..plugins.manager import has_plugins, invoke_hook
+from ..plugins.types import HookType
 from .base import C, CBlock, Component, Context, ModelOutputThunk
 from .utils import FancyLogger
 
@@ -97,84 +100,6 @@ class Backend(abc.ABC):
             tool_calls: Always set to false unless supported by backend.
         """
 
-    # TODO: FSA generate_from_context_with_hooks -> generate_from_context
-    async def generate_from_context_with_hooks(
-        self,
-        action: Component[C] | CBlock,
-        ctx: Context,
-        *,
-        format: type[BaseModelSubclass] | None = None,
-        model_options: dict | None = None,
-        tool_calls: bool = False,
-    ) -> tuple[ModelOutputThunk[C], Context]:
-        """Wraps ``generate_from_context`` with generation_pre_call / generation_post_call hooks.
-
-        Falls through to ``generate_from_context`` directly when no plugins are configured.
-
-        .. note::
-            The ``generation_post_call`` hook fires immediately after
-            ``generate_from_context`` returns, at which point the
-            ``ModelOutputThunk`` is typically **uncomputed** (lazy).
-            ``latency_ms`` is always ``0`` here for that reason.
-
-            TODO: Move the post-call hook into ``ModelOutputThunk.astream``
-            (after ``post_process``) so it fires once the value is materialized
-            and ``latency_ms`` can be measured accurately.
-        """
-        from mellea.plugins.manager import has_plugins, invoke_hook
-        from mellea.plugins.types import HookType
-
-        if has_plugins(HookType.GENERATION_PRE_CALL):
-            from mellea.plugins.hooks.generation import (
-                GenerationPostCallPayload,
-                GenerationPreCallPayload,
-            )
-
-            pre_payload = GenerationPreCallPayload(
-                action=action,
-                context=ctx,
-                model_options=model_options or {},
-                format=format,
-                tools=None,
-            )
-            _, pre_payload = await invoke_hook(
-                HookType.GENERATION_PRE_CALL, pre_payload, backend=self, context=ctx
-            )
-            model_options = pre_payload.model_options
-            format = pre_payload.format
-
-        # TODO: generate_from_context -> _generate_from_context
-        out_result, new_ctx = await self.generate_from_context(
-            action,
-            ctx,
-            format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
-
-        if has_plugins(HookType.GENERATION_POST_CALL):
-            from mellea.plugins.hooks.generation import GenerationPostCallPayload
-
-            glog = getattr(out_result, "_generate_log", None)
-            post_payload = GenerationPostCallPayload(
-                prompt=glog.prompt if glog else "",
-                model_output=out_result,
-                latency_ms=0,
-            )
-            _, post_payload = await invoke_hook(
-                HookType.GENERATION_POST_CALL,
-                post_payload,
-                backend=self,
-                context=new_ctx,
-            )
-            if (
-                post_payload.model_output is not None
-                and post_payload.model_output is not out_result
-            ):
-                out_result = post_payload.model_output
-
-        return out_result, new_ctx
-
     async def do_generate_walk(
         self, action: CBlock | Component | ModelOutputThunk
     ) -> None:
@@ -202,6 +127,81 @@ class Backend(abc.ABC):
                 f"generate_from_chat_context awaited on {len(_to_compute)} uncomputed mots."
             )
         await asyncio.gather(*coroutines)
+
+    def __init_subclass__(cls):
+        """Injects generation hooks in concrete backends.
+
+        .. note::
+            The ``generation_post_call`` hook fires immediately after
+            ``generate_from_context`` returns, at which point the
+            ``ModelOutputThunk`` is typically **uncomputed** (lazy).
+            ``latency_ms`` is always ``0`` here for that reason.
+
+            TODO: Move the post-call hook into ``ModelOutputThunk.astream``
+            (after ``post_process``) so it fires once the value is materialized
+            and ``latency_ms`` can be measured accurately.
+
+        """
+        if "generate_from_context" in cls.__dict__:
+            original = cls.__dict__["generate_from_context"]
+
+            @functools.wraps(original)
+            async def wrapped(
+                self,
+                action: Component[C] | CBlock,
+                ctx: Context,
+                *,
+                format: type[BaseModelSubclass] | None = None,
+                model_options: dict | None = None,
+                tool_calls: bool = False,
+            ):
+                if has_plugins(HookType.GENERATION_PRE_CALL):
+                    from ..plugins.hooks.generation import GenerationPreCallPayload
+
+                    pre_payload = GenerationPreCallPayload(
+                        action=action,
+                        context=ctx,
+                        format=format,
+                        model_options=model_options or {},
+                    )
+                    _, pre_payload = await invoke_hook(
+                        HookType.GENERATION_PRE_CALL,
+                        pre_payload,
+                        backend=self,
+                        context=ctx,
+                    )
+                    model_options = pre_payload.model_options
+                    format = pre_payload.format
+                out_result, new_ctx = await original(
+                    self,
+                    action,
+                    ctx,
+                    format=format,
+                    model_options=model_options,
+                    tool_calls=tool_calls,
+                )
+                if has_plugins(HookType.GENERATION_POST_CALL):
+                    from ..plugins.hooks.generation import GenerationPostCallPayload
+
+                    glog = getattr(out_result, "_generate_log", None)
+                    post_payload = GenerationPostCallPayload(
+                        prompt=glog.prompt if glog else "", model_output=out_result
+                    )
+                    _, post_payload = await invoke_hook(
+                        HookType.GENERATION_POST_CALL,
+                        post_payload,
+                        backend=self,
+                        context=new_ctx,
+                    )
+                    if (
+                        post_payload.model_output is not None
+                        and post_payload.model_output is not out_result
+                    ):
+                        out_result = post_payload.model_output
+
+                return out_result, new_ctx
+
+            setattr(cls, "generate_from_context", wrapped)
 
 
 def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputThunk]:

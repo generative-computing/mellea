@@ -15,36 +15,30 @@ class GenerationPreCallPayload(MelleaBasePayload):
         action: The ``Component`` or ``CBlock`` about to be sent to the backend.
         context: The ``Context`` being used for this generation call.
         model_options: Dict of model options (writable — plugins may adjust temperature, etc.).
-        tools: Optional dict mapping tool names to callables (writable).
         format: Optional ``BaseModel`` subclass for constrained decoding (writable).
     """
 
     action: Any = None
     context: Any = None
     model_options: dict[str, Any] = {}
-    tools: dict[str, Callable] | None = None
     format: Any = None
 
 
 class GenerationPostCallPayload(MelleaBasePayload):
     """Payload for ``generation_post_call`` — after LLM response received.
 
-    .. note::
-        This hook fires immediately after ``generate_from_context`` returns.
-        The ``ModelOutputThunk`` is typically **uncomputed** (lazy) at this
-        point, so ``model_output.value`` may be ``None``.  ``latency_ms``
-        is always ``0`` here; accurate timing requires the hook to move into
-        ``ModelOutputThunk.astream`` (see backend.py TODO).
-
     Attributes:
         prompt: The formatted prompt sent to the backend (str or list of message dicts).
         model_output: The ``ModelOutputThunk`` returned by the backend (writable).
-        latency_ms: Always ``0`` — see note above.
+        latency_ms: Always ``0`` at this call site — the ``ModelOutputThunk`` is
+            uncomputed (lazy) when the hook fires. TODO: move hook into
+            ``ModelOutputThunk.astream`` (after ``post_process``) where real
+            latency can be measured.
     """
 
     prompt: str | list[dict[str, Any]] = ""
     model_output: Any = None
-    latency_ms: int = 0
+    latency_ms: float = 0.0
 
 
 class GenerationStreamChunkPayload(MelleaBasePayload):

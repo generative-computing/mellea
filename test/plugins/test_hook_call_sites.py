@@ -75,10 +75,10 @@ async def reset_plugins():
 
 
 class TestGenerationHookCallSites:
-    """GENERATION_PRE_CALL and GENERATION_POST_CALL fire in Backend.generate_from_context_with_hooks()."""
+    """GENERATION_PRE_CALL and GENERATION_POST_CALL fire in Backend.generate_from_context()."""
 
     async def test_generation_pre_call_fires_once(self) -> None:
-        """GENERATION_PRE_CALL fires exactly once per generate_from_context_with_hooks() call."""
+        """GENERATION_PRE_CALL fires exactly once per generate_from_context() call."""
         observed: list[Any] = []
 
         @hook("generation_pre_call")
@@ -89,7 +89,7 @@ class TestGenerationHookCallSites:
         register(recorder)
         backend = _MockBackend()
         action = CBlock("hello world")
-        await backend.generate_from_context_with_hooks(action, MagicMock(spec=Context))
+        await backend.generate_from_context(action, MagicMock(spec=Context))
 
         assert len(observed) == 1
 
@@ -106,7 +106,7 @@ class TestGenerationHookCallSites:
         backend = _MockBackend()
         action = CBlock("specific input text")
         mock_ctx = MagicMock(spec=Context)
-        await backend.generate_from_context_with_hooks(action, mock_ctx)
+        await backend.generate_from_context(action, mock_ctx)
 
         p = observed[0]
         # cpex deep-copies payloads when policies exist, so verify the
@@ -126,9 +126,7 @@ class TestGenerationHookCallSites:
 
         register(recorder)
         backend = _MockBackend()
-        await backend.generate_from_context_with_hooks(
-            CBlock("test"), MagicMock(spec=Context)
-        )
+        await backend.generate_from_context(CBlock("test"), MagicMock(spec=Context))
 
         assert len(observed) == 1
 
@@ -145,7 +143,7 @@ class TestGenerationHookCallSites:
 
         register(recorder)
         backend = _MockBackend()
-        _result, _ = await backend.generate_from_context_with_hooks(
+        _result, _ = await backend.generate_from_context(
             CBlock("test"), MagicMock(spec=Context)
         )
 
@@ -163,9 +161,7 @@ class TestGenerationHookCallSites:
 
         register(recorder)
         backend = _MockBackend()
-        await backend.generate_from_context_with_hooks(
-            CBlock("test"), MagicMock(spec=Context)
-        )
+        await backend.generate_from_context(CBlock("test"), MagicMock(spec=Context))
 
         assert observed[0].latency_ms >= 0
 
@@ -186,7 +182,7 @@ class TestGenerationHookCallSites:
         register(pre_recorder)
         register(post_recorder)
         backend = _MockBackend()
-        await backend.generate_from_context_with_hooks(
+        await backend.generate_from_context(
             CBlock("order test"), MagicMock(spec=Context)
         )
 
@@ -884,7 +880,7 @@ class TestGenerationPostCallMutation:
 
         register(swap_output)
         backend = _MockBackend()
-        result, _ = await backend.generate_from_context_with_hooks(
+        result, _ = await backend.generate_from_context(
             CBlock("mutation test"), MagicMock(spec=Context)
         )
 
@@ -899,7 +895,7 @@ class TestGenerationPostCallMutation:
 
         register(observe_only)
         backend = _MockBackend()
-        result, _ = await backend.generate_from_context_with_hooks(
+        result, _ = await backend.generate_from_context(
             CBlock("no-op test"), MagicMock(spec=Context)
         )
 

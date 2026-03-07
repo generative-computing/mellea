@@ -525,7 +525,7 @@ async def aact(
                         "Calling the function with NO strategy BUT requirements. No requirement is being checked!"
                     )
 
-                result, new_ctx = await backend.generate_from_context_with_hooks(
+                result, new_ctx = await backend.generate_from_context(
                     action,
                     ctx=context,
                     format=format,
