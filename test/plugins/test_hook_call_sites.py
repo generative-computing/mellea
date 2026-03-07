@@ -109,8 +109,7 @@ class TestGenerationHookCallSites:
         await backend.generate_from_context(action, mock_ctx)
 
         p = observed[0]
-        # cpex deep-copies payloads when policies exist, so verify the
-        # payload carries structurally equivalent values (not identity).
+
         assert isinstance(p.action, CBlock)
         assert p.action.value == action.value
         assert p.context is not None
@@ -147,7 +146,6 @@ class TestGenerationHookCallSites:
             CBlock("test"), MagicMock(spec=Context)
         )
 
-        # cpex deep-copies payloads, so check structural equivalence
         assert observed[0].model_output is not None
 
     async def test_generation_post_call_latency_ms_is_non_negative(self) -> None:
@@ -331,7 +329,6 @@ class TestComponentHookCallSites:
         action = Instruction("Live reference test")
 
         await aact(action, ctx, backend, strategy=None)
-        # cpex deep-copies payloads, so check structural equivalence
         assert isinstance(observed[0].action, Instruction)
         assert observed[0].action._description.value == action._description.value  # type: ignore[union-attr]
 
@@ -397,7 +394,7 @@ class TestComponentHookCallSites:
         _result, _new_ctx = await aact(action, ctx, backend, strategy=None)
 
         p = observed[0]
-        # cpex deep-copies payloads, so check structural equivalence
+
         assert p.result is not None
         assert p.context_before is not None
         assert p.context_after is not None

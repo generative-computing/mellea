@@ -16,12 +16,14 @@ class GenerationPreCallPayload(MelleaBasePayload):
         context: The ``Context`` being used for this generation call.
         model_options: Dict of model options (writable — plugins may adjust temperature, etc.).
         format: Optional ``BaseModel`` subclass for constrained decoding (writable).
+        tool_calls: Whether tool calls are enabled for this generation (writable).
     """
 
     action: Any = None
     context: Any = None
     model_options: dict[str, Any] = {}
     format: Any = None
+    tool_calls: bool = False
 
 
 class GenerationPostCallPayload(MelleaBasePayload):

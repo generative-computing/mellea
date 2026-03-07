@@ -163,6 +163,7 @@ class Backend(abc.ABC):
                         context=ctx,
                         format=format,
                         model_options=model_options or {},
+                        tool_calls=tool_calls,
                     )
                     _, pre_payload = await invoke_hook(
                         HookType.GENERATION_PRE_CALL,
@@ -172,6 +173,7 @@ class Backend(abc.ABC):
                     )
                     model_options = pre_payload.model_options
                     format = pre_payload.format
+                    tool_calls = pre_payload.tool_calls
                 out_result, new_ctx = await original(
                     self,
                     action,
