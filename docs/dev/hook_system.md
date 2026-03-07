@@ -1,7 +1,6 @@
 # Mellea Plugin Hook System Design Document
 
-Mellea's hook system provides extension points for deployed generative AI applications that need policy enforcement, observability, and customization without modifying core library code. Hooks enable plugins to register and respond to events throughout the framework's execution lifecycle — from session initialization through generation, validation, and cleanup.
-
+Mellea's hook system provides extension points for deployed generative AI applications that need policy enforcement, observability, and customization without modifying core library code. Hooks enable plugins to register and respond to events throughout the framework's execution lifecycle, from session initialization through generation, validation, and cleanup.
 
 ## 1. Overview
 
@@ -12,8 +11,8 @@ Mellea's hook system provides extension points for deployed generative AI applic
 3. **Fail-safe**: Hook failures can be handled gracefully without breaking core execution
 4. **Minimal Intrusion**: Plugins are opt-in; default Mellea behavior remains unchanged without plugins. Plugins work identically whether invoked through a session (`m.instruct(...)`) or via the functional API (`instruct(backend, context, ...)`)
 5. **Architecturally Aligned**: Hook categories reflect Mellea's true abstraction boundaries — Session lifecycle, Component lifecycle, and the (Backend, Context) generation pipeline
-6. **Code-First**: Plugins are defined and composed in Python. Decorators are the primary registration mechanism; YAML configuration is a secondary option for deployment-time overrides
-7. **Functions-First**: The simplest plugin is a plain async function decorated with `@hook`. Class-based plugins exist for stateful, multi-hook scenarios but are not required
+6. **Code-First**: Plugins are defined and composed in Python. The `@hook` decorator and `Plugin` base class are the primary registration mechanisms; YAML configuration is a secondary option for deployment-time overrides
+7. **Functions-First**: The simplest plugin is a plain async function decorated with `@hook`. Class-based plugins (via the `Plugin` base class) exist for stateful, multi-hook scenarios but are not required
 
 ### Hook Method Signature
 
@@ -21,14 +20,14 @@ All hooks follow this consistent async pattern:
 
 ```python
 # Standalone function hook (primary)
-@hook("hook_name", mode="sequential", priority=50)
+@hook("hook_name", mode=PluginMode.SEQUENTIAL, priority=50)
 async def my_hook(
     payload: PluginPayload,
     context: PluginContext
 ) -> PluginResult | None
 
 # Class-based method hook
-class MyPlugin(MelleaPlugin):
+class MyPlugin(Plugin, name="my-plugin"):
     @hook("hook_name")
     async def my_hook(
         self,
@@ -39,7 +38,7 @@ class MyPlugin(MelleaPlugin):
 
 - **`payload`**: Immutable (frozen), strongly-typed data specific to the hook point. Plugins use `model_copy(update={...})` to propose modifications
 - **`context`**: Read-only shared context with session metadata and utilities
-- **`mode`**: `"sequential"` (default), `"concurrent"`, `"audit"`, or `"fire_and_forget"` — controls execution behavior (see Execution Mode below)
+- **`mode`**: `PluginMode.SEQUENTIAL` (default), `PluginMode.CONCURRENT`, `PluginMode.AUDIT`, or `PluginMode.FIRE_AND_FORGET` — controls execution behavior (see Execution Mode below)
 - **`priority`**: Lower numbers execute first (default: 50)
 - **Returns**: A `PluginResult` with continuation flag, modified payload, and violation/explanation — or `None` to continue unchanged
 
@@ -57,22 +56,21 @@ Hooks support four execution modes, configurable per-registration via the `mode`
 
 | Mode | Behavior |
 |------|----------|
-| **`sequential`** (default) | Awaited inline, executed serially in priority order. If the hook returns `PluginResult(continue_processing=False)`, execution is blocked and downstream hooks do not run. Use for policy enforcement, budget controls, and authorization. |
-| **`concurrent`** | Awaited inline, but dispatched concurrently alongside other `concurrent` hooks at the same priority level. Violations are honored. Use when hooks are independent and ordering does not matter. |
-| **`audit`** | Awaited inline. Violations are logged but do not block execution. Use for monitoring, auditing, and gradual rollout of policies. |
-| **`fire_and_forget`** | Dispatched via `asyncio.create_task()` and runs in the background. The `PluginResult` is ignored — cannot modify payloads or block execution. Use for logging, telemetry, and non-critical side effects where latency matters more than ordering guarantees. |
+| **`PluginMode.SEQUENTIAL`** (default) | Awaited inline, executed serially in priority order. If the hook returns `PluginResult(continue_processing=False)`, execution is blocked and downstream hooks do not run. Use for policy enforcement, budget controls, and authorization. |
+| **`PluginMode.CONCURRENT`** | Awaited inline, but dispatched concurrently alongside other `concurrent` hooks at the same priority level. Violations are honored. Use when hooks are independent and ordering does not matter. |
+| **`PluginMode.AUDIT`** | Awaited inline. Violations are logged but do not block execution. Use for monitoring, auditing, and gradual rollout of policies. |
+| **`PluginMode.FIRE_AND_FORGET`** | Dispatched via `asyncio.create_task()` and runs in the background. The `PluginResult` is ignored — cannot modify payloads or block execution. Use for logging, telemetry, and non-critical side effects where latency matters more than ordering guarantees. |
 
-Fire-and-forget hooks receive the payload snapshot as it existed at dispatch time; `sequential`/`concurrent`/`audit` hooks in the same chain that execute earlier (higher priority) can modify the payload before fire-and-forget hooks see it. Any exceptions in fire-and-forget hooks are logged but do not propagate.
+Fire-and-forget hooks receive the payload snapshot as it existed at dispatch time; `SEQUENTIAL`/`CONCURRENT`/`AUDIT` hooks in the same chain that execute earlier (higher priority) can modify the payload before fire-and-forget hooks see it. Any exceptions in fire-and-forget hooks are logged but do not propagate.
 
-> **Note**: All four modes (`sequential`, `concurrent`, `audit`, `fire_and_forget`) are supported by CPEX's `PluginMode` enum. The additional `disabled` mode remains available in the `PluginMode` enum and YAML configuration for deployment-time control, but is not exposed as a `@hook` decorator value. It is a deployment concern, not a definition-time concern.
+> **Note**: All four modes are exposed via Mellea's own `PluginMode` enum (`PluginMode.SEQUENTIAL`, `PluginMode.CONCURRENT`, `PluginMode.AUDIT`, `PluginMode.FIRE_AND_FORGET`), which maps to CPEX's internal `PluginMode`. The additional `disabled` mode remains available in CPEX's enum and YAML configuration for deployment-time control, but is not exposed in Mellea's `PluginMode`. It is a deployment concern, not a definition-time concern.
 
 ### Plugin Framework
 
 The hook system is backed by a lightweight plugin framework built as a Mellea dependency (not a separate user-facing package). This framework:
 
 - Provides the `@hook` decorator for registering standalone async functions as hook handlers
-- Provides the `@plugin` decorator for marking plain classes as multi-hook plugins
-- Provides the `MelleaPlugin` base class for stateful plugins that need lifecycle hooks (`initialize`/`shutdown`) and typed context accessors
+- Provides the `Plugin` base class for multi-hook plugins with automatic context-manager support and metadata via `__init_subclass__` keyword arguments
 - Exposes `PluginSet` for grouping related hooks/plugins into composable, reusable units
 - Exposes `register()` for global plugin registration and `block()` as a convenience for returning blocking `PluginResult`s
 - Implements a plugin manager that loads, registers, and governs the execution of plugins
@@ -81,7 +79,7 @@ The hook system is backed by a lightweight plugin framework built as a Mellea de
 The public API surface:
 
 ```python
-from mellea.plugins import hook, plugin, block, PluginSet, register, MelleaPlugin
+from mellea.plugins import Plugin, hook, block, PluginSet, register
 ```
 
 ### Global vs Session-Scoped Plugins
@@ -107,11 +105,11 @@ This is useful for:
 - Middleware injection: wrap a third-party call with additional hooks without polluting global state
 - Composing scopes: stack independent scopes that each clean up after themselves
 
-Four equivalent forms are supported:
+Three equivalent forms are supported:
 
 **1. `plugin_scope(*items)` factory**
 
-Accepts standalone `@hook` functions, `@plugin`-decorated instances, `PluginSet`s, or any mix:
+Accepts standalone `@hook` functions, `Plugin` subclass instances, `PluginSet`s, or any mix:
 
 ```python
 from mellea.plugins import plugin_scope
@@ -124,12 +122,12 @@ with plugin_scope(pii_redactor, observability_set, enforce_budget):
     result = m.instruct("Summarize the customer record.")
 ```
 
-**2. `@plugin`-decorated class instance as context manager**
+**2. `Plugin` subclass instance as context manager**
 
-Any instance of a `@plugin`-decorated class can be entered directly as a context manager:
+Any instance of a `Plugin` subclass can be entered directly as a context manager:
 
 ```python
-guard = ContentGuard()
+guard = ContentGuard()  # ContentGuard inherits from Plugin
 with guard:
     result = m.instruct("What is the boiling point of water?")
 # ContentGuard hooks are deregistered here
@@ -145,19 +143,9 @@ with observability:  # observability is a PluginSet
 # All observability hooks are deregistered here
 ```
 
-**4. `MelleaPlugin` subclass instance as context manager**
-
-Any `MelleaPlugin` instance supports the same `with` syntax:
-
-```python
-profiler = SlotProfiler()
-with profiler:
-    result = m.instruct("Generate a report.")
-```
-
 **Async variants**
 
-All four forms also support `async with` for use in async code:
+All three forms also support `async with` for use in async code:
 
 ```python
 async with plugin_scope(log_request, ContentGuard()):
@@ -173,7 +161,7 @@ Scopes stack cleanly, i.e., each exit deregisters only its own plugins. Nesting 
 
 ```python
 with plugin_scope(log_request):          # outer scope
-    with ContentGuard() as guard:        # inner scope: @plugin instance
+    with ContentGuard() as guard:        # inner scope: Plugin subclass instance
         result = m.instruct("...")       # log_request + ContentGuard active
     result = m.instruct("...")           # only log_request active
 # no plugins active
@@ -380,7 +368,7 @@ Mellea uses `DefaultHookPolicy.DENY` as the default for hooks without an explici
 Because payloads are frozen, plugins must use `model_copy(update={...})` to create a modified copy:
 
 ```python
-@hook("generation_pre_call", mode="sequential", priority=10)
+@hook("generation_pre_call", mode=PluginMode.SEQUENTIAL, priority=10)
 async def enforce_budget(payload, ctx):
     if (_estimate_tokens(payload) or 0) > 4000:
         return block("Token budget exceeded")
@@ -1317,7 +1305,7 @@ return PluginResult(
 All plugin registration APIs are available from `mellea.plugins`:
 
 ```python
-from mellea.plugins import hook, plugin, block, PluginSet, register, MelleaPlugin
+from mellea.plugins import Plugin, hook, block, PluginSet, register
 ```
 
 ### Standalone Function Hooks
@@ -1325,36 +1313,33 @@ from mellea.plugins import hook, plugin, block, PluginSet, register, MelleaPlugi
 The simplest way to define a hook handler is with the `@hook` decorator on a plain async function:
 
 ```python
-from mellea.plugins import hook, block
+from mellea.plugins import hook, block, PluginMode
 
-@hook("generation_pre_call", mode="sequential", priority=10)
+@hook("generation_pre_call", mode=PluginMode.SEQUENTIAL, priority=10)
 async def enforce_budget(payload, ctx):
     if (_estimate_tokens(payload) or 0) > 4000:
         return block("Token budget exceeded")
 
-@hook("component_post_success", mode="fire_and_forget")
+@hook("component_post_success", mode=PluginMode.FIRE_AND_FORGET)
 async def log_result(payload, ctx):
     print(f"[{payload.component_type}] {payload.latency_ms}ms")
 ```
 
 **Parameters**:
 - `hook_type: str` — the hook point name (required, first positional argument)
-- `mode: str` — `"sequential"` (default), `"concurrent"`, `"audit"`, or `"fire_and_forget"`
+- `mode: PluginMode` — `PluginMode.SEQUENTIAL` (default), `PluginMode.CONCURRENT`, `PluginMode.AUDIT`, or `PluginMode.FIRE_AND_FORGET`
 - `priority: int` — lower numbers execute first (default: 50)
 
 The `block()` helper is shorthand for returning `PluginResult(continue_processing=False, violation=PluginViolation(reason=...))`. It accepts an optional `code`, `description`, and `details` for structured violation information.
 
 ### Class-Based Plugins
 
-For plugins that need shared state across multiple hooks, use the `@plugin` decorator on a class or subclass `MelleaPlugin`:
-
-**`@plugin` decorator** — marks a plain class as a multi-hook plugin:
+For plugins that need shared state across multiple hooks, subclass `Plugin`:
 
 ```python
-from mellea.plugins import plugin, hook
+from mellea.plugins import Plugin, hook
 
-@plugin("pii-redactor", priority=5)
-class PIIRedactor:
+class PIIRedactor(Plugin, name="pii-redactor", priority=5):
     def __init__(self, patterns: list[str] | None = None):
         self.patterns = patterns or []
 
@@ -1367,14 +1352,17 @@ class PIIRedactor:
         ...
 ```
 
-The `@plugin` decorator accepts:
-- `name: str` — plugin name (required, first positional argument)
-- `priority: int` — default priority for all hooks in this plugin (default: 50). Individual `@hook` decorators on methods can override.
+The `Plugin` base class uses `__init_subclass__` keyword arguments:
+- `name: str` — plugin name (required for registration)
+- `priority: int` — default priority for all hooks in this plugin (default: 50). The class-level priority takes precedence over individual `@hook` priorities.
 
-**`MelleaPlugin` subclass** — for plugins that need lifecycle hooks (`initialize`/`shutdown`) or typed context accessors:
+`Plugin` subclasses automatically support the context manager protocol (`with`/`async with`) for block-scoped activation.
+
+**Advanced: `MelleaPlugin` subclass** — for plugins that need cpex lifecycle hooks (`initialize`/`shutdown`) or typed context accessors. This is not part of the primary public API:
 
 ```python
-from mellea.plugins import MelleaPlugin, hook
+from mellea.plugins.base import MelleaPlugin
+from mellea.plugins import hook
 
 class MetricsPlugin(MelleaPlugin):
     def __init__(self, endpoint: str):
@@ -1395,8 +1383,6 @@ class MetricsPlugin(MelleaPlugin):
         self._buffer.append({"latency": payload.latency_ms})
 ```
 
-Convention-based registration (methods named `on_<hook_type>`) remains supported for `MelleaPlugin` subclasses.
-
 ### Composing Plugins with PluginSet
 
 `PluginSet` groups related hooks and plugins for reuse across sessions:
@@ -1415,7 +1401,7 @@ observability = PluginSet("observability", [
 ])
 ```
 
-`PluginSet` accepts standalone hook functions, `@plugin`-decorated class instances, and `MelleaPlugin` instances. PluginSets can be nested.
+`PluginSet` accepts standalone hook functions and `Plugin` subclass instances. PluginSets can be nested.
 
 ### Global Registration
 
@@ -1462,7 +1448,7 @@ Only globally registered plugins fire. If no global plugins are registered, hook
 - Lower numbers execute first
 - Within the same priority, execution order is deterministic but unspecified
 - Default priority: 50
-- Priority can be set on `@hook` (per-handler), `@plugin` (per-plugin default), or `PluginSet` (per-set default). Most specific wins: per-handler > per-plugin > per-set.
+- Priority can be set on `@hook` (per-handler), `Plugin` subclass (per-plugin default via `__init_subclass__`), or `PluginSet` (per-set default). Class-level `Plugin` priority takes precedence over `@hook` method-level priority. `PluginSet` priority overrides all item priorities.
 
 ### YAML Configuration (Secondary)
 
@@ -1502,7 +1488,7 @@ The following modes are available in CPEX's `PluginMode` enum and YAML configura
 - **`fire_and_forget`** (`PluginMode.FIRE_AND_FORGET`): Background task, result ignored
 - **`disabled`** (`PluginMode.DISABLED`): Skip hook execution (deployment-time only)
 
-The `@hook` decorator exposes `sequential`, `concurrent`, `audit`, and `fire_and_forget` — all backed by CPEX's `PluginMode` enum. The `disabled` mode is a deployment-time concern configured via YAML or programmatic `PluginConfig`.
+The `@hook` decorator accepts Mellea's own `PluginMode` enum values (`SEQUENTIAL`, `CONCURRENT`, `AUDIT`, `FIRE_AND_FORGET`) which map to CPEX's internal `PluginMode`. The `disabled` mode is a deployment-time concern configured via YAML or programmatic `PluginConfig`.
 
 ### Custom Hook Types
 
@@ -1523,9 +1509,9 @@ Custom hooks follow the same calling convention, payload chaining, and result se
 ### Token Budget Enforcement (Standalone Function)
 
 ```python
-from mellea.plugins import hook, block
+from mellea.plugins import hook, block, PluginMode
 
-@hook("generation_pre_call", mode="sequential", priority=10)
+@hook("generation_pre_call", mode=PluginMode.SEQUENTIAL, priority=10)
 async def enforce_token_budget(payload, ctx):
     budget = 4000
     estimated = _estimate_tokens(payload) or 0
@@ -1540,11 +1526,11 @@ async def enforce_token_budget(payload, ctx):
 ### Content Policy (Standalone Function)
 
 ```python
-from mellea.plugins import hook, block
+from mellea.plugins import hook, block, PluginMode
 
 BLOCKED_TERMS = ["term1", "term2"]
 
-@hook("component_pre_create", mode="sequential", priority=10)
+@hook("component_pre_create", mode=PluginMode.SEQUENTIAL, priority=10)
 async def enforce_content_policy(payload, ctx):
     # Only enforce on Instructions and GenerativeSlots
     if payload.component_type not in ("Instruction", "GenerativeSlot"):
@@ -1561,9 +1547,9 @@ async def enforce_content_policy(payload, ctx):
 ### Audit Logger (Fire-and-Forget)
 
 ```python
-from mellea.plugins import hook
+from mellea.plugins import hook, PluginMode
 
-@hook("component_post_success", mode="fire_and_forget")
+@hook("component_post_success", mode=PluginMode.FIRE_AND_FORGET)
 async def audit_log_success(payload, ctx):
     await send_to_audit_service({
         "event": "generation_success",
@@ -1573,7 +1559,7 @@ async def audit_log_success(payload, ctx):
         "timestamp": payload.timestamp.isoformat(),
     })
 
-@hook("component_post_error", mode="fire_and_forget")
+@hook("component_post_error", mode=PluginMode.FIRE_AND_FORGET)
 async def audit_log_error(payload, ctx):
     await send_to_audit_service({
         "event": "generation_error",
@@ -1583,14 +1569,13 @@ async def audit_log_error(payload, ctx):
     })
 ```
 
-### PII Redaction Plugin (Class-Based with `@plugin`)
+### PII Redaction Plugin (Class-Based with `Plugin`)
 
 ```python
 import re
-from mellea.plugins import plugin, hook, PluginResult
+from mellea.plugins import Plugin, hook, PluginResult
 
-@plugin("pii-redactor", priority=5)
-class PIIRedactor:
+class PIIRedactor(Plugin, name="pii-redactor", priority=5):
     def __init__(self, patterns: list[str] | None = None):
         self.patterns = patterns or [r"\d{3}-\d{2}-\d{4}"]
 
@@ -1617,22 +1602,17 @@ class PIIRedactor:
         return text
 ```
 
-### Generative Slot Profiler (`MelleaPlugin` Subclass)
+### Generative Slot Profiler (`Plugin` Subclass)
 
 ```python
 from collections import defaultdict
-from mellea.plugins import MelleaPlugin, hook
+from mellea.plugins import Plugin, hook
 
-class SlotProfiler(MelleaPlugin):
-    """Uses MelleaPlugin for lifecycle hooks and typed context accessors."""
+class SlotProfiler(Plugin, name="slot-profiler"):
+    """Tracks latency stats for GenerativeSlot executions."""
 
     def __init__(self):
-        super().__init__()
         self._stats = defaultdict(lambda: {"calls": 0, "total_ms": 0})
-
-    async def initialize(self):
-        # Called once when the plugin manager starts
-        self._stats.clear()
 
     @hook("component_post_success")
     async def profile(self, payload, ctx):
