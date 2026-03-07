@@ -47,6 +47,7 @@ class Instruction(Component[str]):
         requirements = [] if requirements is None else requirements
         icl_examples = [] if icl_examples is None else icl_examples
         grounding_context = dict() if grounding_context is None else grounding_context
+
         # Apply templates. All inputs must be strings if provided.
         if user_variables is not None:
             if description is not None:
@@ -183,6 +184,16 @@ class Instruction(Component[str]):
         res = deepcopy(self)
         res._repair_string = repair_string
         return res
+
+    @property
+    def description(self) -> str:
+        """Return the description text as a plain string."""
+        return str(self._description) if self._description is not None else ""
+
+    @description.setter
+    def description(self, value: str) -> None:
+        """Replace the description text."""
+        self._description = blockify(value)
 
     def _parse(self, computed: ModelOutputThunk) -> str:
         """Parse the model output. Returns string value for now."""

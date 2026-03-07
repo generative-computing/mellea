@@ -2,8 +2,7 @@
 
 Covers:
 - SessionPostInitPayload, SessionResetPayload, SessionCleanupPayload
-- ComponentPostCreatePayload, ComponentPreExecutePayload,
-  ComponentPostSuccessPayload, ComponentPostErrorPayload
+- ComponentPreExecutePayload, ComponentPostSuccessPayload, ComponentPostErrorPayload
 - GenerationPostCallPayload, GenerationStreamChunkPayload
 - ValidationPreCheckPayload, ValidationPostCheckPayload
 - SamplingLoopStartPayload, SamplingIterationPayload,
@@ -18,7 +17,6 @@ pytest.importorskip("cpex.framework")
 
 from mellea.plugins.base import MelleaBasePayload
 from mellea.plugins.hooks.component import (
-    ComponentPostCreatePayload,
     ComponentPostErrorPayload,
     ComponentPostSuccessPayload,
     ComponentPreExecutePayload,
@@ -203,50 +201,6 @@ class TestSessionCleanupPayload:
 # ===========================================================================
 # Component payloads
 # ===========================================================================
-
-
-class TestComponentPostCreatePayload:
-    def test_defaults(self):
-        payload = ComponentPostCreatePayload()
-        assert payload.component_type == ""
-        assert payload.component is None
-        assert payload.session_id is None
-
-    def test_construction_with_values(self):
-        payload = ComponentPostCreatePayload(
-            component_type="Instruction",
-            component=_SENTINEL_COMPONENT,
-            request_id="r-comp-001",
-        )
-        assert payload.component_type == "Instruction"
-        assert payload.component is _SENTINEL_COMPONENT
-        assert payload.request_id == "r-comp-001"
-
-    def test_frozen(self):
-        payload = ComponentPostCreatePayload(component_type="Instruction")
-        with pytest.raises(ValidationError):
-            payload.component_type = "Other"
-
-    def test_frozen_component_field(self):
-        payload = ComponentPostCreatePayload(component=_SENTINEL_COMPONENT)
-        with pytest.raises(ValidationError):
-            payload.component = object()
-
-    def test_model_copy_creates_modified_copy(self):
-        new_comp = object()
-        payload = ComponentPostCreatePayload(
-            component_type="Instruction", component=_SENTINEL_COMPONENT
-        )
-        modified = payload.model_copy(
-            update={"component_type": "Extractor", "component": new_comp}
-        )
-        assert modified.component_type == "Extractor"
-        assert modified.component is new_comp
-        assert payload.component_type == "Instruction"
-        assert payload.component is _SENTINEL_COMPONENT
-
-    def test_inherits_base_fields(self):
-        assert issubclass(ComponentPostCreatePayload, MelleaBasePayload)
 
 
 class TestComponentPreExecutePayload:

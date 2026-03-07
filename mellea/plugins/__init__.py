@@ -2,7 +2,7 @@
 
 Public API::
 
-    from mellea.plugins import Plugin, hook, block, PluginSet, register
+    from mellea.plugins import Plugin, hook, block, modify, PluginSet, register, unregister
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 from mellea.plugins.base import Plugin, PluginResult, PluginViolationError
 from mellea.plugins.decorators import hook
 from mellea.plugins.pluginset import PluginSet
-from mellea.plugins.registry import block, plugin_scope, register
+from mellea.plugins.registry import block, modify, plugin_scope, register, unregister
 from mellea.plugins.types import HookType, PluginMode
 
 __all__ = [
@@ -22,6 +22,8 @@ __all__ = [
     "PluginViolationError",
     "block",
     "hook",
+    "modify",
     "plugin_scope",
     "register",
+    "unregister",
 ]

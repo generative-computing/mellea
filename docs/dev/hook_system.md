@@ -330,8 +330,8 @@ def apply_policy(
 | `component_post_success` | `result` |
 | `component_post_error` | *(observe-only)* |
 | **Generation Pipeline** | |
-| `generation_pre_call` | `model_options`, `tools`, `format`, `formatted_prompt` |
-| `generation_post_call` | `processed_output`, `model_output` |
+| `generation_pre_call` | `model_options`, `format`, `tool_calls` |
+| `generation_post_call` | `model_output` |
 | `generation_stream_chunk` | `chunk`, `accumulated` |
 | **Validation** | |
 | `validation_pre_check` | `requirements`, `model_options` |
@@ -504,7 +504,9 @@ Plugins should check for `None`/empty values rather than assuming all fields are
 
 #### `component_pre_create`
 
-- **Trigger**: Called when `instruct()`, `chat()`, or a generative slot is invoked, before the prompt is constructed.
+> **Implementation deferred.** `component_pre_create` and `component_post_create` are not implemented in this iteration of the hook system. See the discussion note below.
+
+- **Trigger**: Called inside `Component.__init__` (specifically `Instruction.__init__` and `Message.__init__`), before attributes are assigned. Fires for every component created, regardless of the code path — whether via `instruct()`/`chat()`, `ainstruct()`/`achat()`, or direct construction (e.g. `Instruction(...)`).
 - **Use Cases**:
   - PII redaction on user input
   - Prompt injection detection
@@ -524,15 +526,14 @@ Plugins should check for `None`/empty values rather than assuming all fields are
       prefix: str | CBlock | None                # Output prefix
       template_id: str | None                    # Identifier of prompt template
   ```
-- **Context**:
-  - `backend`: Backend
-  - `context`: Context - Context the component will be added to
-  - `history_snapshot`: ContextSnapshot - Conversation history
+- **Context**: `backend` and `context` are not available at this hook point (`None`). The hook fires from `__init__`, where no backend or execution context exists yet.
 
 
 #### `component_post_create`
 
-- **Trigger**: After component is created and formatted, before backend call.
+> **Implementation deferred.** See the discussion note below.
+
+- **Trigger**: Called at the end of `Component.__init__` (specifically `Instruction.__init__` and `Message.__init__`), after all attributes are set. Fires for every component created, regardless of the code path. Note: because this hook fires inside `__init__`, the component **cannot be replaced** — plugins may only mutate the component's attributes in-place.
 - **Use Cases**:
   - Appending system prompts
   - Context stuffing (RAG injection)
@@ -543,11 +544,18 @@ Plugins should check for `None`/empty values rather than assuming all fields are
   class ComponentPostCreatePayload(BasePayload):
       component_type: str            # "Instruction", "GenerativeSlot", etc.
       component: Component           # The created component
-      template_repr: TemplateRepresentation  # Formatted representation
   ```
-- **Context**:
-  - `backend`: Backend
-  - `context`: Context
+- **Context**: `backend` and `context` are not available at this hook point (`None`). See `component_pre_create` note above.
+
+> **Discussion — why these hooks are deferred:**
+>
+> `Component` is currently a `Protocol`, not an abstract base class. This means Mellea has no ownership over component initialization: there are no guarantees about when or how subclass `__init__` methods run, and there is no single interception point that covers all `Component` implementations.
+>
+> Placing hook calls inside `Instruction.__init__` and `Message.__init__` works for those specific classes, but it is fragile (any user-defined `Component` subclass is invisible to the hooks) and architecturally wrong (the hook system should not need to be threaded manually into every `__init__`).
+>
+> If `Component` were refactored to an abstract base class, Mellea could wrap `__init__` at the ABC level and fire `component_pre_create` / `component_post_create` generically for all subclasses, without per-class boilerplate.
+>
+> Until that refactoring is decided and implemented, these two hook types are intentionally excluded from the active hook system. Use `component_pre_execute` for pre-execution policy enforcement, as it fires just before generation and covers the same high-value interception scenarios.
 
 
 #### `component_pre_execute`
@@ -665,10 +673,9 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
   class GenerationPreCallPayload(BasePayload):
       action: Component | CBlock           # Source action
       context: Context                     # Current context
-      linearized_context: list[Component | CBlock]  # Context as list
-      model_options: dict[str, Any]        # Generation parameters
-      tools: dict[str, Callable] | None    # Available tools
-      format: type | None                  # Structured output format
+      model_options: dict[str, Any]        # Generation parameters (writable)
+      format: type | None                  # Structured output format (writable)
+      tool_calls: bool                     # Whether tool calling is enabled (writable)
   ```
 - **Context**:
   - `backend`: Backend
@@ -682,7 +689,7 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
 
 #### `generation_post_call`
 
-- **Trigger**: Immediately after `generate_from_context` returns, before any post-processing.
+- **Trigger**: For lazy `ModelOutputThunk` objects (the normal path), fires inside `ModelOutputThunk.astream` after `post_process` completes — at the point where `model_output.value` is fully materialized. For already-computed thunks (e.g. cached responses), fires inline before `generate_from_context` returns. `latency_ms` is measured from the `generate_from_context` call to value availability in both cases.
 - **Use Cases**:
   - Output filtering/sanitization
   - PII detection and redaction
@@ -695,8 +702,8 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
   ```python
   class GenerationPostCallPayload(BasePayload):
       prompt: str | list[dict]       # Sent prompt (from linearization)
-      model_output: ModelOutputThunk # Output thunk (typically uncomputed/lazy)
-      latency_ms: int                # Always 0 — see note below
+      model_output: ModelOutputThunk # Fully computed output thunk (writable on already-computed path only)
+      latency_ms: float              # Elapsed ms from generate_from_context call to value availability
   ```
 - **Context**:
   - `backend`: Backend
@@ -706,12 +713,9 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
   - `status_code`: int | None - HTTP status from provider
   - `stream_chunks`: int | None - Number of chunks if streaming
 - **Notes**:
-  - The `ModelOutputThunk` is typically **uncomputed (lazy)** when this hook fires — `model_output.value` may be `None`. Plugins should not assume the output text is available.
-  - `latency_ms` is always `0` because timing the `generate_from_context` call is meaningless when the thunk is lazy. Accurate latency measurement requires moving the post-call hook into `ModelOutputThunk.astream` (after `post_process`). See TODO in `backend.py`.
-  - Field `raw_response: dict # Full JSON response from provider` not implemented
-  - Field `processed_output: str # Processed output text` not implemented
-  - Field `token_usage: dict | None # Token counts` not implemented
-  - Field `finish_reason: str # Why generation stopped` not implemented
+  - On the lazy path (normal), `model_output.value` is guaranteed to be available when this hook fires.
+  - On the lazy path, replacing `model_output` via the writable field has no effect because the caller already holds the original reference — use `component_post_success` instead for output transformation.
+  - On the already-computed path (e.g. cached responses), `model_output` replacement is supported.
 
 #### `generation_stream_chunk`
 
@@ -1270,32 +1274,63 @@ Because payloads are frozen, the `modified_payload` in option 2 must be a new ob
 
 ### Modify Payload
 
+Use the `modify()` convenience helper to return a modified payload. It absorbs both the `model_copy` call and the `PluginResult` wrapping:
+
 ```python
-# Create an immutable copy with only the desired changes
+from mellea.plugins import modify
+
+return modify(payload, model_options=new_options)
+```
+
+This is equivalent to the verbose form:
+
+```python
 modified = payload.model_copy(update={"model_options": new_options})
-return PluginResult(
-    continue_processing=True,
-    modified_payload=modified,
-)
+return PluginResult(continue_processing=True, modified_payload=modified)
+```
+
+Multiple fields can be updated in a single call:
+
+```python
+return modify(payload, action=new_action, model_options=new_options)
 ```
 
 > **Note**: Only changes to fields listed in the hook's `HookPayloadPolicy.writable_fields` will be accepted. Changes to other fields are silently discarded by the policy enforcement layer.
 
 ### Block Execution
 
+Use the `block()` convenience helper to halt execution with structured violation information:
+
+```python
+from mellea.plugins import block
+
+return block("Token budget exceeded", code="BUDGET_001")
+```
+
+This is equivalent to the verbose form:
+
 ```python
 violation = PluginViolation(
-    reason="Policy violation",
-    description="Detailed explanation",
-    code="POLICY_001",
-    details={"field": "value"},
-    severity="error"  # "error" | "warning"
+    reason="Token budget exceeded",
+    code="BUDGET_001",
 )
+return PluginResult(continue_processing=False, violation=violation)
+```
 
-return PluginResult(
-    continue_processing=False,
-    violation=violation
-)
+`block()` accepts an optional `description` (longer explanation), `details` (dict of structured metadata), in addition to `reason` and `code`.
+
+### Symmetry of `modify()` and `block()`
+
+`modify()` and `block()` are intentional counterparts: one for transforming, one for stopping. Reading a hook at a glance, `return modify(...)` signals a payload transformation continues processing, while `return block(...)` signals a hard stop:
+
+```python
+@hook("component_pre_execute", mode=PluginMode.SEQUENTIAL)
+async def enforce_and_redact(payload, ctx):
+    if is_restricted(payload.action):
+        return block("Restricted topic", code="POLICY_001")
+    if has_pii(payload.action):
+        return modify(payload, action=redact(payload.action))
+    # returning None continues processing unchanged
 ```
 
 ## 7. Registration & Configuration
@@ -1305,7 +1340,7 @@ return PluginResult(
 All plugin registration APIs are available from `mellea.plugins`:
 
 ```python
-from mellea.plugins import Plugin, hook, block, PluginSet, register
+from mellea.plugins import Plugin, hook, block, modify, PluginSet, register, unregister
 ```
 
 ### Standalone Function Hooks
@@ -1343,7 +1378,7 @@ class PIIRedactor(Plugin, name="pii-redactor", priority=5):
     def __init__(self, patterns: list[str] | None = None):
         self.patterns = patterns or []
 
-    @hook("component_pre_create")
+    @hook("component_pre_execute")
     async def redact_input(self, payload, ctx):
         ...
 
@@ -1416,6 +1451,22 @@ register(enforce_budget)                    # standalone function
 ```
 
 `register()` accepts a single item or a list. Items can be standalone hook functions, plugin instances, or `PluginSet`s.
+
+### Global Deregistration
+
+To remove a globally registered plugin at runtime, use `unregister()`:
+
+```python
+from mellea.plugins import unregister
+
+unregister(security)                     # single item
+unregister([security, observability])    # list
+unregister(enforce_budget)              # standalone function
+```
+
+`unregister()` accepts the same item types as `register()`: standalone hook functions, `Plugin` subclass instances, and `PluginSet`s. Unregistering a `PluginSet` removes all of its member items. Calling `unregister()` on an item that is not currently registered is a no-op; it does not raise.
+
+`unregister()` applies only to globally registered plugins. Session-scoped plugins are deregistered automatically when their session ends; with-block-scoped plugins are deregistered on scope exit. Neither requires an explicit `unregister()` call.
 
 ### Session-Scoped Registration
 

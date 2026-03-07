@@ -57,7 +57,7 @@ class Plugin:
     Subclasses get automatic context-manager support and plugin metadata::
 
         class PIIRedactor(Plugin, name="pii-redactor", priority=5):
-            @hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.SEQUENTIAL)
+            @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.SEQUENTIAL)
             async def redact_input(self, payload, ctx):
                 ...
 

@@ -4,7 +4,6 @@ import pytest
 from pydantic import ValidationError
 
 from mellea.plugins.base import MelleaBasePayload
-from mellea.plugins.hooks.component import ComponentPreCreatePayload
 from mellea.plugins.hooks.generation import GenerationPreCallPayload
 from mellea.plugins.hooks.session import SessionPreInitPayload
 
@@ -55,25 +54,6 @@ class TestSessionPreInitPayload:
         )
         assert modified.model_id == "gpt-3.5"
         assert modified.model_options == {"temperature": 0.5}
-
-
-class TestComponentPreCreatePayload:
-    def test_creation(self):
-        payload = ComponentPreCreatePayload(
-            component_type="Instruction",
-            description="Extract the user's age",
-            requirements=["Must be a number"],
-        )
-        assert payload.component_type == "Instruction"
-        assert payload.description == "Extract the user's age"
-        assert len(payload.requirements) == 1
-
-    def test_defaults(self):
-        payload = ComponentPreCreatePayload()
-        assert payload.component_type == ""
-        assert payload.description == ""
-        assert payload.images is None
-        assert payload.requirements == []
 
 
 class TestGenerationPreCallPayload:

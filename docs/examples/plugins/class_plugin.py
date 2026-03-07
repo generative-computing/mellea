@@ -3,23 +3,25 @@
 # Class-based plugin — group related hooks in a single Plugin subclass.
 #
 # This example creates a PII redaction plugin that:
-#   1. Scans input descriptions for SSN patterns before component creation
-#   2. Scans LLM output for SSN patterns after generation
+#   1. Scans input descriptions for SSN patterns before component execution
+#   2. Scans LLM output for SSN patterns after generation and replaces them
 #
 # Run:
 #   uv run python docs/examples/plugins/class_plugin.py
 
+import copy
 import logging
 import re
 import sys
 
 from mellea import start_session
+from mellea.core import ModelOutputThunk
 from mellea.plugins import (
     HookType,
     Plugin,
-    PluginResult,
     PluginViolationError,
     hook,
+    modify,
     register,
 )
 
@@ -50,27 +52,27 @@ class PIIRedactor(Plugin, name="pii-redactor", priority=5):
         ]
         self.redaction_count = 0
 
-    @hook(HookType.COMPONENT_PRE_CREATE)
+    @hook(HookType.COMPONENT_PRE_EXECUTE)
     async def redact_input(self, payload, ctx):
-        """Scan and redact PII from component descriptions before they reach the LLM."""
-        original = payload.description
+        """Scan component action for PII and redact before it reaches the LLM."""
+        if payload.component_type != "Instruction":
+            return
+        original = payload.action.description
         redacted = self._redact(original)
         if redacted != original:
-            log.info("[pii-redactor] redacted PII from input description")
+            log.info("[pii-redactor] PII detected in component action — redacting")
             self.redaction_count += 1
-            modified = payload.model_copy(update={"description": redacted})
-            return PluginResult(continue_processing=True, modified_payload=modified)
+            new_action = copy.deepcopy(payload.action)
+            new_action.description = redacted
+            return modify(payload, action=new_action)
         log.info("[pii-redactor] no PII found in input")
 
     @hook(HookType.GENERATION_POST_CALL)
     async def redact_output(self, payload, ctx):
-        """Scan LLM output for PII and log a warning if found.
+        """Scan LLM output for PII and replace it before the result is returned.
 
-        Note: This hook fires while the ``ModelOutputThunk`` is still lazy
-        (uncomputed), so ``payload.model_output.value`` may be ``None``.
-        Modifying the thunk's value from here is not currently supported —
-        use ``COMPONENT_PRE_CREATE`` to redact *inputs* before they reach the
-        LLM instead.
+        This hook fires after the ``ModelOutputThunk`` is computed, so
+        ``payload.model_output.value`` is always populated here.
         """
         mot_value = getattr(payload.model_output, "value", None)
         if mot_value is None:
@@ -79,10 +81,10 @@ class PIIRedactor(Plugin, name="pii-redactor", priority=5):
         original = str(mot_value)
         redacted = self._redact(original)
         if redacted != original:
-            log.warning("[pii-redactor] PII detected in LLM output")
+            log.warning("[pii-redactor] PII detected in LLM output — redacting")
             self.redaction_count += 1
-        else:
-            log.info("[pii-redactor] no PII found in output")
+            return modify(payload, model_output=ModelOutputThunk(value=redacted))
+        log.info("[pii-redactor] no PII found in output")
 
     def _redact(self, text: str) -> str:
         for pattern in self.patterns:
@@ -103,7 +105,8 @@ if __name__ == "__main__":
         log.info("")
 
         try:
-            # The SSN in this prompt will be redacted before reaching the LLM
+            # The SSN in this prompt is redacted before reaching the LLM;
+            # any SSN that slips through in the output is redacted on return.
             result = m.instruct(
                 "Summarize this customer record: "
                 "Name: Jane Doe, SSN: 123-45-6789, Status: Active"

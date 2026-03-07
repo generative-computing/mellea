@@ -7,44 +7,6 @@ from typing import Any
 from mellea.plugins.base import MelleaBasePayload
 
 
-class ComponentPreCreatePayload(MelleaBasePayload):
-    """Payload for ``component_pre_create`` — before component creation.
-
-    Attributes:
-        component_type: Class name of the component being created (e.g. ``"Instruction"``, ``"Message"``).
-        description: The description / prompt text for the component.
-        images: Optional list of ``ImageBlock`` instances attached to the component.
-        requirements: List of ``Requirement`` instances for validation.
-        icl_examples: List of in-context learning examples (``str`` or ``CBlock``).
-        grounding_context: Dict mapping variable names to grounding values (``str``, ``CBlock``, or ``Component``).
-        user_variables: Optional dict of user-defined Jinja template variables.
-        prefix: Optional prefix (``str`` or ``CBlock``) prepended to the prompt.
-        template_id: Optional template identifier for custom formatting.
-    """
-
-    component_type: str = ""
-    description: str = ""
-    images: list[Any] | None = None
-    requirements: list[Any] = []
-    icl_examples: list[Any] = []
-    grounding_context: dict[str, Any] = {}
-    user_variables: dict[str, str] | None = None
-    prefix: Any = None
-    template_id: str | None = None
-
-
-class ComponentPostCreatePayload(MelleaBasePayload):
-    """Payload for ``component_post_create`` — after component created, before execution.
-
-    Attributes:
-        component_type: Class name of the created component.
-        component: The created ``Component`` instance.
-    """
-
-    component_type: str = ""
-    component: Any = None
-
-
 class ComponentPreExecutePayload(MelleaBasePayload):
     """Payload for ``component_pre_execute`` — before component execution via ``aact()``.
 

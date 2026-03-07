@@ -42,6 +42,38 @@ def _map_mode(mode: PluginMode) -> Any:
     return _MODE_MAP.get(mode, _MODE_MAP.get(PluginMode.SEQUENTIAL))
 
 
+def modify(payload: Any, **field_updates: Any) -> Any:
+    """Convenience helper for returning a modifying ``PluginResult``.
+
+    Creates an immutable copy of ``payload`` with ``field_updates`` applied and
+    wraps it in a ``PluginResult(continue_processing=True)``.  Only fields
+    listed in the hook's ``HookPayloadPolicy.writable_fields`` will be accepted
+    by the framework; changes to read-only fields are silently discarded.
+
+    Mirrors :func:`block` for the modification case::
+
+        # instead of:
+        modified = payload.model_copy(update={"model_output": new_mot})
+        return PluginResult(continue_processing=True, modified_payload=modified)
+
+        # write:
+        return modify(payload, model_output=new_mot)
+
+    Args:
+        payload: The original (frozen) payload received by the hook.
+        **field_updates: Fields to update on the payload copy.
+    """
+    if not _HAS_PLUGIN_FRAMEWORK:
+        raise ImportError(
+            "modify() requires the ContextForge plugin framework. "
+            "Install it with: pip install 'mellea[contextforge]'"
+        )
+    return PluginResult(
+        continue_processing=True,
+        modified_payload=payload.model_copy(update=field_updates),
+    )
+
+
 def block(
     reason: str,
     *,
@@ -306,6 +338,64 @@ class _PluginScope:
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self._deactivate()
+
+
+def _unregister_single(pm: Any, item: Callable | Any) -> None:
+    """Unregister a single hook function or plugin instance by its registered name."""
+    meta: HookMeta | None = getattr(item, "_mellea_hook_meta", None)
+    plugin_meta: PluginMeta | None = getattr(type(item), "_mellea_plugin_meta", None)
+
+    if meta is not None:
+        name = item.__qualname__
+    elif plugin_meta is not None:
+        name = plugin_meta.name
+    elif isinstance(item, Plugin):
+        name = item.name
+    else:
+        raise TypeError(
+            f"Cannot unregister {item!r}: expected a @hook-decorated function, "
+            f"a Plugin subclass instance, or a MelleaPlugin instance."
+        )
+
+    try:
+        pm._registry.unregister(name)
+        logger.debug("Unregistered plugin: %s", name)
+    except Exception:
+        logger.debug("Plugin %s was not registered", name, exc_info=True)
+
+
+def unregister(
+    items: Callable | Any | PluginSet | list[Callable | Any | PluginSet],
+) -> None:
+    """Unregister globally-registered plugins.
+
+    Accepts the same items as :func:`register`: standalone ``@hook``-decorated
+    functions, ``Plugin`` subclass instances, ``MelleaPlugin`` instances,
+    ``PluginSet`` instances, or lists thereof.
+
+    Silently ignores items that are not currently registered.
+    """
+    if not _HAS_PLUGIN_FRAMEWORK:
+        raise ImportError(
+            "unregister() requires the ContextForge plugin framework. "
+            "Install it with: pip install 'mellea[contextforge]'"
+        )
+
+    from mellea.plugins.manager import get_plugin_manager
+
+    pm = get_plugin_manager()
+    if pm is None:
+        return
+
+    if not isinstance(items, list):
+        items = [items]
+
+    for item in items:
+        if isinstance(item, PluginSet):
+            for flattened_item, _ in item.flatten():
+                _unregister_single(pm, flattened_item)
+        else:
+            _unregister_single(pm, item)
 
 
 def plugin_scope(*items: Callable | Any | PluginSet) -> _PluginScope:

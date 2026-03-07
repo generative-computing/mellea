@@ -195,25 +195,35 @@ def instruct(
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
     """
-    return _run_async_in_thread(
-        ainstruct(  # type: ignore[call-overload, misc]
-            description,
-            context=context,
-            backend=backend,
-            images=images,
-            requirements=requirements,
-            icl_examples=icl_examples,
-            grounding_context=grounding_context,
-            user_variables=user_variables,
-            prefix=prefix,
-            output_prefix=output_prefix,
-            strategy=strategy,
-            return_sampling_results=return_sampling_results,
-            format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
-    )  # type: ignore[return-value]
+    requirements = [] if requirements is None else requirements
+    icl_examples = [] if icl_examples is None else icl_examples
+    grounding_context = dict() if grounding_context is None else grounding_context
+
+    images = _parse_and_clean_image_args(images)
+
+    # All instruction options are forwarded to create a new Instruction object.
+    i = Instruction(
+        description=description,
+        requirements=requirements,
+        icl_examples=icl_examples,
+        grounding_context=grounding_context,
+        user_variables=user_variables,
+        prefix=prefix,
+        output_prefix=output_prefix,
+        images=images,
+    )
+
+    return act(
+        i,
+        context=context,
+        backend=backend,
+        requirements=i.requirements,
+        strategy=strategy,
+        return_sampling_results=return_sampling_results,
+        format=format,
+        model_options=model_options,
+        tool_calls=tool_calls,
+    )  # type: ignore[call-overload]
 
 
 def chat(
@@ -229,19 +239,28 @@ def chat(
     tool_calls: bool = False,
 ) -> tuple[Message, Context]:
     """Sends a simple chat message and returns the response. Adds both messages to the Context."""
-    return _run_async_in_thread(
-        achat(
-            content=content,
-            context=context,
-            backend=backend,
-            role=role,
-            images=images,
-            user_variables=user_variables,
-            format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
+    if user_variables is not None:
+        content_resolved = Instruction.apply_user_dict_from_jinja(
+            user_variables, content
         )
+    else:
+        content_resolved = content
+    images = _parse_and_clean_image_args(images)
+    user_message = Message(role=role, content=content_resolved, images=images)
+
+    result, new_ctx = act(
+        user_message,
+        context=context,
+        backend=backend,
+        strategy=None,  # Explicitly pass `None` since this can't pass requirements.
+        format=format,
+        model_options=model_options,
+        tool_calls=tool_calls,
     )
+    parsed_assistant_message = result.parsed_repr
+    assert isinstance(parsed_assistant_message, Message)
+
+    return parsed_assistant_message, new_ctx
 
 
 def validate(
@@ -742,31 +761,6 @@ async def ainstruct(
 
     images = _parse_and_clean_image_args(images)
 
-    # --- component_pre_create hook ---
-    if has_plugins(HookType.COMPONENT_PRE_CREATE):
-        from ..plugins.hooks.component import ComponentPreCreatePayload
-
-        pre_payload = ComponentPreCreatePayload(
-            component_type="Instruction",
-            description=description,
-            images=images,
-            requirements=requirements,
-            icl_examples=icl_examples,
-            grounding_context=grounding_context,
-            user_variables=user_variables,
-            prefix=prefix,
-        )
-        _, pre_payload = await invoke_hook(
-            HookType.COMPONENT_PRE_CREATE, pre_payload, backend=backend, context=context
-        )
-        description = pre_payload.description
-        images = pre_payload.images
-        requirements = pre_payload.requirements
-        icl_examples = pre_payload.icl_examples
-        grounding_context = pre_payload.grounding_context
-        user_variables = pre_payload.user_variables
-        prefix = pre_payload.prefix
-
     # All instruction options are forwarded to create a new Instruction object.
     i = Instruction(
         description=description,
@@ -778,22 +772,6 @@ async def ainstruct(
         output_prefix=output_prefix,
         images=images,
     )
-
-    # --- component_post_create hook ---
-    if has_plugins(HookType.COMPONENT_POST_CREATE):
-        from ..plugins.hooks.component import ComponentPostCreatePayload
-
-        post_payload = ComponentPostCreatePayload(
-            component_type="Instruction", component=i
-        )
-        _, post_payload = await invoke_hook(
-            HookType.COMPONENT_POST_CREATE,
-            post_payload,
-            backend=backend,
-            context=context,
-        )
-        if post_payload.component is not None and post_payload.component is not i:
-            i = post_payload.component
 
     return await aact(
         i,
@@ -828,40 +806,7 @@ async def achat(
     else:
         content_resolved = content
     images = _parse_and_clean_image_args(images)
-
-    # --- component_pre_create hook ---
-    if has_plugins(HookType.COMPONENT_PRE_CREATE):
-        from ..plugins.hooks.component import ComponentPreCreatePayload
-
-        pre_payload = ComponentPreCreatePayload(
-            component_type="Message", description=content_resolved, images=images
-        )
-        _, pre_payload = await invoke_hook(
-            HookType.COMPONENT_PRE_CREATE, pre_payload, backend=backend, context=context
-        )
-        content_resolved = pre_payload.description
-        images = pre_payload.images
-
     user_message = Message(role=role, content=content_resolved, images=images)
-
-    # --- component_post_create hook ---
-    if has_plugins(HookType.COMPONENT_POST_CREATE):
-        from ..plugins.hooks.component import ComponentPostCreatePayload
-
-        post_payload = ComponentPostCreatePayload(
-            component_type="Message", component=user_message
-        )
-        _, post_payload = await invoke_hook(
-            HookType.COMPONENT_POST_CREATE,
-            post_payload,
-            backend=backend,
-            context=context,
-        )
-        if (
-            post_payload.component is not None
-            and post_payload.component is not user_message
-        ):
-            user_message = post_payload.component
 
     result, new_ctx = await aact(
         user_message,

@@ -62,22 +62,17 @@ async def enforce_token_budget(payload, ctx):
         )
 
 
-@hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.SEQUENTIAL, priority=20)
+@hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.SEQUENTIAL, priority=20)
 async def enforce_description_length(payload, ctx):
-    """Reject component descriptions that are too long."""
+    """Reject component actions whose text representation is too long."""
     max_len = 2000
-    if len(payload.description) > max_len:
-        log.info(
-            "[security/desc-length] BLOCKED: description is %d chars",
-            len(payload.description),
-        )
+    action_text = str(payload.action)
+    if len(action_text) > max_len:
+        log.info("[security/desc-length] BLOCKED: action is %d chars", len(action_text))
         return block(
-            f"Description exceeds {max_len} characters", code="DESC_LENGTH_001"
+            f"Action text exceeds {max_len} characters", code="DESC_LENGTH_001"
         )
-    log.info(
-        "[security/desc-length] description length OK (%d chars)",
-        len(payload.description),
-    )
+    log.info("[security/desc-length] action length OK (%d chars)", len(action_text))
 
 
 # --- Observability hooks ---

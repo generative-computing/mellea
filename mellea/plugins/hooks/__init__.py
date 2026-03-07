@@ -1,10 +1,8 @@
 """Hook payload classes for the Mellea plugin system."""
 
 from mellea.plugins.hooks.component import (
-    ComponentPostCreatePayload,
     ComponentPostErrorPayload,
     ComponentPostSuccessPayload,
-    ComponentPreCreatePayload,
     ComponentPreExecutePayload,
 )
 from mellea.plugins.hooks.generation import (
@@ -32,10 +30,8 @@ from mellea.plugins.hooks.validation import (
 
 __all__ = [
     # Component
-    "ComponentPostCreatePayload",
     "ComponentPostErrorPayload",
     "ComponentPostSuccessPayload",
-    "ComponentPreCreatePayload",
     "ComponentPreExecutePayload",
     # Generation
     "GenerationPostCallPayload",

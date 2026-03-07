@@ -33,8 +33,6 @@ class HookType(str, Enum):
     SESSION_CLEANUP = "session_cleanup"
 
     # Component Lifecycle
-    COMPONENT_PRE_CREATE = "component_pre_create"
-    COMPONENT_POST_CREATE = "component_post_create"
     COMPONENT_PRE_EXECUTE = "component_pre_execute"
     COMPONENT_POST_SUCCESS = "component_post_success"
     COMPONENT_POST_ERROR = "component_post_error"
@@ -83,10 +81,8 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
     Imports payload classes lazily to avoid circular imports.
     """
     from mellea.plugins.hooks.component import (
-        ComponentPostCreatePayload,
         ComponentPostErrorPayload,
         ComponentPostSuccessPayload,
-        ComponentPreCreatePayload,
         ComponentPreExecutePayload,
     )
     from mellea.plugins.hooks.generation import (
@@ -119,11 +115,6 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
         HookType.SESSION_RESET.value: (SessionResetPayload, PluginResult),
         HookType.SESSION_CLEANUP.value: (SessionCleanupPayload, PluginResult),
         # Component Lifecycle
-        HookType.COMPONENT_PRE_CREATE.value: (ComponentPreCreatePayload, PluginResult),
-        HookType.COMPONENT_POST_CREATE.value: (
-            ComponentPostCreatePayload,
-            PluginResult,
-        ),
         HookType.COMPONENT_PRE_EXECUTE.value: (
             ComponentPreExecutePayload,
             PluginResult,

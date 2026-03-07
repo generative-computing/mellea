@@ -50,15 +50,15 @@ register(log_session_init)
 BLOCKED_TOPICS = ["weaponry", "explosives"]
 
 
-@hook(HookType.COMPONENT_PRE_CREATE, mode=PluginMode.SEQUENTIAL, priority=10)
+@hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.SEQUENTIAL, priority=10)
 async def enforce_content_policy(payload, ctx):
-    """Block components whose descriptions mention restricted topics."""
-    desc = payload.description.lower()
+    """Block components whose action text mentions restricted topics."""
+    desc = str(payload.action).lower()
     for topic in BLOCKED_TOPICS:
         if topic in desc:
-            log.info("[content-policy] BLOCKED: topic '%s' found in description", topic)
+            log.info("[content-policy] BLOCKED: topic '%s' found in action", topic)
             return block(f"Restricted topic: {topic}", code="CONTENT_POLICY_001")
-    log.info("[content-policy] description is clean — allowing")
+    log.info("[content-policy] action is clean — allowing")
 
 
 @hook(HookType.COMPONENT_POST_SUCCESS, mode=PluginMode.AUDIT)

@@ -30,23 +30,6 @@ def _build_policies() -> dict[str, Any]:
         ),
         # session_post_init, session_reset, session_cleanup: observe-only
         # Component Lifecycle
-        "component_pre_create": HookPayloadPolicy(
-            writable_fields=frozenset(
-                {
-                    "description",
-                    "images",
-                    "requirements",
-                    "icl_examples",
-                    "grounding_context",
-                    "user_variables",
-                    "prefix",
-                    "template_id",
-                }
-            )
-        ),
-        "component_post_create": HookPayloadPolicy(
-            writable_fields=frozenset({"component"})
-        ),
         "component_pre_execute": HookPayloadPolicy(
             writable_fields=frozenset(
                 {

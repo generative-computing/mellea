@@ -517,10 +517,10 @@ MELLEA_HOOK_PAYLOAD_POLICIES: dict[str, HookPayloadPolicy] = {
 
     # Generation Pipeline
     "generation_pre_call": HookPayloadPolicy(
-        writable_fields=frozenset({"model_options", "tools", "format"}),
+        writable_fields=frozenset({"model_options", "format", "tool_calls"}),
     ),
     "generation_post_call": HookPayloadPolicy(
-        writable_fields=frozenset({"processed_output", "model_output"}),
+        writable_fields=frozenset({"model_output"}),
     ),
     "generation_stream_chunk": HookPayloadPolicy(
         writable_fields=frozenset({"chunk", "accumulated"}),
@@ -1006,12 +1006,14 @@ SessionCleanupPayload(
 
 ### 5.2 Component Lifecycle
 
-**File**: `mellea/stdlib/functional.py`
+**Files**: `mellea/stdlib/components/instruction.py` (`Instruction.__init__`), `mellea/stdlib/components/chat.py` (`Message.__init__`), `mellea/stdlib/functional.py` (`aact()`)
+
+> **`component_pre_create` and `component_post_create` are deferred.** These hooks are not implemented in this iteration. See the discussion note at the end of this section.
 
 | Hook | Location | Trigger | Result Handling |
 |------|----------|---------|-----------------|
-| `component_pre_create` | `instruct()` before `Instruction(...)` (~L200), `chat()` before `Message(...)` (~L244), `query()` (~L321), `transform()` (~L363), and async variants | Before component constructor | Supports payload modification: updated `description`, `requirements`. Violation blocks creation. |
-| `component_post_create` | Same functions, after Component constructor, before `act()`/`aact()` | Component created | Supports `component` replacement. Primarily observability. |
+| `component_pre_create` | *(deferred — not implemented)* | — | — |
+| `component_post_create` | *(deferred — not implemented)* | — | — |
 | `component_pre_execute` | `aact()`, at top before strategy branch (~L492) | Before generation begins | Supports `action`, `model_options`, `requirements`, `strategy` modification. Violation blocks execution. |
 | `component_post_success` | `aact()`, after result in both branches (~L506, ~L534) | Successful execution | Supports `result` modification (output transformation). Primarily observability. |
 | `component_post_error` | `aact()`, in new `try/except Exception` wrapping the body | Exception during execution | Observability-only. Always re-raises after hook. |
@@ -1022,10 +1024,18 @@ SessionCleanupPayload(
 - `except` handler: fire `component_post_error` then `error_occurred`, then re-raise
 - Insert `component_post_success` before each `return` path
 
+> **Discussion — why `component_pre_create` and `component_post_create` are deferred:**
+>
+> `Component` is currently a `Protocol`, not an abstract base class. Mellea has no ownership over component initialization: there are no guarantees about when or how subclass `__init__` methods run, and there is no single interception point that covers all `Component` implementations. Calling hooks manually inside `Instruction.__init__` and `Message.__init__` works for those classes, but it is fragile (any user-defined `Component` subclass is invisible) and requires per-class boilerplate.
+>
+> If `Component` were refactored to an abstract base class, the ABC could wrap `__init__` and fire these hooks generically for every subclass. Until that refactoring is decided, these hook types are excluded from the active hook system: they are not in `HookType`, have no payload classes, no registered call sites, and no tests. The hook names and payload designs remain documented here for when the refactoring occurs. Use `component_pre_execute` for pre-execution interception in the meantime.
+
+**Sync/async bridge for PRE/POST_CREATE** *(relevant if/when these hooks are implemented)*: `Instruction.__init__` and `Message.__init__` are synchronous. Use `_run_async_in_thread(invoke_hook(...))` from `mellea/helpers/__init__.py`. `backend` and `context` are `None`.
+
 **Payload examples**:
 
 ```python
-# component_pre_create (Instruction case)
+# component_pre_create (Instruction case — inside Instruction.__init__, before attrs)
 ComponentPreCreatePayload(
     component_type="Instruction",
     description=description,
@@ -1033,6 +1043,8 @@ ComponentPreCreatePayload(
     requirements=requirements,
     icl_examples=icl_examples,
     grounding_context=grounding_context,
+    user_variables=user_variables,
+    prefix=prefix,
 )
 
 # component_pre_execute
@@ -1062,69 +1074,22 @@ ComponentPostSuccessPayload(
 
 ### 5.3 Generation Pipeline
 
-**Approach**: Add a non-abstract `generate_from_context_with_hooks()` method to the `Backend` ABC in `mellea/core/backend.py`. This wraps the abstract `generate_from_context()` with pre/post hooks, avoiding modifications to all 6 backend implementations (Ollama, OpenAI, HuggingFace, vLLM, Watsonx, LiteLLM).
+**Approach**: `Backend.__init_subclass__` in `mellea/core/backend.py` automatically wraps `generate_from_context` in every concrete backend subclass that defines it. This avoids modifying all backend implementations (Ollama, OpenAI, HuggingFace, vLLM, Watsonx, LiteLLM) individually. No separate `generate_from_context_with_hooks()` method is added.
 
-**New method on `Backend`** (`mellea/core/backend.py`):
+The wrapper is injected at class definition time and applies to all current and future `Backend` subclasses transparently.
 
-```python
-async def generate_from_context_with_hooks(
-    self,
-    action: Component | CBlock,
-    ctx: Context,
-    *,
-    format=None,
-    model_options=None,
-    tool_calls=False,
-) -> tuple[ModelOutputThunk, Context]:
-    """Wraps generate_from_context with generation_pre_call / generation_post_call hooks."""
-    from mellea.plugins.manager import invoke_hook, has_plugins
-    from mellea.plugins.types import HookType
-    from mellea.plugins.hooks.generation import GenerationPreCallPayload, GenerationPostCallPayload
+**`generation_post_call` timing**: The post-call hook fires via an `_on_computed` callback set on the returned `ModelOutputThunk`:
 
-    if has_plugins():
-        pre_payload = GenerationPreCallPayload(
-            action=action, context=ctx,
-            model_options=model_options or {}, format=format, tools=None,
-        )
-        result, pre_payload = await invoke_hook(
-            HookType.GENERATION_PRE_CALL, pre_payload,
-            backend=self, context=ctx,
-        )
-        # pre_payload is the policy-filtered result — extract all writable fields
-        model_options = pre_payload.model_options
-        format = pre_payload.format
+- **Lazy MOTs** (normal path): `_on_computed` fires inside `ModelOutputThunk.astream` after `post_process` completes, when the value is fully materialized. `latency_ms` reflects the full wall-clock time from the `generate_from_context` call to value availability.
+- **Already-computed MOTs** (e.g. cached responses or test mocks): `astream` returns early without firing `_on_computed`, so the hook is fired inline before the wrapper returns. `model_output` replacement is supported on this path.
 
-    out_result, new_ctx = await self.generate_from_context(
-        action, ctx, format=format, model_options=model_options, tool_calls=tool_calls,
-    )
-
-    if has_plugins():
-        glog = getattr(out_result, "_generate_log", None)
-        # latency_ms is 0 — the ModelOutputThunk is lazy/uncomputed at this point,
-        # so timing is meaningless. Accurate latency requires moving this hook
-        # into ModelOutputThunk.astream (after post_process).
-        post_payload = GenerationPostCallPayload(
-            prompt=glog.prompt if glog else "",  # Sent prompt (from linearization)
-            model_output=out_result,
-            latency_ms=0,
-        )
-        await invoke_hook(
-            HookType.GENERATION_POST_CALL, post_payload,
-            backend=self, context=new_ctx,
-        )
-
-    return out_result, new_ctx
-```
-
-**Call site changes** :
-- `mellea/stdlib/functional.py:aact()` line 499: `backend.generate_from_context(...)` → `backend.generate_from_context_with_hooks(...)`
-- `mellea/stdlib/sampling/base.py:sample()` line ~163: same substitution
+**Writable fields applied from `generation_pre_call`**: `model_options`, `format`, `tool_calls`.
 
 | Hook | Location | Trigger | Result Handling |
 |------|----------|---------|-----------------|
-| `generation_pre_call` | `Backend.generate_from_context_with_hooks()`, before delegate | Before LLM API call | Supports `model_options` modification. Violation blocks (e.g., token budget exceeded). |
-| `generation_post_call` | Same method, after delegate returns | After LLM response | Supports output modification (redaction). Primarily observability. |
-| `generation_stream_chunk` | **Deferred to Phase 7** — requires hooks in `ModelOutputThunk.astream()` streaming path | Per streaming chunk | Fire-and-forget to avoid slowing streaming. |
+| `generation_pre_call` | `Backend.__init_subclass__` wrapper, before `generate_from_context` delegate | Before LLM API call | Supports `model_options`, `format`, `tool_calls` modification. Violation blocks (e.g., token budget exceeded). |
+| `generation_post_call` | Via `_on_computed` callback on `ModelOutputThunk` (lazy path), or inline before return (already-computed path) | After output fully materialized | Primarily observability. `model_output` replacement only effective on already-computed path. |
+| `generation_stream_chunk` | **Deferred** — requires hooks in `ModelOutputThunk.astream()` streaming path | Per streaming chunk | Fire-and-forget to avoid slowing streaming. |
 
 ### 5.4 Validation
 
@@ -1278,10 +1243,12 @@ async def fire_error_hook(
 
 | File | Changes |
 |------|---------|
-| `mellea/stdlib/functional.py` | ~12 hook insertions (component lifecycle, validation, tools, error) |
+| `mellea/stdlib/components/instruction.py` | `COMPONENT_PRE_CREATE` (before attr assignment) and `COMPONENT_POST_CREATE` (after attr assignment) hooks in `Instruction.__init__` |
+| `mellea/stdlib/components/chat.py` | Same PRE/POST_CREATE hooks in `Message.__init__` |
+| `mellea/stdlib/functional.py` | Component execute/success/error hooks in `aact()`; validation and tool hooks |
 | `mellea/stdlib/session.py` | 4 session hooks + `plugins` param on `start_session()` + session-scoped plugin registration/deregistration |
-| `mellea/stdlib/sampling/base.py` | 4 sampling hooks + `generate_from_context` → `generate_from_context_with_hooks` |
-| `mellea/core/backend.py` | Add `generate_from_context_with_hooks()` wrapper method to `Backend` ABC |
+| `mellea/stdlib/sampling/base.py` | 4 sampling hooks |
+| `mellea/core/backend.py` | `Backend.__init_subclass__` wraps `generate_from_context` in all subclasses, injecting `GENERATION_PRE_CALL` and `GENERATION_POST_CALL` hooks; post-call hook fires via `_on_computed` callback on the returned `ModelOutputThunk` |
 | `mellea/stdlib/context.py` | 2 context operation hooks in `ChatContext.add()`, `SimpleContext.add()` |
 | `mellea/backends/openai.py` | 4 adapter hooks in `load_adapter()` / `unload_adapter()` |
 | `mellea/backends/huggingface.py` | 4 adapter hooks in `load_adapter()` / `unload_adapter()` |

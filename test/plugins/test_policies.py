@@ -16,13 +16,6 @@ class TestPolicies:
         assert "model_options" in policy.writable_fields
         assert "backend_kwargs" in policy.writable_fields
 
-    def test_component_pre_create_policy(self):
-        policy = MELLEA_HOOK_PAYLOAD_POLICIES.get("component_pre_create")
-        assert policy is not None
-        assert "description" in policy.writable_fields
-        assert "requirements" in policy.writable_fields
-        assert "images" in policy.writable_fields
-
     def test_generation_pre_call_policy(self):
         policy = MELLEA_HOOK_PAYLOAD_POLICIES.get("generation_pre_call")
         assert policy is not None

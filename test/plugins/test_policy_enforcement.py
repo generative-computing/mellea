@@ -13,10 +13,7 @@ import pytest
 pytest.importorskip("cpex.framework")
 
 from mellea.plugins import PluginMode, PluginResult, hook, register
-from mellea.plugins.hooks.component import (
-    ComponentPostErrorPayload,
-    ComponentPreCreatePayload,
-)
+from mellea.plugins.hooks.component import ComponentPostErrorPayload
 from mellea.plugins.hooks.generation import GenerationPreCallPayload
 from mellea.plugins.hooks.sampling import SamplingIterationPayload
 from mellea.plugins.hooks.session import SessionPreInitPayload
@@ -32,14 +29,6 @@ def _session_payload(**kwargs) -> SessionPreInitPayload:
     defaults: dict = dict(backend_name="original-backend", model_id="original-model")
     defaults.update(kwargs)
     return SessionPreInitPayload(**defaults)
-
-
-def _component_payload(**kwargs) -> ComponentPreCreatePayload:
-    defaults: dict = dict(
-        description="original description", component_type="Instruction"
-    )
-    defaults.update(kwargs)
-    return ComponentPreCreatePayload(**defaults)
 
 
 def _generation_payload(**kwargs) -> GenerationPreCallPayload:
@@ -106,23 +95,6 @@ class TestWritableFieldAccepted:
 
         assert returned.model_options == new_options
 
-    async def test_description_writable_in_component_pre_create(self) -> None:
-        @hook("component_pre_create", priority=10)
-        async def change_description(payload, ctx):
-            return PluginResult(
-                continue_processing=True,
-                modified_payload=payload.model_copy(
-                    update={"description": "plugin-modified description"}
-                ),
-            )
-
-        register(change_description)
-
-        payload = _component_payload()
-        _, returned = await invoke_hook(HookType.COMPONENT_PRE_CREATE, payload)
-
-        assert returned.description == "plugin-modified description"
-
 
 # ---------------------------------------------------------------------------
 # TestNonWritableFieldDiscarded
@@ -169,26 +141,6 @@ class TestNonWritableFieldDiscarded:
 
         # hook field is set by the dispatcher — plugin cannot override it
         assert returned.hook == HookType.SESSION_PRE_INIT.value
-
-    async def test_component_type_non_writable_in_component_pre_create(self) -> None:
-        original_type = "Instruction"
-
-        @hook("component_pre_create", priority=10)
-        async def tamper_component_type(payload, ctx):
-            return PluginResult(
-                continue_processing=True,
-                modified_payload=payload.model_copy(
-                    update={"component_type": "Hijacked"}
-                ),
-            )
-
-        register(tamper_component_type)
-
-        payload = _component_payload(component_type=original_type)
-        _, returned = await invoke_hook(HookType.COMPONENT_PRE_CREATE, payload)
-
-        # component_type is not in the component_pre_create writable set
-        assert returned.component_type == original_type
 
 
 # ---------------------------------------------------------------------------

@@ -14,7 +14,7 @@ import pytest
 
 pytest.importorskip("cpex.framework")
 
-from mellea.plugins import PluginMode, block, hook, register
+from mellea.plugins import PluginMode, block, hook, modify, register
 from mellea.plugins.base import PluginViolationError
 from mellea.plugins.context import build_global_context
 from mellea.plugins.hooks.session import SessionPreInitPayload
@@ -99,6 +99,67 @@ class TestBlockHelper:
         result = block("No code provided")
 
         assert result.violation.code == ""
+
+
+# ---------------------------------------------------------------------------
+# TestModifyHelper
+# ---------------------------------------------------------------------------
+
+
+class TestModifyHelper:
+    """Unit tests for the ``modify()`` convenience helper."""
+
+    def test_modify_returns_continue_processing_true(self) -> None:
+        payload = _payload()
+        result = modify(payload, backend_name="new-backend")
+
+        assert result.continue_processing is True
+
+    def test_modify_produces_modified_payload(self) -> None:
+        payload = _payload(backend_name="original")
+        result = modify(payload, backend_name="updated")
+
+        assert result.modified_payload is not None
+        assert result.modified_payload.backend_name == "updated"
+
+    def test_modify_does_not_mutate_original_payload(self) -> None:
+        payload = _payload(backend_name="original")
+        modify(payload, backend_name="updated")
+
+        assert payload.backend_name == "original"
+
+    def test_modify_preserves_unmodified_fields(self) -> None:
+        payload = _payload(backend_name="original", model_id="gpt-4")
+        result = modify(payload, backend_name="updated")
+
+        assert result.modified_payload.model_id == "gpt-4"
+
+    def test_modify_multiple_fields(self) -> None:
+        payload = _payload(backend_name="original", model_id="gpt-4")
+        result = modify(payload, backend_name="updated", model_id="gpt-4o")
+
+        assert result.modified_payload.backend_name == "updated"
+        assert result.modified_payload.model_id == "gpt-4o"
+
+    def test_modify_has_no_violation(self) -> None:
+        payload = _payload()
+        result = modify(payload, backend_name="new-backend")
+
+        assert result.violation is None
+
+    async def test_modify_returned_from_hook_updates_payload_seen_by_invoke_hook(
+        self,
+    ) -> None:
+        """A hook returning modify() causes invoke_hook to return the modified payload."""
+
+        @hook("session_pre_init")
+        async def swapper(payload, ctx):
+            return modify(payload, backend_name="swapped")
+
+        register(swapper)
+        _, returned_payload = await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
+
+        assert returned_payload.backend_name == "swapped"
 
 
 # ---------------------------------------------------------------------------
