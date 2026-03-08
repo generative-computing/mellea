@@ -197,7 +197,7 @@ Hooks are called from Mellea's base classes (`Component.aact()`, `Backend.genera
 The calling convention is a single async call at each hook site:
 
 ```python
-result = await plugin_manager.invoke_hook(hook_type, payload, context)
+result = await invoke_hook(hook_type, payload, backend=backend)
 ```
 
 The caller (the base class method) is responsible for both invoking the hook and processing the result. Processing means checking the result for one of three possible outcomes:
@@ -229,11 +229,13 @@ class BasePayload(PluginPayload):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     session_id: str | None = None      # Session identifier (None for functional API calls)
-    request_id: str                    # Unique ID for this execution chain
+    request_id: str = ""               # Reserved for future use (e.g., request tracing)
     timestamp: datetime                # When the event fired
     hook: str                          # Name of the hook (e.g., "generation_pre_call")
     user_metadata: dict[str, Any]      # Custom metadata carried by user code
 ```
+
+> **Note on `session_id` and `request_id`**: These fields exist on the base payload schema but are **not** automatically stamped by the framework at dispatch time. `session_id` is available when the caller sets it on the payload directly. `request_id` is reserved for future request-tracing support.
 
 ## 3. Hook Summary Table
 
@@ -1128,137 +1130,36 @@ Cross-cutting hook for error conditions.
   - `operation`: str - What operation was being performed
 
 
-## 5. PluginContext by Domain
+## 5. GlobalContext (Ambient Metadata)
 
-The `PluginContext` passed to hooks varies by domain, providing only the references relevant to that category:
+The `GlobalContext` passed to hooks carries lightweight, cross-cutting ambient metadata that is useful to every hook regardless of type. Hook-specific data (context, session, action, etc.) belongs on the **typed payload**, not on the global context.
 
-### Session Hooks
-
-```python
-# session_* hooks
-session: MelleaSession
-session_id: str
-
-# Environment
-environment: dict[str, str]
-cwd: str
-
-# Plugin State
-shared_state: dict[str, Any]       # Shared across plugins
-
-# Utilities
-logger: Logger
-metrics: MetricsCollector
-
-# Request Metadata
-request_id: str
-parent_request_id: str | None
-timestamp: datetime
-
-# User Information
-user_id: str | None
-user_metadata: dict[str, Any]
-```
-
-### Component, Generation, Validation, Sampling, and Tool Hooks
+### What goes in GlobalContext
 
 ```python
-# component_*, generation_*, validation_*, sampling_*, tool_* hooks
-backend: Backend
-context: Context
-
-# Backend Information (generation hooks)
-backend_name: str                  # Available on generation_* hooks
-model_id: str                      # Available on generation_* hooks
-
-# Strategy Information (sampling hooks)
-strategy_name: str                 # Available on sampling_* hooks
-
-# Plugin State
-shared_state: dict[str, Any]
-
-# Utilities
-logger: Logger
-metrics: MetricsCollector
-
-# Request Metadata
-request_id: str
-parent_request_id: str | None
-timestamp: datetime
-
-# User Information
-user_id: str | None
-user_metadata: dict[str, Any]
+# GlobalContext.state — same for all hook types
+backend_name: str                  # Derived from backend.model_id (when backend is passed)
 ```
 
-### Adapter Hooks
+The `backend_name` is a lightweight string extracted from `backend.model_id`. The full `backend` and `session` objects are **not** stored in GlobalContext — this avoids giving plugins unchecked mutable access to core framework objects.
 
-```python
-# adapter_* hooks
-backend: Backend
+### What goes on payloads
 
-# Plugin State
-shared_state: dict[str, Any]
+Domain-specific data belongs on the typed payload for each hook:
 
-# Utilities
-logger: Logger
-metrics: MetricsCollector
+- **`context`** — Available on payload types that need it (e.g., `GenerationPreCallPayload.context`, `ComponentPreExecutePayload.context`, `SamplingLoopStartPayload.context`)
+- **`session`** — Available on session hook payloads (e.g., `SessionPostInitPayload.session`)
+- **`action`**, **`result`**, **`model_output`** — Available on the relevant pre/post payloads
 
-# Request Metadata
-request_id: str
-timestamp: datetime
-```
+This design ensures that plugins access data through typed, documented, discoverable payload fields rather than untyped dict lookups on `global_context.state`.
 
-### Context Hooks
+### Design rationale
 
-```python
-# context_* hooks
-context: Context
+Previously, `context`, `session`, and `backend` were passed both on payloads and in `GlobalContext.state`, creating duplication. The same mutable object accessible via two paths was a footgun — plugins could be confused about which to read/modify. The refactored design:
 
-# Plugin State
-shared_state: dict[str, Any]
-
-# Utilities
-logger: Logger
-metrics: MetricsCollector
-
-# Request Metadata
-request_id: str
-timestamp: datetime
-```
-
-### Error Hook
-
-```python
-# error_occurred
-session: MelleaSession | None
-backend: Backend | None
-context: Context | None
-
-# Plugin State
-shared_state: dict[str, Any]
-
-# Utilities
-logger: Logger
-metrics: MetricsCollector
-
-# Request Metadata
-request_id: str
-timestamp: datetime
-operation: str
-```
-
-### Context Snapshot
-
-When conversation history is relevant, the plugin context object may include a `ContextSnapshot`:
-
-```python
-@dataclass
-class ContextSnapshot:
-    history_length: int                # Number of turns
-    last_turn: dict | None             # Last user/assistant exchange
-    token_estimate: int | None         # Estimated token count
-```
+1. **Payloads** are the primary API surface — typed, documented, policy-controlled
+2. **GlobalContext** holds only truly ambient metadata (`backend_name`) that doesn't belong on any specific payload
+3. No mutable framework objects (`Backend`, `MelleaSession`, `Context`) are stored in GlobalContext
 
 ## 6. Hook Results
 
@@ -1829,9 +1730,8 @@ flowchart TD
 
 The hook system provides natural integration points for enriching these shallow spans with Mellea-level context:
 
-- **`generation_pre_call`**: Inject span attributes such as `component_type`, `strategy_name`, and `request_id` into the active OTel context before the HTTP call fires
+- **`generation_pre_call`**: Inject span attributes such as `component_type`, `strategy_name`, and `backend_name` (from `GlobalContext.state`) into the active OTel context before the HTTP call fires
 - **`generation_post_call`**: Attach result metadata — `finish_reason`, `token_usage`, validation outcome — to the span after the call completes
-- **`request_id` from `BasePayload`**: Serves as a correlation ID linking Mellea-level hook events to transport-level OTel spans
 
 > **Forward-looking**: Mellea does not currently include OTel integration. This section describes the intended design for how hooks and shallow logging would compose when OTel support is added.
 

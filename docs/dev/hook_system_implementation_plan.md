@@ -289,28 +289,22 @@ def register_mellea_hooks() -> None:
 
 ### 3.4 Context Mapping (`mellea/plugins/context.py`)
 
-The hook system spec defines domain-specific `PluginContext` fields (`session`, `backend`, `context`) that vary by hook category. CPEX provides a generic `GlobalContext` with a `state: dict`. The mapping uses `GlobalContext.state` as the carrier for Mellea-specific context:
+CPEX provides a generic `GlobalContext` with a `state: dict`. The `build_global_context` factory populates it with lightweight, cross-cutting ambient metadata. Hook-specific data (context, session, action, etc.) belongs on the typed payload, not here.
 
 ```python
 def build_global_context(
     *,
-    session: MelleaSession | None = None,
     backend: Backend | None = None,
-    context: Context | None = None,
-    request_id: str = "",
     **extra_fields,
 ) -> GlobalContext:
     state: dict[str, Any] = {}
-    if session is not None:
-        state["session"] = session
     if backend is not None:
-        state["backend"] = backend
         state["backend_name"] = getattr(backend, "model_id", "unknown")
-    if context is not None:
-        state["context"] = context
     state.update(extra_fields)
-    return GlobalContext(request_id=request_id, state=state)
+    return GlobalContext(request_id="", state=state)
 ```
+
+> **Design note**: Previously, `context`, `session`, and the full `backend` object were stored in `GlobalContext.state`, duplicating data already present on typed payloads. This was removed to eliminate the duplication footgun — plugins should access domain objects through the typed, policy-controlled payload fields.
 
 ### 3.5 `Plugin` Base Class (`mellea/plugins/base.py`)
 
@@ -355,14 +349,8 @@ class Plugin:
 class MelleaPlugin(_CpexPlugin):
     """Advanced base class for Mellea plugins with lifecycle hooks and typed accessors."""
 
-    def get_backend(self, context: PluginContext) -> Backend | None:
-        return context.global_context.state.get("backend")
-
-    def get_mellea_context(self, context: PluginContext) -> Context | None:
-        return context.global_context.state.get("context")
-
-    def get_session(self, context: PluginContext) -> MelleaSession | None:
-        return context.global_context.state.get("session")
+    def get_backend_name(self, context: PluginContext) -> str | None:
+        return context.global_context.state.get("backend_name")
 
     @property
     def plugin_config(self) -> dict[str, Any]:
@@ -628,29 +616,20 @@ All hook call sites use this single function. Three layers of no-op guards ensur
 2. **`has_hooks_for(hook_type)`** — skips invocation when no plugin subscribes to this hook
 3. **Returns `(None, original_payload)` immediately** when either guard fails
 
-When `session_id` is provided, the manager invokes both global plugins (those registered without a session tag) and session-scoped plugins matching that session ID. When `session_id` is `None` (functional API path), only global plugins are invoked.
+The wrapper accepts only `backend` and optional `**context_fields` as kwargs. Domain-specific data (context, session, action, etc.) belongs on the typed payload, not on the invocation kwargs.
 
 ```python
 async def invoke_hook(
     hook_type: HookType,
     payload: MelleaBasePayload,
     *,
-    session_id: str | None = None,
-    session: MelleaSession | None = None,
     backend: Backend | None = None,
-    context: Context | None = None,
-    request_id: str = "",
-    violations_as_exceptions: bool = True,
     **context_fields,
 ) -> tuple[PluginResult | None, MelleaBasePayload]:
     """Invoke a hook if plugins are configured.
 
     Returns (result, possibly-modified-payload).
     If plugins are not configured, returns (None, original_payload) immediately.
-
-    When session_id is provided, both global plugins and session-scoped
-    plugins matching that session ID are invoked. When session_id is None
-    (functional API path), only global plugins are invoked.
     """
     if not _plugins_enabled or _plugin_manager is None:
         return None, payload
@@ -659,21 +638,16 @@ async def invoke_hook(
         return None, payload
 
     # Payloads are frozen — use model_copy to set dispatch-time fields
-    updates: dict[str, Any] = {"hook": hook_type.value, "session_id": session_id}
-    if not payload.request_id:
-        updates["request_id"] = request_id
+    updates: dict[str, Any] = {"hook": hook_type.value}
     payload = payload.model_copy(update=updates)
 
-    global_ctx = build_global_context(
-        session=session, backend=backend, context=context,
-        request_id=request_id, session_id=session_id, **context_fields,
-    )
+    global_ctx = build_global_context(backend=backend, **context_fields)
 
     result, _ = await _plugin_manager.invoke_hook(
         hook_type=hook_type.value,
         payload=payload,
         global_context=global_ctx,
-        violations_as_exceptions=violations_as_exceptions,
+        violations_as_exceptions=False,
     )
 
     modified = result.modified_payload if result and result.modified_payload else payload
