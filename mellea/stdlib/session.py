@@ -193,7 +193,6 @@ def start_session(
                 backend_name=backend_name,
                 model_id=model_id_str,
                 model_options=model_options,
-                backend_kwargs=backend_kwargs,
                 context_type=ctx.__class__.__name__ if ctx else "SimpleContext",
             )
             _, pre_payload = _run_async_in_thread(
@@ -203,7 +202,6 @@ def start_session(
             backend_name = pre_payload.backend_name  # type: ignore[assignment]
             model_id_str = pre_payload.model_id
             model_options = pre_payload.model_options
-            backend_kwargs = pre_payload.backend_kwargs
 
         backend_class = backend_name_to_class(backend_name)
         if backend_class is None:

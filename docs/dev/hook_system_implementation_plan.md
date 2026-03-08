@@ -478,7 +478,7 @@ from cpex.framework.hooks.policies import HookPayloadPolicy
 MELLEA_HOOK_PAYLOAD_POLICIES: dict[str, HookPayloadPolicy] = {
     # Session Lifecycle
     "session_pre_init": HookPayloadPolicy(
-        writable_fields=frozenset({"backend_name", "model_id", "model_options", "backend_kwargs"}),
+        writable_fields=frozenset({"backend_name", "model_id", "model_options"}),
     ),
     # session_post_init, session_reset, session_cleanup: observe-only (no entry)
 
@@ -964,7 +964,6 @@ SessionPreInitPayload(
     backend_name=backend_name,
     model_id=str(model_id),
     model_options=model_options,
-    backend_kwargs=backend_kwargs,
     context_type=type(ctx).__name__ if ctx else "SimpleContext",
 )
 

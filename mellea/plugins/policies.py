@@ -24,9 +24,7 @@ def _build_policies() -> dict[str, Any]:
     return {
         # Session Lifecycle
         "session_pre_init": HookPayloadPolicy(
-            writable_fields=frozenset(
-                {"backend_name", "model_id", "model_options", "backend_kwargs"}
-            )
+            writable_fields=frozenset({"backend_name", "model_id", "model_options"})
         ),
         # session_post_init, session_reset, session_cleanup: observe-only
         # Component Lifecycle

@@ -321,7 +321,7 @@ def apply_policy(
 | Hook Point | Writable Fields |
 |------------|----------------|
 | **Session Lifecycle** | |
-| `session_pre_init` | `backend_name`, `model_id`, `model_options`, `backend_kwargs` |
+| `session_pre_init` | `backend_name`, `model_id`, `model_options` |
 | `session_post_init` | *(observe-only)* |
 | `session_reset` | *(observe-only)* |
 | `session_cleanup` | *(observe-only)* |
@@ -414,7 +414,6 @@ Hooks that manage session boundaries, useful for initialization, state setup, an
       backend_name: str              # Requested backend identifier
       model_id: str | ModelIdentifier  # Target model
       model_options: dict | None     # Generation parameters
-      backend_kwargs: dict           # Additional backend configuration
       context_type: type[Context]    # Context class to use
   ```
 - **Context**:

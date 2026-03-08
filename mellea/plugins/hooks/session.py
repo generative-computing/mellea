@@ -17,14 +17,12 @@ class SessionPreInitPayload(MelleaBasePayload):
         backend_name: Name of the backend (e.g. ``"ollama"``, ``"openai"``) (writable).
         model_id: Model identifier string (writable).
         model_options: Optional dict of model options like temperature, max_tokens (writable).
-        backend_kwargs: Additional keyword arguments passed to the backend constructor (writable).
         context_type: Class name of the context being used (e.g. ``"SimpleContext"``).
     """
 
     backend_name: str
     model_id: str
     model_options: dict[str, Any] | None = None
-    backend_kwargs: dict[str, Any] = {}
     context_type: str = "SimpleContext"
 
 

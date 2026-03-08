@@ -14,7 +14,7 @@ class TestPolicies:
         assert "backend_name" in policy.writable_fields
         assert "model_id" in policy.writable_fields
         assert "model_options" in policy.writable_fields
-        assert "backend_kwargs" in policy.writable_fields
+        assert "backend_kwargs" not in policy.writable_fields
 
     def test_generation_pre_call_policy(self):
         policy = MELLEA_HOOK_PAYLOAD_POLICIES.get("generation_pre_call")
