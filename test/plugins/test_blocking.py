@@ -40,7 +40,7 @@ async def _invoke_no_raise(payload: SessionPreInitPayload):
     ``PluginManager.invoke_hook`` directly.
     """
     pm = ensure_plugin_manager()
-    ctx = build_global_context(request_id="test-req")
+    ctx = build_global_context()
     # Stamp the hook field the same way Mellea's wrapper would
     stamped = payload.model_copy(update={"hook": HookType.SESSION_PRE_INIT.value})
     result, _ = await pm.invoke_hook(

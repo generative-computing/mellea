@@ -236,14 +236,7 @@ def start_session(
 
             post_payload = SessionPostInitPayload(session=session)
             _run_async_in_thread(
-                invoke_hook(
-                    HookType.SESSION_POST_INIT,
-                    post_payload,
-                    session_id=session.id,
-                    session=session,
-                    backend=backend,
-                    context=ctx,
-                )
+                invoke_hook(HookType.SESSION_POST_INIT, post_payload, backend=backend)
             )
 
         return session
@@ -342,14 +335,7 @@ class MelleaSession:
 
             payload = SessionResetPayload(previous_context=self.ctx)
             _run_async_in_thread(
-                invoke_hook(
-                    HookType.SESSION_RESET,
-                    payload,
-                    session_id=self.id,
-                    session=self,
-                    backend=self.backend,
-                    context=self.ctx,
-                )
+                invoke_hook(HookType.SESSION_RESET, payload, backend=self.backend)
             )
         self.ctx = self.ctx.reset_to_new()
 
@@ -362,14 +348,7 @@ class MelleaSession:
                 context=self.ctx, interaction_count=len(self.ctx.as_list())
             )
             _run_async_in_thread(
-                invoke_hook(
-                    HookType.SESSION_CLEANUP,
-                    payload,
-                    session_id=self.id,
-                    session=self,
-                    backend=self.backend,
-                    context=self.ctx,
-                )
+                invoke_hook(HookType.SESSION_CLEANUP, payload, backend=self.backend)
             )
 
         # Deregister session-scoped plugins — must run whenever plugins are

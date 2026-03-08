@@ -9,8 +9,6 @@ from typing import TYPE_CHECKING, Any, TypeAlias
 
 from pydantic import Field
 
-from mellea.plugins.types import PluginMode
-
 # ---------------------------------------------------------------------------
 # Plugin base class (no cpex dependency)
 # ---------------------------------------------------------------------------

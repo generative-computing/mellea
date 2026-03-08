@@ -505,8 +505,8 @@ class TestSamplingHookCallSites:
         assert isinstance(p.all_results, list)
         assert len(p.all_results) == 1  # one iteration, one result
 
-    async def test_sampling_loop_end_context_in_plugin_ctx_is_result_ctx(self) -> None:
-        """On success, SAMPLING_LOOP_END invoke_hook passes context=result_ctx (post-generation)."""
+    async def test_sampling_loop_end_context_available_on_payload(self) -> None:
+        """On success, SAMPLING_LOOP_END payload carries final_context (post-generation)."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 
@@ -514,8 +514,7 @@ class TestSamplingHookCallSites:
 
         @hook("sampling_loop_end")
         async def recorder(payload: Any, ctx: Any) -> Any:
-            # ctx.global_context.state["context"] is the context passed to invoke_hook
-            observed_ctxs.append(ctx.global_context.state.get("context"))
+            observed_ctxs.append(payload.final_context)
             return None
 
         register(recorder)
@@ -533,10 +532,10 @@ class TestSamplingHookCallSites:
             tool_calls=False,
             show_progress=False,
         )
-        # On success, the context in plugin ctx should be result_ctx (not original_ctx)
+        # On success, the payload's final_context should be result_ctx (not original_ctx)
         if observed_ctxs:
             assert observed_ctxs[0] is not original_ctx, (
-                "Success path: plugin context should be result_ctx, not the original input context"
+                "Success path: payload.final_context should be result_ctx, not the original input context"
             )
 
     async def test_all_three_sampling_hooks_fire_in_order(self) -> None:

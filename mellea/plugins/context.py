@@ -13,19 +13,15 @@ except ImportError:
 
 if TYPE_CHECKING:
     from mellea.core.backend import Backend
-    from mellea.core.base import Context
-    from mellea.stdlib.session import MelleaSession
 
 
-def build_global_context(
-    *,
-    session: MelleaSession | None = None,
-    backend: Backend | None = None,
-    context: Context | None = None,
-    request_id: str = "",
-    **extra_fields: Any,
-) -> Any:
+def build_global_context(*, backend: Backend | None = None, **extra_fields: Any) -> Any:
     """Build a ContextForge ``GlobalContext`` from Mellea domain objects.
+
+    The global context carries lightweight, cross-cutting ambient metadata
+    (e.g. ``backend_name``) that is useful to every hook regardless of type.
+    Hook-specific data (context, session, action, etc.) belongs on the typed
+    payload, not here.
 
     Returns ``None`` if ContextForge is not installed.
     """
@@ -33,13 +29,8 @@ def build_global_context(
         return None
 
     state: dict[str, Any] = {}
-    if session is not None:
-        state["session"] = session
     if backend is not None:
-        state["backend"] = backend
         state["backend_name"] = getattr(backend, "model_id", "unknown")
-    if context is not None:
-        state["context"] = context
     state.update(extra_fields)
 
-    return GlobalContext(request_id=request_id, state=state)
+    return GlobalContext(request_id="", state=state)

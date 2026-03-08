@@ -174,10 +174,7 @@ class Backend(abc.ABC):
                         tool_calls=tool_calls,
                     )
                     _, pre_payload = await invoke_hook(
-                        HookType.GENERATION_PRE_CALL,
-                        pre_payload,
-                        backend=self,
-                        context=ctx,
+                        HookType.GENERATION_PRE_CALL, pre_payload, backend=self
                     )
                     model_options = pre_payload.model_options
                     format = pre_payload.format
@@ -213,7 +210,6 @@ class Backend(abc.ABC):
                         HookType.GENERATION_POST_CALL,
                         post_payload,
                         backend=_backend_ref,
-                        context=_ctx_ref,
                     )
                     if (
                         post_payload.model_output is not None

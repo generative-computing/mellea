@@ -162,10 +162,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 loop_budget=self.loop_budget,
             )
             _, start_payload = await invoke_hook(
-                HookType.SAMPLING_LOOP_START,
-                start_payload,
-                backend=backend,
-                context=context,
+                HookType.SAMPLING_LOOP_START, start_payload, backend=backend
             )
             effective_loop_budget = start_payload.loop_budget
 
@@ -236,10 +233,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                     total_count=len(constraint_scores),
                 )
                 await invoke_hook(
-                    HookType.SAMPLING_ITERATION,
-                    iter_payload,
-                    backend=backend,
-                    context=result_ctx,
+                    HookType.SAMPLING_ITERATION, iter_payload, backend=backend
                 )
 
             # if all vals are true -- break and return success
@@ -264,10 +258,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                         all_validations=sampled_scores,
                     )
                     _, end_payload = await invoke_hook(
-                        HookType.SAMPLING_LOOP_END,
-                        end_payload,
-                        backend=backend,
-                        context=result_ctx,
+                        HookType.SAMPLING_LOOP_END, end_payload, backend=backend
                     )
                     if (
                         end_payload.final_result is not None
@@ -324,10 +315,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                     repair_iteration=loop_count,
                 )
                 _, repair_payload = await invoke_hook(
-                    HookType.SAMPLING_REPAIR,
-                    repair_payload,
-                    backend=backend,
-                    context=next_context,
+                    HookType.SAMPLING_REPAIR, repair_payload, backend=backend
                 )
                 next_action = repair_payload.repair_action
                 next_context = repair_payload.repair_context
@@ -367,10 +355,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 all_validations=sampled_scores,
             )
             _, end_payload = await invoke_hook(
-                HookType.SAMPLING_LOOP_END,
-                end_payload,
-                backend=backend,
-                context=_final_ctx,
+                HookType.SAMPLING_LOOP_END, end_payload, backend=backend
             )
             if (
                 end_payload.final_result is not None

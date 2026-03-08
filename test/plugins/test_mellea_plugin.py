@@ -32,18 +32,17 @@ def _make_payload() -> SessionPreInitPayload:
 # ---------------------------------------------------------------------------
 
 
-class TestTypedContextAccessors:
-    """get_backend(), get_mellea_context(), get_session() extract from GlobalContext.state."""
+class TestGlobalContextAccessors:
+    """GlobalContext.state carries lightweight ambient metadata (backend_name)."""
 
-    async def test_get_backend_returns_backend(self) -> None:
-        """get_backend() returns the object passed as backend= to invoke_hook."""
-        received_backend = []
+    async def test_backend_name_in_global_context(self) -> None:
+        """backend_name is set in GlobalContext.state when backend= is passed."""
+        received = []
 
-        class AccessorPlugin(Plugin, name="accessor-test-backend"):
+        class AccessorPlugin(Plugin, name="accessor-test-backend-name"):
             @hook("session_pre_init")
             async def on_pre_init(self, payload: Any, ctx: Any) -> Any:
-                # Access via GlobalContext.state directly
-                received_backend.append(ctx.global_context.state.get("backend"))
+                received.append(ctx.global_context.state.get("backend_name"))
                 return None
 
         mock_backend = MagicMock()
@@ -52,71 +51,39 @@ class TestTypedContextAccessors:
         await invoke_hook(
             HookType.SESSION_PRE_INIT, _make_payload(), backend=mock_backend
         )
-        assert len(received_backend) == 1
-        assert received_backend[0] is mock_backend
+        assert len(received) == 1
+        assert received[0] == "mock-backend"
 
-    async def test_get_mellea_context_returns_context(self) -> None:
-        """get_mellea_context() returns the object passed as context= to invoke_hook."""
-        received_context = []
-
-        class AccessorPlugin(Plugin, name="accessor-test-context"):
-            @hook("session_pre_init")
-            async def on_pre_init(self, payload: Any, ctx: Any) -> Any:
-                received_context.append(ctx.global_context.state.get("context"))
-                return None
-
-        mock_context = MagicMock()
-        register(AccessorPlugin())
-        await invoke_hook(
-            HookType.SESSION_PRE_INIT, _make_payload(), context=mock_context
-        )
-        assert len(received_context) == 1
-        assert received_context[0] is mock_context
-
-    async def test_get_session_returns_session(self) -> None:
-        """get_session() returns the object passed as session= to invoke_hook."""
-        received_session = []
-
-        class AccessorPlugin(Plugin, name="accessor-test-session"):
-            @hook("session_pre_init")
-            async def on_pre_init(self, payload: Any, ctx: Any) -> Any:
-                received_session.append(ctx.global_context.state.get("session"))
-                return None
-
-        mock_session = MagicMock()
-        register(AccessorPlugin())
-        await invoke_hook(
-            HookType.SESSION_PRE_INIT, _make_payload(), session=mock_session
-        )
-        assert len(received_session) == 1
-        assert received_session[0] is mock_session
-
-    async def test_backend_absent_when_not_passed(self) -> None:
-        """State key 'backend' is absent when backend is not passed."""
+    async def test_backend_name_absent_when_not_passed(self) -> None:
+        """'backend_name' is absent from state when backend is not passed."""
         received = []
 
         class AccessorPlugin(Plugin, name="accessor-absent-backend"):
             @hook("session_pre_init")
             async def on_pre_init(self, payload: Any, ctx: Any) -> Any:
-                received.append("backend" in ctx.global_context.state)
+                received.append("backend_name" in ctx.global_context.state)
                 return None
 
         register(AccessorPlugin())
         await invoke_hook(HookType.SESSION_PRE_INIT, _make_payload())
         assert received == [False]
 
-    async def test_session_absent_when_not_passed(self) -> None:
-        """State key 'session' is absent when session is not passed."""
+    async def test_full_backend_object_not_in_state(self) -> None:
+        """The full backend object should NOT be stored in GlobalContext.state."""
         received = []
 
-        class AccessorPlugin(Plugin, name="accessor-absent-session"):
+        class AccessorPlugin(Plugin, name="accessor-no-full-backend"):
             @hook("session_pre_init")
             async def on_pre_init(self, payload: Any, ctx: Any) -> Any:
-                received.append("session" in ctx.global_context.state)
+                received.append("backend" in ctx.global_context.state)
                 return None
 
+        mock_backend = MagicMock()
+        mock_backend.model_id = "test"
         register(AccessorPlugin())
-        await invoke_hook(HookType.SESSION_PRE_INIT, _make_payload())
+        await invoke_hook(
+            HookType.SESSION_PRE_INIT, _make_payload(), backend=mock_backend
+        )
         assert received == [False]
 
 

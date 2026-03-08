@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Coroutine
 from typing import Any, Literal, overload
 
@@ -27,7 +28,7 @@ from ..core import (
     ValidationResult,
 )
 from ..helpers import _run_async_in_thread
-from ..plugins.base import PluginViolationError
+from ..plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
 from ..plugins.manager import has_plugins, invoke_hook
 from ..plugins.types import HookType
 from ..telemetry import set_span_attribute, trace_application
@@ -513,10 +514,7 @@ async def aact(
                 tool_calls_enabled=tool_calls,
             )
             _, pre_exec_payload = await invoke_hook(
-                HookType.COMPONENT_PRE_EXECUTE,
-                pre_exec_payload,
-                backend=backend,
-                context=context,
+                HookType.COMPONENT_PRE_EXECUTE, pre_exec_payload, backend=backend
             )
             action = pre_exec_payload.action
             context = pre_exec_payload.context
@@ -631,10 +629,7 @@ async def aact(
                     latency_ms=int((time.monotonic() - t0) * 1000),
                 )
                 _, success_payload = await invoke_hook(
-                    HookType.COMPONENT_POST_SUCCESS,
-                    success_payload,
-                    backend=backend,
-                    context=new_ctx,
+                    HookType.COMPONENT_POST_SUCCESS, success_payload, backend=backend
                 )
                 if (
                     success_payload.result is not None
@@ -665,10 +660,7 @@ async def aact(
                     model_options=model_options or {},
                 )
                 await invoke_hook(
-                    HookType.COMPONENT_POST_ERROR,
-                    error_payload,
-                    backend=backend,
-                    context=context,
+                    HookType.COMPONENT_POST_ERROR, error_payload, backend=backend
                 )
             raise
 
@@ -860,7 +852,7 @@ async def avalidate(
             model_options=model_options or {},
         )
         _, pre_payload = await invoke_hook(
-            HookType.VALIDATION_PRE_CHECK, pre_payload, backend=backend, context=context
+            HookType.VALIDATION_PRE_CHECK, pre_payload, backend=backend
         )
         reqs = pre_payload.requirements
         model_options = pre_payload.model_options or model_options
@@ -905,10 +897,7 @@ async def avalidate(
             failed_count=sum(1 for r in rvs if not bool(r)),
         )
         _, post_payload = await invoke_hook(
-            HookType.VALIDATION_POST_CHECK,
-            post_payload,
-            backend=backend,
-            context=context,
+            HookType.VALIDATION_POST_CHECK, post_payload, backend=backend
         )
         rvs = post_payload.results
 
@@ -999,7 +988,7 @@ async def atransform(
         tool_calls=True,
     )
 
-    tools = await _acall_tools(transformed, backend, context=context)
+    tools = await _acall_tools(transformed, backend)
 
     # Transform only supports calling one tool call since it cannot currently synthesize multiple outputs.
     # Attempt to choose the best one to call.
@@ -1072,18 +1061,14 @@ def _call_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]
     return _run_async_in_thread(_acall_tools(result, backend))
 
 
-async def _acall_tools(
-    result: ModelOutputThunk,
-    backend: Backend,
-    *,
-    context: Context | None = None,
-    session_id: str | None = None,
-) -> list[ToolMessage]:
-    """Async implementation of _call_tools with tool_pre_invoke / tool_post_invoke hook support."""
-    import time
+async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]:
+    """Call all the tools requested in a result's tool calls object.
 
-    from ..plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
+    Call tools with tool_pre_invoke / tool_post_invoke hook support.
 
+    Returns:
+        list[ToolMessage]: A list of tool messages that can be empty.
+    """
     outputs: list[ToolMessage] = []
     tool_calls = result.tool_calls
     if not tool_calls:
@@ -1094,11 +1079,7 @@ async def _acall_tools(
         if has_plugins(HookType.TOOL_PRE_INVOKE):
             pre_payload = ToolPreInvokePayload(model_tool_call=tool)
             _, pre_payload = await invoke_hook(
-                HookType.TOOL_PRE_INVOKE,
-                pre_payload,
-                backend=backend,
-                context=context,
-                session_id=session_id,
+                HookType.TOOL_PRE_INVOKE, pre_payload, backend=backend
             )
             if pre_payload.model_tool_call is not tool and isinstance(
                 pre_payload.model_tool_call, ModelToolCall
@@ -1144,11 +1125,7 @@ async def _acall_tools(
                 error=error,
             )
             _, post_payload = await invoke_hook(
-                HookType.TOOL_POST_INVOKE,
-                post_payload,
-                backend=backend,
-                context=context,
-                session_id=session_id,
+                HookType.TOOL_POST_INVOKE, post_payload, backend=backend
             )
             # If a plugin modified tool_output, reformat and rebuild the ToolMessage
             if post_payload.tool_output is not output:

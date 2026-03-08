@@ -19,8 +19,6 @@ except ImportError:
 
 if TYPE_CHECKING:
     from mellea.core.backend import Backend
-    from mellea.core.base import Context
-    from mellea.stdlib.session import MelleaSession
 
 logger = logging.getLogger(__name__)
 
@@ -143,11 +141,7 @@ async def invoke_hook(
     hook_type: HookType,
     payload: MelleaBasePayload,
     *,
-    session_id: str | None = None,
-    session: MelleaSession | None = None,
     backend: Backend | None = None,
-    context: Context | None = None,
-    request_id: str = "",
     **context_fields: Any,
 ) -> tuple[Any | None, MelleaBasePayload]:
     """Invoke a hook if plugins are configured.
@@ -168,20 +162,9 @@ async def invoke_hook(
 
     # Payloads are frozen — use model_copy to set dispatch-time fields
     updates: dict[str, Any] = {"hook": hook_type.value}
-    if session_id is not None:
-        updates["session_id"] = session_id
-    if not payload.request_id:
-        updates["request_id"] = request_id
     payload = payload.model_copy(update=updates)
 
-    global_ctx = build_global_context(
-        session=session,
-        backend=backend,
-        context=context,
-        request_id=request_id,
-        session_id=session_id,
-        **context_fields,
-    )
+    global_ctx = build_global_context(backend=backend, **context_fields)
 
     result, _ = await _plugin_manager.invoke_hook(
         hook_type=hook_type.value,
