@@ -140,10 +140,14 @@ class Backend(abc.ABC):
               ``ModelOutputThunk.astream`` after ``post_process`` completes and
               the value is fully materialized. ``latency_ms`` reflects the full
               time from the ``generate_from_context`` call to value availability.
+              ``model_output`` replacement is supported — the original MOT's
+              output fields are updated in-place via ``_copy_from``.
             - **Already-computed MOTs** (e.g. cached responses): ``astream``
               returns early and never invokes ``_on_computed``, so the hook is
               fired inline here before returning. ``model_output`` replacement is
               supported in this path.
+
+            Both paths support ``model_output`` replacement by plugins.
 
         """
         if "generate_from_context" in cls.__dict__:

@@ -216,6 +216,20 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         self._generate_log: GenerateLog | None = None
 
+    def _copy_from(self, other: ModelOutputThunk) -> None:
+        """Copy computed-output fields from *other* into *self*.
+
+        This is used when a hook replaces the MOT: callers already hold a
+        reference to *self*, so we swap the output-relevant state in-place
+        rather than replacing the object.
+        """
+        self._underlying_value = other._underlying_value
+        self._meta = other._meta
+        self.parsed_repr = other.parsed_repr
+        self.tool_calls = other.tool_calls
+        self._thinking = other._thinking
+        self._generate_log = other._generate_log
+
     def is_computed(self):
         """Returns true only if this Thunk has already been filled."""
         return self._computed
@@ -362,7 +376,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
             )
 
             if self._on_computed is not None:
-                await self._on_computed(self)
+                replacement = await self._on_computed(self)
+                if replacement is not None and replacement is not self:
+                    self._copy_from(replacement)
 
             return self._underlying_value  # type: ignore
 

@@ -702,7 +702,7 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
   ```python
   class GenerationPostCallPayload(BasePayload):
       prompt: str | list[dict]       # Sent prompt (from linearization)
-      model_output: ModelOutputThunk # Fully computed output thunk (writable on already-computed path only)
+      model_output: ModelOutputThunk # Fully computed output thunk (writable)
       latency_ms: float              # Elapsed ms from generate_from_context call to value availability
   ```
 - **Context**:
@@ -714,8 +714,8 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
   - `stream_chunks`: int | None - Number of chunks if streaming
 - **Notes**:
   - On the lazy path (normal), `model_output.value` is guaranteed to be available when this hook fires.
-  - On the lazy path, replacing `model_output` via the writable field has no effect because the caller already holds the original reference — use `component_post_success` instead for output transformation.
-  - On the already-computed path (e.g. cached responses), `model_output` replacement is supported.
+  - Replacing `model_output` is supported on both paths. On the lazy path, the original MOT's output fields are updated in-place via `_copy_from`.
+  - On the already-computed path (e.g. cached responses), the returned MOT object itself is replaced.
 
 #### `generation_stream_chunk`
 

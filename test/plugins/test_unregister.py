@@ -148,7 +148,7 @@ class TestUnregisterClassPlugin:
         unregister(instance)
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
         assert len(standalone_calls) == 2  # Still firing
-        assert len(class_calls) == 1       # Stopped
+        assert len(class_calls) == 1  # Stopped
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +201,7 @@ class TestUnregisterPluginSet:
 
         unregister(ps)
         await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
-        assert len(ps_calls) == 1    # Stopped
+        assert len(ps_calls) == 1  # Stopped
         assert len(other_calls) == 2  # Still firing
 
 

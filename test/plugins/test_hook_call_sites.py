@@ -17,7 +17,13 @@ import pytest
 pytest.importorskip("cpex.framework")
 
 from mellea.core.backend import Backend
-from mellea.core.base import CBlock, Context, GenerateLog, ModelOutputThunk
+from mellea.core.base import (
+    CBlock,
+    Context,
+    GenerateLog,
+    GenerateType,
+    ModelOutputThunk,
+)
 from mellea.plugins import PluginResult, hook, register
 from mellea.plugins.manager import shutdown_plugins
 from mellea.stdlib.context import SimpleContext
@@ -705,7 +711,7 @@ class TestSessionHookCallSites:
 
 
 class TestGenerationPostCallMutation:
-    """GENERATION_POST_CALL: a hook that replaces model_output is applied."""
+    """GENERATION_POST_CALL: a hook that replaces model_output is applied (eager path)."""
 
     async def test_hook_can_replace_model_output(self) -> None:
         """A plugin that returns a modified model_output replaces the returned thunk."""
@@ -740,6 +746,129 @@ class TestGenerationPostCallMutation:
 
         assert result is not None
         assert isinstance(result, ModelOutputThunk)
+
+
+# ---------------------------------------------------------------------------
+# Lazy/stream path MOT replacement
+# ---------------------------------------------------------------------------
+
+
+class _MockLazyBackend(Backend):
+    """Backend that returns a real lazy (uncomputed) ModelOutputThunk.
+
+    The MOT must be materialized via ``avalue()``/``astream()``, exercising
+    the ``_on_computed`` callback path.
+    """
+
+    model_id = "mock-lazy-model"
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def generate_from_context(self, action, ctx, **kwargs):
+        import asyncio
+
+        mot = ModelOutputThunk(value=None)
+        mot._generate_type = GenerateType.ASYNC
+        mot._chunk_size = 0
+        mot._action = action
+
+        async def _process(thunk, chunk):
+            if thunk._underlying_value is None:
+                thunk._underlying_value = ""
+            thunk._underlying_value += str(chunk)
+
+        async def _post_process(thunk):
+            pass
+
+        mot._process = _process
+        mot._post_process = _post_process
+
+        glog = GenerateLog()
+        glog.prompt = "lazy mocked prompt"
+        mot._generate_log = glog
+
+        # Simulate async generation: enqueue chunks + sentinel
+        async def _generate():
+            await mot._async_queue.put("lazy output")
+            await mot._async_queue.put(None)  # sentinel
+
+        mot._generate = asyncio.ensure_future(_generate())
+
+        return mot, SimpleContext()
+
+    async def generate_from_raw(self, actions, ctx, **kwargs):
+        return []
+
+
+class TestGenerationPostCallMutationLazyPath:
+    """GENERATION_POST_CALL: model_output replacement works on the lazy/stream path."""
+
+    async def test_hook_can_replace_model_output_on_lazy_path(self) -> None:
+        """A plugin replacing model_output has its fields copied into the original MOT via _copy_from."""
+        replacement = ModelOutputThunk(value="replaced output")
+        replacement.parsed_repr = "replaced parsed"
+        replacement._thinking = "replaced thinking"
+        replacement_glog = GenerateLog()
+        replacement_glog.prompt = "replaced prompt"
+        replacement._generate_log = replacement_glog
+
+        @hook("generation_post_call")
+        async def swap_output(payload, *_):
+            modified = payload.model_copy(update={"model_output": replacement})
+            return PluginResult(continue_processing=True, modified_payload=modified)
+
+        register(swap_output)
+        backend = _MockLazyBackend()
+        result, _ = await backend.generate_from_context(
+            CBlock("lazy mutation test"), MagicMock(spec=Context)
+        )
+
+        # The caller holds `result` — it's the original MOT, not the replacement object
+        assert result is not replacement
+        # But _copy_from should have swapped the output fields
+        await result.avalue()
+        assert result.value == "replaced output"
+        assert result.parsed_repr == "replaced parsed"
+        assert result._thinking == "replaced thinking"
+        assert result._generate_log is replacement_glog
+
+    async def test_no_modification_preserves_original_on_lazy_path(self) -> None:
+        """When the hook returns None on the lazy path, the original MOT is unchanged."""
+
+        @hook("generation_post_call")
+        async def observe_only(*_):
+            return None
+
+        register(observe_only)
+        backend = _MockLazyBackend()
+        result, _ = await backend.generate_from_context(
+            CBlock("lazy no-op test"), MagicMock(spec=Context)
+        )
+
+        value = await result.avalue()
+        assert value == "lazy output"
+
+    async def test_hook_fires_exactly_once_on_lazy_path(self) -> None:
+        """GENERATION_POST_CALL fires exactly once even when avalue() is called after astream()."""
+        fire_count = 0
+
+        @hook("generation_post_call")
+        async def counter(*_):
+            nonlocal fire_count
+            fire_count += 1
+            return None
+
+        register(counter)
+        backend = _MockLazyBackend()
+        result, _ = await backend.generate_from_context(
+            CBlock("lazy fire-once test"), MagicMock(spec=Context)
+        )
+
+        await result.avalue()
+        # Second avalue call should not re-fire
+        await result.avalue()
+        assert fire_count == 1
 
 
 class TestSamplingLoopEndMutation:

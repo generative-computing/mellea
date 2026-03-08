@@ -1080,7 +1080,7 @@ The wrapper is injected at class definition time and applies to all current and 
 
 **`generation_post_call` timing**: The post-call hook fires via an `_on_computed` callback set on the returned `ModelOutputThunk`:
 
-- **Lazy MOTs** (normal path): `_on_computed` fires inside `ModelOutputThunk.astream` after `post_process` completes, when the value is fully materialized. `latency_ms` reflects the full wall-clock time from the `generate_from_context` call to value availability.
+- **Lazy MOTs** (normal path): `_on_computed` fires inside `ModelOutputThunk.astream` after `post_process` completes, when the value is fully materialized. `latency_ms` reflects the full wall-clock time from the `generate_from_context` call to value availability. `model_output` replacement is supported — the original MOT's output fields are updated in-place via `_copy_from`.
 - **Already-computed MOTs** (e.g. cached responses or test mocks): `astream` returns early without firing `_on_computed`, so the hook is fired inline before the wrapper returns. `model_output` replacement is supported on this path.
 
 **Writable fields applied from `generation_pre_call`**: `model_options`, `format`, `tool_calls`.
@@ -1088,7 +1088,7 @@ The wrapper is injected at class definition time and applies to all current and 
 | Hook | Location | Trigger | Result Handling |
 |------|----------|---------|-----------------|
 | `generation_pre_call` | `Backend.__init_subclass__` wrapper, before `generate_from_context` delegate | Before LLM API call | Supports `model_options`, `format`, `tool_calls` modification. Violation blocks (e.g., token budget exceeded). |
-| `generation_post_call` | Via `_on_computed` callback on `ModelOutputThunk` (lazy path), or inline before return (already-computed path) | After output fully materialized | Primarily observability. `model_output` replacement only effective on already-computed path. |
+| `generation_post_call` | Via `_on_computed` callback on `ModelOutputThunk` (lazy path), or inline before return (already-computed path) | After output fully materialized | `model_output` replacement supported on both paths. On the lazy path, fields are copied in-place via `_copy_from`. |
 | `generation_stream_chunk` | **Deferred** — requires hooks in `ModelOutputThunk.astream()` streaming path | Per streaming chunk | Fire-and-forget to avoid slowing streaming. |
 
 ### 5.4 Validation
