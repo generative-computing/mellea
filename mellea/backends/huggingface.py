@@ -498,8 +498,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         #       us having specific caching for each Component/Message.
 
         generate_input, other_input = (
-            # type: ignore
-            granite_formatters.base.util.chat_completion_request_to_transformers_inputs(
+            granite_formatters.base.util.chat_completion_request_to_transformers_inputs(  # type: ignore
                 rewritten, self._tokenizer, self._model
             )
         )
