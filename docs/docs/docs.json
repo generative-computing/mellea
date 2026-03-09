@@ -32,9 +32,10 @@
             "group": "Tutorials",
             "pages": [
               "tutorials/01-your-first-generative-program",
-              "tutorials/02-mifying-legacy-code",
+              "tutorials/02-streaming-and-async",
               "tutorials/03-using-generative-slots",
-              "tutorials/04-making-agents-reliable"
+              "tutorials/04-making-agents-reliable",
+              "tutorials/05-mifying-legacy-code"
             ]
           },
           {
