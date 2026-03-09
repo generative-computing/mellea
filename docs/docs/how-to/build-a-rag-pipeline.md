@@ -74,7 +74,7 @@ filter acceptance rates.
 ## Step 2: Filter candidates with `@generative`
 
 Vector similarity finds *topically related* documents but cannot determine
-whether a document actually answers the question. Add an LLM filter:
+whether a document actually answers the question. Add an [`@generative`](../guide/glossary#generative) LLM filter:
 
 ```python
 from mellea import generative
@@ -120,7 +120,7 @@ else:
 
 ## Step 3: Generate with `grounding_context`
 
-Pass the surviving documents as named entries in `grounding_context`. Mellea
+Pass the surviving documents as named entries in [`grounding_context`](../guide/glossary#grounding_context). Mellea
 injects them into the prompt and tracks them as separate context components:
 
 ```python
@@ -168,7 +168,7 @@ answer = m.instruct(
 
 ## Step 5: Check groundedness (optional)
 
-After generation, use `GuardianCheck` with `GuardianRisk.GROUNDEDNESS` to
+After generation, use [`GuardianCheck`](../guide/glossary#guardiancheck) with `GuardianRisk.GROUNDEDNESS` to
 verify the answer does not hallucinate beyond the retrieved documents:
 
 ```python
@@ -192,7 +192,7 @@ Pass the same text to `context_text` that you used in `grounding_context` —
 this ensures the groundedness model evaluates the answer against exactly what
 the generator was given.
 
-> **Note:** `GuardianCheck` requires `granite3-guardian:2b` pulled in Ollama.
+> **Backend note:** `GuardianCheck` requires `granite3-guardian:2b` pulled in Ollama.
 > Run `ollama pull granite3-guardian:2b` before using it.
 
 ---

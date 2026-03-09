@@ -71,6 +71,16 @@
             ]
           },
           {
+            "group": "Examples",
+            "pages": [
+              "examples/index",
+              "examples/data-extraction-pipeline",
+              "examples/legacy-code-integration",
+              "examples/resilient-rag-fallback",
+              "examples/traced-generation-loop"
+            ]
+          },
+          {
             "group": "Integrations",
             "pages": [
               "integrations/ollama",
@@ -106,16 +116,6 @@
               "advanced/mellea-core-internals",
               "advanced/template-formatting",
               "advanced/custom-components"
-            ]
-          },
-          {
-            "group": "Examples",
-            "pages": [
-              "examples/index",
-              "examples/data-extraction-pipeline",
-              "examples/legacy-code-integration",
-              "examples/resilient-rag-fallback",
-              "examples/traced-generation-loop"
             ]
           },
           {

@@ -43,7 +43,7 @@ async def main():
 asyncio.run(main())
 ```
 
-`ainstruct()` returns a `ModelOutputThunk`. `await`-ing it starts generation
+`ainstruct()` returns a [`ModelOutputThunk`](../guide/glossary#modeloutputthunk). `await`-ing it starts generation
 immediately; `str(result)` resolves the value when it is ready. Every other
 method follows the same pattern: `achat()`, `aact()`, `aquery()`,
 `atransform()`, `avalidate()`.
@@ -214,8 +214,8 @@ asyncio.run(analyze_feedback(
 
 ## Step 5: Context and concurrency
 
-By default `start_session()` uses `SimpleContext`, which is safe for concurrent
-async calls. If you switch to `ChatContext`, Mellea logs a warning when parallel
+By default [`start_session()`](../guide/glossary#melleasession) uses [`SimpleContext`](../guide/glossary#context), which is safe for concurrent
+async calls. If you switch to [`ChatContext`](../guide/glossary#context), Mellea logs a warning when parallel
 calls are detected, because concurrent writes can corrupt the context state:
 
 ```text
@@ -254,6 +254,8 @@ For parallel generation, keep the default `SimpleContext`.
 | `wait_for_all_mots` | Fan-out: all thunks resolve concurrently |
 | Explicit dependency ordering | Sequential where needed, parallel everywhere else |
 | `SimpleContext` (default) | Safe concurrent access with no state corruption |
+
+---
 
 **See also:** [Async and Streaming](../how-to/use-async-and-streaming) (full API reference) |
 [Tutorial 03: Using Generative Slots](./03-using-generative-slots)
