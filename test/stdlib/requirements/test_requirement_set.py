@@ -11,7 +11,6 @@ from mellea.stdlib.requirements.guardrails import (
     no_pii,
 )
 
-
 # region RequirementSet Tests
 
 
@@ -52,7 +51,7 @@ def test_requirement_set_add_immutable():
     """Test that add() returns new instance (immutable)."""
     original = RequirementSet([no_pii()])
     modified = original.add(json_valid())
-    
+
     assert len(original) == 1
     assert len(modified) == 2
 
@@ -62,7 +61,7 @@ def test_requirement_set_remove():
     req1 = no_pii()
     req2 = json_valid()
     reqs = RequirementSet([req1, req2])
-    
+
     # Note: remove() uses identity (is), not equality (==)
     # Since we're creating new instances, this won't find them
     # This is expected behavior - remove by reference
@@ -76,7 +75,7 @@ def test_requirement_set_remove_immutable():
     req1 = no_pii()
     original = RequirementSet([req1, json_valid()])
     modified = original.remove(req1)
-    
+
     assert len(original) == 2
     # After deep copy, references change, so length stays same
     assert len(modified) == 2  # Expected: no change due to deep copy
@@ -107,7 +106,7 @@ def test_requirement_set_addition():
     set1 = RequirementSet([no_pii()])
     set2 = RequirementSet([json_valid()])
     combined = set1 + set2
-    
+
     assert len(combined) == 2
     assert len(set1) == 1  # Original unchanged
     assert len(set2) == 1  # Original unchanged
@@ -117,7 +116,7 @@ def test_requirement_set_addition_type_error():
     """Test that adding non-RequirementSet raises TypeError."""
     reqs = RequirementSet([no_pii()])
     with pytest.raises(TypeError, match="Can only add RequirementSet"):
-        reqs + [json_valid()]  # type: ignore
+        reqs + [json_valid()]  # type: ignore  # noqa: RUF005
 
 
 def test_requirement_set_iadd():
@@ -125,7 +124,7 @@ def test_requirement_set_iadd():
     reqs = RequirementSet([no_pii()])
     original_id = id(reqs)
     reqs += RequirementSet([json_valid()])
-    
+
     assert len(reqs) == 2
     assert id(reqs) == original_id  # Same object (in-place)
 
@@ -148,7 +147,7 @@ def test_requirement_set_iter():
     req1 = no_pii()
     req2 = json_valid()
     reqs = RequirementSet([req1, req2])
-    
+
     items = list(reqs)
     assert len(items) == 2
     assert all(isinstance(item, Requirement) for item in items)
@@ -180,7 +179,7 @@ def test_requirement_set_copy():
     """Test deep copy."""
     original = RequirementSet([no_pii(), json_valid()])
     copy = original.copy()
-    
+
     assert len(copy) == len(original)
     assert id(copy) != id(original)
     assert id(copy._requirements) != id(original._requirements)
@@ -190,7 +189,7 @@ def test_requirement_set_to_list():
     """Test conversion to list."""
     reqs = RequirementSet([no_pii(), json_valid()])
     req_list = reqs.to_list()
-    
+
     assert isinstance(req_list, list)
     assert len(req_list) == 2
     assert all(isinstance(item, Requirement) for item in req_list)
@@ -200,7 +199,7 @@ def test_requirement_set_clear():
     """Test clearing all requirements."""
     reqs = RequirementSet([no_pii(), json_valid()])
     empty = reqs.clear()
-    
+
     assert len(empty) == 0
     assert empty.is_empty()
     assert len(reqs) == 2  # Original unchanged
@@ -210,18 +209,15 @@ def test_requirement_set_is_empty():
     """Test is_empty() method."""
     empty = RequirementSet()
     not_empty = RequirementSet([no_pii()])
-    
+
     assert empty.is_empty()
     assert not not_empty.is_empty()
 
 
 def test_requirement_set_chaining():
     """Test method chaining (fluent API)."""
-    reqs = (RequirementSet()
-            .add(no_pii())
-            .add(json_valid())
-            .add(max_length(500)))
-    
+    reqs = RequirementSet().add(no_pii()).add(json_valid()).add(max_length(500))
+
     assert len(reqs) == 3
 
 
@@ -230,7 +226,7 @@ def test_requirement_set_complex_composition():
     base = RequirementSet([no_pii()])
     safety = base.add(no_harmful_content())
     format = RequirementSet([json_valid(), max_length(1000)])
-    
+
     combined = safety + format
     assert len(combined) == 4
 
@@ -330,7 +326,7 @@ def test_guardrail_profiles_customization():
     """Test that profiles can be customized."""
     profile = GuardrailProfiles.basic_safety()
     customized = profile.add(json_valid())
-    
+
     assert len(profile) == 2  # Original unchanged
     assert len(customized) == 3
 
@@ -339,7 +335,7 @@ def test_guardrail_profiles_composition():
     """Test composing multiple profiles."""
     safety = GuardrailProfiles.basic_safety()
     format = GuardrailProfiles.json_output(max_size=500)
-    
+
     combined = safety + format
     assert isinstance(combined, RequirementSet)
     # Note: May have duplicates (e.g., no_pii appears in both)
@@ -355,7 +351,7 @@ def test_requirement_set_with_session_compatibility():
     """Test that RequirementSet is compatible with session.instruct()."""
     # This test verifies the interface, not actual execution
     reqs = RequirementSet([no_pii(), json_valid()])
-    
+
     # Should be iterable
     req_list = list(reqs)
     assert len(req_list) == 2
@@ -365,7 +361,7 @@ def test_requirement_set_with_session_compatibility():
 def test_profile_with_session_compatibility():
     """Test that GuardrailProfiles work with session.instruct()."""
     profile = GuardrailProfiles.basic_safety()
-    
+
     # Should be iterable
     req_list = list(profile)
     assert len(req_list) == 2
@@ -374,11 +370,12 @@ def test_profile_with_session_compatibility():
 
 def test_real_world_scenario():
     """Test a realistic usage scenario."""
+
     # Define application-wide profiles
     class AppGuardrails:
         BASE = RequirementSet([no_pii(), no_harmful_content()])
         JSON_API = BASE + RequirementSet([json_valid(), max_length(1000)])
-    
+
     # Use in application
     api_reqs = AppGuardrails.JSON_API
     assert len(api_reqs) == 4
@@ -386,4 +383,3 @@ def test_real_world_scenario():
 
 
 # endregion
-

@@ -44,7 +44,7 @@ def _get_spacy_nlp():
     global _SPACY_NLP
     if _SPACY_NLP is None:
         try:
-            import spacy
+            import spacy  # type: ignore[import-not-found]
 
             try:
                 _SPACY_NLP = spacy.load("en_core_web_sm")
@@ -133,7 +133,7 @@ def _validate_no_pii(
 
     text = str(last_output.value)
     has_pii = False
-    detected_types = []
+    detected_types: list[str] = []
     pii_examples = []
 
     # Apply detection method and collect examples
