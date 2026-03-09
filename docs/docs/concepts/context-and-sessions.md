@@ -8,6 +8,8 @@ Every call to an LLM in Mellea passes through four layers: [**Component**](../gu
 [**Context**](../guide/glossary#context), and **Session**. Understanding how these fit together explains both why
 Mellea is structured the way it is and how to extend it effectively.
 
+> **Looking to use this in code?** See [Context and Sessions](../how-to/use-context-and-sessions) for practical examples and session extension patterns.
+
 ## The four layers
 
 ### Components
