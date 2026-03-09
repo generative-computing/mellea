@@ -7,6 +7,8 @@ description: "Define type-safe LLM functions with @generative and Pydantic struc
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
 `pip install mellea`, Ollama running locally.
 
+> **Concept overview:** [Generative functions](../concepts/generative-functions) explains the design and trade-offs.
+
 `@generative` is the idiomatic way to define type-safe LLM functions in Mellea. You
 write a function signature with type hints and a docstring — Mellea generates the
 implementation, calls the backend, and parses the output into the declared return type.
