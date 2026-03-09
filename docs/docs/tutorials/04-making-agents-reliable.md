@@ -16,7 +16,8 @@ By the end you will have covered:
 - Detecting harmful outputs with `GuardianCheck`
 - Grounding safety checks against retrieved context
 
-**Prerequisites:** [Tutorial 03](./03-using-generative-slots) complete,
+**Prerequisites:** [Tutorial 02](./02-streaming-and-async) and
+[Tutorial 03](./03-using-generative-slots) complete,
 `pip install mellea`, Ollama running locally with `granite4:micro` downloaded.
 
 ---
