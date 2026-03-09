@@ -1,0 +1,30 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "[{\"response_begin\": 0, \"response_end\": 91, \"response_text\": \"Murdoch expanded in Australia and New Zealand by acquiring and expanding local newspapers. \", \"citation_doc_id\": \"0\", \"citation_begin\": 1219, \"citation_end\": 1346, \"citation_text\": \"Murdoch's first foray outside Australia involved the purchase of a controlling interest in the New Zealand daily The Dominion. \"}, {\"response_begin\": 0, \"response_end\": 91, \"response_text\": \"Murdoch expanded in Australia and New Zealand by acquiring and expanding local newspapers. \", \"citation_doc_id\": \"0\", \"citation_begin\": 1642, \"citation_end\": 1739, \"citation_text\": \"A four-way battle for control ensued in which the 32-year-old Murdoch was ultimately successful. \"}, {\"response_begin\": 0, \"response_end\": 91, \"response_text\": \"Murdoch expanded in Australia and New Zealand by acquiring and expanding local newspapers. \", \"citation_doc_id\": \"0\", \"citation_begin\": 1886, \"citation_end\": 2044, \"citation_text\": \"In 1972, Murdoch acquired the Sydney morning tabloid The Daily Telegraph from Australian media mogul Sir Frank Packer, who later regretted selling it to him. \"}]",
+                "role": "assistant",
+                "tool_calls": [],
+                "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": "stop"
+        }
+    ],
+    "prompt_logprobs": null,
+    "id": "chatcmpl-a7d7170784e84757b5bc365cb25c57c9",
+    "created": 1757963100,
+    "model": "citations",
+    "object": "chat.completion",
+    "service_tier": null,
+    "system_fingerprint": null,
+    "usage": {
+        "completion_tokens": 32,
+        "prompt_tokens": 1124,
+        "total_tokens": 1156,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": null
+    },
+    "kv_transfer_params": null
+}

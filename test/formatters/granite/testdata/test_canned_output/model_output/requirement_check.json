@@ -1,0 +1,373 @@
+{
+  "id": "chatcmpl-161ba1db8d6b4d05bbd5658b6d27c798",
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": {
+        "content": [
+          {
+            "token": "true",
+            "bytes": [
+              116,
+              114,
+              117,
+              101
+            ],
+            "logprob": -0.0052339909598231316,
+            "top_logprobs": [
+              {
+                "token": "true",
+                "bytes": [
+                  116,
+                  114,
+                  117,
+                  101
+                ],
+                "logprob": -0.0052339909598231316
+              },
+              {
+                "token": "false",
+                "bytes": [
+                  102,
+                  97,
+                  108,
+                  115,
+                  101
+                ],
+                "logprob": -5.2552337646484375
+              },
+              {
+                "token": "tr",
+                "bytes": [
+                  116,
+                  114
+                ],
+                "logprob": -16.192733764648438
+              },
+              {
+                "token": "f",
+                "bytes": [
+                  102
+                ],
+                "logprob": -16.692733764648438
+              },
+              {
+                "token": "t",
+                "bytes": [
+                  116
+                ],
+                "logprob": -16.880233764648438
+              },
+              {
+                "token": "fa",
+                "bytes": [
+                  102,
+                  97
+                ],
+                "logprob": -18.505233764648438
+              },
+              {
+                "token": "fal",
+                "bytes": [
+                  102,
+                  97,
+                  108
+                ],
+                "logprob": -19.786483764648438
+              },
+              {
+                "token": "<fim_middle>",
+                "bytes": [
+                  60,
+                  102,
+                  105,
+                  109,
+                  95,
+                  109,
+                  105,
+                  100,
+                  100,
+                  108,
+                  101,
+                  62
+                ],
+                "logprob": -9999.0
+              },
+              {
+                "token": "<fim_prefix>",
+                "bytes": [
+                  60,
+                  102,
+                  105,
+                  109,
+                  95,
+                  112,
+                  114,
+                  101,
+                  102,
+                  105,
+                  120,
+                  62
+                ],
+                "logprob": -9999.0
+              },
+              {
+                "token": "<|end_of_text|>",
+                "bytes": [
+                  60,
+                  124,
+                  101,
+                  110,
+                  100,
+                  95,
+                  111,
+                  102,
+                  95,
+                  116,
+                  101,
+                  120,
+                  116,
+                  124,
+                  62
+                ],
+                "logprob": -9999.0
+              }
+            ]
+          },
+          {
+            "token": "<|end_of_text|>",
+            "bytes": [
+              60,
+              124,
+              101,
+              110,
+              100,
+              95,
+              111,
+              102,
+              95,
+              116,
+              101,
+              120,
+              116,
+              124,
+              62
+            ],
+            "logprob": 0.0,
+            "top_logprobs": [
+              {
+                "token": "<|end_of_text|>",
+                "bytes": [
+                  60,
+                  124,
+                  101,
+                  110,
+                  100,
+                  95,
+                  111,
+                  102,
+                  95,
+                  116,
+                  101,
+                  120,
+                  116,
+                  124,
+                  62
+                ],
+                "logprob": 0.0
+              },
+              {
+                "token": "<fim_middle>",
+                "bytes": [
+                  60,
+                  102,
+                  105,
+                  109,
+                  95,
+                  109,
+                  105,
+                  100,
+                  100,
+                  108,
+                  101,
+                  62
+                ],
+                "logprob": -9999.0
+              },
+              {
+                "token": "<fim_pad>",
+                "bytes": [
+                  60,
+                  102,
+                  105,
+                  109,
+                  95,
+                  112,
+                  97,
+                  100,
+                  62
+                ],
+                "logprob": -9999.0
+              },
+              {
+                "token": "<issue_start>",
+                "bytes": [
+                  60,
+                  105,
+                  115,
+                  115,
+                  117,
+                  101,
+                  95,
+                  115,
+                  116,
+                  97,
+                  114,
+                  116,
+                  62
+                ],
+                "logprob": -9999.0
+              },
+              {
+                "token": "<issue_comment>",
+                "bytes": [
+                  60,
+                  105,
+                  115,
+                  115,
+                  117,
+                  101,
+                  95,
+                  99,
+                  111,
+                  109,
+                  109,
+                  101,
+                  110,
+                  116,
+                  62
+                ],
+                "logprob": -9999.0
+              },
+              {
+                "token": "<fim_prefix>",
+                "bytes": [
+                  60,
+                  102,
+                  105,
+                  109,
+                  95,
+                  112,
+                  114,
+                  101,
+                  102,
+                  105,
+                  120,
+                  62
+                ],
+                "logprob": -9999.0
+              },
+              {
+                "token": "<fim_suffix>",
+                "bytes": [
+                  60,
+                  102,
+                  105,
+                  109,
+                  95,
+                  115,
+                  117,
+                  102,
+                  102,
+                  105,
+                  120,
+                  62
+                ],
+                "logprob": -9999.0
+              },
+              {
+                "token": "<gh_stars>",
+                "bytes": [
+                  60,
+                  103,
+                  104,
+                  95,
+                  115,
+                  116,
+                  97,
+                  114,
+                  115,
+                  62
+                ],
+                "logprob": -9999.0
+              },
+              {
+                "token": "<issue_closed>",
+                "bytes": [
+                  60,
+                  105,
+                  115,
+                  115,
+                  117,
+                  101,
+                  95,
+                  99,
+                  108,
+                  111,
+                  115,
+                  101,
+                  100,
+                  62
+                ],
+                "logprob": -9999.0
+              },
+              {
+                "token": "<filename>",
+                "bytes": [
+                  60,
+                  102,
+                  105,
+                  108,
+                  101,
+                  110,
+                  97,
+                  109,
+                  101,
+                  62
+                ],
+                "logprob": -9999.0
+              }
+            ]
+          }
+        ],
+        "refusal": null
+      },
+      "message": {
+        "content": "true",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [],
+        "reasoning_content": null
+      },
+      "stop_reason": null
+    }
+  ],
+  "created": 1758304397,
+  "model": "requirement_check",
+  "object": "chat.completion",
+  "service_tier": null,
+  "system_fingerprint": null,
+  "usage": {
+    "completion_tokens": 2,
+    "prompt_tokens": 293,
+    "total_tokens": 295,
+    "completion_tokens_details": null,
+    "prompt_tokens_details": null
+  },
+  "prompt_logprobs": null,
+  "kv_transfer_params": null
+}

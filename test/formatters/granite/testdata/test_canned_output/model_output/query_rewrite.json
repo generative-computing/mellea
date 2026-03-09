@@ -1,0 +1,11 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "{\n    \"rewritten_question\": \"Is Rex, my outdoor dog, more likely to get fleas because of his frequent time spent in the backyard and outdoors?\"\n}",
+                "role": "assistant"
+            }
+        }
+    ]
+}

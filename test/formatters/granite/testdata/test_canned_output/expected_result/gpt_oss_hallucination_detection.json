@@ -1,0 +1,13 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "[{\"response_begin\": 0, \"response_end\": 31, \"response_text\": \"Purple bumble fish are yellow. \", \"faithfulness_likelihood\": 0.9395809657567371, \"explanation\": \"This sentence makes a factual claim about the color of purple bumble fish. The provided context states: 'The only type of fish that is yellow is the purple bumble fish.' This directly supports the claim in the sentence.\"}, {\"response_begin\": 31, \"response_end\": 65, \"response_text\": \"Green bumble fish are also yellow.\", \"faithfulness_likelihood\": 0.05383118091859103, \"explanation\": \"This sentence makes a factual claim about the color of green bumble fish. However, the provided context does not mention green bumble fish at all, so there is no evidence to support this claim.\"}]",
+                "role": "assistant",
+                "tool_calls": []
+            },
+            "finish_reason": "stop"
+        }
+    ]
+}

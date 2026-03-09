@@ -1,0 +1,44 @@
+{
+  "messages": [
+    {
+      "content": "Who attended the meeting?",
+      "role": "user"
+    },
+    {
+      "content": "Many people attended the meeting.",
+      "role": "assistant"
+    },
+    {
+      "content": "Rewrite the response for relevance.\nThe last assistant response is considered not fully relevant to the last user inquiry due to Misinterpreted question: The response does not address the question about who attended the meeting. It provides a general statement about many people attending the meeting but does not specify who those people were. This is not relevant to the question asked. The response is also missing the closing tag.\nDecide if you agree with this assessment, then act according to the following instructions: \nIf you disagree with the assessment, provide a verbatim copy of the original response.  DO NOT attempt to correct any other perceived defects in the response. \nIf you agree with the assessment, provide an updated response that no longer fit the label Misinterpreted question, by providing answer only to the correct interpretation of the inquiry, or attempting clarification if the inquiry is ambiguous or otherwise confusing, or indicating that the desired answer is not available.  Your response should be entirely based on the provided documents and should not rely on other prior knowledge. Your response should be suitable to be directly provided to the user.  It should NOT contain meta information regarding the original response, its assessment, or this instruction.  The user does not see any of these.  Your response is the only response they will see to their inquiry, in place of the original response.\n",
+      "role": "user"
+    }
+  ],
+  "extra_body": {
+    "documents": [
+      {
+        "text": "Meeting attendees: Alice, Bob, Carol.",
+        "doc_id": "1"
+      },
+      {
+        "text": "Meeting time: 9:00 am to 11:00 am.",
+        "doc_id": "2"
+      }
+    ],
+    "structured_outputs": {
+      "json": {
+        "properties": {
+          "answer_relevance_rewrite": {
+            "title": "Rewritten answer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "answer_relevance_rewrite"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "temperature": 0.0,
+  "max_completion_tokens": 1024
+}
