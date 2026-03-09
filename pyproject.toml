@@ -199,7 +199,6 @@ ignore = [
   "F811",    # redefinition of the same function
   "PL",      # Pylint
   "RUF012",  # Mutable Class Attributes
-  "PD901",   # Generic variable name 'df' for DataFrames (deprecated rule, but needed while PD is enabled)
   "C901",    # Complexity warnings
 ]
 
