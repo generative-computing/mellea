@@ -61,6 +61,31 @@ Add a `# diataxis:` comment in every page's frontmatter:
 | `reference` | Information-oriented (e.g., `glossary`, API docs) |
 | `explanation` | Understanding-oriented (e.g., `generative-programming`, `internals`) |
 
+### Cross-linking paired pages
+
+Some features have two pages: an **explanation** page in `concepts/` (what it
+is and why it works the way it does) and a **how-to** page in `guide/` or
+`how-to/` (how to use it). Both are valid entry points — a reader may land on
+either depending on how they searched.
+
+When a feature has paired pages, add a brief cross-link near the top of each,
+before the first H2, so readers can orient themselves quickly:
+
+- On the **explanation** page:
+
+  ```markdown
+  > **Looking to use this in code?** See [Generative Functions](../guide/generative-functions) for practical examples and API details.
+  ```
+
+- On the **how-to** page:
+
+  ```markdown
+  > **Concept overview:** [Generative functions](../concepts/generative-functions) explains the design and trade-offs.
+  ```
+
+Keep both cross-links to one sentence. Do not duplicate content between the
+two pages — the explanation should cover *why*, the how-to should cover *how*.
+
 ---
 
 ## Headings
@@ -350,3 +375,4 @@ markdownlint docs/docs/guide/your-page.md
 - [ ] Backend-specific code blocks flagged with `> **Backend note:**`.
 - [ ] No visible TODO placeholders — missing content tracked as GitHub issues.
 - [ ] `# diataxis:` comment in frontmatter.
+- [ ] If the page has a paired explanation/how-to counterpart, cross-link added near the top of both pages (see "Cross-linking paired pages").
