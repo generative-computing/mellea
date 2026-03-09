@@ -82,7 +82,6 @@ class ReactToolbox(pydantic.BaseModel):
 
     def tool_name_schema(self):
         names = self.tool_names()
-        # Python 3.10 compatible: use Enum instead of Literal[*names] (requires 3.11+)
         ToolEnum = Enum("ToolEnum", {name: name for name in names})
         return pydantic.create_model("ToolSelectionSchema", tool=(ToolEnum, ...))
 

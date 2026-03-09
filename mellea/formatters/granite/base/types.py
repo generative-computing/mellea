@@ -3,13 +3,12 @@
 """Common shared types."""
 
 # Standard
-from typing import Annotated, Literal, TypeAlias
+from typing import Annotated, Any, Literal, TypeAlias
 
 import pydantic
 
 # Third Party
 from pydantic import Field, StringConstraints
-from typing_extensions import Any
 
 
 class NoDefaultsMixin:
