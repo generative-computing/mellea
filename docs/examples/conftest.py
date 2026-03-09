@@ -503,7 +503,12 @@ class ExampleItem(pytest.Item):
 
         repo_root = str(pathlib.Path(__file__).parent.parent.parent.resolve())
         env = os.environ.copy()
-        env["PYTHONPATH"] = f"{repo_root}{os.pathsep}{env.get('PYTHONPATH', '')}"
+        existing_pythonpath = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = (
+            f"{existing_pythonpath}{os.pathsep}{repo_root}"
+            if existing_pythonpath
+            else repo_root
+        )
 
         process = subprocess.Popen(
             [sys.executable, self.path],
