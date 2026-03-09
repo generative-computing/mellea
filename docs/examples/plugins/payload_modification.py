@@ -39,6 +39,7 @@ log = logging.getLogger("payload_modification")
 # generation_pre_call writable fields include: model_options, format, tool_calls
 # ---------------------------------------------------------------------------
 
+
 @hook(HookType.GENERATION_PRE_CALL, mode=PluginMode.SEQUENTIAL, priority=10)
 async def cap_max_tokens(payload, ctx):
     """Cap max_tokens to 256 on every generation call."""
@@ -84,6 +85,7 @@ async def prepend_safety_preamble(payload, ctx):
 # by the payload policy enforcement, and the original context will be used.
 # ---------------------------------------------------------------------------
 
+
 @hook(HookType.GENERATION_PRE_CALL, mode=PluginMode.SEQUENTIAL, priority=20)
 async def attempt_non_writable(payload, ctx):
     """Try to modify a non-writable field — change will be silently discarded."""
@@ -98,7 +100,9 @@ if __name__ == "__main__":
     log.info("")
 
     with start_session() as m:
-        with plugin_scope(cap_max_tokens, prepend_safety_preamble, attempt_non_writable):
+        with plugin_scope(
+            cap_max_tokens, prepend_safety_preamble, attempt_non_writable
+        ):
             result = m.instruct(
                 "Summarize the benefits of open-source software in one sentence."
             )

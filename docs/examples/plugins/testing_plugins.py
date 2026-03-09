@@ -97,7 +97,10 @@ async def test_blocks_long_description():
     assert result.continue_processing is False, "Expected continue_processing=False"
     assert result.violation is not None, "Expected a violation"
     assert result.violation.code == "DESC_TOO_LONG"
-    log.info("[PASS] test_blocks_long_description: long text is blocked with code=%s", result.violation.code)
+    log.info(
+        "[PASS] test_blocks_long_description: long text is blocked with code=%s",
+        result.violation.code,
+    )
 
 
 async def test_exact_boundary():
@@ -115,6 +118,7 @@ async def test_exact_boundary():
 # ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
+
 
 async def run_all():
     await test_pass_through()

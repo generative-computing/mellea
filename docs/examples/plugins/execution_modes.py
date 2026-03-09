@@ -39,6 +39,7 @@ log = logging.getLogger("execution_modes")
 # --- Hook 1: SEQUENTIAL (priority=10) ---
 # Runs first, inline. Could block execution if it returned block().
 
+
 @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.SEQUENTIAL, priority=10)
 async def sequential_hook(payload, ctx):
     """Sequential hook — runs inline in priority order."""
@@ -48,6 +49,7 @@ async def sequential_hook(payload, ctx):
 # --- Hook 2: CONCURRENT (priority=20) ---
 # Dispatched concurrently with other concurrent hooks at the same priority.
 
+
 @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.CONCURRENT, priority=20)
 async def concurrent_hook(payload, ctx):
     """Concurrent hook — runs inline but concurrently with peers."""
@@ -56,6 +58,7 @@ async def concurrent_hook(payload, ctx):
 
 # --- Hook 3: AUDIT (priority=30) ---
 # Runs inline; violations are logged but do NOT block execution.
+
 
 @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.AUDIT, priority=30)
 async def audit_hook(payload, ctx):
@@ -67,6 +70,7 @@ async def audit_hook(payload, ctx):
 # --- Hook 4: FIRE_AND_FORGET (priority=40) ---
 # Dispatched via asyncio.create_task(); result is ignored.
 # The log line may appear *after* the main result is printed.
+
 
 @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.FIRE_AND_FORGET, priority=40)
 async def fire_and_forget_hook(payload, ctx):
