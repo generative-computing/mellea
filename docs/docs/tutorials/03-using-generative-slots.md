@@ -57,6 +57,8 @@ Generative functions support any JSON-serialisable return type — `str`, `int`,
 `bool`, `list`, `dict`, and Pydantic models:
 
 ```python
+from typing import Literal
+
 from pydantic import BaseModel
 
 class FeedbackAnalysis(BaseModel):

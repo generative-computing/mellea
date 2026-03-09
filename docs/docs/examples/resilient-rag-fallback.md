@@ -112,7 +112,7 @@ are L2-normalised, as `sentence-transformers` produces by default.
 ```python
 def create_index(model, ds: list[str]) -> IndexFlatIP:
     print("running encoding... ")
-    embeddings = model.encode(docs)
+    embeddings = model.encode(ds)
     print("running embeddings... ")
     dimension = embeddings.shape[1]
     index = IndexFlatIP(dimension)
@@ -261,7 +261,7 @@ docs = [
 
 def create_index(model, ds: list[str]) -> IndexFlatIP:
     print("running encoding... ")
-    embeddings = model.encode(docs)
+    embeddings = model.encode(ds)
     print("running embeddings... ")
     dimension = embeddings.shape[1]
     index = IndexFlatIP(dimension)
