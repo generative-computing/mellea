@@ -267,7 +267,7 @@ Target 300–600 lines. Split if >800. If a page is hard to read in one sitting 
 
 ## Navigation footer
 
-Every page ends with a navigation footer:
+Mintlify renders previous/next page links automatically from the nav order in `docs.json` — do not add these manually. Add a `**See also:**` block at the end of each page for non-sequential cross-links:
 
 ```markdown
 ---
@@ -367,7 +367,7 @@ markdownlint docs/docs/guide/your-page.md
 - [ ] `markdownlint` passes with zero warnings.
 - [ ] New glossary terms added to `glossary.md`.
 - [ ] Mellea-specific terms linked to `glossary.md` on first use (see "Glossary and terminology" section).
-- [ ] Navigation footer present (Next + See also).
+- [ ] `**See also:**` footer present with relevant cross-links (Mintlify generates prev/next automatically).
 - [ ] `docs.json` updated if new page added; old MDX page removed from nav if replaced.
 - [ ] `index.mdx` landing page cards reviewed — add a card if the new page is a major entry point (key pattern, integration, or prominent how-to); keep total cards per section to ≤ 8.
 - [ ] Previewed locally with `mint dev`.
