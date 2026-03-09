@@ -271,6 +271,4 @@ def rag(docs: list[str], query: str) -> str | None:
 
 ---
 
----
-
 **See also:** [Resilient RAG with Fallback Filtering](../examples/resilient-rag-fallback) | [Making Agents Reliable](../tutorials/04-making-agents-reliable) | [The Requirements System](../concepts/requirements-system)

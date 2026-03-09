@@ -155,27 +155,15 @@ into `classify_sentiment`:
 ```python
 import asyncio
 from typing import Literal
-from pydantic import BaseModel
 
 import mellea
 from mellea import generative
 from mellea.helpers.async_helpers import wait_for_all_mots
 
 
-class FeedbackIssues(BaseModel):
-    main_complaint: str
-    positive_aspect: str | None
-    urgency: str  # "low", "medium", "high"
-
-
 @generative
 def classify_sentiment(summary: str) -> Literal["positive", "negative", "mixed"]:
     """Classify the overall sentiment of the customer feedback summary."""
-
-
-@generative
-def extract_issues(feedback: str) -> FeedbackIssues:
-    """Extract the main complaint, any positive aspect, and urgency level from the feedback."""
 
 
 async def analyze_feedback(feedback: str) -> None:
