@@ -4,6 +4,8 @@ description: "How Requirement, ValidationResult, and the IVR loop work together 
 # diataxis: explanation
 ---
 
+> **Looking to use this in code?** See [Write Custom Verifiers](../how-to/write-custom-verifiers) for practical examples and API details.
+
 Requirements are Mellea's mechanism for enforcing constraints on generative output.
 They serve two roles simultaneously: they appear in the prompt so the model knows what
 to aim for, and they are evaluated after generation so Mellea can detect and repair

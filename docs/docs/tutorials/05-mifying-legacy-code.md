@@ -4,6 +4,8 @@ description: "Add LLM query and transform capabilities to existing Python classe
 # diataxis: tutorial
 ---
 
+> **Concept overview:** [MObjects and mify](../concepts/mobjects-and-mify) explains the design and trade-offs.
+
 This tutorial shows how to make existing Python objects queryable and transformable
 by the LLM using [`@mify`](../guide/glossary#mify--mify) — without changing their Python interface or behaviour.
 

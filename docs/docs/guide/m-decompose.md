@@ -114,3 +114,7 @@ For tasks that fit comfortably in a single prompt, use `m.instruct()` directly.
 ---
 
 **Full example:** [`docs/examples/m_decompose/`](../../examples/m_decompose/)
+
+---
+
+**See also:** [Tools and Agents](../guide/tools-and-agents) | [Refactor Prompts with CLI](../how-to/refactor-prompts-with-cli)

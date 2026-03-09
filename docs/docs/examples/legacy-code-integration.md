@@ -322,7 +322,7 @@ fields the model should see.
 (without `[no-index]`) are exposed as tools. Use `funcs_include` to be
 explicit.
 
-## What to try next
+**What to try next:**
 
 - Read the [MObjects and mify](../concepts/mobjects-and-mify) concept page for
   the full design rationale.
@@ -330,3 +330,7 @@ explicit.
   rich document types.
 - See `docs/examples/mify/rich_table_execute_basic.py` for mifying table
   objects for data manipulation.
+
+---
+
+**See also:** [MObjects and mify](../concepts/mobjects-and-mify) | [Tutorial 05: MIFYing Legacy Code](../tutorials/05-mifying-legacy-code) | [Examples Index](./index)

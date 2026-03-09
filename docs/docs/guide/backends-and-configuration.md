@@ -220,3 +220,7 @@ m = mellea.start_session(
 ```
 
 Valid `backend_name` values: `"ollama"`, `"openai"`, `"hf"`, `"litellm"`, `"watsonx"`.
+
+---
+
+**See also:** [Configure Model Options](../how-to/configure-model-options) | [Integrations](../integrations/ollama)
