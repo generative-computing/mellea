@@ -51,7 +51,7 @@
             ]
           },
           {
-            "group": "Guides",
+            "group": "How-To",
             "pages": [
               "guide/generative-functions",
               "guide/tools-and-agents",
@@ -59,12 +59,6 @@
               "guide/backends-and-configuration",
               "guide/act-and-aact",
               "guide/m-decompose",
-              "integrations/m-serve"
-            ]
-          },
-          {
-            "group": "How-To",
-            "pages": [
               "how-to/use-async-and-streaming",
               "how-to/use-context-and-sessions",
               "how-to/enforce-structured-output",
@@ -88,7 +82,8 @@
               "integrations/watsonx",
               "integrations/mcp",
               "integrations/langchain",
-              "integrations/smolagents"
+              "integrations/smolagents",
+              "integrations/m-serve"
             ]
           },
           {
@@ -101,7 +96,7 @@
             ]
           },
           {
-            "group": "Advanced",
+            "group": "Deep Dives",
             "pages": [
               "advanced/intrinsics",
               "advanced/lora-and-alora-adapters",
