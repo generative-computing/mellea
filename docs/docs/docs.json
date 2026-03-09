@@ -71,6 +71,7 @@
               "how-to/write-custom-verifiers",
               "how-to/configure-model-options",
               "how-to/use-images-and-vision",
+              "how-to/build-a-rag-pipeline",
               "how-to/refactor-prompts-with-cli",
               "how-to/unit-test-generative-code"
             ]
