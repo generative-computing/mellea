@@ -53,9 +53,6 @@ def _build_policies() -> dict[str, Any]:
         "generation_post_call": HookPayloadPolicy(
             writable_fields=frozenset({"model_output"})
         ),
-        "generation_stream_chunk": HookPayloadPolicy(
-            writable_fields=frozenset({"chunk", "accumulated"})
-        ),
         # Validation
         "validation_pre_check": HookPayloadPolicy(
             writable_fields=frozenset({"requirements", "model_options"})

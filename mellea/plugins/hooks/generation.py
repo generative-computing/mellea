@@ -49,19 +49,3 @@ class GenerationPostCallPayload(MelleaBasePayload):
     prompt: str | list[dict[str, Any]] = ""
     model_output: Any = None
     latency_ms: float = 0.0
-
-
-class GenerationStreamChunkPayload(MelleaBasePayload):
-    """Payload for ``generation_stream_chunk`` — for each streaming chunk.
-
-    Attributes:
-        chunk: The new text chunk received in this streaming event (writable).
-        accumulated: All text received so far, including this chunk (writable).
-        chunk_index: 0-based index of this chunk in the stream.
-        is_final: ``True`` if this is the last chunk in the stream.
-    """
-
-    chunk: str = ""
-    accumulated: str = ""
-    chunk_index: int = 0
-    is_final: bool = False

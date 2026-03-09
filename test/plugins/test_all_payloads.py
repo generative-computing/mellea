@@ -3,7 +3,7 @@
 Covers:
 - SessionPostInitPayload, SessionResetPayload, SessionCleanupPayload
 - ComponentPreExecutePayload, ComponentPostSuccessPayload, ComponentPostErrorPayload
-- GenerationPostCallPayload, GenerationStreamChunkPayload
+- GenerationPostCallPayload
 - ValidationPreCheckPayload, ValidationPostCheckPayload
 - SamplingLoopStartPayload, SamplingIterationPayload,
   SamplingRepairPayload, SamplingLoopEndPayload
@@ -21,10 +21,7 @@ from mellea.plugins.hooks.component import (
     ComponentPostSuccessPayload,
     ComponentPreExecutePayload,
 )
-from mellea.plugins.hooks.generation import (
-    GenerationPostCallPayload,
-    GenerationStreamChunkPayload,
-)
+from mellea.plugins.hooks.generation import GenerationPostCallPayload
 from mellea.plugins.hooks.sampling import (
     SamplingIterationPayload,
     SamplingLoopEndPayload,
@@ -437,62 +434,6 @@ class TestGenerationPostCallPayload:
 
     def test_inherits_base_fields(self):
         assert issubclass(GenerationPostCallPayload, MelleaBasePayload)
-
-
-class TestGenerationStreamChunkPayload:
-    def test_defaults(self):
-        payload = GenerationStreamChunkPayload()
-        assert payload.chunk == ""
-        assert payload.accumulated == ""
-        assert payload.chunk_index == 0
-        assert payload.is_final is False
-
-    def test_construction_with_values(self):
-        payload = GenerationStreamChunkPayload(
-            chunk="aris",
-            accumulated="Paris",
-            chunk_index=3,
-            is_final=False,
-            request_id="r-stream-001",
-        )
-        assert payload.chunk == "aris"
-        assert payload.accumulated == "Paris"
-        assert payload.chunk_index == 3
-        assert payload.is_final is False
-
-    def test_final_chunk(self):
-        payload = GenerationStreamChunkPayload(
-            chunk=".", accumulated="Paris.", chunk_index=10, is_final=True
-        )
-        assert payload.is_final is True
-
-    def test_frozen(self):
-        payload = GenerationStreamChunkPayload(chunk="hello")
-        with pytest.raises(ValidationError):
-            payload.chunk = "world"
-
-    def test_frozen_is_final(self):
-        payload = GenerationStreamChunkPayload(is_final=False)
-        with pytest.raises(ValidationError):
-            payload.is_final = True
-
-    def test_model_copy_creates_modified_copy(self):
-        payload = GenerationStreamChunkPayload(
-            chunk="hel",  # codespell:ignore
-            accumulated="hel",  # codespell:ignore
-            chunk_index=0,
-        )
-        modified = payload.model_copy(
-            update={"chunk": "lo", "accumulated": "hello", "chunk_index": 1}
-        )
-        assert modified.chunk == "lo"
-        assert modified.accumulated == "hello"
-        assert modified.chunk_index == 1
-        assert payload.chunk == "hel"  # codespell:ignore
-        assert payload.accumulated == "hel"  # codespell:ignore
-
-    def test_inherits_base_fields(self):
-        assert issubclass(GenerationStreamChunkPayload, MelleaBasePayload)
 
 
 # ===========================================================================

@@ -8,7 +8,6 @@ from mellea.plugins.hooks.component import (
 from mellea.plugins.hooks.generation import (
     GenerationPostCallPayload,
     GenerationPreCallPayload,
-    GenerationStreamChunkPayload,
 )
 from mellea.plugins.hooks.sampling import (
     SamplingIterationPayload,
@@ -36,7 +35,6 @@ __all__ = [
     # Generation
     "GenerationPostCallPayload",
     "GenerationPreCallPayload",
-    "GenerationStreamChunkPayload",
     # Sampling
     "SamplingIterationPayload",
     "SamplingLoopEndPayload",

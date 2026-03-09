@@ -40,7 +40,6 @@ class HookType(str, Enum):
     # Generation Pipeline
     GENERATION_PRE_CALL = "generation_pre_call"
     GENERATION_POST_CALL = "generation_post_call"
-    GENERATION_STREAM_CHUNK = "generation_stream_chunk"
 
     # Validation
     VALIDATION_PRE_CHECK = "validation_pre_check"
@@ -75,7 +74,6 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
     from mellea.plugins.hooks.generation import (
         GenerationPostCallPayload,
         GenerationPreCallPayload,
-        GenerationStreamChunkPayload,
     )
     from mellea.plugins.hooks.sampling import (
         SamplingIterationPayload,
@@ -114,10 +112,6 @@ def _build_hook_registry() -> dict[str, tuple[type, type]]:
         # Generation Pipeline
         HookType.GENERATION_PRE_CALL.value: (GenerationPreCallPayload, PluginResult),
         HookType.GENERATION_POST_CALL.value: (GenerationPostCallPayload, PluginResult),
-        HookType.GENERATION_STREAM_CHUNK.value: (
-            GenerationStreamChunkPayload,
-            PluginResult,
-        ),
         # Validation
         HookType.VALIDATION_PRE_CHECK.value: (ValidationPreCheckPayload, PluginResult),
         HookType.VALIDATION_POST_CHECK.value: (
