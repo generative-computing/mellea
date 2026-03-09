@@ -96,7 +96,7 @@
             ]
           },
           {
-            "group": "Deep Dives",
+            "group": "Advanced",
             "pages": [
               "advanced/intrinsics",
               "advanced/lora-and-alora-adapters",
