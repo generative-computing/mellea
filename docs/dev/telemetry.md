@@ -91,6 +91,8 @@ The backend tracer (`mellea.backend`) instruments LLM interactions following [Op
 
 Mellea automatically tracks token consumption across backends using OpenTelemetry metrics counters. Token metrics follow the [Gen-AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) for standardized observability.
 
+> **Note**: Token usage metrics are only tracked for `generate_from_context` requests. `generate_from_raw` calls do not record token metrics.
+
 #### Metrics
 
 | Metric Name | Type | Unit | Description |
