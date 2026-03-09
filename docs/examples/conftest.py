@@ -498,12 +498,25 @@ class ExampleItem(pytest.Item):
         super().__init__(**kwargs)
 
     def runtest(self):
+        import os
+        import pathlib
+
+        repo_root = str(pathlib.Path(__file__).parent.parent.parent.resolve())
+        env = os.environ.copy()
+        existing_pythonpath = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = (
+            f"{existing_pythonpath}{os.pathsep}{repo_root}"
+            if existing_pythonpath
+            else repo_root
+        )
+
         process = subprocess.Popen(
             [sys.executable, self.path],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,  # Enable line-buffering
+            env=env,
         )
 
         # Capture stdout output and output it so it behaves like a regular test with -s.

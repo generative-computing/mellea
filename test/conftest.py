@@ -251,6 +251,11 @@ def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
         if markexpr:
             cmd.extend(["-m", markexpr])
 
+        import pathlib
+
+        repo_root = str(pathlib.Path(__file__).parent.parent.resolve())
+        env["PYTHONPATH"] = f"{repo_root}{os.pathsep}{env.get('PYTHONPATH', '')}"
+
         # Stream output in real-time while capturing for parsing
         process = subprocess.Popen(
             cmd,

@@ -435,7 +435,6 @@ def validate_tool_arguments(
             if len(unique_types) == 1:
                 param_type = unique_types[0]
             else:
-                # Use modern union syntax (Python 3.10+)
                 from functools import reduce
                 from operator import or_
 
