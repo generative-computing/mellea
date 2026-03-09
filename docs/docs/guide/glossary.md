@@ -213,6 +213,32 @@ See: [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-wit
 
 ---
 
+## grounding_context
+
+The `grounding_context` parameter of `m.instruct()` accepts a dictionary of
+named text entries that Mellea injects into the prompt as grounding evidence.
+Each entry is tracked as a separate context component, so it can be traced
+and rendered independently from the instruction template.
+
+Use `grounding_context` to anchor the model's output to retrieved documents,
+knowledge-base passages, or any reference material — without mixing that content
+into `user_variables`:
+
+```python
+answer = m.instruct(
+    "Answer the question: {{question}}",
+    user_variables={"question": query},
+    grounding_context={"doc0": doc_text_0, "doc1": doc_text_1},
+)
+```
+
+Without `grounding_context`, `m.instruct()` generates from the model's parametric
+knowledge only. It is the primary integration point for RAG pipelines.
+
+See: [Build a RAG Pipeline](../how-to/build-a-rag-pipeline)
+
+---
+
 ## GuardianCheck
 
 A safety requirement in Mellea that validates LLM outputs against defined safety
@@ -691,3 +717,25 @@ See: [Write Custom Verifiers](../how-to/write-custom-verifiers)
 ## Thunk
 
 See [ModelOutputThunk](#modeloutputthunk).
+
+---
+
+## wait_for_all_mots
+
+A helper from `mellea.helpers.async_helpers` that concurrently resolves a list
+of [`ModelOutputThunk`](#modeloutputthunk) objects. All thunks in the list are
+awaited in parallel; the call returns when every thunk has been computed.
+
+```python
+from mellea.helpers.async_helpers import wait_for_all_mots
+
+thunks = [await m.ainstruct(...) for _ in items]
+await wait_for_all_mots(thunks)
+# All thunks are now resolved — access .value on each.
+```
+
+Total wall-clock time is roughly the latency of the slowest single call rather
+than the sum of all calls. Use `SimpleContext` (the default) when calling
+`wait_for_all_mots`; concurrent writes to `ChatContext` can corrupt state.
+
+See: [Tutorial 02: Streaming and Async](../tutorials/02-streaming-and-async)
