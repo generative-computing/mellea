@@ -87,14 +87,14 @@ def is_relevant(document: str, question: str) -> bool:
 Apply it after retrieval:
 
 ```python
-import mellea
+from mellea import start_session
 
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 index = build_index(docs, embedding_model)
 candidates = search(query, docs, index, embedding_model)
 del embedding_model  # free memory before loading the LLM
 
-m = mellea.start_session()
+m = start_session()
 
 relevant = [
     doc for doc in candidates
@@ -203,8 +203,7 @@ the generator was given.
 from faiss import IndexFlatIP
 from sentence_transformers import SentenceTransformer
 
-import mellea
-from mellea import generative
+from mellea import generative, start_session
 from mellea.stdlib.requirements import req, simple_validate
 from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
 
@@ -233,7 +232,7 @@ def rag(docs: list[str], query: str) -> str | None:
     candidates = search(query, docs, index, embedding_model)
     del embedding_model
 
-    m = mellea.start_session()
+    m = start_session()
 
     relevant = [doc for doc in candidates if is_relevant(m, document=doc, question=query)]
     if not relevant:
@@ -272,9 +271,6 @@ def rag(docs: list[str], query: str) -> str | None:
 
 ---
 
-## See also
+---
 
-- [Resilient RAG with Fallback Filtering](../examples/resilient-rag-fallback) — annotated walkthrough of the complete source file
-- [Making Agents Reliable](../tutorials/04-making-agents-reliable) — Guardian checks in depth
-- [The Requirements System](../concepts/requirements-system) — advanced validators for the generation step
-- `docs/examples/rag/` — runnable source including a PDF variant (`simple_rag_with_filter.py`, `mellea_pdf.py`)
+**See also:** [Resilient RAG with Fallback Filtering](../examples/resilient-rag-fallback) | [Making Agents Reliable](../tutorials/04-making-agents-reliable) | [The Requirements System](../concepts/requirements-system)

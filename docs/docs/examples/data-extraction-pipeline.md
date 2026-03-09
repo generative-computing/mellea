@@ -118,7 +118,7 @@ dependency on a live backend visible at the call site. You can pass different
 sessions in tests (for example, a session backed by a mock) without changing
 the function definition.
 
-## What to try next
+**What to try next:**
 
 - Replace `list[str]` with a Pydantic model to extract multiple fields at
   once — see [Enforce structured output](../how-to/enforce-structured-output).
@@ -127,3 +127,7 @@ the function definition.
   [requirements system concept](../concepts/requirements-system).
 - Look at `docs/examples/information_extraction/advanced_with_m_instruct.py`
   for a version that uses `m.instruct()` directly with structured outputs.
+
+---
+
+**See also:** [Enforce Structured Output](../how-to/enforce-structured-output) | [The Requirements System](../concepts/requirements-system) | [Examples Index](./index)

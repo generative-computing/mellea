@@ -491,11 +491,6 @@ agentic system:
 | `GuardianRisk.GROUNDEDNESS` + `context_text` | Detect hallucination relative to retrieved context |
 | `react()` | Goal-driven multi-step agentic loop |
 
-## Next steps
+---
 
-- [The Requirements System](../concepts/requirements-system) — advanced validators,
-  preconditions, and the IVR loop in depth
-- [Security and Taint Tracking](../advanced/security-and-taint-tracking) — track
-  data provenance across generative pipelines
-- [Tools and Agents](../guide/tools-and-agents) — `@tool`, `MelleaTool`, LangChain
-  interop, and the code interpreter
+**See also:** [The Requirements System](../concepts/requirements-system) | [Security and Taint Tracking](../advanced/security-and-taint-tracking) | [Tools and Agents](../guide/tools-and-agents)

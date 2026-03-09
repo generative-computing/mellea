@@ -361,13 +361,6 @@ call is self-contained.
 | `@generative` + Pydantic | Structured extraction with attribute access |
 | Composition | Independent typed functions wired into a pipeline |
 
-## Next steps
+---
 
-- [Instruct, Validate, Repair](../concepts/instruct-validate-repair) — deep dive
-  into the IVR loop and sampling strategies
-- [The Requirements System](../concepts/requirements-system) — advanced validators,
-  preconditions, and debugging
-- [Generative Functions](../concepts/generative-functions) — `@generative` in depth
-- [MObjects and mify](../concepts/mobjects-and-mify) — passing structured data
-  into generative programs
-- [Use Images and Vision](../how-to/use-images-and-vision) — multimodal inputs
+**See also:** [Tutorial 02: Streaming and Async](../tutorials/02-streaming-and-async) | [Instruct, Validate, Repair](../concepts/instruct-validate-repair) | [The Requirements System](../concepts/requirements-system) | [Generative Functions](../concepts/generative-functions) | [MObjects and mify](../concepts/mobjects-and-mify) | [Use Images and Vision](../how-to/use-images-and-vision)

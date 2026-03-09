@@ -246,6 +246,6 @@ context-steerable generative functions:
 | `ChatContext` + `CBlock` injection | Shared persona or policy across all functions |
 | Pre/postcondition checks | Input validation and output compliance |
 
-**See also:** [Generative Functions](../guide/generative-functions) |
-[The Requirements System](../concepts/requirements-system) |
-[Write Custom Verifiers](../how-to/write-custom-verifiers)
+---
+
+**See also:** [Generative Functions](../guide/generative-functions) | [The Requirements System](../concepts/requirements-system) | [Write Custom Verifiers](../how-to/write-custom-verifiers)

@@ -203,3 +203,7 @@ print(answer)
 
 The structured `Thought` titles can be surfaced in a UI for observability into the
 model's reasoning process.
+
+---
+
+**See also:** [Generative Functions](../concepts/generative-functions) | [Enforce Structured Output](../how-to/enforce-structured-output) | [Write Custom Verifiers](../how-to/write-custom-verifiers)

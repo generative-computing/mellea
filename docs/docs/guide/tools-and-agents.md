@@ -252,3 +252,7 @@ gets generated (see examples above).
 
 > **Warning:** `local_code_interpreter` executes Python code in the current process.
 > Do not use it in production contexts without sandboxing.
+
+---
+
+**See also:** [Tutorial 04: Making Agents Reliable](../tutorials/04-making-agents-reliable) | [Instruct, Validate, Repair](../concepts/instruct-validate-repair)

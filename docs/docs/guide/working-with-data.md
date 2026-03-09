@@ -247,3 +247,7 @@ if tables:
 tools during `transform()` calls automatically.
 
 > **Full example:** [`docs/examples/tutorial/document_mobject.py`](../../examples/tutorial/document_mobject.py)
+
+---
+
+**See also:** [act() and aact()](../guide/act-and-aact) | [MObjects and mify](../concepts/mobjects-and-mify)
