@@ -48,7 +48,7 @@ def _build_policies() -> dict[str, Any]:
         # component_post_error: observe-only
         # Generation Pipeline
         "generation_pre_call": HookPayloadPolicy(
-            writable_fields=frozenset({"model_options", "tools", "format"})
+            writable_fields=frozenset({"model_options", "tool_calls", "format"})
         ),
         "generation_post_call": HookPayloadPolicy(
             writable_fields=frozenset({"model_output"})

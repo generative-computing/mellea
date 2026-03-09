@@ -3,8 +3,8 @@
 Priority rules (actual framework behavior)
 --------------------------------------------
 - Lower priority numbers execute FIRST (priority=1 runs before priority=50 before priority=100).
-- Default priority is 50 when not specified on @hook.
-- Plugin class-level priority GOVERNS all methods; @hook(priority=N) on a method is NOT used.
+- Resolution order: PluginSet override > @hook priority > Plugin class priority > 50.
+- Plugin class-level priority is the DEFAULT for methods; @hook(priority=N) overrides it per method.
 - PluginSet.priority OVERRIDES the priority of all items in the set, including items with
   explicit @hook priorities.
 """
@@ -207,13 +207,13 @@ class TestPriorityOrdering:
 
 
 class TestPriorityInheritance:
-    """@plugin class-level priority governs all methods; @hook method priority is not used."""
+    """Plugin class-level priority is the default; @hook method priority overrides it."""
 
     @pytest.mark.asyncio
     async def test_plugin_class_priority_applies_to_method_without_explicit_priority(
         self,
     ) -> None:
-        """A @plugin with priority=5 makes its @hook method fire before a default-priority hook."""
+        """A Plugin with priority=5 makes its @hook method (no explicit priority) fire before a default-priority hook."""
         execution_order: list[str] = []
 
         class EarlyPlugin(Plugin, name="high-priority-class-plugin", priority=5):
@@ -239,25 +239,24 @@ class TestPriorityInheritance:
         )
 
     @pytest.mark.asyncio
-    async def test_hook_decorator_priority_does_not_override_plugin_class_priority(
+    async def test_hook_decorator_priority_overrides_plugin_class_priority(
         self,
     ) -> None:
-        """@hook(priority=80) on a method does NOT override @plugin(priority=5) on the class.
+        """@hook(priority=80) on a method overrides Plugin(priority=5) on the class.
 
-        The @plugin class-level priority takes precedence over any method-level @hook priority.
-        So a @plugin(priority=5) method fires at effective priority=5, regardless of any
-        @hook(priority=80) on the method itself.
+        The method-level @hook priority takes precedence over the class-level default.
+        So a Plugin(priority=5) method with @hook(priority=80) fires at effective priority=80.
         """
         execution_order: list[str] = []
 
-        class PluginWithOverriddenPriority(
+        class PluginWithMethodPriority(
             Plugin, name="low-effective-priority-plugin", priority=5
         ):
             @hook(
                 "session_pre_init", priority=80
-            )  # @hook priority is ignored; class priority=5 wins
+            )  # @hook priority=80 overrides class priority=5
             async def on_pre_init(self, payload, ctx):
-                execution_order.append("method_class_p5")
+                execution_order.append("method_p80")
                 return None
 
         @hook("session_pre_init", priority=50)
@@ -265,14 +264,14 @@ class TestPriorityInheritance:
             execution_order.append("standalone_p50")
             return None
 
-        register(PluginWithOverriddenPriority())
+        register(PluginWithMethodPriority())
         register(mid_hook)
 
         await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
 
-        # @plugin(priority=5) wins over @hook(priority=80): class plugin fires at priority=5 (before 50)
-        assert execution_order.index("method_class_p5") < execution_order.index(
-            "standalone_p50"
+        # @hook(priority=80) wins over Plugin(priority=5): method fires at priority=80 (after 50)
+        assert execution_order.index("standalone_p50") < execution_order.index(
+            "method_p80"
         )
 
     @pytest.mark.asyncio
@@ -302,43 +301,38 @@ class TestPriorityInheritance:
         assert execution_order == ["plugin_p3", "plugin_p99"]
 
     @pytest.mark.asyncio
-    async def test_class_priority_governs_when_method_has_explicit_hook_priority(
-        self,
-    ) -> None:
-        """Class priority governs execution order even when methods have explicit @hook priorities.
+    async def test_method_priority_overrides_class_priority(self) -> None:
+        """@hook method priority overrides the class-level default.
 
-        @plugin(priority=1) fires before @plugin(priority=100) regardless of any
-        @hook(priority=N) annotations on the methods. Class-level priority always wins.
+        Plugin(priority=100) with @hook(priority=10) fires at effective priority=10.
+        Plugin(priority=1) with @hook(priority=90) fires at effective priority=90.
+        So the first plugin fires before the second, despite its class priority being higher.
         """
         execution_order: list[str] = []
 
-        class LowClassPriority(
-            Plugin, name="multi-method-plugin-low-class", priority=100
-        ):
+        class PluginA(Plugin, name="multi-method-plugin-low-class", priority=100):
             @hook(
                 "session_pre_init", priority=10
-            )  # @hook priority ignored; class=100 governs
+            )  # method priority=10 overrides class=100
             async def on_pre_init(self, payload, ctx):
-                execution_order.append("class_p100")
+                execution_order.append("plugin_a_effective_p10")
                 return None
 
-        class HighClassPriority(
-            Plugin, name="multi-method-plugin-high-class", priority=1
-        ):
+        class PluginB(Plugin, name="multi-method-plugin-high-class", priority=1):
             @hook(
                 "session_pre_init", priority=90
-            )  # @hook priority ignored; class=1 governs
+            )  # method priority=90 overrides class=1
             async def on_pre_init(self, payload, ctx):
-                execution_order.append("class_p1")
+                execution_order.append("plugin_b_effective_p90")
                 return None
 
-        register(LowClassPriority())
-        register(HighClassPriority())
+        register(PluginA())
+        register(PluginB())
 
         await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
 
-        # class priority=1 fires before class priority=100; @hook priorities are not used
-        assert execution_order == ["class_p1", "class_p100"]
+        # effective priorities are 10 and 90; PluginA fires first despite class priority=100
+        assert execution_order == ["plugin_a_effective_p10", "plugin_b_effective_p90"]
 
 
 # ---------------------------------------------------------------------------

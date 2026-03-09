@@ -218,6 +218,7 @@ Hook payloads follow six design principles:
 4. **Policy-controlled** — Each hook type declares a `HookPayloadPolicy` specifying which fields are writable. The plugin manager applies the policy after each plugin returns, accepting only changes to writable fields and silently discarding unauthorized modifications. This separates "what the plugin can observe" from "what the plugin can change" — and enforces it at the framework level. See [Hook Payload Policies](#hook-payload-policies) for the full policy table.
 5. **Serializable** — Payloads should be serializable for external (MCP-based) plugins that run out-of-process. All payload fields use types that can round-trip through JSON or similar formats.
 6. **Versioned** — Payload schemas carry a `payload_version` so plugins can detect incompatible changes at registration time rather than at runtime.
+7. **Memory-safe** — Payload fields that hold live, framework-owned objects (`Context`, `Component`, `MelleaSession`, `SamplingStrategy`) are typed as `WeakProxy` (defined in `mellea/plugins/base.py`). `WeakProxy` wraps the value in `weakref.proxy()` at construction time. Plugins that cache a payload instance cannot inadvertently keep these objects alive beyond the request lifecycle. Accessing a `WeakProxy` field after the referent is garbage-collected raises `ReferenceError` — do not cache payloads for use beyond the hook invocation. Result and data fields (`model_output`, `result`, `final_result`, `generate_log`, etc.) remain strong references because plugins may legitimately retain output data.
 
 ## 2. Common Payload Fields
 
@@ -239,35 +240,35 @@ class BasePayload(PluginPayload):
 
 ## 3. Hook Summary Table
 
-| Prio | Hook Point | Category | Domain | Description |
-|--|------------|----------|--------|-------------|
-|3| `session_pre_init` | Session Lifecycle | Session | Before session initialization |
-|3| `session_post_init` | Session Lifecycle | Session | After session is fully initialized |
-|3| `session_reset` | Session Lifecycle | Session | When session context is reset |
-|3| `session_cleanup` | Session Lifecycle | Session | Before session cleanup/teardown |
-|7| `component_pre_create` | Component Lifecycle | Component / (Backend, Context) | Before component creation |
-|7| `component_post_create` | Component Lifecycle | Component / (Backend, Context) | After component created, before execution |
-|7| `component_pre_execute` | Component Lifecycle | Component / (Backend, Context) | Before component execution via `aact()` |
-|7| `component_post_success` | Component Lifecycle | Component / (Backend, Context) | After successful component execution |
-|7| `component_post_error` | Component Lifecycle | Component / (Backend, Context) | After component execution fails |
-|1| `generation_pre_call` | Generation Pipeline | (Backend, Context) | Before LLM backend call |
-|1| `generation_post_call` | Generation Pipeline | (Backend, Context) | After LLM response received |
-|1| `generation_stream_chunk` | Generation Pipeline | (Backend, Context) | For each streaming chunk |
-|1| `validation_pre_check` | Validation | (Backend, Context) | Before requirement validation |
-|1| `validation_post_check` | Validation | (Backend, Context) | After validation completes |
-|3| `sampling_loop_start` | Sampling Pipeline | (Backend, Context) | When sampling strategy begins |
-|3| `sampling_iteration` | Sampling Pipeline | (Backend, Context) | After each sampling attempt |
-|3| `sampling_repair` | Sampling Pipeline | (Backend, Context) | When repair is invoked |
-|3| `sampling_loop_end` | Sampling Pipeline | (Backend, Context) | When sampling completes |
-|1| `tool_pre_invoke` | Tool Execution | (Backend, Context) | Before tool/function invocation |
-|1| `tool_post_invoke` | Tool Execution | (Backend, Context) | After tool execution |
-|5| `adapter_pre_load` | Backend Adapter Ops | Backend | Before `backend.load_adapter()` |
-|5| `adapter_post_load` | Backend Adapter Ops | Backend | After adapter loaded |
-|5| `adapter_pre_unload` | Backend Adapter Ops | Backend | Before `backend.unload_adapter()` |
-|5| `adapter_post_unload` | Backend Adapter Ops | Backend | After adapter unloaded |
-|???| `context_update` | Context Operations | Context | When context changes |
-|???| `context_prune` | Context Operations | Context | When context is trimmed |
-|???| `error_occurred` | Error Handling | Cross-cutting | When an unrecoverable error occurs |
+| Priority | Hook Point | Category | Domain | Status | Description |
+|:--:|------------|----------|--------|:--------:|-------------|
+|3| `session_pre_init` | Session Lifecycle | Session | ✔️ | Before session initialization |
+|3| `session_post_init` | Session Lifecycle | Session | ✔️ | After session is fully initialized |
+|3| `session_reset` | Session Lifecycle | Session | ✔️ | When session context is reset |
+|3| `session_cleanup` | Session Lifecycle | Session | ✔️ | Before session cleanup/teardown |
+|7| `component_pre_create` | Component Lifecycle | Component / (Backend, Context) |  | Before component creation |
+|7| `component_post_create` | Component Lifecycle | Component / (Backend, Context) |  | After component created, before execution |
+|7| `component_pre_execute` | Component Lifecycle | Component / (Backend, Context) | ✔️ | Before component execution via `aact()` |
+|7| `component_post_success` | Component Lifecycle | Component / (Backend, Context) | ✔️ | After successful component execution |
+|7| `component_post_error` | Component Lifecycle | Component / (Backend, Context) | ✔️ | After component execution fails |
+|1| `generation_pre_call` | Generation Pipeline | (Backend, Context) | ✔️ | Before LLM backend call |
+|1| `generation_post_call` | Generation Pipeline | (Backend, Context) | ✔️ | After LLM response received |
+|1| `generation_stream_chunk` | Generation Pipeline | (Backend, Context) |  | For each streaming chunk |
+|1| `validation_pre_check` | Validation | (Backend, Context) | ✔️ | Before requirement validation |
+|1| `validation_post_check` | Validation | (Backend, Context) | ✔️ | After validation completes |
+|3| `sampling_loop_start` | Sampling Pipeline | (Backend, Context) | ✔️ | When sampling strategy begins |
+|3| `sampling_iteration` | Sampling Pipeline | (Backend, Context) | ✔️ | After each sampling attempt |
+|3| `sampling_repair` | Sampling Pipeline | (Backend, Context) | ✔️ | When repair is invoked |
+|3| `sampling_loop_end` | Sampling Pipeline | (Backend, Context) | ✔️ | When sampling completes |
+|1| `tool_pre_invoke` | Tool Execution | (Backend, Context) | ✔️ | Before tool/function invocation |
+|1| `tool_post_invoke` | Tool Execution | (Backend, Context) | ✔️ | After tool execution |
+|5| `adapter_pre_load` | Backend Adapter Ops | Backend |  | Before `backend.load_adapter()` |
+|5| `adapter_post_load` | Backend Adapter Ops | Backend |  | After adapter loaded |
+|5| `adapter_pre_unload` | Backend Adapter Ops | Backend |  | Before `backend.unload_adapter()` |
+|5| `adapter_post_unload` | Backend Adapter Ops | Backend |  | After adapter unloaded |
+|7| `context_update` | Context Operations | Context |  | When context changes |
+|7| `context_prune` | Context Operations | Context |  | When context is trimmed |
+|7| `error_occurred` | Error Handling | Cross-cutting |  | When an unrecoverable error occurs |
 
 ## 3b. Hook Payload Policies
 
@@ -354,7 +355,7 @@ def apply_policy(
 | **Context Operations** | |
 | `context_update` | *(observe-only)* |
 | `context_prune` | *(observe-only)* |
-| **Error Handling** | |
+| **Error Handling**| |
 | `error_occurred` | *(observe-only)* |
 
 ### Default Policy
@@ -432,13 +433,11 @@ Hooks that manage session boundaries, useful for initialization, state setup, an
 - **Payload**:
   ```python
   class SessionPostInitPayload(BasePayload):
-      backend: Backend               # Initialized backend instance
-      context: Context               # Initial context
-      logger: FancyLogger            # Session logger
+      session: MelleaSession         # Fully initialized session (observe-only, WeakProxy)
   ```
+  > `session` is held as a `WeakProxy`. Do not cache this payload — accessing the field after the session is garbage-collected raises `ReferenceError`.
 - **Context**:
-  - `backend_info`: dict - Backend capabilities and metadata
-  - `model_info`: dict - Model details (context window, etc.)
+  - `backend_name`: str - Backend identifier
 
 
 #### `session_reset`
@@ -451,12 +450,11 @@ Hooks that manage session boundaries, useful for initialization, state setup, an
 - **Payload**:
   ```python
   class SessionResetPayload(BasePayload):
-      previous_context: Context      # Context before reset
-      new_context: Context           # Fresh context after reset
+      previous_context: Context      # Context about to be discarded (observe-only, WeakProxy)
   ```
+  > `previous_context` is held as a `WeakProxy`. Do not cache this payload.
 - **Context**:
-  - `session`: MelleaSession
-  - `reset_reason`: str | None - Optional reason for reset
+  - `backend_name`: str - Backend identifier
 
 
 #### `session_cleanup`
@@ -470,15 +468,12 @@ Hooks that manage session boundaries, useful for initialization, state setup, an
 - **Payload**:
   ```python
   class SessionCleanupPayload(BasePayload):
-      context: Context               # Final context state
-      total_generations: int         # Count of generations performed
-      total_tokens_used: int | None  # Aggregate token usage
-      interaction_count: int         # Total number of turns
+      context: Context               # Context at cleanup time (observe-only, WeakProxy)
+      interaction_count: int         # Number of items in context at cleanup
   ```
+  > `context` is held as a `WeakProxy`. Do not cache this payload.
 - **Context**:
-  - `generate_logs`: list[GenerateLog] - All logs from session
-  - `duration_ms`: int - Session duration
-  - `session`: MelleaSession - Final session state
+  - `backend_name`: str - Backend identifier
 
 
 ### B. Component Lifecycle Hooks
@@ -572,15 +567,16 @@ Plugins should check for `None`/empty values rather than assuming all fields are
   ```python
   class ComponentPreExecutePayload(BasePayload):
       component_type: str            # "Instruction", "GenerativeSlot", etc.
-      action: Component | CBlock     # The component to execute
-      context: Context               # Current context
-      context_view: list[Component | CBlock] | None  # Linearized context
-      requirements: list[Requirement]  # Attached requirements
-      model_options: dict            # Generation parameters
-      format: type | None            # Structured output format
-      strategy: SamplingStrategy | None  # Sampling strategy
-      tool_calls_enabled: bool       # Whether tools are available
+      action: Component | CBlock     # The component to execute (writable, WeakProxy)
+      context: Context               # Current context (writable, WeakProxy)
+      context_view: list[Component | CBlock] | None  # Linearized context (writable)
+      requirements: list[Requirement]  # Attached requirements (writable)
+      model_options: dict            # Generation parameters (writable)
+      format: type | None            # Structured output format (writable)
+      strategy: SamplingStrategy | None  # Sampling strategy (writable, WeakProxy)
+      tool_calls_enabled: bool       # Whether tools are available (writable)
   ```
+  > `action`, `context`, and `strategy` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -600,14 +596,15 @@ Plugins should check for `None`/empty values rather than assuming all fields are
   ```python
   class ComponentPostSuccessPayload(BasePayload):
       component_type: str            # "Instruction", "GenerativeSlot", etc.
-      action: Component | CBlock     # Executed component
-      result: ModelOutputThunk       # Generation result
-      context_before: Context        # Context before execution
-      context_after: Context         # Context after execution
-      generate_log: GenerateLog      # Detailed execution log
-      sampling_results: list[SamplingResult] | None  # If sampling was used
+      action: Component | CBlock     # Executed component (WeakProxy)
+      result: ModelOutputThunk       # Generation result (writable, strong reference)
+      context_before: Context        # Context before execution (WeakProxy)
+      context_after: Context         # Context after execution (WeakProxy)
+      generate_log: GenerateLog      # Detailed execution log (strong reference)
+      sampling_results: list[SamplingResult] | None  # If sampling was used (strong reference)
       latency_ms: int                # Execution time
   ```
+  > `action`, `context_before`, and `context_after` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -635,13 +632,14 @@ Plugins should check for `None`/empty values rather than assuming all fields are
   ```python
   class ComponentPostErrorPayload(BasePayload):
       component_type: str            # "Instruction", "GenerativeSlot", etc.
-      action: Component | CBlock     # Component that failed
-      error: Exception               # The exception raised
+      action: Component | CBlock     # Component that failed (WeakProxy)
+      error: Exception               # The exception raised (strong reference)
       error_type: str                # Exception class name
       stack_trace: str               # Full stack trace
-      context: Context               # Context at time of error
+      context: Context               # Context at time of error (WeakProxy)
       model_options: dict            # Options used
   ```
+  > `action` and `context` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -672,12 +670,13 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
 - **Payload**:
   ```python
   class GenerationPreCallPayload(BasePayload):
-      action: Component | CBlock           # Source action
-      context: Context                     # Current context
+      action: Component | CBlock           # Source action (WeakProxy)
+      context: Context                     # Current context (WeakProxy)
       model_options: dict[str, Any]        # Generation parameters (writable)
       format: type | None                  # Structured output format (writable)
       tool_calls: bool                     # Whether tool calling is enabled (writable)
   ```
+  > `action` and `context` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -758,11 +757,12 @@ Hooks around requirement verification and output validation. These operate on th
 - **Payload**:
   ```python
   class ValidationPreCheckPayload(BasePayload):
-      requirements: list[Requirement]  # Requirements to check
-      target: CBlock | None            # Target to validate
-      context: Context                 # Current context
-      model_options: dict              # Options for LLM-as-judge
+      requirements: list[Requirement]  # Requirements to check (writable)
+      target: CBlock | None            # Target to validate (WeakProxy)
+      context: Context                 # Current context (WeakProxy)
+      model_options: dict              # Options for LLM-as-judge (writable)
   ```
+  > `target` and `context` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -810,11 +810,12 @@ Hooks around sampling strategies and failure recovery. These operate on the (Bac
   ```python
   class SamplingLoopStartPayload(BasePayload):
       strategy_name: str             # Strategy class name
-      action: Component              # Initial action
-      context: Context               # Initial context
+      action: Component              # Initial action (WeakProxy)
+      context: Context               # Initial context (WeakProxy)
       requirements: list[Requirement]  # All requirements
-      loop_budget: int               # Maximum iterations
+      loop_budget: int               # Maximum iterations (writable)
   ```
+  > `action` and `context` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -833,14 +834,15 @@ Hooks around sampling strategies and failure recovery. These operate on the (Bac
 - **Payload**:
   ```python
   class SamplingIterationPayload(BasePayload):
-      iteration: int                 # Current iteration number
-      action: Component              # Action used this iteration
-      result: ModelOutputThunk       # Generation result
+      iteration: int                 # 1-based iteration number
+      action: Component              # Action used this iteration (WeakProxy)
+      result: ModelOutputThunk       # Generation result (strong reference)
       validation_results: list[tuple[Requirement, ValidationResult]]
-      all_validations_passed: bool    # Did all requirements pass
+      all_validations_passed: bool   # Did all requirements pass
       valid_count: int
       total_count: int
   ```
+  > `action` is held as a `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -866,15 +868,14 @@ Hooks around sampling strategies and failure recovery. These operate on the (Bac
   ```python
   class SamplingRepairPayload(BasePayload):
       repair_type: str               # "identity" | "template_repair" | "multi_turn_message" | "sofai_feedback" | "custom"
-      failed_action: Component       # Action that failed
-      failed_result: ModelOutputThunk  # Failed output
+      failed_action: Component       # Action that failed (WeakProxy)
+      failed_result: ModelOutputThunk  # Failed output (strong reference)
       failed_validations: list[tuple[Requirement, ValidationResult]]
-      old_context: Context           # Context without failure
-      new_context: Context           # Context with failure
-      repair_action: Component       # New action for retry
-      repair_context: Context        # Context for retry
-      repair_iteration: int          # Which repair attempt
+      repair_action: Component       # New action for retry (writable, WeakProxy)
+      repair_context: Context        # Context for retry (writable, WeakProxy)
+      repair_iteration: int          # 1-based iteration at which repair was triggered
   ```
+  > `failed_action`, `repair_action`, and `repair_context` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -895,13 +896,14 @@ Hooks around sampling strategies and failure recovery. These operate on the (Bac
   class SamplingLoopEndPayload(BasePayload):
       success: bool                  # Did sampling succeed
       iterations_used: int           # Total iterations performed
-      final_result: ModelOutputThunk | None  # Best result
-      final_action: Component | None
-      final_context: Context | None
+      final_result: ModelOutputThunk | None  # Best result (writable, strong reference)
+      final_action: Component | None         # Component that produced final_result (WeakProxy)
+      final_context: Context | None          # Context for final_result (WeakProxy)
       failure_reason: str | None     # If failed, why
-      all_results: list[ModelOutputThunk]
+      all_results: list[ModelOutputThunk]    # All iteration results (strong references)
       all_validations: list[list[tuple[Requirement, ValidationResult]]]
   ```
+  > `final_action` and `final_context` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -1289,7 +1291,7 @@ class PIIRedactor(Plugin, name="pii-redactor", priority=5):
 
 The `Plugin` base class uses `__init_subclass__` keyword arguments:
 - `name: str` — plugin name (required for registration)
-- `priority: int` — default priority for all hooks in this plugin (default: 50). The class-level priority takes precedence over individual `@hook` priorities.
+- `priority: int` — default priority for all hooks in this plugin (default: 50). Individual `@hook(priority=N)` on a method overrides this class-level default for that specific method. `PluginSet` priority overrides both.
 
 `Plugin` subclasses automatically support the context manager protocol (`with`/`async with`) for block-scoped activation.
 
@@ -1398,8 +1400,13 @@ Only globally registered plugins fire. If no global plugins are registered, hook
 
 - Lower numbers execute first
 - Within the same priority, execution order is deterministic but unspecified
-- Default priority: 50
-- Priority can be set on `@hook` (per-handler), `Plugin` subclass (per-plugin default via `__init_subclass__`), or `PluginSet` (per-set default). Class-level `Plugin` priority takes precedence over `@hook` method-level priority. `PluginSet` priority overrides all item priorities.
+- Default priority: 50 (when no explicit priority is set anywhere)
+- Priority resolution order (highest precedence first):
+  1. `PluginSet` priority — overrides all items in the set, including nested `PluginSet`s
+  2. `@hook(priority=N)` on a method — overrides the class-level default for that specific method
+  3. `Plugin` class-level priority (`class Foo(Plugin, priority=N)`) — default for all methods without an explicit `@hook` priority
+  4. Framework default: 50
+- `HookMeta.priority` is `int | None` — `None` means "not explicitly set", resolved at registration time
 
 ### YAML Configuration (Secondary)
 

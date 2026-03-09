@@ -2,12 +2,43 @@
 
 from __future__ import annotations
 
+import weakref
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Annotated, Any, TypeAlias
 
-from pydantic import Field
+from pydantic import BeforeValidator, Field
+
+
+def _to_weak_proxy(v: Any) -> Any:
+    """Wrap *v* in a ``weakref.proxy`` if the type supports it; return *v* unchanged otherwise.
+
+    Payload fields typed as :data:`WeakProxy` store a weak reference to their
+    value.  This prevents plugins that cache a payload from inadvertently keeping
+    framework-owned objects (``Context``, ``Component``, ``MelleaSession``) alive
+    after the request that produced them has completed.
+
+    Accessing a ``WeakProxy`` field after the referent has been garbage-collected
+    raises ``ReferenceError``.  This is intentional: plugins must not cache
+    payloads for use beyond the hook invocation.
+    """
+    if v is None:
+        return None
+    try:
+        return weakref.proxy(v)
+    except TypeError:
+        # Type does not support weak references (e.g. some C-extension types).
+        return v
+
+
+WeakProxy = Annotated[Any, BeforeValidator(_to_weak_proxy)]
+"""Pydantic field type that stores a ``weakref.proxy`` to the given value.
+
+Use this for payload fields that hold live, framework-owned objects
+(``Context``, ``Component``, ``MelleaSession``, ``SamplingStrategy``) to avoid
+unintentional memory retention when plugins cache payload instances.
+"""
 
 # ---------------------------------------------------------------------------
 # Plugin base class (no cpex dependency)

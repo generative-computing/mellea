@@ -38,11 +38,21 @@ class PluginSet:
         self._scope_id: str | None = None
 
     def flatten(self) -> list[tuple[Callable | Any, int | None]]:
-        """Recursively flatten nested PluginSets into ``(item, priority_override)`` pairs."""
+        """Recursively flatten nested PluginSets into ``(item, priority_override)`` pairs.
+
+        When this set has a priority, it overrides the priorities of all nested
+        items — including items inside nested ``PluginSet`` instances.
+        """
         result: list[tuple[Callable | Any, int | None]] = []
         for item in self.items:
             if isinstance(item, PluginSet):
-                result.extend(item.flatten())
+                for sub_item, sub_prio in item.flatten():
+                    result.append(
+                        (
+                            sub_item,
+                            self.priority if self.priority is not None else sub_prio,
+                        )
+                    )
             else:
                 result.append((item, self.priority))
         return result

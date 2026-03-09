@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from mellea.plugins.base import MelleaBasePayload
+from mellea.plugins.base import MelleaBasePayload, WeakProxy
 
 if TYPE_CHECKING:
     pass
@@ -31,9 +31,10 @@ class SessionPostInitPayload(MelleaBasePayload):
 
     Attributes:
         session: The fully initialized ``MelleaSession`` instance (observe-only).
+            Held as a weak reference — do not cache this payload.
     """
 
-    session: Any = None
+    session: WeakProxy = None
 
 
 class SessionResetPayload(MelleaBasePayload):
@@ -41,9 +42,10 @@ class SessionResetPayload(MelleaBasePayload):
 
     Attributes:
         previous_context: The ``Context`` that is about to be discarded (observe-only).
+            Held as a weak reference — do not cache this payload.
     """
 
-    previous_context: Any = None
+    previous_context: WeakProxy = None
 
 
 class SessionCleanupPayload(MelleaBasePayload):
@@ -51,8 +53,9 @@ class SessionCleanupPayload(MelleaBasePayload):
 
     Attributes:
         context: The ``Context`` at the time of cleanup (observe-only).
+            Held as a weak reference — do not cache this payload.
         interaction_count: Number of items in the context at cleanup time.
     """
 
-    context: Any = None
+    context: WeakProxy = None
     interaction_count: int = 0

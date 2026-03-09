@@ -162,23 +162,57 @@ def _register_single(
 
             track_session_plugin(session_id, adapter.name)
         logger.debug(
-            "Registered standalone hook: %s for %s", item.__qualname__, meta.hook_type
+            "Registered standalone hook: %s for %s",
+            f"{item.__module__}.{item.__qualname__}",
+            meta.hook_type,
         )
 
     elif plugin_meta is not None:
-        # @plugin-decorated class instance
-        adapter = _ClassPluginAdapter(
-            item,
-            plugin_meta,
-            session_id=session_id,
-            priority_override=priority_override,
-        )
-        pm._registry.register(adapter)
-        if session_id:
-            from mellea.plugins.manager import track_session_plugin
+        # @plugin-decorated class instance — register one adapter per @hook method
+        # so that each method's execution mode is respected independently.
+        plugin_module = f"{type(item).__module__}.{type(item).__qualname__}"
+        registered_any = False
+        for attr_name in dir(item):
+            if attr_name.startswith("_"):
+                continue
+            attr = getattr(item, attr_name, None)
+            if attr is None:
+                continue
+            hook_meta: HookMeta | None = getattr(attr, "_mellea_hook_meta", None)
+            if hook_meta is None:
+                continue
+            # Priority resolution: PluginSet override > @hook priority > Plugin class priority > 50
+            priority = (
+                priority_override
+                if priority_override is not None
+                else (
+                    hook_meta.priority
+                    if hook_meta.priority is not None
+                    else plugin_meta.priority
+                )
+            )
+            method_adapter = _MethodHookAdapter(
+                instance=item,
+                bound_method=attr,
+                hook_meta=hook_meta,
+                plugin_name=plugin_meta.name,
+                plugin_module=plugin_module,
+                priority=priority,
+                session_id=session_id,
+            )
+            pm._registry.register(method_adapter)
+            if session_id:
+                from mellea.plugins.manager import track_session_plugin
 
-            track_session_plugin(session_id, adapter.name)
-        logger.debug("Registered class plugin: %s", plugin_meta.name)
+                track_session_plugin(session_id, method_adapter.name)
+            registered_any = True
+        if registered_any:
+            logger.debug("Registered class plugin: %s", plugin_meta.name)
+        else:
+            logger.warning(
+                "Plugin %r has no @hook-decorated methods; nothing registered.",
+                plugin_meta.name,
+            )
 
     elif isinstance(item, Plugin):
         # MelleaPlugin / ContextForge Plugin instance
@@ -206,9 +240,13 @@ class _FunctionHookAdapter(Plugin):
         priority_override: int | None = None,
     ):
         meta: HookMeta = fn._mellea_hook_meta  # type: ignore[attr-defined]
-        priority = priority_override if priority_override is not None else meta.priority
+        priority = (
+            priority_override
+            if priority_override is not None
+            else (meta.priority if meta.priority is not None else 50)
+        )
         config = PluginConfig(
-            name=fn.__qualname__,
+            name=f"{fn.__module__}.{fn.__qualname__}",
             kind=f"{fn.__module__}.{fn.__qualname__}",
             hooks=[meta.hook_type],
             mode=_map_mode(meta.mode),
@@ -241,41 +279,40 @@ class _FunctionHookAdapter(Plugin):
         return result
 
 
-class _ClassPluginAdapter(Plugin):
-    """Adapts a ``@plugin``-decorated class instance into a ContextForge Plugin."""
+class _MethodHookAdapter(Plugin):
+    """Adapts a single ``@hook``-decorated bound method from a ``Plugin`` class.
+
+    Each ``@hook`` method on a ``@plugin``-decorated class gets its own adapter
+    so that per-method execution modes (``SEQUENTIAL``, ``FIRE_AND_FORGET``, etc.)
+    are respected.  The adapter name is ``"<plugin_name>.<hook_type>"``.
+
+    Note: ``initialize()`` and ``shutdown()`` delegate to the underlying class
+    instance and may be called once per registered hook method.  Make them
+    idempotent when using the ``Plugin`` base class with multiple hook methods.
+    """
 
     def __init__(
         self,
         instance: Any,
-        plugin_meta: PluginMeta,
+        bound_method: Callable,
+        hook_meta: HookMeta,
+        plugin_name: str,
+        plugin_module: str,
+        priority: int,
         session_id: str | None = None,
-        priority_override: int | None = None,
     ):
-        # Discover all @hook-decorated methods
-        hook_methods: dict[str, tuple[Callable, HookMeta]] = {}
-        for attr_name in dir(instance):
-            if attr_name.startswith("_"):
-                continue
-            attr = getattr(instance, attr_name, None)
-            if attr is None:
-                continue
-            hook_meta: HookMeta | None = getattr(attr, "_mellea_hook_meta", None)
-            if hook_meta is not None:
-                hook_methods[hook_meta.hook_type] = (attr, hook_meta)
-
-        priority = (
-            priority_override if priority_override is not None else plugin_meta.priority
-        )
+        hook_val = getattr(hook_meta.hook_type, "value", hook_meta.hook_type)
+        adapter_name = f"{plugin_name}.{hook_val}"
         config = PluginConfig(
-            name=plugin_meta.name,
-            kind=f"{type(instance).__module__}.{type(instance).__qualname__}",
-            hooks=list(hook_methods.keys()),
-            mode=PluginMode.SEQUENTIAL,
+            name=adapter_name,
+            kind=f"{plugin_module}.{hook_val}",
+            hooks=[hook_meta.hook_type],
+            mode=_map_mode(hook_meta.mode),
             priority=priority,
         )
         super().__init__(config)
         self._instance = instance
-        self._hook_methods = hook_methods
+        self._bound_method = bound_method
         self._session_id = session_id
 
     async def initialize(self) -> None:
@@ -289,19 +326,17 @@ class _ClassPluginAdapter(Plugin):
             await shut()
 
     def __getattr__(self, name: str) -> Any:
-        if name in self._hook_methods:
-            bound_method = self._hook_methods[name][0]
-
-            async def _wrapped(payload: Any, context: Any) -> Any:
-                result = await bound_method(payload, context)
-                if result is None:
-                    return PluginResult(continue_processing=True)
-                return result
-
-            return _wrapped
+        if self._config.hooks and name == self._config.hooks[0]:
+            return self._invoke
         raise AttributeError(
             f"'{type(self).__name__}' object has no attribute '{name}'"
         )
+
+    async def _invoke(self, payload: Any, context: Any) -> Any:
+        result = await self._bound_method(payload, context)
+        if result is None:
+            return PluginResult(continue_processing=True)
+        return result
 
 
 class _PluginScope:
@@ -346,22 +381,45 @@ def _unregister_single(pm: Any, item: Callable | Any) -> None:
     plugin_meta: PluginMeta | None = getattr(type(item), "_mellea_plugin_meta", None)
 
     if meta is not None:
-        name = item.__qualname__
+        # Standalone @hook function — name matches _FunctionHookAdapter
+        name = f"{item.__module__}.{item.__qualname__}"
+        try:
+            pm._registry.unregister(name)
+            logger.debug("Unregistered plugin: %s", name)
+        except Exception:
+            logger.debug("Plugin %s was not registered", name, exc_info=True)
     elif plugin_meta is not None:
-        name = plugin_meta.name
+        # @plugin-decorated class — one adapter per @hook method, named "<plugin>.<hook_type>"
+        for attr_name in dir(item):
+            if attr_name.startswith("_"):
+                continue
+            attr = getattr(item, attr_name, None)
+            if attr is None:
+                continue
+            hook_meta: HookMeta | None = getattr(attr, "_mellea_hook_meta", None)
+            if hook_meta is None:
+                continue
+            hook_val = getattr(hook_meta.hook_type, "value", hook_meta.hook_type)
+            adapter_name = f"{plugin_meta.name}.{hook_val}"
+            try:
+                pm._registry.unregister(adapter_name)
+                logger.debug("Unregistered plugin method: %s", adapter_name)
+            except Exception:
+                logger.debug(
+                    "Plugin %s was not registered", adapter_name, exc_info=True
+                )
     elif isinstance(item, Plugin):
         name = item.name
+        try:
+            pm._registry.unregister(name)
+            logger.debug("Unregistered plugin: %s", name)
+        except Exception:
+            logger.debug("Plugin %s was not registered", name, exc_info=True)
     else:
         raise TypeError(
             f"Cannot unregister {item!r}: expected a @hook-decorated function, "
             f"a Plugin subclass instance, or a MelleaPlugin instance."
         )
-
-    try:
-        pm._registry.unregister(name)
-        logger.debug("Unregistered plugin: %s", name)
-    except Exception:
-        logger.debug("Plugin %s was not registered", name, exc_info=True)
 
 
 def unregister(

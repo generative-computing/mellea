@@ -16,7 +16,9 @@ class TestHookDecorator:
         assert isinstance(meta, HookMeta)
         assert meta.hook_type == "generation_pre_call"
         assert meta.mode == PluginMode.SEQUENTIAL
-        assert meta.priority == 50
+        assert (
+            meta.priority is None
+        )  # no explicit priority; resolves at registration time
 
     def test_hook_custom_mode_and_priority(self):
         @hook("component_post_success", mode=PluginMode.AUDIT, priority=10)

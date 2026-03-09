@@ -1012,8 +1012,8 @@ toml = [
 
 [[package]]
 name = "cpex"
-version = "0.1.0.dev3"
-source = { git = "https://github.com/contextforge-org/contextforge-plugins-framework.git?tag=0.1.0.dev3#ee6cbebba17c053071600608efa37e42266ce6d9" }
+version = "0.1.0.dev8"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx", extra = ["http2"] },
@@ -1025,6 +1025,10 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/64/e7/9f33e4b82761ef49ad981d113d796bfe0e11598249f9088583fc43f25fd4/cpex-0.1.0.dev8.tar.gz", hash = "sha256:fd23912dc408b44c36d6758bb9a764636918dd2aa2823cd976d10b88c6a26974", size = 745831, upload-time = "2026-03-09T04:06:55.925Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/a1/afaff5e3c0020066997ebf06826f304c09fbb2ddca9ea4cdafec835a83f8/cpex-0.1.0.dev8-py3-none-any.whl", hash = "sha256:8af6ea129c94b40a8dd1fd8e8396c8b835ec0f9bd9d355184a83d99bd3d184a8", size = 161757, upload-time = "2026-03-09T04:06:53.957Z" },
 ]
 
 [[package]]
@@ -3784,7 +3788,7 @@ requires-dist = [
     { name = "accelerate", marker = "extra == 'hf'", specifier = ">=1.9.0" },
     { name = "boto3", marker = "extra == 'litellm'" },
     { name = "click", specifier = "<8.2.0" },
-    { name = "cpex", marker = "python_full_version >= '3.11' and extra == 'hooks'", git = "https://github.com/contextforge-org/contextforge-plugins-framework.git?tag=0.1.0.dev3" },
+    { name = "cpex", marker = "python_full_version >= '3.11' and extra == 'hooks'", specifier = ">=0.1.0.dev7" },
     { name = "datasets", marker = "extra == 'hf'", specifier = ">=4.0.0" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.45.0" },
     { name = "elasticsearch", marker = "extra == 'granite-retriever'", specifier = ">=8.0.0,<9.0.0" },

@@ -28,15 +28,23 @@ class TestPluginSet:
         inner = PluginSet("inner", ["x", "y"], priority=10)
         outer = PluginSet("outer", [inner, "z"], priority=20)
         result = outer.flatten()
-        # inner items keep inner's priority, outer item gets outer's priority
-        assert result == [("x", 10), ("y", 10), ("z", 20)]
+        # outer's priority overrides inner's priority for ALL items (including nested)
+        assert result == [("x", 20), ("y", 20), ("z", 20)]
+
+    def test_flatten_nested_no_outer_priority(self):
+        inner = PluginSet("inner", ["x", "y"], priority=10)
+        outer = PluginSet("outer", [inner, "z"])  # no priority on outer
+        result = outer.flatten()
+        # outer has no priority → inner items keep inner's priority; direct items get None
+        assert result == [("x", 10), ("y", 10), ("z", None)]
 
     def test_flatten_deeply_nested(self):
         deep = PluginSet("deep", ["a"], priority=1)
         mid = PluginSet("mid", [deep, "b"], priority=2)
         top = PluginSet("top", [mid, "c"], priority=3)
         result = top.flatten()
-        assert result == [("a", 1), ("b", 2), ("c", 3)]
+        # The outermost set's priority wins for all nested items
+        assert result == [("a", 3), ("b", 3), ("c", 3)]
 
     def test_repr(self):
         ps = PluginSet("security", [1, 2])

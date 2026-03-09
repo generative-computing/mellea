@@ -56,19 +56,6 @@ class HookType(str, Enum):
     TOOL_PRE_INVOKE = "tool_pre_invoke"
     TOOL_POST_INVOKE = "tool_post_invoke"
 
-    # Backend Adapter Ops
-    ADAPTER_PRE_LOAD = "adapter_pre_load"
-    ADAPTER_POST_LOAD = "adapter_post_load"
-    ADAPTER_PRE_UNLOAD = "adapter_pre_unload"
-    ADAPTER_POST_UNLOAD = "adapter_post_unload"
-
-    # Context Operations
-    CONTEXT_UPDATE = "context_update"
-    CONTEXT_PRUNE = "context_prune"
-
-    # Error Handling
-    ERROR_OCCURRED = "error_occurred"
-
 
 # Lazily populated mapping: hook_type -> (payload_class, result_class).
 # Populated by _build_hook_registry() on first call to _register_mellea_hooks().

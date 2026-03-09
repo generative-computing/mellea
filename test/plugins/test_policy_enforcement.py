@@ -148,21 +148,13 @@ class TestNonWritableFieldDiscarded:
 # ---------------------------------------------------------------------------
 
 
-class TestObserveOnlyHookAcceptsAll:
-    """Hooks absent from the policy table are documented as 'observe-only' in policies.py,
-    but in practice the PluginManager does NOT enforce a DENY default for missing hooks.
-    Modifications to any field are accepted because no policy entry restricts them.
-
-    NOTE: policies.py says "Hooks absent from this table are observe-only. With
-    DefaultHookPolicy.DENY (the Mellea default), any modification attempt on an
-    observe-only hook is rejected." However, the PluginManager is initialised without
-    an explicit default_hook_policy=DENY argument, so it falls back to ALLOW. This
-    means ALL fields on observe-only hooks are effectively writable. This is a
-    known gap — the intended DENY default is not yet enforced.
+class TestObserveOnlyHookRejectsModifications:
+    """Hooks absent from the policy table are 'observe-only': the PluginManager enforces
+    DefaultHookPolicy.DENY, silently discarding all plugin-proposed modifications.
     """
 
-    async def test_error_type_accepted_in_component_post_error(self) -> None:
-        """component_post_error is observe-only per design, but modification is accepted in practice."""
+    async def test_error_type_rejected_in_component_post_error(self) -> None:
+        """component_post_error is observe-only — plugin modifications are discarded."""
         original_error_type = "ValueError"
 
         @hook("component_post_error", priority=10)
@@ -181,16 +173,11 @@ class TestObserveOnlyHookAcceptsAll:
         )
         _, returned = await invoke_hook(HookType.COMPONENT_POST_ERROR, payload)
 
-        # GAP: component_post_error has no policy entry; the framework SHOULD reject
-        # modifications (DefaultHookPolicy.DENY), but currently accepts them.
-        assert returned.error_type == "HackedError", (
-            "component_post_error modification is accepted because the PluginManager "
-            "does not enforce DefaultHookPolicy.DENY for missing policy entries. "
-            "When the gap is fixed, change this to assert returned.error_type == original_error_type."
-        )
+        # DefaultHookPolicy.DENY is now enforced: modification is silently discarded.
+        assert returned.error_type == original_error_type
 
-    async def test_all_validations_passed_accepted_in_sampling_iteration(self) -> None:
-        """sampling_iteration is observe-only per design, but modification is accepted in practice."""
+    async def test_all_validations_passed_rejected_in_sampling_iteration(self) -> None:
+        """sampling_iteration is observe-only — plugin modifications are discarded."""
 
         @hook("sampling_iteration", priority=10)
         async def tamper_all_validations_passed(payload, ctx):
@@ -206,13 +193,8 @@ class TestObserveOnlyHookAcceptsAll:
         payload = SamplingIterationPayload(iteration=1, all_validations_passed=False)
         _, returned = await invoke_hook(HookType.SAMPLING_ITERATION, payload)
 
-        # GAP: sampling_iteration has no policy entry; modifications should be rejected
-        # but are currently accepted due to the missing DefaultHookPolicy.DENY default.
-        assert returned.all_validations_passed is True, (
-            "sampling_iteration modification is accepted because the PluginManager "
-            "does not enforce DefaultHookPolicy.DENY for missing policy entries. "
-            "When the gap is fixed, change this to assert returned.all_validations_passed is False."
-        )
+        # DefaultHookPolicy.DENY is now enforced: modification is silently discarded.
+        assert returned.all_validations_passed is False
 
 
 # ---------------------------------------------------------------------------

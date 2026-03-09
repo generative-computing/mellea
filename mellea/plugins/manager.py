@@ -28,6 +28,7 @@ _plugins_enabled: bool = False
 _session_tags: dict[str, set[str]] = {}  # session_id -> set of plugin names
 
 DEFAULT_PLUGIN_TIMEOUT: int = 5  # seconds
+DEFAULT_HOOK_POLICY: str = "deny"
 
 
 def has_plugins(hook_type: HookType | None = None) -> bool:
@@ -66,6 +67,7 @@ def ensure_plugin_manager() -> Any:
         pm = PluginManager(
             timeout=DEFAULT_PLUGIN_TIMEOUT,
             hook_policies=MELLEA_HOOK_PAYLOAD_POLICIES,  # type: ignore[arg-type]
+            default_hook_policy=DEFAULT_HOOK_POLICY,
         )
         from mellea.helpers import _run_async_in_thread
 
@@ -98,6 +100,7 @@ async def initialize_plugins(
         config_path or "",
         timeout=timeout,
         hook_policies=MELLEA_HOOK_PAYLOAD_POLICIES,  # type: ignore[arg-type]
+        default_hook_policy=DEFAULT_HOOK_POLICY,
     )
     await pm.initialize()
     _plugin_manager = pm
