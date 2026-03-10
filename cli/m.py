@@ -1,4 +1,10 @@
-"""Entrypoint for the M CLI."""
+"""Entrypoint for the ``m`` command-line tool.
+
+Wires together all CLI sub-applications into a single Typer root command: ``m serve``
+(start a model-serving endpoint), ``m alora`` (train and upload LoRA/aLoRA adapters),
+``m decompose`` (LLM-driven task decomposition), and ``m eval`` (test-based model
+evaluation). Run ``m --help`` to see all available sub-commands.
+"""
 
 import typer
 

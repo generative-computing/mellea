@@ -1,4 +1,12 @@
-"""Module for adapters to backends."""
+"""Adapter classes for adding fine-tuned modules to inference backends.
+
+Defines the abstract ``Adapter`` base class and its concrete subclasses
+``LocalHFAdapter`` (for locally loaded HuggingFace models) and ``IntrinsicAdapter``
+(for adapters whose metadata is stored in Mellea's intrinsic catalog). Also provides
+``get_adapter_for_intrinsic`` for resolving the right adapter class given an
+intrinsic name, and ``AdapterMixin`` for backends that support runtime adapter
+loading and unloading.
+"""
 
 import abc
 import pathlib

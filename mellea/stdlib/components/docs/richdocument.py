@@ -1,4 +1,12 @@
-"""Representations of Docling Documents."""
+"""``RichDocument``, ``Table``, and related helpers backed by Docling.
+
+``RichDocument`` wraps a ``DoclingDocument`` (e.g. produced by converting a PDF or
+Markdown file) and renders it as Markdown for a language model. ``Table`` represents a
+single table within a Docling document and provides ``transpose``, ``to_markdown``, and
+query/transform helpers. Use ``RichDocument.from_document_file`` to convert a PDF or
+other supported format, and ``get_tables()`` to extract structured table data for
+downstream LLM-driven Q&A or transformation tasks.
+"""
 
 from __future__ import annotations
 

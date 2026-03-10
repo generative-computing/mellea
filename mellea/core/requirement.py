@@ -1,4 +1,12 @@
-"""Interface for Requirements."""
+"""``Requirement`` interface for constrained and validated generation.
+
+A ``Requirement`` pairs a human-readable description with a validation function that
+inspects a ``Context`` (and optionally a backend) to determine whether a model output
+meets a constraint. ``ValidationResult`` carries the pass/fail verdict along with an
+optional reason, score, and the ``ModelOutputThunk`` produced during validation.
+Helper factories such as ``default_output_to_bool`` make it easy to build requirements
+without boilerplate.
+"""
 
 import re
 from collections.abc import Callable

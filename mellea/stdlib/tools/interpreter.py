@@ -1,4 +1,14 @@
-"""Code interpreter tool."""
+"""Code interpreter tool and execution environments for agentic workflows.
+
+Provides ``ExecutionResult`` (capturing stdout, stderr, success, and optional static
+analysis output) and three concrete ``ExecutionEnvironment`` implementations:
+``StaticAnalysisEnvironment`` (parse and import-check only, no execution),
+``UnsafeEnvironment`` (subprocess execution in the current Python environment), and
+``LLMSandboxEnvironment`` (Docker-isolated execution via ``llm-sandbox``). All
+environments support an optional ``allowed_imports`` allowlist. The top-level
+``code_interpreter`` and ``local_code_interpreter`` functions are ready to be wrapped
+as ``MelleaTool`` instances for ReACT or other agentic loops.
+"""
 
 import ast
 import subprocess

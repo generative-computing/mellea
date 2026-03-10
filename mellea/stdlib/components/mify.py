@@ -1,4 +1,13 @@
-"""Mify classes and objects."""
+"""The ``@mify`` decorator for turning Python objects into ``Component``s.
+
+``mify`` wraps an existing Python class or instance with the ``MifiedProtocol``
+interface, exposing its fields as named spans and its documented methods as
+``MelleaTool`` instances callable by the LLM. The resulting ``MifiedProtocol`` object
+can be queried, transformed, and formatted for a language model without any manual
+``Component`` subclassing. Use ``mify`` when you have an existing domain object
+(dataclass, Pydantic model, or plain class) that you want to expose directly to an
+LLM-driven pipeline.
+"""
 
 import inspect
 import types

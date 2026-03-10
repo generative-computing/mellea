@@ -1,4 +1,12 @@
-"""Requirements for tool-use workflows."""
+"""``Requirement`` factories for tool-use validation.
+
+Provides ``uses_tool``, a ``Requirement`` factory that validates whether a model
+response includes a call to a specified tool — useful when you need to enforce tool
+invocation via rejection sampling rather than relying solely on the model's
+``tool_choice`` setting. Also provides ``tool_arg_validator``, which validates the
+value of a specific argument to a named tool. Both accept either the tool's string
+name or its callable.
+"""
 
 from collections.abc import Callable
 

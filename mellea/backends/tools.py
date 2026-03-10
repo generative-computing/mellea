@@ -1,4 +1,11 @@
-"""Utilities for dealing with LLM tools."""
+"""LLM tool definitions, parsing, and validation for mellea backends.
+
+Provides the ``MelleaTool`` class (and the ``@tool`` decorator shorthand) for
+wrapping Python callables as OpenAI-compatible tool schemas, with factory methods
+for LangChain and smolagents interoperability. Also includes helpers for converting
+tool lists to JSON, extracting tool call requests from raw LLM output strings, and
+validating/coercing tool arguments against the tool's JSON schema using Pydantic.
+"""
 
 import inspect
 import json

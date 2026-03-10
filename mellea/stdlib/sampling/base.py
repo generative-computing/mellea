@@ -1,4 +1,12 @@
-"""Base Sampling Strategies."""
+"""Base class and built-in strategies for budget-limited, requirement-driven sampling.
+
+``BaseSamplingStrategy`` extends ``SamplingStrategy`` with a ``loop_budget`` (maximum
+number of generate/validate cycles) and optional global ``requirements`` that are
+evaluated on every sample. Concrete subclasses ``RejectionSamplingStrategy`` (retries
+the same action on failure), ``RepairTemplateStrategy`` (adds failed-requirement
+feedback to the prompt), and ``MultiTurnStrategy`` (appends a multi-turn repair
+message) are all provided here.
+"""
 
 import abc
 from copy import deepcopy

@@ -1,4 +1,10 @@
-"""Document component."""
+"""``Document`` component for grounding model inputs with text passages.
+
+``Document`` wraps a text passage with an optional ``title`` and ``doc_id``, and
+renders them inline as a formatted citation string for the model. Documents are
+typically attached to a ``Message`` via its ``documents`` parameter, enabling
+retrieval-augmented generation (RAG) workflows.
+"""
 
 from ....core import CBlock, Component, ModelOutputThunk
 

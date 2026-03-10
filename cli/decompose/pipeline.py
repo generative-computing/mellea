@@ -1,3 +1,12 @@
+"""Core decomposition pipeline that breaks a task prompt into structured subtasks.
+
+Provides the ``decompose()`` function, which orchestrates a series of LLM calls
+(subtask listing, constraint extraction, validation strategy selection, prompt
+generation, and constraint assignment) to produce a ``DecompPipelineResult``
+containing subtasks, per-subtask prompts, constraints, and dependency information.
+Supports Ollama, OpenAI-compatible, and RITS inference backends.
+"""
+
 import re
 from enum import StrEnum
 from typing import Literal, NotRequired, TypedDict

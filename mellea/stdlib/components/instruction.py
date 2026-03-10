@@ -1,4 +1,12 @@
-"""Instructions."""
+"""``Instruction`` component for instruct/validate/repair loops.
+
+``Instruction`` is the primary component type used with ``MelleaSession.instruct``. It
+packages a task ``description``, a list of ``Requirement`` constraints, optional
+in-context-learning examples, a grounding context dict, user variables for Jinja2
+template interpolation, and output/input prefix overrides into a single renderable
+unit. The session's sampling strategy evaluates each requirement against the model's
+output and may repair or resample until all requirements pass.
+"""
 
 from __future__ import annotations
 

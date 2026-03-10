@@ -1,3 +1,12 @@
+"""Typer sub-application for the ``m alora`` command group.
+
+Provides three commands: ``train`` (fine-tune a base causal language model on a JSONL
+dataset to produce a LoRA or aLoRA adapter), ``upload`` (push adapter weights to
+Hugging Face Hub, optionally packaging the adapter as an intrinsic with an
+``io.yaml`` configuration), and ``add-readme`` (use an LLM to auto-generate and
+upload an ``INTRINSIC_README.md`` for the trained adapter).
+"""
+
 import json
 import os
 import tempfile

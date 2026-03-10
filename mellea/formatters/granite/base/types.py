@@ -1,6 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
-"""Common shared types."""
+"""Common Pydantic types shared across the Granite formatter package.
+
+Defines reusable Pydantic models and mixins, including ``NoDefaultsMixin`` (which
+suppresses unset default fields from serialized JSON output) and message/request
+types for Granite model chat completions (``ChatMessage``, ``ChatCompletion``,
+``VLLMExtraBody``, ``ChatCompletionLogProbs``, and related classes). These types are
+consumed internally by the Granite intrinsic formatters.
+"""
 
 # Standard
 from typing import Annotated, Any, Literal, TypeAlias

@@ -1,4 +1,12 @@
-"""Interfaces for Sampling Strategies."""
+"""Abstract interfaces for sampling strategies and their results.
+
+``SamplingStrategy`` defines the contract for all sampling algorithms: an async
+``sample`` method that takes an action, context, backend, and requirements, and
+returns a ``SamplingResult``. ``SamplingResult`` records the chosen generation
+alongside the full history of intermediate samples, their validation outcomes,
+and associated contexts — enabling detailed post-hoc inspection of the sampling
+process.
+"""
 
 import abc
 from typing import Generic

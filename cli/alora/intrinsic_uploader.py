@@ -1,3 +1,12 @@
+"""Upload a trained adapter to Hugging Face Hub in the intrinsic directory layout.
+
+Creates or updates a private Hugging Face repository and uploads adapter weights
+into a ``<intrinsic_name>/<base_model>/<adapter_type>`` sub-directory, together with
+the required ``io.yaml`` configuration file. If an ``INTRINSIC_README.md`` exists in
+the weight directory it is also uploaded as the repository's root ``README.md``.
+Requires an authenticated Hugging Face token obtained via ``huggingface-cli login``.
+"""
+
 import os
 import shutil
 import tempfile

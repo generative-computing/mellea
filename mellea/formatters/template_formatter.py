@@ -1,4 +1,12 @@
-"""Template Formatter."""
+"""``TemplateFormatter``: Jinja2-template-based formatter for legacy backends.
+
+``TemplateFormatter`` extends ``ChatFormatter`` to look up a per-component Jinja2
+template at rendering time, allowing each ``Component`` type to control its own
+prompt representation. Template discovery walks a configurable ``template_path`` and
+the built-in templates directory; results are cached in a ``SimpleLRUCache`` for
+performance. Use this formatter when your backend requires hand-crafted prompts
+rather than a generic chat-message rendering.
+"""
 
 import os
 import re

@@ -1,4 +1,11 @@
-"""Module for Intrinsics."""
+"""``Intrinsic`` component for invoking fine-tuned adapter capabilities.
+
+An ``Intrinsic`` component references a named adapter from Mellea's intrinsic catalog
+and transforms a chat completion request — typically by injecting new messages,
+modifying model parameters, or applying structured output constraints. It must be
+paired with a backend that supports adapter loading (e.g. ``LocalHFBackend`` with an
+attached ``IntrinsicAdapter``).
+"""
 
 from ....backends.adapters import AdapterType, fetch_intrinsic_metadata
 from ....core import CBlock, Component, ModelOutputThunk, TemplateRepresentation

@@ -1,3 +1,12 @@
+"""Fine-tune a causal language model to produce a LoRA or aLoRA adapter.
+
+Loads a JSONL dataset of ``item``/``label`` pairs, applies an 80/20 train/validation
+split, and trains using HuggingFace PEFT and TRL's ``SFTTrainer`` — saving the
+checkpoint with the lowest validation loss. Supports CUDA, MPS (macOS,
+PyTorch ≥ 2.8), and CPU device selection, and handles the
+``alora_invocation_tokens`` configuration required for aLoRA training.
+"""
+
 import json
 import os
 import sys

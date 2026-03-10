@@ -1,4 +1,10 @@
-"""Utils for Core Library."""
+"""Logging utilities for the mellea core library.
+
+Provides ``FancyLogger``, a singleton logger with colour-coded console output and
+an optional REST handler (``RESTHandler``) that forwards log records to a local
+``/api/receive`` endpoint when the ``FLOG`` environment variable is set. All
+internal mellea modules obtain their logger via ``FancyLogger.get_logger()``.
+"""
 
 import json
 import logging

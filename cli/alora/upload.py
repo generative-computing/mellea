@@ -1,3 +1,11 @@
+"""Upload a trained LoRA or aLoRA adapter to Hugging Face Hub.
+
+Creates the target repository if it does not already exist and pushes the entire
+adapter weights directory (output of ``save_pretrained``) to the repository root.
+Requires an authenticated Hugging Face token set via the ``HF_TOKEN`` environment
+variable or ``huggingface-cli login``.
+"""
+
 import os
 
 from huggingface_hub import HfApi, HfFolder, create_repo, upload_folder

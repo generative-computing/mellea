@@ -1,4 +1,12 @@
-"""MObject."""
+"""``MObject``, ``Query``, ``Transform``, and ``MObjectProtocol`` for query/transform workflows.
+
+Defines the ``MObjectProtocol`` protocol for objects that can be queried and
+transformed by an LLM, and the concrete ``MObject`` base class that implements it.
+Also provides the ``Query`` and ``Transform`` ``Component`` subtypes, which wrap an
+object with a natural-language question or mutation instruction respectively. These
+primitives underpin ``@mify`` and can be composed directly to build document Q&A
+or structured extraction pipelines.
+"""
 
 from __future__ import annotations
 
