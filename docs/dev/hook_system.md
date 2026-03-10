@@ -52,18 +52,25 @@ Hooks use Python's `async`/`await` cooperative multitasking. Because Python's ev
 
 ### Execution Mode
 
-Hooks support four execution modes, configurable per-registration via the `mode` parameter on the `@hook` decorator:
+Hooks support five execution modes, configurable per-registration via the `mode` parameter on the `@hook` decorator. Each mode defines a unique combination of two orthogonal capabilities — **blocking** (halting the pipeline) and **modifying** (changing the payload):
 
-| Mode | Behavior |
-|------|----------|
-| **`PluginMode.SEQUENTIAL`** (default) | Awaited inline, executed serially in priority order. If the hook returns `PluginResult(continue_processing=False)`, execution is blocked and downstream hooks do not run. Use for policy enforcement, budget controls, and authorization. |
-| **`PluginMode.CONCURRENT`** | Awaited inline, but dispatched concurrently alongside other `concurrent` hooks at the same priority level. Violations are honored. Use when hooks are independent and ordering does not matter. |
-| **`PluginMode.AUDIT`** | Awaited inline. Violations are logged but do not block execution. Use for monitoring, auditing, and gradual rollout of policies. |
-| **`PluginMode.FIRE_AND_FORGET`** | Dispatched via `asyncio.create_task()` and runs in the background. The `PluginResult` is ignored — cannot modify payloads or block execution. Use for logging, telemetry, and non-critical side effects where latency matters more than ordering guarantees. |
+| Mode | Can block | Can modify | Execution | Use case |
+|------|:---------:|:----------:|-----------|----------|
+| **`PluginMode.SEQUENTIAL`** (default) | Yes | Yes | Serial, chained | Policy enforcement + transformation |
+| **`PluginMode.TRANSFORM`** | No | Yes | Serial, chained | Data transformation (PII redaction, prompt rewriting) |
+| **`PluginMode.AUDIT`** | No | No | Serial | Observation, logging, metrics |
+| **`PluginMode.CONCURRENT`** | Yes | No | Parallel | Independent policy gates |
+| **`PluginMode.FIRE_AND_FORGET`** | No | No | Background | Telemetry, async side effects |
 
-Fire-and-forget hooks receive the payload snapshot as it existed at dispatch time; `SEQUENTIAL`/`CONCURRENT`/`AUDIT` hooks in the same chain that execute earlier (higher priority) can modify the payload before fire-and-forget hooks see it. Any exceptions in fire-and-forget hooks are logged but do not propagate.
+Execution order: **SEQUENTIAL → TRANSFORM → AUDIT → CONCURRENT → FIRE_AND_FORGET**.
 
-> **Note**: All four modes are exposed via Mellea's own `PluginMode` enum (`PluginMode.SEQUENTIAL`, `PluginMode.CONCURRENT`, `PluginMode.AUDIT`, `PluginMode.FIRE_AND_FORGET`), which maps to CPEX's internal `PluginMode`. The additional `disabled` mode remains available in CPEX's enum and YAML configuration for deployment-time control, but is not exposed in Mellea's `PluginMode`. It is a deployment concern, not a definition-time concern.
+- **SEQUENTIAL** hooks are awaited inline, in priority order. Each receives the chained payload from prior hooks. Can halt the pipeline via `PluginResult(continue_processing=False)` and modify writable fields.
+- **TRANSFORM** hooks are awaited inline, in priority order, after all SEQUENTIAL hooks. Each receives the chained payload. Can modify writable fields but **cannot** halt the pipeline — blocking results are suppressed with a warning.
+- **AUDIT** hooks are awaited inline, in priority order, after TRANSFORM. Observe-only: payload modifications are **discarded** and violations are logged but do not block. Use for monitoring and gradual policy rollout.
+- **CONCURRENT** hooks are dispatched in parallel after AUDIT. Can halt the pipeline (fail-fast on first blocking result) but payload modifications are **discarded** to avoid non-deterministic last-writer-wins races.
+- **FIRE_AND_FORGET** hooks are dispatched via `asyncio.create_task()` after all other phases. They receive a copy-on-write snapshot of the payload. Cannot modify payloads or block execution. Any exceptions are logged but do not propagate.
+
+> **Note**: All five modes are exposed via Mellea's own `PluginMode` enum, which maps to CPEX's internal `PluginMode`. The additional `disabled` mode remains available in CPEX's enum and YAML configuration for deployment-time control, but is not exposed in Mellea's `PluginMode`. It is a deployment concern, not a definition-time concern.
 
 ### Plugin Framework
 
@@ -218,7 +225,7 @@ Hook payloads follow six design principles:
 4. **Policy-controlled** — Each hook type declares a `HookPayloadPolicy` specifying which fields are writable. The plugin manager applies the policy after each plugin returns, accepting only changes to writable fields and silently discarding unauthorized modifications. This separates "what the plugin can observe" from "what the plugin can change" — and enforces it at the framework level. See [Hook Payload Policies](#hook-payload-policies) for the full policy table.
 5. **Serializable** — Payloads should be serializable for external (MCP-based) plugins that run out-of-process. All payload fields use types that can round-trip through JSON or similar formats.
 6. **Versioned** — Payload schemas carry a `payload_version` so plugins can detect incompatible changes at registration time rather than at runtime.
-7. **Memory-safe** — Payload fields that hold live, framework-owned objects (`Context`, `Component`, `MelleaSession`, `SamplingStrategy`) are typed as `WeakProxy` (defined in `mellea/plugins/base.py`). `WeakProxy` wraps the value in `weakref.proxy()` at construction time. Plugins that cache a payload instance cannot inadvertently keep these objects alive beyond the request lifecycle. Accessing a `WeakProxy` field after the referent is garbage-collected raises `ReferenceError` — do not cache payloads for use beyond the hook invocation. Result and data fields (`model_output`, `result`, `final_result`, `generate_log`, etc.) remain strong references because plugins may legitimately retain output data.
+7. **Isolation** — Each plugin receives a copy-on-write (CoW) snapshot of the payload. Mutable containers (dicts, lists) are wrapped so mutations in one plugin do not affect others. Plugins should not cache payloads beyond the hook invocation — payload fields reference live framework objects (`Context`, `Component`, `MelleaSession`) whose lifecycle is managed by the framework.
 
 ## 2. Common Payload Fields
 
@@ -433,9 +440,8 @@ Hooks that manage session boundaries, useful for initialization, state setup, an
 - **Payload**:
   ```python
   class SessionPostInitPayload(BasePayload):
-      session: MelleaSession         # Fully initialized session (observe-only, WeakProxy)
+      session: MelleaSession         # Fully initialized session (observe-only)
   ```
-  > `session` is held as a `WeakProxy`. Do not cache this payload — accessing the field after the session is garbage-collected raises `ReferenceError`.
 - **Context**:
   - `backend_name`: str - Backend identifier
 
@@ -450,9 +456,8 @@ Hooks that manage session boundaries, useful for initialization, state setup, an
 - **Payload**:
   ```python
   class SessionResetPayload(BasePayload):
-      previous_context: Context      # Context about to be discarded (observe-only, WeakProxy)
+      previous_context: Context      # Context about to be discarded (observe-only)
   ```
-  > `previous_context` is held as a `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend_name`: str - Backend identifier
 
@@ -468,10 +473,9 @@ Hooks that manage session boundaries, useful for initialization, state setup, an
 - **Payload**:
   ```python
   class SessionCleanupPayload(BasePayload):
-      context: Context               # Context at cleanup time (observe-only, WeakProxy)
+      context: Context               # Context at cleanup time (observe-only)
       interaction_count: int         # Number of items in context at cleanup
   ```
-  > `context` is held as a `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend_name`: str - Backend identifier
 
@@ -567,16 +571,15 @@ Plugins should check for `None`/empty values rather than assuming all fields are
   ```python
   class ComponentPreExecutePayload(BasePayload):
       component_type: str            # "Instruction", "GenerativeSlot", etc.
-      action: Component | CBlock     # The component to execute (writable, WeakProxy)
-      context: Context               # Current context (writable, WeakProxy)
+      action: Component | CBlock     # The component to execute (writable)
+      context: Context               # Current context (writable)
       context_view: list[Component | CBlock] | None  # Linearized context (writable)
       requirements: list[Requirement]  # Attached requirements (writable)
       model_options: dict            # Generation parameters (writable)
       format: type | None            # Structured output format (writable)
-      strategy: SamplingStrategy | None  # Sampling strategy (writable, WeakProxy)
+      strategy: SamplingStrategy | None  # Sampling strategy (writable)
       tool_calls_enabled: bool       # Whether tools are available (writable)
   ```
-  > `action`, `context`, and `strategy` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -596,15 +599,11 @@ Plugins should check for `None`/empty values rather than assuming all fields are
   ```python
   class ComponentPostSuccessPayload(BasePayload):
       component_type: str            # "Instruction", "GenerativeSlot", etc.
-      action: Component | CBlock     # Executed component (WeakProxy)
-      result: ModelOutputThunk       # Generation result (writable, strong reference)
-      context_before: Context        # Context before execution (WeakProxy)
-      context_after: Context         # Context after execution (WeakProxy)
-      generate_log: GenerateLog      # Detailed execution log (strong reference)
+      action: Component | CBlock     # Executed component      result: ModelOutputThunk       # Generation result (writable, strong reference)
+      context_before: Context        # Context before execution      context_after: Context         # Context after execution      generate_log: GenerateLog      # Detailed execution log (strong reference)
       sampling_results: list[SamplingResult] | None  # If sampling was used (strong reference)
       latency_ms: int                # Execution time
   ```
-  > `action`, `context_before`, and `context_after` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -632,14 +631,11 @@ Plugins should check for `None`/empty values rather than assuming all fields are
   ```python
   class ComponentPostErrorPayload(BasePayload):
       component_type: str            # "Instruction", "GenerativeSlot", etc.
-      action: Component | CBlock     # Component that failed (WeakProxy)
-      error: Exception               # The exception raised (strong reference)
+      action: Component | CBlock     # Component that failed      error: Exception               # The exception raised (strong reference)
       error_type: str                # Exception class name
       stack_trace: str               # Full stack trace
-      context: Context               # Context at time of error (WeakProxy)
-      model_options: dict            # Options used
+      context: Context               # Context at time of error      model_options: dict            # Options used
   ```
-  > `action` and `context` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -670,13 +666,10 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
 - **Payload**:
   ```python
   class GenerationPreCallPayload(BasePayload):
-      action: Component | CBlock           # Source action (WeakProxy)
-      context: Context                     # Current context (WeakProxy)
-      model_options: dict[str, Any]        # Generation parameters (writable)
+      action: Component | CBlock           # Source action      context: Context                     # Current context      model_options: dict[str, Any]        # Generation parameters (writable)
       format: type | None                  # Structured output format (writable)
       tool_calls: bool                     # Whether tool calling is enabled (writable)
   ```
-  > `action` and `context` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -758,11 +751,8 @@ Hooks around requirement verification and output validation. These operate on th
   ```python
   class ValidationPreCheckPayload(BasePayload):
       requirements: list[Requirement]  # Requirements to check (writable)
-      target: CBlock | None            # Target to validate (WeakProxy)
-      context: Context                 # Current context (WeakProxy)
-      model_options: dict              # Options for LLM-as-judge (writable)
+      target: CBlock | None            # Target to validate      context: Context                 # Current context      model_options: dict              # Options for LLM-as-judge (writable)
   ```
-  > `target` and `context` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -810,12 +800,9 @@ Hooks around sampling strategies and failure recovery. These operate on the (Bac
   ```python
   class SamplingLoopStartPayload(BasePayload):
       strategy_name: str             # Strategy class name
-      action: Component              # Initial action (WeakProxy)
-      context: Context               # Initial context (WeakProxy)
-      requirements: list[Requirement]  # All requirements
+      action: Component              # Initial action      context: Context               # Initial context      requirements: list[Requirement]  # All requirements
       loop_budget: int               # Maximum iterations (writable)
   ```
-  > `action` and `context` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -835,14 +822,12 @@ Hooks around sampling strategies and failure recovery. These operate on the (Bac
   ```python
   class SamplingIterationPayload(BasePayload):
       iteration: int                 # 1-based iteration number
-      action: Component              # Action used this iteration (WeakProxy)
-      result: ModelOutputThunk       # Generation result (strong reference)
+      action: Component              # Action used this iteration      result: ModelOutputThunk       # Generation result (strong reference)
       validation_results: list[tuple[Requirement, ValidationResult]]
       all_validations_passed: bool   # Did all requirements pass
       valid_count: int
       total_count: int
   ```
-  > `action` is held as a `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -868,14 +853,12 @@ Hooks around sampling strategies and failure recovery. These operate on the (Bac
   ```python
   class SamplingRepairPayload(BasePayload):
       repair_type: str               # "identity" | "template_repair" | "multi_turn_message" | "sofai_feedback" | "custom"
-      failed_action: Component       # Action that failed (WeakProxy)
-      failed_result: ModelOutputThunk  # Failed output (strong reference)
+      failed_action: Component       # Action that failed      failed_result: ModelOutputThunk  # Failed output (strong reference)
       failed_validations: list[tuple[Requirement, ValidationResult]]
-      repair_action: Component       # New action for retry (writable, WeakProxy)
-      repair_context: Context        # Context for retry (writable, WeakProxy)
+      repair_action: Component       # New action for retry (writable)
+      repair_context: Context        # Context for retry (writable)
       repair_iteration: int          # 1-based iteration at which repair was triggered
   ```
-  > `failed_action`, `repair_action`, and `repair_context` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context
@@ -897,13 +880,10 @@ Hooks around sampling strategies and failure recovery. These operate on the (Bac
       success: bool                  # Did sampling succeed
       iterations_used: int           # Total iterations performed
       final_result: ModelOutputThunk | None  # Best result (writable, strong reference)
-      final_action: Component | None         # Component that produced final_result (WeakProxy)
-      final_context: Context | None          # Context for final_result (WeakProxy)
-      failure_reason: str | None     # If failed, why
+      final_action: Component | None         # Component that produced final_result      final_context: Context | None          # Context for final_result      failure_reason: str | None     # If failed, why
       all_results: list[ModelOutputThunk]    # All iteration results (strong references)
       all_validations: list[list[tuple[Requirement, ValidationResult]]]
   ```
-  > `final_action` and `final_context` are held as `WeakProxy`. Do not cache this payload.
 - **Context**:
   - `backend`: Backend
   - `context`: Context

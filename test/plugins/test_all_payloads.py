@@ -66,8 +66,9 @@ _SENTINEL_VALIDATION_RESULT = object()
 class TestSessionPostInitPayload:
     def test_defaults(self):
         payload = SessionPostInitPayload()
-        assert payload.session is None
-        assert payload.session_id is None
+        assert payload.session_id == ""
+        assert payload.model_id == ""
+        assert payload.context is None
         assert payload.request_id == ""
         assert payload.hook == ""
         assert payload.user_metadata == {}
@@ -75,20 +76,22 @@ class TestSessionPostInitPayload:
 
     def test_construction_with_values(self):
         payload = SessionPostInitPayload(
-            session=_SENTINEL_SESSION,
             session_id="s-001",
+            model_id="granite4:micro",
+            context=_SENTINEL_CONTEXT,
             request_id="r-001",
             hook="session_post_init",
         )
-        assert payload.session is _SENTINEL_SESSION
         assert payload.session_id == "s-001"
+        assert payload.model_id == "granite4:micro"
+        assert payload.context is _SENTINEL_CONTEXT
         assert payload.request_id == "r-001"
         assert payload.hook == "session_post_init"
 
     def test_frozen(self):
-        payload = SessionPostInitPayload(session=_SENTINEL_SESSION)
+        payload = SessionPostInitPayload(session_id="s-001")
         with pytest.raises(ValidationError):
-            payload.session = object()
+            payload.session_id = "s-002"
 
     def test_frozen_base_field(self):
         payload = SessionPostInitPayload(request_id="r-001")
@@ -96,11 +99,12 @@ class TestSessionPostInitPayload:
             payload.request_id = "r-002"
 
     def test_model_copy_creates_modified_copy(self):
-        new_session = object()
-        payload = SessionPostInitPayload(session=_SENTINEL_SESSION, request_id="r-001")
-        modified = payload.model_copy(update={"session": new_session})
-        assert modified.session is new_session
-        assert payload.session is _SENTINEL_SESSION
+        payload = SessionPostInitPayload(
+            session_id="s-001", model_id="gpt-4", request_id="r-001"
+        )
+        modified = payload.model_copy(update={"model_id": "gpt-3.5"})
+        assert modified.model_id == "gpt-3.5"
+        assert payload.model_id == "gpt-4"
         assert modified.request_id == "r-001"
 
     def test_inherits_base_fields(self):

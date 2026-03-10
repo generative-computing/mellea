@@ -317,13 +317,8 @@ class BaseSamplingStrategy(SamplingStrategy):
                 _, repair_payload = await invoke_hook(
                     HookType.SAMPLING_REPAIR, repair_payload, backend=backend
                 )
-                # WeakProxy fields: guard against GC'd referents
-                _rep_action = repair_payload.repair_action
-                next_action = _rep_action if _rep_action is not None else next_action
-                _rep_context = repair_payload.repair_context
-                next_context = (
-                    _rep_context if _rep_context is not None else next_context
-                )
+                next_action = repair_payload.repair_action or next_action
+                next_context = repair_payload.repair_context or next_context
 
         flog.info(
             f"Invoking select_from_failure after {len(sampled_results)} failed attempts."

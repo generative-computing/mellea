@@ -15,9 +15,13 @@ except ImportError:
 
 
 class PluginMode(str, Enum):
-    """Execution modes for Mellea plugins."""
+    """Execution modes for Mellea plugins.
+
+    Execution order: SEQUENTIAL → TRANSFORM → AUDIT → CONCURRENT → FIRE_AND_FORGET
+    """
 
     SEQUENTIAL = "sequential"
+    TRANSFORM = "transform"
     CONCURRENT = "concurrent"
     AUDIT = "audit"
     FIRE_AND_FORGET = "fire_and_forget"

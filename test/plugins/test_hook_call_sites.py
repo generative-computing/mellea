@@ -655,9 +655,9 @@ class TestSessionHookCallSites:
 
         assert len(observed) == 1
 
-    def test_session_post_init_payload_has_live_session(self) -> None:
-        """SESSION_POST_INIT payload.session is a live (weak) reference to the MelleaSession."""
-        from mellea.stdlib.session import MelleaSession, start_session
+    def test_session_post_init_payload_has_session_metadata(self) -> None:
+        """SESSION_POST_INIT payload contains session_id, model_id, and context."""
+        from mellea.stdlib.session import start_session
 
         observed: list[Any] = []
 
@@ -671,11 +671,12 @@ class TestSessionHookCallSites:
         with patch(
             "mellea.stdlib.session.backend_name_to_class", return_value=_MockBackend
         ):
-            _ = start_session("ollama", model_id="test-model")
+            session = start_session("ollama", model_id="test-model")
 
         p = observed[0]
-        # payload.session is a weakref.proxy — use isinstance to verify the type
-        assert isinstance(p.session, MelleaSession)
+        assert p.session_id == session.id
+        assert p.model_id == "test-model"
+        assert p.context is not None
 
     def test_pre_init_fires_before_post_init(self) -> None:
         """SESSION_PRE_INIT fires before SESSION_POST_INIT."""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mellea.plugins.base import MelleaBasePayload, WeakProxy
+from mellea.plugins.base import MelleaBasePayload
 
 
 class GenerationPreCallPayload(MelleaBasePayload):
@@ -12,16 +12,16 @@ class GenerationPreCallPayload(MelleaBasePayload):
 
     Attributes:
         action: The ``Component`` or ``CBlock`` about to be sent to the backend.
-            Held as a weak reference — do not cache this payload.
+
         context: The ``Context`` being used for this generation call.
-            Held as a weak reference — do not cache this payload.
+
         model_options: Dict of model options (writable — plugins may adjust temperature, etc.).
         format: Optional ``BaseModel`` subclass for constrained decoding (writable).
         tool_calls: Whether tool calls are enabled for this generation (writable).
     """
 
-    action: WeakProxy = None
-    context: WeakProxy = None
+    action: Any = None
+    context: Any = None
     model_options: dict[str, Any] = {}
     format: Any = None
     tool_calls: bool = False

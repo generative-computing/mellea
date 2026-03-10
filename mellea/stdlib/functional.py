@@ -499,8 +499,6 @@ async def aact(
                 "\nSee the async section of the tutorial: https://github.com/generative-computing/mellea/blob/main/docs/tutorial.md#chapter-12-asynchronicity"
             )
 
-        # Capture the component type name before hooks may replace `action`
-        # with a WeakProxy (whose type().__name__ would be "ProxyType").
         _component_type_name = type(action).__name__
 
         # --- component_pre_execute hook ---
@@ -520,15 +518,9 @@ async def aact(
             _, pre_exec_payload = await invoke_hook(
                 HookType.COMPONENT_PRE_EXECUTE, pre_exec_payload, backend=backend
             )
-            # WeakProxy fields: read back but guard against GC'd referents.
-            # _component_type_name was captured above since type() on a proxy
-            # returns ProxyType.
-            _pre_action = pre_exec_payload.action
-            action = _pre_action if _pre_action is not None else action
-            _pre_context = pre_exec_payload.context
-            context = _pre_context if _pre_context is not None else context
-            _pre_strategy = pre_exec_payload.strategy
-            strategy = _pre_strategy if _pre_strategy is not None else strategy
+            action = pre_exec_payload.action or action
+            context = pre_exec_payload.context or context
+            strategy = pre_exec_payload.strategy or strategy
             requirements = pre_exec_payload.requirements or requirements
             model_options = pre_exec_payload.model_options or model_options
             format = pre_exec_payload.format

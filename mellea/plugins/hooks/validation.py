@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mellea.plugins.base import MelleaBasePayload, WeakProxy
+from mellea.plugins.base import MelleaBasePayload
 
 
 class ValidationPreCheckPayload(MelleaBasePayload):
@@ -13,15 +13,15 @@ class ValidationPreCheckPayload(MelleaBasePayload):
     Attributes:
         requirements: List of ``Requirement`` instances to validate (writable).
         target: The ``CBlock`` being validated, or ``None`` when validating the full context.
-            Held as a weak reference — do not cache this payload.
+
         context: The ``Context`` used for validation.
-            Held as a weak reference — do not cache this payload.
+
         model_options: Dict of model options for backend-based validators (writable).
     """
 
     requirements: list[Any] = []
-    target: WeakProxy = None
-    context: WeakProxy = None
+    target: Any = None
+    context: Any = None
     model_options: dict[str, Any] = {}
 
 

@@ -232,7 +232,9 @@ def start_session(
         if has_plugins(HookType.SESSION_POST_INIT):
             from ..plugins.hooks.session import SessionPostInitPayload
 
-            post_payload = SessionPostInitPayload(session=session)
+            post_payload = SessionPostInitPayload(
+                session_id=session.id, model_id=model_id_str, context=session.ctx
+            )
             _run_async_in_thread(
                 invoke_hook(HookType.SESSION_POST_INIT, post_payload, backend=backend)
             )

@@ -15,8 +15,13 @@ except ImportError:
 def _build_policies() -> dict[str, Any]:
     """Build per-hook-type payload modification policies.
 
-    Hooks absent from this table are observe-only.  With ``DefaultHookPolicy.DENY``
-    (the Mellea default), any modification attempt on an observe-only hook is rejected.
+    Payload mutability is governed by **this policy table**, not by the hook's
+    execution mode (SEQUENTIAL, AUDIT, CONCURRENT, etc.).  cpex applies the
+    same ``_apply_payload_modification()`` logic for every mode — it is the
+    ``HookPayloadPolicy`` returned here that decides which fields a plugin may
+    write to.  Hooks absent from this table are observe-only; with
+    ``DefaultHookPolicy.DENY`` (the Mellea default), any modification attempt
+    on an observe-only hook is rejected by cpex at runtime.
     """
     if not _HAS_PLUGIN_FRAMEWORK:
         return {}

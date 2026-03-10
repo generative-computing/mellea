@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mellea.plugins.base import MelleaBasePayload, WeakProxy
+from mellea.plugins.base import MelleaBasePayload
 
 
 class SamplingLoopStartPayload(MelleaBasePayload):
@@ -13,16 +13,16 @@ class SamplingLoopStartPayload(MelleaBasePayload):
     Attributes:
         strategy_name: Class name of the sampling strategy (e.g. ``"RejectionSamplingStrategy"``).
         action: The ``Component`` being sampled.
-            Held as a weak reference — do not cache this payload.
+
         context: The ``Context`` at the start of sampling.
-            Held as a weak reference — do not cache this payload.
+
         requirements: List of ``Requirement`` instances to validate against.
         loop_budget: Maximum number of sampling iterations allowed (writable).
     """
 
     strategy_name: str = ""
-    action: WeakProxy = None
-    context: WeakProxy = None
+    action: Any = None
+    context: Any = None
     requirements: list[Any] = []
     loop_budget: int = 0
 
@@ -33,7 +33,7 @@ class SamplingIterationPayload(MelleaBasePayload):
     Attributes:
         iteration: 1-based iteration number within the sampling loop.
         action: The ``Component`` used for this attempt.
-            Held as a weak reference — do not cache this payload.
+
         result: The ``ModelOutputThunk`` produced by this attempt.
         validation_results: List of ``(Requirement, ValidationResult)`` tuples.
         all_validations_passed: ``True`` when **every** requirement in ``validation_results``
@@ -43,7 +43,7 @@ class SamplingIterationPayload(MelleaBasePayload):
     """
 
     iteration: int = 0
-    action: WeakProxy = None
+    action: Any = None
     result: Any = None
     validation_results: list[tuple[Any, Any]] = []
     all_validations_passed: bool = False
@@ -57,22 +57,20 @@ class SamplingRepairPayload(MelleaBasePayload):
     Attributes:
         repair_type: Kind of repair (strategy-dependent, e.g. ``"rejection"``, ``"template"``).
         failed_action: The ``Component`` that failed validation.
-            Held as a weak reference — do not cache this payload.
+
         failed_result: The ``ModelOutputThunk`` that failed validation.
         failed_validations: List of ``(Requirement, ValidationResult)`` tuples that failed.
         repair_action: The repaired ``Component`` to use for the next attempt (writable).
-            Held as a weak reference — do not cache this payload.
         repair_context: The ``Context`` to use for the next attempt (writable).
-            Held as a weak reference — do not cache this payload.
         repair_iteration: 1-based iteration at which the repair was triggered.
     """
 
     repair_type: str = ""
-    failed_action: WeakProxy = None
+    failed_action: Any = None
     failed_result: Any = None
     failed_validations: list[tuple[Any, Any]] = []
-    repair_action: WeakProxy = None
-    repair_context: WeakProxy = None
+    repair_action: Any = None
+    repair_context: Any = None
     repair_iteration: int = 0
 
 
@@ -84,9 +82,9 @@ class SamplingLoopEndPayload(MelleaBasePayload):
         iterations_used: Total number of iterations the loop executed.
         final_result: The selected ``ModelOutputThunk`` (best success or best failure) (writable).
         final_action: The ``Component`` that produced ``final_result``.
-            Held as a weak reference — do not cache this payload.
+
         final_context: The ``Context`` associated with ``final_result``.
-            Held as a weak reference — do not cache this payload.
+
         failure_reason: Human-readable reason when ``success`` is ``False``.
         all_results: List of ``ModelOutputThunk`` from every iteration.
         all_validations: Nested list — ``all_validations[i]`` is the list of
@@ -96,8 +94,8 @@ class SamplingLoopEndPayload(MelleaBasePayload):
     success: bool = False
     iterations_used: int = 0
     final_result: Any = None
-    final_action: WeakProxy = None
-    final_context: WeakProxy = None
+    final_action: Any = None
+    final_context: Any = None
     failure_reason: str | None = None
     all_results: list[Any] = []
     all_validations: list[list[tuple[Any, Any]]] = []

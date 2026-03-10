@@ -1,20 +1,22 @@
-"""Tests for hook execution modes: enforce, permissive, and fire_and_forget.
+"""Tests for hook execution modes.
+
+Execution order: SEQUENTIAL → TRANSFORM → AUDIT → CONCURRENT → FIRE_AND_FORGET
 
 behavior summary
 -----------------
-- ``mode=SEQUENTIAL`` (default): hook is awaited inline. If ``continue_processing=False``
-  the ContextForge executor stops the chain and returns the blocking result; Mellea's
-  ``invoke_hook`` then raises ``PluginViolationError``.
+- ``mode=SEQUENTIAL`` (default): serial, chained. Can block and modify payloads.
 
-- ``mode=AUDIT``: hook is awaited inline. If ``continue_processing=False`` the
-  ContextForge executor logs the violation but lets the loop continue.  The aggregate
-  result returned to Mellea always has ``continue_processing=True``, so ``invoke_hook``
-  does NOT raise.
+- ``mode=TRANSFORM``: serial, chained. Can modify payloads but cannot block — blocking
+  results are suppressed.
 
-- ``mode=FIRE_AND_FORGET``: mapped to ``PluginMode.OBSERVE`` at the ContextForge level.
-  The hook is dispatched as a background ``asyncio.create_task`` and the pipeline
-  continues immediately.  Violations are logged but never raised as exceptions, and
-  payload modifications are discarded (the pipeline sees the original payload).
+- ``mode=AUDIT``: serial, observe-only. Cannot block or modify — violations are logged
+  and payload modifications are discarded.
+
+- ``mode=CONCURRENT``: parallel, fail-fast. Can block but cannot modify — payload
+  modifications are discarded to avoid non-deterministic races.
+
+- ``mode=FIRE_AND_FORGET``: background ``asyncio.create_task``. Cannot block or modify.
+  Receives an isolated snapshot.
 """
 
 from __future__ import annotations
@@ -308,22 +310,22 @@ class TestAuditMode:
         assert order == ["enforce", "permissive"]
 
     @pytest.mark.asyncio
-    async def test_permissive_continuing_hook_modifies_writable_field(self) -> None:
-        """A permissive hook that does NOT block and modifies a writable field applies the change."""
+    async def test_audit_modification_is_discarded(self) -> None:
+        """AUDIT hooks are observe-only — payload modifications are discarded."""
 
         @hook("session_pre_init", mode=PluginMode.AUDIT)
-        async def permissive_modifier(payload, ctx):
-            modified = payload.model_copy(update={"model_id": "permissive-model"})
+        async def audit_modifier(payload, ctx):
+            modified = payload.model_copy(update={"model_id": "audit-model"})
             return PluginResult(continue_processing=True, modified_payload=modified)
 
-        register(permissive_modifier)
+        register(audit_modifier)
 
         payload = _session_payload(model_id="original-model")
         _result, returned_payload = await invoke_hook(
             HookType.SESSION_PRE_INIT, payload
         )
 
-        assert returned_payload.model_id == "permissive-model"
+        assert returned_payload.model_id == "original-model"
 
 
 # ---------------------------------------------------------------------------
@@ -462,3 +464,181 @@ class TestFireAndForgetMode:
         )
 
         assert returned_payload.backend_name == "unchanged"
+
+
+# ---------------------------------------------------------------------------
+# Transform mode
+# ---------------------------------------------------------------------------
+
+
+class TestTransformMode:
+    """TRANSFORM plugins can modify payloads but cannot block the pipeline."""
+
+    @pytest.mark.asyncio
+    async def test_transform_modifies_writable_field(self) -> None:
+        """A TRANSFORM hook can modify writable fields."""
+
+        @hook("session_pre_init", mode=PluginMode.TRANSFORM)
+        async def xform_modifier(payload, ctx):
+            modified = payload.model_copy(update={"model_id": "transformed-model"})
+            return PluginResult(continue_processing=True, modified_payload=modified)
+
+        register(xform_modifier)
+
+        payload = _session_payload(model_id="original-model")
+        _result, returned_payload = await invoke_hook(
+            HookType.SESSION_PRE_INIT, payload
+        )
+
+        assert returned_payload.model_id == "transformed-model"
+
+    @pytest.mark.asyncio
+    async def test_transform_cannot_block(self) -> None:
+        """A TRANSFORM hook returning continue_processing=False is suppressed."""
+
+        @hook("session_pre_init", mode=PluginMode.TRANSFORM)
+        async def xform_blocker(payload, ctx):
+            return block("Should be suppressed")
+
+        register(xform_blocker)
+
+        payload = _session_payload()
+        # Should NOT raise — blocking is suppressed for TRANSFORM
+        _result, returned_payload = await invoke_hook(
+            HookType.SESSION_PRE_INIT, payload
+        )
+        assert returned_payload.backend_name == "test-backend"
+
+    @pytest.mark.asyncio
+    async def test_transform_chains_between_plugins(self) -> None:
+        """Two TRANSFORM hooks chain their modifications."""
+
+        @hook("session_pre_init", mode=PluginMode.TRANSFORM, priority=1)
+        async def xform_a(payload, ctx):
+            modified = payload.model_copy(update={"backend_name": "step-a"})
+            return PluginResult(continue_processing=True, modified_payload=modified)
+
+        @hook("session_pre_init", mode=PluginMode.TRANSFORM, priority=2)
+        async def xform_b(payload, ctx):
+            # Should see step-a from the previous plugin
+            modified = payload.model_copy(
+                update={"model_id": f"after-{payload.backend_name}"}
+            )
+            return PluginResult(continue_processing=True, modified_payload=modified)
+
+        register(xform_a)
+        register(xform_b)
+
+        payload = _session_payload()
+        _result, returned_payload = await invoke_hook(
+            HookType.SESSION_PRE_INIT, payload
+        )
+
+        assert returned_payload.backend_name == "step-a"
+        assert returned_payload.model_id == "after-step-a"
+
+    @pytest.mark.asyncio
+    async def test_transform_runs_after_sequential(self) -> None:
+        """TRANSFORM hooks run after SEQUENTIAL hooks regardless of priority."""
+        order: list[str] = []
+
+        @hook("session_pre_init", mode=PluginMode.SEQUENTIAL, priority=99)
+        async def seq_hook(payload, ctx):
+            order.append("sequential")
+            return None
+
+        @hook("session_pre_init", mode=PluginMode.TRANSFORM, priority=1)
+        async def xform_hook(payload, ctx):
+            order.append("transform")
+            return None
+
+        register(seq_hook)
+        register(xform_hook)
+
+        await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
+
+        assert order == ["sequential", "transform"]
+
+    @pytest.mark.asyncio
+    async def test_transform_runs_before_audit(self) -> None:
+        """TRANSFORM hooks run before AUDIT hooks."""
+        order: list[str] = []
+
+        @hook("session_pre_init", mode=PluginMode.AUDIT, priority=1)
+        async def audit_hook(payload, ctx):
+            order.append("audit")
+            return None
+
+        @hook("session_pre_init", mode=PluginMode.TRANSFORM, priority=99)
+        async def xform_hook(payload, ctx):
+            order.append("transform")
+            return None
+
+        register(audit_hook)
+        register(xform_hook)
+
+        await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
+
+        assert order == ["transform", "audit"]
+
+
+# ---------------------------------------------------------------------------
+# Concurrent mode
+# ---------------------------------------------------------------------------
+
+
+class TestConcurrentMode:
+    """CONCURRENT plugins can block but cannot modify payloads."""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_can_block(self) -> None:
+        """A CONCURRENT hook returning continue_processing=False raises."""
+
+        @hook("session_pre_init", mode=PluginMode.CONCURRENT)
+        async def conc_blocker(payload, ctx):
+            return block("Blocked by concurrent gate")
+
+        register(conc_blocker)
+
+        with pytest.raises(PluginViolationError):
+            await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
+
+    @pytest.mark.asyncio
+    async def test_concurrent_modification_is_discarded(self) -> None:
+        """CONCURRENT hooks cannot modify payloads — modifications are discarded."""
+
+        @hook("session_pre_init", mode=PluginMode.CONCURRENT)
+        async def conc_modifier(payload, ctx):
+            modified = payload.model_copy(update={"model_id": "concurrent-model"})
+            return PluginResult(continue_processing=True, modified_payload=modified)
+
+        register(conc_modifier)
+
+        payload = _session_payload(model_id="original-model")
+        _result, returned_payload = await invoke_hook(
+            HookType.SESSION_PRE_INIT, payload
+        )
+
+        assert returned_payload.model_id == "original-model"
+
+    @pytest.mark.asyncio
+    async def test_concurrent_runs_after_audit(self) -> None:
+        """CONCURRENT hooks run after AUDIT hooks."""
+        order: list[str] = []
+
+        @hook("session_pre_init", mode=PluginMode.CONCURRENT, priority=1)
+        async def conc_hook(payload, ctx):
+            order.append("concurrent")
+            return None
+
+        @hook("session_pre_init", mode=PluginMode.AUDIT, priority=99)
+        async def audit_hook(payload, ctx):
+            order.append("audit")
+            return None
+
+        register(conc_hook)
+        register(audit_hook)
+
+        await invoke_hook(HookType.SESSION_PRE_INIT, _session_payload())
+
+        assert order == ["audit", "concurrent"]

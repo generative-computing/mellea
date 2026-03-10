@@ -31,6 +31,7 @@ _MODE_MAP: dict[PluginMode, Any] = {}
 if _HAS_PLUGIN_FRAMEWORK:
     _MODE_MAP = {
         PluginMode.SEQUENTIAL: _CFPluginMode.SEQUENTIAL,
+        PluginMode.TRANSFORM: _CFPluginMode.TRANSFORM,
         PluginMode.CONCURRENT: _CFPluginMode.CONCURRENT,
         PluginMode.AUDIT: _CFPluginMode.AUDIT,
         PluginMode.FIRE_AND_FORGET: _CFPluginMode.FIRE_AND_FORGET,
