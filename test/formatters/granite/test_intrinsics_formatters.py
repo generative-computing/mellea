@@ -737,7 +737,7 @@ def test_run_ollama(yaml_json_combo_for_ollama):
 
     # Prepare inputs for inference
     transformed_input = rewriter.transform(model_input, **transform_kwargs)
-    print(transformed_input.model_dump_json(indent=4))
+    # print(transformed_input.model_dump_json(indent=4))
 
     # Load a canned model response for the mock Ollama backend
     canned_output_file = _CANNED_OUTPUT_MODEL_OUTPUT_DIR / f"{cfg.short_name}.json"
@@ -757,7 +757,7 @@ def test_run_ollama(yaml_json_combo_for_ollama):
 
     # Pull this string out of the debugger to create a fresh model outputs file.
     responses_str = chat_completion.choices[0].model_dump_json(indent=4)
-    print(responses_str)
+    print("Responses:", responses_str[:100])
 
     # Output processing
     transformed_responses = result_processor.transform(
@@ -766,7 +766,7 @@ def test_run_ollama(yaml_json_combo_for_ollama):
 
     # Pull this string out of the debugger to create a fresh expected file.
     transformed_str = transformed_responses.model_dump_json(indent=4)
-    print(transformed_str)
+    print("Transformed:", transformed_str[:100])
 
     with open(
         _TEST_DATA_DIR / f"test_run_ollama/{cfg.short_name}.json", encoding="utf-8"
@@ -791,4 +791,9 @@ def test_run_ollama(yaml_json_combo_for_ollama):
             t_json = json.loads(tc.message.content)
             e_json = json.loads(ec.message.content)
 
+            if t_json != pytest.approx(e_json, abs=0.1):
+                # Workaround for pytest bug
+                print("Assertion is about to fail.")
+                print(f"   {t_json=}")
+                print(f"   {e_json=}")
             assert t_json == pytest.approx(e_json, abs=0.1)
