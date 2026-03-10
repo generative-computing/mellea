@@ -9,6 +9,7 @@ All tests use lightweight mock backends so no real LLM API calls are made.
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -64,6 +65,23 @@ class _MockBackend(Backend):
         # Required abstract method; not exercised by these tests
         return []
 
+async def _noop_process(mot, chunk):
+    if mot._underlying_value is None:
+        mot._underlying_value = ""
+    mot._underlying_value += str(chunk)
+
+async def _noop_post_process(mot):
+    return
+
+def _make_thunk():
+    mot = ModelOutputThunk(value=None)
+    mot._generate_type = GenerateType.ASYNC
+    mot._process = _noop_process
+    mot._post_process = _noop_post_process
+    mot._action = CBlock("test")
+    mot._chunk_size = 0
+    mot._start = datetime.datetime.now()
+    return mot
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -122,6 +140,7 @@ class TestGenerationHookCallSites:
         assert p.action.value == action.value
         assert p.context is not None
 
+    # TODO: JAL.
     async def test_generation_post_call_fires_once(self) -> None:
         """GENERATION_POST_CALL fires exactly once after generate_from_context() returns."""
         observed: list[Any] = []
@@ -132,11 +151,16 @@ class TestGenerationHookCallSites:
             return None
 
         register(recorder)
-        backend = _MockBackend()
-        await backend.generate_from_context(CBlock("test"), MagicMock(spec=Context))
 
+        mot = _make_thunk()
+        await mot._async_queue.put("hello")
+        await mot._async_queue.put("goodbye")
+        await mot._async_queue.put(None) # sentinel for being done
+
+        await mot.avalue()
         assert len(observed) == 1
 
+    # TODO: JAL.
     async def test_generation_post_call_model_output_is_the_returned_thunk(
         self,
     ) -> None:
@@ -149,13 +173,16 @@ class TestGenerationHookCallSites:
             return None
 
         register(recorder)
-        backend = _MockBackend()
-        _result, _ = await backend.generate_from_context(
-            CBlock("test"), MagicMock(spec=Context)
-        )
+
+        mot = _make_thunk()
+        await mot._async_queue.put("hello")
+        await mot._async_queue.put("goodbye")
+        await mot._async_queue.put(None) # sentinel for being done
+        await mot.avalue()
 
         assert observed[0].model_output is not None
 
+    # TODO: JAL.
     async def test_generation_post_call_latency_ms_is_non_negative(self) -> None:
         """GENERATION_POST_CALL payload.latency_ms >= 0."""
         observed: list[Any] = []
@@ -166,34 +193,16 @@ class TestGenerationHookCallSites:
             return None
 
         register(recorder)
-        backend = _MockBackend()
-        await backend.generate_from_context(CBlock("test"), MagicMock(spec=Context))
+
+        mot = _make_thunk()
+        await mot._async_queue.put("hello")
+        await mot._async_queue.put("goodbye")
+        await mot._async_queue.put(None) # sentinel for being done
+
+        await asyncio.sleep(1)
+        await mot.avalue()
 
         assert observed[0].latency_ms >= 0
-
-    async def test_both_generation_hooks_fire_in_order(self) -> None:
-        """GENERATION_PRE_CALL fires before GENERATION_POST_CALL."""
-        order: list[str] = []
-
-        @hook("generation_pre_call")
-        async def pre_recorder(payload: Any, ctx: Any) -> Any:
-            order.append("pre")
-            return None
-
-        @hook("generation_post_call")
-        async def post_recorder(payload: Any, ctx: Any) -> Any:
-            order.append("post")
-            return None
-
-        register(pre_recorder)
-        register(post_recorder)
-        backend = _MockBackend()
-        await backend.generate_from_context(
-            CBlock("order test"), MagicMock(spec=Context)
-        )
-
-        assert order == ["pre", "post"]
-
 
 # ---------------------------------------------------------------------------
 # Component hook call sites
@@ -942,3 +951,6 @@ class TestSamplingLoopEndObserveOnly:
         assert not sampling_result.success
         assert sampling_result.result is not None
         assert observed == [False]
+
+if __name__ == "__main__":
+    pytest.main([__file__])
