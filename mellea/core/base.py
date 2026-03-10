@@ -218,7 +218,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
         self._on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
 
-        self._start: datetime.datetime | None
+        self._start: datetime.datetime | None = None
         self._generate_log: GenerateLog | None = None
 
     def _copy_from(self, other: ModelOutputThunk) -> None:

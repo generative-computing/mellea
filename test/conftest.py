@@ -155,7 +155,7 @@ def pytest_addoption(parser):
         help="Ignore all requirement checks (GPU, RAM, Ollama, API keys)",
     )
     add_option_safe(
-        "--with-plugins",
+        "--disable-default-mellea-plugins",
         action="store_true",
         default=False,
         help="Register all acceptance plugin sets for every test",
@@ -588,12 +588,17 @@ def aggressive_cleanup():
 
 
 @pytest.fixture()
-async def register_acceptance_sets():
+async def register_acceptance_sets(request):
     """Register all acceptance plugin sets (logging, sequential, concurrent, fandf).
 
     Usage: mark your test with ``@pytest.mark.plugins`` and request this fixture,
     or rely on the autouse ``auto_register_acceptance_sets`` fixture below.
     """
+    plugins_disabled = request.config.getoption("--disable-default-mellea-plugins", default=False)
+    if not plugins_disabled:
+        # If plugins are enabled, we don't need to re-enable them for this specific test.
+        return
+
     from mellea.plugins import register
     from mellea.plugins.manager import shutdown_plugins
     from test.plugins._acceptance_sets import ALL_ACCEPTANCE_SETS
@@ -604,13 +609,14 @@ async def register_acceptance_sets():
     await shutdown_plugins()
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True, scope="session")
 async def auto_register_acceptance_sets(request):
-    """Auto-register acceptance plugin sets for all tests when ``--with-plugins`` is passed on the CLI."""
-    has_flag = request.config.getoption("--with-plugins", default=False)
-    if not has_flag:
+    """Auto-register acceptance plugin sets for all tests by defualt; disable when ``--disable-default-mellea-plugins`` is passed on the CLI."""
+    disable_plugins = request.config.getoption("--disable-default-mellea-plugins", default=False)
+    if disable_plugins:
         yield
         return
+
     from mellea.plugins import register
     from mellea.plugins.manager import shutdown_plugins
     from test.plugins._acceptance_sets import ALL_ACCEPTANCE_SETS

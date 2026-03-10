@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from mellea.plugins.base import MelleaBasePayload, PluginViolationError
 from mellea.plugins.context import build_global_context
@@ -28,7 +28,7 @@ _plugins_enabled: bool = False
 _session_tags: dict[str, set[str]] = {}  # session_id -> set of plugin names
 
 DEFAULT_PLUGIN_TIMEOUT: int = 5  # seconds
-DEFAULT_HOOK_POLICY: str = "deny"
+DEFAULT_HOOK_POLICY: Literal["allow"] | Literal["deny"] = "deny"
 
 
 def has_plugins(hook_type: HookType | None = None) -> bool:
