@@ -791,9 +791,14 @@ def test_run_ollama(yaml_json_combo_for_ollama):
             t_json = json.loads(tc.message.content)
             e_json = json.loads(ec.message.content)
 
-            if t_json != pytest.approx(e_json, abs=0.1):
+            if isinstance(t_json, list):
                 # Workaround for pytest bug
-                print("Assertion is about to fail.")
-                print(f"   {t_json=}")
-                print(f"   {e_json=}")
-            assert t_json == pytest.approx(e_json, abs=0.1)
+                for t_elem, e_elem in zip(t_json, e_json, strict=True):
+                    assert t_elem == pytest.approx(e_elem, abs=0.1)
+            else:
+                if t_json != pytest.approx(e_json, abs=0.1):
+                    # Workaround for pytest bug
+                    print("Assertion is about to fail.")
+                    print(f"   {t_json=}")
+                    print(f"   {e_json=}")
+                assert t_json == pytest.approx(e_json, abs=0.1)
