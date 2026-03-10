@@ -279,9 +279,13 @@ class BasePayload(PluginPayload):
 
 ## 3b. Hook Payload Policies
 
-Each hook type declares a `HookPayloadPolicy` that specifies which payload fields plugins are allowed to modify. The plugin manager enforces these policies after each plugin returns: only changes to writable fields are accepted; all other modifications are silently discarded.
+Payload mutability is enforced at **two layers**:
 
-Hooks not listed in the policy table are **observe-only** — plugins can read the payload but cannot modify any fields.
+1. **Execution mode** (cpex layer) — only `SEQUENTIAL` and `TRANSFORM` plugins can modify payloads. `AUDIT`, `CONCURRENT`, and `FIRE_AND_FORGET` plugins have their modifications silently discarded by cpex regardless of what the policy table says.
+
+2. **Field-level policy** (Mellea layer) — for modes that *can* modify, each hook type declares a `HookPayloadPolicy` specifying which fields are writable. The plugin manager applies the policy after each plugin returns: only changes to writable fields are accepted; all other modifications are silently discarded.
+
+Hooks not listed in the policy table are **observe-only** — with `DefaultHookPolicy.DENY` (the Mellea default), any modification attempt on an unlisted hook is rejected at runtime.
 
 ### Policy Types
 
