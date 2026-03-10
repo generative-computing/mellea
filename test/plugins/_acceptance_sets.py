@@ -1,4 +1,4 @@
-"""Plugin sets covering every HookType × PluginMode for acceptance tests.
+"""Plugin sets covering every HookType x PluginMode for acceptance tests.
 
 Each set contains one hook per call site in a single execution mode:
   1. logging_plugin_set  — AUDIT (observe-only)
@@ -37,8 +37,12 @@ def _make_hooks(prefix: str, mode: PluginMode):
 # ---------------------------------------------------------------------------
 
 logging_plugin_set = PluginSet("logging", _make_hooks("log", PluginMode.AUDIT))
-sequential_plugin_set = PluginSet("sequential", _make_hooks("seq", PluginMode.SEQUENTIAL))
-concurrent_plugin_set = PluginSet("concurrent", _make_hooks("concurrent", PluginMode.CONCURRENT))
+sequential_plugin_set = PluginSet(
+    "sequential", _make_hooks("seq", PluginMode.SEQUENTIAL)
+)
+concurrent_plugin_set = PluginSet(
+    "concurrent", _make_hooks("concurrent", PluginMode.CONCURRENT)
+)
 fandf_plugin_set = PluginSet("fandf", _make_hooks("fandf", PluginMode.FIRE_AND_FORGET))
 
 ALL_ACCEPTANCE_SETS = [

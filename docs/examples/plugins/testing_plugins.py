@@ -33,7 +33,7 @@ MAX_DESCRIPTION_LENGTH = 500
 @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.SEQUENTIAL, priority=10)
 async def enforce_description_length(payload, ctx):
     """Block components whose action text exceeds the maximum length."""
-    action_text = str(payload.action)
+    action_text = str(payload.action._description) if payload.action else ""
     if len(action_text) > MAX_DESCRIPTION_LENGTH:
         return block(
             f"Action text is {len(action_text)} chars, max is {MAX_DESCRIPTION_LENGTH}",
@@ -56,8 +56,7 @@ def make_payload(action_text: str):
     """
     payload = MagicMock()
     payload.action = MagicMock()
-    payload.action.__str__ = lambda self: action_text
-    payload.action.description = action_text
+    payload.action._description = action_text
     payload.component_type = "Instruction"
     payload.timestamp = datetime.now(UTC)
     payload.hook = HookType.COMPONENT_PRE_EXECUTE.value

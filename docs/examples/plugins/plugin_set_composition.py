@@ -66,7 +66,7 @@ async def enforce_token_budget(payload, ctx):
 async def enforce_description_length(payload, ctx):
     """Reject component actions whose text representation is too long."""
     max_len = 2000
-    action_text = str(payload.action)
+    action_text = str(payload.action._description) if payload.action else ""
     if len(action_text) > max_len:
         log.info("[security/desc-length] BLOCKED: action is %d chars", len(action_text))
         return block(

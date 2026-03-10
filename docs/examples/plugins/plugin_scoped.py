@@ -7,7 +7,7 @@
 #   1. plugin_scope(*items)  — the universal scope; accepts standalone hooks,
 #                              Plugin instances, PluginSets, or any mix
 #   2. with <Plugin instance>  — Plugin subclass used directly as a context
-#                                manager (equivalent to plugin_scope for one item)
+#                                manager (includes a blocked-topic scenario)
 #   3. with <PluginSet>        — a named group used directly as a context manager
 #
 # All three guarantee that the plugins are registered on __enter__ and
@@ -17,7 +17,6 @@
 #   uv run python docs/examples/plugins/plugin_scoped.py
 
 import logging
-import sys
 
 from mellea import start_session
 from mellea.plugins import (
@@ -48,7 +47,8 @@ log = logging.getLogger("plugin_scoped")
 @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.FIRE_AND_FORGET, priority=10)
 async def log_request(payload, ctx):
     """Log every component action before execution."""
-    preview = str(payload.action)[:60].replace("\n", " ")
+    desc = str(payload.action._description) if payload.action else ""
+    preview = desc[:60].replace("\n", " ")
     log.info("[log_request] → %r", preview)
 
 
@@ -69,7 +69,7 @@ class ContentGuard(Plugin, name="content-guard", priority=5):
 
     @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.SEQUENTIAL, priority=5)
     async def check_description(self, payload, ctx):
-        desc = str(payload.action).lower()
+        desc = str(payload.action._description).lower() if payload.action else ""
         for topic in self.BLOCKED:
             if topic in desc:
                 log.info("[content-guard] BLOCKED: %r", topic)
@@ -87,20 +87,20 @@ observability = PluginSet("observability", [log_request, log_response])
 # ---------------------------------------------------------------------------
 
 
-def run(session, prompt: str) -> str:
+def run(session, prompt: str) -> str | None:
     try:
         result = session.instruct(prompt)
         log.info("Result: %s\n", result)
         return str(result)
     except PluginViolationError as e:
-        log.error(
+        log.warning(
             "Blocked on %s: [%s] %s (plugin=%s)\n",
             e.hook_type,
             e.code,
             e.reason,
             e.plugin_name,
         )
-        sys.exit(1)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +136,8 @@ if __name__ == "__main__":
         with guard:
             log.info("Inside with guard: ContentGuard active")
             run(m, "What is the boiling point of water?")
+            # This prompt triggers the content guard — it contains a blocked topic.
+            run(m, "Give me financial advice on stocks.")
 
         log.info("After with guard: ContentGuard deregistered")
         log.info("")

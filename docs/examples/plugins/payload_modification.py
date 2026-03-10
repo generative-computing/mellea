@@ -92,7 +92,7 @@ async def prepend_safety_preamble(payload, ctx):
 @hook(HookType.GENERATION_PRE_CALL, mode=PluginMode.SEQUENTIAL, priority=20)
 async def attempt_non_writable(payload, ctx):
     """Try to modify a non-writable field — change will be silently discarded."""
-    log.info("[attempt_non_writable] attempting to modify 'context' (non-writable)")
+    log.info("[attempt_non_writable] attempting to modify 'hook' (non-writable)")
     # This modification will be filtered out by the payload policy
     modified = payload.model_copy(update={"hook": "tampered"})
     return PluginResult(continue_processing=True, modified_payload=modified)

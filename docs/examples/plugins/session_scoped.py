@@ -53,7 +53,7 @@ BLOCKED_TOPICS = ["weaponry", "explosives"]
 @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.SEQUENTIAL, priority=10)
 async def enforce_content_policy(payload, ctx):
     """Block components whose action text mentions restricted topics."""
-    desc = str(payload.action).lower()
+    desc = str(payload.action._description).lower() if payload.action else ""
     for topic in BLOCKED_TOPICS:
         if topic in desc:
             log.info("[content-policy] BLOCKED: topic '%s' found in action", topic)
