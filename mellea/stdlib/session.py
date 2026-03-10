@@ -1,7 +1,7 @@
 """``MelleaSession``: the primary entry point for running generative programs.
 
 ``MelleaSession`` wraps a ``Backend`` and a ``Context`` and exposes high-level methods
-(``act``, ``instruct``, ``sample``) that drive the generate–validate–repair loop. It
+(``act``, ``instruct``, ``sample``) that drive the generate-validate-repair loop. It
 also manages a global context variable (accessible via ``get_session()``) so that
 nested components can reach the current session without explicit threading. Use
 ``start_session(...)`` as a context manager to create and automatically clean up a
