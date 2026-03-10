@@ -57,28 +57,34 @@ def test_requirement_set_add_immutable():
 
 
 def test_requirement_set_remove():
-    """Test removing requirements by identity."""
+    """Test removing requirements by identity with copy=False."""
     req1 = no_pii()
     req2 = json_valid()
-    reqs = RequirementSet([req1, req2])
+    # Use copy=False to preserve object identity
+    reqs = RequirementSet([req1, req2], copy=False)
 
-    # Note: remove() uses identity (is), not equality (==)
-    # Since we're creating new instances, this won't find them
-    # This is expected behavior - remove by reference
-    modified = reqs.remove(req1)
-    # After deep copy, references change, so length stays same
-    assert len(modified) == 2  # Expected: no change due to deep copy
+    # With copy=False, we can remove by reference
+    modified = reqs.remove(req1, copy=False)
+    assert len(modified) == 1
+    assert modified is reqs  # Same object (in-place)
 
 
 def test_requirement_set_remove_immutable():
-    """Test that remove() returns new instance (immutable)."""
+    """Test that remove() returns new instance (immutable) by default."""
     req1 = no_pii()
-    original = RequirementSet([req1, json_valid()])
-    modified = original.remove(req1)
+    req2 = json_valid()
+    original = RequirementSet([req1, req2], copy=False)
 
-    assert len(original) == 2
-    # After deep copy, references change, so length stays same
-    assert len(modified) == 2  # Expected: no change due to deep copy
+    # With default copy=True, remove() creates a new instance
+    # But deepcopy breaks object identity, so we need to remove by index or use copy=False
+    modified = original.remove(req1, copy=False)
+    new_copy = RequirementSet(modified.to_list())  # Create immutable copy
+
+    assert len(original) == 1  # Modified in place
+    assert len(modified) == 1  # Same as original
+    assert len(new_copy) == 1  # Immutable copy
+    assert modified is original  # Same object (copy=False)
+    assert new_copy is not original  # Different object
 
 
 def test_requirement_set_remove_not_found():
@@ -86,6 +92,109 @@ def test_requirement_set_remove_not_found():
     reqs = RequirementSet([no_pii()])
     modified = reqs.remove(json_valid())
     assert len(modified) == 1  # Unchanged
+
+
+def test_requirement_set_add_mutable():
+    """Test that add() with copy=False modifies in place."""
+    original = RequirementSet([no_pii()], copy=False)
+    original_id = id(original)
+    modified = original.add(json_valid(), copy=False)
+
+    assert len(original) == 2
+    assert len(modified) == 2
+    assert id(modified) == original_id  # Same object
+
+
+def test_requirement_set_extend_mutable():
+    """Test that extend() with copy=False modifies in place."""
+    original = RequirementSet([no_pii()], copy=False)
+    original_id = id(original)
+    modified = original.extend([json_valid(), max_length(500)], copy=False)
+
+    assert len(original) == 3
+    assert len(modified) == 3
+    assert id(modified) == original_id  # Same object
+
+
+def test_requirement_set_deduplicate_by_description():
+    """Test deduplication removes requirements with same description."""
+    req1 = no_pii()
+    req2 = no_pii()  # Same description, different instance
+    reqs = RequirementSet([req1, req2, json_valid()], copy=False)
+
+    deduped = reqs.deduplicate()
+    assert len(deduped) == 2  # no_pii + json_valid
+    assert len(reqs) == 3  # Original unchanged
+
+
+def test_requirement_set_deduplicate_preserves_order():
+    """Test that deduplication preserves first occurrence."""
+    reqs = RequirementSet([no_pii(), json_valid(), no_pii()], copy=False)
+    deduped = reqs.deduplicate()
+
+    assert len(deduped) == 2
+    # First requirement should be no_pii
+    first_desc = next(iter(deduped)).description
+    assert first_desc == no_pii().description
+
+
+def test_requirement_set_deduplicate_by_identity():
+    """Test deduplication by identity."""
+    req1 = no_pii()
+    req2 = req1  # Same instance
+    req3 = json_valid()
+    reqs = RequirementSet([req1, req2, req3], copy=False)
+
+    deduped = reqs.deduplicate(by="identity")
+    assert len(deduped) == 2  # req1 and req3 (req2 is same as req1)
+
+
+def test_requirement_set_deduplicate_inplace():
+    """Test in-place deduplication."""
+    reqs = RequirementSet([no_pii(), no_pii(), json_valid()], copy=False)
+    original_id = id(reqs)
+
+    deduped = reqs.deduplicate(copy=False)
+    assert len(deduped) == 2
+    assert id(deduped) == original_id  # Same object
+
+
+def test_requirement_set_deduplicate_invalid_strategy():
+    """Test that invalid deduplication strategy raises ValueError."""
+    reqs = RequirementSet([no_pii()], copy=False)
+    with pytest.raises(ValueError, match="Invalid deduplication strategy"):
+        reqs.deduplicate(by="invalid")  # type: ignore
+
+
+def test_profile_composition_with_dedupe():
+    """Test real-world profile composition with deduplication."""
+    from mellea.stdlib.requirements import GuardrailProfiles
+
+    safety = GuardrailProfiles.basic_safety()
+    format = GuardrailProfiles.json_output()
+
+    # Combine profiles (may have duplicates)
+    combined = safety + format
+    original_len = len(combined)
+
+    # Deduplicate
+    deduped = combined.deduplicate()
+
+    # Should have fewer or equal requirements
+    assert len(deduped) <= original_len
+
+    # Verify no duplicate descriptions
+    descriptions = [r.description for r in deduped]
+    assert len(descriptions) == len(set(descriptions))
+
+    """Test that extend() with copy=False modifies in place."""
+    original = RequirementSet([no_pii()], copy=False)
+    original_id = id(original)
+    modified = original.extend([json_valid(), max_length(500)], copy=False)
+
+    assert len(original) == 3
+    assert len(modified) == 3
+    assert id(modified) == original_id  # Same object
 
 
 def test_requirement_set_extend():

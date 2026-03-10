@@ -38,6 +38,26 @@ _CREDIT_CARD_PATTERN = re.compile(r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b")
 # Lazy-loaded spaCy model
 _SPACY_NLP = None
 
+# Harmful content keywords for risk detection
+_RISK_KEYWORDS = {
+    "violence": [
+        "kill",
+        "murder",
+        "attack",
+        "assault",
+        "weapon",
+        "blood",
+        "death",
+        "violent",
+    ],
+    "profanity": ["fuck", "shit", "damn", "hell", "ass", "bitch", "bastard"],
+    "social_bias": ["racist", "sexist", "discrimination", "prejudice", "stereotype"],
+    "sexual_content": ["sex", "sexual", "porn", "nude", "explicit"],
+    "unethical_behavior": ["cheat", "steal", "fraud", "illegal", "unethical"],
+    "jailbreak": ["ignore previous", "disregard", "bypass", "override"],
+    "harm": ["harm", "hurt", "damage", "injure", "dangerous"],
+}
+
 
 def _get_spacy_nlp():
     """Lazy load spaCy model."""
@@ -681,31 +701,6 @@ def no_harmful_content(
         For production use with Guardian models, use the Guardian intrinsics directly
         or the deprecated GuardianCheck class with appropriate backends.
     """
-    # Define harmful keywords for each risk type
-    RISK_KEYWORDS = {
-        "violence": [
-            "kill",
-            "murder",
-            "attack",
-            "assault",
-            "weapon",
-            "blood",
-            "death",
-            "violent",
-        ],
-        "profanity": ["fuck", "shit", "damn", "hell", "ass", "bitch", "bastard"],
-        "social_bias": [
-            "racist",
-            "sexist",
-            "discrimination",
-            "prejudice",
-            "stereotype",
-        ],
-        "sexual_content": ["sex", "sexual", "porn", "nude", "explicit"],
-        "unethical_behavior": ["cheat", "steal", "fraud", "illegal", "unethical"],
-        "jailbreak": ["ignore previous", "disregard", "bypass", "override"],
-        "harm": ["harm", "hurt", "damage", "injure", "dangerous"],
-    }
 
     def validate_no_harmful_content(ctx: Context) -> ValidationResult:
         last_output = ctx.last_output()
@@ -720,11 +715,11 @@ def no_harmful_content(
         # Check for harmful keywords
         detected_risks = []
         for risk in risks_to_check:
-            if risk not in RISK_KEYWORDS:
+            if risk not in _RISK_KEYWORDS:
                 logger.warning(f"Unknown risk type: {risk}. Skipping.")
                 continue
 
-            keywords = RISK_KEYWORDS[risk]
+            keywords = _RISK_KEYWORDS[risk]
             for keyword in keywords:
                 if keyword in text:
                     detected_risks.append(risk)

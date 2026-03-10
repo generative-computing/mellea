@@ -44,14 +44,23 @@ class RequirementSet:
         >>> reqs += RequirementSet([json_valid()])
     """
 
-    def __init__(self, requirements: list[Requirement] | None = None):
+    def __init__(
+        self, requirements: list[Requirement] | None = None, *, copy: bool = True
+    ):
         """Initialize RequirementSet with optional list of requirements.
 
         Args:
             requirements: Optional list of Requirement instances
+            copy: If True (default), deep copy requirements for immutability.
+                  If False, use references directly (faster but mutable).
 
         Raises:
             TypeError: If any item in requirements is not a Requirement instance
+
+        Note:
+            By default, RequirementSet creates deep copies to ensure immutability
+            and prevent unexpected side effects. Set copy=False for performance-critical
+            scenarios where you control the requirement lifecycle.
         """
         self._requirements: list[Requirement] = []
         if requirements:
@@ -61,79 +70,119 @@ class RequirementSet:
                         f"All items must be Requirement instances, got {type(req).__name__}"
                     )
                 self._requirements.append(req)
+            if copy:
+                self._requirements = deepcopy(self._requirements)
 
-    def add(self, requirement: Requirement) -> RequirementSet:
+    def add(self, requirement: Requirement, *, copy: bool = True) -> RequirementSet:
         """Add a requirement and return a new RequirementSet (fluent API).
-
-        This method returns a new RequirementSet instance, leaving the original
-        unchanged (functional/immutable style).
 
         Args:
             requirement: Requirement instance to add
+            copy: If True (default), return new instance (immutable).
+                  If False, modify in place and return self (mutable, faster).
 
         Returns:
-            New RequirementSet with the added requirement
+            New RequirementSet with the added requirement (if copy=True),
+            or self modified in place (if copy=False)
 
         Raises:
             TypeError: If requirement is not a Requirement instance
 
         Examples:
+            Immutable (default):
             >>> reqs = RequirementSet().add(no_pii()).add(json_valid())
+
+            Mutable (faster):
+            >>> reqs = RequirementSet()
+            >>> reqs.add(no_pii(), copy=False).add(json_valid(), copy=False)
         """
         if not isinstance(requirement, Requirement):
             raise TypeError(
                 f"Expected Requirement instance, got {type(requirement).__name__}"
             )
-        new_set = self.copy()
-        new_set._requirements.append(requirement)
-        return new_set
+        if copy:
+            new_set = self.copy()
+            new_set._requirements.append(requirement)
+            return new_set
+        else:
+            self._requirements.append(requirement)
+            return self
 
-    def remove(self, requirement: Requirement) -> RequirementSet:
+    def remove(self, requirement: Requirement, *, copy: bool = True) -> RequirementSet:
         """Remove a requirement and return a new RequirementSet (fluent API).
-
-        This method returns a new RequirementSet instance, leaving the original
-        unchanged. If the requirement is not found, returns a copy unchanged.
 
         Args:
             requirement: Requirement instance to remove
+            copy: If True (default), return new instance (immutable).
+                  If False, modify in place and return self (mutable, faster).
 
         Returns:
-            New RequirementSet without the specified requirement
+            New RequirementSet without the specified requirement (if copy=True),
+            or self modified in place (if copy=False).
+            If requirement not found, returns unchanged.
 
         Examples:
+            Immutable (default):
             >>> reqs = RequirementSet([no_pii(), json_valid()])
             >>> reqs_without_pii = reqs.remove(no_pii())
-        """
-        new_set = self.copy()
-        try:
-            new_set._requirements.remove(requirement)
-        except ValueError:
-            pass  # Requirement not found, return copy unchanged
-        return new_set
 
-    def extend(self, requirements: list[Requirement]) -> RequirementSet:
+            Mutable (faster):
+            >>> reqs = RequirementSet([no_pii(), json_valid()])
+            >>> reqs.remove(no_pii(), copy=False)
+        """
+        if copy:
+            new_set = self.copy()
+            try:
+                new_set._requirements.remove(requirement)
+            except ValueError:
+                pass  # Requirement not found, return copy unchanged
+            return new_set
+        else:
+            try:
+                self._requirements.remove(requirement)
+            except ValueError:
+                pass  # Requirement not found, return self unchanged
+            return self
+
+    def extend(
+        self, requirements: list[Requirement], *, copy: bool = True
+    ) -> RequirementSet:
         """Add multiple requirements and return a new RequirementSet (fluent API).
 
         Args:
             requirements: List of Requirement instances to add
+            copy: If True (default), return new instance (immutable).
+                  If False, modify in place and return self (mutable, faster).
 
         Returns:
-            New RequirementSet with all requirements added
+            New RequirementSet with all requirements added (if copy=True),
+            or self modified in place (if copy=False)
 
         Raises:
             TypeError: If any item is not a Requirement instance
 
         Examples:
+            Immutable (default):
             >>> reqs = RequirementSet().extend([no_pii(), json_valid(), max_length(500)])
+
+            Mutable (faster):
+            >>> reqs = RequirementSet()
+            >>> reqs.extend([no_pii(), json_valid()], copy=False)
         """
-        new_set = self.copy()
+        # Validate all requirements first
         for req in requirements:
             if not isinstance(req, Requirement):
                 raise TypeError(
                     f"All items must be Requirement instances, got {type(req).__name__}"
                 )
-            new_set._requirements.append(req)
-        return new_set
+
+        if copy:
+            new_set = self.copy()
+            new_set._requirements.extend(requirements)
+            return new_set
+        else:
+            self._requirements.extend(requirements)
+            return self
 
     def __add__(self, other: RequirementSet) -> RequirementSet:
         """Combine two RequirementSets using + operator.
@@ -260,6 +309,67 @@ class RequirementSet:
         new_set = RequirementSet()
         new_set._requirements = deepcopy(self._requirements)
         return new_set
+
+    def deduplicate(
+        self, *, by: str = "description", copy: bool = True
+    ) -> RequirementSet:
+        """Remove duplicate requirements.
+
+        Args:
+            by: Deduplication strategy:
+                - "description": Remove requirements with duplicate descriptions (default)
+                - "identity": Remove requirements with same object identity
+            copy: If True (default), return new instance. If False, modify in place.
+
+        Returns:
+            RequirementSet with duplicates removed (preserves first occurrence)
+
+        Note:
+            Description-based deduplication may incorrectly merge requirements with
+            the same description but different validation functions. This is a
+            pragmatic approach for common use cases where requirements are created
+            using the same factory functions (e.g., `no_pii()`).
+
+        Examples:
+            Remove duplicates from composed profiles:
+            >>> safety = GuardrailProfiles.basic_safety()
+            >>> format = GuardrailProfiles.json_output()
+            >>> combined = (safety + format).deduplicate()
+
+            In-place deduplication:
+            >>> reqs = RequirementSet([no_pii(), no_pii(), json_valid()])
+            >>> reqs.deduplicate(copy=False)
+        """
+        if by == "description":
+            seen_descriptions: set[str | None] = set()
+            unique_reqs: list[Requirement] = []
+            for req in self._requirements:
+                desc = req.description
+                if desc not in seen_descriptions:
+                    seen_descriptions.add(desc)
+                    unique_reqs.append(req)
+
+            if copy:
+                return RequirementSet(unique_reqs, copy=False)
+            else:
+                self._requirements = unique_reqs
+                return self
+
+        elif by == "identity":
+            # Use dict to preserve order while removing identity duplicates
+            unique_dict = {id(req): req for req in self._requirements}
+            unique_reqs = list(unique_dict.values())
+
+            if copy:
+                return RequirementSet(unique_reqs, copy=False)
+            else:
+                self._requirements = unique_reqs
+                return self
+
+        else:
+            raise ValueError(
+                f"Invalid deduplication strategy: {by}. Must be 'description' or 'identity'."
+            )
 
     def to_list(self) -> list[Requirement]:
         """Convert to a plain list of requirements.
