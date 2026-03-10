@@ -581,7 +581,7 @@ def _round_floats(json_data, num_digits: int = 2):
     return result
 
 
-def test_run_transformers(yaml_json_combo_with_model):
+def test_run_transformers(yaml_json_combo_with_model, gh_run):
     """
     Run the target model end-to-end on transformers.
     """
@@ -621,6 +621,18 @@ def test_run_transformers(yaml_json_combo_with_model):
 
     # Prepare inputs for inference
     transformed_input = rewriter.transform(model_input, **transform_kwargs)
+
+    if gh_run:
+        pytest.xfail(
+            "Skipping end-to-end model evaluation for this test case because it takes "
+            "more than 5 seconds. "
+            "Mellea's CI fails the entire run without an error message if all 500+ "
+            "tests combined take more than 15 minutes to complete. "
+            "That works out to 1.8 seconds per test. "
+            "Any test that takes more than 5 seconds needs to disable or shortcut "
+            "itself during CI, or all of Mellea's development infrastructure will "
+            "grind to a halt."
+        )
 
     # Run the model using Hugging Face APIs
     model, tokenizer = base_util.load_transformers_lora(lora_dir)
