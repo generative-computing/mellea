@@ -6,7 +6,7 @@ sidebarTitle: "Plugins & Hooks"
 
 ## Overview — What Are Plugins?
 
-Plugins let you intercept and modify Mellea's execution at well-defined points — without changing library code. Whether you need to enforce token budgets, redact PII, log every generation call, or block unsafe tool invocations, plugins give you fine-grained control over the entire pipeline.
+Plugins let you intercept and modify Mellea's execution at well-defined points without changing library code. Whether you need to enforce token budgets, redact PII, log every generation call, or block unsafe tool invocations, plugins give you fine-grained control over the entire pipeline.
 
 When an event fires during Mellea's execution (e.g., "about to call the LLM" or "tool invocation requested"), the plugin system:
 
@@ -60,7 +60,7 @@ Every hook function receives two arguments:
 - **`payload`** — A frozen, typed object containing all the data relevant to this hook point. You can read any field but cannot mutate it directly.
 - **`ctx`** — Read-only context with session metadata (backend name, model ID, etc.).
 
-A hook returns either `None` (continue unchanged) or a `PluginResult` (to modify the payload or block execution). The quickstart hook returns `None` implicitly — it observes without interfering.
+A hook returns either `None` (continue unchanged) or a `PluginResult` (to modify the payload or block execution). The quickstart hook returns `None` implicitly, as it observes without interfering.
 
 See the [full example](https://github.com/generative-computing/mellea/blob/main/docs/examples/plugins/quickstart.py).
 
@@ -150,7 +150,7 @@ return PluginResult(continue_processing=True, modified_payload=modified)
 
 ### Payload Policies
 
-Each hook type declares which fields are writable. Changes to non-writable fields are **silently discarded** by the framework. For example, `generation_pre_call` allows modifying `model_options`, `format`, and `tool_calls` — but not `action` or `context`. This ensures plugins cannot make changes the framework hasn't sanctioned.
+Each hook type declares which fields are writable. Changes to non-writable fields are **silently discarded** by the framework. For example, `generation_pre_call` allows modifying `model_options`, `format`, and `tool_calls`, but not `action` or `context`. This ensures plugins cannot make changes the framework hasn't sanctioned.
 
 See the [full policy table](#hook-payload-policy-table) in the Hook Types Reference.
 
@@ -222,7 +222,7 @@ Plugins can be activated at three levels. Each level determines when hooks fire 
 
 ### Global Scope
 
-Register at module level — fires for every session and every functional API call.
+Register at module level, fires for every session and every functional API call.
 
 ```python
 from mellea.plugins import register
@@ -243,7 +243,7 @@ unregister(log_generation)
 
 ### Session Scope
 
-Pass plugins to `start_session()` — fires only within that session.
+Pass plugins to `start_session()`, fires only within that session.
 
 ```python
 from mellea import start_session
@@ -257,7 +257,7 @@ with start_session(plugins=[enforce_content_policy, log_component]) as m:
 
 Activate plugins for a specific block of code with guaranteed cleanup.
 
-**`plugin_scope()` — the universal scope:**
+**`plugin_scope()`:**
 
 ```python
 from mellea.plugins import plugin_scope
@@ -695,7 +695,7 @@ All hooks for a given hook type are sorted by priority, then dispatched in group
 
 ### SEQUENTIAL (default)
 
-Serial, chained execution. Each hook receives the payload from the prior hook. Can both **block** and **modify**. This is the default mode — use it when you need full control over the pipeline.
+Serial, chained execution. Each hook receives the payload from the prior hook. Can both **block** and **modify**. This is the default mode, use it when you need full control over the pipeline.
 
 ```python
 @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.SEQUENTIAL, priority=10)
@@ -709,7 +709,7 @@ async def enforce_policy(payload, ctx):
 
 ### TRANSFORM
 
-Serial, chained execution after all SEQUENTIAL hooks. Can **modify** but **cannot block** — `block()` calls are suppressed with a warning. Use for data transformation (PII redaction, prompt rewriting) where you want to guarantee the pipeline continues.
+Serial, chained execution after all SEQUENTIAL hooks. Can **modify** but **cannot block** (`block()` calls are suppressed with a warning). Use for data transformation (PII redaction, prompt rewriting) where you want to guarantee the pipeline continues.
 
 ```python
 @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.TRANSFORM, priority=20)
@@ -732,7 +732,7 @@ async def shadow_policy(payload, ctx):
 
 ### CONCURRENT
 
-Dispatched in parallel after AUDIT. Can **block** (fail-fast on first blocking result) but **cannot modify** — modifications are discarded to avoid non-deterministic last-writer-wins races. Use for independent validation checks that benefit from parallel execution.
+Dispatched in parallel after AUDIT. Can **block** (fail-fast on first blocking result) but **cannot modify**; modifications are discarded to avoid non-deterministic last-writer-wins races. Use for independent validation checks that benefit from parallel execution.
 
 ```python
 @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.CONCURRENT, priority=40)
@@ -752,7 +752,7 @@ async def send_telemetry(payload, ctx):
 ```
 
 <Note>
-The FIRE_AND_FORGET log output may appear after the main result is printed. This is expected behavior — these hooks run in the background.
+The FIRE_AND_FORGET log output may appear after the main result is printed. This is expected behavior, as these hooks run in the background.
 </Note>
 
 ### Chaining
@@ -765,9 +765,8 @@ In `SEQUENTIAL` and `TRANSFORM` modes, when multiple plugins modify the same pay
 
 ### Error Handling
 
-- **`SEQUENTIAL`, `TRANSFORM`, `AUDIT`, `CONCURRENT`** — unexpected exceptions propagate to the caller.
-- **`FIRE_AND_FORGET`** — exceptions are logged and swallowed. They never affect the pipeline.
-- **`block()`** — this is intentional control flow, not an error. It raises `PluginViolationError` in the caller.
+- **`SEQUENTIAL`, `TRANSFORM`, `AUDIT`, `CONCURRENT`, `FIRE_AND_FORGET`** —  exceptions are logged and swallowed. They never affect the pipeline.
+- **`block()`** — this is intentional control flow, not an error. It raises a `PluginViolationError` to the caller.
 
 See the [execution modes example](https://github.com/generative-computing/mellea/blob/main/docs/examples/plugins/execution_modes.py).
 
@@ -806,7 +805,7 @@ async def validate_calculator_args(payload, ctx):
 
 ### Argument Sanitization
 
-Auto-fix arguments instead of blocking — a repair pattern:
+Auto-fix arguments instead of blocking (a repair pattern):
 
 ```python
 import dataclasses
@@ -853,7 +852,7 @@ See the [full tool hooks example](https://github.com/generative-computing/mellea
 
 ### Observability Stack
 
-Combine session tracing, component latency, and generation logging — all using `FIRE_AND_FORGET` or `AUDIT` mode so they never slow down the pipeline:
+Combine session tracing, component latency, and generation logging, all using `FIRE_AND_FORGET` or `AUDIT` mode so they never slow down the pipeline:
 
 ```python
 observability = PluginSet("observability", [
@@ -895,7 +894,7 @@ class PIIRedactor(Plugin, name="pii-redactor", priority=5):
 
 ### Graceful Degradation with AUDIT Mode
 
-Deploy a new policy in `AUDIT` mode first — violations are logged but do not block. Monitor the logs. When you're confident, promote to `SEQUENTIAL`:
+Deploy a new policy in `AUDIT` mode first, where violations are logged but do not block. Monitor the logs. When you're confident, promote to `SEQUENTIAL`:
 
 ```python
 # Phase 1: shadow mode — log violations without blocking
@@ -930,7 +929,7 @@ See the [full testing example](https://github.com/generative-computing/mellea/bl
 
 ### Idempotent Lifecycle Hooks
 
-If you use the advanced `MelleaPlugin` base class (which provides `initialize()` and `shutdown()` callbacks), make them idempotent — they may be called once per `@hook` method on your plugin.
+If you use the advanced `MelleaPlugin` base class (which provides `initialize()` and `shutdown()` callbacks), make them idempotent, as they may be called once per `@hook` method on your plugin.
 
 ---
 

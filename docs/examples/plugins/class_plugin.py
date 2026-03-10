@@ -109,7 +109,7 @@ if __name__ == "__main__":
         log.info("")
 
         # Request 2: clean input — no PII, so it reaches the LLM.
-        # If the LLM output happens to contain PII, redact_output scrubs it.
+        # If the LLM output contains PII, scan_output logs a warning (observe-only).
         log.info("Request 2: clean input (should succeed)")
         try:
             result = m.instruct("Name the three primary colors.")
