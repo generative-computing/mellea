@@ -6,7 +6,7 @@ import functools
 import itertools
 import time
 from collections.abc import Sequence
-from typing import overload
+from typing import final, overload
 
 import pydantic
 import typing_extensions
@@ -35,7 +35,7 @@ BaseModelSubclass = typing_extensions.TypeVar(
 class Backend(abc.ABC):
     """An abstract `Backend`."""
 
-    @abc.abstractmethod
+    @final
     async def generate_from_context(
         self,
         action: Component[C] | CBlock,
@@ -46,6 +46,54 @@ class Backend(abc.ABC):
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
         """Generates a model output from a context. May not mutate the context. This must be called from a running event loop as it creates a task to run the generation request.
+
+        Args:
+            action: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
+            ctx: The rest of the context.
+            format: A response format to used for structured outputs / constrained decoding.
+            model_options: Any model options to upsert into the defaults for this call.
+            tool_calls: If `True`, then tool calls are extracts from the `action` `Component`. Assumption: if tool_calls is enabled, then the action `Component` has a TemplateRepresentation
+
+        Returns:
+            a tuple of (ModelOutputThunk, Context) where the Context is the new context after the generation has been completed.
+        """
+        # --- generation_pre_call hook ---
+        if has_plugins(HookType.GENERATION_PRE_CALL):
+            from ..plugins.hooks.generation import GenerationPreCallPayload
+
+            pre_payload = GenerationPreCallPayload(
+                action=action,
+                context=ctx,
+                format=format,
+                model_options=model_options or {},
+                tool_calls=tool_calls,
+            )
+            _, pre_payload = await invoke_hook(
+                HookType.GENERATION_PRE_CALL, pre_payload, backend=self
+            )
+            model_options = pre_payload.model_options
+            format = pre_payload.format
+            tool_calls = pre_payload.tool_calls
+
+        return await self._generate_from_context(
+            action,
+            ctx,
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )
+
+    @abc.abstractmethod
+    async def _generate_from_context(
+        self,
+        action: Component[C] | CBlock,
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> tuple[ModelOutputThunk[C], Context]:
+        """Backend implementers should override this method to generate the actual response.
 
         Args:
             action: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
@@ -128,98 +176,6 @@ class Backend(abc.ABC):
                 f"generate_from_chat_context awaited on {len(_to_compute)} uncomputed mots."
             )
         await asyncio.gather(*coroutines)
-
-    def __init_subclass__(cls):
-        """Injects generation hooks in concrete backends.
-
-        .. note::
-            The ``generation_post_call`` hook fires via ``_on_computed``, a
-            callback set on the returned ``ModelOutputThunk``:
-
-            - **Lazy MOTs** (normal path): ``_on_computed`` is called inside
-              ``ModelOutputThunk.astream`` after ``post_process`` completes and
-              the value is fully materialized. ``latency_ms`` reflects the full
-              time from the ``generate_from_context`` call to value availability.
-            - **Already-computed MOTs** (e.g. cached responses): ``astream``
-              returns early and never invokes ``_on_computed``, so the hook is
-              fired inline here before returning.
-
-            This hook is observe-only — plugins cannot modify ``model_output``.
-
-        """
-        if "generate_from_context" in cls.__dict__:
-            original = cls.__dict__["generate_from_context"]
-
-            @functools.wraps(original)
-            async def wrapped(
-                self,
-                action: Component[C] | CBlock,
-                ctx: Context,
-                *,
-                format: type[BaseModelSubclass] | None = None,
-                model_options: dict | None = None,
-                tool_calls: bool = False,
-            ):
-                if has_plugins(HookType.GENERATION_PRE_CALL):
-                    from ..plugins.hooks.generation import GenerationPreCallPayload
-
-                    pre_payload = GenerationPreCallPayload(
-                        action=action,
-                        context=ctx,
-                        format=format,
-                        model_options=model_options or {},
-                        tool_calls=tool_calls,
-                    )
-                    _, pre_payload = await invoke_hook(
-                        HookType.GENERATION_PRE_CALL, pre_payload, backend=self
-                    )
-                    model_options = pre_payload.model_options
-                    format = pre_payload.format
-                    tool_calls = pre_payload.tool_calls
-                start_time = time.monotonic()
-                out_result, new_ctx = await original(
-                    self,
-                    action,
-                    ctx,
-                    format=format,
-                    model_options=model_options,
-                    tool_calls=tool_calls,
-                )
-
-                _backend_ref = self
-                _ctx_ref = new_ctx
-
-                async def _fire_post_call(mot: ModelOutputThunk) -> ModelOutputThunk:
-                    """Fires GENERATION_POST_CALL (observe-only)."""
-                    mot._on_computed = None  # prevent double-firing
-                    if not has_plugins(HookType.GENERATION_POST_CALL):
-                        return mot
-                    from ..plugins.hooks.generation import GenerationPostCallPayload
-
-                    latency_ms = (time.monotonic() - start_time) * 1000
-                    glog = getattr(mot, "_generate_log", None)
-                    post_payload = GenerationPostCallPayload(
-                        prompt=glog.prompt if glog else "",
-                        model_output=mot,
-                        latency_ms=latency_ms,
-                    )
-                    await invoke_hook(
-                        HookType.GENERATION_POST_CALL,
-                        post_payload,
-                        backend=_backend_ref,
-                    )
-                    return mot
-
-                out_result._on_computed = _fire_post_call
-
-                # For already-computed MOTs (e.g. cached responses or test mocks),
-                # astream() returns early so _on_computed never fires. Fire here.
-                if getattr(out_result, "is_computed", lambda: False)():
-                    await _fire_post_call(out_result)
-
-                return out_result, new_ctx
-
-            setattr(cls, "generate_from_context", wrapped)
 
 
 def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputThunk]:

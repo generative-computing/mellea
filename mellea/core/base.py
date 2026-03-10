@@ -8,6 +8,7 @@ import base64
 import binascii
 import datetime
 import enum
+import time
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -16,6 +17,9 @@ from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
 
 import typing_extensions
 from PIL import Image as PILImage
+
+from ..plugins.manager import has_plugins, invoke_hook
+from ..plugins.types import HookType
 
 
 class CBlock:
@@ -214,6 +218,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
         self._on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
 
+        self._start: datetime.datetime | None
         self._generate_log: GenerateLog | None = None
 
     def _copy_from(self, other: ModelOutputThunk) -> None:
@@ -375,17 +380,33 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
             )
 
-            if self._on_computed is not None:
-                replacement = await self._on_computed(self)
-                if replacement is not None and replacement is not self:
-                    self._copy_from(replacement)
+            # --- generation_post_call hook ---
+            if has_plugins(HookType.GENERATION_POST_CALL):
+                from ..plugins.hooks.generation import GenerationPostCallPayload
 
-            return self._underlying_value  # type: ignore
+                glog = self._generate_log
+                prompt = glog.prompt if glog and glog.prompt else ""
+                latency_ms = (
+                    (datetime.datetime.now() - self._start).total_seconds() * 1000
+                    if self._start
+                    else -1
+                )
+                post_payload = GenerationPostCallPayload(
+                    prompt=prompt, model_output=self, latency_ms=latency_ms
+                )
+                await invoke_hook(HookType.GENERATION_POST_CALL, post_payload)
+                # NOTE: If we allow generation_post_call to modify the model output thunk, we need to
+                # set the value and copy over fields here.
+                # replacement = await invoke_hook(...)
+                # if replacement is not None and replacement is not self:
+                #     self._copy_from(replacement)
+
+            return self._underlying_value
 
         return (
             self._underlying_value
             if beginning_length == 0
-            else self._underlying_value[beginning_length:]  # type: ignore
+            else self._underlying_value[beginning_length:]
         )
 
     def __repr__(self):

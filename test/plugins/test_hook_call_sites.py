@@ -9,6 +9,7 @@ All tests use lightweight mock backends so no real LLM API calls are made.
 
 from __future__ import annotations
 
+import datetime
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -42,12 +43,13 @@ class _MockBackend(Backend):
         # Accept but discard constructor arguments; real backends need model_id etc.
         pass
 
-    async def generate_from_context(self, action, ctx, **kwargs):
+    async def _generate_from_context(self, action, ctx, **kwargs):
         mot = MagicMock(spec=ModelOutputThunk)
         glog = GenerateLog()
         glog.prompt = "mocked formatted prompt"
         mot._generate_log = glog
         mot.parsed_repr = None
+        mot._start = datetime.datetime.now()
 
         async def _avalue():
             return "mocked output"
@@ -767,7 +769,7 @@ class _MockLazyBackend(Backend):
     def __init__(self, *args, **kwargs):
         pass
 
-    async def generate_from_context(self, action, ctx, **kwargs):
+    async def _generate_from_context(self, action, ctx, **kwargs):
         import asyncio
 
         mot = ModelOutputThunk(value=None)

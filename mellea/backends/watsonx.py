@@ -242,7 +242,7 @@ class WatsonxAIBackend(FormatterBackend):
 
         return model_opts
 
-    async def generate_from_context(
+    async def _generate_from_context(
         self,
         action: Component[C] | CBlock,
         ctx: Context,
@@ -369,6 +369,7 @@ class WatsonxAIBackend(FormatterBackend):
             )
 
         output = ModelOutputThunk(None)
+        output._start = datetime.datetime.now()
         output._context = linearized_context
         output._action = action
         output._model_options = model_opts

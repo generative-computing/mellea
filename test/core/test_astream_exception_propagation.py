@@ -5,6 +5,7 @@ the original generation exception by raising a secondary error from post_process
 (which assumes system invariants that don't hold during failures).
 """
 
+import datetime
 import pytest
 
 from mellea.core.base import CBlock, GenerateType, ModelOutputThunk
@@ -27,6 +28,7 @@ def _make_thunk(post_process=_failing_post_process):
     mot._post_process = post_process
     mot._action = CBlock("test")
     mot._chunk_size = 0
+    mot._start = datetime.datetime.now()
     return mot
 
 
