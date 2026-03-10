@@ -78,7 +78,9 @@ def ensure_plugin_manager() -> Any:
 
 
 async def initialize_plugins(
-    config_path: str | None = None, *, timeout: int = DEFAULT_PLUGIN_TIMEOUT
+    config_path: str | None = None,
+    *,
+    timeout: int = DEFAULT_PLUGIN_TIMEOUT,  # noqa: ASYNC109
 ) -> Any:
     """Initialize the PluginManager with Mellea hook registrations and optional YAML config.
 

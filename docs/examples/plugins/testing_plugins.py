@@ -10,7 +10,7 @@
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from unittest.mock import MagicMock
 
 from mellea.plugins import HookType, PluginMode, block, hook
@@ -59,7 +59,7 @@ def make_payload(action_text: str):
     payload.action.__str__ = lambda self: action_text
     payload.action.description = action_text
     payload.component_type = "Instruction"
-    payload.timestamp = datetime.now(timezone.utc)
+    payload.timestamp = datetime.now(UTC)
     payload.hook = HookType.COMPONENT_PRE_EXECUTE.value
     return payload
 

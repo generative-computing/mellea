@@ -15,6 +15,7 @@ from mellea.plugins.types import PluginMode
 try:
     from cpex.framework.base import Plugin
     from cpex.framework.models import (
+        OnError as _CFOnError,
         PluginConfig,
         PluginMode as _CFPluginMode,
         PluginResult,
@@ -252,6 +253,7 @@ class _FunctionHookAdapter(Plugin):
             hooks=[meta.hook_type],
             mode=_map_mode(meta.mode),
             priority=priority,
+            on_error=_CFOnError.IGNORE,
         )
         super().__init__(config)
         self._fn = fn
@@ -310,6 +312,7 @@ class _MethodHookAdapter(Plugin):
             hooks=[hook_meta.hook_type],
             mode=_map_mode(hook_meta.mode),
             priority=priority,
+            on_error=_CFOnError.IGNORE,
         )
         super().__init__(config)
         self._instance = instance

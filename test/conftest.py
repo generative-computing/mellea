@@ -154,6 +154,12 @@ def pytest_addoption(parser):
         default=False,
         help="Ignore all requirement checks (GPU, RAM, Ollama, API keys)",
     )
+    add_option_safe(
+        "--with-plugins",
+        action="store_true",
+        default=False,
+        help="Register all acceptance plugin sets for every test",
+    )
 
 
 def pytest_configure(config):
@@ -187,6 +193,11 @@ def pytest_configure(config):
     # Composite markers
     config.addinivalue_line(
         "markers", "llm: Tests that make LLM calls (needs at least Ollama)"
+    )
+
+    # Plugin acceptance markers
+    config.addinivalue_line(
+        "markers", "plugins: Acceptance tests that register all built-in plugin sets"
     )
 
     # Store vLLM isolation flag in config
@@ -569,6 +580,45 @@ def normalize_ollama_host():
 def aggressive_cleanup():
     """Aggressive memory cleanup after each test to prevent OOM on CI runners."""
     memory_cleaner()
+
+
+# ============================================================================
+# Plugin Acceptance Sets
+# ============================================================================
+
+
+@pytest.fixture()
+async def register_acceptance_sets():
+    """Register all acceptance plugin sets (logging, sequential, concurrent, fandf).
+
+    Usage: mark your test with ``@pytest.mark.plugins`` and request this fixture,
+    or rely on the autouse ``auto_register_acceptance_sets`` fixture below.
+    """
+    from mellea.plugins import register
+    from mellea.plugins.manager import shutdown_plugins
+    from test.plugins._acceptance_sets import ALL_ACCEPTANCE_SETS
+
+    for ps in ALL_ACCEPTANCE_SETS:
+        register(ps)
+    yield
+    await shutdown_plugins()
+
+
+@pytest.fixture(autouse=True)
+async def auto_register_acceptance_sets(request):
+    """Auto-register acceptance plugin sets for all tests when ``--with-plugins`` is passed on the CLI."""
+    has_flag = request.config.getoption("--with-plugins", default=False)
+    if not has_flag:
+        yield
+        return
+    from mellea.plugins import register
+    from mellea.plugins.manager import shutdown_plugins
+    from test.plugins._acceptance_sets import ALL_ACCEPTANCE_SETS
+
+    for ps in ALL_ACCEPTANCE_SETS:
+        register(ps)
+    yield
+    await shutdown_plugins()
 
 
 @pytest.fixture(autouse=True, scope="module")

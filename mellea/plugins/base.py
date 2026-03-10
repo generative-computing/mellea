@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, TypeAlias
 
@@ -145,7 +145,7 @@ class MelleaBasePayload(PluginPayload):
 
     session_id: str | None = None
     request_id: str = ""
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     hook: str = ""
     user_metadata: dict[str, Any] = Field(default_factory=dict)
 

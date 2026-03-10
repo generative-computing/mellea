@@ -185,16 +185,6 @@ class Instruction(Component[str]):
         res._repair_string = repair_string
         return res
 
-    @property
-    def description(self) -> str:
-        """Return the description text as a plain string."""
-        return str(self._description) if self._description is not None else ""
-
-    @description.setter
-    def description(self, value: str) -> None:
-        """Replace the description text."""
-        self._description = blockify(value)
-
     def _parse(self, computed: ModelOutputThunk) -> str:
         """Parse the model output. Returns string value for now."""
         return computed.value if computed.value is not None else ""

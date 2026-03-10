@@ -14,6 +14,7 @@ import copy
 import logging
 
 from mellea import start_session
+from mellea.core import blockify
 from mellea.plugins import (
     HookType,
     PluginMode,
@@ -67,13 +68,15 @@ async def prepend_safety_preamble(payload, ctx):
     if payload.component_type != "Instruction":
         return
 
-    original_desc = payload.action.description
+    original_desc = (
+        str(payload.action._description) if payload.action._description else ""
+    )
     if original_desc.startswith(PREAMBLE):
         return  # already prepended
 
     log.info("[prepend_safety_preamble] injecting safety preamble")
     new_action = copy.deepcopy(payload.action)
-    new_action.description = PREAMBLE + original_desc
+    new_action._description = blockify(PREAMBLE + original_desc)
     return modify(payload, action=new_action)
 
 

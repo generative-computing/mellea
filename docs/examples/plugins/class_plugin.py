@@ -15,7 +15,7 @@ import re
 import sys
 
 from mellea import start_session
-from mellea.core import ModelOutputThunk
+from mellea.core import ModelOutputThunk, blockify
 from mellea.plugins import (
     HookType,
     Plugin,
@@ -57,13 +57,15 @@ class PIIRedactor(Plugin, name="pii-redactor", priority=5):
         """Scan component action for PII and redact before it reaches the LLM."""
         if payload.component_type != "Instruction":
             return
-        original = payload.action.description
+        original = (
+            str(payload.action._description) if payload.action._description else ""
+        )
         redacted = self._redact(original)
         if redacted != original:
             log.info("[pii-redactor] PII detected in component action — redacting")
             self.redaction_count += 1
             new_action = copy.deepcopy(payload.action)
-            new_action.description = redacted
+            new_action._description = blockify(redacted)
             return modify(payload, action=new_action)
         log.info("[pii-redactor] no PII found in input")
 

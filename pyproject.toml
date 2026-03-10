@@ -99,7 +99,7 @@ sandbox = [
 backends = ["mellea[watsonx,hf,vllm,litellm]"]
 
 hooks = [
-    "cpex>=0.1.0.dev8; python_version >= '3.11'",
+    "cpex>=0.1.0.dev9; python_version >= '3.11'",
     "grpcio>=1.78.0",
 ]
 
