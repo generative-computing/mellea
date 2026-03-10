@@ -401,12 +401,12 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 # if replacement is not None and replacement is not self:
                 #     self._copy_from(replacement)
 
-            return self._underlying_value
+            return self._underlying_value  # type: ignore
 
         return (
             self._underlying_value
             if beginning_length == 0
-            else self._underlying_value[beginning_length:]
+            else self._underlying_value[beginning_length:]  # type: ignore
         )
 
     def __repr__(self):
