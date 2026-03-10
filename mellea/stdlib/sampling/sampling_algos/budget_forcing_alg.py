@@ -1,4 +1,12 @@
-"""Budget forcing implementation."""
+"""Budget-forcing generation algorithm for thinking models.
+
+Implements ``think_budget_forcing``, which extends a model's reasoning phase by
+repeatedly appending a "think more" suffix whenever the model attempts to close its
+``<think>`` block prematurely, following the method proposed in arXiv:2501.19393.
+Generation is split into a thinking pass (bounded by ``think_max_tokens``) and an
+answer pass (bounded by ``answer_max_tokens``), using the raw completions API of an
+``OllamaModelBackend``.
+"""
 
 from typing import Any
 

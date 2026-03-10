@@ -1,3 +1,12 @@
+"""Implementation of the ``m decompose run`` CLI command.
+
+Accepts a task prompt (from a text file or interactive input), calls the multi-step
+LLM decomposition pipeline to produce a structured list of subtasks each with
+constraints and inter-subtask dependencies, then validates and topologically reorders
+the subtasks before writing a JSON result file and a rendered Python script to the
+specified output directory.
+"""
+
 import json
 import keyword
 import re

@@ -1,4 +1,10 @@
-"""SimpleComponent."""
+"""``SimpleComponent``: a lightweight named-span component.
+
+``SimpleComponent`` accepts arbitrary keyword arguments (strings, ``CBlock``s, or
+``Component``s) and renders them as a JSON object keyed by the argument names. It is
+the go-to component type for ad-hoc prompts that do not require a dedicated
+``Component`` subclass or a Jinja2 template.
+"""
 
 from typing import Any
 

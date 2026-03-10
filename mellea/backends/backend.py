@@ -1,4 +1,11 @@
-"""FormatterBackend."""
+"""``FormatterBackend``: base class for prompt-engineering backends.
+
+``FormatterBackend`` extends the abstract ``Backend`` with a ``ChatFormatter`` and
+a ``ModelIdentifier``, bridging mellea's generative programming primitives to models
+that do not yet natively support spans or structured fine-tuning. Concrete backend
+implementations (e.g. Ollama, HuggingFace, OpenAI) subclass ``FormatterBackend`` and
+supply the model-specific ``generate_from_context`` logic.
+"""
 
 import abc
 from enum import Enum

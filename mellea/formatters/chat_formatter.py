@@ -1,4 +1,12 @@
-"""ChatFormatter."""
+"""``ChatFormatter`` for converting context histories to chat-message lists.
+
+``ChatFormatter`` is the standard formatter used by mellea's legacy backends. Its
+``to_chat_messages`` method linearises a sequence of ``Component`` and ``CBlock``
+objects into ``Message`` objects with ``user``, ``assistant``, or ``tool`` roles,
+handling ``ModelOutputThunk`` responses, image attachments, and parsed structured
+outputs. Concrete backends call this formatter when preparing input for a chat
+completion endpoint.
+"""
 
 from ..core import (
     CBlock,

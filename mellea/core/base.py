@@ -1,4 +1,13 @@
-"""Core Classes and Data Structures."""
+"""Foundational data structures for mellea's generative programming model.
+
+Defines the building blocks that flow through every layer of the library: ``CBlock``
+(a content block wrapping a string value), ``Component`` (an abstract composable
+generative unit), ``ModelOutputThunk`` (a lazily-evaluated model response),
+``Context`` and ``ContextTurn`` (stateful conversation history containers),
+``TemplateRepresentation`` (the structured rendering of a component for prompt
+templates), ``ImageBlock``, and ``ModelToolCall``. Understanding these types is
+the starting point for building custom components or sampling strategies.
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,11 @@
-"""Interfaces for Backends and Generation."""
+"""Abstract ``Backend`` interface and generation-walk utilities.
+
+Defines the ``Backend`` abstract base class whose two key abstract methods —
+``generate_from_context`` (context-aware single-action generation) and
+``generate_from_raw`` (context-free batch generation) — all concrete backends must
+implement. Also provides ``generate_walk``, which traverses a ``Component`` tree to
+find un-computed ``ModelOutputThunk`` leaves that need to be resolved before rendering.
+"""
 
 import abc
 import asyncio

@@ -1,4 +1,11 @@
-"""Utilities for Backends."""
+"""Shared utility functions used across formatter-based backend implementations.
+
+Provides ``to_chat``, which converts a ``Context`` and a ``Component`` action into
+the list of role/content dicts expected by ``apply_chat_template``; and
+``to_tool_calls``, which parses a raw model output string into validated
+``ModelToolCall`` objects. These helpers are consumed internally by all
+``FormatterBackend`` subclasses.
+"""
 
 from __future__ import annotations
 

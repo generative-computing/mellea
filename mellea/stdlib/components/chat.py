@@ -1,4 +1,12 @@
-"""Chat primitives."""
+"""Chat primitives: the ``Message`` and ``ToolMessage`` components.
+
+Defines ``Message``, the ``Component`` subtype used to represent a single turn in a
+chat history with a ``role`` (``user``, ``assistant``, ``system``, or ``tool``),
+text ``content``, and optional ``images`` and ``documents`` attachments. Also provides
+``ToolMessage`` (a ``Message`` subclass that carries the tool name and arguments) and
+the ``as_chat_history`` utility for converting a ``Context`` into a flat list of
+``Message`` objects.
+"""
 
 from collections.abc import Mapping
 from typing import Any, Literal

@@ -1,4 +1,11 @@
-"""Basic Contexts."""
+"""Concrete ``Context`` implementations for common conversation patterns.
+
+Provides ``ChatContext``, which accumulates all turns in a sliding-window chat history
+(configurable via ``window_size``), and ``SimpleContext``, in which each interaction
+is treated as a stateless single-turn exchange (no prior history is passed to the
+model). Import ``ChatContext`` for multi-turn conversations and ``SimpleContext`` when
+you want each call to the model to be independent.
+"""
 
 from __future__ import annotations
 

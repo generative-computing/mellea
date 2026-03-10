@@ -1,4 +1,11 @@
-"""Caching strategies."""
+"""Cache abstractions and implementations for model state.
+
+Defines the abstract ``Cache`` interface with ``put``, ``get``, and
+``current_size`` methods, and provides a concrete ``SimpleLRUCache`` that evicts
+the least-recently-used entry when capacity is exceeded — optionally calling an
+``on_evict`` callback (e.g. to free GPU memory). Used by local HuggingFace backends
+to store and reuse KV cache state across requests.
+"""
 
 import abc
 from collections import OrderedDict

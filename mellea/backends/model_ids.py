@@ -1,4 +1,11 @@
-"""Dataclasses for ModelIdentifiers."""
+"""``ModelIdentifier`` dataclass and a catalog of pre-defined model IDs.
+
+``ModelIdentifier`` is a frozen dataclass that groups the platform-specific name
+variants for a model (HuggingFace, Ollama, WatsonX, MLX, OpenAI, Bedrock) so that
+a single constant can be passed to any backend without manual string translation.
+The module also ships a curated catalog of ready-to-use constants for popular
+open-weight models including IBM Granite 4, Meta Llama 4, Mistral, and Qwen families.
+"""
 
 import dataclasses
 

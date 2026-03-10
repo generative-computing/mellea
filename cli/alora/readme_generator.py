@@ -1,3 +1,13 @@
+"""LLM-assisted generator for adapter intrinsic README files.
+
+Uses a ``MelleaSession`` with rejection sampling to derive README template variables
+from a JSONL training dataset — including a high-level description, the inferred
+Python argument list, and Jinja2-renderable sample rows. Validates the generated
+output with deterministic requirements (correct naming conventions, syntactically
+valid argument lists) before rendering the final ``INTRINSIC_README.md`` via a
+Jinja2 template.
+"""
+
 import ast
 import json
 import os

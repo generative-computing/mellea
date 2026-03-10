@@ -1,3 +1,11 @@
+"""Execution engine for the test-based LLM evaluation pipeline.
+
+Loads JSON test files into ``TestBasedEval`` objects and, for each test, runs a
+generator model to produce responses and a separate judge model to score them. Parses
+the judge output for a ``{"score": ..., "justification": ...}`` JSON fragment,
+aggregates per-input pass/fail counts, and saves the full results to JSON or JSONL.
+"""
+
 import json
 import re
 from pathlib import Path

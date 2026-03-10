@@ -1,4 +1,12 @@
-"""Components used for ReACT."""
+"""Components that implement the ReACT (Reason + Act) agentic pattern.
+
+Provides ``ReactInitiator``, which primes the model with a goal and a tool list, and
+``ReactThought``, which signals a thinking step. Also exports the
+``MELLEA_FINALIZER_TOOL`` sentinel string used to signal loop termination. These
+components are consumed by ``mellea.stdlib.frameworks.react``, which orchestrates the
+reasoning–acting cycle until the model invokes ``final_answer`` or the step budget
+is exhausted.
+"""
 
 import inspect
 from typing import Generic

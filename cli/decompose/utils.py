@@ -1,3 +1,12 @@
+"""Filename validation utilities for the decompose pipeline.
+
+Provides ``validate_filename``, which checks that a candidate output filename
+contains only safe characters (alphanumeric, underscores, hyphens, periods, and
+spaces) and falls within a reasonable length limit. Used to prevent path-traversal
+or shell-injection issues when writing decomposition output files.
+"""
+
+
 def validate_filename(candidate_str: str) -> bool:
     import re
 

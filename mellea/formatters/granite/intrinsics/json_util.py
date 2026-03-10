@@ -1,6 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
-"""JSON parsing code used by this package."""
+"""JSON parsing utilities for Granite intrinsic formatters.
+
+Provides a fast, position-aware JSON literal parser (``JsonLiteralWithPosition``) used
+to extract and re-score tokens inside structured model outputs. The module also defines
+compiled regular expressions for JSON structural characters, numbers, booleans, and
+null values that are used throughout the Granite intrinsic formatting pipeline.
+"""
 
 # Standard
 import bisect

@@ -1,4 +1,11 @@
-"""Utilities for KV smashing."""
+"""Low-level utilities for concatenating transformer KV caches (KV smashing).
+
+Provides functions for merging ``DynamicCache`` and legacy tuple caches along the
+time axis (``merge_dynamic_caches``, ``legacy_cache_smash``), and
+``tokens_to_legacy_cache`` for converting a tokenized prompt into a prefilled KV
+cache. These helpers are used internally by local HuggingFace backends that reuse
+cached prefix computations across multiple generation calls.
+"""
 
 from collections.abc import Iterable
 from functools import reduce

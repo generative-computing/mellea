@@ -1,4 +1,12 @@
-"""Async helper functions."""
+"""Async helper functions for managing concurrent model output thunks.
+
+Provides ``send_to_queue``, which feeds a backend response coroutine or async iterator
+into an ``asyncio.Queue`` (including sentinel and error forwarding); ``wait_for_all_mots``,
+which gathers multiple ``ModelOutputThunk`` computations in a single ``asyncio.gather``
+call; and ``get_current_event_loop``, a safe wrapper that returns ``None`` instead of
+raising when no event loop is running. These utilities are used internally by backends
+that operate in async contexts.
+"""
 
 import asyncio
 from collections import OrderedDict
