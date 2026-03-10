@@ -238,7 +238,7 @@ def _setup_meter_provider() -> Any:
         warnings.warn(
             "Metrics are enabled (MELLEA_METRICS_ENABLED=true) but no exporters are configured. "
             "Metrics will be collected but not exported. "
-            "Set MELLEA_METRICS_PROMETHEUS_PORT to a port number (e.g., 9464), "
+            "Set OTEL_EXPORTER_PROMETHEUS_PORT to a port number (e.g., 9464), "
             "set MELLEA_METRICS_OTLP=true with an endpoint (OTEL_EXPORTER_OTLP_METRICS_ENDPOINT or "
             "OTEL_EXPORTER_OTLP_ENDPOINT), or set MELLEA_METRICS_CONSOLE=true to export metrics.",
             UserWarning,
