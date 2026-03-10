@@ -594,7 +594,9 @@ async def register_acceptance_sets(request):
     Usage: mark your test with ``@pytest.mark.plugins`` and request this fixture,
     or rely on the autouse ``auto_register_acceptance_sets`` fixture below.
     """
-    plugins_disabled = request.config.getoption("--disable-default-mellea-plugins", default=False)
+    plugins_disabled = request.config.getoption(
+        "--disable-default-mellea-plugins", default=False
+    )
     if not plugins_disabled:
         # If plugins are enabled, we don't need to re-enable them for this specific test.
         return
@@ -611,8 +613,10 @@ async def register_acceptance_sets(request):
 
 @pytest.fixture(autouse=True, scope="session")
 async def auto_register_acceptance_sets(request):
-    """Auto-register acceptance plugin sets for all tests by defualt; disable when ``--disable-default-mellea-plugins`` is passed on the CLI."""
-    disable_plugins = request.config.getoption("--disable-default-mellea-plugins", default=False)
+    """Auto-register acceptance plugin sets for all tests by default; disable when ``--disable-default-mellea-plugins`` is passed on the CLI."""
+    disable_plugins = request.config.getoption(
+        "--disable-default-mellea-plugins", default=False
+    )
     if disable_plugins:
         yield
         return

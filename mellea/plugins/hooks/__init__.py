@@ -1,31 +1,25 @@
 """Hook payload classes for the Mellea plugin system."""
 
-from mellea.plugins.hooks.component import (
+from .component import (
     ComponentPostErrorPayload,
     ComponentPostSuccessPayload,
     ComponentPreExecutePayload,
 )
-from mellea.plugins.hooks.generation import (
-    GenerationPostCallPayload,
-    GenerationPreCallPayload,
-)
-from mellea.plugins.hooks.sampling import (
+from .generation import GenerationPostCallPayload, GenerationPreCallPayload
+from .sampling import (
     SamplingIterationPayload,
     SamplingLoopEndPayload,
     SamplingLoopStartPayload,
     SamplingRepairPayload,
 )
-from mellea.plugins.hooks.session import (
+from .session import (
     SessionCleanupPayload,
     SessionPostInitPayload,
     SessionPreInitPayload,
     SessionResetPayload,
 )
-from mellea.plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
-from mellea.plugins.hooks.validation import (
-    ValidationPostCheckPayload,
-    ValidationPreCheckPayload,
-)
+from .tool import ToolPostInvokePayload, ToolPreInvokePayload
+from .validation import ValidationPostCheckPayload, ValidationPreCheckPayload
 
 __all__ = [
     # Component

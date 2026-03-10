@@ -65,13 +65,16 @@ class _MockBackend(Backend):
         # Required abstract method; not exercised by these tests
         return []
 
+
 async def _noop_process(mot, chunk):
     if mot._underlying_value is None:
         mot._underlying_value = ""
     mot._underlying_value += str(chunk)
 
+
 async def _noop_post_process(mot):
     return
+
 
 def _make_thunk():
     mot = ModelOutputThunk(value=None)
@@ -82,6 +85,7 @@ def _make_thunk():
     mot._chunk_size = 0
     mot._start = datetime.datetime.now()
     return mot
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -155,7 +159,7 @@ class TestGenerationHookCallSites:
         mot = _make_thunk()
         await mot._async_queue.put("hello")
         await mot._async_queue.put("goodbye")
-        await mot._async_queue.put(None) # sentinel for being done
+        await mot._async_queue.put(None)  # sentinel for being done
 
         await mot.avalue()
         assert len(observed) == 1
@@ -177,7 +181,7 @@ class TestGenerationHookCallSites:
         mot = _make_thunk()
         await mot._async_queue.put("hello")
         await mot._async_queue.put("goodbye")
-        await mot._async_queue.put(None) # sentinel for being done
+        await mot._async_queue.put(None)  # sentinel for being done
         await mot.avalue()
 
         assert observed[0].model_output is not None
@@ -197,12 +201,13 @@ class TestGenerationHookCallSites:
         mot = _make_thunk()
         await mot._async_queue.put("hello")
         await mot._async_queue.put("goodbye")
-        await mot._async_queue.put(None) # sentinel for being done
+        await mot._async_queue.put(None)  # sentinel for being done
 
         await asyncio.sleep(1)
         await mot.avalue()
 
         assert observed[0].latency_ms >= 0
+
 
 # ---------------------------------------------------------------------------
 # Component hook call sites
@@ -951,6 +956,7 @@ class TestSamplingLoopEndObserveOnly:
         assert not sampling_result.success
         assert sampling_result.result is not None
         assert observed == [False]
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

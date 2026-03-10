@@ -6,6 +6,7 @@ the original generation exception by raising a secondary error from post_process
 """
 
 import datetime
+
 import pytest
 
 from mellea.core.base import CBlock, GenerateType, ModelOutputThunk

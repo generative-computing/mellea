@@ -26,7 +26,9 @@ class TestNoOpGuards:
     @pytest.mark.asyncio
     async def test_invoke_hook_noop_when_no_plugins(self, request):
         """When no plugins are registered, invoke_hook returns (None, original_payload)."""
-        plugins_disabled = request.config.getoption("--disable-default-mellea-plugins", default=False)
+        plugins_disabled = request.config.getoption(
+            "--disable-default-mellea-plugins", default=False
+        )
         if not plugins_disabled:
             pytest.skip("must pass --disable-default-mellea-plugins for this test")
         payload = MelleaBasePayload(request_id="test-123")
@@ -36,7 +38,9 @@ class TestNoOpGuards:
 
     def test_has_plugins_false_by_default(self, request):
         """has_plugins() returns False when no plugins have been registered."""
-        plugins_disabled = request.config.getoption("--disable-default-mellea-plugins", default=False)
+        plugins_disabled = request.config.getoption(
+            "--disable-default-mellea-plugins", default=False
+        )
         if not plugins_disabled:
             pytest.skip("must pass --disable-default-mellea-plugins for this test")
         # After shutdown, plugins should not be enabled
