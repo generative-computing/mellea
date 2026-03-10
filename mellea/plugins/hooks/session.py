@@ -14,7 +14,7 @@ class SessionPreInitPayload(MelleaBasePayload):
     """Payload for ``session_pre_init`` — before backend initialization.
 
     Attributes:
-        backend_name: Name of the backend (e.g. ``"ollama"``, ``"openai"``) (writable).
+        backend_name: Name of the backend (e.g. ``"ollama"``, ``"openai"``).
         model_id: Model identifier string (writable).
         model_options: Optional dict of model options like temperature, max_tokens (writable).
         context_type: Class name of the context being used (e.g. ``"SimpleContext"``).

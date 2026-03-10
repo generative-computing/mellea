@@ -60,8 +60,8 @@ class SamplingRepairPayload(MelleaBasePayload):
 
         failed_result: The ``ModelOutputThunk`` that failed validation.
         failed_validations: List of ``(Requirement, ValidationResult)`` tuples that failed.
-        repair_action: The repaired ``Component`` to use for the next attempt (writable).
-        repair_context: The ``Context`` to use for the next attempt (writable).
+        repair_action: The repaired ``Component`` to use for the next attempt.
+        repair_context: The ``Context`` to use for the next attempt.
         repair_iteration: 1-based iteration at which the repair was triggered.
     """
 
@@ -80,7 +80,7 @@ class SamplingLoopEndPayload(MelleaBasePayload):
     Attributes:
         success: ``True`` if at least one attempt passed all requirements.
         iterations_used: Total number of iterations the loop executed.
-        final_result: The selected ``ModelOutputThunk`` (best success or best failure) (writable).
+        final_result: The selected ``ModelOutputThunk`` (best success or best failure).
         final_action: The ``Component`` that produced ``final_result``.
 
         final_context: The ``Context`` associated with ``final_result``.

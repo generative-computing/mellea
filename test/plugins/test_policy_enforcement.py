@@ -59,22 +59,22 @@ async def reset_plugins():
 class TestWritableFieldAccepted:
     """Modifications to writable fields must be reflected in the returned payload."""
 
-    async def test_backend_name_writable_in_session_pre_init(self) -> None:
+    async def test_model_id_writable_in_session_pre_init(self) -> None:
         @hook("session_pre_init", priority=10)
-        async def change_backend(payload, ctx):
+        async def change_model(payload, ctx):
             return PluginResult(
                 continue_processing=True,
                 modified_payload=payload.model_copy(
-                    update={"backend_name": "plugin-backend"}
+                    update={"model_id": "plugin-model"}
                 ),
             )
 
-        register(change_backend)
+        register(change_model)
 
         payload = _session_payload()
         _, returned = await invoke_hook(HookType.SESSION_PRE_INIT, payload)
 
-        assert returned.backend_name == "plugin-backend"
+        assert returned.model_id == "plugin-model"
 
     async def test_model_options_writable_in_generation_pre_call(self) -> None:
         new_options = {"temperature": 0.9, "max_tokens": 512}
@@ -216,9 +216,10 @@ class TestMixedModification:
                 modified_payload=payload.model_copy(
                     update={
                         # writable — should be accepted
-                        "backend_name": "new-backend",
                         "model_id": "new-model",
+                        "model_options": {"temperature": 0.9},
                         # non-writable — should be discarded
+                        "backend_name": "new-backend",
                         "session_id": "injected-sid",
                         "request_id": "injected-rid",
                     }
@@ -232,8 +233,9 @@ class TestMixedModification:
         )
         _, returned = await invoke_hook(HookType.SESSION_PRE_INIT, payload)
 
-        assert returned.backend_name == "new-backend"
         assert returned.model_id == "new-model"
+        assert returned.model_options == {"temperature": 0.9}
+        assert returned.backend_name == "original-backend"
         assert returned.session_id == original_session_id
         assert returned.request_id == original_request_id
 
@@ -254,18 +256,18 @@ class TestPayloadChaining:
             return PluginResult(
                 continue_processing=True,
                 modified_payload=payload.model_copy(
-                    update={"backend_name": "modified-by-a"}
+                    update={"model_id": "modified-by-a"}
                 ),
             )
 
         @hook("session_pre_init", mode=PluginMode.TRANSFORM, priority=100)
         async def plugin_b(payload, ctx):
-            # Record the backend_name seen by Plugin B, then write model_id
-            received_by_b.append(payload.backend_name)
+            # Record the model_id seen by Plugin B, then write model_options
+            received_by_b.append(payload.model_id)
             return PluginResult(
                 continue_processing=True,
                 modified_payload=payload.model_copy(
-                    update={"model_id": "modified-by-b"}
+                    update={"model_options": {"temperature": 0.9}}
                 ),
             )
 
@@ -275,12 +277,12 @@ class TestPayloadChaining:
         payload = _session_payload()
         _, returned = await invoke_hook(HookType.SESSION_PRE_INIT, payload)
 
-        # Plugin B must have observed Plugin A's accepted backend_name change
+        # Plugin B must have observed Plugin A's accepted model_id change
         assert received_by_b == ["modified-by-a"]
 
         # Final payload must carry both accepted modifications
-        assert returned.backend_name == "modified-by-a"
-        assert returned.model_id == "modified-by-b"
+        assert returned.model_id == "modified-by-a"
+        assert returned.model_options == {"temperature": 0.9}
 
 
 # ---------------------------------------------------------------------------

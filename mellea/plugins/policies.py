@@ -37,16 +37,13 @@ def _build_policies() -> dict[str, Any]:
     return {
         # Session Lifecycle
         "session_pre_init": HookPayloadPolicy(
-            writable_fields=frozenset({"backend_name", "model_id", "model_options"})
+            writable_fields=frozenset({"model_id", "model_options"})
         ),
         # session_post_init, session_reset, session_cleanup: observe-only
         # Component Lifecycle
         "component_pre_execute": HookPayloadPolicy(
             writable_fields=frozenset(
                 {
-                    "action",
-                    "context",
-                    "context_view",
                     "requirements",
                     "model_options",
                     "format",
@@ -55,17 +52,12 @@ def _build_policies() -> dict[str, Any]:
                 }
             )
         ),
-        "component_post_success": HookPayloadPolicy(
-            writable_fields=frozenset({"result"})
-        ),
-        # component_post_error: observe-only
+        # component_post_success, component_post_error: observe-only
         # Generation Pipeline
         "generation_pre_call": HookPayloadPolicy(
             writable_fields=frozenset({"model_options", "tool_calls", "format"})
         ),
-        "generation_post_call": HookPayloadPolicy(
-            writable_fields=frozenset({"model_output"})
-        ),
+        # generation_post_call: observe-only
         # Validation
         "validation_pre_check": HookPayloadPolicy(
             writable_fields=frozenset({"requirements", "model_options"})
@@ -77,13 +69,7 @@ def _build_policies() -> dict[str, Any]:
         "sampling_loop_start": HookPayloadPolicy(
             writable_fields=frozenset({"loop_budget"})
         ),
-        # sampling_iteration: observe-only
-        "sampling_repair": HookPayloadPolicy(
-            writable_fields=frozenset({"repair_action", "repair_context"})
-        ),
-        "sampling_loop_end": HookPayloadPolicy(
-            writable_fields=frozenset({"final_result"})
-        ),
+        # sampling_iteration, sampling_repair, sampling_loop_end: observe-only
         # Tool Execution
         "tool_pre_invoke": HookPayloadPolicy(
             writable_fields=frozenset({"model_tool_call"})

@@ -257,15 +257,9 @@ class BaseSamplingStrategy(SamplingStrategy):
                         all_results=sampled_results,
                         all_validations=sampled_scores,
                     )
-                    _, end_payload = await invoke_hook(
+                    await invoke_hook(
                         HookType.SAMPLING_LOOP_END, end_payload, backend=backend
                     )
-                    if (
-                        end_payload.final_result is not None
-                        and end_payload.final_result is not result
-                    ):
-                        result = end_payload.final_result
-                        sampled_results[-1] = result
 
                 # SUCCESS !!!!
                 return SamplingResult(
@@ -314,11 +308,9 @@ class BaseSamplingStrategy(SamplingStrategy):
                     repair_context=next_context,
                     repair_iteration=loop_count,
                 )
-                _, repair_payload = await invoke_hook(
+                await invoke_hook(
                     HookType.SAMPLING_REPAIR, repair_payload, backend=backend
                 )
-                next_action = repair_payload.repair_action or next_action
-                next_context = repair_payload.repair_context or next_context
 
         flog.info(
             f"Invoking select_from_failure after {len(sampled_results)} failed attempts."
@@ -354,14 +346,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 all_results=sampled_results,
                 all_validations=sampled_scores,
             )
-            _, end_payload = await invoke_hook(
-                HookType.SAMPLING_LOOP_END, end_payload, backend=backend
-            )
-            if (
-                end_payload.final_result is not None
-                and end_payload.final_result is not sampled_results[best_failed_index]
-            ):
-                sampled_results[best_failed_index] = end_payload.final_result
+            await invoke_hook(HookType.SAMPLING_LOOP_END, end_payload, backend=backend)
 
         return SamplingResult(
             result_index=best_failed_index,

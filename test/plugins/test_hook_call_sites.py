@@ -710,11 +710,11 @@ class TestSessionHookCallSites:
 # ---------------------------------------------------------------------------
 
 
-class TestGenerationPostCallMutation:
-    """GENERATION_POST_CALL: a hook that replaces model_output is applied (eager path)."""
+class TestGenerationPostCallObserveOnly:
+    """GENERATION_POST_CALL is observe-only — modifications are discarded."""
 
-    async def test_hook_can_replace_model_output(self) -> None:
-        """A plugin that returns a modified model_output replaces the returned thunk."""
+    async def test_modification_discarded_on_eager_path(self) -> None:
+        """A plugin that tries to replace model_output has its change discarded."""
         replacement = MagicMock(spec=ModelOutputThunk)
         replacement._generate_log = None
 
@@ -729,7 +729,9 @@ class TestGenerationPostCallMutation:
             CBlock("mutation test"), MagicMock(spec=Context)
         )
 
-        assert result is replacement
+        # model_output is no longer writable — original is preserved
+        assert result is not replacement
+        assert isinstance(result, ModelOutputThunk)
 
     async def test_no_modification_returns_original_output(self) -> None:
         """When the hook returns None the original thunk is returned unchanged."""
@@ -801,14 +803,12 @@ class _MockLazyBackend(Backend):
         return []
 
 
-class TestGenerationPostCallMutationLazyPath:
-    """GENERATION_POST_CALL: model_output replacement works on the lazy/stream path."""
+class TestGenerationPostCallObserveOnlyLazyPath:
+    """GENERATION_POST_CALL is observe-only on the lazy/stream path."""
 
-    async def test_hook_can_replace_model_output_on_lazy_path(self) -> None:
-        """A plugin replacing model_output has its fields copied into the original MOT via _copy_from."""
+    async def test_modification_discarded_on_lazy_path(self) -> None:
+        """A plugin trying to replace model_output has its change discarded on lazy path."""
         replacement = ModelOutputThunk(value="replaced output")
-        replacement.parsed_repr = "replaced parsed"
-        replacement._thinking = "replaced thinking"
         replacement_glog = GenerateLog()
         replacement_glog.prompt = "replaced prompt"
         replacement._generate_log = replacement_glog
@@ -824,14 +824,9 @@ class TestGenerationPostCallMutationLazyPath:
             CBlock("lazy mutation test"), MagicMock(spec=Context)
         )
 
-        # The caller holds `result` — it's the original MOT, not the replacement object
-        assert result is not replacement
-        # But _copy_from should have swapped the output fields
+        # model_output is no longer writable — original value is preserved
         await result.avalue()
-        assert result.value == "replaced output"
-        assert result.parsed_repr == "replaced parsed"
-        assert result._thinking == "replaced thinking"
-        assert result._generate_log is replacement_glog
+        assert result.value == "lazy output"
 
     async def test_no_modification_preserves_original_on_lazy_path(self) -> None:
         """When the hook returns None on the lazy path, the original MOT is unchanged."""
@@ -871,61 +866,28 @@ class TestGenerationPostCallMutationLazyPath:
         assert fire_count == 1
 
 
-class TestSamplingLoopEndMutation:
-    """SAMPLING_LOOP_END: a hook that replaces final_result is applied."""
+class TestSamplingLoopEndObserveOnly:
+    """SAMPLING_LOOP_END is observe-only — modifications are discarded."""
 
-    async def test_hook_can_replace_final_result_on_success_path(self) -> None:
-        """On success, a plugin that replaces final_result is reflected in SamplingResult.result."""
+    async def test_observe_only_on_success_path(self) -> None:
+        """Hook fires on success but cannot modify final_result."""
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 
-        replacement = MagicMock(spec=ModelOutputThunk)
-        glog = GenerateLog()
-        glog.prompt = "replaced"
-        replacement._generate_log = glog
-        replacement.value = "replaced output"
+        observed: list[bool] = []
 
         @hook("sampling_loop_end")
-        async def swap_result(payload, *_):
-            modified = payload.model_copy(update={"final_result": replacement})
-            return PluginResult(continue_processing=True, modified_payload=modified)
-
-        register(swap_result)
-        backend = _MockBackend()
-        ctx = SimpleContext()
-        strategy = RejectionSamplingStrategy(loop_budget=1)
-
-        sampling_result = await strategy.sample(
-            Instruction("mutation test"),
-            context=ctx,
-            backend=backend,
-            requirements=[],
-            format=None,
-            model_options=None,
-            tool_calls=False,
-            show_progress=False,
-        )
-
-        assert sampling_result.result is replacement
-
-    async def test_no_modification_returns_original_result_on_success_path(
-        self,
-    ) -> None:
-        """When the hook returns None on success, the original result is unchanged."""
-        from mellea.stdlib.components import Instruction
-        from mellea.stdlib.sampling.base import RejectionSamplingStrategy
-
-        @hook("sampling_loop_end")
-        async def observe_only(*_):
+        async def observe_success(payload, *_):
+            observed.append(payload.success)
             return None
 
-        register(observe_only)
+        register(observe_success)
         backend = _MockBackend()
         ctx = SimpleContext()
         strategy = RejectionSamplingStrategy(loop_budget=1)
 
         sampling_result = await strategy.sample(
-            Instruction("no-op test"),
+            Instruction("observe test"),
             context=ctx,
             backend=backend,
             requirements=[],
@@ -937,31 +899,25 @@ class TestSamplingLoopEndMutation:
 
         assert sampling_result.result is not None
         assert isinstance(sampling_result.result, ModelOutputThunk)
+        assert observed == [True]
 
-    async def test_hook_can_replace_final_result_on_failure_path(self) -> None:
-        """On failure (budget exhausted), replacing final_result is reflected in SamplingResult.result."""
+    async def test_observe_only_on_failure_path(self) -> None:
+        """Hook fires on failure but cannot modify final_result."""
         from mellea.core.requirement import Requirement, ValidationResult
         from mellea.stdlib.components import Instruction
         from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 
-        replacement = MagicMock(spec=ModelOutputThunk)
-        glog = GenerateLog()
-        glog.prompt = "replaced failure"
-        replacement._generate_log = glog
-        replacement.value = "replaced failure output"
+        observed: list[bool] = []
 
         @hook("sampling_loop_end")
-        async def swap_result(payload, *_):
-            if not payload.success:
-                modified = payload.model_copy(update={"final_result": replacement})
-                return PluginResult(continue_processing=True, modified_payload=modified)
+        async def observe_failure(payload, *_):
+            observed.append(payload.success)
             return None
 
-        register(swap_result)
+        register(observe_failure)
         backend = _MockBackend()
         ctx = SimpleContext()
 
-        # A requirement that always fails via validation_fn forces the failure path.
         always_fail = Requirement(
             description="always fails",
             validation_fn=lambda _ctx: ValidationResult(
@@ -971,7 +927,7 @@ class TestSamplingLoopEndMutation:
         strategy = RejectionSamplingStrategy(loop_budget=1)
 
         sampling_result = await strategy.sample(
-            Instruction("failure mutation test"),
+            Instruction("failure observe test"),
             context=ctx,
             backend=backend,
             requirements=[always_fail],
@@ -982,4 +938,5 @@ class TestSamplingLoopEndMutation:
         )
 
         assert not sampling_result.success
-        assert sampling_result.result is replacement
+        assert sampling_result.result is not None
+        assert observed == [False]

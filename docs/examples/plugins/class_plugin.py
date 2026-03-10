@@ -2,28 +2,19 @@
 #
 # Class-based plugin — group related hooks in a single Plugin subclass.
 #
-# This example creates a PII redaction plugin that:
-#   1. Scans input descriptions for SSN patterns before component execution
-#   2. Scans LLM output for SSN patterns after generation and replaces them
+# This example creates a PII protection plugin that:
+#   1. Blocks input containing SSN patterns before component execution
+#   2. Scans LLM output for SSN patterns after generation (observe-only)
 #
 # Run:
 #   uv run python docs/examples/plugins/class_plugin.py
 
-import copy
 import logging
 import re
 import sys
 
 from mellea import start_session
-from mellea.core import ModelOutputThunk, blockify
-from mellea.plugins import (
-    HookType,
-    Plugin,
-    PluginViolationError,
-    hook,
-    modify,
-    register,
-)
+from mellea.plugins import HookType, Plugin, PluginViolationError, block, hook, register
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,45 +44,43 @@ class PIIRedactor(Plugin, name="pii-redactor", priority=5):
         self.redaction_count = 0
 
     @hook(HookType.COMPONENT_PRE_EXECUTE)
-    async def redact_input(self, payload, ctx):
-        """Scan component action for PII and redact before it reaches the LLM."""
+    async def reject_pii_input(self, payload, ctx):
+        """Block component execution if the action contains PII patterns."""
         if payload.component_type != "Instruction":
             return
         original = (
             str(payload.action._description) if payload.action._description else ""
         )
-        redacted = self._redact(original)
-        if redacted != original:
-            log.info("[pii-redactor] PII detected in component action — redacting")
+        if self._contains_pii(original):
+            log.warning("[pii-redactor] PII detected in component action — blocking")
             self.redaction_count += 1
-            new_action = copy.deepcopy(payload.action)
-            new_action._description = blockify(redacted)
-            return modify(payload, action=new_action)
+            return block(
+                "Input contains PII patterns that must be removed before processing",
+                code="PII_INPUT_DETECTED",
+            )
         log.info("[pii-redactor] no PII found in input")
 
     @hook(HookType.GENERATION_POST_CALL)
-    async def redact_output(self, payload, ctx):
-        """Scan LLM output for PII and replace it before the result is returned.
+    async def scan_output(self, payload, ctx):
+        """Scan LLM output for PII and log a warning if detected.
 
-        This hook fires after the ``ModelOutputThunk`` is computed, so
-        ``payload.model_output.value`` is always populated here.
+        ``generation_post_call`` is observe-only — plugins cannot modify the
+        ``model_output``.  This hook therefore only inspects the output and
+        records a warning for downstream monitoring/alerting.
         """
         mot_value = getattr(payload.model_output, "value", None)
         if mot_value is None:
             log.info("[pii-redactor] output not yet computed — skipping output scan")
             return
         original = str(mot_value)
-        redacted = self._redact(original)
-        if redacted != original:
-            log.warning("[pii-redactor] PII detected in LLM output — redacting")
+        if self._contains_pii(original):
+            log.warning("[pii-redactor] PII detected in LLM output (observe-only)")
             self.redaction_count += 1
-            return modify(payload, model_output=ModelOutputThunk(value=redacted))
-        log.info("[pii-redactor] no PII found in output")
+        else:
+            log.info("[pii-redactor] no PII found in output")
 
-    def _redact(self, text: str) -> str:
-        for pattern in self.patterns:
-            text = re.sub(pattern, "[REDACTED]", text)
-        return text
+    def _contains_pii(self, text: str) -> bool:
+        return any(re.search(p, text) for p in self.patterns)
 
 
 # Create an instance and register it globally
@@ -106,17 +95,25 @@ if __name__ == "__main__":
         log.info("Session started (id=%s)", m.id)
         log.info("")
 
+        # Request 1: contains an SSN — the input hook blocks execution.
+        log.info("Request 1: input with PII (should be blocked)")
         try:
-            # The SSN in this prompt is redacted before reaching the LLM;
-            # any SSN that slips through in the output is redacted on return.
-            result = m.instruct(
+            m.instruct(
                 "Summarize this customer record: "
                 "Name: Jane Doe, SSN: 123-45-6789, Status: Active"
             )
-            log.info("")
+        except PluginViolationError as e:
+            log.info(
+                "Blocked as expected on %s: [%s] %s", e.hook_type, e.code, e.reason
+            )
+        log.info("")
+
+        # Request 2: clean input — no PII, so it reaches the LLM.
+        # If the LLM output happens to contain PII, redact_output scrubs it.
+        log.info("Request 2: clean input (should succeed)")
+        try:
+            result = m.instruct("Name the three primary colors.")
             log.info("Result: %s", result)
-            log.info("")
-            log.info("Total redactions applied: %d", redactor.redaction_count)
         except PluginViolationError as e:
             log.warning(
                 "Execution blocked on %s: [%s] %s (plugin=%s)",
@@ -126,3 +123,6 @@ if __name__ == "__main__":
                 e.plugin_name,
             )
             sys.exit(1)
+
+        log.info("")
+        log.info("Total PII detections: %d", redactor.redaction_count)

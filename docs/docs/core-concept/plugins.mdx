@@ -395,10 +395,9 @@ This section is a comprehensive reference for every implemented hook type. For e
 
 **Payload fields:** `backend_name`, `model_id`, `model_options`, `context_type`
 
-**Writable fields:** `backend_name`, `model_id`, `model_options`
+**Writable fields:** `model_id`, `model_options`
 
 **Use cases:**
-- Routing to alternative backends based on policy
 - Enforcing model usage restrictions
 - Injecting default model options
 
@@ -453,9 +452,9 @@ async def enforce_model_policy(payload, ctx):
 
 **Fires:** Before any component is executed via `aact()`. This is the primary interception point for all generation requests.
 
-**Payload fields:** `component_type`, `action`, `context`, `context_view`, `requirements`, `model_options`, `format`, `strategy`, `tool_calls_enabled`
+**Payload fields:** `component_type`, `action`, `context_view`, `requirements`, `model_options`, `format`, `strategy`, `tool_calls_enabled`
 
-**Writable fields:** `action`, `context`, `context_view`, `requirements`, `model_options`, `format`, `strategy`, `tool_calls_enabled`
+**Writable fields:** `requirements`, `model_options`, `format`, `strategy`, `tool_calls_enabled`
 
 **Use cases:**
 - Policy enforcement on generation requests
@@ -477,10 +476,9 @@ async def enforce_content_policy(payload, ctx):
 
 **Payload fields:** `component_type`, `action`, `result`, `context_before`, `context_after`, `generate_log`, `sampling_results`, `latency_ms`
 
-**Writable fields:** `result`
+**Writable fields:** *(observe-only)*
 
 **Use cases:**
-- Output validation and PII scrubbing
 - Latency and metrics collection
 - Audit logging
 
@@ -533,10 +531,10 @@ async def cap_tokens(payload, ctx):
 
 **Payload fields:** `prompt`, `model_output`, `latency_ms`
 
-**Writable fields:** `model_output`
+**Writable fields:** *(observe-only)*
 
 **Use cases:**
-- Output filtering, PII redaction
+- Output logging and inspection
 - Response caching
 - Quality metrics and hallucination detection
 
@@ -603,11 +601,11 @@ async def cap_tokens(payload, ctx):
 
 **Payload fields:** `repair_type`, `failed_action`, `failed_result`, `failed_validations`, `repair_action`, `repair_context`, `repair_iteration`
 
-**Writable fields:** `repair_action`, `repair_context`
+**Writable fields:** *(observe-only)*
 
 **Use cases:**
-- Injecting custom repair strategies
 - Analyzing failure patterns
+- Logging repair events
 
 #### `sampling_loop_end`
 
@@ -615,12 +613,11 @@ async def cap_tokens(payload, ctx):
 
 **Payload fields:** `success`, `iterations_used`, `final_result`, `final_action`, `final_context`, `failure_reason`, `all_results`, `all_validations`
 
-**Writable fields:** `final_result`
+**Writable fields:** *(observe-only)*
 
 **Use cases:**
 - Sampling effectiveness metrics
 - Cost tracking
-- Selecting best failed attempt
 
 ---
 
@@ -666,21 +663,21 @@ This table summarizes which fields are writable for each hook type. Changes to n
 
 | Hook Point | Writable Fields |
 |---|---|
-| `session_pre_init` | `backend_name`, `model_id`, `model_options` |
+| `session_pre_init` | `model_id`, `model_options` |
 | `session_post_init` | *(observe-only)* |
 | `session_reset` | *(observe-only)* |
 | `session_cleanup` | *(observe-only)* |
-| `component_pre_execute` | `action`, `context`, `context_view`, `requirements`, `model_options`, `format`, `strategy`, `tool_calls_enabled` |
-| `component_post_success` | `result` |
+| `component_pre_execute` | `requirements`, `model_options`, `format`, `strategy`, `tool_calls_enabled` |
+| `component_post_success` | *(observe-only)* |
 | `component_post_error` | *(observe-only)* |
 | `generation_pre_call` | `model_options`, `format`, `tool_calls` |
-| `generation_post_call` | `model_output` |
+| `generation_post_call` | *(observe-only)* |
 | `validation_pre_check` | `requirements`, `model_options` |
 | `validation_post_check` | `results`, `all_validations_passed` |
 | `sampling_loop_start` | `loop_budget` |
 | `sampling_iteration` | *(observe-only)* |
-| `sampling_repair` | `repair_action`, `repair_context` |
-| `sampling_loop_end` | `final_result` |
+| `sampling_repair` | *(observe-only)* |
+| `sampling_loop_end` | *(observe-only)* |
 | `tool_pre_invoke` | `model_tool_call` |
 | `tool_post_invoke` | `tool_output` |
 
@@ -885,12 +882,12 @@ with start_session(plugins=[content_policy]) as m:
 
 ### Input/Output Guardrails
 
-Redact PII on input (`component_pre_execute`) and output (`generation_post_call`) using a class-based plugin with shared redaction state:
+Block PII on input (`component_pre_execute`) and redact PII from output (`generation_post_call`) using a class-based plugin with shared state:
 
 ```python
 class PIIRedactor(Plugin, name="pii-redactor", priority=5):
     @hook(HookType.COMPONENT_PRE_EXECUTE)
-    async def redact_input(self, payload, ctx): ...
+    async def reject_pii_input(self, payload, ctx): ...
 
     @hook(HookType.GENERATION_POST_CALL)
     async def redact_output(self, payload, ctx): ...

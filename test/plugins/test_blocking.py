@@ -154,12 +154,12 @@ class TestModifyHelper:
 
         @hook("session_pre_init")
         async def swapper(payload, ctx):
-            return modify(payload, backend_name="swapped")
+            return modify(payload, model_id="swapped")
 
         register(swapper)
         _, returned_payload = await invoke_hook(HookType.SESSION_PRE_INIT, _payload())
 
-        assert returned_payload.backend_name == "swapped"
+        assert returned_payload.model_id == "swapped"
 
 
 # ---------------------------------------------------------------------------

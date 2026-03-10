@@ -99,10 +99,12 @@ class TestPayloadFieldsAreStrongRefs:
         from mellea.plugins.policies import MELLEA_HOOK_PAYLOAD_POLICIES
 
         policy = MELLEA_HOOK_PAYLOAD_POLICIES["component_pre_execute"]
-        assert "action" in policy.writable_fields
-        assert "context" in policy.writable_fields
+        assert "action" not in policy.writable_fields
+        assert "context" not in policy.writable_fields
+        assert "context_view" not in policy.writable_fields
         assert "strategy" in policy.writable_fields
 
-        policy = MELLEA_HOOK_PAYLOAD_POLICIES["sampling_repair"]
-        assert "repair_action" in policy.writable_fields
-        assert "repair_context" in policy.writable_fields
+        assert "sampling_repair" not in MELLEA_HOOK_PAYLOAD_POLICIES
+        assert "sampling_loop_end" not in MELLEA_HOOK_PAYLOAD_POLICIES
+        assert "component_post_success" not in MELLEA_HOOK_PAYLOAD_POLICIES
+        assert "generation_post_call" not in MELLEA_HOOK_PAYLOAD_POLICIES

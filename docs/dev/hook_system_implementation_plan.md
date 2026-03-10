@@ -478,7 +478,7 @@ from cpex.framework.hooks.policies import HookPayloadPolicy
 MELLEA_HOOK_PAYLOAD_POLICIES: dict[str, HookPayloadPolicy] = {
     # Session Lifecycle
     "session_pre_init": HookPayloadPolicy(
-        writable_fields=frozenset({"backend_name", "model_id", "model_options"}),
+        writable_fields=frozenset({"model_id", "model_options"}),
     ),
     # session_post_init, session_reset, session_cleanup: observe-only (no entry)
 
@@ -494,22 +494,17 @@ MELLEA_HOOK_PAYLOAD_POLICIES: dict[str, HookPayloadPolicy] = {
     ),
     "component_pre_execute": HookPayloadPolicy(
         writable_fields=frozenset({
-            "action", "context", "context_view", "requirements",
-            "model_options", "format", "strategy", "tool_calls_enabled",
+            "requirements", "model_options", "format",
+            "strategy", "tool_calls_enabled",
         }),
     ),
-    "component_post_success": HookPayloadPolicy(
-        writable_fields=frozenset({"result"}),
-    ),
-    # component_post_error: observe-only
+    # component_post_success, component_post_error: observe-only
 
     # Generation Pipeline
     "generation_pre_call": HookPayloadPolicy(
         writable_fields=frozenset({"model_options", "format", "tool_calls"}),
     ),
-    "generation_post_call": HookPayloadPolicy(
-        writable_fields=frozenset({"model_output"}),
-    ),
+    # generation_post_call: observe-only
     "generation_stream_chunk": HookPayloadPolicy(
         writable_fields=frozenset({"chunk", "accumulated"}),
     ),
@@ -526,13 +521,7 @@ MELLEA_HOOK_PAYLOAD_POLICIES: dict[str, HookPayloadPolicy] = {
     "sampling_loop_start": HookPayloadPolicy(
         writable_fields=frozenset({"loop_budget"}),
     ),
-    # sampling_iteration: observe-only
-    "sampling_repair": HookPayloadPolicy(
-        writable_fields=frozenset({"repair_action", "repair_context"}),
-    ),
-    "sampling_loop_end": HookPayloadPolicy(
-        writable_fields=frozenset({"final_result"}),
-    ),
+    # sampling_iteration, sampling_repair, sampling_loop_end: observe-only
 
     # Tool Execution
     "tool_pre_invoke": HookPayloadPolicy(
@@ -949,7 +938,7 @@ Session-scoped plugins passed via `plugins=[...]` are registered with this sessi
 
 | Hook | Location | Trigger | Result Handling |
 |------|----------|---------|-----------------|
-| `session_pre_init` | `start_session()`, before `backend_class(model_id, ...)` (~L163) | Before backend instantiation | Supports payload modification: updated `model_options`, `backend_name`. Violation blocks session creation. |
+| `session_pre_init` | `start_session()`, before `backend_class(model_id, ...)` (~L163) | Before backend instantiation | Supports payload modification: updated `model_options`, `model_id`. Violation blocks session creation. |
 | `session_post_init` | `start_session()`, after `MelleaSession(backend, ctx)` (~L191) | Session fully created | Observability-only. |
 | `session_reset` | `MelleaSession.reset()`, before `self.ctx.reset_to_new()` (~L269) | Context about to reset | Observability-only. |
 | `session_cleanup` | `MelleaSession.cleanup()`, at top of method (~L272) | Before teardown | Observability-only. Must not raise. Deregisters session-scoped plugins. |
@@ -987,8 +976,8 @@ SessionCleanupPayload(
 |------|----------|---------|-----------------|
 | `component_pre_create` | *(deferred — not implemented)* | — | — |
 | `component_post_create` | *(deferred — not implemented)* | — | — |
-| `component_pre_execute` | `aact()`, at top before strategy branch (~L492) | Before generation begins | Supports `action`, `model_options`, `requirements`, `strategy` modification. Violation blocks execution. |
-| `component_post_success` | `aact()`, after result in both branches (~L506, ~L534) | Successful execution | Supports `result` modification (output transformation). Primarily observability. |
+| `component_pre_execute` | `aact()`, at top before strategy branch (~L492) | Before generation begins | Supports `model_options`, `requirements`, `strategy`, `format`, `tool_calls_enabled` modification. Violation blocks execution. |
+| `component_post_success` | `aact()`, after result in both branches (~L506, ~L534) | Successful execution | Observability-only. |
 | `component_post_error` | `aact()`, in new `try/except Exception` wrapping the body | Exception during execution | Observability-only. Always re-raises after hook. |
 
 **Key changes to `aact()`**:
@@ -1061,7 +1050,7 @@ The wrapper is injected at class definition time and applies to all current and 
 | Hook | Location | Trigger | Result Handling |
 |------|----------|---------|-----------------|
 | `generation_pre_call` | `Backend.__init_subclass__` wrapper, before `generate_from_context` delegate | Before LLM API call | Supports `model_options`, `format`, `tool_calls` modification. Violation blocks (e.g., token budget exceeded). |
-| `generation_post_call` | Via `_on_computed` callback on `ModelOutputThunk` (lazy path), or inline before return (already-computed path) | After output fully materialized | `model_output` replacement supported on both paths. On the lazy path, fields are copied in-place via `_copy_from`. |
+| `generation_post_call` | Via `_on_computed` callback on `ModelOutputThunk` (lazy path), or inline before return (already-computed path) | After output fully materialized | Observability-only. |
 | `generation_stream_chunk` | **Deferred** — requires hooks in `ModelOutputThunk.astream()` streaming path | Per streaming chunk | Fire-and-forget to avoid slowing streaming. |
 
 ### 5.4 Validation
@@ -1102,8 +1091,8 @@ ValidationPostCheckPayload(
 |------|----------|---------|-----------------|
 | `sampling_loop_start` | Before `for` loop (~L157) | Loop begins | Supports `loop_budget` modification. |
 | `sampling_iteration` | Inside loop, after validation (~L192) | Each iteration | Observability. Violation can force early termination. |
-| `sampling_repair` | After `self.repair()` call (~L224) | Repair invoked | Supports `repair_action`/`repair_context` modification. |
-| `sampling_loop_end` | Before return in success (~L209) and failure (~L249) paths | Loop ends | Observability. Supports `final_result` override. |
+| `sampling_repair` | After `self.repair()` call (~L224) | Repair invoked | Observability-only. |
+| `sampling_loop_end` | Before return in success (~L209) and failure (~L249) paths | Loop ends | Observability-only. |
 
 **Additional change**: Add `_get_repair_type() -> str` method to each sampling strategy subclass:
 

@@ -515,14 +515,14 @@ class TestTransformMode:
 
         @hook("session_pre_init", mode=PluginMode.TRANSFORM, priority=1)
         async def xform_a(payload, ctx):
-            modified = payload.model_copy(update={"backend_name": "step-a"})
+            modified = payload.model_copy(update={"model_id": "step-a"})
             return PluginResult(continue_processing=True, modified_payload=modified)
 
         @hook("session_pre_init", mode=PluginMode.TRANSFORM, priority=2)
         async def xform_b(payload, ctx):
             # Should see step-a from the previous plugin
             modified = payload.model_copy(
-                update={"model_id": f"after-{payload.backend_name}"}
+                update={"model_options": {"seen": payload.model_id}}
             )
             return PluginResult(continue_processing=True, modified_payload=modified)
 
@@ -534,8 +534,8 @@ class TestTransformMode:
             HookType.SESSION_PRE_INIT, payload
         )
 
-        assert returned_payload.backend_name == "step-a"
-        assert returned_payload.model_id == "after-step-a"
+        assert returned_payload.model_id == "step-a"
+        assert returned_payload.model_options == {"seen": "step-a"}
 
     @pytest.mark.asyncio
     async def test_transform_runs_after_sequential(self) -> None:

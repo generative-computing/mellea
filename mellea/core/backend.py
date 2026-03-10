@@ -140,14 +140,11 @@ class Backend(abc.ABC):
               ``ModelOutputThunk.astream`` after ``post_process`` completes and
               the value is fully materialized. ``latency_ms`` reflects the full
               time from the ``generate_from_context`` call to value availability.
-              ``model_output`` replacement is supported — the original MOT's
-              output fields are updated in-place via ``_copy_from``.
             - **Already-computed MOTs** (e.g. cached responses): ``astream``
               returns early and never invokes ``_on_computed``, so the hook is
-              fired inline here before returning. ``model_output`` replacement is
-              supported in this path.
+              fired inline here before returning.
 
-            Both paths support ``model_output`` replacement by plugins.
+            This hook is observe-only — plugins cannot modify ``model_output``.
 
         """
         if "generate_from_context" in cls.__dict__:
@@ -193,7 +190,7 @@ class Backend(abc.ABC):
                 _ctx_ref = new_ctx
 
                 async def _fire_post_call(mot: ModelOutputThunk) -> ModelOutputThunk:
-                    """Fires GENERATION_POST_CALL and returns the (possibly replaced) MOT."""
+                    """Fires GENERATION_POST_CALL (observe-only)."""
                     mot._on_computed = None  # prevent double-firing
                     if not has_plugins(HookType.GENERATION_POST_CALL):
                         return mot
@@ -206,25 +203,19 @@ class Backend(abc.ABC):
                         model_output=mot,
                         latency_ms=latency_ms,
                     )
-                    _, post_payload = await invoke_hook(
+                    await invoke_hook(
                         HookType.GENERATION_POST_CALL,
                         post_payload,
                         backend=_backend_ref,
                     )
-                    if (
-                        post_payload.model_output is not None
-                        and post_payload.model_output is not mot
-                    ):
-                        return post_payload.model_output
                     return mot
 
                 out_result._on_computed = _fire_post_call
 
                 # For already-computed MOTs (e.g. cached responses or test mocks),
-                # astream() returns early so _on_computed never fires. Fire here
-                # and use the return value to support model_output replacement.
+                # astream() returns early so _on_computed never fires. Fire here.
                 if getattr(out_result, "is_computed", lambda: False)():
-                    out_result = await _fire_post_call(out_result)
+                    await _fire_post_call(out_result)
 
                 return out_result, new_ctx
 

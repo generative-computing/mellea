@@ -209,7 +209,6 @@ class TestComponentPreExecutePayload:
         payload = ComponentPreExecutePayload()
         assert payload.component_type == ""
         assert payload.action is None
-        assert payload.context is None
         assert payload.context_view is None
         assert payload.requirements == []
         assert payload.model_options == {}
@@ -222,7 +221,6 @@ class TestComponentPreExecutePayload:
         payload = ComponentPreExecutePayload(
             component_type="Extractor",
             action=_SENTINEL_ACTION,
-            context=_SENTINEL_CONTEXT,
             context_view=["msg_a", "msg_b"],
             requirements=reqs,
             model_options={"temperature": 0.2},
@@ -233,7 +231,6 @@ class TestComponentPreExecutePayload:
         )
         assert payload.component_type == "Extractor"
         assert payload.action is _SENTINEL_ACTION
-        assert payload.context is _SENTINEL_CONTEXT
         assert payload.context_view == ["msg_a", "msg_b"]
         assert len(payload.requirements) == 2
         assert payload.model_options == {"temperature": 0.2}

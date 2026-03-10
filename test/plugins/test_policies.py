@@ -11,7 +11,7 @@ class TestPolicies:
     def test_session_pre_init_policy(self):
         policy = MELLEA_HOOK_PAYLOAD_POLICIES.get("session_pre_init")
         assert policy is not None
-        assert "backend_name" in policy.writable_fields
+        assert "backend_name" not in policy.writable_fields
         assert "model_id" in policy.writable_fields
         assert "model_options" in policy.writable_fields
         assert "backend_kwargs" not in policy.writable_fields
@@ -27,8 +27,12 @@ class TestPolicies:
         assert "session_post_init" not in MELLEA_HOOK_PAYLOAD_POLICIES
         assert "session_reset" not in MELLEA_HOOK_PAYLOAD_POLICIES
         assert "session_cleanup" not in MELLEA_HOOK_PAYLOAD_POLICIES
+        assert "component_post_success" not in MELLEA_HOOK_PAYLOAD_POLICIES
         assert "component_post_error" not in MELLEA_HOOK_PAYLOAD_POLICIES
+        assert "generation_post_call" not in MELLEA_HOOK_PAYLOAD_POLICIES
         assert "sampling_iteration" not in MELLEA_HOOK_PAYLOAD_POLICIES
+        assert "sampling_repair" not in MELLEA_HOOK_PAYLOAD_POLICIES
+        assert "sampling_loop_end" not in MELLEA_HOOK_PAYLOAD_POLICIES
 
     def test_validation_policies(self):
         policy = MELLEA_HOOK_PAYLOAD_POLICIES.get("validation_pre_check")
@@ -44,8 +48,3 @@ class TestPolicies:
         policy = MELLEA_HOOK_PAYLOAD_POLICIES.get("sampling_loop_start")
         assert policy is not None
         assert "loop_budget" in policy.writable_fields
-
-        policy = MELLEA_HOOK_PAYLOAD_POLICIES.get("sampling_repair")
-        assert policy is not None
-        assert "repair_action" in policy.writable_fields
-        assert "repair_context" in policy.writable_fields

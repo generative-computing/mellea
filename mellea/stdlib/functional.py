@@ -508,7 +508,6 @@ async def aact(
             pre_exec_payload = ComponentPreExecutePayload(
                 component_type=_component_type_name,
                 action=action,
-                context=context,
                 requirements=requirements or [],
                 model_options=model_options or {},
                 format=format,
@@ -518,8 +517,6 @@ async def aact(
             _, pre_exec_payload = await invoke_hook(
                 HookType.COMPONENT_PRE_EXECUTE, pre_exec_payload, backend=backend
             )
-            action = pre_exec_payload.action or action
-            context = pre_exec_payload.context or context
             strategy = pre_exec_payload.strategy or strategy
             requirements = pre_exec_payload.requirements or requirements
             model_options = pre_exec_payload.model_options or model_options
@@ -630,14 +627,9 @@ async def aact(
                     else None,
                     latency_ms=int((time.monotonic() - t0) * 1000),
                 )
-                _, success_payload = await invoke_hook(
+                await invoke_hook(
                     HookType.COMPONENT_POST_SUCCESS, success_payload, backend=backend
                 )
-                if (
-                    success_payload.result is not None
-                    and success_payload.result is not result
-                ):
-                    result = success_payload.result
 
             if return_sampling_results:
                 assert (

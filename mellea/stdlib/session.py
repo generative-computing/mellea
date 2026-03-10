@@ -199,7 +199,6 @@ def start_session(
                 invoke_hook(HookType.SESSION_PRE_INIT, pre_payload)
             )
             # Apply writable field modifications
-            backend_name = pre_payload.backend_name  # type: ignore[assignment]
             model_id_str = pre_payload.model_id
             model_options = pre_payload.model_options
 

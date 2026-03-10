@@ -38,10 +38,7 @@ class GenerationPostCallPayload(MelleaBasePayload):
 
     Attributes:
         prompt: The formatted prompt sent to the backend (str or list of message dicts).
-        model_output: The fully-computed ``ModelOutputThunk`` (writable — replacing
-            it is supported on both lazy and already-computed paths. On the lazy
-            path the original MOT's output fields are updated in-place via
-            ``_copy_from``).
+        model_output: The fully-computed ``ModelOutputThunk``.
         latency_ms: Elapsed milliseconds from the ``generate_from_context`` call
             to when the value was fully materialized.
     """

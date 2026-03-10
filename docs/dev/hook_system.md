@@ -333,19 +333,19 @@ def apply_policy(
 | Hook Point | Writable Fields |
 |------------|----------------|
 | **Session Lifecycle** | |
-| `session_pre_init` | `backend_name`, `model_id`, `model_options` |
+| `session_pre_init` | `model_id`, `model_options` |
 | `session_post_init` | *(observe-only)* |
 | `session_reset` | *(observe-only)* |
 | `session_cleanup` | *(observe-only)* |
 | **Component Lifecycle** | |
 | `component_pre_create` | `description`, `images`, `requirements`, `icl_examples`, `grounding_context`, `user_variables`, `prefix`, `template_id` |
 | `component_post_create` | `component` |
-| `component_pre_execute` | `action`, `context`, `context_view`, `requirements`, `model_options`, `format`, `strategy`, `tool_calls_enabled` |
-| `component_post_success` | `result` |
+| `component_pre_execute` | `requirements`, `model_options`, `format`, `strategy`, `tool_calls_enabled` |
+| `component_post_success` | *(observe-only)* |
 | `component_post_error` | *(observe-only)* |
 | **Generation Pipeline** | |
 | `generation_pre_call` | `model_options`, `format`, `tool_calls` |
-| `generation_post_call` | `model_output` |
+| `generation_post_call` | *(observe-only)* |
 | `generation_stream_chunk` | `chunk`, `accumulated` |
 | **Validation** | |
 | `validation_pre_check` | `requirements`, `model_options` |
@@ -353,8 +353,8 @@ def apply_policy(
 | **Sampling Pipeline** | |
 | `sampling_loop_start` | `loop_budget` |
 | `sampling_iteration` | *(observe-only)* |
-| `sampling_repair` | `repair_action`, `repair_context` |
-| `sampling_loop_end` | `final_result` |
+| `sampling_repair` | *(observe-only)* |
+| `sampling_loop_end` | *(observe-only)* |
 | **Tool Execution** | |
 | `tool_pre_invoke` | `model_tool_call` |
 | `tool_post_invoke` | `tool_output` |
@@ -419,7 +419,6 @@ Hooks that manage session boundaries, useful for initialization, state setup, an
   - Loading user-specific policies
   - Validating backend/model combinations
   - Enforcing model usage policies
-  - Routing to alternative backends
 - **Payload**:
   ```python
   class SessionPreInitPayload(BasePayload):
@@ -575,9 +574,8 @@ Plugins should check for `None`/empty values rather than assuming all fields are
   ```python
   class ComponentPreExecutePayload(BasePayload):
       component_type: str            # "Instruction", "GenerativeSlot", etc.
-      action: Component | CBlock     # The component to execute (writable)
-      context: Context               # Current context (writable)
-      context_view: list[Component | CBlock] | None  # Linearized context (writable)
+      action: Component | CBlock     # The component to execute
+      context_view: list[Component | CBlock] | None  # Linearized context
       requirements: list[Requirement]  # Attached requirements (writable)
       model_options: dict            # Generation parameters (writable)
       format: type | None            # Structured output format (writable)
@@ -603,7 +601,7 @@ Plugins should check for `None`/empty values rather than assuming all fields are
   ```python
   class ComponentPostSuccessPayload(BasePayload):
       component_type: str            # "Instruction", "GenerativeSlot", etc.
-      action: Component | CBlock     # Executed component      result: ModelOutputThunk       # Generation result (writable, strong reference)
+      action: Component | CBlock     # Executed component      result: ModelOutputThunk       # Generation result (strong reference)
       context_before: Context        # Context before execution      context_after: Context         # Context after execution      generate_log: GenerateLog      # Detailed execution log (strong reference)
       sampling_results: list[SamplingResult] | None  # If sampling was used (strong reference)
       latency_ms: int                # Execution time
@@ -652,7 +650,7 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
 
 > **Context Modification Sequencing**
 >
-> Modifications to `Context` at `component_pre_execute` are reflected in the subsequent `generation_pre_call`, because context linearization happens after the component-level hook. Modifications to `Context` after `generation_pre_call` (e.g., in `generation_post_call`) do not affect the current generation — the prompt has already been sent. This ordering is by design: `component_pre_execute` is the last point where context changes influence what the LLM sees.
+> `action`, `context`, and `context_view` are observe-only on `component_pre_execute` — plugins cannot modify them. `component_pre_execute` is the interception point for adjusting `requirements`, `model_options`, `format`, `strategy`, and `tool_calls_enabled` before generation begins.
 
 
 #### `generation_pre_call`
@@ -699,7 +697,7 @@ Low-level hooks between the component abstraction and raw LLM API calls. These o
   ```python
   class GenerationPostCallPayload(BasePayload):
       prompt: str | list[dict]       # Sent prompt (from linearization)
-      model_output: ModelOutputThunk # Fully computed output thunk (writable)
+      model_output: ModelOutputThunk # Fully computed output thunk
       latency_ms: float              # Elapsed ms from generate_from_context call to value availability
   ```
 - **Context**:
@@ -859,8 +857,8 @@ Hooks around sampling strategies and failure recovery. These operate on the (Bac
       repair_type: str               # "identity" | "template_repair" | "multi_turn_message" | "sofai_feedback" | "custom"
       failed_action: Component       # Action that failed      failed_result: ModelOutputThunk  # Failed output (strong reference)
       failed_validations: list[tuple[Requirement, ValidationResult]]
-      repair_action: Component       # New action for retry (writable)
-      repair_context: Context        # Context for retry (writable)
+      repair_action: Component       # New action for retry
+      repair_context: Context        # Context for retry
       repair_iteration: int          # 1-based iteration at which repair was triggered
   ```
 - **Context**:
@@ -883,7 +881,7 @@ Hooks around sampling strategies and failure recovery. These operate on the (Bac
   class SamplingLoopEndPayload(BasePayload):
       success: bool                  # Did sampling succeed
       iterations_used: int           # Total iterations performed
-      final_result: ModelOutputThunk | None  # Best result (writable, strong reference)
+      final_result: ModelOutputThunk | None  # Best result (strong reference)
       final_action: Component | None         # Component that produced final_result      final_context: Context | None          # Context for final_result      failure_reason: str | None     # If failed, why
       all_results: list[ModelOutputThunk]    # All iteration results (strong references)
       all_validations: list[list[tuple[Requirement, ValidationResult]]]

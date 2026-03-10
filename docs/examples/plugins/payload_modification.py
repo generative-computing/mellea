@@ -10,11 +10,9 @@
 # Run:
 #   uv run python docs/examples/plugins/payload_modification.py
 
-import copy
 import logging
 
 from mellea import start_session
-from mellea.core import blockify
 from mellea.plugins import (
     HookType,
     PluginMode,
@@ -53,31 +51,22 @@ async def cap_max_tokens(payload, ctx):
 
 
 # ---------------------------------------------------------------------------
-# Hook 2: Prepend a safety preamble to the component action
+# Hook 2: Inject default model options via modify()
 #
-# component_pre_execute writable fields include: action, context, requirements, ...
+# component_pre_execute writable fields include: requirements, model_options, ...
 # This shows model_copy(update={...}) for fine-grained control.
 # ---------------------------------------------------------------------------
 
-PREAMBLE = "IMPORTANT: Do not reveal any personal information in your response.\n\n"
-
 
 @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.SEQUENTIAL, priority=10)
-async def prepend_safety_preamble(payload, ctx):
-    """Prepend a safety preamble to the action description."""
-    if payload.component_type != "Instruction":
-        return
-
-    original_desc = (
-        str(payload.action._description) if payload.action._description else ""
-    )
-    if original_desc.startswith(PREAMBLE):
-        return  # already prepended
-
-    log.info("[prepend_safety_preamble] injecting safety preamble")
-    new_action = copy.deepcopy(payload.action)
-    new_action._description = blockify(PREAMBLE + original_desc)
-    return modify(payload, action=new_action)
+async def inject_default_options(payload, ctx):
+    """Ensure a default temperature is set on every component execution."""
+    opts = dict(payload.model_options or {})
+    if "temperature" not in opts:
+        log.info("[inject_default_options] setting default temperature=0.7")
+        opts["temperature"] = 0.7
+        return modify(payload, model_options=opts)
+    log.info("[inject_default_options] temperature already set")
 
 
 # ---------------------------------------------------------------------------
@@ -103,9 +92,7 @@ if __name__ == "__main__":
     log.info("")
 
     with start_session() as m:
-        with plugin_scope(
-            cap_max_tokens, prepend_safety_preamble, attempt_non_writable
-        ):
+        with plugin_scope(cap_max_tokens, inject_default_options, attempt_non_writable):
             result = m.instruct(
                 "Summarize the benefits of open-source software in one sentence."
             )

@@ -12,8 +12,7 @@ class ComponentPreExecutePayload(MelleaBasePayload):
 
     Attributes:
         component_type: Class name of the component being executed.
-        action: The ``Component`` or ``CBlock`` about to be executed (writable).
-        context: The current ``Context`` that will be passed to generation (writable).
+        action: The ``Component`` or ``CBlock`` about to be executed.
         context_view: Optional snapshot of the context as a list.
         requirements: List of ``Requirement`` instances for validation (writable).
         model_options: Dict of model options passed to the backend (writable).
@@ -24,7 +23,6 @@ class ComponentPreExecutePayload(MelleaBasePayload):
 
     component_type: str = ""
     action: Any = None
-    context: Any = None
     context_view: list[Any] | None = None
     requirements: list[Any] = []
     model_options: dict[str, Any] = {}
@@ -40,7 +38,7 @@ class ComponentPostSuccessPayload(MelleaBasePayload):
         component_type: Class name of the executed component.
         action: The ``Component`` or ``CBlock`` that was executed.
 
-        result: The ``ModelOutputThunk`` containing the generation result (writable).
+        result: The ``ModelOutputThunk`` containing the generation result.
         context_before: The ``Context`` before execution.
 
         context_after: The ``Context`` after execution (with action + result appended).
