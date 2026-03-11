@@ -5,8 +5,8 @@
 # Standard
 import os
 import pathlib
-import urllib
 import urllib.error
+import urllib.request
 import zipfile
 
 # Third Party

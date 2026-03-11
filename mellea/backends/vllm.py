@@ -234,7 +234,7 @@ class LocalVLLMBackend(FormatterBackend):
 
         return self._underlying_model
 
-    async def generate_from_context(
+    async def _generate_from_context(
         self,
         action: Component[C] | CBlock,
         ctx: Context,
@@ -331,6 +331,7 @@ class LocalVLLMBackend(FormatterBackend):
             sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
 
             output = ModelOutputThunk(value=None, sec_level=sec_level, meta={})
+            output._start = datetime.datetime.now()
 
             generator = self._model.generate(  # type: ignore
                 request_id=str(id(output)),

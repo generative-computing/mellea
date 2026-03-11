@@ -312,7 +312,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             ).past_key_values
         return dc
 
-    async def generate_from_context(
+    async def _generate_from_context(
         self,
         action: Component[C] | CBlock,
         ctx: Context,
@@ -499,8 +499,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         #       us having specific caching for each Component/Message.
 
         generate_input, other_input = (
-            # type: ignore
-            granite_formatters.base.util.chat_completion_request_to_transformers_inputs(
+            granite_formatters.base.util.chat_completion_request_to_transformers_inputs(  # type: ignore
                 rewritten, self._tokenizer, self._model
             )
         )
@@ -521,6 +520,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
 
         output = ModelOutputThunk(value=None, sec_level=sec_level, meta={})
+        output._start = datetime.datetime.now()
+
         output._context = ctx.view_for_generation()
         output._action = action
         output._model_options = model_options
@@ -792,6 +793,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 **format_kwargs,  # type: ignore
             )
 
+            output = ModelOutputThunk(None)
+            output._start = datetime.datetime.now()
             # Compute taint sources from action and context
             sources = taint_sources(action, ctx)
             sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
@@ -940,6 +943,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 **format_kwargs,  # type: ignore
             )
 
+            output = ModelOutputThunk(None)
+            output._start = datetime.datetime.now()
             # Compute taint sources from action and context
             sources = taint_sources(action, ctx)
             sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
