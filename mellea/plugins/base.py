@@ -112,6 +112,13 @@ try:
 
     _HAS_PLUGIN_FRAMEWORK = True
 except ImportError:
+    from pydantic import BaseModel as _BaseModel
+
+    class PluginPayload(_BaseModel):  # type: ignore[no-redef]
+        """Fallback frozen base when cpex is not installed."""
+
+        model_config = {"frozen": True}
+
     _HAS_PLUGIN_FRAMEWORK = False
 
 if TYPE_CHECKING:

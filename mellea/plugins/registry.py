@@ -232,115 +232,116 @@ def _register_single(
         )
 
 
-class _FunctionHookAdapter(Plugin):
-    """Adapts a standalone ``@hook``-decorated function into a ContextForge Plugin."""
+if _HAS_PLUGIN_FRAMEWORK:
 
-    def __init__(
-        self,
-        fn: Callable,
-        session_id: str | None = None,
-        priority_override: int | None = None,
-    ):
-        meta: HookMeta = fn._mellea_hook_meta  # type: ignore[attr-defined]
-        priority = (
-            priority_override
-            if priority_override is not None
-            else (meta.priority if meta.priority is not None else 50)
-        )
-        config = PluginConfig(
-            name=f"{fn.__module__}.{fn.__qualname__}",
-            kind=f"{fn.__module__}.{fn.__qualname__}",
-            hooks=[meta.hook_type],
-            mode=_map_mode(meta.mode),
-            priority=priority,
-            on_error=_CFOnError.IGNORE,
-        )
-        super().__init__(config)
-        self._fn = fn
-        self._session_id = session_id
+    class _FunctionHookAdapter(Plugin):
+        """Adapts a standalone ``@hook``-decorated function into a ContextForge Plugin."""
 
-    async def initialize(self) -> None:
-        pass
+        def __init__(
+            self,
+            fn: Callable,
+            session_id: str | None = None,
+            priority_override: int | None = None,
+        ):
+            meta: HookMeta = fn._mellea_hook_meta  # type: ignore[attr-defined]
+            priority = (
+                priority_override
+                if priority_override is not None
+                else (meta.priority if meta.priority is not None else 50)
+            )
+            config = PluginConfig(
+                name=f"{fn.__module__}.{fn.__qualname__}",
+                kind=f"{fn.__module__}.{fn.__qualname__}",
+                hooks=[meta.hook_type],
+                mode=_map_mode(meta.mode),
+                priority=priority,
+                on_error=_CFOnError.IGNORE,
+            )
+            super().__init__(config)
+            self._fn = fn
+            self._session_id = session_id
 
-    async def shutdown(self) -> None:
-        pass
+        async def initialize(self) -> None:
+            pass
 
-    # The hook method is discovered by convention: method name == hook_type.
-    # We dynamically add it so ContextForge's HookRef can find it.
-    def __getattr__(self, name: str) -> Any:
-        meta: HookMeta | None = getattr(self._fn, "_mellea_hook_meta", None)
-        if meta and name == meta.hook_type:
-            return self._invoke
-        raise AttributeError(
-            f"'{type(self).__name__}' object has no attribute '{name}'"
-        )
+        async def shutdown(self) -> None:
+            pass
 
-    async def _invoke(self, payload: Any, context: Any) -> Any:
-        result = await self._fn(payload, context)
-        if result is None:
-            return PluginResult(continue_processing=True)
-        return result
+        # The hook method is discovered by convention: method name == hook_type.
+        # We dynamically add it so ContextForge's HookRef can find it.
+        def __getattr__(self, name: str) -> Any:
+            meta: HookMeta | None = getattr(self._fn, "_mellea_hook_meta", None)
+            if meta and name == meta.hook_type:
+                return self._invoke
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            )
 
+        async def _invoke(self, payload: Any, context: Any) -> Any:
+            result = await self._fn(payload, context)
+            if result is None:
+                return PluginResult(continue_processing=True)
+            return result
 
-class _MethodHookAdapter(Plugin):
-    """Adapts a single ``@hook``-decorated bound method from a ``Plugin`` class.
+    class _MethodHookAdapter(Plugin):
+        """Adapts a single ``@hook``-decorated bound method from a ``Plugin`` class.
 
-    Each ``@hook`` method on a ``@plugin``-decorated class gets its own adapter
-    so that per-method execution modes (``SEQUENTIAL``, ``FIRE_AND_FORGET``, etc.)
-    are respected.  The adapter name is ``"<plugin_name>.<hook_type>"``.
+        Each ``@hook`` method on a ``@plugin``-decorated class gets its own adapter
+        so that per-method execution modes (``SEQUENTIAL``, ``FIRE_AND_FORGET``, etc.)
+        are respected.  The adapter name is ``"<plugin_name>.<hook_type>"``.
 
-    Note: ``initialize()`` and ``shutdown()`` delegate to the underlying class
-    instance and may be called once per registered hook method.  Make them
-    idempotent when using the ``Plugin`` base class with multiple hook methods.
-    """
+        Note: ``initialize()`` and ``shutdown()`` delegate to the underlying class
+        instance and may be called once per registered hook method.  Make them
+        idempotent when using the ``Plugin`` base class with multiple hook methods.
+        """
 
-    def __init__(
-        self,
-        instance: Any,
-        bound_method: Callable,
-        hook_meta: HookMeta,
-        plugin_name: str,
-        plugin_module: str,
-        priority: int,
-        session_id: str | None = None,
-    ):
-        hook_val = getattr(hook_meta.hook_type, "value", hook_meta.hook_type)
-        adapter_name = f"{plugin_name}.{hook_val}"
-        config = PluginConfig(
-            name=adapter_name,
-            kind=f"{plugin_module}.{hook_val}",
-            hooks=[hook_meta.hook_type],
-            mode=_map_mode(hook_meta.mode),
-            priority=priority,
-            on_error=_CFOnError.IGNORE,
-        )
-        super().__init__(config)
-        self._instance = instance
-        self._bound_method = bound_method
-        self._session_id = session_id
+        def __init__(
+            self,
+            instance: Any,
+            bound_method: Callable,
+            hook_meta: HookMeta,
+            plugin_name: str,
+            plugin_module: str,
+            priority: int,
+            session_id: str | None = None,
+        ):
+            hook_val = getattr(hook_meta.hook_type, "value", hook_meta.hook_type)
+            adapter_name = f"{plugin_name}.{hook_val}"
+            config = PluginConfig(
+                name=adapter_name,
+                kind=f"{plugin_module}.{hook_val}",
+                hooks=[hook_meta.hook_type],
+                mode=_map_mode(hook_meta.mode),
+                priority=priority,
+                on_error=_CFOnError.IGNORE,
+            )
+            super().__init__(config)
+            self._instance = instance
+            self._bound_method = bound_method
+            self._session_id = session_id
 
-    async def initialize(self) -> None:
-        init = getattr(self._instance, "initialize", None)
-        if init and callable(init):
-            await init()
+        async def initialize(self) -> None:
+            init = getattr(self._instance, "initialize", None)
+            if init and callable(init):
+                await init()
 
-    async def shutdown(self) -> None:
-        shut = getattr(self._instance, "shutdown", None)
-        if shut and callable(shut):
-            await shut()
+        async def shutdown(self) -> None:
+            shut = getattr(self._instance, "shutdown", None)
+            if shut and callable(shut):
+                await shut()
 
-    def __getattr__(self, name: str) -> Any:
-        if self._config.hooks and name == self._config.hooks[0]:
-            return self._invoke
-        raise AttributeError(
-            f"'{type(self).__name__}' object has no attribute '{name}'"
-        )
+        def __getattr__(self, name: str) -> Any:
+            if self._config.hooks and name == self._config.hooks[0]:
+                return self._invoke
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            )
 
-    async def _invoke(self, payload: Any, context: Any) -> Any:
-        result = await self._bound_method(payload, context)
-        if result is None:
-            return PluginResult(continue_processing=True)
-        return result
+        async def _invoke(self, payload: Any, context: Any) -> Any:
+            result = await self._bound_method(payload, context)
+            if result is None:
+                return PluginResult(continue_processing=True)
+            return result
 
 
 class _PluginScope:

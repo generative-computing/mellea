@@ -3,7 +3,7 @@
 import pytest
 
 try:
-    import llm_sandbox
+    import llm_sandbox  # type: ignore[import-not-found]
 
     try:
         with llm_sandbox.SandboxSession(

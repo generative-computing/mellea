@@ -601,6 +601,12 @@ async def register_acceptance_sets(request):
         # If plugins are enabled, we don't need to re-enable them for this specific test.
         return
 
+    from mellea.plugins.registry import _HAS_PLUGIN_FRAMEWORK
+
+    if not _HAS_PLUGIN_FRAMEWORK:
+        yield
+        return
+
     from mellea.plugins import register
     from mellea.plugins.manager import shutdown_plugins
     from test.plugins._acceptance_sets import ALL_ACCEPTANCE_SETS
@@ -618,6 +624,12 @@ async def auto_register_acceptance_sets(request):
         "--disable-default-mellea-plugins", default=False
     )
     if disable_plugins:
+        yield
+        return
+
+    from mellea.plugins.registry import _HAS_PLUGIN_FRAMEWORK
+
+    if not _HAS_PLUGIN_FRAMEWORK:
         yield
         return
 
