@@ -127,7 +127,7 @@ def decompose(
         str, dict[Literal["val_strategy"], Literal["code", "llm"]]
     ] = {
         cons_key: {
-            "val_strategy": validation_decision.generate(m_session, cons_key).parse()
+            "val_strategy": validation_decision.generate(m_session, cons_key).parse() or "llm"
         }
         for cons_key in task_prompt_constraints
     }

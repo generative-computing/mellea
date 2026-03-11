@@ -47,6 +47,7 @@ class Instruction(Component[str]):
         requirements = [] if requirements is None else requirements
         icl_examples = [] if icl_examples is None else icl_examples
         grounding_context = dict() if grounding_context is None else grounding_context
+
         # Apply templates. All inputs must be strings if provided.
         if user_variables is not None:
             if description is not None:
