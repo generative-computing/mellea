@@ -38,7 +38,16 @@ NULL_REGEX = re.compile(r"null")
 
 
 class JsonLiteralWithPosition(pydantic.BaseModel):
-    """JSON literal value with its position in the source string."""
+    """JSON literal value with its position in the source string.
+
+    Attributes:
+        value (str | bool | int | float): The parsed Python value of the JSON
+            literal (string, boolean, integer, or float).
+        begin (int): Start offset (inclusive) of the literal within the source
+            JSON string.
+        end (int): End offset (exclusive) of the literal within the source
+            JSON string.
+    """
 
     value: str | bool | int | float
     begin: int
@@ -146,6 +155,10 @@ def reparse_value(tokens, offset) -> tuple[Any, int]:
 
     Returns:
         Tuple of ``(parsed_value, next_offset)``.
+
+    Raises:
+        ValueError: If an unexpected delimiter token or unknown token type is
+            encountered at the current offset.
     """
     begin, end, value, type_ = tokens[offset]
     if type_ == "delim":
@@ -164,7 +177,25 @@ def reparse_value(tokens, offset) -> tuple[Any, int]:
 
 
 def reparse_object(tokens, offset) -> tuple[dict, int]:
-    """Subroutine for handling object parsing inside reparse_value()."""
+    """Parse a JSON object from the token stream, starting after the opening ``{``.
+
+    Subroutine called by :func:`reparse_value` when an opening curly brace is
+    encountered. Consumes tokens until the matching closing ``}`` is found.
+
+    Args:
+        tokens: Token stream as produced by ``tokenize_json()``.
+        offset (int): Token offset immediately after the opening ``{`` delimiter.
+
+    Returns:
+        tuple[dict, int]: A tuple of ``(parsed_dict, next_offset)`` where
+            ``parsed_dict`` maps string keys to parsed values (possibly
+            :class:`JsonLiteralWithPosition` instances) and ``next_offset``
+            is the position of the next unconsumed token.
+
+    Raises:
+        ValueError: If the token stream does not conform to valid JSON object
+            syntax (e.g. missing colon, unexpected delimiter, or non-string key).
+    """
     result: dict[Any, Any] = {}
     while True:
         begin, _, value, type_ = tokens[offset]
@@ -200,7 +231,25 @@ def reparse_object(tokens, offset) -> tuple[dict, int]:
 
 
 def reparse_list(tokens, offset) -> tuple[list, int]:
-    """Subroutine for handling list parsing inside reparse_value()."""
+    """Parse a JSON array from the token stream, starting after the opening ``[``.
+
+    Subroutine called by :func:`reparse_value` when an opening square bracket is
+    encountered. Consumes tokens until the matching closing ``]`` is found.
+
+    Args:
+        tokens: Token stream as produced by ``tokenize_json()``.
+        offset (int): Token offset immediately after the opening ``[`` delimiter.
+
+    Returns:
+        tuple[list, int]: A tuple of ``(parsed_list, next_offset)`` where
+            ``parsed_list`` contains the parsed elements (possibly
+            :class:`JsonLiteralWithPosition` instances) and ``next_offset``
+            is the position of the next unconsumed token.
+
+    Raises:
+        ValueError: If the token stream does not conform to valid JSON array
+            syntax (e.g. unexpected delimiter between elements).
+    """
     result: list[Any] = []
     while True:
         begin, _, value, type_ = tokens[offset]
@@ -290,6 +339,10 @@ def fetch_path(json_value: Any, path: tuple):
 
     Returns:
         The node at the indicated path.
+
+    Raises:
+        TypeError: If ``path`` is not a tuple, if a path element is not a string
+            or integer, or if an intermediate node is not a dict or list.
     """
     if not isinstance(path, tuple):
         raise TypeError(f"Expected tuple, but received '{type(path)}'")
@@ -323,6 +376,10 @@ def replace_path(json_value: Any, path: tuple, new_value: Any) -> Any:
 
     Returns:
         The modified input, or ``new_value`` itself if the root was replaced.
+
+    Raises:
+        TypeError: If ``path`` is not a tuple, or if any error propagated from
+            :func:`fetch_path` during path traversal.
     """
     if not isinstance(path, tuple):
         raise TypeError(f"Expected tuple, but received '{type(path)}'")

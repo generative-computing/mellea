@@ -24,7 +24,21 @@ from .model_options import ModelOption
 
 
 class MelleaTool(AbstractMelleaTool):
-    """Tool class to represent a tool."""
+    """Tool class to represent a callable tool with an OpenAI-compatible JSON schema.
+
+    Wraps a Python callable alongside its JSON schema representation so it can be
+    registered with backends that support tool calling (OpenAI, Ollama, HuggingFace, etc.).
+
+    Args:
+        name (str): The tool name used for identification and lookup.
+        tool_call (Callable): The underlying Python callable to invoke when the tool is run.
+        as_json_tool (dict[str, Any]): The OpenAI-compatible JSON schema dict describing
+            the tool's parameters.
+
+    Attributes:
+        name (str): The registered name of this tool.
+        as_json_tool (dict[str, Any]): OpenAI-compatible JSON schema dict for this tool.
+    """
 
     # Tool is what we pass as a model option / as input
     # Our ModelToolCall is the class that has a reference to the tool and actually calls with arguments
@@ -42,7 +56,15 @@ class MelleaTool(AbstractMelleaTool):
         self._call_tool = tool_call
 
     def run(self, *args, **kwargs) -> Any:
-        """Run the tool with the given arguments."""
+        """Run the tool with the given arguments.
+
+        Args:
+            args: Positional arguments forwarded to the underlying callable.
+            kwargs: Keyword arguments forwarded to the underlying callable.
+
+        Returns:
+            Any: The return value of the underlying callable.
+        """
         return self._call_tool(*args, **kwargs)
 
     @property
@@ -52,7 +74,18 @@ class MelleaTool(AbstractMelleaTool):
 
     @classmethod
     def from_langchain(cls, tool: Any):
-        """Create a Tool from a langchain tool object."""
+        """Create a MelleaTool from a LangChain tool object.
+
+        Args:
+            tool (Any): A ``langchain_core.tools.BaseTool`` instance to wrap.
+
+        Returns:
+            MelleaTool: A Mellea tool wrapping the LangChain tool.
+
+        Raises:
+            ImportError: If ``langchain-core`` is not installed.
+            ValueError: If ``tool`` is not a ``BaseTool`` instance.
+        """
         try:
             from langchain_core.tools import BaseTool  # type: ignore[import-not-found]
             from langchain_core.utils.function_calling import (  # type: ignore[import-not-found]
@@ -143,7 +176,18 @@ class MelleaTool(AbstractMelleaTool):
 
     @classmethod
     def from_callable(cls, func: Callable, name: str | None = None):
-        """Create a Tool from a callable."""
+        """Create a MelleaTool from a plain Python callable.
+
+        Introspects the callable's signature and docstring to build an
+        OpenAI-compatible JSON schema automatically.
+
+        Args:
+            func (Callable): The Python callable to wrap as a tool.
+            name (str | None): Optional name override; defaults to ``func.__name__``.
+
+        Returns:
+            MelleaTool: A Mellea tool wrapping the callable.
+        """
         # Use the function name if the name is '' or None.
         tool_name = name or func.__name__
         as_json = convert_function_to_ollama_tool(func, tool_name).model_dump(
@@ -666,7 +710,15 @@ class SubscriptableBaseModel(BaseModel):
         return False
 
     def get(self, key: str, default: Any = None) -> Any:
-        """Get.
+        """Return the value of a field by name, or a default if the field does not exist.
+
+        Args:
+            key (str): The field name to look up on the model.
+            default (Any): Value to return when ``key`` is not a field on the model.
+                Defaults to ``None``.
+
+        Returns:
+            Any: The field value if the attribute exists, otherwise ``default``.
 
         >>> msg = Message(role='user')
         >>> msg.get('role')
@@ -685,18 +737,42 @@ class SubscriptableBaseModel(BaseModel):
 
 # https://github.com/ollama/ollama-python/blob/60e7b2f9ce710eeb57ef2986c46ea612ae7516af/ollama/_types.py#L337-L363
 class OllamaTool(SubscriptableBaseModel):
-    """Class imported from Ollama."""
+    """Pydantic model for an Ollama-compatible tool schema, imported from the Ollama Python SDK.
+
+    Represents the JSON structure that Ollama (and OpenAI-compatible endpoints) expect
+    when a tool is passed to the chat API. Mellea builds these objects internally via
+    ``convert_function_to_ollama_tool`` and never exposes them to end users directly.
+
+    Attributes:
+        type (str | None): Tool type; always ``"function"`` for function-calling tools.
+        function (Function | None): Nested object containing the function name,
+            description, and parameters schema.
+    """
 
     type: str | None = "function"
 
     class Function(SubscriptableBaseModel):
-        """Class imported from Ollama."""
+        """Pydantic model for the ``function`` field of an Ollama tool schema, imported from the Ollama Python SDK.
+
+        Attributes:
+            name (str | None): The name of the function being described.
+            description (str | None): Human-readable description of what the function does.
+            parameters (Parameters | None): Schema describing the function's parameters.
+        """
 
         name: str | None = None
         description: str | None = None
 
         class Parameters(SubscriptableBaseModel):
-            """Class imported from Ollama."""
+            """Pydantic model for the ``parameters`` field of an Ollama function schema, imported from the Ollama Python SDK.
+
+            Attributes:
+                type (Literal["object"] | None): Always ``"object"`` for function parameters.
+                defs (Any | None): JSON Schema ``$defs`` for referenced sub-schemas.
+                items (Any | None): Array item schema, if applicable.
+                required (Sequence[str] | None): List of required parameter names.
+                properties (Mapping[str, Property] | None): Parameter property definitions.
+            """
 
             model_config = ConfigDict(populate_by_name=True)
             type: Literal["object"] | None = "object"
@@ -705,7 +781,14 @@ class OllamaTool(SubscriptableBaseModel):
             required: Sequence[str] | None = None
 
             class Property(SubscriptableBaseModel):
-                """Class imported from Ollama."""
+                """Pydantic model for a single parameter property in an Ollama tool schema, imported from the Ollama Python SDK.
+
+                Attributes:
+                    type (str | Sequence[str] | None): JSON Schema type string or list of type strings.
+                    items (Any | None): Schema for array element types, if applicable.
+                    description (str | None): Human-readable description of this parameter.
+                    enum (Sequence[Any] | None): Allowed values for this parameter, if constrained.
+                """
 
                 model_config = ConfigDict(arbitrary_types_allowed=True)
 

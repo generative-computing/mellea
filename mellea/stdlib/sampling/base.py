@@ -40,7 +40,20 @@ from ..context import ChatContext
 
 
 class BaseSamplingStrategy(SamplingStrategy):
-    """Base class for multiple strategies that rejects samples based on given instructions."""
+    """Base class for multiple strategies that reject samples based on given instructions.
+
+    Args:
+        loop_budget (int): Maximum number of generate/validate cycles. Must be
+            greater than 0. Defaults to ``1``.
+        requirements (list[Requirement] | None): Global requirements evaluated
+            on every sample. When set, overrides per-call requirements.
+
+    Attributes:
+        loop_budget (int): Maximum number of generate/validate cycles before
+            falling back to ``select_from_failure``.
+        requirements (list[Requirement] | None): Global requirements evaluated
+            on every sample; takes precedence over per-call requirements when set.
+    """
 
     loop_budget: int
 

@@ -66,7 +66,11 @@ async def think_budget_forcing(
         model_options: Any model options to upsert into the defaults for this call.
 
     Returns:
-        A ``ModelOutputThunk`` containing the assembled thinking and answer response.
+        ModelOutputThunk: The assembled thinking and answer response.
+
+    Raises:
+        Exception: If the backend returns generation results without the
+            required ``meta`` information (e.g. token usage counts).
 
     Assumptions:
         -  The chat template is applied on prompt, with think mode enabled

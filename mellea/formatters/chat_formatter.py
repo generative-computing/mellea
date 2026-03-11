@@ -22,7 +22,22 @@ class ChatFormatter(Formatter):
     """Formatter used by Legacy backends to format Contexts as Messages."""
 
     def to_chat_messages(self, cs: list[Component | CBlock]) -> list[Message]:
-        """Helper method that converts a linearized chat history into a list of messages. The purpose of this helper is to prepare a sequence of Messages for input to a chat endpoint."""
+        """Convert a linearized chat history into a list of chat messages.
+
+        Iterates over each element in the context history and converts it to a
+        ``Message`` with an appropriate role. ``ModelOutputThunk`` instances are
+        treated as assistant responses, while all other ``Component`` and
+        ``CBlock`` objects default to the ``user`` role. Image attachments and
+        parsed structured outputs are handled transparently.
+
+        Args:
+            cs (list[Component | CBlock]): The linearized sequence of context
+                components and code blocks to convert.
+
+        Returns:
+            list[Message]: A list of ``Message`` objects ready for submission to
+                a chat completion endpoint.
+        """
 
         def _to_msg(c: Component | CBlock) -> Message:
             role: Message.Role = "user"  # default to `user`; see ModelOutputThunk below for when the role changes.

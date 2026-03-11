@@ -20,7 +20,24 @@ from .base import RejectionSamplingStrategy
 
 
 class BaseMBRDSampling(RejectionSamplingStrategy):
-    """Abstract Minimum Bayes Risk Decoding (MBRD) Sampling Strategy."""
+    """Abstract Minimum Bayes Risk Decoding (MBRD) Sampling Strategy.
+
+    Args:
+        number_of_samples (int): Number of samples to generate and use for
+            majority voting. Defaults to ``8``.
+        weighted (bool): Not yet implemented. If ``True``, weights scores
+            before majority vote.
+        loop_budget (int): Inner rejection-sampling loop count. Must be > 0.
+        requirements (list[Requirement] | None): Requirements to validate
+            against. If ``None``, uses per-call requirements.
+
+    Attributes:
+        number_of_samples (int): Number of candidate samples to draw and compare.
+        weighted (bool): Whether to apply per-sample weights before voting.
+            Currently not implemented; reserved for future use.
+        symmetric (bool): Whether the similarity metric is symmetric, allowing
+            the upper-triangle score matrix to be mirrored.
+    """
 
     number_of_samples: int
     weighted: bool
@@ -57,10 +74,32 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
 
     @abc.abstractmethod
     def compare_strings(self, ref: str, pred: str) -> float:
-        """This method is the abstract method for MBRD similarity metric."""
+        """Compute a similarity score between a reference and a predicted string.
 
-    def maybe_apply_weighted(self, scr: np.ndarray):
-        """Applies weights if self.weighted is True. Not Implemented."""
+        Subclasses must implement this to define the MBRD similarity metric.
+
+        Args:
+            ref (str): The reference string to compare against.
+            pred (str): The predicted string to evaluate.
+
+        Returns:
+            float: A similarity score, typically in ``[0.0, 1.0]`` where ``1.0``
+            indicates a perfect match.
+        """
+
+    def maybe_apply_weighted(self, scr: np.ndarray) -> np.ndarray:
+        """Apply per-sample weights to the score vector if ``self.weighted`` is ``True``.
+
+        Currently not implemented; the input array is returned unchanged when
+        ``self.weighted`` is ``True``.
+
+        Args:
+            scr (np.ndarray): 1-D array of aggregated similarity scores, one
+                entry per candidate sample.
+
+        Returns:
+            np.ndarray: The (possibly weighted) score array.
+        """
         # TODO: not implemented yet
         if self.weighted:
             weights = np.asarray([1.0 for _ in range(len(scr))])
@@ -162,7 +201,29 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
 
 
 class MajorityVotingStrategyForMath(BaseMBRDSampling):
-    """MajorityVoting Sampling Strategy for Math Expressions."""
+    """MajorityVoting Sampling Strategy for Math Expressions.
+
+    Args:
+        number_of_samples (int): Number of samples to generate. Defaults to ``8``.
+        float_rounding (int): Decimal places for float comparison. Defaults to ``6``.
+        strict (bool): Enforce strict comparison mode. Defaults to ``True``.
+        allow_set_relation_comp (bool): Allow set-relation comparisons. Defaults
+            to ``False``.
+        weighted (bool): Not yet implemented. Defaults to ``False``.
+        loop_budget (int): Rejection-sampling loop count. Defaults to ``1``.
+        requirements (list[Requirement] | None): Requirements to validate against.
+
+    Attributes:
+        number_of_samples (int): Number of candidate samples to generate.
+        match_types (list[str]): Extraction target types used for parsing math
+            expressions (e.g. ``["latex", "axpr"]``).
+        float_rounding (int): Number of decimal places used when comparing
+            floating-point results.
+        strict (bool): Whether strict comparison mode is enforced (variables
+            matter; sets are not comparable with tuples).
+        allow_set_relation_comp (bool): Whether set-relation comparisons are
+            permitted in all cases.
+    """
 
     number_of_samples: int
     match_types: list[str]
@@ -223,7 +284,20 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
 
     # https://github.com/huggingface/Math-Verify/blob/5d148cfaaf99214c2e4ffb4bc497ab042c592a7a/tests/test_all.py#L36
     def compare_strings(self, ref: str, pred: str) -> float:
-        """Helper function to compare strings using the math extraction metrics."""
+        """Compare two strings using math-aware extraction and verification.
+
+        Parses both strings into mathematical expressions using the configured
+        ``match_types`` (latex and/or expr), then verifies equivalence via
+        ``math_verify.verify``.
+
+        Args:
+            ref (str): The reference (gold) string containing a math expression.
+            pred (str): The predicted string to compare against the reference.
+
+        Returns:
+            float: ``1.0`` if the expressions are considered equivalent,
+            ``0.0`` otherwise.
+        """
         # Convert string match_types to ExtractionTarget objects
         extraction_targets = []
         for match_type in self.match_types:
@@ -248,7 +322,21 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
 
 
 class MBRDRougeLStrategy(BaseMBRDSampling):
-    """Sampling Strategy that uses RougeL to compute symbol-level distances for majority voting."""
+    """Sampling Strategy that uses RougeL to compute symbol-level distances for majority voting.
+
+    Args:
+        number_of_samples (int): Number of samples to generate. Defaults to ``8``.
+        weighted (bool): Not yet implemented. Defaults to ``False``.
+        loop_budget (int): Rejection-sampling loop count. Defaults to ``1``.
+        requirements (list[Requirement] | None): Requirements to validate against.
+
+    Attributes:
+        match_types (list[str]): Rouge metric names used for scoring (``["rougeL"]``).
+        scorer (RougeScorer): Pre-configured ``RougeScorer`` instance used for
+            pairwise string comparison.
+        symmetric (bool): Inherited from ``BaseMBRDSampling``; always ``True`` for
+            RougeL (the score is symmetric by construction).
+    """
 
     match_types: list[str]
     scorer: RougeScorer
@@ -287,6 +375,14 @@ class MBRDRougeLStrategy(BaseMBRDSampling):
 
     # https://github.com/huggingface/Math-Verify/blob/5d148cfaaf99214c2e4ffb4bc497ab042c592a7a/tests/test_all.py#L36
     def compare_strings(self, ref: str, pred: str) -> float:
-        """Helper function to compare strings using the math extraction metrics."""
+        """Compare two strings using the RougeL F-measure.
+
+        Args:
+            ref (str): The reference string to score against.
+            pred (str): The predicted string to evaluate.
+
+        Returns:
+            float: RougeL F-measure score in the range ``[0.0, 1.0]``.
+        """
         scr: float = self.scorer.score(ref, pred)[self.match_types[-1]].fmeasure
         return scr

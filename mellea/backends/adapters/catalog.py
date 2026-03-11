@@ -10,7 +10,12 @@ import pydantic
 
 
 class AdapterType(enum.Enum):
-    """Possible types of adapters for a backend."""
+    """Possible types of adapters for a backend.
+
+    Attributes:
+        LORA (str): Standard LoRA adapter; value ``"lora"``.
+        ALORA (str): Activated LoRA adapter; value ``"alora"``.
+    """
 
     LORA = "lora"
     ALORA = "alora"
@@ -20,6 +25,16 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
     """A single row in the main intrinsics catalog table.
 
     We use Pydantic for this dataclass because the rest of Mellea also uses Pydantic.
+
+    Attributes:
+        name (str): User-visible name of the intrinsic.
+        internal_name (str | None): Internal name used for adapter loading, or
+            ``None`` if the same as ``name``.
+        repo_id (str): HuggingFace repository where adapters for the intrinsic
+            are located.
+        adapter_types (tuple[AdapterType, ...]): Adapter types known to be
+            available for this intrinsic; defaults to
+            ``(AdapterType.LORA, AdapterType.ALORA)``.
     """
 
     name: str = pydantic.Field(description="User-visible name of the intrinsic.")
@@ -86,10 +101,14 @@ def fetch_intrinsic_metadata(intrinsic_name: str) -> IntriniscsCatalogEntry:
     """Retrieve information about the adapter that backs an intrinsic.
 
     Args:
-        intrinsic_name: User-visible name of the intrinsic.
+        intrinsic_name (str): User-visible name of the intrinsic.
 
     Returns:
-        Metadata about the adapter(s) that implement the intrinsic.
+        IntriniscsCatalogEntry: Metadata about the adapter(s) that implement the
+            intrinsic.
+
+    Raises:
+        ValueError: If ``intrinsic_name`` is not a known intrinsic name.
     """
     if intrinsic_name not in _INTRINSICS_CATALOG:
         raise ValueError(

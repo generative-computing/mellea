@@ -44,40 +44,56 @@ class MifiedProtocol(MObjectProtocol, Protocol):
     _stringify_func: Callable[[object], str] | None = None
 
     def parts(self) -> list[Component | CBlock]:
-        """TODO: we need to rewrite this component to use format_for_llm and initializer correctly.
+        """Return the constituent sub-components of this mified object.
+
+        TODO: we need to rewrite this component to use format_for_llm and initializer correctly.
 
         For now an empty list is the correct behavior.
 
         [no-index]
+
+        Returns:
+            list[Component | CBlock]: Always an empty list for mified objects.
         """
         return []
 
     def get_query_object(self, query: str) -> Query:
-        """Returns the instantiated query object.
+        """Return the instantiated query object for this mified object.
 
         [no-index]
 
         Args:
-            query : The query string.
+            query (str): The natural-language query string.
+
+        Returns:
+            Query: A ``Query`` component wrapping this object and the given query.
         """
         return self._query_type(self, query)
 
     def get_transform_object(self, transformation: str) -> Transform:
-        """Returns the instantiated transform object.
+        """Return the instantiated transform object for this mified object.
 
         [no-index]
 
         Args:
-            transformation: the transform string
+            transformation (str): The natural-language transformation description.
+
+        Returns:
+            Transform: A ``Transform`` component wrapping this object and the
+            given transformation description.
         """
         return self._transform_type(self, transformation)
 
     def content_as_string(self) -> str:
-        """Returns the content of the Mified object as a string.
+        """Return the content of the mified object as a plain string.
 
         [no-index]
 
-        Will use the passed in stringify function if provided.
+        Delegates to the ``stringify_func`` passed to ``mify`` when one was
+        provided; otherwise falls back to ``str(self)``.
+
+        Returns:
+            str: String representation of the mified object's content.
         """
         if self._stringify_func:
             return self._stringify_func()  # type: ignore
@@ -177,14 +193,18 @@ class MifiedProtocol(MObjectProtocol, Protocol):
         return narrowed
 
     def format_for_llm(self) -> TemplateRepresentation:
-        """The representation of an object given to the backend.
+        """Return the ``TemplateRepresentation`` for this mified object.
 
         [no-index]
 
-        Sets the TemplateRepresentation fields based on the object and the values
-        specified during mify.
+        Sets the ``TemplateRepresentation`` fields based on the object and the
+        configuration values supplied to ``mify`` (fields, templates, tools, etc.).
 
-        See mify decorator for more details.
+        See the ``mify`` decorator for more details.
+
+        Returns:
+            TemplateRepresentation: The formatted representation including args,
+            tools, and template ordering.
         """
         args = {"content": self.content_as_string()}
 
@@ -219,9 +239,22 @@ class MifiedProtocol(MObjectProtocol, Protocol):
         return computed.value if computed.value is not None else ""
 
     def parse(self, computed: ModelOutputThunk) -> str:
-        """Parse the model output. Returns string value for now.
+        """Parse the model output into a string value.
 
         [no-index]
+
+        Delegates to ``_parse`` and wraps any exception in a
+        ``ComponentParseError`` to give callers a consistent error type.
+
+        Args:
+            computed (ModelOutputThunk): The raw model output to parse.
+
+        Returns:
+            str: The string value extracted from ``computed``.
+
+        Raises:
+            ComponentParseError: If ``_parse`` raises any exception during
+                parsing.
         """
         try:
             return self._parse(computed)
@@ -282,17 +315,25 @@ def mify(*args, **kwargs):  # noqa: D417
     the attributes and methods of the object/class necessary for it to be mified.
 
     Args:
-        obj: either a class or an instance of the class
-        fields_include: fields of the object to include in its representation to models
-        fields_exclude: fields of the object to exclude from its representation to models
-        funcs_include: functions of the object to include in its representation to models
-        funcs_exclude: functions of the object to exclude from its representation to models
-        query_type: a specific query component type to use when querying a model
-        transform_type: a specific transform component type to use when transforming with a model
-        template: a string representation of a jinja template; takes precedence over template_order
-        template_order: a template ordering to use when searching for applicable templates
-        parsing_func: not yet implemented
-        stringify_func: used to create a string representation of the object
+        obj: A class or an instance of a class to mify. Omit when using as a
+            decorator with arguments (e.g. ``@mify(fields_include={...})``).
+        query_type: A specific query component type to use when querying a model.
+            Defaults to ``Query``.
+        transform_type: A specific transform component type to use when
+            transforming with a model. Defaults to ``Transform``.
+        fields_include: Fields of the object to include in its representation to
+            models. When set, ``stringify_func`` is not used.
+        fields_exclude: Fields of the object to exclude from its representation
+            to models.
+        funcs_include: Functions of the object to expose as tools to models.
+        funcs_exclude: Functions of the object to hide from models.
+        template: A Jinja2 template string. Takes precedence over
+            ``template_order`` when provided.
+        template_order: A template name or list of names used when searching for
+            applicable templates.
+        parsing_func: Not yet implemented.
+        stringify_func: A callable used to create a string representation of the
+            object for ``content_as_string``.
 
     Returns:
         An object if an object was passed in or a decorator (callable) to mify classes.

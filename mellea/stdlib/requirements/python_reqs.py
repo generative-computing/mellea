@@ -140,7 +140,24 @@ def _python_executes_without_error(
 
 
 class PythonExecutionReq(Requirement):
-    """Verifies that Python code runs without raising exceptions."""
+    """Verifies that Python code runs without raising exceptions.
+
+    Extracts the highest-scoring Python code block from the model's last output
+    and validates or executes it according to the configured execution mode.
+
+    Args:
+        timeout (int): Maximum seconds to allow code to run. Defaults to ``5``.
+        allow_unsafe_execution (bool): If ``True``, execute code directly with
+            subprocess. Use only with trusted sources.
+        allowed_imports (list[str] | None): Allowlist of importable top-level
+            modules. ``None`` allows any import.
+        use_sandbox (bool): If ``True``, use ``llm-sandbox`` for Docker-based
+            isolated execution.
+
+    Attributes:
+        validation_fn (Callable[[Context], ValidationResult]): The validation
+            function attached to this requirement; always non-``None``.
+    """
 
     def __init__(
         self,

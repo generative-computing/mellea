@@ -40,6 +40,11 @@ def make_config_dict(
     Returns:
         Validated configuration dict with optional fields set to ``None`` and JSON
         string fields parsed to Python objects.
+
+    Raises:
+        ValueError: If both or neither of ``config_file`` and ``config_dict`` are
+            provided, if a required field is missing, if an unexpected top-level
+            field is encountered, or if a JSON field cannot be parsed.
     """
     if (config_file is None and config_dict is None) or (
         config_file is not None and config_dict is not None
@@ -123,6 +128,10 @@ def obtain_lora(
     Returns:
         Full path to the local copy of the specified (a)LoRA adapter, suitable for
         passing to commands that serve the adapter.
+
+    Raises:
+        ValueError: If the specified intrinsic adapter cannot be found in the
+            Hugging Face Hub repository at the expected path.
     """
     # Third Party
     import huggingface_hub

@@ -84,6 +84,13 @@ class ClientCache:
     """A simple [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_Recently_Used_(LRU)) cache.
 
     Used to keep track of clients for backends where the client is tied to a specific event loop.
+
+    Args:
+        capacity (int): Maximum number of entries to hold before evicting the least recently used.
+
+    Attributes:
+        capacity (int): Maximum number of entries the cache can hold.
+        cache (OrderedDict): Ordered dictionary storing the cached key-value pairs in LRU order.
     """
 
     def __init__(self, capacity: int):

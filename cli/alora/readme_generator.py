@@ -22,6 +22,18 @@ from mellea.stdlib.session import MelleaSession
 
 
 class ReadmeTemplateVars(BaseModel):
+    """Pydantic model holding all variables required to render the intrinsic README template.
+
+    Attributes:
+        high_level_description (str): A 2-3 sentence description of what the intrinsic adapter does.
+        dataset_description (str): Brief description of the training dataset contents and format.
+        userid (str): HuggingFace user ID (the namespace portion of the model name).
+        intrinsic_name (str): Short snake_case identifier for the intrinsic (e.g. ``"carbchecker"``).
+        intrinsic_name_camelcase (str): CamelCase version of ``intrinsic_name`` (e.g. ``"CarbChecker"``).
+        arglist (str): Python function argument list with type hints (e.g. ``"description: str"``).
+        arglist_without_type_annotations (str): Argument list without type hints (e.g. ``"description"``).
+    """
+
     high_level_description: str
     dataset_description: str
     userid: str

@@ -24,7 +24,22 @@ console = Console()
 
 
 class InputEvalResult:
-    """Store results of a single input evaluation (within a unit test)."""
+    """Store results of a single input evaluation (within a unit test).
+
+    Args:
+        input_text (str): The raw input text sent to the generation model.
+        model_output (str): The text response produced by the generation model.
+        validation_passed (bool): Whether the judge scored this response as passing.
+        score (int): Numeric score assigned by the judge (``1`` for pass, ``0`` for fail).
+        validation_reason (str): Justification text returned by the judge model.
+
+    Attributes:
+        input_text (str): The raw input text sent to the generation model.
+        model_output (str): The text response produced by the generation model.
+        validation_passed (bool): Whether the judge scored this response as passing.
+        score (int): Numeric score assigned by the judge (``1`` for pass, ``0`` for fail).
+        validation_reason (str): Justification text returned by the judge model.
+    """
 
     def __init__(
         self,
@@ -41,6 +56,12 @@ class InputEvalResult:
         self.validation_reason = validation_reason
 
     def to_dict(self):
+        """Serialise the input evaluation result to a plain dictionary.
+
+        Returns:
+            dict: A dictionary with keys ``"input"``, ``"model_output"``,
+            ``"passed"``, ``"score"``, and ``"justification"``.
+        """
         return {
             "input": self.input_text,
             "model_output": self.model_output,
@@ -51,13 +72,38 @@ class InputEvalResult:
 
 
 class TestEvalResult:
-    """Store results of a single test evaluation."""
+    """Store results of a single test evaluation.
+
+    Args:
+        test_eval (TestBasedEval): The unit test specification containing
+            the test ID, name, instructions, inputs, and expected targets.
+        input_results (list[InputEvalResult]): Per-input evaluation outcomes
+            produced by running the generation and judge models.
+
+    Attributes:
+        test_eval (TestBasedEval): The unit test specification containing
+            the test ID, name, instructions, inputs, and expected targets.
+        input_results (list[InputEvalResult]): Per-input evaluation outcomes
+            produced by running the generation and judge models.
+        passed_count (int): Number of inputs that received a passing score.
+        total_count (int): Total number of inputs evaluated.
+        pass_rate (float): Fraction of inputs that passed (``passed_count / total_count``).
+    """
 
     def __init__(self, test_eval: TestBasedEval, input_results: list[InputEvalResult]):
         self.test_eval = test_eval
         self.input_results = input_results
 
     def to_dict(self):
+        """Serialise the test evaluation result to a plain dictionary.
+
+        Returns:
+            dict: A dictionary containing the test metadata (``"test_id"``,
+            ``"source"``, ``"name"``, ``"instructions"``), per-input results
+            under ``"input_results"``, expected targets under
+            ``"expected_targets"``, and summary counts (``"passed"``,
+            ``"total_count"``, ``"pass_rate"``).
+        """
         return {
             "test_id": self.test_eval.test_id,
             "source": self.test_eval.source,
@@ -98,6 +144,11 @@ def create_session(
 
     Returns:
         A configured ``MelleaSession`` ready for generation.
+
+    Raises:
+        ValueError: If ``backend`` is not one of the supported backend names.
+        Exception: Re-raised from backend or session construction if
+            initialisation fails.
     """
     model_id = None
     if model:

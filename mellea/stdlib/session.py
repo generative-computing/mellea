@@ -75,6 +75,11 @@ def backend_name_to_class(name: str) -> Any:
 
     Returns:
         The corresponding ``Backend`` class, or ``None`` if the name is unrecognised.
+
+    Raises:
+        ImportError: If the requested backend has optional dependencies that are
+            not installed (e.g. ``mellea[hf]``, ``mellea[watsonx]``, or
+            ``mellea[litellm]``).
     """
     if name == "ollama":
         from ..backends.ollama import OllamaModelBackend
@@ -156,6 +161,12 @@ def start_session(
     Returns:
         MelleaSession: A session object that can be used as a context manager
         or called directly with session methods.
+
+    Raises:
+        Exception: If ``backend_name`` is not one of the recognised backend
+            identifiers.
+        ImportError: If the requested backend requires optional dependencies
+            that are not installed.
 
     Examples:
         ```python
@@ -272,6 +283,17 @@ class MelleaSession:
     If you are doing complicating programming (e.g., non-trivial inference scaling) then you might be better off forgoing `MelleaSession`s and managing your Context and Backend directly.
 
     Note: we put the `instruct`, `validate`, and other convenience functions here instead of in `Context` or `Backend` to avoid import resolution issues.
+
+    Args:
+        backend (Backend): The backend to use for all model inference in this
+            session.
+        ctx (Context | None): The conversation context. Defaults to a new
+            ``SimpleContext`` if ``None``.
+
+    Attributes:
+        ctx (Context): The active conversation context. Updated after every call that
+            produces model output.
+        backend (Backend): The backend used for model inference throughout the session.
     """
 
     ctx: Context
@@ -347,7 +369,11 @@ class MelleaSession:
         return copy(self)
 
     def reset(self):
-        """Reset the context state."""
+        """Reset the context state to a fresh, empty context of the same type.
+
+        Replaces ``self.ctx`` with the result of ``ctx.reset_to_new()``, discarding
+        all accumulated conversation history.
+        """
         if has_plugins(HookType.SESSION_RESET):
             from ..plugins.hooks.session import SessionResetPayload
 
@@ -358,7 +384,7 @@ class MelleaSession:
         self.ctx = self.ctx.reset_to_new()
 
     def cleanup(self) -> None:
-        """Clean up session resources."""
+        """Clean up session resources and deregister session-scoped plugins."""
         if has_plugins(HookType.SESSION_CLEANUP):
             from ..plugins.hooks.session import SessionCleanupPayload
 
@@ -375,10 +401,6 @@ class MelleaSession:
             from ..plugins.manager import deregister_session_plugins
 
             deregister_session_plugins(self.id)
-
-        self.reset()
-        if hasattr(self.backend, "close"):
-            self.backend.close()  # type: ignore
 
     @overload
     def act(
@@ -1008,7 +1030,16 @@ class MelleaSession:
 
     @classmethod
     def powerup(cls, powerup_cls: type):
-        """Appends methods in a class object `powerup_cls` to MelleaSession."""
+        """Appends methods in a class object `powerup_cls` to MelleaSession.
+
+        Iterates over all functions defined on ``powerup_cls`` and attaches each
+        one as a method on the ``MelleaSession`` class, effectively extending
+        the session with domain-specific helpers at runtime.
+
+        Args:
+            powerup_cls (type): A class whose functions should be added to
+                ``MelleaSession`` as instance methods.
+        """
         for name, fn in inspect.getmembers(powerup_cls, predicate=inspect.isfunction):
             setattr(cls, name, fn)
 

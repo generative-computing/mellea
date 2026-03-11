@@ -33,21 +33,35 @@ def _mellea_finalize_tool(answer: str) -> str:
 
 
 class ReactInitiator(Component[str]):
-    """`ReactInitiator` is used at the start of the ReACT loop to prime the model."""
+    """`ReactInitiator` is used at the start of the ReACT loop to prime the model.
+
+    Args:
+        goal (str): The objective of the react loop.
+        tools (list[AbstractMelleaTool] | None): Tools available to the agent.
+            ``None`` is treated as an empty list.
+
+    Attributes:
+        goal (CBlock): The objective of the react loop wrapped as a content block.
+        tools (list[AbstractMelleaTool]): The tools made available to the react agent.
+    """
 
     def __init__(self, goal: str, tools: list[AbstractMelleaTool] | None):
         """`ReactInitiator` is used at the start of the ReACT loop to prime the model.
 
         Args:
-            goal: the objective of the react loop
-            tools: a list of tools that are available to the react agent
-            format: the format/schema of the expected answer
+            goal (str): The objective of the react loop.
+            tools (list[AbstractMelleaTool] | None): A list of tools that are
+                available to the react agent; ``None`` is treated as an empty list.
         """
         self.goal = CBlock(goal)
         self.tools = tools or []
 
     def parts(self) -> list[Component | CBlock]:
-        """The set of all the constituent parts of the `Component`."""
+        """Return the constituent parts of this component.
+
+        Returns:
+            list[Component | CBlock]: A list containing the goal content block.
+        """
         return [self.goal]
 
     def format_for_llm(self) -> TemplateRepresentation:
@@ -89,7 +103,13 @@ class ReactThought(Component[str]):
         """ReactThought signals that a thinking step should be done."""
 
     def parts(self) -> list[Component | CBlock]:
-        """Component has no parts."""
+        """Return the constituent parts of this component.
+
+        ``ReactThought`` has no sub-components; it solely triggers a thinking step.
+
+        Returns:
+            list[Component | CBlock]: Always an empty list.
+        """
         return []
 
     def _parse(self, computed: ModelOutputThunk) -> str:

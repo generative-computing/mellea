@@ -147,6 +147,10 @@ def alora_add_readme(
         name: Destination model name on Hugging Face Hub.
         hints: Path to a file containing additional domain hints, or ``None``.
         io_yaml: Path to the ``io.yaml`` intrinsic configuration file, or ``None``.
+
+    Raises:
+        OSError: If no Hugging Face authentication token is found.
+        SystemExit: If the user declines to upload the generated README.
     """
     from huggingface_hub import HfFolder, create_repo, upload_file
 

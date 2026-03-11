@@ -152,6 +152,7 @@
                 "group": "backends",
                 "pages": [
                   "api/mellea/backends/backend",
+                  "api/mellea/backends/backends",
                   "api/mellea/backends/bedrock",
                   "api/mellea/backends/cache",
                   "api/mellea/backends/dummy",
@@ -180,6 +181,7 @@
                 "pages": [
                   "api/mellea/core/backend",
                   "api/mellea/core/base",
+                  "api/mellea/core/core",
                   "api/mellea/core/formatter",
                   "api/mellea/core/requirement",
                   "api/mellea/core/sampling",
@@ -190,6 +192,7 @@
                 "group": "formatters",
                 "pages": [
                   "api/mellea/formatters/chat_formatter",
+                  "api/mellea/formatters/formatters",
                   "api/mellea/formatters/template_formatter",
                   {
                     "group": "granite",
@@ -254,6 +257,7 @@
                 "group": "helpers",
                 "pages": [
                   "api/mellea/helpers/async_helpers",
+                  "api/mellea/helpers/helpers",
                   "api/mellea/helpers/openai_compatible_helpers",
                   "api/mellea/helpers/server_type"
                 ]
@@ -264,6 +268,7 @@
                   "api/mellea/stdlib/context",
                   "api/mellea/stdlib/functional",
                   "api/mellea/stdlib/session",
+                  "api/mellea/stdlib/stdlib",
                   {
                     "group": "components",
                     "pages": [
@@ -363,6 +368,7 @@
               {
                 "group": "decompose",
                 "pages": [
+                  "api/cli/decompose/__init__",
                   "api/cli/decompose/decompose",
                   "api/cli/decompose/pipeline",
                   "api/cli/decompose/utils"
@@ -372,6 +378,7 @@
                 "group": "eval",
                 "pages": [
                   "api/cli/eval/commands",
+                  "api/cli/eval/eval",
                   "api/cli/eval/runner"
                 ]
               }

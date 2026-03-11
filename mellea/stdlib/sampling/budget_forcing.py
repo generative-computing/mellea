@@ -32,6 +32,40 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
     accept or retry.
 
     Currently only supports the ``OllamaModelBackend``.
+
+    Args:
+        think_max_tokens (int | None): Tokens allocated for the thinking block.
+            Defaults to ``4096``.
+        answer_max_tokens (int | None): Tokens allocated for the answer block.
+            ``None`` means unbounded.
+        start_think_token (str | None): Token opening the thinking block.
+            Defaults to ``"<think>"``.
+        end_think_token (str | None): Token closing the thinking block.
+            Defaults to ``"</think>"``.
+        begin_response_token (str | None): Optional token opening the response
+            block. Defaults to ``""``.
+        end_response_token (str): Token closing the response block.
+        think_more_suffix (str | None): Suffix to force continued thinking.
+            Empty string disables forcing.
+        answer_suffix (str | None): Suffix to elicit a final answer.
+        loop_budget (int): Rejection-sampling loop count. Must be > 0.
+        requirements (list[Requirement] | None): Requirements to validate against.
+
+    Attributes:
+        think_max_tokens (int | None): Maximum tokens allocated for the thinking
+            block. ``None`` means no budget (zero-think case).
+        answer_max_tokens (int | None): Maximum tokens allocated for the answer
+            block. ``None`` means unbounded (generate until EoS).
+        start_think_token (str | None): Token that opens the thinking block,
+            e.g. ``"<think>"``.
+        end_think_token (str | None): Token that closes the thinking block,
+            e.g. ``"</think>"``.
+        begin_response_token (str | None): Optional token that opens the
+            response block, e.g. ``"<response>"``.
+        end_response_token (str): Token that closes the response block.
+        think_more_suffix (str | None): Suffix appended to force continued
+            thinking. Empty string disables forced thinking.
+        answer_suffix (str | None): Suffix appended to elicit a final answer.
     """
 
     think_max_tokens: int | None

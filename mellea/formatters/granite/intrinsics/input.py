@@ -94,6 +94,12 @@ def move_documents_to_message(
         A copy of ``chat_completion`` with any documents under ``extra_body``
         moved to the first message. Returned type will be the same as the input type.
         May return original object if no edits are necessary.
+
+    Raises:
+        TypeError: If ``chat_completion`` is not a :class:`ChatCompletion` or
+            ``dict``.
+        ValueError: If ``how`` is not one of ``"string"``, ``"json"``, or
+            ``"roles"``.
     """
     if isinstance(chat_completion, ChatCompletion):
         should_return_dataclass = True
@@ -163,6 +169,33 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
     General-purpose chat completion rewriter for use with models that implement
     LLM intrinsics. Reads parameters of the model's input and output formats
     from a YAML configuration file and edits the input chat completion appropriately.
+
+    Args:
+        config_file (str | pathlib.Path | None): Path to the YAML configuration file for the
+            target intrinsic. Mutually exclusive with ``config_dict``.
+        config_dict (dict | None): Inline configuration dictionary. Mutually exclusive with
+            ``config_file``.
+        model_name (str | None): Optional model name used to locate model-specific overrides
+            within the configuration.
+
+    Attributes:
+        config (dict): Parsed YAML configuration file for the target intrinsic.
+        response_format (dict): JSON Schema of the expected response format.
+        parameters (dict): Additional parameters (key-value pairs) that this
+            rewriter adds to all chat completion requests.
+        extra_body_parameters (dict): Extended vLLM-specific parameters that go
+            under the ``extra_body`` element of each request. These are merged
+            with any existing ``extra_body`` content in incoming requests.
+        instruction (str | None): Optional instruction template. When present,
+            a new user message is appended with the formatted instruction.
+        sentence_boundaries (dict[str, str] | None): Optional sentence-boundary
+            marking specification, mapping location strings (``"last_message"``
+            or ``"documents"``) to marker prefixes (e.g. ``"c"`` produces
+            ``<c0>``, ``<c1>``, …).
+        docs_as_message (str | None): Optional specification for moving
+            documents from ``extra_body/documents`` to a user message at the
+            start of the messages list. Value must be ``"string"``, ``"json"``,
+            or ``"roles"``.
     """
 
     config: dict
@@ -208,11 +241,15 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
         """Initialize the IntrinsicsRewriter.
 
         Args:
-            config_file: Optional location of the YAML configuration file.
-            config_dict: Optional pre-parsed contents of the YAML configuration file
-                (result of ``yaml.safe_load()``).
-            model_name: Optional model name to inject into chat completion requests;
-                ``None`` uses the default from the configuration.
+            config_file (str | pathlib.Path | None): Optional location of the
+                YAML configuration file. Exactly one of ``config_file`` and
+                ``config_dict`` must be provided.
+            config_dict (dict | None): Optional pre-parsed contents of the YAML
+                configuration file (result of ``yaml.safe_load()``). Exactly one
+                of ``config_file`` and ``config_dict`` must be provided.
+            model_name (str | None): Optional model name to inject into chat
+                completion requests. ``None`` uses the default from the
+                configuration. Defaults to ``None``.
         """
         config = make_config_dict(config_file, config_dict)
         if config is None:

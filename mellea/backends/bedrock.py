@@ -59,14 +59,22 @@ def create_bedrock_mantle_backend(
     """Return an OpenAI backend that points to Bedrock mantle for the given model.
 
     Args:
-        model_id: The model to use, either as a ``ModelIdentifier`` (which must have
-            a ``bedrock_name``) or a raw Bedrock model ID string.
-        region: AWS region name, or ``None`` to use the default region
-            (``"us-east-1"``).
+        model_id (ModelIdentifier | str): The model to use, either as a
+            ``ModelIdentifier`` (which must have a ``bedrock_name``) or a raw
+            Bedrock model ID string.
+        region (str | None): AWS region name, or ``None`` to use the default
+            region (``"us-east-1"``).
 
     Returns:
-        An ``OpenAIBackend`` configured to call the specified model via AWS Bedrock
-        Mantle.
+        OpenAIBackend: An ``OpenAIBackend`` configured to call the specified model
+            via AWS Bedrock Mantle.
+
+    Raises:
+        Exception: If ``model_id`` is a ``ModelIdentifier`` with no ``bedrock_name``
+            set.
+        AssertionError: If the ``AWS_BEARER_TOKEN_BEDROCK`` environment variable is
+            not set.
+        Exception: If the specified model is not available in the target region.
     """
     model_name = ""
     match model_id:

@@ -30,14 +30,36 @@ from .prompt_modules.subtask_prompt_generator import SubtaskPromptItem
 
 
 class ConstraintResult(TypedDict):
-    """A single constraint paired with its assigned validation strategy."""
+    """A single constraint paired with its assigned validation strategy.
+
+    Attributes:
+        constraint (str): Natural-language description of the constraint.
+        validation_strategy (str): Strategy assigned to validate the constraint;
+            either ``"code"`` or ``"llm"``.
+    """
 
     constraint: str
     validation_strategy: str
 
 
 class DecompSubtasksResult(TypedDict):
-    """The full structured result for one decomposed subtask."""
+    """The full structured result for one decomposed subtask.
+
+    Attributes:
+        subtask (str): Natural-language description of the subtask.
+        tag (str): Short identifier for the subtask, used as a variable name
+            in Jinja2 templates and dependency references.
+        constraints (list[ConstraintResult]): List of constraints assigned to
+            this subtask, each with a validation strategy.
+        prompt_template (str): Jinja2 prompt template string for this subtask,
+            with ``{{ variable }}`` placeholders for inputs and prior subtask results.
+        input_vars_required (list[str]): Ordered list of user-provided input
+            variable names referenced in ``prompt_template``.
+        depends_on (list[str]): Ordered list of subtask tags whose results are
+            referenced in ``prompt_template``.
+        generated_response (str): Optional field holding the model response
+            produced during execution; not present until the subtask runs.
+    """
 
     subtask: str
     tag: str
@@ -50,7 +72,20 @@ class DecompSubtasksResult(TypedDict):
 
 
 class DecompPipelineResult(TypedDict):
-    """The complete output of a decomposition pipeline run."""
+    """The complete output of a decomposition pipeline run.
+
+    Attributes:
+        original_task_prompt (str): The raw task prompt provided by the user.
+        subtask_list (list[str]): Ordered list of subtask descriptions produced
+            by the subtask-listing stage.
+        identified_constraints (list[ConstraintResult]): Constraints extracted
+            from the original task prompt, each with a validation strategy.
+        subtasks (list[DecompSubtasksResult]): Fully annotated subtask objects
+            with prompt templates, constraint assignments, and dependency
+            information.
+        final_response (str): Optional field holding the aggregated final
+            response produced during execution; not present until the pipeline runs.
+    """
 
     original_task_prompt: str
     subtask_list: list[str]
@@ -60,7 +95,13 @@ class DecompPipelineResult(TypedDict):
 
 
 class DecompBackend(StrEnum):
-    """Inference backends supported by the decomposition pipeline."""
+    """Inference backends supported by the decomposition pipeline.
+
+    Attributes:
+        ollama (str): Local Ollama inference server backend.
+        openai (str): Any OpenAI-compatible HTTP endpoint backend.
+        rits (str): IBM RITS (Remote Inference and Training Service) backend.
+    """
 
     ollama = "ollama"
     openai = "openai"

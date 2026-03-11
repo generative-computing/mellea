@@ -21,6 +21,18 @@ class GuardianRisk(Enum):
     """Risk definitions for Granite Guardian models.
 
     Based on https://github.com/ibm-granite/granite-guardian but updated for 3.3 8B support.
+
+    Attributes:
+        HARM (str): General harmful content risk.
+        GROUNDEDNESS (str): Factual groundedness / attribution risk.
+        PROFANITY (str): Profane language risk.
+        ANSWER_RELEVANCE (str): Answer relevance to the question risk.
+        JAILBREAK (str): Jailbreak attempt risk.
+        FUNCTION_CALL (str): Unsafe or invalid function-call risk.
+        SOCIAL_BIAS (str): Social bias risk.
+        VIOLENCE (str): Violent content risk.
+        SEXUAL_CONTENT (str): Explicit sexual content risk.
+        UNETHICAL_BEHAVIOR (str): Unethical behaviour risk.
     """
 
     HARM = "harm"
@@ -36,7 +48,11 @@ class GuardianRisk(Enum):
 
     @classmethod
     def get_available_risks(cls) -> list[str]:
-        """Get list of all available risk types."""
+        """Return a list of all available risk type identifiers.
+
+        Returns:
+            list[str]: String values of all ``GuardianRisk`` enum members.
+        """
         return [risk.value for risk in cls]
 
 
@@ -71,6 +87,24 @@ class GuardianCheck(Requirement):
     """Enhanced risk checking using Granite Guardian 3.3 8B with multiple backend support.
 
     [DEPRECATED as of V 0.4 -- Use Intrinsics instead]
+
+    Args:
+        risk (str | GuardianRisk | None): The type of risk to check for.  Required
+            unless ``custom_criteria`` is provided.
+        backend_type (BackendType): Backend type to use -- ``"ollama"`` or
+            ``"huggingface"``.
+        model_version (str | None): Specific Guardian model version.  Defaults to
+            the appropriate 8B model for the chosen backend.
+        device (str | None): Device string for HuggingFace inference (e.g.
+            ``"cuda"``).
+        ollama_url (str): Base URL for the Ollama server.
+        thinking (bool): Enable chain-of-thought reasoning mode in the Guardian model.
+        custom_criteria (str | None): Free-text criteria string used in place of a
+            standard ``GuardianRisk`` value.
+        context_text (str | None): Context document for groundedness checks.
+        tools (list[dict] | None): Tool schemas for function-call validation.
+        backend (Backend | None): Pre-initialised backend instance to reuse; avoids
+            loading the model multiple times.
     """
 
     def __init__(
@@ -179,12 +213,23 @@ class GuardianCheck(Requirement):
         self._logger = FancyLogger.get_logger()
 
     def get_effective_risk(self) -> str:
-        """Get the effective risk criteria to use for validation."""
+        """Return the effective risk criteria to use for validation.
+
+        Returns the ``custom_criteria`` string when one was provided, otherwise
+        returns the ``risk`` identifier set during initialisation.
+
+        Returns:
+            str: The active risk/criteria string forwarded to the Guardian model.
+        """
         return self._custom_criteria if self._custom_criteria else self._risk
 
     @classmethod
     def get_available_risks(cls) -> list[str]:
-        """Get list of all available standard risk types."""
+        """Return a list of all available standard risk type identifiers.
+
+        Returns:
+            list[str]: String values of all ``GuardianRisk`` enum members.
+        """
         return GuardianRisk.get_available_risks()
 
     def __deepcopy__(self, memo):
@@ -215,7 +260,25 @@ class GuardianCheck(Requirement):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
     ) -> ValidationResult:
-        """Validate conversation using Granite Guardian via selected backend."""
+        """Validate a conversation using Granite Guardian via the selected backend.
+
+        Builds a minimal chat context from the current session context, invokes the
+        Guardian model, and parses its ``<score>yes/no</score>`` output.  A ``"No"``
+        label (risk not detected) is treated as a passing validation result.
+
+        Args:
+            backend (Backend): The session backend (used as a fallback context
+                source; the Guardian's own backend is used for generation).
+            ctx (Context): The current conversation context to validate.
+            format (type[BaseModelSubclass] | None): Unused; present for interface
+                compatibility.
+            model_options (dict | None): Additional model options merged into the
+                Guardian backend call.
+
+        Returns:
+            ValidationResult: ``result=True`` when the content is considered safe
+            (Guardian returns ``"No"``), ``result=False`` otherwise.
+        """
         logger = self._logger
 
         # Build a fresh chat context for the guardian model (keep it minimal).
