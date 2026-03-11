@@ -141,7 +141,16 @@ def chat_completion_delta_merge(
 
 
 def message_to_openai_message(msg: Message):
-    """Serializes a mellea Message object to the message format required by OpenAI compatible api providers."""
+    """Serialise a Mellea ``Message`` to the format required by OpenAI-compatible API providers.
+
+    Args:
+        msg: The ``Message`` object to serialise.
+
+    Returns:
+        A dict with ``"role"`` and ``"content"`` fields. When the message carries
+        images, ``"content"`` is a list of text and image-URL dicts; otherwise it
+        is a plain string.
+    """
     if msg.images is not None:
         img_list = [
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}}
@@ -173,7 +182,15 @@ def message_to_openai_message(msg: Message):
 
 
 def messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]:
-    """Extracts the docs from a list of messages."""
+    """Extract all ``Document`` objects from a list of ``Message`` objects.
+
+    Args:
+        msgs: List of ``Message`` objects whose ``_docs`` attributes are inspected.
+
+    Returns:
+        A list of dicts, each with a ``"text"`` key and optional ``"title"`` and
+        ``"doc_id"`` keys, suitable for passing to an OpenAI-compatible RAG API.
+    """
     docs: list[Document] = []
     for message in msgs:
         if message._docs is not None:

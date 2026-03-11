@@ -77,7 +77,7 @@ class ArgumentDict(TypedDict):
 
 
 class Argument:
-    """An Argument."""
+    """A single function argument with its name, type annotation, and value."""
 
     def __init__(
         self,
@@ -94,6 +94,12 @@ class Argument:
 
 
 class Arguments(CBlock):
+    """A ``CBlock`` that renders a list of ``Argument`` objects as human-readable text.
+
+    Each argument is formatted as ``"- name: value  (type: annotation)"`` and the
+    items are newline-joined into a single string suitable for inclusion in a prompt.
+    """
+
     def __init__(self, arguments: list[Argument]):
         """Create a textual representation of a list of arguments."""
         # Make meta the original list of arguments and create a list of textual representations.
@@ -143,10 +149,15 @@ class PreconditionException(Exception):
 
 
 class Function(Generic[P, R]):
-    """A Function."""
+    """Wraps a callable with its introspected ``FunctionDict`` metadata.
+
+    Stores the original callable alongside its name, signature, and docstring
+    as produced by ``describe_function``, so generative slots can render them
+    into prompts without re-inspecting the function each time.
+    """
 
     def __init__(self, func: Callable[P, R]):
-        """A Function."""
+        """Wrap a callable and capture its metadata via ``describe_function``."""
         self._func: Callable[P, R] = func
         self._function_dict: FunctionDict = describe_function(func)
 
@@ -258,7 +269,14 @@ _disallowed_param_names = [field.name for field in fields(ExtractedArgs())]
 
 
 class GenerativeSlot(Component[R], Generic[P, R]):
-    """A generative slot component."""
+    """Abstract base class for AI-powered function wrappers produced by ``@generative``.
+
+    A ``GenerativeSlot`` wraps a callable and uses an LLM to generate its output.
+    Subclasses (``SyncGenerativeSlot``, ``AsyncGenerativeSlot``) implement
+    ``__call__`` for synchronous and asynchronous invocation respectively.
+    The function's signature, docstring, and type hints are rendered into a prompt
+    so the LLM can imitate the function's intended behaviour.
+    """
 
     def __init__(self, func: Callable[P, R]):
         """A generative slot function that converts a given `func` to a generative slot.
@@ -424,6 +442,13 @@ class GenerativeSlot(Component[R], Generic[P, R]):
 
 
 class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
+    """A synchronous generative slot that blocks until the LLM response is ready.
+
+    Returned by ``@generative`` when the decorated function is not a coroutine.
+    ``__call__`` returns the parsed result directly (when a session is passed) or a
+    ``(result, context)`` tuple (when a context and backend are passed).
+    """
+
     @overload
     def __call__(
         self,

@@ -40,7 +40,13 @@ BaseModelSubclass = typing_extensions.TypeVar(
 
 
 class Backend(abc.ABC):
-    """An abstract `Backend`."""
+    """Abstract base class for all inference backends.
+
+    All concrete backends must implement ``generate_from_context`` (context-aware
+    single-action generation) and ``generate_from_raw`` (context-free batch
+    generation). The ``do_generate_walk`` / ``do_generate_walks`` helpers can be
+    used to pre-compute any unresolved ``ModelOutputThunk`` leaves before rendering.
+    """
 
     @final
     async def generate_from_context(
@@ -186,7 +192,15 @@ class Backend(abc.ABC):
 
 
 def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputThunk]:
-    """Returns the generation walk ordering for a Span."""
+    """Return all uncomputed ``ModelOutputThunk`` leaves reachable from ``c``.
+
+    Args:
+        c: A ``CBlock``, ``Component``, or ``ModelOutputThunk`` to traverse.
+
+    Returns:
+        A flat list of uncomputed ``ModelOutputThunk`` instances in the order
+        they need to be resolved (depth-first over ``Component.parts()``).
+    """
     match c:
         case ModelOutputThunk() if not c.is_computed():
             return [c]

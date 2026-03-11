@@ -152,6 +152,7 @@ dev = [
     {include-group = "typecheck"},
     {include-group = "build"},
     {include-group = "release"},
+    "griffe>=2.0.0",
 ]
 
 # Documentation and notebooks

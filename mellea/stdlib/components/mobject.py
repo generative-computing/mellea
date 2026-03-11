@@ -19,7 +19,12 @@ from ...core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 
 
 class Query(Component[str]):
-    """A Query component."""
+    """A ``Component`` that pairs an ``MObject`` with a natural-language question.
+
+    Wraps the object and its query string into a ``TemplateRepresentation`` so the
+    formatter can render both together in a prompt, optionally forwarding the
+    object's tools and fields to the template.
+    """
 
     def __init__(self, obj: Component, query: str) -> None:
         """Initializes a new instance of Query with the provided object and query.
@@ -63,7 +68,12 @@ class Query(Component[str]):
 
 
 class Transform(Component[str]):
-    """A Transform component."""
+    """A ``Component`` that pairs an ``MObject`` with a natural-language mutation instruction.
+
+    Wraps the object and its transformation description into a
+    ``TemplateRepresentation`` so the formatter can render both together in a prompt,
+    optionally forwarding the object's tools and fields to the template.
+    """
 
     def __init__(self, obj: Component, transformation: str) -> None:
         """Initializes a new instance of Transform with the provided object and transformation description.

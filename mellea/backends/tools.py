@@ -312,13 +312,14 @@ def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
 
 
 def json_extraction(text: str) -> Generator[dict, None, None]:
-    """Yields the next valid json object in a given string.
+    """Yield the next valid JSON object found in a given string.
 
     Args:
         text: Input string potentially containing one or more JSON objects.
 
-    Yields:
-        Each valid JSON object found in ``text``, in order.
+    Returns:
+        A generator that yields each valid JSON object found in ``text``,
+        in order of appearance.
     """
     index = 0
     decoder = json.JSONDecoder()
@@ -587,7 +588,12 @@ def validate_tool_arguments(
 # so that all backends don't need it installed.
 # https://github.com/ollama/ollama-python/blob/60e7b2f9ce710eeb57ef2986c46ea612ae7516af/ollama/_types.py#L19-L101
 class SubscriptableBaseModel(BaseModel):
-    """Class imported from Ollama."""
+    """Pydantic ``BaseModel`` subclass that also supports subscript (``[]``) access.
+
+    Imported from the Ollama Python client. Allows model fields to be accessed
+    via ``model["field"]`` in addition to ``model.field``, which is required for
+    compatibility with Ollama's internal response parsing.
+    """
 
     def __getitem__(self, key: str) -> Any:
         """Getitem.

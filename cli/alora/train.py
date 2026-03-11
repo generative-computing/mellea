@@ -40,6 +40,21 @@ if sys.platform == "darwin" and hasattr(torch.backends, "mps"):
 
 
 def load_dataset_from_json(json_path, tokenizer, invocation_prompt):
+    """Load a JSONL dataset and format it for SFT training.
+
+    Reads ``item``/``label`` pairs from a JSONL file and builds a HuggingFace
+    ``Dataset`` with ``input`` and ``target`` columns. Each input is formatted as
+    ``"{item}\\nRequirement: <|end_of_text|>\\n{invocation_prompt}"``.
+
+    Args:
+        json_path: Path to the JSONL file containing ``item``/``label`` pairs.
+        tokenizer: HuggingFace tokenizer instance (currently unused, reserved for
+            future tokenization steps).
+        invocation_prompt: Invocation string appended to each input prompt.
+
+    Returns:
+        A HuggingFace ``Dataset`` with ``"input"`` and ``"target"`` string columns.
+    """
     data = []
     with open(json_path, encoding="utf-8") as f:
         for line in f:
@@ -59,6 +74,16 @@ def load_dataset_from_json(json_path, tokenizer, invocation_prompt):
 
 
 def formatting_prompts_func(example):
+    """Concatenate input and target columns for SFT prompt formatting.
+
+    Args:
+        example: A batch dict with ``"input"`` and ``"target"`` list fields, as
+            produced by HuggingFace ``Dataset.map`` in batched mode.
+
+    Returns:
+        A list of strings, each formed by concatenating the ``input`` and
+        ``target`` values for a single example in the batch.
+    """
     return [
         f"{example['input'][i]}{example['target'][i]}"
         for i in range(len(example["input"]))
@@ -66,6 +91,8 @@ def formatting_prompts_func(example):
 
 
 class SaveBestModelCallback(TrainerCallback):
+    """HuggingFace Trainer callback that saves the adapter at its best validation loss."""
+
     def __init__(self):
         self.best_eval_loss = float("inf")
 
@@ -79,6 +106,8 @@ class SaveBestModelCallback(TrainerCallback):
 
 
 class SafeSaveTrainer(SFTTrainer):
+    """SFTTrainer subclass that always saves models with safe serialization enabled."""
+
     def save_model(self, output_dir: str | None = None, _internal_call: bool = False):
         if self.model is not None:
             self.model.save_pretrained(output_dir, safe_serialization=True)
@@ -100,6 +129,29 @@ def train_model(
     max_length: int = 1024,
     grad_accum: int = 4,
 ):
+    """Fine-tune a causal language model to produce a LoRA or aLoRA adapter.
+
+    Loads and 80/20-splits the JSONL dataset, configures PEFT with the specified
+    adapter type, trains using ``SFTTrainer`` with a best-checkpoint callback, saves
+    the adapter weights, and removes the PEFT-generated ``README.md`` from the output
+    directory.
+
+    Args:
+        dataset_path: Path to the JSONL training dataset file.
+        base_model: Hugging Face model ID or local path to the base model.
+        output_file: Destination path for the trained adapter weights.
+        prompt_file: Optional path to a JSON config file with an
+            ``"invocation_prompt"`` key. Defaults to the aLoRA invocation token.
+        adapter: Adapter type to train -- ``"alora"`` (default) or ``"lora"``.
+        device: Device selection -- ``"auto"``, ``"cpu"``, ``"cuda"``, or
+            ``"mps"``.
+        run_name: Name of the training run (passed to ``SFTConfig``).
+        epochs: Number of training epochs.
+        learning_rate: Optimizer learning rate.
+        batch_size: Per-device training batch size.
+        max_length: Maximum token sequence length.
+        grad_accum: Gradient accumulation steps.
+    """
     if prompt_file:
         # load the configurable variable invocation_prompt
         with open(prompt_file) as f:

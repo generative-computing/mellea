@@ -23,7 +23,16 @@ from .sampling_algos import think_budget_forcing
 
 
 class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
-    """Budget forcing sampling class."""
+    """Sampling strategy that enforces a token budget for chain-of-thought reasoning.
+
+    Extends ``RejectionSamplingStrategy`` with explicit control over the ``<think>``
+    block size and the answer block size. On each loop iteration,
+    ``think_budget_forcing`` interleaves forced-thinking and final-answer generation,
+    after which the standard rejection-sampling validation pass determines whether to
+    accept or retry.
+
+    Currently only supports the ``OllamaModelBackend``.
+    """
 
     think_max_tokens: int | None
     answer_max_tokens: int | None

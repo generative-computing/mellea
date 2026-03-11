@@ -19,7 +19,12 @@ cli = typer.Typer(name="m", no_args_is_help=True)
 # Add a default callback for handling the default cli description.
 @cli.callback()
 def callback() -> None:
-    """Perform M Tasks."""
+    """Mellea command-line tool for LLM-powered workflows.
+
+    Provides sub-commands for serving models (``m serve``), training and uploading
+    adapters (``m alora``), decomposing tasks into subtasks (``m decompose``), and
+    running test-based evaluation pipelines (``m eval``).
+    """
 
 
 # Typer assumes that all commands are in the same file/module.

@@ -47,7 +47,11 @@ class Adapter(abc.ABC):
 
 
 class LocalHFAdapter(Adapter):
-    """Adapter for LocalHFBackends."""
+    """Abstract adapter subclass for locally loaded HuggingFace model backends.
+
+    Subclasses must implement ``get_local_hf_path`` to return the filesystem path
+    from which adapter weights should be loaded given a base model name.
+    """
 
     @abc.abstractmethod
     def get_local_hf_path(self, base_model_name: str) -> str:

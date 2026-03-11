@@ -8,6 +8,18 @@ or shell-injection issues when writing decomposition output files.
 
 
 def validate_filename(candidate_str: str) -> bool:
+    """Check whether a string is safe to use as an output filename.
+
+    Permits alphanumeric characters, underscores, hyphens, periods, and spaces;
+    the first character must be alphanumeric, an underscore, or a period.
+    Also enforces a maximum length of 250 characters.
+
+    Args:
+        candidate_str: The filename candidate to validate.
+
+    Returns:
+        ``True`` if the string is a safe, valid filename; ``False`` otherwise.
+    """
     import re
 
     # Allows alphanumeric characters, underscore, hyphen, period, and space.
