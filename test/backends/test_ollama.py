@@ -87,7 +87,7 @@ def test_format(session) -> None:
     output = session.instruct(
         "Write a short email to Olivia, thanking her for organizing a sailing activity. Her email server is example.com. No more than two sentences. ",
         format=Email,
-        model_options={ModelOption.MAX_NEW_TOKENS: 2**8},
+        model_options={ModelOption.MAX_NEW_TOKENS: 2**10},
     )
     print("Formatted output:")
     email = Email.model_validate_json(
@@ -102,15 +102,20 @@ def test_format(session) -> None:
 
 
 @pytest.mark.qualitative
+@pytest.mark.timeout(150)
 async def test_generate_from_raw(session) -> None:
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
     results = await session.backend.generate_from_raw(
-        actions=[CBlock(value=prompt) for prompt in prompts], ctx=session.ctx
+        actions=[CBlock(value=prompt) for prompt in prompts],
+        ctx=session.ctx,
+        model_options={ModelOption.CONTEXT_WINDOW: 2048},
     )
 
     assert len(results) == len(prompts)
-    assert results[0].value is not None
+    assert all(r.value for r in results), (
+        f"One or more requests returned empty (possible backend timeout): {[r.value for r in results]}"
+    )
 
 
 @pytest.mark.xfail(reason="ollama sometimes fails generated structured outputs")
@@ -125,17 +130,19 @@ async def test_generate_from_raw_with_format(session) -> None:
         actions=[CBlock(value=prompt) for prompt in prompts],
         ctx=session.ctx,
         format=Answer,
+        model_options={ModelOption.CONTEXT_WINDOW: 2048},
     )
 
     assert len(results) == len(prompts)
+    assert all(r.value for r in results), (
+        f"One or more requests returned empty (possible backend timeout): {[r.value for r in results]}"
+    )
 
-    random_result = results[0]
-    try:
-        Answer.model_validate_json(random_result.value)
-    except pydantic.ValidationError as e:
-        assert False, (
-            f"formatting directive failed for {random_result.value}: {e.json()}"
-        )
+    for result in results:
+        try:
+            Answer.model_validate_json(result.value)
+        except pydantic.ValidationError as e:
+            assert False, f"formatting directive failed for {result.value}: {e.json()}"
 
 
 async def test_async_parallel_requests(session) -> None:

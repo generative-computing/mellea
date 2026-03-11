@@ -43,13 +43,13 @@ Rewrites queries for better retrieval or understanding.
 
 ```python
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.adapters.adapter import GraniteCommonAdapter
+from mellea.backends.adapters.adapter import IntrinsicAdapter
 from mellea.stdlib.components import Intrinsic
 import mellea.stdlib.functional as mfuncs
 
 # Create backend and adapter
 backend = LocalHFBackend(model_id="ibm-granite/granite-3.3-8b-instruct")
-adapter = GraniteCommonAdapter("requirement_check", 
+adapter = IntrinsicAdapter("requirement_check", 
                                base_model_name=backend.base_model_name)
 backend.add_adapter(adapter)
 

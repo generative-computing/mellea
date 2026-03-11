@@ -14,7 +14,7 @@ from .pipeline import DecompBackend, DecompPipelineResult, DecompSubtasksResult
 
 # Must maintain declaration order
 # Newer versions must be declared on the bottom
-class DecompVersion(str, Enum):
+class DecompVersion(StrEnum):
     latest = "latest"
     v1 = "v1"
     v2 = "v2"

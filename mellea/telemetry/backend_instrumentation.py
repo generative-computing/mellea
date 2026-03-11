@@ -6,6 +6,7 @@ https://opentelemetry.io/docs/specs/semconv/gen-ai/
 
 from typing import Any
 
+from ..backends.utils import get_value
 from .tracing import set_span_attribute, trace_backend
 
 
@@ -199,11 +200,6 @@ def record_token_usage(span: Any, usage: Any) -> None:
     try:
         # Gen-AI semantic convention attributes for token usage
         # Handle both objects and dicts
-        def get_value(obj, key):
-            if isinstance(obj, dict):
-                return obj.get(key)
-            return getattr(obj, key, None)
-
         prompt_tokens = get_value(usage, "prompt_tokens")
         if prompt_tokens is not None:
             set_span_attribute(span, "gen_ai.usage.input_tokens", prompt_tokens)
@@ -234,12 +230,6 @@ def record_response_metadata(
         return
 
     try:
-        # Helper to get values from both objects and dicts
-        def get_value(obj, key):
-            if isinstance(obj, dict):
-                return obj.get(key)
-            return getattr(obj, key, None)
-
         # Record the actual model used in the response (may differ from request)
         if model_id:
             set_span_attribute(span, "gen_ai.response.model", model_id)

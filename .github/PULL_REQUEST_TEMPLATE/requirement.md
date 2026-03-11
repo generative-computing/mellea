@@ -3,7 +3,7 @@
 Use this template when adding or modifying requirements in `mellea/stdlib/requirements/`.
 
 ## Description
-- [ ] Link to Issue: 
+- [ ] Link to Issue: Fixes <!-- issue number -->
 
 <!-- Brief description of the requirement being added/modified along with an explanation for why it should be in the standard library. -->
 
@@ -17,7 +17,7 @@ Use this template when adding or modifying requirements in `mellea/stdlib/requir
 ### Validation Logic
 - [ ] `validation_fn` defined (if using Python-based validation)
     - [ ] re-usable functionality within the validation_fn should be separated out into `mellea/stdlib/tools/`
-- [ ] `validate` returns a `ValidationResult` with 
+- [ ] `validate` returns a `ValidationResult` with
     - [ ] a `thunk` and `context` if using a backend to generate
     - [ ] a specific `reason` and `score` when possible
 

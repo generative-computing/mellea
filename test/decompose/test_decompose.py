@@ -17,7 +17,7 @@ from cli.decompose.pipeline import DecompPipelineResult, DecompSubtasksResult
 class TestReorderSubtasksHappyPath:
     """Happy path tests for reorder_subtasks function."""
 
-    def test_no_dependencies(self):
+    def test_no_dependencies(self) -> None:
         """Test subtasks with no dependencies remain in original order."""
         subtasks: list[DecompSubtasksResult] = [
             {
@@ -57,7 +57,7 @@ class TestReorderSubtasksHappyPath:
         assert result[1]["tag"] == "TASK_B"
         assert result[2]["tag"] == "TASK_C"
 
-    def test_simple_linear_dependency(self):
+    def test_simple_linear_dependency(self) -> None:
         """Test simple linear dependency chain: C -> B -> A."""
         subtasks: list[DecompSubtasksResult] = [
             {
@@ -97,7 +97,7 @@ class TestReorderSubtasksHappyPath:
         assert result[1]["tag"] == "TASK_B"
         assert result[2]["tag"] == "TASK_C"
 
-    def test_diamond_dependency(self):
+    def test_diamond_dependency(self) -> None:
         """Test diamond dependency: D depends on B and C, both depend on A."""
         subtasks: list[DecompSubtasksResult] = [
             {
@@ -146,7 +146,7 @@ class TestReorderSubtasksHappyPath:
         assert result[3]["tag"] == "TASK_D"
         assert {result[1]["tag"], result[2]["tag"]} == {"TASK_B", "TASK_C"}
 
-    def test_case_insensitive_dependencies(self):
+    def test_case_insensitive_dependencies(self) -> None:
         """Test that dependencies are case-insensitive."""
         subtasks: list[DecompSubtasksResult] = [
             {
@@ -175,7 +175,7 @@ class TestReorderSubtasksHappyPath:
         assert result[0]["tag"] == "TASK_A"
         assert result[1]["tag"] == "task_b"
 
-    def test_multiple_independent_chains(self):
+    def test_multiple_independent_chains(self) -> None:
         """Test multiple independent dependency chains."""
         subtasks: list[DecompSubtasksResult] = [
             # Chain 1: B -> A
@@ -229,7 +229,7 @@ class TestReorderSubtasksHappyPath:
         assert a_idx < b_idx
         assert c_idx < d_idx
 
-    def test_nonexistent_dependency_ignored(self):
+    def test_nonexistent_dependency_ignored(self) -> None:
         """Test that dependencies referencing non-existent tasks are ignored."""
         subtasks: list[DecompSubtasksResult] = [
             {
@@ -262,7 +262,7 @@ class TestReorderSubtasksHappyPath:
         assert result[0]["tag"] == "TASK_A"
         assert result[1]["tag"] == "TASK_B"
 
-    def test_renumbers_subtask_descriptions(self):
+    def test_renumbers_subtask_descriptions(self) -> None:
         """Test that subtask descriptions with numbers are renumbered after reordering."""
         subtasks: list[DecompSubtasksResult] = [
             {
@@ -302,7 +302,7 @@ class TestReorderSubtasksHappyPath:
         assert result[1]["subtask"] == "2. Do task B"
         assert result[2]["subtask"] == "3. Do task C"
 
-    def test_renumbers_only_numbered_subtasks(self):
+    def test_renumbers_only_numbered_subtasks(self) -> None:
         """Test that only subtasks starting with numbers are renumbered."""
         subtasks: list[DecompSubtasksResult] = [
             {
@@ -332,7 +332,7 @@ class TestReorderSubtasksHappyPath:
         assert result[0]["subtask"] == "Unnumbered task A"
         assert result[1]["subtask"] == "2. Numbered task B"
 
-    def test_renumbers_with_complex_reordering(self):
+    def test_renumbers_with_complex_reordering(self) -> None:
         """Test renumbering with reordering."""
         subtasks: list[DecompSubtasksResult] = [
             {
@@ -387,7 +387,7 @@ class TestReorderSubtasksHappyPath:
 class TestReorderSubtasksUnhappyPath:
     """Negative tests for reorder_subtasks function."""
 
-    def test_circular_dependency_two_nodes(self):
+    def test_circular_dependency_two_nodes(self) -> None:
         """Test circular dependency between two nodes."""
         subtasks: list[DecompSubtasksResult] = [
             {
@@ -413,7 +413,7 @@ class TestReorderSubtasksUnhappyPath:
         with pytest.raises(ValueError, match="Circular dependency detected"):
             reorder_subtasks(subtasks)
 
-    def test_circular_dependency_three_nodes(self):
+    def test_circular_dependency_three_nodes(self) -> None:
         """Test circular dependency in a chain of three nodes."""
         subtasks: list[DecompSubtasksResult] = [
             {
@@ -448,7 +448,7 @@ class TestReorderSubtasksUnhappyPath:
         with pytest.raises(ValueError, match="Circular dependency detected"):
             reorder_subtasks(subtasks)
 
-    def test_self_dependency(self):
+    def test_self_dependency(self) -> None:
         """Test task depending on itself."""
         subtasks: list[DecompSubtasksResult] = [
             {
@@ -465,7 +465,7 @@ class TestReorderSubtasksUnhappyPath:
         with pytest.raises(ValueError, match="Circular dependency detected"):
             reorder_subtasks(subtasks)
 
-    def test_empty_subtasks_list(self):
+    def test_empty_subtasks_list(self) -> None:
         """Test with empty subtasks list."""
         subtasks: list[DecompSubtasksResult] = []
 
@@ -482,7 +482,7 @@ class TestReorderSubtasksUnhappyPath:
 class TestVerifyUserVariablesHappyPath:
     """Happy path tests for verify_user_variables function."""
 
-    def test_no_input_vars_no_dependencies(self):
+    def test_no_input_vars_no_dependencies(self) -> None:
         """Test with no input variables and no dependencies."""
         decomp_data: DecompPipelineResult = {
             "original_task_prompt": "Test task",
@@ -506,7 +506,7 @@ class TestVerifyUserVariablesHappyPath:
         assert result == decomp_data
         assert len(result["subtasks"]) == 1
 
-    def test_valid_input_vars(self):
+    def test_valid_input_vars(self) -> None:
         """Test with valid input variables."""
         decomp_data: DecompPipelineResult = {
             "original_task_prompt": "Test task",
@@ -529,7 +529,7 @@ class TestVerifyUserVariablesHappyPath:
 
         assert result == decomp_data
 
-    def test_case_insensitive_input_vars(self):
+    def test_case_insensitive_input_vars(self) -> None:
         """Test that input variable matching is case-insensitive."""
         decomp_data: DecompPipelineResult = {
             "original_task_prompt": "Test task",
@@ -553,7 +553,7 @@ class TestVerifyUserVariablesHappyPath:
 
         assert result == decomp_data
 
-    def test_valid_dependencies_in_order(self):
+    def test_valid_dependencies_in_order(self) -> None:
         """Test with valid dependencies already in correct order."""
         decomp_data: DecompPipelineResult = {
             "original_task_prompt": "Test task",
@@ -587,7 +587,7 @@ class TestVerifyUserVariablesHappyPath:
         assert result["subtasks"][0]["tag"] == "TASK_A"
         assert result["subtasks"][1]["tag"] == "TASK_B"
 
-    def test_dependencies_out_of_order_triggers_reorder(self):
+    def test_dependencies_out_of_order_triggers_reorder(self) -> None:
         """Test that out-of-order dependencies trigger automatic reordering."""
         decomp_data: DecompPipelineResult = {
             "original_task_prompt": "Test task",
@@ -621,7 +621,7 @@ class TestVerifyUserVariablesHappyPath:
         assert result["subtasks"][0]["tag"] == "TASK_A"
         assert result["subtasks"][1]["tag"] == "TASK_B"
 
-    def test_complex_reordering(self):
+    def test_complex_reordering(self) -> None:
         """Test complex dependency reordering."""
         decomp_data: DecompPipelineResult = {
             "original_task_prompt": "Test task",
@@ -677,7 +677,7 @@ class TestVerifyUserVariablesHappyPath:
 class TestVerifyUserVariablesUnHappyPath:
     """Negative tests for verify_user_variables function."""
 
-    def test_missing_required_input_var(self):
+    def test_missing_required_input_var(self) -> None:
         """Test error when required input variable is not provided."""
         decomp_data: DecompPipelineResult = {
             "original_task_prompt": "Test task",
@@ -702,7 +702,7 @@ class TestVerifyUserVariablesUnHappyPath:
         ):
             verify_user_variables(decomp_data, None)
 
-    def test_missing_required_input_var_with_some_provided(self):
+    def test_missing_required_input_var_with_some_provided(self) -> None:
         """Test error when one of multiple required variables is missing."""
         decomp_data: DecompPipelineResult = {
             "original_task_prompt": "Test task",
@@ -727,7 +727,7 @@ class TestVerifyUserVariablesUnHappyPath:
         ):
             verify_user_variables(decomp_data, ["VAR1"])
 
-    def test_dependency_on_nonexistent_subtask(self):
+    def test_dependency_on_nonexistent_subtask(self) -> None:
         """Test error when subtask depends on non-existent subtask."""
         decomp_data: DecompPipelineResult = {
             "original_task_prompt": "Test task",
@@ -752,7 +752,7 @@ class TestVerifyUserVariablesUnHappyPath:
         ):
             verify_user_variables(decomp_data, None)
 
-    def test_circular_dependency_detected(self):
+    def test_circular_dependency_detected(self) -> None:
         """Test that circular dependencies are caught during reordering."""
         decomp_data: DecompPipelineResult = {
             "original_task_prompt": "Test task",
@@ -783,7 +783,7 @@ class TestVerifyUserVariablesUnHappyPath:
         with pytest.raises(ValueError, match="Circular dependency detected"):
             verify_user_variables(decomp_data, None)
 
-    def test_empty_input_var_list_treated_as_none(self):
+    def test_empty_input_var_list_treated_as_none(self) -> None:
         """Test that empty input_var list is treated same as None."""
         decomp_data: DecompPipelineResult = {
             "original_task_prompt": "Test task",

@@ -4,7 +4,7 @@ import collections.abc
 import json
 
 from ....backends import ModelOption
-from ....backends.adapters import AdapterMixin, AdapterType, GraniteCommonAdapter
+from ....backends.adapters import AdapterMixin, AdapterType, IntrinsicAdapter
 from ....stdlib import functional as mfuncs
 from ...components import Document
 from ...context import ChatContext
@@ -47,7 +47,7 @@ def _call_intrinsic(
     base_model_name = backend.base_model_name
     if base_model_name is None:
         raise ValueError("Backend has no model ID")
-    adapter = GraniteCommonAdapter(
+    adapter = IntrinsicAdapter(
         intrinsic_name, adapter_type=AdapterType.LORA, base_model_name=base_model_name
     )
     if adapter.qualified_name not in backend.list_adapters():

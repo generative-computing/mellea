@@ -115,6 +115,10 @@ def _should_skip_collection(markers):
     if "qualitative" in markers and gh_run == 1:
         return True, "Skipping qualitative test in CI (CICD=1)"
 
+    # Explicitly skip if 'skip' marker is present
+    if "skip" in markers:
+        return True, "Example marked with skip marker"
+
     # Skip slow tests if SKIP_SLOW=1 environment variable is set
     if "slow" in markers and int(os.environ.get("SKIP_SLOW", 0)) == 1:
         return True, "Skipping slow test (SKIP_SLOW=1)"
@@ -494,12 +498,25 @@ class ExampleItem(pytest.Item):
         super().__init__(**kwargs)
 
     def runtest(self):
+        import os
+        import pathlib
+
+        repo_root = str(pathlib.Path(__file__).parent.parent.parent.resolve())
+        env = os.environ.copy()
+        existing_pythonpath = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = (
+            f"{existing_pythonpath}{os.pathsep}{repo_root}"
+            if existing_pythonpath
+            else repo_root
+        )
+
         process = subprocess.Popen(
             [sys.executable, self.path],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,  # Enable line-buffering
+            env=env,
         )
 
         # Capture stdout output and output it so it behaves like a regular test with -s.

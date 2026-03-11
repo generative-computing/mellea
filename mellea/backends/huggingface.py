@@ -14,11 +14,9 @@ import threading
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, overload
 
-import granite_common
 import llguidance
 import llguidance.hf
 import llguidance.torch
-import peft
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.cache_utils import DynamicCache
@@ -43,7 +41,7 @@ from ..core import (
     Requirement,
 )
 from ..core.base import AbstractMelleaTool
-from ..formatters import ChatFormatter, TemplateFormatter
+from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
 from ..helpers import message_to_openai_message, messages_to_docs, send_to_queue
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
@@ -54,7 +52,7 @@ from ..telemetry.backend_instrumentation import (
 from .adapters import (
     AdapterMixin,
     AdapterType,
-    GraniteCommonAdapter,
+    IntrinsicAdapter,
     LocalHFAdapter,
     get_adapter_for_intrinsic,
 )
@@ -272,8 +270,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
                 # Get the model and tokenizer.
                 self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-                    self._hf_model_id
-                ).to(self._device)  # type: ignore
+                    self._hf_model_id, device_map=str(self._device)
+                )
                 self._tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
                     self._hf_model_id
                 )
@@ -465,19 +463,19 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 f"backend ({self}) has no adapter for processing intrinsic: {action.intrinsic_name}"
             )
 
-        # TODO: Code below this point is mostly specific to RagIntrinsics (and granite_common).
+        # TODO: Code below this point is mostly specific to RagIntrinsics
         #       It should be refactored into a specific adapter.transform() function.
-        assert isinstance(adapter, GraniteCommonAdapter), (
-            "currently Mellea only supports GraniteCommonAdapters and Intrinsics"
+        assert isinstance(adapter, IntrinsicAdapter), (
+            "currently Mellea only supports IntrinsicAdapters and Intrinsics"
         )
 
         intrinsic_config = adapter.config
         assert intrinsic_config is not None
 
-        rewriter = granite_common.IntrinsicsRewriter(
+        rewriter = granite_formatters.IntrinsicsRewriter(
             config_dict=intrinsic_config, model_name=adapter.name
         )
-        result_processor = granite_common.IntrinsicsResultProcessor(
+        result_processor = granite_formatters.IntrinsicsResultProcessor(
             config_dict=intrinsic_config
         )
 
@@ -495,12 +493,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
 
-        # TODO: Handle caching here. granite_common doesn't tell us what changed,
+        # TODO: Handle caching here. granite_formatters doesn't tell us what changed,
         #       so we will have to invalidate the cache on our side. This requires
         #       us having specific caching for each Component/Message.
 
         generate_input, other_input = (
-            granite_common.util.chat_completion_request_to_transformers_inputs(  # type: ignore
+            # type: ignore
+            granite_formatters.base.util.chat_completion_request_to_transformers_inputs(
                 rewritten, self._tokenizer, self._model
             )
         )
@@ -508,7 +507,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         chat_response = asyncio.to_thread(
             self._generate_with_adapter_lock,
             adapter.qualified_name,
-            granite_common.util.generate_with_transformers,  # type: ignore
+            granite_formatters.base.util.generate_with_transformers,  # type: ignore
             # Passed as args/kwargs to generate.
             self._tokenizer,
             self._model,
@@ -522,17 +521,17 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         output._model_options = model_options
 
         # Add another step to the processing function.
-        async def granite_common_processing(
+        async def granite_formatters_processing(
             mot: ModelOutputThunk,
-            chunk: granite_common.ChatCompletionResponse,
-            rewritten: granite_common.ChatCompletion,
-            result_processor: granite_common.IntrinsicsResultProcessor,
+            chunk: granite_formatters.ChatCompletionResponse,
+            rewritten: granite_formatters.ChatCompletion,
+            result_processor: granite_formatters.IntrinsicsResultProcessor,
             input_ids,
         ):
             try:
                 res = result_processor.transform(chunk, rewritten)  # type: ignore
-            except json.JSONDecodeError:
-                raise Exception(f"Intrinsic did not return a JSON: {chunk}")
+            except json.JSONDecodeError as e:
+                raise Exception(f"Intrinsic did not return a JSON: {chunk}") from e
 
             # TODO: If we want to support caches, we need to get the GenerateDecoderOnlyOutput. This means we
             #       probably need to break out the pieces from `generate_with_transformers`.
@@ -542,7 +541,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
         output._process = functools.partial(
-            granite_common_processing,
+            granite_formatters_processing,
             rewritten=rewritten,
             result_processor=result_processor,
             input_ids=generate_input["input_tokens"],
@@ -1054,17 +1053,59 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
-        # Record telemetry if span is available
         span = mot._meta.get("_telemetry_span")
+        from ..telemetry.metrics import is_metrics_enabled
+
+        metrics_enabled = is_metrics_enabled()
+
+        # Extract token counts only if needed
+        hf_output = mot._meta.get("hf_output")
+        n_prompt, n_completion = None, None
+        if (span is not None or metrics_enabled) and isinstance(
+            hf_output, GenerateDecoderOnlyOutput
+        ):
+            # HuggingFace local models don't provide usage objects, but we can
+            # calculate token counts from sequences
+            try:
+                if input_ids is not None and hf_output.sequences is not None:
+                    n_prompt = input_ids.shape[1]
+                    n_completion = hf_output.sequences[0].shape[0] - n_prompt
+            except Exception:
+                pass
+
+        # Record metrics if enabled
+        if metrics_enabled and n_prompt is not None:
+            from ..telemetry.backend_instrumentation import (
+                get_model_id_str,
+                get_system_name,
+            )
+            from ..telemetry.metrics import record_token_usage_metrics
+
+            record_token_usage_metrics(
+                input_tokens=n_prompt,
+                output_tokens=n_completion,
+                model=get_model_id_str(self),
+                backend=self.__class__.__name__,
+                system=get_system_name(self),
+            )
+
+        # Record tracing if span exists
         if span is not None:
             from ..telemetry import end_backend_span
-            from ..telemetry.backend_instrumentation import record_response_metadata
+            from ..telemetry.backend_instrumentation import (
+                record_response_metadata,
+                record_token_usage,
+            )
 
-            # HuggingFace local models don't typically provide token counts
-            # but we can record response metadata if available
-            hf_output = mot._meta.get("hf_output")
             if isinstance(hf_output, GenerateDecoderOnlyOutput):
                 record_response_metadata(span, hf_output)
+                if n_prompt is not None:
+                    usage = {
+                        "prompt_tokens": n_prompt,
+                        "completion_tokens": n_completion,
+                        "total_tokens": n_prompt + n_completion,
+                    }
+                    record_token_usage(span, usage)
 
             # Close the span now that async operation is complete
             end_backend_span(span)

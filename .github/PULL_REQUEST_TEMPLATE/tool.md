@@ -3,7 +3,7 @@
 Use this template when adding or modifying components in `mellea/stdlib/tools/`.
 
 ## Description
-- [ ] Link to Issue: 
+- [ ] Link to Issue: Fixes <!-- issue number -->
 
 <!-- Brief description of the tool being added/modified along with an explanation for why it should be in the standard library. -->
 

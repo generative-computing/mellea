@@ -470,6 +470,10 @@ class OllamaModelBackend(FormatterBackend):
             result = None
             error = None
             if isinstance(response, BaseException):
+                FancyLogger.get_logger().warning(
+                    f"generate_from_raw: request {i} failed with "
+                    f"{type(response).__name__}: {response}"
+                )
                 result = ModelOutputThunk(value="")
                 error = response
             else:
@@ -610,6 +614,31 @@ class OllamaModelBackend(FormatterBackend):
         mot._generate_log = generate_log
         mot._generate = None
 
+        # Extract token counts from response
+        response = mot._meta.get("chat_response")
+        prompt_tokens = (
+            getattr(response, "prompt_eval_count", None) if response else None
+        )
+        completion_tokens = getattr(response, "eval_count", None) if response else None
+
+        # Record metrics if enabled
+        from ..telemetry.metrics import is_metrics_enabled
+
+        if is_metrics_enabled():
+            from ..telemetry.backend_instrumentation import (
+                get_model_id_str,
+                get_system_name,
+            )
+            from ..telemetry.metrics import record_token_usage_metrics
+
+            record_token_usage_metrics(
+                input_tokens=prompt_tokens,
+                output_tokens=completion_tokens,
+                model=get_model_id_str(self),
+                backend=self.__class__.__name__,
+                system=get_system_name(self),
+            )
+
         # Record telemetry and close span now that response is available
         span = mot._meta.get("_telemetry_span")
         if span is not None:
@@ -619,15 +648,14 @@ class OllamaModelBackend(FormatterBackend):
                 record_token_usage,
             )
 
-            response = mot._meta.get("chat_response")
             if response:
                 # Ollama responses may have usage information
-                usage = (
-                    response.get("usage")
-                    if isinstance(response, dict)
-                    else getattr(response, "usage", None)
-                )
-                if usage:
+                if prompt_tokens is not None or completion_tokens is not None:
+                    usage = {
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "total_tokens": (prompt_tokens or 0) + (completion_tokens or 0),
+                    }
                     record_token_usage(span, usage)
                 record_response_metadata(span, response)
 

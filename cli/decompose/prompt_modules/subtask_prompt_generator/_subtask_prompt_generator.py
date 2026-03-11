@@ -1,8 +1,6 @@
 import re
 from collections.abc import Callable, Sequence
-from typing import TypedDict, TypeVar, cast, final
-
-from typing_extensions import Unpack
+from typing import TypedDict, TypeVar, Unpack, cast, final
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
