@@ -48,6 +48,7 @@ from .metrics import (
     create_histogram,
     create_up_down_counter,
     is_metrics_enabled,
+    record_token_usage_metrics,
 )
 from .tracing import (
     end_backend_span,
@@ -68,6 +69,7 @@ __all__ = [
     "is_application_tracing_enabled",
     "is_backend_tracing_enabled",
     "is_metrics_enabled",
+    "record_token_usage_metrics",
     "set_span_attribute",
     "set_span_error",
     "start_backend_span",

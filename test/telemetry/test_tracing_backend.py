@@ -6,6 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from mellea.backends.model_ids import (
+    IBM_GRANITE_4_HYBRID_MICRO,
+    IBM_GRANITE_4_HYBRID_SMALL,
+)
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
@@ -28,13 +32,15 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="module", autouse=True)
 def setup_telemetry():
     """Set up telemetry for all tests in this module."""
-    import os
+    mp = pytest.MonkeyPatch()
+    mp.setenv("MELLEA_TRACE_BACKEND", "true")
 
-    # Enable backend tracing before any imports
-    os.environ["MELLEA_TRACE_BACKEND"] = "true"
+    yield
+
+    mp.undo()
 
 
 @pytest.fixture
@@ -64,7 +70,7 @@ async def test_span_duration_captures_async_operation(span_exporter, gh_run):
     if gh_run:
         pytest.skip("Skipping in CI - requires Ollama")
 
-    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
@@ -110,7 +116,7 @@ async def test_context_propagation_parent_child(span_exporter, gh_run):
     if gh_run:
         pytest.skip("Skipping in CI - requires Ollama")
 
-    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
@@ -155,7 +161,7 @@ async def test_token_usage_recorded_after_completion(span_exporter, gh_run):
     if gh_run:
         pytest.skip("Skipping in CI - requires Ollama")
 
-    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
@@ -167,9 +173,6 @@ async def test_token_usage_recorded_after_completion(span_exporter, gh_run):
     # Get the recorded span
     spans = span_exporter.get_finished_spans()
     assert len(spans) > 0, "No spans were recorded"
-
-    # Debug: print all span names
-    print(f"\nRecorded spans: {[s.name for s in spans]}")
 
     backend_span = None
     for span in spans:
@@ -209,7 +212,7 @@ async def test_span_not_closed_prematurely(span_exporter, gh_run):
     if gh_run:
         pytest.skip("Skipping in CI - requires Ollama")
 
-    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Count to 5"))
 
@@ -245,7 +248,7 @@ async def test_multiple_generations_separate_spans(span_exporter, gh_run):
     if gh_run:
         pytest.skip("Skipping in CI - requires Ollama")
 
-    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test'"))
 
@@ -281,7 +284,7 @@ async def test_streaming_span_duration(span_exporter, gh_run):
 
     from mellea.backends.model_options import ModelOption
 
-    backend = OllamaModelBackend(model_id="llama3.2:1b")
+    backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Count to 3"))
 

@@ -1,7 +1,7 @@
 # pytest: huggingface, requires_heavy_ram, llm
 
 import mellea.stdlib.functional as mfuncs
-from mellea.backends.adapters.adapter import AdapterType, GraniteCommonAdapter
+from mellea.backends.adapters.adapter import AdapterType, IntrinsicAdapter
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext
@@ -11,8 +11,8 @@ from mellea.stdlib.context import ChatContext
 
 backend = LocalHFBackend(model_id="ibm-granite/granite-3.3-8b-instruct")
 
-# Create the Adapter. GraniteCommonAdapter's default to ALORAs.
-req_adapter = GraniteCommonAdapter(
+# Create the Adapter. IntrinsicAdapter's default to ALORAs.
+req_adapter = IntrinsicAdapter(
     "requirement_check", base_model_name=backend.base_model_name
 )
 
