@@ -1,17 +1,18 @@
 """Comprehensive security tests for mellea thread security features."""
 
 import pytest
-from mellea.stdlib.components import CBlock, ModelOutputThunk, SimpleComponent
-from mellea.stdlib.context import ChatContext
-from mellea.stdlib.components.instruction import Instruction
+
 from mellea.security import (
     AccessType,
     SecLevel,
     SecurityError,
-    privileged,
     declassify,
+    privileged,
     taint_sources,
 )
+from mellea.stdlib.components import CBlock, ModelOutputThunk, SimpleComponent
+from mellea.stdlib.components.instruction import Instruction
+from mellea.stdlib.context import ChatContext
 
 
 class TestAccessType:
@@ -254,6 +255,46 @@ class TestPrivilegedDecorator:
 
         with pytest.raises(SecurityError, match="argument 'data'"):
             safe_function(data=tainted_cblock)
+
+    def test_privileged_rejects_nested_tainted_content(self):
+        """Test that privileged rejects Components containing tainted parts recursively."""
+        tainted_inner = CBlock("sensitive", sec_level=SecLevel.tainted_by(None))
+        # Component with safe top-level but tainted nested CBlock
+        nested = SimpleComponent(data=tainted_inner)
+        instruction = Instruction(
+            description=CBlock("Process the data"), grounding_context={"ctx": nested}
+        )
+
+        @privileged
+        def safe_function(comp):
+            return "ok"
+
+        with pytest.raises(SecurityError, match="requires safe input"):
+            safe_function(instruction)
+        with pytest.raises(SecurityError, match="tainted content"):
+            safe_function(instruction)
+
+    def test_privileged_rejects_nested_classified_content(self):
+        """Test that privileged rejects Components containing classified parts recursively."""
+
+        class TestAccess(AccessType[str]):
+            def has_access(self, entitlement: str | None) -> bool:
+                return entitlement == "admin"
+
+        classified_inner = CBlock("secret", sec_level=SecLevel.classified(TestAccess()))
+        nested = SimpleComponent(data=classified_inner)
+        instruction = Instruction(
+            description=CBlock("Process"), grounding_context={"ctx": nested}
+        )
+
+        @privileged
+        def safe_function(comp):
+            return "ok"
+
+        with pytest.raises(SecurityError, match="classified content"):
+            safe_function(instruction)
+        with pytest.raises(SecurityError, match=r"sources:.*CBlock"):
+            safe_function(instruction)
 
 
 class TestTaintSources:

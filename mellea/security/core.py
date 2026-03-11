@@ -165,6 +165,59 @@ class TaintChecking(Protocol):
         ...
 
 
+def _collect_sources_by_predicate(
+    action: "Component | CBlock", ctx: Any, predicate: Callable[["SecLevel"], bool]
+) -> "list[CBlock | Component]":
+    """Recursively collect CBlocks/Components whose sec_level satisfies predicate.
+
+    Shared logic for taint_sources and classified_sources. Walks action and
+    context (shallow), recursing into Component.parts().
+    """
+    from ..core.base import (
+        CBlock,
+        Component,
+    )  # Import here to avoid circular dependency
+
+    sources = []
+
+    if isinstance(action, TaintChecking):
+        sec_level = action.sec_level
+        if sec_level is not None and predicate(sec_level):
+            sources.append(action)
+
+    match action:
+        case CBlock():
+            pass
+        case _ if isinstance(action, Component):
+            parts = action.parts()
+            for part in parts:
+                if isinstance(part, TaintChecking):
+                    sec_level = part.sec_level
+                    if sec_level is not None and predicate(sec_level):
+                        sources.append(part)
+                if isinstance(part, Component):
+                    nested = _collect_sources_by_predicate(part, None, predicate)
+                    sources.extend(nested)
+
+    if hasattr(ctx, "as_list"):
+        try:
+            context_items = ctx.as_list(last_n_components=5)
+            for item in context_items:
+                if isinstance(item, CBlock | Component) and isinstance(
+                    item, TaintChecking
+                ):
+                    sec_level = item.sec_level
+                    if sec_level is not None and predicate(sec_level):
+                        sources.append(item)
+                if isinstance(item, Component):
+                    nested = _collect_sources_by_predicate(item, None, predicate)
+                    sources.extend(nested)
+        except Exception:
+            pass
+
+    return sources
+
+
 def taint_sources(action: "Component | CBlock", ctx: Any) -> "list[CBlock | Component]":
     """Compute taint sources from action and context.
 
@@ -180,75 +233,64 @@ def taint_sources(action: "Component | CBlock", ctx: Any) -> "list[CBlock | Comp
     Returns:
         List of tainted CBlocks or Components
     """
-    from ..core.base import (
-        CBlock,
-        Component,
-    )  # Import here to avoid circular dependency
+    return _collect_sources_by_predicate(action, ctx, lambda sec: sec.is_tainted())
 
-    sources = []
 
-    # Check if action has security level and is tainted
-    if isinstance(action, TaintChecking):
-        sec_level = action.sec_level
-        if sec_level is not None and sec_level.is_tainted():
-            sources.append(action)
+def classified_sources(
+    action: "Component | CBlock", ctx: Any = None
+) -> "list[CBlock | Component]":
+    """Compute classified sources from action and context.
 
-    # For Components, check their constituent parts for taint
-    # Use pattern matching: CBlock doesn't have parts, Components do
-    match action:
-        case CBlock():
-            # CBlock doesn't have parts, nothing to do
-            pass
-        case _ if isinstance(action, Component):
-            # Component is @runtime_checkable, so isinstance() works
-            # If it's a Component, it has parts() method by protocol definition
-            parts = action.parts()
-            for part in parts:
-                # Check if the part itself is tainted
-                if isinstance(part, TaintChecking):
-                    sec_level = part.sec_level
-                    if sec_level is not None and sec_level.is_tainted():
-                        sources.append(part)
-                # Recursively check Component parts for nested taint sources
-                # (Components can contain other Components with tainted CBlocks)
-                if isinstance(part, Component):
-                    nested_sources = taint_sources(part, None)
-                    sources.extend(nested_sources)
+    Recursively examines the action and context (same structure as
+    taint_sources) and returns all CBlocks or Components that have
+    classified security level.
 
-    # Check context for tainted content (shallow check of recent items, but recursive within each)
-    if hasattr(ctx, "as_list"):
-        try:
-            context_items = ctx.as_list(
-                last_n_components=5
-            )  # Limit to recent items for performance
-            for item in context_items:
-                # Recursively check each context item (same as action check)
-                # Only append if item is actually a CBlock or Component (not just TaintChecking)
-                if isinstance(item, CBlock | Component) and isinstance(
-                    item, TaintChecking
-                ):
-                    sec_level = item.sec_level
-                    if sec_level is not None and sec_level.is_tainted():
-                        sources.append(item)
-                # Recursively check Component parts in context items
-                if isinstance(item, Component):
-                    nested_sources = taint_sources(item, None)
-                    sources.extend(nested_sources)
-        except Exception:
-            # If context analysis fails, continue without it
-            pass
+    Args:
+        action: The action component or content block
+        ctx: Optional context containing previous interactions (shallow scan)
 
-    return sources
+    Returns:
+        List of classified CBlocks or Components
+    """
+    return _collect_sources_by_predicate(action, ctx, lambda sec: sec.is_classified())
 
 
 F = TypeVar("F", bound=Callable[..., Any])
+
+
+def _raise_if_privilege_violation(
+    obj: Any, func_name: str, arg_name: str | None = None
+) -> None:
+    """Raise SecurityError if obj or any nested part is tainted or classified.
+
+    Uses taint_sources() and classified_sources() for recursive detection.
+    """
+    suffix = f" in argument '{arg_name}'" if arg_name else ""
+
+    sources = taint_sources(obj, None)
+    if sources:
+        source_names = ", ".join(type(s).__name__ for s in sources)
+        raise SecurityError(
+            f"Function {func_name} requires safe input, but received "
+            f"tainted content (tainted by: {source_names}){suffix}"
+        )
+
+    sources = classified_sources(obj, None)
+    if sources:
+        source_names = ", ".join(type(s).__name__ for s in sources)
+        raise SecurityError(
+            f"Function {func_name} requires safe input, but received "
+            f"classified content (sources: {source_names}){suffix}"
+        )
 
 
 def privileged(func: F) -> F:
     """Decorator to mark functions that require safe (non-tainted, non-classified) input.
 
     Functions decorated with @privileged will raise SecurityError if
-    called with tainted or classified content blocks.
+    called with tainted or classified content blocks. Checks are performed
+    recursively: if any argument is a Component, its parts (and their parts)
+    are also checked for taint or classified content.
 
     Args:
         func: The function to decorate
@@ -262,54 +304,10 @@ def privileged(func: F) -> F:
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        # Check all arguments for marked content (tainted or classified)
         for arg in args:
-            if isinstance(arg, TaintChecking):
-                sec_level = arg.sec_level
-                if sec_level is not None:
-                    if sec_level.is_tainted():
-                        taint_sources = sec_level.get_taint_sources()
-                        if taint_sources:
-                            source_names = ", ".join(
-                                type(s).__name__ for s in taint_sources
-                            )
-                            source_info = f" (tainted by: {source_names})"
-                        else:
-                            source_info = ""
-                        raise SecurityError(
-                            f"Function {func.__name__} requires safe input, but received "
-                            f"tainted content{source_info}"
-                        )
-                    elif sec_level.is_classified():
-                        raise SecurityError(
-                            f"Function {func.__name__} requires safe input, but received "
-                            f"classified content"
-                        )
-
-        # Check keyword arguments for marked content (tainted or classified)
+            _raise_if_privilege_violation(arg, func.__name__, None)
         for key, value in kwargs.items():
-            if isinstance(value, TaintChecking):
-                sec_level = value.sec_level
-                if sec_level is not None:
-                    if sec_level.is_tainted():
-                        taint_sources = sec_level.get_taint_sources()
-                        if taint_sources:
-                            source_names = ", ".join(
-                                type(s).__name__ for s in taint_sources
-                            )
-                            source_info = f" (tainted by: {source_names})"
-                        else:
-                            source_info = ""
-                        raise SecurityError(
-                            f"Function {func.__name__} requires safe input, but received "
-                            f"tainted content in argument '{key}'{source_info}"
-                        )
-                    elif sec_level.is_classified():
-                        raise SecurityError(
-                            f"Function {func.__name__} requires safe input, but received "
-                            f"classified content in argument '{key}'"
-                        )
-
+            _raise_if_privilege_violation(value, func.__name__, key)
         return func(*args, **kwargs)
 
     return wrapper  # type: ignore
