@@ -250,7 +250,7 @@ class OllamaModelBackend(FormatterBackend):
         )
         return ModelOption.remove_special_keys(backend_specific)
 
-    async def generate_from_context(
+    async def _generate_from_context(
         self,
         action: Component[C] | CBlock,
         ctx: Context,
@@ -365,6 +365,7 @@ class OllamaModelBackend(FormatterBackend):
         )  # type: ignore
 
         output = ModelOutputThunk(None)
+        output._start = datetime.datetime.now()
         output._context = linearized_context
         output._action = action
         output._model_options = model_opts

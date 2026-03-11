@@ -54,7 +54,8 @@
               "core-concept/tuning",
               "core-concept/adapters",
               "core-concept/alora",
-              "core-concept/interoperability"
+              "core-concept/interoperability",
+              "core-concept/plugins"
             ]
           }
         ]

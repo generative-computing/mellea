@@ -64,8 +64,10 @@ def example_4(m: MelleaSession):
                 "The plot should be written to /tmp/output.png",
                 tool_name=local_code_interpreter,
                 arg_name="code",
-                validation_fn=lambda code_snippet: "/tmp/output.png" in code_snippet
-                and "plt.show()" not in code_snippet,
+                validation_fn=lambda code_snippet: (
+                    "/tmp/output.png" in code_snippet
+                    and "plt.show()" not in code_snippet
+                ),
             ),
         ],
         model_options={
