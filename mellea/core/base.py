@@ -170,7 +170,7 @@ class Component(TaintChecking, Protocol, Generic[S]):
         Returns:
             SecLevel if present, None otherwise
         """
-        ...
+        return None
 
     def parse(self, computed: ModelOutputThunk) -> S:
         """Parse the expected type from a given `ModelOutputThunk`.
