@@ -105,43 +105,6 @@ def validate_qiskit_migration(md_code: str) -> tuple[bool, str]:
         return False, f"Validation error: {e}"
 
 
-def validate_prompt_content(prompt: str) -> tuple[bool, str]:
-    """Validate the user's prompt content for quantum/Qiskit relevance.
-
-    This is used as a pre-condition validation before generation to ensure
-    the prompt is appropriate for Qiskit code generation.
-
-    Args:
-        prompt: User's input prompt
-
-    Returns:
-        Tuple of (is_valid, error_message)
-    """
-    # Check minimum length
-    if len(prompt.strip()) < 10:
-        return (
-            False,
-            "Prompt too short - please provide more detail (minimum 10 characters)",
-        )
-
-    # Check for quantum/Qiskit relevance
-    prompt_lower = prompt.lower()
-    quantum_keywords = [
-        "quantum",
-        "qiskit",
-        "qubit",
-        "circuit",
-        "gate",
-        "entangle",
-        "superposition",
-    ]
-    if not any(keyword in prompt_lower for keyword in quantum_keywords):
-        print(f"Warning: prompt may not be quantum-related: {prompt[:50]}...")
-        # Don't fail, just warn - user might use different terminology
-
-    return True, ""
-
-
 def validate_input_code(prompt: str) -> tuple[bool, str]:
     """Validate any Qiskit code contained in the user's prompt.
 
@@ -178,7 +141,7 @@ def generate_validated_qiskit_code(
     """Generate Qiskit code that passes Qiskit migration validation.
 
     This function implements the Instruct-Validate-Repair pattern:
-    1. Pre-validates prompt and input code
+    1. Pre-validates input code
     2. Instructs the LLM with structured requirements
     3. Validates output against QKT rules
     4. Repairs code if validation fails (up to max_repair_attempts times)
@@ -194,11 +157,6 @@ def generate_validated_qiskit_code(
     Raises:
         ValueError: If prompt validation fails
     """
-    # Pre-validate prompt content BEFORE generation
-    is_valid, error_msg = validate_prompt_content(prompt)
-    if not is_valid:
-        raise ValueError(f"Invalid prompt: {error_msg}")
-
     # Pre-validate input code if present — include violations as context rather than failing
     is_valid, error_msg = validate_input_code(prompt)
     input_code_errors = None
@@ -221,7 +179,6 @@ def generate_validated_qiskit_code(
     code_candidate = m.instruct(
         instruct_prompt,
         requirements=[
-            check("Generate valid Python code"),
             req(
                 "Code must pass Qiskit migration validation (QKT rules)",
                 validation_fn=simple_validate(validate_qiskit_migration),
@@ -243,10 +200,7 @@ def generate_validated_qiskit_code(
                         f"  Failed requirement: {requirement.description} — {validation_result.reason}"
                     )
         # Return best attempt even if validation failed
-        if (
-            code_candidate.sample_generations
-            and len(code_candidate.sample_generations) > 0
-        ):
+        if code_candidate.sample_generations:
             return str(code_candidate.sample_generations[0].value or "")
         print("No code generations available")
         return ""
