@@ -11,14 +11,16 @@ import requests
 class RESTHandler(logging.Handler):
     """RESTHandler for logging."""
 
-    def __init__(self, api_url, method="POST", headers=None):
+    def __init__(
+        self, api_url: str, method: str = "POST", headers: dict[str, str] | None = None
+    ) -> None:
         """Initializes a RESTHandler; uses application/json by default."""
         super().__init__()
         self.api_url = api_url
         self.method = method
         self.headers = headers or {"Content-Type": "application/json"}
 
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord) -> None:
         """Attempts to emit a record to FLOG, or silently fails."""
         if os.environ.get("FLOG"):
             log_data = self.format(record)
@@ -74,7 +76,7 @@ class CustomFormatter(logging.Formatter):
         logging.CRITICAL: bold_red + _format_string + reset,
     }
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         """The format fn."""
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(log_fmt, datefmt="%H:%M:%S")
@@ -96,7 +98,7 @@ class FancyLogger:
     NOTSET = 0
 
     @staticmethod
-    def get_logger():
+    def get_logger() -> logging.Logger:
         """Returns a FancyLogger.logger and sets level based upon env vars."""
         if FancyLogger.logger is None:
             logger = logging.getLogger("fancy_logger")

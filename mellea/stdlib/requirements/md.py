@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from ...core import Context, Requirement
+from ...core import Context, Requirement, ValidationResult
 
 if TYPE_CHECKING:
     import mistletoe
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 _mistletoe = None
 
 
-def _get_mistletoe():
+def _get_mistletoe() -> Any:
     global _mistletoe
     if _mistletoe is None:
         import mistletoe as mt
@@ -46,8 +46,8 @@ def as_markdown_list(ctx: Context) -> list[str] | None:
         return None
 
 
-def _md_list(ctx: Context):
-    return as_markdown_list(ctx) is not None
+def _md_list(ctx: Context) -> ValidationResult:
+    return ValidationResult(result=as_markdown_list(ctx) is not None)
 
 
 is_markdown_list = Requirement(
@@ -61,7 +61,7 @@ is_markdown_list = Requirement(
 # region tables
 
 
-def _md_table(ctx: Context):
+def _md_table(ctx: Context) -> ValidationResult:
     mistletoe = _get_mistletoe()
     raw_output = ctx.last_output()
     assert raw_output is not None
@@ -71,10 +71,10 @@ def _md_table(ctx: Context):
         assert parsed.children is not None
         children = list(parsed.children)
         if len(children) != 1:
-            return False
-        return type(children[0]) is mistletoe.block_token.Table
+            return ValidationResult(result=False)
+        return ValidationResult(result=type(children[0]) is mistletoe.block_token.Table)
     except Exception:
-        return False
+        return ValidationResult(result=False)
 
 
 is_markdown_table = Requirement(

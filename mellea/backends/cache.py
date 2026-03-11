@@ -12,7 +12,7 @@ class Cache(abc.ABC):
     # Whenever PEP 695 generics are supported by mypy, we should use them here.
 
     @abc.abstractmethod
-    def put(self, key: str | int, value: Any):
+    def put(self, key: str | int, value: Any) -> None:
         """Inserts into the cache. May result in eviction of other cached values."""
         ...
 
@@ -44,7 +44,7 @@ class SimpleLRUCache(Cache):
         self.cache: OrderedDict = OrderedDict()
         self.on_evict = on_evict
 
-    def current_size(self):
+    def current_size(self) -> int:
         """Just return the size of the key set. This isn't necessarily safe."""
         return len(self.cache.keys())
 
@@ -58,7 +58,7 @@ class SimpleLRUCache(Cache):
             self.cache[key] = value
             return value
 
-    def put(self, key: str | int, value: Any):
+    def put(self, key: str | int, value: Any) -> None:
         """Put a value into the cache."""
         if self.capacity <= 0:
             return

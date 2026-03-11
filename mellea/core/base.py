@@ -53,15 +53,15 @@ class CBlock:
         return self._underlying_value
 
     @value.setter
-    def value(self, v: str):
+    def value(self, v: str) -> None:
         """Sets the value of the block."""
         self._underlying_value = v
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Stringifies the block."""
         return self.value if self.value else ""
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Provides a python-parsable representation of the block (usually)."""
         return f"CBlock({self.value}, {self._meta.__repr__()})"
 
@@ -120,7 +120,7 @@ class ImageBlock(CBlock):
         image_base64 = cls.pil_to_base64(image)
         return cls(image_base64, meta)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Provides a python-parsable representation of the block (usually)."""
         return f"ImageBlock({self.value}, {self._meta.__repr__()})"
 
@@ -235,7 +235,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._thinking = other._thinking
         self._generate_log = other._generate_log
 
-    def is_computed(self):
+    def is_computed(self) -> bool:
         """Returns true only if this Thunk has already been filled."""
         return self._computed
 
@@ -247,7 +247,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         return self._underlying_value
 
     @value.setter
-    def value(self, v: str):
+    def value(self, v: str) -> None:
         """Sets the value of the block."""
         self._underlying_value = v
 
@@ -409,14 +409,14 @@ class ModelOutputThunk(CBlock, Generic[S]):
             else self._underlying_value[beginning_length:]  # type: ignore
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Provides a python-parsable representation (usually).
 
         Differs from CBlock because `._meta` can be very large for ModelOutputThunks.
         """
         return f"ModelOutputThunk({self.value})"
 
-    def __copy__(self):
+    def __copy__(self) -> ModelOutputThunk:
         """Returns a shallow copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generating."""
         copied = ModelOutputThunk(
             self._underlying_value, self._meta, self.parsed_repr, self.tool_calls
@@ -436,7 +436,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         copied._model_options = self._model_options
         return copied
 
-    def __deepcopy__(self, memo):
+    def __deepcopy__(self, memo: dict) -> ModelOutputThunk:
         """Returns a deep copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generation. Similar to __copy__ but creates deepcopies of _meta, parsed_repr, and most other fields that are objects."""
         # Use __init__ to initialize all fields. Modify the fields that need to be copied/deepcopied below.
         deepcopied = ModelOutputThunk(self._underlying_value)
@@ -488,7 +488,7 @@ class Context(abc.ABC):
     _is_root: bool
     _is_chat_context: bool = True
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Constructs a new root context with no content."""
         self._previous = None
         self._data = None
@@ -590,7 +590,7 @@ class Context(abc.ABC):
                 return c
         return None
 
-    def last_turn(self):
+    def last_turn(self) -> ContextTurn | None:
         """The last input/output turn of the context.
 
         This can be partial. If the last event is an input, then the output is None.
@@ -632,7 +632,7 @@ class AbstractMelleaTool(abc.ABC):
     """Name of the tool."""
 
     @abc.abstractmethod
-    def run(self, *args, **kwargs) -> Any:
+    def run(self, *args: Any, **kwargs: Any) -> Any:
         """Runs the tool on the given arguments."""
 
     @property
