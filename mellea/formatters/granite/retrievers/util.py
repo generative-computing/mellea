@@ -17,10 +17,13 @@ import pyarrow.json as pj
 def download_mtrag_corpus(target_dir: str, corpus_name: str) -> pathlib.Path:
     """Download a corpus file from the MTRAG benchmark if the file hasn't already present.
 
-    :param target_dir: Location where the file should be written if not already present.
-    :param corpus_name: Should be one of "cloud", "clapnq", "fiqa", or "govt"
+    Args:
+        target_dir: Location where the file should be written if not already present.
+        corpus_name: Should be one of ``"cloud"``, ``"clapnq"``, ``"fiqa"``,
+            or ``"govt"``.
 
-    :returns: Path to the downloaded (or cached) file.
+    Returns:
+        Path to the downloaded (or cached) file.
     """
     corpus_names = ("cloud", "clapnq", "fiqa", "govt")
     if corpus_name not in corpus_names:
@@ -42,10 +45,12 @@ MB = 1048576  # 1MB in bytes
 def read_mtrag_corpus(corpus_file: str | pathlib.Path) -> pa.Table:
     """Read the documents from one of the MTRAG benchmark's corpora.
 
-    :param corpus_file: Location where the corpus data is located.
+    Args:
+        corpus_file: Location of the corpus data file.
 
-    :returns: Documents from the corpus as a Pyarrow table, with schema
-        ``["id", "url", "title", "text"]``
+    Returns:
+        Documents from the corpus as a PyArrow table, with schema
+        ``["id", "url", "title", "text"]``.
     """
     if not isinstance(corpus_file, pathlib.Path):
         corpus_file = pathlib.Path(corpus_file)
@@ -84,11 +89,13 @@ def read_mtrag_corpus(corpus_file: str | pathlib.Path) -> pa.Table:
 def download_mtrag_embeddings(embedding_name: str, corpus_name: str, target_dir: str):
     """Download precomputed embeddings for a corpus in the MTRAG benchmark.
 
-    :param embedding_name: Name of SentenceTransformers embedding model that was used
-     to create the embeddings.
-    :param corpus_name: Should be one of "cloud", "clapnq", "fiqa", or "govt"
-    :param target_dir: Location where Parquet files with names "part_001.parquet",
-     "part_002.parquet", etc. will be written.
+    Args:
+        embedding_name: Name of the SentenceTransformers embedding model used to
+            create the embeddings.
+        corpus_name: Should be one of ``"cloud"``, ``"clapnq"``, ``"fiqa"``,
+            or ``"govt"``.
+        target_dir: Location where Parquet files named ``"part_001.parquet"``,
+            ``"part_002.parquet"``, etc. will be written.
     """
     corpus_names = ("cloud", "clapnq", "fiqa", "govt")
     if corpus_name not in corpus_names:

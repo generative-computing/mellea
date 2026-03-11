@@ -13,7 +13,17 @@ from ..stdlib.components import Document, Message
 def extract_model_tool_requests(
     tools: dict[str, AbstractMelleaTool], response: dict[str, Any]
 ) -> dict[str, ModelToolCall] | None:
-    """Extracts tool calls from the dict representation of an OpenAI-like chat response object."""
+    """Extract tool calls from the dict representation of an OpenAI-like chat response object.
+
+    Args:
+        tools: Mapping of tool name to ``AbstractMelleaTool`` for lookup.
+        response: Dict representation of an OpenAI-compatible chat completion message
+            (must contain a ``"message"`` key).
+
+    Returns:
+        Mapping of tool name to ``ModelToolCall`` for each requested tool call, or
+        ``None`` if no tool calls were found.
+    """
     model_tool_calls: dict[str, ModelToolCall] = {}
     calls = response["message"].get("tool_calls", None)
     if calls:
@@ -45,11 +55,19 @@ def extract_model_tool_requests(
 def chat_completion_delta_merge(
     chunks: list[dict], force_all_tool_calls_separate: bool = False
 ) -> dict:
-    """Takes a list of deltas from `ChatCompletionChunk`s and merges them into a single dict representing the `ChatCompletion` choice.
+    """Merge a list of deltas from ``ChatCompletionChunk``s into a single dict representing the ``ChatCompletion`` choice.
 
     Args:
-        chunks: the list of dicts that represent the message deltas
-        force_all_tool_calls_separate: if `True`, tool calls in separate message deltas will not be merged (even if their index values are the same); use when providers do not return the correct index value for tool calls. If using this option, all tool calls must be fully populated in a single delta since they won't be merged.
+        chunks: The list of dicts that represent the message deltas.
+        force_all_tool_calls_separate: If ``True``, tool calls in separate message
+            deltas will not be merged even if their index values are the same. Use
+            when providers do not return the correct index value for tool calls; all
+            tool calls must then be fully populated in a single delta.
+
+    Returns:
+        A single merged dict representing the assembled ``ChatCompletion`` choice,
+        with ``finish_reason``, ``index``, and a ``message`` sub-dict containing
+        ``content``, ``role``, and ``tool_calls``.
     """
     merged: dict[str, Any] = dict()
 

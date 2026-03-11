@@ -15,10 +15,17 @@ class LLMaJRequirement(Requirement):
 
 
 def requirement_check_to_bool(x: CBlock | str) -> bool:
-    """Checks if a given output should be marked converted to `True`.
+    """Checks if a given output should be marked converted to ``True``.
 
-    By default, the requirement check alora outputs: `{"requirement_likelihood": 0.0}`.
-    True if >.5
+    By default, the requirement check alora outputs: ``{"requirement_likelihood": 0.0}``.
+    Returns ``True`` if the likelihood value is > 0.5.
+
+    Args:
+        x: ALoRA output string or CBlock containing JSON with a
+            ``requirement_likelihood`` field.
+
+    Returns:
+        True if the extracted likelihood exceeds 0.5, False otherwise.
     """
     output = str(x)
     req_dict: dict[str, Any] = json.loads(output)
@@ -67,6 +74,12 @@ def reqify(r: str | Requirement) -> Requirement:
     """Maps strings to Requirements.
 
     This is a utility method for functions that allow you to pass in Requirements as either explicit Requirement objects or strings that you intend to be interpreted as requirements.
+
+    Args:
+        r: A ``Requirement`` object or a plain string description to wrap as one.
+
+    Returns:
+        A ``Requirement`` instance.
     """
     if type(r) is str:
         return Requirement(r)
@@ -77,12 +90,20 @@ def reqify(r: str | Requirement) -> Requirement:
 
 
 def req(*args, **kwargs) -> Requirement:
-    """Shorthand for Requirement.__init__."""
+    """Shorthand for Requirement.__init__.
+
+    Returns:
+        A new ``Requirement`` instance.
+    """
     return Requirement(*args, **kwargs)
 
 
 def check(*args, **kwargs) -> Requirement:
-    """Shorthand for Requirement.__init__(..., check_only=True)."""
+    """Shorthand for Requirement.__init__(..., check_only=True).
+
+    Returns:
+        A new ``Requirement`` instance with ``check_only=True``.
+    """
     return Requirement(*args, **kwargs, check_only=True)
 
 
@@ -116,6 +137,9 @@ def simple_validate(
     Args:
         fn: the simple validation function that takes a string and returns either a bool or (bool, str)
         reason: only used if the provided function returns a bool; if the validation function fails, a static reason for that failure to give to the llm when repairing
+
+    Returns:
+        A validation function that takes a ``Context`` and returns a ``ValidationResult``.
     """
 
     def validate(ctx: Context) -> ValidationResult:

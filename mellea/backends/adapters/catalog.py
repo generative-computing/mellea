@@ -74,16 +74,22 @@ Mellea code should access this catalog via :func:`fetch_intrinsic_metadata()`"""
 
 
 def known_intrinsic_names() -> list[str]:
-    """:returns: List of all known user-visible names for intrinsics."""
+    """Return all known user-visible names for intrinsics.
+
+    Returns:
+        List of all known user-visible intrinsic names.
+    """
     return list(_INTRINSICS_CATALOG.keys())
 
 
 def fetch_intrinsic_metadata(intrinsic_name: str) -> IntriniscsCatalogEntry:
     """Retrieve information about the adapter that backs an intrinsic.
 
-    :param intrinsic_name: User-visible name of the intrinsic
+    Args:
+        intrinsic_name: User-visible name of the intrinsic.
 
-    :returns: Metadata about the adapter(s) that implement the intrinsic.
+    Returns:
+        Metadata about the adapter(s) that implement the intrinsic.
     """
     if intrinsic_name not in _INTRINSICS_CATALOG:
         raise ValueError(

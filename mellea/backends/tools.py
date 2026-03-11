@@ -230,6 +230,11 @@ def add_tools_from_model_options(
     """If model_options has tools, add those tools to the tools_dict.
 
     Accepts MelleaTool instances or @tool decorated functions.
+
+    Args:
+        tools_dict: Mutable mapping of tool name to tool instance; modified in-place.
+        model_options: Model options dict that may contain a ``ModelOption.TOOLS``
+            entry (either a list of ``MelleaTool`` or a ``dict[str, MelleaTool]``).
     """
     model_opts_tools = model_options.get(ModelOption.TOOLS, None)
     if model_opts_tools is None:
@@ -267,7 +272,13 @@ def add_tools_from_context_actions(
     tools_dict: dict[str, AbstractMelleaTool],
     ctx_actions: list[Component | CBlock] | None,
 ):
-    """If any of the actions in ctx_actions have tools in their template_representation, add those to the tools_dict."""
+    """If any of the actions in ctx_actions have tools in their template_representation, add those to the tools_dict.
+
+    Args:
+        tools_dict: Mutable mapping of tool name to tool instance; modified in-place.
+        ctx_actions: List of ``Component`` or ``CBlock`` objects whose template
+            representations may declare tools, or ``None`` to skip.
+    """
     if ctx_actions is None:
         return
 
@@ -286,6 +297,12 @@ def add_tools_from_context_actions(
 def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
     """Convert tools to json dict representation.
 
+    Args:
+        tools: Mapping of tool name to ``AbstractMelleaTool`` instance.
+
+    Returns:
+        List of OpenAI-compatible JSON tool schema dicts, one per tool.
+
     Notes:
     - Huggingface transformers library lets you pass in an array of functions but doesn't like methods.
     - WatsonxAI uses `from langchain_ibm.chat_models import convert_to_openai_tool` in their demos, but it gives the same values.
@@ -295,7 +312,14 @@ def convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]:
 
 
 def json_extraction(text: str) -> Generator[dict, None, None]:
-    """Yields the next valid json object in a given string."""
+    """Yields the next valid json object in a given string.
+
+    Args:
+        text: Input string potentially containing one or more JSON objects.
+
+    Yields:
+        Each valid JSON object found in ``text``, in order.
+    """
     index = 0
     decoder = json.JSONDecoder()
 
@@ -317,7 +341,15 @@ def json_extraction(text: str) -> Generator[dict, None, None]:
 def find_func(d) -> tuple[str | None, Mapping | None]:
     """Find the first function in a json-like dictionary.
 
-    Most llms output tool requests in the form `...{"name": string, "arguments": {}}...`
+    Most llms output tool requests in the form ``...{"name": string, "arguments": {}}...``
+
+    Args:
+        d: A JSON-like Python object (typically a ``dict``) to search for a function
+            call record.
+
+    Returns:
+        A ``(name, args)`` tuple where ``name`` is the tool name string and ``args``
+        is the arguments mapping, or ``(None, None)`` if no function call was found.
     """
     if not isinstance(d, dict):
         return None, None
@@ -343,7 +375,14 @@ def find_func(d) -> tuple[str | None, Mapping | None]:
 
 
 def parse_tools(llm_response: str) -> list[tuple[str, Mapping]]:
-    """A simple parser that will scan a string for tools and attempt to extract them; only works for json based outputs."""
+    """A simple parser that will scan a string for tools and attempt to extract them; only works for json based outputs.
+
+    Args:
+        llm_response: Raw string output from a language model.
+
+    Returns:
+        List of ``(tool_name, arguments)`` tuples for each tool call found.
+    """
     processed = " ".join(llm_response.split())
 
     tools = []
@@ -725,7 +764,18 @@ def _parse_docstring(doc_string: str | None) -> dict[str, str]:
 def convert_function_to_ollama_tool(
     func: Callable, name: str | None = None
 ) -> OllamaTool:
-    """Imported from Ollama."""
+    """Convert a Python callable to an Ollama-compatible tool schema.
+
+    Imported from Ollama.
+
+    Args:
+        func: The Python callable to convert.
+        name: Optional override for the tool name; defaults to ``func.__name__``.
+
+    Returns:
+        An ``OllamaTool`` instance representing the function as an OpenAI-compatible
+        tool schema.
+    """
     doc_string_hash = str(hash(inspect.getdoc(func)))
     parsed_docstring = _parse_docstring(inspect.getdoc(func))
     schema = type(

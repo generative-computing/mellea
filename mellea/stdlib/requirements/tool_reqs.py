@@ -30,7 +30,10 @@ def uses_tool(tool_name: str | Callable, check_only=False):
         tool_name: The tool that must be called; this can be either the name of the tool or the Callable for the tool.
         check_only: Propagates to the Requirement.
 
-    Use `tool_choice` if the OpenAI `tool_choice` model option is supported by your model and inference engine.
+    Use ``tool_choice`` if the OpenAI ``tool_choice`` model option is supported by your model and inference engine.
+
+    Returns:
+        A ``Requirement`` that validates whether the specified tool was called.
     """
     tool_name = _name2str(tool_name)
 
@@ -69,6 +72,9 @@ def tool_arg_validator(
     Todo:
         1. should this be a requirement?
         2. should this be done automatically when the user provides asserts in their function body?
+
+    Returns:
+        A ``Requirement`` that validates the specified tool argument.
     """
     if tool_name:
         tool_name = _name2str(tool_name)

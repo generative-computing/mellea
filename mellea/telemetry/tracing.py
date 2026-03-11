@@ -91,12 +91,22 @@ if _OTEL_AVAILABLE and (_TRACE_APPLICATION_ENABLED or _TRACE_BACKEND_ENABLED):
 
 
 def is_application_tracing_enabled() -> bool:
-    """Check if application tracing is enabled."""
+    """Check if application tracing is enabled.
+
+    Returns:
+        True if application tracing has been enabled via the
+        ``MELLEA_TRACE_APPLICATION`` environment variable.
+    """
     return _TRACE_APPLICATION_ENABLED
 
 
 def is_backend_tracing_enabled() -> bool:
-    """Check if backend tracing is enabled."""
+    """Check if backend tracing is enabled.
+
+    Returns:
+        True if backend tracing has been enabled via the
+        ``MELLEA_TRACE_BACKEND`` environment variable.
+    """
     return _TRACE_BACKEND_ENABLED
 
 

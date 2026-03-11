@@ -86,7 +86,19 @@ class TestEvalResult:
 def create_session(
     backend: str, model: str | None, max_tokens: int | None
 ) -> mellea.MelleaSession:
-    """Create a mellea session with the specified backend and model."""
+    """Create a mellea session with the specified backend and model.
+
+    Args:
+        backend: Backend name: ``"ollama"``, ``"openai"``, ``"hf"``,
+            ``"watsonx"``, or ``"litellm"``.
+        model: Model ID or ``ModelIdentifier`` attribute name, or ``None``
+            to use the default model.
+        max_tokens: Maximum number of tokens to generate, or ``None`` for
+            the backend default.
+
+    Returns:
+        A configured ``MelleaSession`` ready for generation.
+    """
     model_id = None
     if model:
         if model.isupper() or "_" in model:
@@ -173,14 +185,25 @@ def run_evaluations(
     output_format: str,
     continue_on_error: bool,
 ):
-    """Run all 'unit test' evaluations
+    """Run all unit-test evaluations against a generation model and a judge model.
 
-    Each test file should be a json containing:
-        "id": an id that is unique to this test file
-        "source": the origin for the evaluation prompts, else "N/A"
-        "name": an instruction-following attribute that the user intends to evaluate through this test
-        "instructions": a set (in string form) of requirements which the generation should follow; the judge will evaluate if these are satisfied
-        "examples": a list of entries containing an input_id, an input(prompt), and a list of targets. Each input may have multiple (or no) targets; inputs and targets are in messages format.
+    Args:
+        test_files: List of paths to JSON test files. Each file should contain
+            ``"id"``, ``"source"``, ``"name"``, ``"instructions"``, and
+            ``"examples"`` fields.
+        backend: Backend name for the generation model.
+        model: Model ID for the generator, or ``None`` for the default.
+        max_gen_tokens: Maximum tokens for the generator, or ``None`` for the
+            backend default.
+        judge_backend: Backend name for the judge model, or ``None`` to reuse
+            the generation backend.
+        judge_model: Model ID for the judge, or ``None`` for the default.
+        max_judge_tokens: Maximum tokens for the judge, or ``None`` for the
+            backend default.
+        output_path: File path prefix for saving results.
+        output_format: Output format: ``"json"`` or ``"jsonl"``.
+        continue_on_error: If ``True``, skip failed test evaluations instead of
+            raising.
     """
     all_test_evals: list[TestBasedEval] = []
 
@@ -248,9 +271,18 @@ def execute_test_eval(
     generation_session: mellea.MelleaSession,
     judge_session: mellea.MelleaSession,
 ) -> TestEvalResult:
-    """Execute a single test evaluation
-    For each input in the test, generate a response using generation_session
-    Then, after all inputs are processed, validate using judge_session.
+    """Execute a single test evaluation.
+
+    For each input in the test, generates a response using ``generation_session``,
+    then validates using ``judge_session``.
+
+    Args:
+        test_eval: The ``TestBasedEval`` object containing inputs and targets.
+        generation_session: ``MelleaSession`` used to produce model responses.
+        judge_session: ``MelleaSession`` used to score model responses.
+
+    Returns:
+        A ``TestEvalResult`` with per-input pass/fail outcomes.
     """
     input_results = []
 
@@ -294,6 +326,16 @@ def execute_test_eval(
 
 
 def parse_judge_output(judge_output: str):
+    """Parse score and justification from a judge model's output string.
+
+    Args:
+        judge_output: Raw text output from the judge model.
+
+    Returns:
+        A ``(score, justification)`` tuple where ``score`` is an integer (or
+        ``None`` if parsing failed) and ``justification`` is an explanatory
+        string.
+    """
     try:
         json_match = re.search(r'\{[^}]*"score"[^}]*\}', judge_output, re.DOTALL)
         if json_match:
@@ -315,6 +357,14 @@ def parse_judge_output(judge_output: str):
 
 
 def save_results(results: list[TestEvalResult], output_path: str, output_format: str):
+    """Persist evaluation results to disk in JSON or JSONL format.
+
+    Args:
+        results: List of ``TestEvalResult`` objects to serialise.
+        output_path: Destination file path (extension may be appended if it
+            does not match ``output_format``).
+        output_format: Format string: ``"json"`` or ``"jsonl"``.
+    """
     output_path_obj = Path(output_path)
     if output_path_obj.suffix != f".{output_format}":
         output_path_obj = Path(f"{output_path}.{output_format}")
@@ -347,6 +397,11 @@ def save_results(results: list[TestEvalResult], output_path: str, output_format:
 
 
 def summary_stats(results: list[TestEvalResult]):
+    """Print aggregated pass-rate statistics for a set of evaluation results.
+
+    Args:
+        results: List of ``TestEvalResult`` objects to summarise.
+    """
     total_inputs = sum(r.total_count for r in results)
     passed_inputs = sum(r.passed_count for r in results)
     overall_pass_rate = passed_inputs / total_inputs if total_inputs > 0 else 0.0

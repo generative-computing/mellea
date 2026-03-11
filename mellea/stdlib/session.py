@@ -52,6 +52,9 @@ _context_session: contextvars.ContextVar[MelleaSession | None] = contextvars.Con
 def get_session() -> MelleaSession:
     """Get the current session from context.
 
+    Returns:
+        The currently active ``MelleaSession``.
+
     Raises:
         RuntimeError: If no session is currently active.
     """
@@ -64,7 +67,15 @@ def get_session() -> MelleaSession:
 
 
 def backend_name_to_class(name: str) -> Any:
-    """Resolves backend names to Backend classes."""
+    """Resolves backend names to Backend classes.
+
+    Args:
+        name: Short backend name, e.g. ``"ollama"``, ``"hf"``, ``"openai"``,
+            ``"watsonx"``, or ``"litellm"``.
+
+    Returns:
+        The corresponding ``Backend`` class, or ``None`` if the name is unrecognised.
+    """
     if name == "ollama":
         from ..backends.ollama import OllamaModelBackend
 
@@ -511,6 +522,10 @@ class MelleaSession:
             model_options: Additional model options, which will upsert into the model/backend's defaults.
             tool_calls: If true, tool calling is enabled.
             images: A list of images to be used in the instruction or None if none.
+
+        Returns:
+            A ``ModelOutputThunk`` if ``return_sampling_results`` is ``False``,
+            else a ``SamplingResult``.
         """
         r = mfuncs.instruct(
             description,
@@ -550,7 +565,20 @@ class MelleaSession:
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> Message:
-        """Sends a simple chat message and returns the response. Adds both messages to the Context."""
+        """Sends a simple chat message and returns the response. Adds both messages to the Context.
+
+        Args:
+            content: The message text to send.
+            role: The role for the outgoing message (default ``"user"``).
+            images: Optional list of images to include in the message.
+            user_variables: Optional Jinja variable substitutions applied to ``content``.
+            format: Optional Pydantic model for constrained decoding of the response.
+            model_options: Additional model options to merge with backend defaults.
+            tool_calls: If true, tool calling is enabled.
+
+        Returns:
+            The assistant ``Message`` response.
+        """
         result, context = mfuncs.chat(
             content=content,
             context=self.ctx,
@@ -576,7 +604,19 @@ class MelleaSession:
         generate_logs: list[GenerateLog] | None = None,
         input: CBlock | None = None,
     ) -> list[ValidationResult]:
-        """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
+        """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
+
+        Args:
+            reqs: A single ``Requirement`` or a list of them to validate.
+            output: Optional model output ``CBlock`` to validate against instead of the context.
+            format: Optional Pydantic model for constrained decoding.
+            model_options: Additional model options to merge with backend defaults.
+            generate_logs: Optional list to append generation logs to.
+            input: Optional input ``CBlock`` to include alongside ``output`` when validating.
+
+        Returns:
+            List of ``ValidationResult`` objects, one per requirement.
+        """
         return mfuncs.validate(
             reqs=reqs,
             context=self.ctx,
@@ -795,6 +835,10 @@ class MelleaSession:
             model_options: Additional model options, which will upsert into the model/backend's defaults.
             tool_calls: If true, tool calling is enabled.
             images: A list of images to be used in the instruction or None if none.
+
+        Returns:
+            A ``ModelOutputThunk`` if ``return_sampling_results`` is ``False``,
+            else a ``SamplingResult``.
         """
         r = await mfuncs.ainstruct(
             description,
@@ -834,7 +878,20 @@ class MelleaSession:
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> Message:
-        """Sends a simple chat message and returns the response. Adds both messages to the Context."""
+        """Sends a simple chat message and returns the response. Adds both messages to the Context.
+
+        Args:
+            content: The message text to send.
+            role: The role for the outgoing message (default ``"user"``).
+            images: Optional list of images to include in the message.
+            user_variables: Optional Jinja variable substitutions applied to ``content``.
+            format: Optional Pydantic model for constrained decoding of the response.
+            model_options: Additional model options to merge with backend defaults.
+            tool_calls: If true, tool calling is enabled.
+
+        Returns:
+            The assistant ``Message`` response.
+        """
         result, context = await mfuncs.achat(
             content=content,
             context=self.ctx,
@@ -860,7 +917,19 @@ class MelleaSession:
         generate_logs: list[GenerateLog] | None = None,
         input: CBlock | None = None,
     ) -> list[ValidationResult]:
-        """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
+        """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
+
+        Args:
+            reqs: A single ``Requirement`` or a list of them to validate.
+            output: Optional model output ``CBlock`` to validate against instead of the context.
+            format: Optional Pydantic model for constrained decoding.
+            model_options: Additional model options to merge with backend defaults.
+            generate_logs: Optional list to append generation logs to.
+            input: Optional input ``CBlock`` to include alongside ``output`` when validating.
+
+        Returns:
+            List of ``ValidationResult`` objects, one per requirement.
+        """
         return await mfuncs.avalidate(
             reqs=reqs,
             context=self.ctx,

@@ -275,6 +275,9 @@ def code_interpreter(code: str) -> ExecutionResult:
 
     Args:
         code: The Python code to execute.
+
+    Returns:
+        An ``ExecutionResult`` with stdout, stderr, and a success flag.
     """
     exec_env = LLMSandboxEnvironment(allowed_imports=None)
     return exec_env.execute(code, 60)
@@ -285,6 +288,9 @@ def local_code_interpreter(code: str) -> ExecutionResult:
 
     Args:
         code: The Python code to execute.
+
+    Returns:
+        An ``ExecutionResult`` with stdout, stderr, and a success flag.
     """
     exec_env = UnsafeEnvironment(allowed_imports=None)
     return exec_env.execute(code, 60)
