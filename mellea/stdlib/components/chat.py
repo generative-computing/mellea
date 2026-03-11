@@ -214,7 +214,15 @@ class ToolMessage(Message):
 
 
 def as_chat_history(ctx: Context) -> list[Message]:
-    """Returns a list of Messages corresponding to a Context."""
+    """Returns a list of Messages corresponding to a Context.
+
+    Args:
+        ctx: A linear ``Context`` whose entries are ``Message`` or ``ModelOutputThunk``
+            objects with ``Message`` parsed representations.
+
+    Returns:
+        List of ``Message`` objects in conversation order.
+    """
 
     def _to_msg(c: CBlock | Component | ModelOutputThunk) -> Message | None:
         match c:

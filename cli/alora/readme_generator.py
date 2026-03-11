@@ -129,8 +129,20 @@ def make_readme_jinja_dict(
     """Generate all template variables for the intrinsic README using an LLM.
 
     Loads the first five lines of the JSONL dataset, determines the input structure,
-    and uses m.instruct with deterministic requirements and rejection sampling to
+    and uses ``m.instruct`` with deterministic requirements and rejection sampling to
     generate README template variables.
+
+    Args:
+        m: Active ``MelleaSession`` to use for LLM generation.
+        dataset_path: Path to the JSONL training dataset file.
+        base_model: Base model ID or path used to train the adapter.
+        prompt_file: Path to the prompt format file (empty string if not provided).
+        name: Destination model name on Hugging Face Hub
+            (e.g. ``"acme/carbchecker-alora"``).
+        hints: Optional string of additional domain hints to include in the prompt.
+
+    Returns:
+        Dict of Jinja2 template variables for rendering the ``INTRINSIC_README.md``.
     """
     # Load first 5 lines of the dataset.
     samples = []
@@ -270,8 +282,19 @@ def generate_readme(
 ) -> str:
     """Generate an INTRINSIC_README.md file from the dataset and template.
 
-    Creates a MelleaSession, uses the LLM to generate template variables,
-    renders the Jinja template, and writes the result to output_path.
+    Creates a ``MelleaSession``, uses the LLM to generate template variables,
+    renders the Jinja template, and writes the result to ``output_path``.
+
+    Args:
+        dataset_path: Path to the JSONL training dataset file.
+        base_model: Base model ID or path used to train the adapter.
+        prompt_file: Path to the prompt format file, or ``None``.
+        output_path: Destination path for the generated README file.
+        name: Destination model name on Hugging Face Hub.
+        hints: Optional string of additional domain hints for the LLM.
+
+    Returns:
+        The path to the written output file (same as ``output_path``).
     """
     from jinja2 import Environment, FileSystemLoader
 

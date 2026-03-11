@@ -75,10 +75,16 @@ class ValidationResult:
 
 
 def default_output_to_bool(x: CBlock | str) -> bool:
-    """Checks if a given output should be marked converted to `True`.
+    """Convert a model output string to a boolean by checking for a "yes" answer.
 
-    Checks if the output is exactly equal to "yes" or "y" (case-insensitive). If not, it will also
-    check if any of the words in the output are "yes" (case-insensitive).
+    Checks if the output is exactly equal to "yes" or "y" (case-insensitive). If not,
+    also checks if any of the words in the output are "yes" (case-insensitive).
+
+    Args:
+        x: The model output to evaluate, as a ``CBlock`` or plain string.
+
+    Returns:
+        ``True`` if the output indicates a "yes" answer, ``False`` otherwise.
     """
     output = str(x)
 

@@ -23,7 +23,12 @@ instructions."""
 
 @contextmanager
 def import_optional(extra_name: str):
-    """Handle optional imports."""
+    """Handle optional imports.
+
+    Args:
+        extra_name: Package extra to suggest in the install hint
+            (e.g. ``pip install granite_io[extra_name]``).
+    """
     try:
         yield
     except ImportError as err:
@@ -40,7 +45,8 @@ def import_optional(extra_name: str):
 def nltk_check(feature_name: str):
     """Variation on import_optional for nltk.
 
-    :param feature_name: Name of feature that requires NLTK
+    Args:
+        feature_name: Name of the feature that requires NLTK, used in the error message.
     """
     try:
         yield

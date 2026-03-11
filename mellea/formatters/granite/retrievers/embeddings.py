@@ -93,18 +93,20 @@ def compute_embeddings(
     # pylint: disable=too-many-locals
     """Split documents into windows and compute embeddings for each of the the windows.
 
-    :param corpus: PyArrow Table of documents as returned by :func:`read_corpus()`.
-        Should have the columns ``["id", "url", "title", "text"]``
-    :param embedding_model_name: Hugging Face model name for the model that computes
-        embeddings. Also used for tokenizing.
-    :param chunk_size: Maximum size of chunks to split documents into, in embedding
-        model tokens; must be less than or equal to the embedding model's maximum
-        sequence length.
-    :param overlap: Target overlap between adjacent chunks, in embedding model tokens.
-        Actual begins and ends of chunks will be on sentence boundaries.
+    Args:
+        corpus: PyArrow Table of documents as returned by ``read_corpus()``.
+            Should have the columns ``["id", "url", "title", "text"]``.
+        embedding_model_name: Hugging Face model name for the model that computes
+            embeddings. Also used for tokenizing.
+        chunk_size: Maximum size of chunks to split documents into, in embedding
+            model tokens; must be less than or equal to the embedding model's maximum
+            sequence length.
+        overlap: Target overlap between adjacent chunks, in embedding model tokens.
+            Actual begins and ends of chunks will be on sentence boundaries.
 
-    :returns: PyArrow Table of chunks of the corpus, with schema
-        ````["id", "url", "title", "begin", "end", "text", "embedding"]``
+    Returns:
+        PyArrow Table of chunks of the corpus, with schema
+        ``["id", "url", "title", "begin", "end", "text", "embedding"]``.
     """
     # Third Party
     import pyarrow as pa
@@ -187,12 +189,15 @@ def write_embeddings(
     Write the embeddings produced by :func:`compute_embeddings()` to a directory of
     Parquet files on local disk.
 
-    :param target_dir: Location where the files should be written (in a subdirectory)
-    :param corpus_name: Corpus name to use in generating a location for writing files
-    :param chunks_per_partition: Number of document chunks to write to each partition
-      of the Parquet file
+    Args:
+        target_dir: Location where the files should be written (in a subdirectory).
+        corpus_name: Corpus name used to generate the output directory name.
+        embeddings: PyArrow Table produced by ``compute_embeddings()``.
+        chunks_per_partition: Number of document chunks to write to each Parquet
+            partition file.
 
-    :param returns: Path where data was written
+    Returns:
+        Path to the directory where the Parquet files were written.
     """
     # Third Party
     import pyarrow as pa
@@ -221,12 +226,13 @@ class InMemoryRetriever:
     ):
         """Simple retriever that keeps docs and embeddings in memory.
 
-        :param data_file_or_table: Parquet file of document snippets and embeddings,
-         or an equivalent in-memory PyArrow Table object.
-         Should have columns `id`, `begin`, `end`, `text`, and `embedding`.
-        :param embedding_model_name: Name of Sentence Transformers model to use for
-         embeddings. Must be the same model that was used to compute embeddings in the
-         data file.
+        Args:
+            data_file_or_table: Parquet file of document snippets and embeddings,
+                or an equivalent in-memory PyArrow Table. Should have columns
+                ``id``, ``begin``, ``end``, ``text``, and ``embedding``.
+            embedding_model_name: Name of the Sentence Transformers model to use for
+                embeddings. Must match the model used to compute embeddings in the
+                data file.
         """
         # Third Party
         import pyarrow as pa
@@ -251,7 +257,15 @@ class InMemoryRetriever:
         self._embeddings = torch.tensor(embeddings_array)
 
     def retrieve(self, query: str, top_k: int = 5) -> list[dict]:
-        """Run a query and return results."""
+        """Run a query and return results.
+
+        Args:
+            query: Natural language query string.
+            top_k: Number of top results to return.
+
+        Returns:
+            List of dicts with keys ``doc_id``, ``text``, and ``score``.
+        """
         # Third Party
         import pyarrow as pa
         import sentence_transformers

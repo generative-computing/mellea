@@ -53,8 +53,11 @@ def is_vllm_server_with_structured_output(
     v0.12.0 was the last version to support guided_json params. It's now under structured_outputs.
 
     Args:
-        base_url : Base url for LLM API.
-        headers : additional headers to pass to the request.
+        base_url: Base url for LLM API.
+        headers: Additional headers to pass to the request.
+
+    Returns:
+        True if the server is vLLM >= v0.12.0, False otherwise.
     """
     # Not using the models endpoint for now. Assuming version is enough.
     # vllm_provider_endpoint = str(self._client.base_url).join("/models")
