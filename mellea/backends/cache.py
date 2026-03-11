@@ -35,7 +35,12 @@ class Cache(abc.ABC):
 
 
 class SimpleLRUCache(Cache):
-    """A simple [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_Recently_Used_(LRU)) cache."""
+    """A simple `LRU <https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_Recently_Used_(LRU)>`_ cache.
+
+    Evicts the least-recently-used entry when capacity is exceeded, optionally
+    invoking an ``on_evict`` callback (e.g. to free GPU memory). Used by local
+    HuggingFace backends to store and reuse KV cache state across requests.
+    """
 
     def __init__(self, capacity: int, on_evict: Callable[[Any], None] | None = None):
         """Initializes the LRU cache with a certain capacity.

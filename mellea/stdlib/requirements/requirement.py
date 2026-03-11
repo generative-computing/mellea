@@ -90,7 +90,11 @@ def reqify(r: str | Requirement) -> Requirement:
 
 
 def req(*args, **kwargs) -> Requirement:
-    """Shorthand for Requirement.__init__.
+    """Shorthand for ``Requirement.__init__``.
+
+    Args:
+        *args: Positional arguments forwarded to ``Requirement.__init__``.
+        **kwargs: Keyword arguments forwarded to ``Requirement.__init__``.
 
     Returns:
         A new ``Requirement`` instance.
@@ -99,7 +103,11 @@ def req(*args, **kwargs) -> Requirement:
 
 
 def check(*args, **kwargs) -> Requirement:
-    """Shorthand for Requirement.__init__(..., check_only=True).
+    """Shorthand for ``Requirement.__init__(..., check_only=True)``.
+
+    Args:
+        *args: Positional arguments forwarded to ``Requirement.__init__``.
+        **kwargs: Keyword arguments forwarded to ``Requirement.__init__``.
 
     Returns:
         A new ``Requirement`` instance with ``check_only=True``.

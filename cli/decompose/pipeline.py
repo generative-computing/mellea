@@ -30,11 +30,15 @@ from .prompt_modules.subtask_prompt_generator import SubtaskPromptItem
 
 
 class ConstraintResult(TypedDict):
+    """A single constraint paired with its assigned validation strategy."""
+
     constraint: str
     validation_strategy: str
 
 
 class DecompSubtasksResult(TypedDict):
+    """The full structured result for one decomposed subtask."""
+
     subtask: str
     tag: str
     constraints: list[ConstraintResult]
@@ -46,6 +50,8 @@ class DecompSubtasksResult(TypedDict):
 
 
 class DecompPipelineResult(TypedDict):
+    """The complete output of a decomposition pipeline run."""
+
     original_task_prompt: str
     subtask_list: list[str]
     identified_constraints: list[ConstraintResult]
@@ -54,6 +60,8 @@ class DecompPipelineResult(TypedDict):
 
 
 class DecompBackend(StrEnum):
+    """Inference backends supported by the decomposition pipeline."""
+
     ollama = "ollama"
     openai = "openai"
     rits = "rits"
@@ -71,6 +79,30 @@ def decompose(
     backend_endpoint: str | None = None,
     backend_api_key: str | None = None,
 ) -> DecompPipelineResult:
+    """Break a task prompt into structured subtasks using a multi-step LLM pipeline.
+
+    Orchestrates five sequential LLM calls to produce a fully structured
+    decomposition: subtask listing, constraint extraction, validation strategy
+    selection, prompt template generation, and per-subtask constraint assignment.
+
+    Args:
+        task_prompt: Natural-language description of the task to decompose.
+        user_input_variable: Optional list of variable names that will be
+            templated into generated prompts as user-provided input data. Pass
+            ``None`` or an empty list if the task requires no input variables.
+        model_id: Model name or ID used for all pipeline steps.
+        backend: Inference backend -- ``"ollama"``, ``"openai"``, or ``"rits"``.
+        backend_req_timeout: Request timeout in seconds for model inference calls.
+        backend_endpoint: Base URL of the OpenAI-compatible endpoint. Required
+            when ``backend`` is ``"openai"`` or ``"rits"``.
+        backend_api_key: API key for the configured endpoint. Required when
+            ``backend`` is ``"openai"`` or ``"rits"``.
+
+    Returns:
+        A ``DecompPipelineResult`` containing the original prompt, subtask list,
+        identified constraints, and fully annotated subtask objects with prompt
+        templates, constraint assignments, and dependency information.
+    """
     if user_input_variable is None:
         user_input_variable = []
 

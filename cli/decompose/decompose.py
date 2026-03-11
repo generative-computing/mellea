@@ -23,6 +23,12 @@ from .pipeline import DecompBackend, DecompPipelineResult, DecompSubtasksResult
 # Must maintain declaration order
 # Newer versions must be declared on the bottom
 class DecompVersion(StrEnum):
+    """Available versions of the decomposition pipeline template.
+
+    Newer versions must be declared last to ensure ``latest`` always resolves to
+    the most recent template.
+    """
+
     latest = "latest"
     v1 = "v1"
     # v2 = "v2"
@@ -252,7 +258,32 @@ def run(
         ),
     ] = None,
 ) -> None:
-    """Runs the decomposition pipeline."""
+    """Decompose a task prompt into subtasks with constraints and dependency metadata.
+
+    Reads the task prompt either from a file or interactively, runs the LLM
+    decomposition pipeline to produce subtask descriptions, Jinja2 prompt templates,
+    constraint lists, and dependency metadata, validates variable ordering, then
+    writes a ``{out_name}.json`` result file and a rendered ``{out_name}.py``
+    Python script to the output directory.
+
+    Args:
+        out_dir: Path to an existing directory where output files are saved.
+        out_name: Base name (no extension) for the output files. Defaults to
+            ``"m_decomp_result"``.
+        prompt_file: Optional path to a raw-text file containing the task prompt.
+            If omitted, the prompt is collected interactively.
+        model_id: Model name or ID used for all decomposition pipeline steps.
+        backend: Inference backend -- ``"ollama"`` or ``"openai"``.
+        backend_req_timeout: Request timeout in seconds for model inference calls.
+        backend_endpoint: Base URL of the OpenAI-compatible endpoint. Required
+            when ``backend="openai"``.
+        backend_api_key: API key for the configured endpoint. Required when
+            ``backend="openai"``.
+        version: Version of the decomposition pipeline template to use.
+        input_var: Optional list of user-input variable names (e.g. ``"DOC"``).
+            Each name must be a valid Python identifier. Pass this option
+            multiple times to define multiple variables.
+    """
     try:
         from jinja2 import Environment, FileSystemLoader
 

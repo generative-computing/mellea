@@ -98,7 +98,11 @@ class RichDocument(Component[str]):
 
 
 class TableQuery(Query):
-    """Table-specific query."""
+    """A ``Query`` component specialised for ``Table`` objects.
+
+    Formats the table as Markdown alongside the query string so the LLM receives
+    both the structured table content and the natural-language question.
+    """
 
     def __init__(self, obj: Table, query: str) -> None:
         """Initializes a new instance of the `TableQuery` class.
@@ -129,7 +133,11 @@ class TableQuery(Query):
 
 
 class TableTransform(Transform):
-    """Table-specific transform."""
+    """A ``Transform`` component specialised for ``Table`` objects.
+
+    Formats the table as Markdown alongside the transformation instruction so the
+    LLM receives both the structured table content and the mutation description.
+    """
 
     def __init__(self, obj: Table, transformation: str) -> None:
         """Initializes a new instance of the `TableTransform` class.

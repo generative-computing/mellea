@@ -15,7 +15,12 @@ import requests
 
 
 class RESTHandler(logging.Handler):
-    """RESTHandler for logging."""
+    """Logging handler that forwards records to a local REST endpoint.
+
+    Sends log records as JSON to ``/api/receive`` when the ``FLOG`` environment
+    variable is set. Failures are silently suppressed to avoid disrupting the
+    application.
+    """
 
     def __init__(
         self, api_url: str, method: str = "POST", headers: dict[str, str] | None = None
@@ -44,7 +49,11 @@ class RESTHandler(logging.Handler):
 
 
 class JsonFormatter(logging.Formatter):
-    """Logging formatter for JSON."""
+    """Logging formatter that serialises log records as structured JSON dicts.
+
+    Includes timestamp, level, message, module, function name, line number,
+    process ID, thread ID, and (if present) exception information.
+    """
 
     def format(self, record):  # type: ignore
         """Formats record as a JSON serializable object."""
@@ -90,7 +99,13 @@ class CustomFormatter(logging.Formatter):
 
 
 class FancyLogger:
-    """A fancy logger."""
+    """Singleton logger with colour-coded console output and optional REST forwarding.
+
+    Obtain the shared logger instance via ``FancyLogger.get_logger()``. Log level
+    defaults to ``INFO`` but can be raised to ``DEBUG`` by setting the ``DEBUG``
+    environment variable. When the ``FLOG`` environment variable is set, records are
+    also forwarded to a local ``/api/receive`` REST endpoint via ``RESTHandler``.
+    """
 
     logger = None
 

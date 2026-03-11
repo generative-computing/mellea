@@ -703,7 +703,14 @@ class ModelToolCall:
 
 
 def blockify(s: str | CBlock | Component) -> CBlock | Component:
-    """`blockify` is a helper function that turns raw strings into CBlocks."""
+    """Turn a raw string into a ``CBlock``, leaving ``CBlock`` and ``Component`` objects unchanged.
+
+    Args:
+        s: A plain string, ``CBlock``, or ``Component`` to normalise.
+
+    Returns:
+        A ``CBlock`` wrapping ``s`` if it was a string; otherwise ``s`` unchanged.
+    """
     # noinspection PyUnreachableCode
     match s:
         case str():
@@ -717,7 +724,15 @@ def blockify(s: str | CBlock | Component) -> CBlock | Component:
 
 
 def get_images_from_component(c: Component) -> None | list[ImageBlock]:
-    """Gets images from a `Component` if they are present and a non-empty list, otherwise returns None."""
+    """Return the images attached to a ``Component``, or ``None`` if absent or empty.
+
+    Args:
+        c: The ``Component`` whose ``images`` attribute is inspected.
+
+    Returns:
+        A non-empty list of ``ImageBlock`` objects if the component has an
+        ``images`` attribute with at least one element; ``None`` otherwise.
+    """
     if hasattr(c, "images"):
         imgs = c.images  # type: ignore
         if imgs is not None:
