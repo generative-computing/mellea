@@ -49,8 +49,7 @@ Telemetry is configured via environment variables:
 | `MELLEA_METRICS_CONSOLE` | Print metrics to console (debugging) | `false` |
 | `MELLEA_METRICS_OTLP` | Enable OTLP metrics exporter | `false` |
 | `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | OTLP metrics-specific endpoint (overrides general endpoint) | None |
-| `OTEL_EXPORTER_PROMETHEUS_PORT` | Port for Prometheus HTTP scrape endpoint (e.g., `9464`) | None |
-| `OTEL_EXPORTER_PROMETHEUS_HOST` | Host/address for Prometheus HTTP server | `0.0.0.0` |
+| `MELLEA_METRICS_PROMETHEUS` | Enable Prometheus metric reader (registers with prometheus_client registry) | `false` |
 | `OTEL_METRIC_EXPORT_INTERVAL` | Export interval in milliseconds | `60000` |
 
 ### Application Trace Scope
@@ -242,28 +241,57 @@ docker run -p 4317:4317 -p 8889:8889 \
   otel/opentelemetry-collector:latest
 ```
 
-##### Prometheus Exporter (Prometheus Monitoring)
+##### Prometheus Exporter
 
-Expose metrics via HTTP endpoint for Prometheus scraping:
-
-**⚠️ Important**: The Prometheus exporter requires your application to keep running. It's designed for long-running services (web APIs, workers, daemons), not short-lived scripts. For batch jobs or examples, use Console or OTLP exporters instead.
+Register metrics with the `prometheus_client` default registry for Prometheus scraping:
 
 ```bash
-# Enable metrics and Prometheus exporter
+# Enable metrics and Prometheus metric reader
 export MELLEA_METRICS_ENABLED=true
-export OTEL_EXPORTER_PROMETHEUS_PORT=9464
-
-# Optional: Bind to specific host (default: 0.0.0.0)
-export OTEL_EXPORTER_PROMETHEUS_HOST=localhost
+export MELLEA_METRICS_PROMETHEUS=true
 
 # Optional: Set service name
 export OTEL_SERVICE_NAME=my-mellea-app
 
-# For long-running applications (web servers, APIs, workers)
-python your_long_running_app.py
+python docs/examples/telemetry/metrics_example.py
 ```
 
-The Prometheus exporter starts an HTTP server on the specified port. Metrics are available at `http://localhost:9464/metrics` in Prometheus exposition format.
+When enabled, Mellea registers its OpenTelemetry metrics with the `prometheus_client` default registry via `PrometheusMetricReader`. Your application is responsible for exposing the registry for scraping. Common approaches:
+
+**Standalone HTTP server** (simplest):
+
+```python
+from prometheus_client import start_http_server
+
+# Start Prometheus scrape endpoint on port 9464
+start_http_server(9464)
+```
+
+**FastAPI middleware**:
+
+```python
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from fastapi import FastAPI, Response
+
+app = FastAPI()
+
+@app.get("/metrics")
+def metrics():
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+```
+
+**Flask route**:
+
+```python
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from flask import Flask, Response
+
+app = Flask(__name__)
+
+@app.route("/metrics")
+def metrics():
+    return Response(generate_latest(), content_type=CONTENT_TYPE_LATEST)
+```
 
 **Verify Prometheus Endpoint:**
 
@@ -304,7 +332,7 @@ export MELLEA_METRICS_ENABLED=true
 export MELLEA_METRICS_CONSOLE=true          # Debug output
 export MELLEA_METRICS_OTLP=true             # Production observability
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-export OTEL_EXPORTER_PROMETHEUS_PORT=9464   # Prometheus monitoring
+export MELLEA_METRICS_PROMETHEUS=true       # Prometheus monitoring
 
 python docs/examples/telemetry/metrics_example.py
 ```
@@ -312,7 +340,7 @@ python docs/examples/telemetry/metrics_example.py
 This configuration:
 - Prints metrics to console for immediate feedback
 - Exports to OTLP collector for centralized observability
-- Exposes Prometheus endpoint for scraping
+- Registers metrics with prometheus_client registry for Prometheus scraping
 
 **Use Cases:**
 - **Development**: Console + Prometheus for local testing
@@ -495,7 +523,7 @@ The Gen-AI semantic conventions make it easy to:
 1. Verify `MELLEA_METRICS_ENABLED=true` is set
 2. Check that at least one exporter is configured (Console, OTLP, or Prometheus)
 3. For OTLP: Verify `MELLEA_METRICS_OTLP=true` and endpoint is reachable
-4. For Prometheus: Verify port is not in use and endpoint responds (`curl http://localhost:PORT/metrics`)
+4. For Prometheus: Verify `MELLEA_METRICS_PROMETHEUS=true` and your application exposes the registry (`curl http://localhost:PORT/metrics`)
 5. Enable console output (`MELLEA_METRICS_CONSOLE=true`) to verify metrics are being collected
 
 **Missing OpenTelemetry dependency:**
@@ -508,15 +536,6 @@ pip install mellea[telemetry]
 # or
 uv pip install mellea[telemetry]
 ```
-
-**Port already in use:**
-```
-OSError: [Errno 48] Address already in use
-```
-The Prometheus port is already in use. Either:
-1. Stop the process using the port
-2. Choose a different port with `OTEL_EXPORTER_PROMETHEUS_PORT`
-3. Check for other Mellea processes: `lsof -i :9464`
 
 **OTLP connection refused:**
 ```
@@ -540,7 +559,7 @@ WARNING: Metrics are enabled but no exporters are configured
 Enable at least one exporter:
 - Console: `export MELLEA_METRICS_CONSOLE=true`
 - OTLP: `export MELLEA_METRICS_OTLP=true` + endpoint
-- Prometheus: `export OTEL_EXPORTER_PROMETHEUS_PORT=9464`
+- Prometheus: `export MELLEA_METRICS_PROMETHEUS=true`
 
 ### Future Enhancements
 

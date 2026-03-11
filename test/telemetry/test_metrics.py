@@ -1,7 +1,6 @@
 """Unit tests for OpenTelemetry metrics instrumentation."""
 
-import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -28,8 +27,7 @@ def clean_metrics_env(monkeypatch):
     monkeypatch.delenv("MELLEA_METRICS_OTLP", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", raising=False)
-    monkeypatch.delenv("OTEL_EXPORTER_PROMETHEUS_PORT", raising=False)
-    monkeypatch.delenv("OTEL_EXPORTER_PROMETHEUS_HOST", raising=False)
+    monkeypatch.delenv("MELLEA_METRICS_PROMETHEUS", raising=False)
     monkeypatch.delenv("OTEL_METRIC_EXPORT_INTERVAL", raising=False)
     monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
     # Force reload of metrics module to pick up env vars
@@ -470,46 +468,27 @@ def test_otlp_enabled_without_endpoint_warning(monkeypatch):
 # Prometheus Exporter Tests
 
 
-def test_prometheus_exporter_enabled_with_valid_port(monkeypatch):
-    """Test that Prometheus exporter initializes with valid port."""
+def test_prometheus_exporter_enabled(monkeypatch):
+    """Test that Prometheus metric reader initializes when enabled."""
     import importlib
 
     import mellea.telemetry.metrics
 
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
-    monkeypatch.setenv("OTEL_EXPORTER_PROMETHEUS_PORT", "9464")
+    monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
 
-    # Mock start_http_server to avoid actual HTTP server
-    mock_start_server = MagicMock()
-    with patch("prometheus_client.start_http_server", mock_start_server):
-        importlib.reload(mellea.telemetry.metrics)
+    importlib.reload(mellea.telemetry.metrics)
 
-        from mellea.telemetry.metrics import _PROMETHEUS_PORT
+    from mellea.telemetry.metrics import _METRICS_PROMETHEUS
 
-        assert _PROMETHEUS_PORT == "9464"
-        # Verify HTTP server was started with correct port
-        mock_start_server.assert_called_once_with(port=9464, addr="0.0.0.0")
-
-
-def test_prometheus_exporter_with_invalid_port_warning(monkeypatch):
-    """Test that invalid port number produces warning."""
-    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
-    monkeypatch.setenv("OTEL_EXPORTER_PROMETHEUS_PORT", "invalid")
-
-    import importlib
-
-    import mellea.telemetry.metrics
-
-    with pytest.warns(UserWarning, match="Invalid OTEL_EXPORTER_PROMETHEUS_PORT value"):
-        importlib.reload(mellea.telemetry.metrics)
+    assert _METRICS_PROMETHEUS is True
 
 
 def test_prometheus_exporter_import_error_warning(monkeypatch):
     """Test that missing Prometheus package produces helpful warning."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
-    monkeypatch.setenv("OTEL_EXPORTER_PROMETHEUS_PORT", "9464")
+    monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
 
-    # Mock ImportError when trying to import PrometheusMetricReader
     import importlib
     import sys
 
@@ -522,7 +501,7 @@ def test_prometheus_exporter_import_error_warning(monkeypatch):
     try:
         with pytest.warns(
             UserWarning,
-            match="Prometheus exporter is configured.*but opentelemetry-exporter-prometheus is not installed",
+            match="Prometheus exporter is enabled.*but opentelemetry-exporter-prometheus is not installed",
         ):
             importlib.reload(mellea.telemetry.metrics)
     finally:
@@ -531,101 +510,48 @@ def test_prometheus_exporter_import_error_warning(monkeypatch):
         sys.modules.update(original_modules)
 
 
-def test_prometheus_exporter_port_in_use_warning(monkeypatch):
-    """Test that port conflict produces helpful warning."""
-    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
-    monkeypatch.setenv("OTEL_EXPORTER_PROMETHEUS_PORT", "9464")
-
-    # Mock OSError for port in use
-    mock_start_server = MagicMock(
-        side_effect=OSError("[Errno 48] Address already in use")
-    )
-
-    import importlib
-
-    import mellea.telemetry.metrics
-
-    with patch("prometheus_client.start_http_server", mock_start_server):
-        with pytest.warns(
-            UserWarning,
-            match="Failed to start Prometheus HTTP server on port 9464.*port may already be in use",
-        ):
-            importlib.reload(mellea.telemetry.metrics)
-
-
 def test_prometheus_and_otlp_exporters_together(monkeypatch):
     """Test that Prometheus and OTLP exporters can run simultaneously."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
-    monkeypatch.setenv("OTEL_EXPORTER_PROMETHEUS_PORT", "9464")
+    monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
     monkeypatch.setenv("MELLEA_METRICS_OTLP", "true")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
-
-    # Mock start_http_server to avoid actual HTTP server
-    mock_start_server = MagicMock()
 
     import importlib
 
     import mellea.telemetry.metrics
 
-    with patch("prometheus_client.start_http_server", mock_start_server):
-        importlib.reload(mellea.telemetry.metrics)
+    importlib.reload(mellea.telemetry.metrics)
 
-        from mellea.telemetry.metrics import _METRICS_OTLP, _PROMETHEUS_PORT
+    from mellea.telemetry.metrics import _METRICS_OTLP, _METRICS_PROMETHEUS
 
-        assert _PROMETHEUS_PORT == "9464"
-        assert _METRICS_OTLP is True
-        # Verify HTTP server was started
-        mock_start_server.assert_called_once()
+    assert _METRICS_PROMETHEUS is True
+    assert _METRICS_OTLP is True
 
 
 def test_prometheus_exporter_disabled_by_default(enable_metrics):
     """Test that Prometheus exporter is disabled by default."""
-    from mellea.telemetry.metrics import _PROMETHEUS_PORT
+    from mellea.telemetry.metrics import _METRICS_PROMETHEUS
 
-    assert _PROMETHEUS_PORT is None
+    assert _METRICS_PROMETHEUS is False
 
 
 def test_prometheus_exporter_with_console_exporter(monkeypatch):
     """Test that Prometheus works alongside console exporter."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
-    monkeypatch.setenv("OTEL_EXPORTER_PROMETHEUS_PORT", "9464")
+    monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
     monkeypatch.setenv("MELLEA_METRICS_CONSOLE", "true")
 
-    # Mock start_http_server
-    mock_start_server = MagicMock()
-
     import importlib
 
     import mellea.telemetry.metrics
 
-    with patch("prometheus_client.start_http_server", mock_start_server):
-        importlib.reload(mellea.telemetry.metrics)
+    importlib.reload(mellea.telemetry.metrics)
 
-        from mellea.telemetry.metrics import _METRICS_CONSOLE, _PROMETHEUS_PORT
+    from mellea.telemetry.metrics import _METRICS_CONSOLE, _METRICS_PROMETHEUS
 
-        assert _PROMETHEUS_PORT == "9464"
-        assert _METRICS_CONSOLE is True
-        mock_start_server.assert_called_once()
-
-
-def test_prometheus_exporter_generic_exception_warning(monkeypatch):
-    """Test that generic exceptions during Prometheus setup produce warning."""
-    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
-    monkeypatch.setenv("OTEL_EXPORTER_PROMETHEUS_PORT", "9464")
-
-    # Mock generic exception
-    mock_start_server = MagicMock(side_effect=RuntimeError("Unexpected error"))
-
-    import importlib
-
-    import mellea.telemetry.metrics
-
-    with patch("prometheus_client.start_http_server", mock_start_server):
-        with pytest.warns(
-            UserWarning,
-            match="Failed to initialize Prometheus metrics exporter.*Unexpected error",
-        ):
-            importlib.reload(mellea.telemetry.metrics)
+    assert _METRICS_PROMETHEUS is True
+    assert _METRICS_CONSOLE is True
 
 
 # Token Counter Tests
