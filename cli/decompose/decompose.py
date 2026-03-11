@@ -2,7 +2,7 @@ import json
 import keyword
 import re
 import shutil
-from enum import Enum
+from enum import StrEnum
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Annotated
