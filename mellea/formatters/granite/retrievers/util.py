@@ -24,6 +24,9 @@ def download_mtrag_corpus(target_dir: str, corpus_name: str) -> pathlib.Path:
 
     Returns:
         Path to the downloaded (or cached) file.
+
+    Raises:
+        ValueError: If ``corpus_name`` is not one of the supported corpus names.
     """
     corpus_names = ("cloud", "clapnq", "fiqa", "govt")
     if corpus_name not in corpus_names:
@@ -51,6 +54,10 @@ def read_mtrag_corpus(corpus_file: str | pathlib.Path) -> pa.Table:
     Returns:
         Documents from the corpus as a PyArrow table, with schema
         ``["id", "url", "title", "text"]``.
+
+    Raises:
+        TypeError: If the ID column cannot be identified or if no ``text`` column
+            is present in the corpus file.
     """
     if not isinstance(corpus_file, pathlib.Path):
         corpus_file = pathlib.Path(corpus_file)
@@ -96,6 +103,11 @@ def download_mtrag_embeddings(embedding_name: str, corpus_name: str, target_dir:
             or ``"govt"``.
         target_dir: Location where Parquet files named ``"part_001.parquet"``,
             ``"part_002.parquet"``, etc. will be written.
+
+    Raises:
+        ValueError: If ``corpus_name`` is not one of the supported corpus names, or
+            if no precomputed embeddings are found for the given corpus and embedding
+            model combination.
     """
     corpus_names = ("cloud", "clapnq", "fiqa", "govt")
     if corpus_name not in corpus_names:

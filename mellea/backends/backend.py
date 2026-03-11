@@ -27,6 +27,17 @@ class FormatterBackend(Backend, abc.ABC):
     The `mellea` library supports these legacy models primarily through prompt engineering surfaced via `FormatterBackends`.
     A `FormatterBackend` is a backend that uses hand-engineered prompts for rendering generative programming primitives to a model and parsing responses from the model back into `mellea`.
     By default, a `FormatterBackend` uses jinja2 templates for pretty-printing, and relies on the user's ad-hoc logic for parsing.
+
+    Args:
+        model_id (str | ModelIdentifier): The model identifier to use for generation.
+        formatter (ChatFormatter): The formatter used to convert components into prompts.
+        model_options (dict | None): Default model options; if ``None``, an empty dict
+            is used.
+
+    Attributes:
+        model_id (str | ModelIdentifier): The model identifier for this backend.
+        model_options (dict): The default model options for generation requests.
+        formatter (ChatFormatter): The formatter used to render components into prompts.
     """
 
     def __init__(

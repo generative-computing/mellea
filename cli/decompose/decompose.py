@@ -27,6 +27,10 @@ class DecompVersion(StrEnum):
 
     Newer versions must be declared last to ensure ``latest`` always resolves to
     the most recent template.
+
+    Attributes:
+        latest (str): Sentinel value that resolves to the last declared version.
+        v1 (str): Version 1 of the decomposition pipeline template.
     """
 
     latest = "latest"
@@ -283,6 +287,15 @@ def run(
         input_var: Optional list of user-input variable names (e.g. ``"DOC"``).
             Each name must be a valid Python identifier. Pass this option
             multiple times to define multiple variables.
+
+    Raises:
+        AssertionError: If ``out_name`` contains invalid characters, if
+            ``out_dir`` does not exist or is not a directory, or if any
+            ``input_var`` name is not a valid Python identifier.
+        ValueError: If a required input variable is missing from ``input_var``
+            or if circular dependencies are detected among subtasks.
+        Exception: Re-raised from the decomposition pipeline after cleaning up
+            any partially written output files.
     """
     try:
         from jinja2 import Environment, FileSystemLoader

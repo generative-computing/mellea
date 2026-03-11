@@ -9,7 +9,12 @@ from ..components.intrinsic import Intrinsic
 
 
 class LLMaJRequirement(Requirement):
-    """A requirement that always uses LLM-as-a-Judge. Any available constraint ALoRA will be ignored."""
+    """A requirement that always uses LLM-as-a-Judge. Any available constraint ALoRA will be ignored.
+
+    Attributes:
+        use_aloras (bool): Always ``False`` for this class; ALoRA adapters are
+            never used even if they are available.
+    """
 
     use_aloras: bool = False
 
@@ -44,7 +49,20 @@ def requirement_check_to_bool(x: CBlock | str) -> bool:
 
 
 class ALoraRequirement(Requirement, Intrinsic):
-    """A requirement that always uses an (possibly specified) ALora. If an exception is thrown during the ALora execution path, `mellea` will fall back to LLMaJ. But that is the only case where LLMaJ will be used."""
+    """A requirement validated by an ALoRA adapter; falls back to LLM-as-a-Judge only on error.
+
+    If an exception is thrown during the ALoRA execution path, ``mellea`` will
+    fall back to LLMaJ. That is the only case where LLMaJ will be used.
+
+    Args:
+        description (str): Human-readable requirement description.
+        intrinsic_name (str | None): Name of the ALoRA intrinsic to use.
+            Defaults to ``"requirement_check"``.
+
+    Attributes:
+        use_aloras (bool): Always ``True``; this class always attempts to use
+            ALoRA adapters for validation.
+    """
 
     def __init__(self, description: str, intrinsic_name: str | None = None):
         """A requirement that is validated by an ALora.
@@ -71,7 +89,7 @@ class ALoraRequirement(Requirement, Intrinsic):
 
 
 def reqify(r: str | Requirement) -> Requirement:
-    """Maps strings to Requirements.
+    """Map strings to Requirements.
 
     This is a utility method for functions that allow you to pass in Requirements as either explicit Requirement objects or strings that you intend to be interpreted as requirements.
 
@@ -80,6 +98,9 @@ def reqify(r: str | Requirement) -> Requirement:
 
     Returns:
         A ``Requirement`` instance.
+
+    Raises:
+        Exception: If ``r`` is neither a ``str`` nor a ``Requirement`` instance.
     """
     if type(r) is str:
         return Requirement(r)
@@ -148,6 +169,10 @@ def simple_validate(
 
     Returns:
         A validation function that takes a ``Context`` and returns a ``ValidationResult``.
+
+    Raises:
+        ValueError: If ``fn`` returns a type other than ``bool`` or
+            ``tuple[bool, str]``.
     """
 
     def validate(ctx: Context) -> ValidationResult:

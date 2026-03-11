@@ -27,7 +27,25 @@ from ..requirements.requirement import reqify
 
 
 class Instruction(Component[str]):
-    """The Instruction in an instruct/validate/repair loop."""
+    """The Instruction in an instruct/validate/repair loop.
+
+    Args:
+        description (str | CBlock | None): The task description shown to the model.
+        requirements (list[Requirement | str] | None): Constraints the output must satisfy.
+        icl_examples (list[str | CBlock] | None): In-context-learning examples.
+        grounding_context (dict[str, str | CBlock | Component] | None): Named context
+            passages injected into the prompt.
+        user_variables (dict[str, str] | None): Jinja2 variable substitutions applied
+            to all string parameters.
+        prefix (str | CBlock | None): A prefix prepended before the model's generation.
+        output_prefix (str | CBlock | None): A prefix prepended to the model's output token
+            stream (currently unsupported; must be ``None``).
+        images (list[ImageBlock] | None): Images to include in the prompt.
+
+    Attributes:
+        requirements (list[Requirement]): The resolved list of requirement instances
+            attached to this instruction.
+    """
 
     def __init__(
         self,
@@ -151,7 +169,13 @@ class Instruction(Component[str]):
         return filtered
 
     def format_for_llm(self) -> TemplateRepresentation:
-        """Formats the instruction for Formatter use."""
+        """Format this instruction for the language model.
+
+        Returns:
+            TemplateRepresentation: A template representation containing the
+            description, requirements, in-context examples, grounding context,
+            and optional prefix/repair fields.
+        """
         return TemplateRepresentation(
             obj=self,
             args={
@@ -178,7 +202,16 @@ class Instruction(Component[str]):
 
     @staticmethod
     def apply_user_dict_from_jinja(user_dict: dict[str, str], s: str) -> str:
-        """Treats s as a jinja string and user_dict as the template values dictionary."""
+        """Render a Jinja2 template string using the provided variable dictionary.
+
+        Args:
+            user_dict (dict[str, str]): Mapping of Jinja2 variable names to their
+                string replacement values.
+            s (str): A string treated as a Jinja2 template to be rendered.
+
+        Returns:
+            str: The rendered string with all Jinja2 placeholders substituted.
+        """
         assert s is not None
         return jinja2.Template(s).render(user_dict)
 
@@ -188,7 +221,16 @@ class Instruction(Component[str]):
         return self._requirements
 
     def copy_and_repair(self, repair_string: str) -> Instruction:
-        """Creates a copy of the instruction and adds/overwrites the repair string."""
+        """Create a deep copy of this instruction with the repair string set.
+
+        Args:
+            repair_string (str): The repair feedback string to attach, typically
+                describing which requirements failed and why.
+
+        Returns:
+            Instruction: A new ``Instruction`` identical to this one but with
+            ``_repair_string`` set to ``repair_string``.
+        """
         res = deepcopy(self)
         res._repair_string = repair_string
         return res

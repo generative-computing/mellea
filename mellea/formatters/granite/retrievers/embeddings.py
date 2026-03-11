@@ -217,7 +217,15 @@ def write_embeddings(
 
 
 class InMemoryRetriever:
-    """Simple retriever that keeps docs and embeddings in memory."""
+    """Simple retriever that keeps docs and embeddings in memory.
+
+    Args:
+        data_file_or_table: Parquet file of document snippets and embeddings, or an equivalent
+            in-memory PyArrow Table. Should have columns ``id``, ``begin``, ``end``, ``text``,
+            and ``embedding``.
+        embedding_model_name (str): Name of the Sentence Transformers model to use for embeddings.
+            Must match the model used to compute embeddings in the data file.
+    """
 
     def __init__(
         self,

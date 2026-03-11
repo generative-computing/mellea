@@ -24,7 +24,32 @@ from .chat_formatter import ChatFormatter
 
 
 class TemplateFormatter(ChatFormatter):
-    """Formatter that uses jinja2 templates."""
+    """Formatter that uses Jinja2 templates to render components into prompt strings.
+
+    Template discovery walks a configurable ``template_path`` and the built-in
+    templates directory. Results are optionally cached in a ``SimpleLRUCache``
+    for performance. Use this formatter when your backend requires hand-crafted
+    prompts rather than generic chat-message rendering.
+
+    Args:
+        model_id (str | ModelIdentifier): Describes the model for which templates will be looked up.
+            Should match the template directory structure.
+        template_path (str): An alternate location where templates can be found.
+            Will be preferred over all other template directories even if a less exact match is found.
+            Defaults to ``""``.
+        use_template_cache (bool): When ``True``, caches template lookup results. Set to ``False``
+            if you plan to change ``model_id`` or ``template_path`` after construction.
+            Defaults to ``True``.
+
+    Attributes:
+        model_id (str | ModelIdentifier): The model identifier used to locate
+            model-specific templates during rendering.
+
+    Example::
+
+        formatter = TemplateFormatter(model_id="my-model", template_path="/path/to/templates")
+        text = formatter.print(my_component)
+    """
 
     def __init__(
         self,
@@ -33,12 +58,20 @@ class TemplateFormatter(ChatFormatter):
         template_path: str = "",
         use_template_cache: bool = True,
     ):
-        """A TemplateFormatter use jinja2 templates.
+        """Initialise a ``TemplateFormatter``.
 
         Args:
-            model_id: Describes the model for which templates will be looked up. Should match the template dir structure.
-            template_path: Specify an alternate location where templates can be found. Will be preferred over all other template dirs even if a less exact match is found.
-            use_template_cache: Cache the location of the most recent templates so that future lookups don't need to be performed. Set to false if you plan on changing the model_id or template_path after the TemplateFormatter has been created.
+            model_id (str | ModelIdentifier): Describes the model for which
+                templates will be looked up. Should match the template
+                directory structure.
+            template_path (str): An alternate location where templates can be
+                found. Will be preferred over all other template directories
+                even if a less exact match is found. Defaults to ``""``.
+            use_template_cache (bool): When ``True``, caches the location of
+                the most recently used templates so that future lookups are
+                skipped. Set to ``False`` if you plan on changing ``model_id``
+                or ``template_path`` after the formatter has been created.
+                Defaults to ``True``.
         """
         self.model_id = model_id
         self._template_path: str = template_path
@@ -118,7 +151,14 @@ class TemplateFormatter(ChatFormatter):
                 return str(c)
 
     def print(self, c: Component | CBlock) -> str:
-        """Uses a jinja2 template to pretty-print components."""
+        """Render a component or code block to a string using a Jinja2 template.
+
+        Args:
+            c (Component | CBlock): The component or code block to render.
+
+        Returns:
+            str: The rendered string representation of the component.
+        """
         return self._stringify(c)
 
     def _load_template(self, repr: TemplateRepresentation) -> jinja2.Template:

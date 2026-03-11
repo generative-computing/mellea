@@ -91,12 +91,33 @@ def formatting_prompts_func(example):
 
 
 class SaveBestModelCallback(TrainerCallback):
-    """HuggingFace Trainer callback that saves the adapter at its best validation loss."""
+    """HuggingFace Trainer callback that saves the adapter at its best validation loss.
+
+    Attributes:
+        best_eval_loss (float): Lowest evaluation loss seen so far across all
+            evaluation steps. Initialised to ``float("inf")``.
+    """
 
     def __init__(self):
         self.best_eval_loss = float("inf")
 
     def on_evaluate(self, args, state, control, **kwargs):
+        """Save the adapter weights if the current evaluation loss is a new best.
+
+        Called automatically by the HuggingFace Trainer after each evaluation
+        step. Compares the current ``eval_loss`` from ``metrics`` against
+        ``best_eval_loss`` and, if lower, updates the stored best and saves the
+        model to ``args.output_dir``.
+
+        Args:
+            args: ``TrainingArguments`` instance with training configuration,
+                including ``output_dir``.
+            state: ``TrainerState`` instance with the current training state.
+            control: ``TrainerControl`` instance for controlling training flow.
+            **kwargs: Additional keyword arguments provided by the Trainer,
+                including ``"model"`` (the current PEFT model) and
+                ``"metrics"`` (a dict containing ``"eval_loss"``).
+        """
         model = kwargs["model"]
         metrics = kwargs["metrics"]
         eval_loss = metrics.get("eval_loss")
@@ -109,6 +130,18 @@ class SafeSaveTrainer(SFTTrainer):
     """SFTTrainer subclass that always saves models with safe serialization enabled."""
 
     def save_model(self, output_dir: str | None = None, _internal_call: bool = False):
+        """Save the model and tokenizer with safe serialization always enabled.
+
+        Overrides ``SFTTrainer.save_model`` to call ``save_pretrained`` with
+        ``safe_serialization=True``, ensuring weights are saved in safetensors
+        format rather than the legacy pickle-based format.
+
+        Args:
+            output_dir (str | None): Directory to save the model into. If
+                ``None``, the trainer's configured ``output_dir`` is used.
+            _internal_call (bool): Internal flag passed through from the Trainer
+                base class; not used by this override.
+        """
         if self.model is not None:
             self.model.save_pretrained(output_dir, safe_serialization=True)
             if self.tokenizer is not None:
@@ -151,6 +184,12 @@ def train_model(
         batch_size: Per-device training batch size.
         max_length: Maximum token sequence length.
         grad_accum: Gradient accumulation steps.
+
+    Raises:
+        ValueError: If ``device`` is not one of ``"auto"``, ``"cpu"``,
+            ``"cuda"``, or ``"mps"``.
+        RuntimeError: If the GPU has insufficient VRAM to load the model
+            (wraps ``NotImplementedError`` for meta tensor errors).
     """
     if prompt_file:
         # load the configurable variable invocation_prompt

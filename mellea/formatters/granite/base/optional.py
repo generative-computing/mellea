@@ -47,6 +47,10 @@ def nltk_check(feature_name: str):
 
     Args:
         feature_name: Name of the feature that requires NLTK, used in the error message.
+
+    Raises:
+        ImportError: If the ``nltk`` package is not installed, re-raised with
+            a descriptive message and installation instructions.
     """
     try:
         yield

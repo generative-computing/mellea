@@ -11,16 +11,45 @@ from ....core import CBlock, Component, ModelOutputThunk
 
 # TODO: Add support for passing in docs as model options.
 class Document(Component[str]):
-    """Documents should typically be used in a Message object."""
+    """A text passage with optional metadata for grounding model inputs.
+
+    Documents are typically attached to a ``Message`` via its ``documents``
+    parameter to enable retrieval-augmented generation (RAG) workflows.
+
+    Args:
+        text (str): The text content of the document.
+        title (str | None): An optional human-readable title for the document.
+        doc_id (str | None): An optional unique identifier for the document.
+
+    Attributes:
+        text (str): The text content of this document.
+        title (str | None): Human-readable title, or ``None`` if not set.
+        doc_id (str | None): Unique identifier, or ``None`` if not set.
+    """
 
     def __init__(self, text: str, title: str | None = None, doc_id: str | None = None):
-        """Create a document object. Should typically be used as a list in the `_docs` field of Message."""
+        """Create a document object. Should typically be used as a list in the ``_docs`` field of ``Message``.
+
+        Args:
+            text (str): The text content of the document.
+            title (str | None): An optional human-readable title.
+            doc_id (str | None): An optional unique identifier.
+        """
         self.text = text
         self.title = title
         self.doc_id = doc_id
 
     def parts(self) -> list[Component | CBlock]:
-        """The set of all the constituent parts of the `Component`."""
+        """Return the constituent parts of this document.
+
+        Returns:
+            list[Component | CBlock]: Not implemented by default; subclasses
+            should override this method.
+
+        Raises:
+            NotImplementedError: Always, since ``parts`` is not implemented for
+                the base ``Document`` class.
+        """
         raise NotImplementedError("parts isn't implemented by default")
 
     def format_for_llm(self) -> str:

@@ -127,7 +127,11 @@ class _ChatMessageBase(pydantic.BaseModel, NoDefaultsMixin):
 
 
 class UserMessage(_ChatMessageBase):
-    """User message for an IBM Granite model chat completion request."""
+    """User message for an IBM Granite model chat completion request.
+
+    Attributes:
+        role (str): Always ``"user"``, identifying the message sender.
+    """
 
     role: Literal["user"] = "user"
 
@@ -137,13 +141,29 @@ class DocumentMessage(_ChatMessageBase):
 
     Document message for an IBM Granite model (from the Ollama library) chat
     completion request.
+
+    Attributes:
+        role (str): A string matching the pattern ``"document <name>"``,
+            identifying this message as a document fragment.
     """
 
     role: Annotated[str, StringConstraints(pattern=r"^document .+$")]
 
 
 class ToolCall(pydantic.BaseModel, NoDefaultsMixin):
-    """Tool call entry format."""
+    """Represents a single tool-call entry produced by an assistant message.
+
+    Captures the identifier, name, and arguments of a tool invocation returned
+    by the model during a chat completion response.
+
+    Attributes:
+        id (str | None): An optional unique identifier for this tool call,
+            used to correlate calls with their results.
+        name (str): The name of the tool to invoke.
+        arguments (dict[str, Any] | None): A mapping of argument names to
+            values, conforming to the parameter schema of the associated tool
+            definition.
+    """
 
     id: str | None = None
     name: str
@@ -158,6 +178,13 @@ class AssistantMessage(_ChatMessageBase):
 
     Lowest-common-denominator assistant message for an IBM Granite model chat
     completion request.
+
+    Attributes:
+        role (str): Always ``"assistant"``, identifying the message sender.
+        tool_calls (list[ToolCall] | None): Optional list of tool calls
+            requested by the assistant during this turn.
+        reasoning_content (str | None): Optional chain-of-thought or reasoning
+            text produced by the model before the final response.
     """
 
     role: Literal["assistant"] = "assistant"
@@ -170,6 +197,10 @@ class ToolResultMessage(_ChatMessageBase):
 
     Message containing the result of a tool call in an IBM Granite model chat completion
     request.
+
+    Attributes:
+        role (str): Always ``"tool"``, identifying this as a tool-result message.
+        tool_call_id (str): The identifier of the tool call this message responds to.
     """
 
     role: Literal["tool"] = "tool"
@@ -177,13 +208,21 @@ class ToolResultMessage(_ChatMessageBase):
 
 
 class SystemMessage(_ChatMessageBase):
-    """System message for an IBM Granite model chat completion request."""
+    """System message for an IBM Granite model chat completion request.
+
+    Attributes:
+        role (str): Always ``"system"``, identifying this as a system-level instruction.
+    """
 
     role: Literal["system"] = "system"
 
 
 class DeveloperMessage(_ChatMessageBase):
-    """Developer system message for a chat completion request."""
+    """Developer system message for a chat completion request.
+
+    Attributes:
+        role (str): Always ``"developer"``, identifying this as a developer-role message.
+    """
 
     role: Literal["developer"] = "developer"
 
@@ -201,7 +240,15 @@ ChatMessage: TypeAlias = (
 
 
 class ToolDefinition(pydantic.BaseModel, NoDefaultsMixin):
-    """An entry in the ``tools`` list in an IBM Granite model chat completion request."""
+    """An entry in the ``tools`` list in an IBM Granite model chat completion request.
+
+    Attributes:
+        name (str): The name used to identify and invoke the tool.
+        description (str | None): An optional human-readable description of
+            what the tool does.
+        parameters (dict[str, Any] | None): An optional JSON Schema object
+            describing the tool's input parameters.
+    """
 
     name: str
     description: str | None = None
@@ -216,6 +263,12 @@ class Document(pydantic.BaseModel, NoDefaultsMixin):
 
     RAG documents, which in practice are usually snippets drawn from larger
     documents.
+
+    Attributes:
+        text (str): The textual content of the document snippet.
+        title (str | None): An optional title for the document.
+        doc_id (str | None): An optional string identifier for the document,
+            required by some backends such as vLLM.
     """
 
     text: str
@@ -230,6 +283,11 @@ class ChatTemplateKwargs(pydantic.BaseModel):
 
     Values that can appear in the ``chat_template_kwargs`` portion of a valid chat
     completion request for a Granite model.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic model configuration allowing
+            arbitrary types and extra fields to be passed through to
+            model-specific I/O processors.
     """
 
     model_config = pydantic.ConfigDict(
@@ -246,6 +304,16 @@ class VLLMExtraBody(pydantic.BaseModel, NoDefaultsMixin):
     Elements of `vllm.entrypoints.openai.protocol.ChatCompletionRequest` that
     are not part of OpenAI's protocol and need to be stuffed into the
     "extra_body" parameter of a chat completion request.
+
+    Attributes:
+        documents (list[Document] | None): RAG documents made accessible to
+            the model during generation, if the template supports RAG.
+        add_generation_prompt (bool): When ``True``, the generation prompt is
+            appended to the rendered chat template. Defaults to ``True``.
+        chat_template_kwargs (ChatTemplateKwargs | None): Additional keyword
+            arguments forwarded to the chat template renderer.
+        structured_outputs (dict | None): Optional JSON schema that constrains
+            the model's output format.
     """
 
     documents: list[Document] | None = Field(
@@ -304,6 +372,17 @@ class ChatCompletion(pydantic.BaseModel, NoDefaultsMixin):
 
     See the class `vllm.entrypoints.openai.protocol.ChatCompletionRequest` for
     more information.
+
+    Attributes:
+        messages (list[ChatMessage]): The ordered list of chat messages forming
+            the conversation history.
+        model (str | None): An optional model identifier specifying which model
+            to use for the completion.
+        tools (list[ToolDefinition] | None): An optional list of tool
+            definitions made available to the model during generation.
+        extra_body (VLLMExtraBody | None): Optional vLLM-specific parameters
+            not covered by the OpenAI protocol, such as documents and
+            chat-template kwargs.
     """
 
     messages: list[ChatMessage]
@@ -421,6 +500,13 @@ class Logprob(pydantic.BaseModel, NoDefaultsMixin):
 
     See the class `vllm.entrypoints.openai.protocol.Logprob` for
     more information.
+
+    Attributes:
+        logprob (float): The log-probability value for this token.
+        rank (int | None): The rank of this token among the top candidates,
+            if available.
+        decoded_token (str | None): The decoded string representation of the
+            token, if available.
     """
 
     logprob: float
@@ -438,6 +524,13 @@ class ChatCompletionLogProb(pydantic.BaseModel, NoDefaultsMixin):
 
     See the class `vllm.entrypoints.openai.protocol.ChatCompletionLogProb` for
     more information.
+
+    Attributes:
+        token (str): The decoded token string.
+        logprob (float): The log-probability of the token. Defaults to
+            ``-9999.0`` when not returned by the server.
+        bytes (list[int] | None): The UTF-8 byte values of the token,
+            if provided by the server.
     """
 
     token: str
@@ -453,6 +546,10 @@ class ChatCompletionLogProbsContent(ChatCompletionLogProb):
 
     See the class `vllm.entrypoints.openai.protocol.ChatCompletionLogProbsContent` for
     more information.
+
+    Attributes:
+        top_logprobs (list[ChatCompletionLogProb]): The list of top-k
+            candidate tokens and their log-probabilities at this position.
     """
 
     top_logprobs: list[ChatCompletionLogProb] = Field(default_factory=list)
@@ -466,6 +563,11 @@ class ChatCompletionLogProbs(pydantic.BaseModel, NoDefaultsMixin):
 
     See the class `vllm.entrypoints.openai.protocol.ChatCompletionLogProbs` for
     more information.
+
+    Attributes:
+        content (list[ChatCompletionLogProbsContent] | None): Per-token
+            log-probability entries for each generated token, or ``None`` if
+            logprobs were not requested.
     """
 
     content: list[ChatCompletionLogProbsContent] | None = None
@@ -479,6 +581,14 @@ class ChatCompletionResponseChoice(pydantic.BaseModel, NoDefaultsMixin):
 
     See the class `vllm.entrypoints.openai.protocol.ChatCompletionResponseChoice` for
     more information.
+
+    Attributes:
+        index (int): The zero-based index of this choice in the response.
+        message (ChatMessage): The generated message for this choice.
+        logprobs (ChatCompletionLogProbs | None): Token log-probabilities for
+            this choice, if they were requested.
+        finish_reason (str | None): The reason the model stopped generating.
+            Defaults to ``"stop"`` per the OpenAI specification.
     """
 
     index: int
@@ -496,6 +606,15 @@ class ChatCompletionResponse(pydantic.BaseModel, NoDefaultsMixin):
 
     See the class `vllm.entrypoints.openai.protocol.ChatCompletionResponse` for
     more information.
+
+    Attributes:
+        choices (list[ChatCompletionResponseChoice]): The list of generated
+            response choices returned by the model.
+        prompt_logprobs (list[dict[int, Logprob] | None] | None): Per-token
+            prompt log-probabilities returned by vLLM, if requested. This
+            field is not part of the OpenAI specification.
+        model_config (ConfigDict): Pydantic configuration allowing extra fields
+            to be passed through when transforming data.
     """
 
     choices: list[ChatCompletionResponseChoice]

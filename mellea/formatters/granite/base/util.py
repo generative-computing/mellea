@@ -52,6 +52,10 @@ def nltk_check(feature_name: str):
 
     Args:
         feature_name: Name of the feature that requires NLTK, used in the error message.
+
+    Raises:
+        ImportError: If the ``nltk`` package is not installed, re-raised with
+            a descriptive message and installation instructions.
     """
     try:
         yield
@@ -109,6 +113,11 @@ def load_transformers_lora(local_or_remote_path):
     Returns:
         Tuple of ``(model, tokenizer)`` where ``model`` is the loaded LoRA model and
         ``tokenizer`` is the corresponding HuggingFace tokenizer.
+
+    Raises:
+        ImportError: If ``peft`` or ``transformers`` packages are not installed.
+        NotImplementedError: If ``local_or_remote_path`` does not exist locally
+            (remote loading from the Hugging Face Hub is not yet implemented).
     """
     with import_optional("peft"):
         # Third Party
@@ -146,6 +155,14 @@ def chat_completion_request_to_transformers_inputs(
         Tuple of ``(generate_input, other_input)`` where ``generate_input`` contains
         kwargs to pass directly to ``generate()`` and ``other_input`` contains
         additional parameters for ``generate_with_transformers``.
+
+    Raises:
+        ImportError: If ``torch``, ``transformers``, or ``xgrammar`` packages
+            are not installed (the latter only when constrained decoding is used).
+        TypeError: If ``tokenizer.apply_chat_template()`` returns an unexpected type.
+        ValueError: If padding or end-of-sequence token IDs cannot be determined
+            from the tokenizer, or if a constrained-decoding request is made
+            without passing a ``tokenizer`` or ``model`` argument.
     """
     with import_optional("torch"):
         # Third Party

@@ -63,6 +63,7 @@
       {
         "tab": "API Reference",
         "pages": [
+          "api-reference",
           {
             "group": "mellea",
             "pages": [
@@ -70,6 +71,8 @@
                 "group": "backends",
                 "pages": [
                   "api/mellea/backends/backend",
+                  "api/mellea/backends/backends",
+                  "api/mellea/backends/bedrock",
                   "api/mellea/backends/cache",
                   "api/mellea/backends/dummy",
                   "api/mellea/backends/huggingface",
@@ -97,6 +100,7 @@
                 "pages": [
                   "api/mellea/core/backend",
                   "api/mellea/core/base",
+                  "api/mellea/core/core",
                   "api/mellea/core/formatter",
                   "api/mellea/core/requirement",
                   "api/mellea/core/sampling",
@@ -107,14 +111,74 @@
                 "group": "formatters",
                 "pages": [
                   "api/mellea/formatters/chat_formatter",
-                  "api/mellea/formatters/template_formatter"
+                  "api/mellea/formatters/formatters",
+                  "api/mellea/formatters/template_formatter",
+                  {
+                    "group": "granite",
+                    "pages": [
+                      {
+                        "group": "base",
+                        "pages": [
+                          "api/mellea/formatters/granite/base/base",
+                          "api/mellea/formatters/granite/base/io",
+                          "api/mellea/formatters/granite/base/optional",
+                          "api/mellea/formatters/granite/base/types",
+                          "api/mellea/formatters/granite/base/util"
+                        ]
+                      },
+                      {
+                        "group": "granite3",
+                        "pages": [
+                          "api/mellea/formatters/granite/granite3/constants",
+                          "api/mellea/formatters/granite/granite3/input",
+                          "api/mellea/formatters/granite/granite3/output",
+                          "api/mellea/formatters/granite/granite3/types",
+                          {
+                            "group": "granite32",
+                            "pages": [
+                              "api/mellea/formatters/granite/granite3/granite32/input",
+                              "api/mellea/formatters/granite/granite3/granite32/output",
+                              "api/mellea/formatters/granite/granite3/granite32/types"
+                            ]
+                          },
+                          {
+                            "group": "granite33",
+                            "pages": [
+                              "api/mellea/formatters/granite/granite3/granite33/input",
+                              "api/mellea/formatters/granite/granite3/granite33/output",
+                              "api/mellea/formatters/granite/granite3/granite33/types"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "group": "intrinsics",
+                        "pages": [
+                          "api/mellea/formatters/granite/intrinsics/input",
+                          "api/mellea/formatters/granite/intrinsics/json_util",
+                          "api/mellea/formatters/granite/intrinsics/output",
+                          "api/mellea/formatters/granite/intrinsics/util"
+                        ]
+                      },
+                      {
+                        "group": "retrievers",
+                        "pages": [
+                          "api/mellea/formatters/granite/retrievers/elasticsearch",
+                          "api/mellea/formatters/granite/retrievers/embeddings",
+                          "api/mellea/formatters/granite/retrievers/util"
+                        ]
+                      }
+                    ]
+                  }
                 ]
               },
               {
                 "group": "helpers",
                 "pages": [
                   "api/mellea/helpers/async_helpers",
-                  "api/mellea/helpers/openai_compatible_helpers"
+                  "api/mellea/helpers/helpers",
+                  "api/mellea/helpers/openai_compatible_helpers",
+                  "api/mellea/helpers/server_type"
                 ]
               },
               {
@@ -123,6 +187,7 @@
                   "api/mellea/stdlib/context",
                   "api/mellea/stdlib/functional",
                   "api/mellea/stdlib/session",
+                  "api/mellea/stdlib/stdlib",
                   {
                     "group": "components",
                     "pages": [
@@ -131,6 +196,7 @@
                       "api/mellea/stdlib/components/instruction",
                       "api/mellea/stdlib/components/mify",
                       "api/mellea/stdlib/components/mobject",
+                      "api/mellea/stdlib/components/react",
                       "api/mellea/stdlib/components/simple",
                       "api/mellea/stdlib/components/unit_test_eval",
                       {
@@ -147,6 +213,12 @@
                           "api/mellea/stdlib/components/intrinsic/rag"
                         ]
                       }
+                    ]
+                  },
+                  {
+                    "group": "frameworks",
+                    "pages": [
+                      "api/mellea/stdlib/frameworks/react"
                     ]
                   },
                   {
@@ -186,6 +258,15 @@
                     ]
                   }
                 ]
+              },
+              {
+                "group": "telemetry",
+                "pages": [
+                  "api/mellea/telemetry/backend_instrumentation",
+                  "api/mellea/telemetry/metrics",
+                  "api/mellea/telemetry/telemetry",
+                  "api/mellea/telemetry/tracing"
+                ]
               }
             ]
           },
@@ -197,6 +278,8 @@
                 "group": "alora",
                 "pages": [
                   "api/cli/alora/commands",
+                  "api/cli/alora/intrinsic_uploader",
+                  "api/cli/alora/readme_generator",
                   "api/cli/alora/train",
                   "api/cli/alora/upload"
                 ]
@@ -204,6 +287,7 @@
               {
                 "group": "decompose",
                 "pages": [
+                  "api/cli/decompose/__init__",
                   "api/cli/decompose/decompose",
                   "api/cli/decompose/pipeline",
                   "api/cli/decompose/utils"
@@ -213,6 +297,7 @@
                 "group": "eval",
                 "pages": [
                   "api/cli/eval/commands",
+                  "api/cli/eval/eval",
                   "api/cli/eval/runner"
                 ]
               }

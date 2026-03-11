@@ -65,7 +65,33 @@ format: None = None  # typing this variable in order to shadow the global format
 
 
 class OpenAIBackend(FormatterBackend):
-    """A generic OpenAI compatible backend."""
+    """A generic OpenAI compatible backend.
+
+    Args:
+        model_id (str | ModelIdentifier): OpenAI-compatible model identifier.
+            Defaults to ``model_ids.OPENAI_GPT_5_1``.
+        formatter (ChatFormatter | None): Formatter for rendering components.
+            Defaults to ``TemplateFormatter``.
+        base_url (str | None): Base URL for the API endpoint; defaults to the
+            standard OpenAI endpoint if not set.
+        model_options (dict | None): Default model options for generation requests.
+        default_to_constraint_checking_alora (bool): If ``False``, deactivates aLoRA
+            constraint checking; primarily for benchmarking and debugging.
+        api_key (str | None): API key; falls back to ``OPENAI_API_KEY`` env var.
+        kwargs: Additional keyword arguments forwarded to the OpenAI client.
+
+    Attributes:
+        to_mellea_model_opts_map_chats (dict): Mapping from chat-endpoint option names
+            to Mellea ``ModelOption`` sentinel keys.
+        from_mellea_model_opts_map_chats (dict): Mapping from Mellea sentinel keys to
+            chat-endpoint option names.
+        to_mellea_model_opts_map_completions (dict): Mapping from completions-endpoint
+            option names to Mellea ``ModelOption`` sentinel keys.
+        from_mellea_model_opts_map_completions (dict): Mapping from Mellea sentinel keys
+            to completions-endpoint option names.
+        default_to_constraint_checking_alora (bool): Whether aLoRA constraint checking
+            is enabled by default.
+    """
 
     def __init__(
         self,
@@ -206,15 +232,29 @@ class OpenAIBackend(FormatterBackend):
 
     @staticmethod
     def filter_openai_client_kwargs(**kwargs) -> dict:
-        """Filter kwargs to only include valid OpenAI client parameters."""
+        """Filter kwargs to only include valid OpenAI client constructor parameters.
+
+        Args:
+            kwargs: Arbitrary keyword arguments to filter.
+
+        Returns:
+            dict: A dict containing only keys accepted by ``openai.OpenAI.__init__``.
+        """
         openai_params = set(inspect.signature(openai.OpenAI.__init__).parameters.keys())  # type: ignore
         openai_params.discard("self")  # Remove 'self' parameter
         return {k: v for k, v in kwargs.items() if k in openai_params}
 
     def filter_chat_completions_kwargs(self, model_options: dict) -> dict:
-        """Filter kwargs to only include valid OpenAI chat.completions.create parameters.
+        """Filter model options to only include valid OpenAI chat completions parameters.
 
-        https://platform.openai.com/docs/api-reference/chat/create
+        See https://platform.openai.com/docs/api-reference/chat/create for the full
+        list of accepted parameters.
+
+        Args:
+            model_options (dict): Model options dict that may contain non-chat keys.
+
+        Returns:
+            dict: A dict containing only keys accepted by ``chat.completions.create``.
         """
         from openai.resources.chat.completions import Completions
 
@@ -223,9 +263,16 @@ class OpenAIBackend(FormatterBackend):
         return {k: v for k, v in model_options.items() if k in chat_params}
 
     def filter_completions_kwargs(self, model_options: dict) -> dict:
-        """Filter kwargs to only include valid OpenAI completions.create parameters.
+        """Filter model options to only include valid OpenAI completions parameters.
 
-        https://platform.openai.com/docs/api-reference/completions
+        See https://platform.openai.com/docs/api-reference/completions for the full
+        list of accepted parameters.
+
+        Args:
+            model_options (dict): Model options dict that may contain non-completions keys.
+
+        Returns:
+            dict: A dict containing only keys accepted by ``completions.create``.
         """
         from openai.resources.completions import Completions
 
@@ -303,7 +350,25 @@ class OpenAIBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """See `generate_from_chat_context`."""
+        """Generate a completion for ``action`` given ``ctx`` via the OpenAI chat API.
+
+        Delegates to ``generate_from_chat_context``. Only chat contexts are supported.
+
+        Args:
+            action (Component[C] | CBlock): The component or content block to generate
+                a completion for.
+            ctx (Context): The current generation context (must be a chat context).
+            format (type[BaseModelSubclass] | None): Optional Pydantic model class for
+                structured/constrained output decoding.
+            model_options (dict | None): Per-call model options that override the
+                backend's defaults.
+            tool_calls (bool): If ``True``, expose available tools to the model and
+                parse tool-call responses.
+
+        Returns:
+            tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
+                and an updated context that includes ``action`` and the new output.
+        """
         from ..telemetry.backend_instrumentation import start_generate_span
 
         assert ctx.is_chat_context, NotImplementedError(
@@ -342,7 +407,24 @@ class OpenAIBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generates a new completion from the provided Context using this backend's `Formatter`."""
+        """Generate a new completion from the provided Context using this backend's ``Formatter``.
+
+        Formats the context and action into OpenAI-compatible chat messages, submits the
+        request asynchronously, and returns a thunk that lazily resolves the output.
+
+        Args:
+            action (Component[C] | CBlock): The component or content block to generate
+                a completion for.
+            ctx (Context): The current generation context.
+            _format (type[BaseModelSubclass] | None): Optional Pydantic model class for
+                structured output decoding.
+            model_options (dict | None): Per-call model options.
+            tool_calls (bool): If ``True``, expose available tools and parse responses.
+
+        Returns:
+            tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
+                and an updated context that includes ``action`` and the new output.
+        """
         await self.do_generate_walk(action)
 
         mot = await self._generate_from_chat_context_standard(
@@ -508,9 +590,15 @@ class OpenAIBackend(FormatterBackend):
     async def processing(
         self, mot: ModelOutputThunk, chunk: ChatCompletion | ChatCompletionChunk
     ):
-        """Called during generation to add information from a single ChatCompletion or ChatCompletionChunk to the ModelOutputThunk.
+        """Accumulate content from a single OpenAI response object into the output thunk.
 
-        For OpenAI, tool call parsing is handled in the post processing step.
+        Called for each ``ChatCompletion`` (non-streaming) or ``ChatCompletionChunk``
+        (streaming). Tool call parsing is deferred to ``post_processing``.
+
+        Args:
+            mot (ModelOutputThunk): The output thunk being populated.
+            chunk (ChatCompletion | ChatCompletionChunk): A single response object or
+                streaming delta from the OpenAI API.
         """
         if mot._thinking is None:
             mot._thinking = ""
@@ -568,7 +656,22 @@ class OpenAIBackend(FormatterBackend):
         seed,
         _format,
     ):
-        """Called when generation is done."""
+        """Finalize the output thunk after OpenAI generation completes.
+
+        Reconstructs a merged chat response from streaming chunks if applicable,
+        extracts any tool call requests, records token usage metrics, emits telemetry,
+        and attaches the generate log.
+
+        Args:
+            mot (ModelOutputThunk): The output thunk to finalize.
+            tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
+            conversation (list[dict]): The chat conversation sent to the model,
+                used for logging.
+            thinking: The reasoning effort level passed to the model, or ``None``
+                if reasoning mode was not enabled.
+            seed: The random seed used during generation, or ``None``.
+            _format: The structured output format class used during generation, if any.
+        """
         # Reconstruct the chat_response from chunks if streamed.
         streamed_chunks = mot._meta.get("oai_chat_response_streamed", None)
         if streamed_chunks is not None:
@@ -692,7 +795,26 @@ class OpenAIBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
-        """Generate using the completions api. Gives the input provided to the model without templating."""
+        """Generate completions for multiple actions without chat templating via the OpenAI completions API.
+
+        Passes formatted prompt strings directly to the completions endpoint.
+        Tool calling is not supported on this endpoint.
+
+        Args:
+            actions (Sequence[Component[C] | CBlock]): Actions to generate completions for.
+            ctx (Context): The current generation context.
+            format (type[BaseModelSubclass] | None): Optional Pydantic model for
+                structured output; passed as a guided-decoding parameter.
+            model_options (dict | None): Per-call model options.
+            tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
+
+        Returns:
+            list[ModelOutputThunk]: A list of model output thunks, one per action.
+
+        Raises:
+            openai.BadRequestError: If the request is invalid (e.g. when targeting an
+                Ollama server that does not support batched completion requests).
+        """
         await self.do_generate_walks(list(actions))
 
         extra_body = {}

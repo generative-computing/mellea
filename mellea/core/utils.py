@@ -20,6 +20,11 @@ class RESTHandler(logging.Handler):
     Sends log records as JSON to ``/api/receive`` when the ``FLOG`` environment
     variable is set. Failures are silently suppressed to avoid disrupting the
     application.
+
+    Attributes:
+        api_url (str): The URL of the REST endpoint that receives log records.
+        method (str): The HTTP method used when sending records (default ``"POST"``).
+        headers (dict): HTTP headers sent with each request; defaults to ``{"Content-Type": "application/json"}``.
     """
 
     def __init__(self, api_url, method="POST", headers=None):
@@ -30,7 +35,13 @@ class RESTHandler(logging.Handler):
         self.headers = headers or {"Content-Type": "application/json"}
 
     def emit(self, record):
-        """Attempts to emit a record to FLOG, or silently fails."""
+        """Forwards a log record to the REST endpoint when the ``FLOG`` environment variable is set.
+
+        Silently suppresses any network or HTTP errors to avoid disrupting the application.
+
+        Args:
+            record (logging.LogRecord): The log record to forward.
+        """
         if os.environ.get("FLOG"):
             log_data = self.format(record)
             try:
@@ -54,7 +65,14 @@ class JsonFormatter(logging.Formatter):
     """
 
     def format(self, record):  # type: ignore
-        """Formats record as a JSON serializable object."""
+        """Formats a log record as a JSON-serialisable dictionary.
+
+        Includes timestamp, level, message, module, function name, line number,
+        process ID, thread ID, and exception info if present.
+
+        Args:
+            record (logging.LogRecord): The log record to format.
+        """
         log_record = {
             "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,
@@ -71,7 +89,17 @@ class JsonFormatter(logging.Formatter):
 
 
 class CustomFormatter(logging.Formatter):
-    """A nice custom formatter copied from [https://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output](Sergey Pleshakov's post on StackOvervlow)."""
+    """A nice custom formatter copied from [https://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output](Sergey Pleshakov's post on StackOvervlow).
+
+    Attributes:
+        cyan (str): ANSI escape code for cyan text, used for DEBUG messages.
+        grey (str): ANSI escape code for grey text, used for INFO messages.
+        yellow (str): ANSI escape code for yellow text, used for WARNING messages.
+        red (str): ANSI escape code for red text, used for ERROR messages.
+        bold_red (str): ANSI escape code for bold red text, used for CRITICAL messages.
+        reset (str): ANSI escape code to reset text colour.
+        FORMATS (dict): Mapping from logging level integer to the colour-formatted format string.
+    """
 
     cyan = "\033[96m"  # Cyan
     grey = "\x1b[38;20m"
@@ -90,7 +118,11 @@ class CustomFormatter(logging.Formatter):
     }
 
     def format(self, record):
-        """The format fn."""
+        """Formats a log record using a colour-coded ANSI format string based on the record's log level.
+
+        Args:
+            record (logging.LogRecord): The log record to format.
+        """
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(log_fmt, datefmt="%H:%M:%S")
         return formatter.format(record)
@@ -103,6 +135,17 @@ class FancyLogger:
     defaults to ``INFO`` but can be raised to ``DEBUG`` by setting the ``DEBUG``
     environment variable. When the ``FLOG`` environment variable is set, records are
     also forwarded to a local ``/api/receive`` REST endpoint via ``RESTHandler``.
+
+    Attributes:
+        logger (logging.Logger | None): The shared ``logging.Logger`` instance; ``None`` until first call to ``get_logger()``.
+        CRITICAL (int): Numeric level for critical log messages (50).
+        FATAL (int): Alias for ``CRITICAL`` (50).
+        ERROR (int): Numeric level for error log messages (40).
+        WARNING (int): Numeric level for warning log messages (30).
+        WARN (int): Alias for ``WARNING`` (30).
+        INFO (int): Numeric level for informational log messages (20).
+        DEBUG (int): Numeric level for debug log messages (10).
+        NOTSET (int): Numeric level meaning no level is set (0).
     """
 
     logger = None
