@@ -123,12 +123,8 @@ def decompose(
         m_session, task_prompt, enforce_same_words=False
     ).parse()
 
-    constraint_val_strategy: dict[
-        str, dict[Literal["val_strategy"], Literal["code", "llm"]]
-    ] = {
-        cons_key: {
-            "val_strategy": validation_decision.generate(m_session, cons_key).parse()
-        }
+    constraint_validation_strategies: dict[str, Literal["code", "llm"]] = {
+        cons_key: validation_decision.generate(m_session, cons_key).parse() or "llm"
         for cons_key in task_prompt_constraints
     }
 
@@ -168,9 +164,9 @@ def decompose(
                     "constraint": cons_str,
                     "val_strategy": constraint_val_data[cons_str]["val_strategy"],
                     "val_fn_name": f"val_fn_{task_prompt_constraints.index(cons_str) + 1}",
-                    # >> Always include generated "val_fn" code (experimental)
+                    # Always include generated "val_fn" code (experimental)
                     "val_fn": constraint_val_data[cons_str]["val_fn"],
-                    # >> Include generated "val_fn" code only for the last subtask (experimental)
+                    # Include generated "val_fn" code only for the last subtask (experimental)
                     # "val_fn": constraint_val_data[cons_str]["val_fn"]
                     # if subtask_i + 1 == len(subtask_prompts_with_constraints)
                     # else None,
