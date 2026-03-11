@@ -1,6 +1,7 @@
 """Helper for event loop management. Allows consistently running async generate requests in sync code."""
 
 import asyncio
+import os
 import threading
 from collections.abc import Coroutine
 from typing import Any, TypeVar
@@ -13,17 +14,31 @@ R = TypeVar("R")
 class _EventLoopHandler:
     """A class that handles the event loop for Mellea code. Do not directly instantiate this. Use `_run_async_in_thread`."""
 
-    def __init__(self):
-        """Instantiates an EventLoopHandler. Used to ensure consistency when calling async code from sync code in Mellea.
-
-        Do not instantiate this class. Rely on the exported `_run_async_in_thread` function.
-        """
+    def _event_loop_setup(self):
+        """Sets up the event loop and thread."""
+        # This code lives in a helper function since both __init__ and _reinit_if_forked
+        # will need to use it.
+        self._pid = os.getpid()  # Store the pid in case users fork this process.
         self._event_loop = asyncio.new_event_loop()
         self._thread: threading.Thread = threading.Thread(  # type: ignore[annotation-unchecked]
             target=self._event_loop.run_forever,
             daemon=True,  # type: ignore
         )
         self._thread.start()
+
+    def __init__(self):
+        """Instantiates an EventLoopHandler. Used to ensure consistency when calling async code from sync code in Mellea.
+
+        Do not instantiate this class. Rely on the exported `_run_async_in_thread` function.
+        """
+        self._event_loop_setup()
+
+    def _reinit_if_forked(self) -> None:
+        """Reinitialize the event loop and thread if we're in a forked child to prevent hanging on awaited tasks."""
+        if os.getpid() != self._pid:
+            # If the process has been forked, reset the event loop and thread.
+            # Don't cleanup the parent's objects.
+            self._event_loop_setup()
 
     def __del__(self):
         """Delete the event loop handler."""
@@ -55,6 +70,7 @@ class _EventLoopHandler:
 
     def __call__(self, co: Coroutine[Any, Any, R]) -> R:
         """Runs the coroutine in the event loop."""
+        self._reinit_if_forked()
         if self._event_loop == get_current_event_loop():
             # If this gets called from the same event loop, launch in a separate thread to prevent blocking.
             return _EventLoopHandler()(co)
