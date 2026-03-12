@@ -182,7 +182,7 @@ def generate_validated_qiskit_code(
             req(
                 "Code must pass Qiskit migration validation (QKT rules)",
                 validation_fn=simple_validate(validate_qiskit_migration),
-            ),
+            )
         ],
         strategy=RepairTemplateStrategy(loop_budget=max_repair_attempts),
         return_sampling_results=True,
