@@ -56,7 +56,7 @@ class JsonFormatter(logging.Formatter):
 
 
 class CustomFormatter(logging.Formatter):
-    """A nice custom formatter copied from [https://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output](Sergey Pleshakov's post on StackOvervlow)."""
+    """A nice custom formatter copied from [Sergey Pleshakov's post on StackOverflow](https://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output)."""
 
     cyan = "\033[96m"  # Cyan
     grey = "\x1b[38;20m"

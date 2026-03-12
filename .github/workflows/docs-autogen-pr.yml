@@ -1,10 +1,13 @@
-name: Auto-generate docs PR (PyPI mellea)
+name: Generate API Documentation
 
+# TODO: Re-enable once branch strategy is agreed (main vs dedicated docs branch)
+# and integration with the new uv-based tooling is validated end-to-end. See PR #611.
 on:
-  push:
-    tags:
-      - "v*"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      enabled:
+        description: 'This workflow is currently disabled pending branch strategy decision'
+        required: false
 
 permissions:
   contents: write
@@ -15,70 +18,76 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  docs_autogen:
+  generate-docs:
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      
+      # Use native setup-uv with caching
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
-          cache: "pip"
-
-      - name: Resolve version from tag
-        id: ver
-        shell: bash
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      
+      # Check lock file is up to date (determinism check)
+      - name: Check lock file is up to date
         run: |
-          set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"          # e.g. v0.3.0
-          VERSION="${TAG#v}"               # 0.3.0
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Using version: $VERSION"
-
-      - name: Install tooling dependencies (decorator deps etc.)
+          uv lock --check
+          if ! git diff --exit-code uv.lock; then
+            echo "ERROR: uv.lock is out of sync. Run 'uv lock' locally."
+            exit 1
+          fi
+      
+      # Extract version from tag
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+      # Build wheel from local source
+      - name: Build wheel
+        run: uv build --wheel
+      
+      # Generate API documentation using build.py wrapper
+      - name: Generate API documentation
         run: |
-          python -m pip install --upgrade pip
-          pip install -r tooling/docs-autogen/requirements.txt || true
-
-      - name: Generate API docs + merge docs.json (install-mode)
+          WHEEL=$(ls dist/*.whl | head -n1)
+          uv run --isolated --with "${WHEEL}" --with mdxify --with griffe \
+            python tooling/docs-autogen/build.py \
+            --version ${{ steps.version.outputs.VERSION }} \
+            --no-venv
+      
+      # Validate documentation with quality thresholds
+      - name: Validate documentation
         run: |
-          set -euxo pipefail
-          python3 tooling/docs-autogen/generate-ast.py \
-            --docs-json docs/docs/docs.json \
-            --docs-root docs/docs \
-            --pypi-name mellea \
-            --pypi-version "${{ steps.ver.outputs.version }}"
-
-      - name: Decorate API MDX (SidebarFix + pills)
-        run: |
-          set -euxo pipefail
-          python3 tooling/docs-autogen/decorate_api_mdx.py \
-            --docs-root docs/docs
-
-      - name: Create Pull Request (only if there are changes)
-        id: cpr
+          uv run --isolated --with griffe \
+            python tooling/docs-autogen/audit_coverage.py \
+            --docs-dir docs/docs/api \
+            --threshold 80.0
+      
+      # Create Pull Request with generated docs
+      - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
-          commit-message: "docs: auto-generate (PyPI mellea ${{ steps.ver.outputs.version }})"
-          title: "docs: auto-generate (PyPI mellea ${{ steps.ver.outputs.version }})"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "docs: update API documentation for ${{ steps.version.outputs.VERSION }}"
+          title: "docs: API documentation for v${{ steps.version.outputs.VERSION }}"
           body: |
-            This PR was automatically generated for tag `${{ steps.ver.outputs.tag }}`.
-
-            Target PyPI version: `${{ steps.ver.outputs.version }}`
-          branch: "automation/docs-autogen-${{ steps.ver.outputs.version }}"
+            Auto-generated API documentation for version ${{ steps.version.outputs.VERSION }}
+            
+            Generated from tag: ${{ github.ref }}
+            
+            ## Changes
+            - Updated API documentation from local wheel build
+            - Validated coverage meets 80% threshold
+          branch: docs/api-${{ steps.version.outputs.VERSION }}
+          base: main
           delete-branch: true
           labels: |
             documentation
             automation
 
-      - name: Cleanup local tooling environment (always)
-        if: always()
-        run: |
-          rm -rf .venv-docs-autogen .mdxify-run-cwd || true
-          rm -rf docs/api || true

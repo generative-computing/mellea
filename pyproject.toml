@@ -152,6 +152,9 @@ dev = [
     {include-group = "typecheck"},
     {include-group = "build"},
     {include-group = "release"},
+    "griffe>=2.0.0",
+    "mdxify>=0.2.37",
+    "poethepoet>=0.42.1",
 ]
 
 # Documentation and notebooks
@@ -166,6 +169,47 @@ docs = [
     "sphinx-autodoc-typehints",
     "sphinx_mdinclude",
 ]
+
+# -----------------------------
+# poethepoet - Task Runner
+# -----------------------------
+# Run tasks with: uv run poe <task>
+
+[tool.poe.tasks]
+
+[tool.poe.tasks.apidocs]
+cmd = "python tooling/docs-autogen/build.py"
+help = "Generate + decorate API docs (version auto-detected from pyproject.toml)"
+
+[tool.poe.tasks.apidocs-clean]
+shell = "rm -rf docs/docs/api docs/docs/api-reference.mdx .venv-docs-autogen"
+help = "Remove all generated API docs and build artefacts"
+
+[tool.poe.tasks.apidocs-validate]
+cmd = "python tooling/docs-autogen/validate.py docs/docs/api --coverage-threshold 80"
+help = "Validate generated API docs (coverage, MDX syntax, links)"
+
+[tool.poe.tasks.apidocs-test]
+cmd = "pytest tooling/docs-autogen/"
+help = "Run docs tooling unit tests"
+
+[tool.poe.tasks.apidocs-orphans]
+cmd = "python tooling/docs-autogen/audit_coverage.py --orphans"
+help = "Find MDX files not referenced in docs/mint.json navigation"
+
+[tool.poe.tasks.apidocs-quality]
+cmd = "python tooling/docs-autogen/audit_coverage.py --quality"
+help = "Audit docstring quality for documented public symbols including methods (use --no-methods to skip class methods)"
+
+[tool.poe.tasks.apidocs-preview]
+shell = """
+set -e
+PREVIEW_DIR=/tmp/mellea-preview
+python tooling/docs-autogen/build.py --output-dir "$PREVIEW_DIR/api"
+python tooling/docs-autogen/audit_coverage.py --quality \
+  --docs-dir "$PREVIEW_DIR/api"
+"""
+help = "Generate fresh API docs to /tmp/mellea-preview and audit quality."
 
 # -----------------------------
 # Ruff - Linting and Formatting

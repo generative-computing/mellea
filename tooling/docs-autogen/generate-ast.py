@@ -7,9 +7,8 @@ Key fix vs your prior script:
     shadowed by repo-local ./mellea or ./cli packages.
 
 Pipeline:
-  1) Create/Reuse venv: <repo-root>/.venv-docs-autogen
-  2) pip install: mdxify + mellea (optionally pinned)
-  3) Run mdxify --all for root modules: mellea, cli into STAGING: <repo-root>/docs/api/<pkg>
+  1) Use current Python environment (assumes mdxify is installed)
+  2) Run mdxify --all for root modules: mellea, cli into STAGING: <repo-root>/docs/api/<pkg>
   4) Reorganize flat mdxify output into nested folders
   5) Rename __init__.mdx -> <foldername>.mdx (dedupe if identical)
   6) Update frontmatter (title/sidebarTitle/description) from H1 + first paragraph
@@ -108,25 +107,28 @@ def is_meaningful_body_line(line: str) -> bool:
     return True
 
 
-def find_docs_json(cli_path: str | None) -> Path:
+def find_docs_json(cli_path: str | None, search_root: Path | None = None) -> Path:
     if cli_path:
         p = Path(cli_path)
         if not p.is_absolute():
-            p = (REPO_ROOT / p).resolve()
+            root = search_root if search_root is not None else REPO_ROOT
+            p = (root / p).resolve()
         if not p.exists():
             raise FileNotFoundError(f"--docs-json path not found: {p}")
         return p
 
+    root = search_root if search_root is not None else REPO_ROOT
     candidates = [
-        REPO_ROOT / "docs.json",
-        REPO_ROOT / "docs" / "docs.json",
-        REPO_ROOT / "docs" / "docs" / "docs.json",
+        root / "docs.json",
+        root / "docs" / "docs.json",
+        root / "docs" / "docs" / "docs.json",
     ]
     for c in candidates:
         if c.exists():
             return c
     raise FileNotFoundError(
-        "Could not locate docs.json. Pass --docs-json explicitly, e.g. --docs-json docs/docs/docs.json"
+        f"Could not locate docs.json under {root}. "
+        "Pass --docs-json explicitly, e.g. --docs-json docs/docs/docs.json"
     )
 
 
@@ -172,19 +174,32 @@ def ensure_venv() -> Path:
 
 def pip_install(venv_python: Path, pypi_name: str, pypi_version: str | None) -> None:
     ver = normalize_version(pypi_version)
-    spec = pypi_name if not ver else f"{pypi_name}=={ver}"
+    # If no version specified, install from local source (for development)
+    # Otherwise install from PyPI with specified version
+    if not ver:
+        spec = "."  # Install from current directory
+        print(
+            f"📦 Installing into venv: mdxify + {pypi_name} (from local source)",
+            flush=True,
+        )
+    else:
+        spec = f"{pypi_name}=={ver}"
+        print(f"📦 Installing into venv: mdxify + {spec}", flush=True)
 
-    print(f"📦 Installing into venv: mdxify + {spec}", flush=True)
     subprocess.run([str(venv_python), "-m", "pip", "install", "-U", "pip"], check=True)
     subprocess.run(
-        [str(venv_python), "-m", "pip", "install", "-U", "mdxify", spec], check=True
+        [str(venv_python), "-m", "pip", "install", "-U", "mdxify", spec],
+        check=True,
+        cwd=str(REPO_ROOT) if not ver else None,
     )
 
 
 # -----------------------------
 # mdxify generation
 # -----------------------------
-def run_mdxify_generation(venv_python: Path, root_module: str) -> None:
+def run_mdxify_generation(
+    venv_python: Path, root_module: str, source_root: Path | None = None
+) -> None:
     output_dir = STAGING_API_DIR / root_module
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -213,9 +228,15 @@ def run_mdxify_generation(venv_python: Path, root_module: str) -> None:
         REPO_URL,
     ]
 
-    # Ensure PYTHONPATH doesn't accidentally include repo roots
     env = os.environ.copy()
-    env.pop("PYTHONPATH", None)
+    if source_root is not None:
+        # Point mdxify at the external source tree so it imports the right package.
+        # We set PYTHONPATH rather than clearing it so the venv site-packages
+        # (mdxify itself) remain importable.
+        env["PYTHONPATH"] = str(source_root)
+    else:
+        # Default: clear PYTHONPATH so the repo-local packages don't shadow site-packages
+        env.pop("PYTHONPATH", None)
 
     subprocess.run(cmd, check=True, text=True, cwd=str(MDXIFY_CWD), env=env)
     print(f"✅ Successfully generated docs for {root_module}", flush=True)
@@ -490,6 +511,176 @@ def collect_pages_under(api_dir: Path, pkg: str, docs_root: Path) -> list[str]:
     return sorted(out)
 
 
+def _read_frontmatter_field(mdx_path: Path, field: str) -> str:
+    """Extract a single YAML frontmatter field value from an MDX file."""
+    try:
+        content = mdx_path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    if not content.startswith("---\n"):
+        return ""
+    end = content.find("\n---\n", 4)
+    if end == -1:
+        return ""
+    fm = content[4:end]
+    for line in fm.splitlines():
+        if line.startswith(f"{field}:"):
+            val = line[len(field) + 1 :].strip().strip('"').strip("'")
+            return val
+    return ""
+
+
+_MD_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+
+
+def _read_body_preamble(mdx_path: Path) -> str:
+    """Extract the first rich prose paragraph from an MDX body.
+
+    Skips frontmatter, import lines, and JSX/HTML tags, then returns the
+    first meaningful paragraph of prose text before any heading.
+
+    Markdown links are simplified to their display text, and { / } are
+    escaped as HTML entities so the text is safe inside JSX Card children.
+    """
+    try:
+        content = mdx_path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    # Strip frontmatter
+    if content.startswith("---\n"):
+        end = content.find("\n---\n", 4)
+        if end != -1:
+            content = content[end + 5 :]
+    lines = content.splitlines()
+    current_para: list[str] = []
+    for line in lines:
+        s = line.strip()
+        if not s:
+            if current_para:
+                break
+            continue
+        # Skip import lines, JSX/HTML tags, and SidebarFix
+        if s.startswith(("import ", "<")) or "SidebarFix" in s or s == "---":
+            if current_para:
+                break
+            continue
+        # Stop at the first heading
+        if s.startswith("#"):
+            break
+        current_para.append(s)
+    text = " ".join(current_para).strip()
+    # Simplify markdown links to their display text
+    text = _MD_LINK_RE.sub(r"\1", text)
+    # Escape { and } for safe rendering inside JSX Card children
+    text = text.replace("{", "&#123;").replace("}", "&#125;")
+    return text
+
+
+def _find_index_mdx(child_dir: Path) -> Path | None:
+    """Return the best representative MDX file for a module subdirectory."""
+    # Prefer a file whose stem matches the directory name
+    candidate = child_dir / f"{child_dir.name}.mdx"
+    if candidate.exists():
+        return candidate
+    mdxs = sorted(child_dir.glob("*.mdx"))
+    return mdxs[0] if mdxs else None
+
+
+def _collect_module_entries(
+    api_dir: Path, pkg: str, docstring_cache: dict[str, str] | None = None
+) -> list[tuple[str, str, str, str]]:
+    """Return (module_name, description, preamble, href) for direct children of api/<pkg>/.
+
+    Only includes entries at the immediate subdirectory level (not deep nested),
+    to keep the landing page overview concise.
+
+    The preamble for each entry comes from the package's __init__ docstring
+    (looked up in docstring_cache via the dotted module path), falling back to
+    reading the body of the representative MDX file when no cache is available.
+    This follows standard Python practice: __init__.py is the canonical
+    description of a package.
+    """
+    base = api_dir / pkg
+    if not base.exists():
+        return []
+    entries = []
+    for child in sorted(base.iterdir()):
+        if child.is_dir():
+            index_mdx = _find_index_mdx(child)
+            if index_mdx is None:
+                continue
+            module_path = f"{pkg}.{child.name}"
+            desc = _read_frontmatter_field(index_mdx, "description")
+            if docstring_cache:
+                preamble = docstring_cache.get(module_path, "")
+            else:
+                preamble = _read_body_preamble(index_mdx)
+            href = f"api/{pkg}/{child.name}/{index_mdx.stem}"
+            entries.append((child.name, desc, preamble, href))
+        elif child.suffix == ".mdx":
+            module_path = f"{pkg}.{child.stem}"
+            desc = _read_frontmatter_field(child, "description")
+            if docstring_cache:
+                preamble = docstring_cache.get(module_path, "")
+            else:
+                preamble = _read_body_preamble(child)
+            href = f"api/{pkg}/{child.stem}"
+            entries.append((child.stem, desc, preamble, href))
+    return entries
+
+
+def generate_landing_page(
+    api_dir: Path, docs_root: Path, docstring_cache: dict[str, str] | None = None
+) -> None:
+    """Generate api-reference.mdx as a landing page for the API Reference tab.
+
+    Scans the generated api/ directory structure to produce an up-to-date
+    overview of every top-level module, rendered as a prose list with links.
+    The file is written to docs_root so Mintlify serves it when the user
+    clicks the API Reference tab.
+
+    When docstring_cache is provided, package descriptions are sourced directly
+    from __init__ module docstrings (standard Python practice) rather than
+    inferred from the representative MDX file body.
+    """
+    mellea_entries = _collect_module_entries(api_dir, "mellea", docstring_cache)
+    cli_entries = _collect_module_entries(api_dir, "cli", docstring_cache)
+
+    def _entry(name: str, desc: str, preamble: str, href: str, pkg: str) -> str:
+        title = f"mellea.{name}" if pkg == "mellea" else f"m {name}"
+        body = preamble or desc
+        line = f"- **[{title}](/{href})**"
+        if body:
+            line += f" — {body}"
+        return line
+
+    def _list_section(entries: list[tuple[str, str, str, str]], pkg: str) -> str:
+        if not entries:
+            return "_No modules found._\n"
+        return "\n".join(_entry(n, d, p, h, pkg) for n, d, p, h in entries) + "\n"
+
+    content = """\
+---
+title: "Mellea API Reference"
+description: "Complete reference for Mellea's Python API and command-line tools"
+---
+
+Mellea is a library for writing generative programs. Generative programming replaces
+flaky agents and brittle prompts with structured, maintainable, and efficient AI
+workflows.
+
+## Python Library
+
+"""
+    content += _list_section(mellea_entries, "mellea")
+    content += "\n## CLI (`m`)\n\n"
+    content += _list_section(cli_entries, "cli")
+
+    out_path = docs_root / "api-reference.mdx"
+    safe_write_text(out_path, content)
+    print(f"✅ Generated landing page: {out_path}", flush=True)
+
+
 def build_api_reference_tab_object(api_dir: Path, docs_root: Path) -> dict[str, Any]:
     cli_pages = collect_pages_under(api_dir, "cli", docs_root)
     mellea_pages = collect_pages_under(api_dir, "mellea", docs_root)
@@ -503,19 +694,54 @@ def build_api_reference_tab_object(api_dir: Path, docs_root: Path) -> dict[str, 
     return {
         "tab": NAV_TAB,
         "pages": [
+            "api-reference",  # landing page, generated by generate_landing_page()
             {"group": "mellea", "pages": mellea_nav["pages"]},
             {"group": "cli", "pages": cli_nav["pages"]},
         ],
     }
 
 
+def _load_docstring_cache(source_root: Path | None = None) -> dict[str, str]:
+    """Load the module-path→docstring cache from the source packages.
+
+    Imports build_module_docstring_cache from decorate_api_mdx (same directory)
+    and builds the cache from the given source root (defaults to REPO_ROOT).
+    Returns an empty dict on any failure so callers degrade gracefully to the
+    _read_body_preamble() fallback.
+
+    Args:
+        source_root: Root of the repo whose mellea/ package to read. Defaults
+            to REPO_ROOT (this checkout).
+
+    Returns:
+        Dict mapping module dotted paths to their first-paragraph docstrings.
+    """
+    root = source_root if source_root is not None else REPO_ROOT
+    try:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from decorate_api_mdx import (
+            build_module_docstring_cache,  # type: ignore[import]
+        )
+
+        cache = build_module_docstring_cache(root / "mellea")
+        print(f"  Loaded {len(cache)} module docstrings from source.", flush=True)
+        return cache
+    except Exception as exc:
+        print(f"  WARNING: could not load docstring cache: {exc}", flush=True)
+        return {}
+
+
 def build_and_merge_navigation(
-    docs_json_path: Path, api_dir: Path, docs_root: Path
+    docs_json_path: Path,
+    api_dir: Path,
+    docs_root: Path,
+    docstring_cache: dict[str, str] | None = None,
 ) -> None:
     print("-" * 30, flush=True)
     print(
         "🛠️ Building API Reference navigation and merging into docs.json...", flush=True
     )
+    generate_landing_page(api_dir, docs_root, docstring_cache)
     api_tab = build_api_reference_tab_object(api_dir, docs_root)
     merge_api_reference_into_docs_json(docs_json_path, api_tab)
 
@@ -545,27 +771,75 @@ def main() -> None:
         required=False,
         help="Version like v0.3.0 or 0.3.0. Omit for latest.",
     )
+    parser.add_argument(
+        "--no-venv",
+        action="store_true",
+        help="Skip virtual environment creation (use when called via 'uv run --with').",
+    )
+    parser.add_argument(
+        "--nav-only",
+        action="store_true",
+        help=(
+            "Skip MDX generation; only rebuild the landing page and navigation from "
+            "existing files in docs-root/api. Use after decoration so that preamble "
+            "text injected by decorate_api_mdx.py appears in landing page cards."
+        ),
+    )
+    parser.add_argument(
+        "--source-dir",
+        default=None,
+        help="Source repo root whose mellea/ and cli/ packages to document "
+        "(default: this repo). Overrides REPO_ROOT for package lookup and "
+        "docstring cache; does not affect staging/output paths.",
+    )
 
     args = parser.parse_args()
 
-    docs_json_path = find_docs_json(args.docs_json)
+    # source_root: the repo whose mellea/ and cli/ packages to document.
+    # Defaults to REPO_ROOT (this checkout). Override with --source-dir when
+    # generating docs for a different repo without modifying that repo.
+    source_root = Path(args.source_dir).resolve() if args.source_dir else REPO_ROOT
+
+    docs_json_path = find_docs_json(args.docs_json, search_root=source_root)
     docs_root = (
         Path(args.docs_root).resolve()
         if args.docs_root
         else docs_json_path.parent.resolve()
     )
 
+    # --nav-only: skip all MDX generation; just rebuild landing page + nav
+    if args.nav_only:
+        final_api_dir = (docs_root / "api").resolve()
+        if not final_api_dir.exists():
+            raise SystemExit(
+                f"❌ API dir not found: {final_api_dir}\n"
+                "Run the full pipeline first (without --nav-only)."
+            )
+        print("🔄 --nav-only: rebuilding landing page and navigation...", flush=True)
+        docstring_cache = _load_docstring_cache(source_root)
+        build_and_merge_navigation(
+            docs_json_path, final_api_dir, docs_root, docstring_cache
+        )
+        print("🎉 Navigation rebuild complete.", flush=True)
+        return
+
     # Prep staging
     if STAGING_API_DIR.exists():
         shutil.rmtree(STAGING_API_DIR)
     STAGING_API_DIR.mkdir(parents=True, exist_ok=True)
 
-    venv_python = ensure_venv()
-    pip_install(venv_python, args.pypi_name, args.pypi_version)
+    if args.no_venv:
+        print("⚠️ Skipping venv creation (--no-venv flag set)", flush=True)
+        venv_python = Path(sys.executable)
+    else:
+        venv_python = ensure_venv()
+        pip_install(venv_python, args.pypi_name, args.pypi_version)
 
     # Generate MDX into staging (critical cwd fix inside run_mdxify_generation)
     for pkg in PACKAGES:
-        run_mdxify_generation(venv_python, pkg)
+        run_mdxify_generation(
+            venv_python, pkg, source_root if source_root != REPO_ROOT else None
+        )
 
     # Restructure + cleanup in staging
     reorganize_to_nested_structure()
@@ -577,7 +851,9 @@ def main() -> None:
     final_api_dir = move_api_to_docs_root(docs_root)
 
     # Merge nav based on final location
-    build_and_merge_navigation(docs_json_path, final_api_dir, docs_root)
+    build_and_merge_navigation(
+        docs_json_path, final_api_dir, docs_root, _load_docstring_cache(source_root)
+    )
 
     # Cleanup mdxify run cwd (optional)
     if MDXIFY_CWD.exists():
