@@ -72,6 +72,9 @@ If the default field listing is too verbose or structured incorrectly, supply a
 `stringify_func` to produce exactly the text the LLM receives:
 
 ```python
+import mellea
+from mellea.stdlib.components.mify import mify
+
 @mify(stringify_func=lambda r: (
     f"Customer: {r.name}\n"
     f"Last purchase: {r.last_purchase}\n"
@@ -96,6 +99,9 @@ print(str(result))
 To hide internal state from the LLM, use `fields_include` with a Jinja2 template:
 
 ```python
+import mellea
+from mellea.stdlib.components.mify import mify
+
 @mify(
     fields_include={"name", "spend_ytd"},
     template="{{ name }} — spent £{{ spend_ytd }} this year",
@@ -123,6 +129,9 @@ model.
 calling one of its methods. Expose the target method with `funcs_include`:
 
 ```python
+import mellea
+from mellea.stdlib.components.mify import mify
+
 @mify(
     stringify_func=lambda r: f"{r.name}: {r.last_purchase}, £{r.spend_ytd:.2f} YTD",
     funcs_include={"to_summary"},
@@ -154,6 +163,7 @@ You can also mify an existing object instance without decorating its class — u
 when you don't own the class definition:
 
 ```python
+import mellea
 from mellea.stdlib.components.mify import mify
 
 class ThirdPartyRecord:
