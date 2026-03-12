@@ -114,7 +114,7 @@ def decompose(
     ).parse()
 
     constraint_validation_strategies: dict[str, Literal["code", "llm"]] = {
-        cons_key: validation_decision.generate(m_session, cons_key).parse()
+        cons_key: validation_decision.generate(m_session, cons_key).parse() or "llm"
         for cons_key in task_prompt_constraints
     }
 
@@ -140,7 +140,9 @@ def decompose(
             constraints=[
                 {
                     "constraint": cons_str,
-                    "validation_strategy": constraint_validation_strategies[cons_str],
+                    "validation_strategy": constraint_validation_strategies.get(
+                        cons_str, "llm"
+                    ),
                 }
                 for cons_str in subtask_data.constraints
             ],

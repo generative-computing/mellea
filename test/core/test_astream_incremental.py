@@ -87,11 +87,10 @@ async def test_astream_multiple_calls_accumulate_correctly():
     # Stream until computed
     while not mot.is_computed():
         chunk = await mot.astream()
-        if chunk:
+
+        if chunk is not None:
             chunks.append(chunk)
-            # Only accumulate if this wasn't the final (completing) chunk
-            if not mot.is_computed():
-                accumulated += chunk
+            accumulated += chunk
 
         # Safety: don't loop forever
         if len(chunks) > 100:
@@ -100,22 +99,14 @@ async def test_astream_multiple_calls_accumulate_correctly():
     # Get final value
     final_val = await mot.avalue()
 
-    # The last chunk should be the full value when computed
-    if len(chunks) > 0:
-        assert chunks[-1] == final_val, (
-            f"Last chunk (when computed) should be full value.\n"
-            f"Last chunk: {chunks[-1]!r}\n"
-            f"Final: {final_val!r}"
-        )
-
     # All chunks except the last should be incremental
-    if len(chunks) > 1:
-        incremental_accumulated = "".join(chunks[:-1])
-        assert final_val.startswith(incremental_accumulated), (
-            f"Incremental chunks should be prefix of final value.\n"
-            f"Accumulated: {incremental_accumulated!r}\n"
-            f"Final: {final_val!r}"
-        )
+    assert len(chunks) > 1, "There should be at least one chunk."
+    incremental_accumulated = "".join(chunks)
+    assert final_val == incremental_accumulated, (
+        f"Joined incremental chunks should be final value.\n"
+        f"Accumulated: {incremental_accumulated!r}\n"
+        f"Final: {final_val!r}"
+    )
 
 
 @pytest.mark.ollama
@@ -174,63 +165,44 @@ async def test_astream_empty_beginning():
 
 @pytest.mark.ollama
 @pytest.mark.llm
-async def test_astream_computed_returns_full_value():
-    """Test that astream returns full value when already computed."""
+async def test_computed_mot_raises_error_for_astream():
+    """Test that computed mot raises an error for astream() calls."""
+
     # Create a pre-computed thunk
     mot = ModelOutputThunk(value="Hello, world!")
     mot._computed = True
 
-    # astream should return the full value immediately (line 272)
-    result = await mot.astream()
-
-    assert result == "Hello, world!", "Computed thunk should return full value"
+    try:
+        await mot.astream()
+        assert False
+    except RuntimeError:
+        pass
+    else:
+        assert False, "Expected RuntimeError, got another error"
 
 
 @pytest.mark.ollama
 @pytest.mark.llm
-async def test_astream_final_call_returns_full_value():
-    """Test that the final astream call returns the full value when computed.
-
-    This tests the behavior at line 350 in base.py where the final call
-    (when _computed becomes True) returns the full _underlying_value.
-    """
+async def test_non_streaming_astream():
+    """Test that non-streaming astream has exactly one chunk."""
     session = start_session()
-    model_opts = {ModelOption.STREAM: True}
+    model_opts = {ModelOption.STREAM: False}
 
     mot, _ = await session.backend.generate_from_context(
-        CBlock("Count: 1, 2, 3"), SimpleContext(), model_options=model_opts
+        CBlock("Hi"), SimpleContext(), model_options=model_opts
     )
 
     chunks = []
-
-    # Collect all chunks
+    # Stream until computed
     while not mot.is_computed():
         chunk = await mot.astream()
-        if chunk:
+        if chunk is not None:
             chunks.append(chunk)
 
-        if len(chunks) > 100:  # Safety
-            break
-
-    # Get final value
-    final_val = await mot.avalue()
-
-    # The last chunk should be the full value (not incremental)
-    if len(chunks) > 0:
-        assert chunks[-1] == final_val, (
-            f"Final chunk should be the complete value.\n"
-            f"Last chunk: {chunks[-1]!r}\n"
-            f"Final value: {final_val!r}"
-        )
-
-    # All chunks before the last should be incremental (non-overlapping)
-    for i in range(len(chunks) - 2):  # Exclude the last chunk
-        for j in range(i + 1, len(chunks) - 1):  # Exclude the last chunk
-            # Earlier incremental chunks shouldn't be prefixes of later ones
-            if chunks[j] and chunks[i]:
-                assert not chunks[j].startswith(chunks[i]), (
-                    f"Incremental chunk {j} should not start with chunk {i}"
-                )
+    assert len(chunks) == 1, "There should be at least one chunk."
+    incremental_accumulated = "".join(chunks)
+    full_text = await mot.avalue()
+    assert full_text == incremental_accumulated
 
 
 if __name__ == "__main__":

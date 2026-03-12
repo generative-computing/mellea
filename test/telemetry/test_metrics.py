@@ -54,13 +54,6 @@ def enable_metrics(monkeypatch):
     importlib.reload(mellea.telemetry.metrics)
 
 
-@pytest.fixture
-def metric_reader():
-    """Create an in-memory metric reader for testing."""
-    reader = InMemoryMetricReader()
-    return reader
-
-
 # Configuration Tests
 
 
@@ -381,3 +374,102 @@ def test_console_exporter_disabled_by_default(enable_metrics):
     from mellea.telemetry.metrics import _METRICS_CONSOLE
 
     assert _METRICS_CONSOLE is False
+
+
+# Token Counter Tests
+
+
+def test_token_counters_lazy_initialization(enable_metrics):
+    """Test that token counters are lazily initialized."""
+    from mellea.telemetry.metrics import _input_token_counter, _output_token_counter
+
+    # Initially None
+    assert _input_token_counter is None
+    assert _output_token_counter is None
+
+    # Call record_token_usage_metrics
+    from mellea.telemetry.metrics import record_token_usage_metrics
+
+    record_token_usage_metrics(
+        input_tokens=100,
+        output_tokens=50,
+        model="llama2:7b",
+        backend="OllamaBackend",
+        system="ollama",
+    )
+
+    # Now should be initialized
+    from mellea.telemetry.metrics import _input_token_counter, _output_token_counter
+
+    assert _input_token_counter is not None
+    assert _output_token_counter is not None
+
+
+def test_record_token_usage_metrics_with_valid_tokens(enable_metrics):
+    """Test recording token usage with valid token counts."""
+    from mellea.telemetry.metrics import record_token_usage_metrics
+
+    # Should not raise
+    record_token_usage_metrics(
+        input_tokens=150,
+        output_tokens=50,
+        model="gpt-4",
+        backend="OpenAIBackend",
+        system="openai",
+    )
+
+
+def test_record_token_usage_metrics_with_none_tokens(enable_metrics):
+    """Test recording token usage with None values (graceful handling)."""
+    from mellea.telemetry.metrics import record_token_usage_metrics
+
+    # Should not raise
+    record_token_usage_metrics(
+        input_tokens=None,
+        output_tokens=None,
+        model="llama2:7b",
+        backend="OllamaBackend",
+        system="ollama",
+    )
+
+
+def test_record_token_usage_metrics_with_zero_tokens(enable_metrics):
+    """Test recording token usage with zero values (should not record)."""
+    from mellea.telemetry.metrics import record_token_usage_metrics
+
+    # Should not raise, but won't record zeros
+    record_token_usage_metrics(
+        input_tokens=0,
+        output_tokens=0,
+        model="llama2:7b",
+        backend="OllamaBackend",
+        system="ollama",
+    )
+
+
+def test_record_token_usage_metrics_noop_when_disabled(clean_metrics_env):
+    """Test that record_token_usage_metrics is no-op when metrics disabled."""
+    from mellea.telemetry.metrics import record_token_usage_metrics
+
+    # Should not raise and should be no-op
+    record_token_usage_metrics(
+        input_tokens=100,
+        output_tokens=50,
+        model="llama2:7b",
+        backend="OllamaBackend",
+        system="ollama",
+    )
+
+    # Counters should still be None (not initialized)
+    from mellea.telemetry.metrics import _input_token_counter, _output_token_counter
+
+    assert _input_token_counter is None
+    assert _output_token_counter is None
+
+
+def test_record_token_usage_metrics_exported_in_public_api():
+    """Test that record_token_usage_metrics is exported in public API."""
+    from mellea.telemetry import record_token_usage_metrics
+
+    assert record_token_usage_metrics is not None
+    assert callable(record_token_usage_metrics)

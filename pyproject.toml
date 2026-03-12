@@ -98,7 +98,12 @@ sandbox = [
 
 backends = ["mellea[watsonx,hf,vllm,litellm]"]
 
-all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever]"]
+hooks = [
+    "cpex>=0.1.0.dev10; python_version >= '3.11'",
+    "grpcio>=1.78.0",
+]
+
+all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever,hooks]"]
 
 [dependency-groups]
 # Development groups: uv sync --all-groups
@@ -117,6 +122,7 @@ test = [
     "pytest-cov>=6.0.0",
     "pytest-timeout",  # For test suite timeout configuration
     "pytest-recording",  # For blocking network access and using canned server responses
+    "pytest-xdist>=3.8.0", # For concurrent test execution (uv run pytest -n auto test/)
     "psutil",  # For test infrastructure: RAM detection in conftest.py
     "nbmake>=1.5.5",  # Notebook testing
     "sentencepiece==0.2.1",  # Necessary for test_huggingface_tools test because of Mistral model
