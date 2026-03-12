@@ -371,7 +371,8 @@ class MelleaSession:
     def reset(self):
         """Reset the context state to a fresh, empty context of the same type.
 
-        Replaces ``self.ctx`` with the result of ``ctx.reset_to_new()``, discarding
+        Fires the ``SESSION_RESET`` plugin hook if any plugins are registered, then
+        replaces ``self.ctx`` with the result of ``ctx.reset_to_new()``, discarding
         all accumulated conversation history.
         """
         if has_plugins(HookType.SESSION_RESET):

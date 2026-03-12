@@ -33,12 +33,6 @@ class InputEvalResult:
         score (int): Numeric score assigned by the judge (``1`` for pass, ``0`` for fail).
         validation_reason (str): Justification text returned by the judge model.
 
-    Attributes:
-        input_text (str): The raw input text sent to the generation model.
-        model_output (str): The text response produced by the generation model.
-        validation_passed (bool): Whether the judge scored this response as passing.
-        score (int): Numeric score assigned by the judge (``1`` for pass, ``0`` for fail).
-        validation_reason (str): Justification text returned by the judge model.
     """
 
     def __init__(
@@ -81,10 +75,6 @@ class TestEvalResult:
             produced by running the generation and judge models.
 
     Attributes:
-        test_eval (TestBasedEval): The unit test specification containing
-            the test ID, name, instructions, inputs, and expected targets.
-        input_results (list[InputEvalResult]): Per-input evaluation outcomes
-            produced by running the generation and judge models.
         passed_count (int): Number of inputs that received a passing score.
         total_count (int): Total number of inputs evaluated.
         pass_rate (float): Fraction of inputs that passed (``passed_count / total_count``).
