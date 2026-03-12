@@ -313,8 +313,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
             RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible.
         """
         if self._computed:
-            assert self.value is not None  # If computed, the value cannot be None.
-            return self.value
+            raise RuntimeError(
+                "Streaming has finished and MOT is computed. Subsequent calls to mot.astream() are not permitted."
+            )
 
         do_set_computed = False
 
@@ -425,8 +426,6 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 # replacement = await invoke_hook(...)
                 # if replacement is not None and replacement is not self:
                 #     self._copy_from(replacement)
-
-            return self._underlying_value  # type: ignore
 
         return (
             self._underlying_value
