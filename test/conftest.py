@@ -169,6 +169,36 @@ def shared_vllm_backend(request):
 
 
 # ============================================================================
+# Backend Test Grouping Configuration
+# ============================================================================
+
+# Define backend groups for organized test execution
+# This helps reduce GPU memory fragmentation by running all tests for a
+# backend together before switching to the next backend
+BACKEND_GROUPS = {
+    "huggingface": {
+        "marker": "huggingface",
+        "description": "HuggingFace backend tests (GPU)",
+    },
+    "vllm": {
+        "marker": "vllm",
+        "description": "vLLM backend tests (GPU, shared backend)",
+    },
+    "ollama": {
+        "marker": "ollama",
+        "description": "Ollama backend tests (local server)",
+    },
+    "api": {
+        "marker": "requires_api_key",
+        "description": "API-based backends (OpenAI, Watsonx, Bedrock)",
+    },
+}
+
+# Execution order when --group-by-backend is used
+BACKEND_GROUP_ORDER = ["huggingface", "vllm", "ollama", "api"]
+
+
+# ============================================================================
 # Pytest Marker Registration and CLI Options
 # ============================================================================
 
@@ -229,6 +259,12 @@ def pytest_addoption(parser):
         action="store_true",
         default=False,
         help="Run heavy GPU tests in isolated subprocesses (slower, but guarantees CUDA memory release)",
+    )
+    add_option_safe(
+        "--group-by-backend",
+        action="store_true",
+        default=False,
+        help="Group tests by backend and run them together (reduces GPU memory fragmentation)",
     )
 
 
@@ -495,9 +531,10 @@ def pytest_collection_finish(session):
 
 
 def pytest_collection_modifyitems(config, items):
-    """Skip tests at collection time based on markers.
+    """Skip tests at collection time based on markers and optionally reorder by backend.
 
     This prevents fixture setup errors for tests that would be skipped anyway.
+    When --group-by-backend is used, reorders tests to group by backend.
     """
     capabilities = get_system_capabilities()
 
@@ -516,6 +553,41 @@ def pytest_collection_modifyitems(config, items):
         if item.get_closest_marker("ollama") and not ignore_ollama:
             if not capabilities["has_ollama"]:
                 item.add_marker(skip_ollama)
+
+    # Reorder tests by backend if requested
+    if config.getoption("--group-by-backend", default=False):
+        logger = FancyLogger.get_logger()
+        logger.info("Grouping tests by backend (--group-by-backend enabled)")
+
+        # Group items by backend
+        grouped_items = []
+        seen = set()
+
+        for group_name in BACKEND_GROUP_ORDER:
+            marker = BACKEND_GROUPS[group_name]["marker"]
+            group_tests = [
+                item
+                for item in items
+                if item.get_closest_marker(marker) and id(item) not in seen
+            ]
+
+            if group_tests:
+                logger.info(
+                    f"Backend group '{group_name}': {len(group_tests)} tests ({BACKEND_GROUPS[group_name]['description']})"
+                )
+                grouped_items.extend(group_tests)
+                for item in group_tests:
+                    seen.add(id(item))
+
+        # Add tests without backend markers at the end
+        unmarked = [item for item in items if id(item) not in seen]
+        if unmarked:
+            logger.info(f"Unmarked tests: {len(unmarked)} tests")
+            grouped_items.extend(unmarked)
+
+        # Reorder in place
+        items[:] = grouped_items
+        logger.info(f"Total tests reordered: {len(items)}")
 
 
 # ============================================================================
