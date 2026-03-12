@@ -34,10 +34,6 @@ class FormatterBackend(Backend, abc.ABC):
         model_options (dict | None): Default model options; if ``None``, an empty dict
             is used.
 
-    Attributes:
-        model_id (str | ModelIdentifier): The model identifier for this backend.
-        model_options (dict): The default model options for generation requests.
-        formatter (ChatFormatter): The formatter used to render components into prompts.
     """
 
     def __init__(

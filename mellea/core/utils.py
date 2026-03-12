@@ -89,7 +89,7 @@ class JsonFormatter(logging.Formatter):
 
 
 class CustomFormatter(logging.Formatter):
-    """A nice custom formatter copied from [https://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output](Sergey Pleshakov's post on StackOvervlow).
+    """A nice custom formatter copied from [https://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output](Sergey Pleshakov's post on StackOverflow).
 
     Attributes:
         cyan (str): ANSI escape code for cyan text, used for DEBUG messages.

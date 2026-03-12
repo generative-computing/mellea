@@ -40,9 +40,6 @@ class CBlock:
             completion object). Defaults to an empty dict.
         cache (bool): If ``True``, the inference engine may store the KV cache for this block. Experimental.
 
-    Attributes:
-        cache (bool): Whether the inference engine may store the KV cache for this block.
-        value (str | None): The underlying string content of the block.
     """
 
     def __init__(
@@ -93,8 +90,6 @@ class ImageBlock(CBlock):
         value (str): A valid base64-encoded PNG string (with or without a data URI prefix).
         meta (dict[str, Any] | None): Optional metadata to associate with this image block.
 
-    Attributes:
-        value (str): The base64-encoded PNG string representing the image.
     """
 
     def __init__(self, value: str, meta: dict[str, Any] | None = None):
@@ -276,10 +271,6 @@ class ModelOutputThunk(CBlock, Generic[S]):
         parsed_repr (S | None): An already-parsed representation to attach; set when re-wrapping existing output.
         tool_calls (dict[str, ModelToolCall] | None): Tool calls returned by the model alongside the text output.
 
-    Attributes:
-        parsed_repr (S | None): The parsed representation of the output, non-``None`` once computed.
-        tool_calls (dict[str, ModelToolCall] | None): Tool calls requested by the model, if any.
-        value (str | None): The raw string output from the model, or ``None`` if not yet computed.
     """
 
     def __init__(
@@ -597,11 +588,6 @@ class ContextTurn:
         output (ModelOutputThunk | None): The model's output thunk for this turn,
             or ``None`` for an input-only partial turn.
 
-    Attributes:
-        model_input (CBlock | Component | None): The input component or content block for this turn,
-            or ``None`` when the turn represents an output-only partial turn.
-        output (ModelOutputThunk | None): The model's output thunk for this turn,
-            or ``None`` when the turn represents an input-only partial turn.
     """
 
     model_input: CBlock | Component | None
@@ -860,15 +846,6 @@ class TemplateRepresentation:
         template_order (list[str] | None): An optional ordering hint for template sections/keys.
         images (list[ImageBlock] | None): Optional list of image blocks associated with this representation.
 
-    Attributes:
-        obj (Any): The original component object being represented.
-        args (dict): Named arguments extracted from the component for template substitution.
-        tools (dict[str, AbstractMelleaTool] | None): Tools available for this representation,
-            keyed by the tool's function name. ``None`` if the component has no tools.
-        fields (list[Any] | None): An optional ordered list of field values for positional templates.
-        template (str | None): An optional Jinja2 (or similar) template string to use when rendering.
-        template_order (list[str] | None): An optional ordering hint for template sections/keys.
-        images (list[ImageBlock] | None): Optional list of image blocks associated with this representation.
     """
 
     obj: Any
@@ -903,16 +880,6 @@ class GenerateLog:
         is_final_result (bool | None): Whether this log entry corresponds to the definitive final result.
         extra (dict[str, Any] | None): Arbitrary extra metadata to attach to the log entry.
 
-    Attributes:
-        date (datetime.datetime | None): Timestamp when the generation was logged.
-        prompt (str | list[dict] | None): The prompt string or chat-message list sent to the model.
-        backend (str | None): Identifier of the inference backend used for this generation.
-        model_options (dict[str, Any] | None): Model configuration options applied to this call.
-        model_output (Any | None): The raw output returned by the backend API.
-        action (Component | CBlock | None): The component or block that triggered the generation.
-        result (ModelOutputThunk | None): The ``ModelOutputThunk`` produced by this generation call.
-        is_final_result (bool | None): Whether this log entry corresponds to the definitive final result.
-        extra (dict[str, Any] | None): Arbitrary extra metadata to attach to the log entry.
     """
 
     date: datetime.datetime | None = None
@@ -937,10 +904,6 @@ class ModelToolCall:
         func (AbstractMelleaTool): The ``AbstractMelleaTool`` instance that will be invoked.
         args (Mapping[str, Any]): The keyword arguments the model supplied for the tool call.
 
-    Attributes:
-        name (str): The name of the tool the model requested to call.
-        func (AbstractMelleaTool): The ``AbstractMelleaTool`` instance that will be invoked.
-        args (Mapping[str, Any]): The keyword arguments the model supplied for the tool call.
     """
 
     name: str
