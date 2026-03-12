@@ -34,15 +34,23 @@ except ImportError as e:
     )
 
 
+# vLLM tests use hybrid backend strategy (see conftest.py):
+# - Default: Shared session-scoped backend (fast, no fragmentation)
+# - --isolate-heavy: Module-scoped backends in separate processes
 @pytest.fixture(scope="module")
-def backend():
-    """Shared vllm backend for all tests in this module."""
+def backend(shared_vllm_backend):
+    """Use shared session-scoped backend, or create module-scoped if isolated.
+
+    Without --isolate-heavy: Uses shared backend (fast, no fragmentation)
+    With --isolate-heavy: Creates module-scoped backend (process isolation)
+    """
+    if shared_vllm_backend is not None:
+        return shared_vllm_backend
+
+    # Isolation mode - create module-scoped backend
     backend = LocalVLLMBackend(
-        model_id=model_ids.QWEN3_0_6B,
-        # formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
+        model_id=model_ids.IBM_GRANITE_4_MICRO_3B,
         model_options={
-            # made smaller for a testing environment with smaller gpus.
-            # such an environment could possibly be running other gpu applications, including slack
             "gpu_memory_utilization": 0.8,
             "max_model_len": 8192,
             "max_num_seqs": 8,
@@ -50,7 +58,6 @@ def backend():
     )
     yield backend
 
-    # Cleanup using shared function (best-effort within module)
     from test.conftest import cleanup_vllm_backend
 
     cleanup_vllm_backend(backend)

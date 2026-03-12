@@ -6,6 +6,8 @@ import sys
 import pytest
 import requests
 
+from mellea.core import FancyLogger
+
 # Try to import optional dependencies for system detection
 try:
     import psutil
@@ -103,6 +105,67 @@ def system_capabilities():
 @pytest.fixture(scope="session")
 def gh_run() -> int:
     return int(os.environ.get("CICD", 0))  # type: ignore
+
+
+@pytest.fixture(scope="session")
+def shared_vllm_backend(request):
+    """Shared vLLM backend for ALL vLLM tests across all modules.
+
+    When --isolate-heavy is used, returns None to allow module-scoped backends.
+    Uses IBM Granite 4 Micro as a small, fast model suitable for all vLLM tests.
+    """
+    # Check if process isolation is enabled
+    use_isolation = (
+        request.config.getoption("--isolate-heavy", default=False)
+        or os.environ.get("CICD", "0") == "1"
+    )
+
+    if use_isolation:
+        logger = FancyLogger.get_logger()
+        logger.info(
+            "Process isolation enabled (--isolate-heavy). "
+            "Skipping shared vLLM backend - each module will create its own."
+        )
+        yield None
+        return
+
+    try:
+        import mellea.backends.model_ids as model_ids
+        from mellea.backends.vllm import LocalVLLMBackend
+    except ImportError:
+        pytest.skip("vLLM backend not available")
+        return
+
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA not available for vLLM tests")
+            return
+    except ImportError:
+        pytest.skip("PyTorch not available")
+        return
+
+    logger = FancyLogger.get_logger()
+    logger.info(
+        "Creating shared vLLM backend (session-scoped) for all vLLM tests. "
+        "This backend will be reused to avoid GPU memory fragmentation."
+    )
+
+    backend = LocalVLLMBackend(
+        model_id=model_ids.IBM_GRANITE_4_MICRO_3B,
+        model_options={
+            "gpu_memory_utilization": 0.8,
+            "max_model_len": 8192,
+            "max_num_seqs": 8,
+        },
+    )
+
+    logger.info("Shared vLLM backend created successfully.")
+    yield backend
+
+    logger.info("Cleaning up shared vLLM backend (end of test session)")
+    cleanup_vllm_backend(backend)
 
 
 # ============================================================================
