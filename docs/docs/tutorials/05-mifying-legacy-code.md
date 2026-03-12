@@ -64,7 +64,7 @@ By default, `@mify` exposes all instance attributes as fields and adds the
 [`MObject`](../guide/glossary#mobject) protocol to every instance. The LLM sees a text representation
 of the object built from those fields.
 
-> **Full example:** [`docs/examples/mify/mify.py`](../../examples/mify/mify.py)
+> **Full example:** [`docs/examples/mify/mify.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/mify/mify.py)
 
 ## Step 2: Control the text representation
 

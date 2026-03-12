@@ -18,7 +18,7 @@ range of safety and quality risks. `GuardianCheck` can be used:
 
 > **Backend note:** `GuardianCheck` runs a separate Granite Guardian model to perform
 > validation. It supports two backends: `"ollama"` (default, requires pulling a
-> Guardian model) and `"huggingface"` (`pip install mellea[hf]`). The backend used
+> Guardian model) and `"huggingface"` (`pip install "mellea[hf]"`). The backend used
 > for validation is independent of the session's generation backend.
 
 ## Basic safety check
@@ -169,4 +169,4 @@ else:
     print("Message blocked: jailbreak attempt detected.")
 ```
 
-> **Full example:** [`docs/examples/safety/guardian.py`](../../examples/safety/guardian.py)
+> **Full example:** [`docs/examples/safety/guardian.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/safety/guardian.py)

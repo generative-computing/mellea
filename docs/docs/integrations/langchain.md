@@ -97,7 +97,7 @@ print(str(response))
 AI, tool) into `{"role": ..., "content": ...}` dicts. Any library that exports to
 OpenAI chat format — LlamaIndex, Haystack, Semantic Kernel — works with the same pattern.
 
-> **Full example:** [`docs/examples/library_interop/langchain_messages.py`](../../examples/library_interop/langchain_messages.py)
+> **Full example:** [`docs/examples/library_interop/langchain_messages.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/library_interop/langchain_messages.py)
 
 ## Which approach to use
 

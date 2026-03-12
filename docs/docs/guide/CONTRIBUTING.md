@@ -246,7 +246,7 @@ Show what failure modes actually look like in a `text` block. If the exact messa
 Where a CI-tested example exists in `docs/examples/`, link it:
 
 ```text
-> **Full example:** [`docs/examples/tutorial/simple_email.py`](../../examples/tutorial/simple_email.py)
+> **Full example:** [`docs/examples/tutorial/simple_email.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/simple_email.py)
 ```
 
 Only link examples that are current and in CI.
@@ -273,7 +273,7 @@ Mintlify renders previous/next page links automatically from the nav order in `d
 ---
 
 
-**See also:** [Related Page](./related), [Another Page](./another)
+**See also:** [Glossary](./glossary), [Working with Data](./working-with-data)
 ```
 
 ---

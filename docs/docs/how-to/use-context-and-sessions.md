@@ -177,4 +177,4 @@ methods are:
 > want to replace the default behaviour entirely. The base methods handle context
 > management and telemetry instrumentation.
 >
-> **Full example:** [`docs/examples/sessions/creating_a_new_type_of_session.py`](../../examples/sessions/creating_a_new_type_of_session.py)
+> **Full example:** [`docs/examples/sessions/creating_a_new_type_of_session.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/sessions/creating_a_new_type_of_session.py)

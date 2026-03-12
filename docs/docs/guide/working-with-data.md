@@ -6,7 +6,7 @@ description: "Ground instructions with documents, build RAG pipelines, and use M
 
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete, `pip install mellea`,
 Ollama running locally. RAG examples require `faiss-cpu` and `sentence-transformers`.
-`RichDocument` requires `pip install mellea[docling]` or `docling` installed separately.
+`RichDocument` requires `pip install "mellea[docling]"` or `docling` installed separately.
 
 ## Grounding context
 
@@ -78,7 +78,7 @@ print(str(result))
 The `@generative` filter returns a typed `bool`, giving you deterministic branching
 over LLM relevance judgments.
 
-> **Full example:** [`docs/examples/rag/simple_rag_with_filter.py`](../../examples/rag/simple_rag_with_filter.py)
+> **Full example:** [`docs/examples/rag/simple_rag_with_filter.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/rag/simple_rag_with_filter.py)
 
 ## MObjects — making data LLM-aware
 
@@ -110,7 +110,7 @@ print(str(answer))
 `fields_include` controls which fields are visible to the LLM. `template` controls
 how the object is formatted in the prompt.
 
-> **Full example:** [`docs/examples/tutorial/table_mobject.py`](../../examples/tutorial/table_mobject.py)
+> **Full example:** [`docs/examples/tutorial/table_mobject.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/table_mobject.py)
 
 ### `query()` and `transform()`
 
@@ -246,7 +246,7 @@ if tables:
 `Table` is itself an MObject — its methods (e.g., `transpose()`) are registered as
 tools during `transform()` calls automatically.
 
-> **Full example:** [`docs/examples/tutorial/document_mobject.py`](../../examples/tutorial/document_mobject.py)
+> **Full example:** [`docs/examples/tutorial/document_mobject.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/document_mobject.py)
 
 ---
 

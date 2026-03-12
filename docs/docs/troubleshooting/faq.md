@@ -79,9 +79,9 @@ and LiteLLM (which itself proxies dozens of providers).
 Install the backend you need:
 
 ```bash
-pip install mellea[litellm]    # LiteLLM multi-provider
-pip install mellea[hf]         # HuggingFace / local inference
-pip install mellea[watsonx]    # IBM WatsonX
+pip install "mellea[litellm]"    # LiteLLM multi-provider
+pip install "mellea[hf]"         # HuggingFace / local inference
+pip install "mellea[watsonx]"    # IBM WatsonX
 ```
 
 Then pass the backend to `start_session()` or `MelleaSession`:

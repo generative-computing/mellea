@@ -22,7 +22,7 @@ OTLP-compatible backend.
 Install the telemetry extra:
 
 ```bash
-pip install mellea[telemetry]
+pip install "mellea[telemetry]"
 ```
 
 Enable one or both trace scopes via environment variables:
@@ -180,7 +180,7 @@ backend options or shorten your prompts.
 ### Full working example
 
 The example at
-[`docs/examples/telemetry/telemetry_example.py`](../../examples/telemetry/telemetry_example.py)
+[`docs/examples/telemetry/telemetry_example.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/telemetry/telemetry_example.py)
 runs a session with `instruct()`, `@generative`, and `m.chat()` and prints trace
 status to stdout. Run it to verify your setup:
 

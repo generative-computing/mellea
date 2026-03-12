@@ -270,7 +270,7 @@ def format_for_llm(self) -> str:
 
 To change how an existing component is rendered, subclass it and override
 `format_for_llm()`. Then create a new template file at the appropriate path.
-See [`docs/examples/mify/rich_document_advanced.py`](../../examples/mify/rich_document_advanced.py)
+See [`docs/examples/mify/rich_document_advanced.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/mify/rich_document_advanced.py)
 for a worked example.
 
 ---

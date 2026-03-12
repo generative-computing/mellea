@@ -24,7 +24,7 @@ print(str(email))
 Three lines: create a session, instruct, print. The `instruct()` call returns a
 [`ModelOutputThunk`](../guide/glossary#modeloutputthunk); call `str()` on it (or access `.value`) to get the string.
 
-> **Full example:** [`docs/examples/tutorial/simple_email.py`](../../examples/tutorial/simple_email.py)
+> **Full example:** [`docs/examples/tutorial/simple_email.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/simple_email.py)
 
 ## User variables
 

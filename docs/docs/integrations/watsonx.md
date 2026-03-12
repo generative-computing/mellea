@@ -89,7 +89,7 @@ KeyError: WATSONX_URL / WATSONX_API_KEY / WATSONX_PROJECT_ID
 All three environment variables must be set. Check your IBM Cloud project settings
 for the correct values.
 
-**`pip install mellea[watsonx]` required:**
+**`pip install "mellea[watsonx]"` required:**
 
 The WatsonX backend requires the `ibm-watson-machine-learning` package, which is not
 installed by default:

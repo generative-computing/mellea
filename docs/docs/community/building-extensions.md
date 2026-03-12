@@ -295,7 +295,7 @@ class EchoBackend(Backend):
 ```
 
 The full `Backend` abstract interface is documented in the
-[API reference](../../api/mellea/core/backend).
+[API reference](/api/mellea/core/backend).
 
 > **Note:** Production backends handle async streaming, tokenization, and error
 > recovery. Study an existing backend in `mellea/backends/` before implementing
