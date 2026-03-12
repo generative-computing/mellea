@@ -50,9 +50,9 @@ def backend(shared_vllm_backend):
     backend = LocalVLLMBackend(
         model_id=model_ids.IBM_GRANITE_4_MICRO_3B,
         model_options={
-            "gpu_memory_utilization": 0.8,
-            "max_model_len": 8192,
-            "max_num_seqs": 8,
+            "gpu_memory_utilization": 0.6,
+            "max_model_len": 4096,
+            "max_num_seqs": 4,
         },
     )
     yield backend
