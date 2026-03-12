@@ -25,7 +25,15 @@ def _get_mistletoe():
 
 
 def as_markdown_list(ctx: Context) -> list[str] | None:
-    """Attempts to format the last_output of the given context as a markdown list."""
+    """Attempts to format the last_output of the given context as a markdown list.
+
+    Args:
+        ctx: The current conversation context whose last output will be parsed.
+
+    Returns:
+        List of rendered list-item strings if the output is a markdown list,
+        or ``None`` if parsing fails or the output is not a list.
+    """
     mistletoe = _get_mistletoe()
     xs = list()
     raw_output = ctx.last_output()

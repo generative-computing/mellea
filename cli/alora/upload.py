@@ -1,3 +1,11 @@
+"""Upload a trained LoRA or aLoRA adapter to Hugging Face Hub.
+
+Creates the target repository if it does not already exist and pushes the entire
+adapter weights directory (output of ``save_pretrained``) to the repository root.
+Requires an authenticated Hugging Face token set via the ``HF_TOKEN`` environment
+variable or ``huggingface-cli login``.
+"""
+
 import os
 
 from huggingface_hub import HfApi, HfFolder, create_repo, upload_folder
@@ -11,8 +19,10 @@ def upload_model(weight_path: str, model_name: str, private: bool = True):
         model_name (str): Target model repo name (e.g., "acme/carbchecker-alora").
         private (bool): Whether the repo should be private. Default: True.
 
-    Requires:
-        - `HF_TOKEN` set in environment or via `huggingface-cli login`.
+    Raises:
+        FileNotFoundError: If ``weight_path`` does not exist on disk.
+        OSError: If no Hugging Face authentication token is found.
+        RuntimeError: If creating or accessing the Hugging Face repository fails.
     """
     if not os.path.exists(weight_path):
         raise FileNotFoundError(f"Adapter directory not found: {weight_path}")

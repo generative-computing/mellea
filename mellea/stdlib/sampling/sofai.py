@@ -34,14 +34,39 @@ from ..context import ChatContext
 
 
 class SOFAISamplingStrategy(SamplingStrategy):
-    """SOFAI sampling strategy.
+    """SOFAI (Slow and Fast AI) two-solver sampling strategy.
 
-    Uses S1 Solver (fast model) in a loop with targeted feedback from validation results.
-    If S1 Solver fails after exhausting the budget or shows no improvement,
-    escalates to a single attempt with S2 Solver (slow model).
+    Uses S1 Solver (fast model) in a loop with targeted feedback from validation
+    results. If S1 Solver fails after exhausting the budget or shows no
+    improvement, escalates to a single attempt with S2 Solver (slow model).
 
-    The strategy leverages ValidationResult.reason fields to provide targeted
+    The strategy leverages ``ValidationResult.reason`` fields to provide targeted
     feedback for repair, enabling more effective iterative improvement.
+
+    Args:
+        s1_solver_backend (Backend): Backend for the fast S1 solver used in the
+            iterative repair loop.
+        s2_solver_backend (Backend): Backend for the slow S2 solver used as a
+            final escalation step.
+        s2_solver_mode (Literal["fresh_start", "continue_chat", "best_attempt"]):
+            How to invoke the S2 solver when S1 fails.
+        loop_budget (int): Maximum number of S1 repair attempts before escalating
+            to S2. Must be greater than 0. Defaults to ``3``.
+        judge_backend (Backend | None): Optional backend for LLM-as-Judge
+            validation. If ``None``, falls back to the session backend.
+        feedback_strategy (Literal["simple", "first_error", "all_errors"]):
+            Detail level of repair feedback provided to the S1 solver.
+
+    Attributes:
+        s1_solver_backend (Backend): Backend for the fast S1 solver.
+        s2_solver_backend (Backend): Backend for the slow S2 solver.
+        s2_solver_mode (str): How to invoke the S2 solver: ``"fresh_start"``,
+            ``"continue_chat"``, or ``"best_attempt"``.
+        loop_budget (int): Maximum S1 attempts before escalating to S2.
+        judge_backend (Backend | None): Optional third backend for LLM-as-Judge
+            validation. ``None`` uses the session backend.
+        feedback_strategy (str): Detail level of feedback: ``"simple"``,
+            ``"first_error"``, or ``"all_errors"``.
     """
 
     def __init__(

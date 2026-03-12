@@ -1,4 +1,11 @@
-"""FormatterBackend."""
+"""``FormatterBackend``: base class for prompt-engineering backends.
+
+``FormatterBackend`` extends the abstract ``Backend`` with a ``ChatFormatter`` and
+a ``ModelIdentifier``, bridging mellea's generative programming primitives to models
+that do not yet natively support spans or structured fine-tuning. Concrete backend
+implementations (e.g. Ollama, HuggingFace, OpenAI) subclass ``FormatterBackend`` and
+supply the model-specific ``generate_from_context`` logic.
+"""
 
 import abc
 from enum import Enum
@@ -20,6 +27,13 @@ class FormatterBackend(Backend, abc.ABC):
     The `mellea` library supports these legacy models primarily through prompt engineering surfaced via `FormatterBackends`.
     A `FormatterBackend` is a backend that uses hand-engineered prompts for rendering generative programming primitives to a model and parsing responses from the model back into `mellea`.
     By default, a `FormatterBackend` uses jinja2 templates for pretty-printing, and relies on the user's ad-hoc logic for parsing.
+
+    Args:
+        model_id (str | ModelIdentifier): The model identifier to use for generation.
+        formatter (ChatFormatter): The formatter used to convert components into prompts.
+        model_options (dict | None): Default model options; if ``None``, an empty dict
+            is used.
+
     """
 
     def __init__(

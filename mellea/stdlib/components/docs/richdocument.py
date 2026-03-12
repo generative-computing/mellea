@@ -1,4 +1,12 @@
-"""Representations of Docling Documents."""
+"""``RichDocument``, ``Table``, and related helpers backed by Docling.
+
+``RichDocument`` wraps a ``DoclingDocument`` (e.g. produced by converting a PDF or
+Markdown file) and renders it as Markdown for a language model. ``Table`` represents a
+single table within a Docling document and provides ``transpose``, ``to_markdown``, and
+query/transform helpers. Use ``RichDocument.from_document_file`` to convert a PDF or
+other supported format, and ``get_tables()`` to extract structured table data for
+downstream LLM-driven Q&A or transformation tasks.
+"""
 
 from __future__ import annotations
 
@@ -17,28 +25,44 @@ from ..mobject import MObject, Query, Transform
 
 
 class RichDocument(Component[str]):
-    """A `RichDocument` is a block of content with an underlying DoclingDocument.
+    """A ``RichDocument`` is a block of content backed by a ``DoclingDocument``.
 
-    It has helper functions for working with the document and extracting parts of it.
+    Provides helper functions for working with the document and extracting parts
+    such as tables. Use ``from_document_file`` to convert PDFs or other formats,
+    and ``save``/``load`` for persistence.
+
+    Args:
+        doc (DoclingDocument): The underlying Docling document to wrap.
     """
 
     def __init__(self, doc: DoclingDocument):
-        """A `RichDocument` is a block of content with an underlying DoclingDocument."""
+        """Create a ``RichDocument`` wrapping the provided ``DoclingDocument``.
+
+        Args:
+            doc (DoclingDocument): The Docling document to wrap.
+        """
         self._doc = doc
 
     def parts(self) -> list[Component | CBlock]:
-        """RichDocument has no parts.
+        """Return the constituent parts of this document.
 
-        In the future, we should allow chunking of DoclingDocuments to correspond to parts().
+        Currently always returns an empty list. Future versions may support
+        chunking the document into constituent parts.
+
+        Returns:
+            list[Component | CBlock]: Always an empty list.
         """
         # TODO: we could separate a DoclingDocument into chunks and then treat those chunks as parts.
         # for now, do nothing.
         return []
 
     def format_for_llm(self) -> TemplateRepresentation | str:
-        """Return Document content as Markdown.
+        """Return the document content as a Markdown string.
 
-        No template needed here.
+        No template is needed; the full document is exported to Markdown directly.
+
+        Returns:
+            TemplateRepresentation | str: The full document rendered as Markdown.
         """
         return self.to_markdown()
 
@@ -47,7 +71,11 @@ class RichDocument(Component[str]):
         return computed.value if computed.value is not None else ""
 
     def docling(self) -> DoclingDocument:
-        """Get the underlying Docling Document."""
+        """Return the underlying ``DoclingDocument``.
+
+        Returns:
+            DoclingDocument: The wrapped Docling document instance.
+        """
         return self._doc
 
     def to_markdown(self):
@@ -55,18 +83,35 @@ class RichDocument(Component[str]):
         return self._doc.export_to_markdown()
 
     def get_tables(self) -> list[Table]:
-        """Return the `Table`s that are a part of this document."""
+        """Return all tables found in this document.
+
+        Returns:
+            list[Table]: A list of ``Table`` objects extracted from the document.
+        """
         return [Table(x, self.docling()) for x in self.docling().tables]
 
     def save(self, filename: str | Path) -> None:
-        """Save the underlying DoclingDocument for reuse later."""
+        """Save the underlying ``DoclingDocument`` to a JSON file for later reuse.
+
+        Args:
+            filename (str | Path): Destination file path for the serialized
+                document.
+        """
         if type(filename) is str:
             filename = Path(filename)
         self._doc.save_as_json(filename)
 
     @classmethod
     def load(cls, filename: str | Path) -> RichDocument:
-        """Load a DoclingDocument from a file. The file must already be a DoclingDocument."""
+        """Load a ``RichDocument`` from a previously saved ``DoclingDocument`` JSON file.
+
+        Args:
+            filename (str | Path): Path to a JSON file previously created by
+                ``RichDocument.save``.
+
+        Returns:
+            RichDocument: A new ``RichDocument`` wrapping the loaded document.
+        """
         if type(filename) is str:
             filename = Path(filename)
         doc_doc = DoclingDocument.load_from_json(filename)
@@ -74,7 +119,15 @@ class RichDocument(Component[str]):
 
     @classmethod
     def from_document_file(cls, source: str | Path | DocumentStream) -> RichDocument:
-        """Process a document with Docling."""
+        """Convert a document file to a ``RichDocument`` using Docling.
+
+        Args:
+            source (str | Path | DocumentStream): Path or stream for the
+                source document (e.g. a PDF or Markdown file).
+
+        Returns:
+            RichDocument: A new ``RichDocument`` wrapping the converted document.
+        """
         pipeline_options = PdfPipelineOptions(
             images_scale=2.0, generate_picture_images=True
         )
@@ -90,24 +143,45 @@ class RichDocument(Component[str]):
 
 
 class TableQuery(Query):
-    """Table-specific query."""
+    """A ``Query`` component specialised for ``Table`` objects.
+
+    Formats the table as Markdown alongside the query string so the LLM receives
+    both the structured table content and the natural-language question.
+
+    Args:
+        obj (Table): The table to query.
+        query (str): The natural-language question to ask about the table.
+    """
 
     def __init__(self, obj: Table, query: str) -> None:
-        """Initializes a new instance of the `TableQuery` class.
+        """Initializes a new instance of the ``TableQuery`` class.
 
         Args:
-            obj : The table object to which the query applies.
-            query : The query string.
+            obj (Table): The table object to which the query applies.
+            query (str): The query string.
         """
         super().__init__(obj, query)
 
     def parts(self) -> list[Component | CBlock]:
-        """The list of cblocks/components on which TableQuery depends."""
+        """Return the constituent parts of this table query.
+
+        Returns:
+            list[Component | CBlock]: A list containing the wrapped ``Table``
+            object.
+        """
         cs: list[Component | CBlock] = [self._obj]
         return cs
 
     def format_for_llm(self) -> TemplateRepresentation:
-        """Template arguments for Formatter."""
+        """Format this table query for the language model.
+
+        Renders the table as Markdown alongside the query string, and forwards
+        any tools and fields from the table's own representation.
+
+        Returns:
+            TemplateRepresentation: Template args containing the query string
+            and the Markdown-rendered table.
+        """
         assert isinstance(self._obj, Table)
         tbl_repr = self._obj.format_for_llm()
         assert isinstance(tbl_repr, TemplateRepresentation)
@@ -121,24 +195,45 @@ class TableQuery(Query):
 
 
 class TableTransform(Transform):
-    """Table-specific transform."""
+    """A ``Transform`` component specialised for ``Table`` objects.
+
+    Formats the table as Markdown alongside the transformation instruction so the
+    LLM receives both the structured table content and the mutation description.
+
+    Args:
+        obj (Table): The table to transform.
+        transformation (str): Natural-language description of the desired mutation.
+    """
 
     def __init__(self, obj: Table, transformation: str) -> None:
-        """Initializes a new instance of the `TableTransform` class.
+        """Initializes a new instance of the ``TableTransform`` class.
 
         Args:
-            obj : The table object to which the transform applies.
-            transformation : The transformation description string.
+            obj (Table): The table object to which the transform applies.
+            transformation (str): The transformation description string.
         """
         super().__init__(obj, transformation)
 
     def parts(self) -> list[Component | CBlock]:
-        """The parts for this component."""
+        """Return the constituent parts of this table transform.
+
+        Returns:
+            list[Component | CBlock]: A list containing the wrapped ``Table``
+            object.
+        """
         cs: list[Component | CBlock] = [self._obj]
         return cs
 
     def format_for_llm(self) -> TemplateRepresentation:
-        """Template arguments for Formatter."""
+        """Format this table transform for the language model.
+
+        Renders the table as Markdown alongside the transformation description,
+        and forwards any tools and fields from the table's own representation.
+
+        Returns:
+            TemplateRepresentation: Template args containing the transformation
+            description and the Markdown-rendered table.
+        """
         assert isinstance(self._obj, Table)
         tbl_repr = self._obj.format_for_llm()
         assert isinstance(tbl_repr, TemplateRepresentation)
@@ -155,17 +250,40 @@ class TableTransform(Transform):
 
 
 class Table(MObject):
-    """A `Table` represents a single table within a larger Docling Document."""
+    """A ``Table`` represents a single table within a larger Docling Document.
+
+    Args:
+        ti (TableItem): The Docling ``TableItem`` extracted from the document.
+        doc (DoclingDocument): The parent ``DoclingDocument``. Passing ``None``
+            may cause downstream Docling functions to fail.
+    """
 
     def __init__(self, ti: TableItem, doc: DoclingDocument):
-        """If you pass doc=None, the underlying docling functions to extract data from tables may fail due to lack of context and docling deprecations."""
+        """Create a ``Table`` wrapping a Docling ``TableItem``.
+
+        Args:
+            ti (TableItem): The Docling table item to wrap.
+            doc (DoclingDocument): The parent Docling document. If ``None``,
+                some Docling extraction functions may fail.
+        """
         super().__init__(query_type=TableQuery, transform_type=TableTransform)
         self._ti = ti
         self._doc = doc
 
     @classmethod
     def from_markdown(cls, md: str) -> Table | None:
-        """Creates a fake document from the markdown and attempts to extract the first table found."""
+        """Create a ``Table`` from a Markdown string by round-tripping through Docling.
+
+        Wraps the Markdown in a minimal document, converts it with Docling, and
+        returns the first table found.
+
+        Args:
+            md (str): A Markdown string containing at least one table.
+
+        Returns:
+            Table | None: The first ``Table`` extracted from the Markdown, or
+            ``None`` if no table could be found.
+        """
         fake_doc = f"# X\n\n{md}\n"
         bs = io.BytesIO(fake_doc.encode("utf-8"))
         doc = RichDocument.from_document_file(DocumentStream(name="x.md", stream=bs))
@@ -175,20 +293,42 @@ class Table(MObject):
             return None
 
     def parts(self):
-        """The current implementation does not necessarily entail any string re-use, so parts is empty."""
+        """Return the constituent parts of this table component.
+
+        The current implementation always returns an empty list because the
+        table is rendered entirely through ``format_for_llm``.
+
+        Returns:
+            list[Component | CBlock]: Always an empty list.
+        """
         return []
 
     def to_markdown(self) -> str:
-        """Get the `Table` as markdown."""
+        """Export this table as a Markdown string.
+
+        Returns:
+            str: The Markdown representation of this table.
+        """
         return self._ti.export_to_markdown(self._doc)
 
     def transpose(self) -> Table | None:
-        """Transposes the table. Will return a new transposed `Table` if successful."""
+        """Transpose this table and return the result as a new ``Table``.
+
+        Returns:
+            Table | None: A new transposed ``Table``, or ``None`` if the
+            transposed Markdown cannot be parsed back into a ``Table``.
+        """
         t = self._ti.export_to_dataframe().transpose()
         return Table.from_markdown(t.to_markdown())
 
     def format_for_llm(self) -> TemplateRepresentation | str:
-        """Return Table representation for Formatter."""
+        """Return the table representation for the Formatter.
+
+        Returns:
+            TemplateRepresentation | str: A ``TemplateRepresentation`` that
+            renders the table as its Markdown string using a ``{{table}}``
+            template.
+        """
         return TemplateRepresentation(
             args={"table": self.to_markdown()},
             obj=self,

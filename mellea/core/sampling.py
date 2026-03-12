@@ -1,4 +1,12 @@
-"""Interfaces for Sampling Strategies."""
+"""Abstract interfaces for sampling strategies and their results.
+
+``SamplingStrategy`` defines the contract for all sampling algorithms: an async
+``sample`` method that takes an action, context, backend, and requirements, and
+returns a ``SamplingResult``. ``SamplingResult`` records the chosen generation
+alongside the full history of intermediate samples, their validation outcomes,
+and associated contexts — enabling detailed post-hoc inspection of the sampling
+process.
+"""
 
 import abc
 from typing import Generic
@@ -9,7 +17,26 @@ from .requirement import Requirement, ValidationResult
 
 
 class SamplingResult(CBlock, Generic[S]):
-    """Stores the results from a sampling operation. This includes successful and failed samplings."""
+    """Stores the results from a sampling operation. This includes successful and failed samplings.
+
+    Args:
+        result_index (int): Index into ``sample_generations`` identifying the chosen final output.
+        success (bool): Whether the sampling operation produced a passing result.
+        sample_generations (list[ModelOutputThunk[S]] | None): All output thunks generated during sampling.
+        sample_validations (list[list[tuple[Requirement, ValidationResult]]] | None): Per-generation validation
+            results; each inner list contains one tuple per requirement evaluated.
+        sample_actions (list[Component] | None): The actions used to produce each generation.
+        sample_contexts (list[Context] | None): The contexts associated with each generation.
+
+    Attributes:
+        result_index (int): Index into ``sample_generations`` identifying the chosen final output.
+        success (bool): Whether the sampling operation produced a passing result.
+        sample_generations (list[ModelOutputThunk[S]]): All output thunks generated during sampling.
+        sample_validations (list[list[tuple[Requirement, ValidationResult]]]): Per-generation validation
+            results; each inner list contains one tuple per requirement evaluated.
+        sample_actions (list[Component]): The actions used to produce each generation.
+        sample_contexts (list[Context]): The contexts associated with each generation.
+    """
 
     def __init__(
         self,

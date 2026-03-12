@@ -1,4 +1,14 @@
-"""Code interpreter tool."""
+"""Code interpreter tool and execution environments for agentic workflows.
+
+Provides ``ExecutionResult`` (capturing stdout, stderr, success, and optional static
+analysis output) and three concrete ``ExecutionEnvironment`` implementations:
+``StaticAnalysisEnvironment`` (parse and import-check only, no execution),
+``UnsafeEnvironment`` (subprocess execution in the current Python environment), and
+``LLMSandboxEnvironment`` (Docker-isolated execution via ``llm-sandbox``). All
+environments support an optional ``allowed_imports`` allowlist. The top-level
+``code_interpreter`` and ``local_code_interpreter`` functions are ready to be wrapped
+as ``MelleaTool`` instances for ReACT or other agentic loops.
+"""
 
 import ast
 import subprocess
@@ -28,6 +38,32 @@ class ExecutionResult:
     using the `analysis_result` field.
 
     TODO: should we also be trying to pass back the value of the final expression evaluated, or the value of locals() and globals()?
+
+    Args:
+        success (bool): ``True`` if execution succeeded (exit code 0 or
+            static-analysis passed); ``False`` otherwise.
+        stdout (str | None): Captured standard output, or ``None`` if
+            execution was skipped.
+        stderr (str | None): Captured standard error, or ``None`` if
+            execution was skipped.
+        skipped (bool): ``True`` when execution was not attempted.
+        skip_message (str | None): Explanation of why execution was skipped.
+        analysis_result (Any | None): Optional payload from static-analysis
+            environments.
+
+    Attributes:
+        success (bool): ``True`` if the code executed with exit code 0 or if a
+            static-analysis check passed; ``False`` otherwise.
+        stdout (str | None): Standard output captured from the subprocess, or
+            ``None`` if execution was skipped.
+        stderr (str | None): Standard error captured from the subprocess, or
+            ``None`` if execution was skipped.
+        skipped (bool): ``True`` when execution was not attempted (e.g. due to
+            unauthorized imports or a missing sandbox dependency).
+        skip_message (str | None): Human-readable explanation of why execution
+            was skipped, when ``skipped`` is ``True``.
+        analysis_result (Any | None): Optional payload returned by static-analysis
+            environments (e.g. the parsed AST tree or a ``SyntaxError`` instance).
     """
 
     success: bool
@@ -66,26 +102,56 @@ class ExecutionResult:
 
 
 class ExecutionEnvironment(ABC):
-    """Abstract environment for executing Python code."""
+    """Abstract environment for executing Python code.
+
+    Args:
+        allowed_imports (list[str] | None): Allowlist of top-level module names
+            that generated code may import. ``None`` disables the import check.
+
+    Attributes:
+        allowed_imports (list[str] | None): Allowlist of top-level module names that
+            generated code may import. ``None`` disables the import check entirely.
+    """
 
     def __init__(self, allowed_imports: list[str] | None = None):
         """Initialize with optional import restrictions.
 
         Args:
-            allowed_imports: List of allowed import modules. None means any import is allowed.
+            allowed_imports (list[str] | None): List of allowed import modules.
+                ``None`` means any import is allowed.
         """
         self.allowed_imports = allowed_imports
 
     @abstractmethod
     def execute(self, code: str, timeout: int) -> ExecutionResult:
-        """Execute code and return result."""
+        """Execute the given code and return the result.
+
+        Args:
+            code (str): The Python source code to execute.
+            timeout (int): Maximum number of seconds to allow the code to run.
+
+        Returns:
+            ExecutionResult: Execution outcome including stdout, stderr, and
+            success flag.
+        """
 
 
 class StaticAnalysisEnvironment(ExecutionEnvironment):
     """Safe environment that validates but does not execute code."""
 
     def execute(self, code: str, timeout: int) -> ExecutionResult:
-        """Validate code syntax and imports without executing."""
+        """Validate code syntax and imports without executing.
+
+        Args:
+            code (str): The Python source code to validate.
+            timeout (int): Ignored for static analysis; present for interface
+                compatibility.
+
+        Returns:
+            ExecutionResult: Result with ``skipped=True`` and the parsed AST in
+            ``analysis_result`` on success, or a syntax-error description on
+            failure.
+        """
         try:
             parse_tree = ast.parse(code)
         except SyntaxError as e:
@@ -123,7 +189,18 @@ class UnsafeEnvironment(ExecutionEnvironment):
     """Unsafe environment that executes code directly with subprocess."""
 
     def execute(self, code: str, timeout: int) -> ExecutionResult:
-        """Execute code with subprocess after checking imports."""
+        """Execute code with subprocess after checking imports.
+
+        Args:
+            code (str): The Python source code to execute.
+            timeout (int): Maximum number of seconds before the subprocess is
+                killed and a timeout result is returned.
+
+        Returns:
+            ExecutionResult: Execution outcome with captured stdout/stderr and
+            success flag, or a skipped result if imports are unauthorized or an
+            unexpected error occurs.
+        """
         if self.allowed_imports:
             unauthorized = _get_unauthorized_imports(code, self.allowed_imports)
             if unauthorized:
@@ -183,7 +260,21 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
     """Environment using llm-sandbox for secure Docker-based execution."""
 
     def execute(self, code: str, timeout: int) -> ExecutionResult:
-        """Execute code using llm-sandbox."""
+        """Execute code using llm-sandbox in an isolated Docker container.
+
+        Checks the import allowlist first, then delegates to a ``SandboxSession``
+        from the ``llm-sandbox`` package. Returns a skipped result if
+        ``llm-sandbox`` is not installed.
+
+        Args:
+            code (str): The Python source code to execute.
+            timeout (int): Maximum number of seconds to allow the sandboxed
+                process to run.
+
+        Returns:
+            ExecutionResult: Execution outcome with stdout/stderr and success
+            flag, or a skipped result on import violation or sandbox error.
+        """
         if self.allowed_imports:
             unauthorized = _get_unauthorized_imports(code, self.allowed_imports)
             if unauthorized:
@@ -265,6 +356,9 @@ def code_interpreter(code: str) -> ExecutionResult:
 
     Args:
         code: The Python code to execute.
+
+    Returns:
+        An ``ExecutionResult`` with stdout, stderr, and a success flag.
     """
     exec_env = LLMSandboxEnvironment(allowed_imports=None)
     return exec_env.execute(code, 60)
@@ -275,6 +369,9 @@ def local_code_interpreter(code: str) -> ExecutionResult:
 
     Args:
         code: The Python code to execute.
+
+    Returns:
+        An ``ExecutionResult`` with stdout, stderr, and a success flag.
     """
     exec_env = UnsafeEnvironment(allowed_imports=None)
     return exec_env.execute(code, 60)

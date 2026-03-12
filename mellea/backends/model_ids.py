@@ -1,4 +1,11 @@
-"""Dataclasses for ModelIdentifiers."""
+"""``ModelIdentifier`` dataclass and a catalog of pre-defined model IDs.
+
+``ModelIdentifier`` is a frozen dataclass that groups the platform-specific name
+variants for a model (HuggingFace, Ollama, WatsonX, MLX, OpenAI, Bedrock) so that
+a single constant can be passed to any backend without manual string translation.
+The module also ships a curated catalog of ready-to-use constants for popular
+open-weight models including IBM Granite 4, Meta Llama 4, Mistral, and Qwen families.
+"""
 
 import dataclasses
 
@@ -10,6 +17,24 @@ class ModelIdentifier:
     Using model strings is messy:
         1. Different platforms use variations on model id strings.
         2. Using raw strings is annoying because: no autocomplete, typos, hallucinated names, mismatched model and tokenizer names, etc.
+
+    Args:
+        hf_model_name (str | None): HuggingFace Hub model repository ID (e.g. ``"ibm-granite/granite-3.3-8b-instruct"``).
+        ollama_name (str | None): Ollama model tag (e.g. ``"granite3.3:8b"``).
+        watsonx_name (str | None): WatsonX AI model ID (e.g. ``"ibm/granite-3-2b-instruct"``).
+        mlx_name (str | None): MLX model identifier for Apple Silicon inference.
+        openai_name (str | None): OpenAI API model name (e.g. ``"gpt-5.1"``).
+        bedrock_name (str | None): AWS Bedrock model ID (e.g. ``"openai.gpt-oss-20b"``).
+        hf_tokenizer_name (str | None): HuggingFace tokenizer ID; defaults to ``hf_model_name`` if ``None``.
+
+    Attributes:
+        hf_model_name (str | None): HuggingFace Hub model repository ID.
+        ollama_name (str | None): Ollama model tag.
+        watsonx_name (str | None): WatsonX AI model ID.
+        mlx_name (str | None): MLX model identifier.
+        openai_name (str | None): OpenAI API model name.
+        bedrock_name (str | None): AWS Bedrock model ID.
+        hf_tokenizer_name (str | None): HuggingFace tokenizer ID; same as ``hf_model_name`` when ``None``.
     """
 
     hf_model_name: str | None = None
