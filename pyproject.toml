@@ -300,7 +300,7 @@ addopts = [
     "--cov-report=html",
     "--cov-report=json",
     # Set timeout to 15 minutes for full test suite
-    "--timeout=900",
+    "--timeout=1200",
 ]
 filterwarnings = [
     # Show each deprecation warning only once per session

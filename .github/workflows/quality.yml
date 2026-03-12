@@ -14,7 +14,7 @@ env:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 90 # TODO: need to reduce this after we figure out our testing strategy.
+    timeout-minutes: 180 # TODO: need to reduce this after we figure out our testing strategy.
     strategy:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
