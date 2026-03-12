@@ -68,7 +68,7 @@ def modify(payload: Any, **field_updates: Any) -> Any:
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
             "modify() requires the ContextForge plugin framework. "
-            "Install it with: pip install 'mellea[contextforge]'"
+            "Install it with: pip install 'mellea[hooks]'"
         )
     return PluginResult(
         continue_processing=True,
@@ -94,7 +94,7 @@ def block(
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
             "block() requires the ContextForge plugin framework. "
-            "Install it with: pip install 'mellea[contextforge]'"
+            "Install it with: pip install 'mellea[hooks]'"
         )
     return PluginResult(
         continue_processing=False,
@@ -123,7 +123,7 @@ def register(
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
             "register() requires the ContextForge plugin framework. "
-            "Install it with: pip install 'mellea[contextforge]'"
+            "Install it with: pip install 'mellea[hooks]'"
         )
 
     from mellea.plugins.manager import ensure_plugin_manager
@@ -343,6 +343,27 @@ if _HAS_PLUGIN_FRAMEWORK:
                 return PluginResult(continue_processing=True)
             return result
 
+else:
+    # Provide a stub when the plugin framework is not installed.
+    class _FunctionHookAdapter:  # type: ignore[no-redef]
+        """Stub — install ``"mellea[hooks]"`` for full plugin support."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            raise ImportError(
+                "MelleaPlugin requires the ContextForge plugin framework. "
+                "Install it with: pip install 'mellea[hooks]'"
+            )
+
+    # Provide a stub when the plugin framework is not installed.
+    class _MethodHookAdapter:  # type: ignore[no-redef]
+        """Stub — install ``"mellea[hooks]"`` for full plugin support."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            raise ImportError(
+                "MelleaPlugin requires the ContextForge plugin framework. "
+                "Install it with: pip install 'mellea[hooks]'"
+            )
+
 
 class _PluginScope:
     """Context manager returned by :func:`plugin_scope`.
@@ -441,7 +462,7 @@ def unregister(
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
             "unregister() requires the ContextForge plugin framework. "
-            "Install it with: pip install 'mellea[contextforge]'"
+            "Install it with: pip install 'mellea[hooks]'"
         )
 
     from mellea.plugins.manager import get_plugin_manager
