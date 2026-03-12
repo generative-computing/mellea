@@ -135,7 +135,7 @@ def extract_keywords(text: str) -> list[str]:
 For stricter guarantees, add requirements:
 
 ```python
-from mellea import generative
+from mellea import generative, start_session
 from mellea.stdlib.requirements import req
 
 @generative
@@ -176,7 +176,7 @@ with start_session() as m:
 when you want a reusable, typed, unit-testable function:
 
 ```python
-from mellea import generative
+from mellea import generative, start_session
 
 @generative
 def translate(text: str, language: str) -> str:
