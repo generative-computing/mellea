@@ -44,6 +44,7 @@ free text. For constrained output, use `Literal`:
 
 ```python
 from typing import Literal
+from mellea import generative
 
 @generative
 def classify_sentiment(text: str) -> Literal["positive", "negative", "neutral"]: ...
@@ -59,6 +60,8 @@ Generative functions support any JSON-serialisable return type — `str`, `int`,
 ```python
 from typing import Literal
 
+import mellea
+from mellea import generative
 from pydantic import BaseModel
 
 class FeedbackAnalysis(BaseModel):
@@ -88,6 +91,11 @@ Because each `@generative` function is just a Python function, you compose them
 the same way as any other code:
 
 ```python
+import mellea
+from mellea import generative
+
+# FeedbackAnalysis is the Pydantic model from Step 2 above.
+
 @generative
 def analyse_feedback(text: str) -> FeedbackAnalysis:
     """Extract sentiment, the main issue, and whether it is actionable."""
