@@ -1,4 +1,10 @@
 # pytest: ollama, llm, qualitative, skip
+# /// script
+# dependencies = [
+#   "mellea",
+#   "flake8-qiskit-migration",
+# ]
+# ///
 """Qiskit Code Validation with Instruct-Validate-Repair Pattern.
 
 This example demonstrates using Mellea's Instruct-Validate-Repair (IVR) pattern
@@ -12,15 +18,12 @@ The pipeline follows these steps:
 4. **Repair loop**: Automatically repair code that fails validation (up to 5 attempts)
 
 Requirements:
-    - flake8-qiskit-migration: Install with `uv pip install flake8-qiskit-migration`
+    - flake8-qiskit-migration: Installed automatically when run via `uv run`
     - Ollama backend running with a compatible model (e.g., mistral-small-3.2-24b-qiskit-GGUF)
 
 Example:
-    Run as a test:
-        $ uv run pytest docs/examples/instruct_validate_repair/qiskit_code_validation.py
-
-    Run as a standalone script:
-        $ uv run python docs/examples/instruct_validate_repair/qiskit_code_validation.py
+    Run as a standalone script (dependencies installed automatically):
+        $ uv run docs/examples/instruct_validate_repair/qiskit_code_validation.py
 """
 
 import ast
@@ -38,7 +41,7 @@ try:
 except ImportError:
     raise ImportError(
         "flake8-qiskit-migration is required for this example. "
-        "Install it with: uv pip install flake8-qiskit-migration"
+        "Run with: uv run docs/examples/instruct_validate_repair/qiskit_code_validation.py"
     )
 
 
