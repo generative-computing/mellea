@@ -110,7 +110,7 @@ The LiteLLM model ID format for Bedrock is `bedrock/converse/<bedrock-model-id>`
 See the [LiteLLM documentation](https://docs.litellm.ai/docs/providers/bedrock) for
 available model IDs and credential setup.
 
-> **Full example:** [`docs/examples/bedrock/bedrock_openai_example.py`](../../examples/bedrock/bedrock_openai_example.py)
+> **Full example:** [`docs/examples/bedrock/bedrock_openai_example.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/bedrock/bedrock_openai_example.py)
 
 ## Troubleshooting
 

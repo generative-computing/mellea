@@ -83,7 +83,7 @@ m = MelleaSession(
 
 ## LiteLLM backend
 
-> **Backend note:** Requires `pip install mellea[litellm]`. Provider-specific
+> **Backend note:** Requires `pip install "mellea[litellm]"`. Provider-specific
 > environment variables must be set (e.g., `AWS_BEARER_TOKEN_BEDROCK` for Bedrock).
 > See the [LiteLLM docs](https://docs.litellm.ai/) for your provider's setup.
 
@@ -104,7 +104,7 @@ print(str(result))
 
 ## HuggingFace backend
 
-> **Backend note:** Requires `pip install mellea[hf]`. Models are downloaded from
+> **Backend note:** Requires `pip install "mellea[hf]"`. Models are downloaded from
 > HuggingFace Hub on first use. GPU recommended for reasonable inference speed.
 > Required for [Intrinsics](../advanced/intrinsics).
 
@@ -120,7 +120,7 @@ m = MelleaSession(backend=backend)
 
 ## WatsonX backend
 
-> **Backend note:** Requires `pip install mellea[watsonx]` and IBM Cloud credentials.
+> **Backend note:** Requires `pip install "mellea[watsonx]"` and IBM Cloud credentials.
 
 ```python
 from mellea import start_session

@@ -344,7 +344,7 @@ output of `summarize_feedback` feeds `classify_sentiment`; the original feedback
 feeds `extract_issues`. There is no global state, no prompt accumulation — each
 call is self-contained.
 
-> **Full example:** [`docs/examples/instruct_validate_repair/101_email_with_requirements.py`](../../examples/instruct_validate_repair/101_email_with_requirements.py)
+> **Full example:** [`docs/examples/instruct_validate_repair/101_email_with_requirements.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/instruct_validate_repair/101_email_with_requirements.py)
 
 ---
 

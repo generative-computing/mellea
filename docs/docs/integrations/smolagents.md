@@ -47,7 +47,7 @@ description and parameter types are preserved exactly.
 > calling (e.g., Ollama with `granite4:micro`, OpenAI with `gpt-4o`). The default
 > Ollama setup supports this.
 >
-> **Full example:** [`docs/examples/tools/smolagents_example.py`](../../examples/tools/smolagents_example.py)
+> **Full example:** [`docs/examples/tools/smolagents_example.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/tools/smolagents_example.py)
 
 ## Which approach to use
 

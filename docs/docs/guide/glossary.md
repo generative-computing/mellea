@@ -542,7 +542,7 @@ See: [Requirements System](../concepts/requirements-system)
 
 ## RichDocument
 
-A `RichDocument` wraps a [Docling](https://ds4sd.github.io/docling/) parsed document
+A `RichDocument` wraps a [Docling](https://docling-project.github.io/docling/) parsed document
 to make PDFs, tables, and structured files queryable by the LLM. Extract tables as
 `Table` objects and pass them directly to `m.transform()` or `m.query()`.
 

@@ -117,7 +117,7 @@ print(handle_ticket(m, "The app crashes on login every time.", "French"))
 Each function is an independent LLM call. The composition logic stays in
 ordinary Python.
 
-> **Full example:** [`docs/examples/generative_slots/generate_with_context.py`](../../examples/generative_slots/generate_with_context.py)
+> **Full example:** [`docs/examples/generative_slots/generate_with_context.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/generative_slots/generate_with_context.py)
 
 ## Step 4: Steer all functions via context
 
@@ -233,7 +233,7 @@ except ValueError as e:
 The precondition check runs before the expensive letter generation. The
 postcondition check uses a second `@generative` call as a lightweight verifier.
 
-> **Full example:** [`docs/examples/generative_slots/investment_advice.py`](../../examples/generative_slots/investment_advice.py)
+> **Full example:** [`docs/examples/generative_slots/investment_advice.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/generative_slots/investment_advice.py)
 
 ## What you built
 

@@ -113,7 +113,7 @@ For tasks that fit comfortably in a single prompt, use `m.instruct()` directly.
 
 ---
 
-**Full example:** [`docs/examples/m_decompose/`](../../examples/m_decompose/)
+**Full example:** [`docs/examples/m_decompose/`](https://github.com/generative-computing/mellea/blob/main/docs/examples/m_decompose/)
 
 ---
 

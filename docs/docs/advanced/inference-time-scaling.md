@@ -146,7 +146,7 @@ print(f"Attempts: {len(result.sample_generations)}")
 The `ValidationResult.reason` string is passed to both S1 and S2 as repair guidance —
 write specific, actionable failure reasons for best results.
 
-> **Full example:** [`docs/examples/sofai/sofai_graph_coloring.py`](../../examples/sofai/sofai_graph_coloring.py)
+> **Full example:** [`docs/examples/sofai/sofai_graph_coloring.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/sofai/sofai_graph_coloring.py)
 
 ## Budget forcing
 

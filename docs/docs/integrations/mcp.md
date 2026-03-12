@@ -111,7 +111,7 @@ To run the server directly:
 uv run your_server.py
 ```
 
-**Full example:** [`docs/examples/notebooks/mcp_example.ipynb`](../../examples/notebooks/mcp_example.ipynb)
+**Full example:** [`docs/examples/notebooks/mcp_example.ipynb`](https://github.com/generative-computing/mellea/blob/main/docs/examples/notebooks/mcp_example.ipynb)
 
 ---
 

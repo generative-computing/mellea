@@ -107,7 +107,7 @@ response = client.chat.completions.create(
 print(response.choices[0].message.content)
 ```
 
-**Full example:** [`docs/examples/m_serve/m_serve_example_simple.py`](../../examples/m_serve/m_serve_example_simple.py)
+**Full example:** [`docs/examples/m_serve/m_serve_example_simple.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/m_serve/m_serve_example_simple.py)
 
 ---
 

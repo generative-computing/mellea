@@ -23,17 +23,17 @@ uv add mellea
 Install extras for specific backends:
 
 ```bash
-pip install mellea[litellm]    # LiteLLM multi-provider (Anthropic, Bedrock, etc.)
-pip install mellea[hf]         # HuggingFace transformers for local inference
-pip install mellea[watsonx]    # IBM WatsonX
-pip install mellea[tools]      # Tool and agent dependencies
-pip install mellea[telemetry]  # OpenTelemetry tracing and metrics
+pip install "mellea[litellm]"    # LiteLLM multi-provider (Anthropic, Bedrock, etc.)
+pip install "mellea[hf]"         # HuggingFace transformers for local inference
+pip install "mellea[watsonx]"    # IBM WatsonX
+pip install "mellea[tools]"      # Tool and agent dependencies
+pip install "mellea[telemetry]"  # OpenTelemetry tracing and metrics
 ```
 
 You can combine extras:
 
 ```bash
-pip install mellea[litellm,tools,telemetry]
+pip install "mellea[litellm,tools,telemetry]"
 ```
 
 ## Default backend: Ollama

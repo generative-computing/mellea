@@ -53,11 +53,11 @@ Please install them with: pip install 'mellea[hf]'
 Each backend has an optional extras group. Install what you need:
 
 ```bash
-pip install mellea[hf]         # HuggingFace / local inference
-pip install mellea[litellm]    # LiteLLM multi-provider
-pip install mellea[watsonx]    # IBM WatsonX
-pip install mellea[tools]      # Tool / agent dependencies
-pip install mellea[telemetry]  # OpenTelemetry tracing + metrics
+pip install "mellea[hf]"         # HuggingFace / local inference
+pip install "mellea[litellm]"    # LiteLLM multi-provider
+pip install "mellea[watsonx]"    # IBM WatsonX
+pip install "mellea[tools]"      # Tool / agent dependencies
+pip install "mellea[telemetry]"  # OpenTelemetry tracing + metrics
 ```
 
 ---

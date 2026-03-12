@@ -5,7 +5,7 @@ description: "Add OpenTelemetry tracing and metrics to Mellea programs."
 ---
 
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
-`pip install mellea[telemetry]`, Ollama running locally.
+`pip install "mellea[telemetry]"`, Ollama running locally.
 
 Mellea provides built-in [OpenTelemetry](https://opentelemetry.io/) instrumentation.
 Two independent trace scopes can be enabled separately, and a metrics API lets you
@@ -13,7 +13,7 @@ collect counters and histograms alongside traces. All telemetry is opt-in — if
 `[telemetry]` extra is not installed, every telemetry call is a silent no-op.
 
 > **Note:** OpenTelemetry is an optional dependency. Mellea works normally without it.
-> Install with `pip install mellea[telemetry]` or `uv pip install mellea[telemetry]`.
+> Install with `pip install "mellea[telemetry]"` or `uv pip install "mellea[telemetry]"`.
 
 ## Configuration
 
@@ -186,4 +186,4 @@ Application spans add Mellea-specific attributes:
 | `num_generate_logs` | Number of generation attempts |
 | `response` | Model response (truncated to 500 chars) |
 
-> **Full example:** [`docs/examples/telemetry/telemetry_example.py`](../../examples/telemetry/telemetry_example.py)
+> **Full example:** [`docs/examples/telemetry/telemetry_example.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/telemetry/telemetry_example.py)

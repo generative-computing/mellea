@@ -91,7 +91,7 @@ image or an [`ImageBlock`](../guide/glossary#imageblock) via `images=[...]` to
 
 ## Troubleshooting
 
-### `pip install mellea[hf]` fails on Intel macOS
+### `pip install "mellea[hf]"` fails on Intel macOS
 
 If you see torch/torchvision version errors on an Intel Mac, use Conda:
 
