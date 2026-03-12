@@ -324,6 +324,7 @@ async def test_litellm_token_metrics_integration(
 @pytest.mark.asyncio
 @pytest.mark.llm
 @pytest.mark.huggingface
+@pytest.mark.requires_heavy_ram
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_huggingface_token_metrics_integration(
     enable_metrics, metric_reader, stream, hf_metrics_backend
