@@ -120,7 +120,9 @@ def main():
         print("Prometheus endpoint still available at http://localhost:9464/metrics")
         print("Press Ctrl+C to exit.")
         print("=" * 60)
+
         import time
+
         try:
             while True:
                 time.sleep(1)
