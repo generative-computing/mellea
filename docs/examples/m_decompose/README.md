@@ -1,6 +1,6 @@
 # m_decompose
 
-This module with the example demonstrates **task decomposition pipelines** built with *Mellea generative programs*.
+This automatic pipeline demonstrates **task decomposition and execution** built with *Mellea generative programs*.
 
 Instead of solving a complex task with a single prompt, the system first **decomposes the task into subtasks**, then executes them sequentially through a assembled pipeline.
 
