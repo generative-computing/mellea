@@ -32,13 +32,13 @@ main branch (source of truth)
 ### Key principle
 
 The **source of truth** is always `main` (or a feature branch targeting
-`main`). The deployment branches `docs/staging` and `docs/production` are
+`main`). The docs branches `docs/staging` and `docs/production` are
 **fully automated orphan branches** that are force-pushed on each run.
 
-**Never edit files on the deployment branches directly.** Any manual
+**Never edit files on the docs branches directly.** Any manual
 changes will be overwritten without warning on the next pipeline run.
 
-## Deployment branches
+## Docs branches
 
 | Branch | Trigger | Purpose |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ changes will be overwritten without warning on the next pipeline run.
 | `docs/production` | GitHub release published | Production docs site served to users |
 | `docs/preview` | PR with `docs-preview` label, or `workflow_dispatch` | Throwaway branch for validating the full pipeline |
 
-All deployment branches are true orphan branches (no shared commit
+All docs branches are true orphan branches (no shared commit
 history with `main`). They contain only the assembled documentation
 output — static guides plus generated API reference.
 
@@ -169,7 +169,7 @@ In the Mintlify dashboard (Git Configuration):
 - **Staging environment** → branch: `docs/staging`, docs directory: `/` (root)
 - **Production environment** → branch: `docs/production`, docs directory: `/` (root)
 
-The deployment branches contain only documentation — `docs.json` sits at
+The docs branches contain only documentation — `docs.json` sits at
 the root, not under `docs/docs/` as it does on `main`. Set the docs
 directory to `/` (root), not `docs/docs`.
 
