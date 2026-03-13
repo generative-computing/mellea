@@ -50,6 +50,12 @@ All docs branches are true orphan branches (no shared commit
 history with `main`). They contain only the assembled documentation
 output — static guides plus generated API reference.
 
+Each deploy **replaces the branch with a single new commit** — no
+history is retained between runs. The branch is effectively a write
+target for the latest build, not a versioned record. If deploy history
+becomes useful in future, this can be changed by removing `force_orphan:
+true` from the workflow, which would let commits accumulate instead.
+
 ## What the pipeline does
 
 The `docs-publish.yml` workflow (`Docs` in GitHub Actions) runs these steps:
