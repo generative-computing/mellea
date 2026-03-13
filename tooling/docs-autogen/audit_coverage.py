@@ -402,8 +402,6 @@ def _print_quality_report(issues: list[dict]) -> None:
         for item in sorted(items, key=lambda x: x["path"]):
             print(f"  {item['path']}")
             print(f"    {item['detail']}")
-            if _IN_GHA:
-                _gha_cmd("error", label, f"{item['path']} — {item['detail']}")
 
 
 def audit_nav_orphans(docs_dir: Path, source_dir: Path) -> list[str]:
