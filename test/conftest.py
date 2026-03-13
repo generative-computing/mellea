@@ -112,6 +112,7 @@ def shared_vllm_backend(request):
     """Shared vLLM backend for ALL vLLM tests across all modules.
 
     When --isolate-heavy is used, returns None to allow module-scoped backends.
+    When --group-by-backend is used, delays creation until after openai_vllm group.
     Uses IBM Granite 4 Micro as a small, fast model suitable for all vLLM tests.
     """
     # Check if process isolation is enabled
@@ -128,6 +129,19 @@ def shared_vllm_backend(request):
         )
         yield None
         return
+
+    # When using --group-by-backend, delay backend creation until after openai_vllm group
+    if request.config.getoption("--group-by-backend", default=False):
+        # Check if we're currently in the openai_vllm group
+        if hasattr(pytest_runtest_setup, "_last_backend_group"):
+            current_group = pytest_runtest_setup._last_backend_group
+            if current_group == "openai_vllm":
+                logger = FancyLogger.get_logger()
+                logger.info(
+                    "Backend grouping enabled: Delaying vLLM backend creation until after openai_vllm group"
+                )
+                yield None
+                return
 
     try:
         import mellea.backends.model_ids as model_ids
@@ -181,9 +195,14 @@ BACKEND_GROUPS = {
         "description": "HuggingFace backend tests (GPU)",
         "needs_gpu_cleanup": True,
     },
+    "openai_vllm": {
+        "marker": "openai",
+        "description": "OpenAI backend tests with vLLM server (subprocess)",
+        "needs_gpu_cleanup": True,
+    },
     "vllm": {
         "marker": "vllm",
-        "description": "vLLM backend tests (GPU, shared backend)",
+        "description": "vLLM backend tests (GPU, shared in-process backend)",
         "needs_gpu_cleanup": True,
     },
     "ollama": {
@@ -199,7 +218,8 @@ BACKEND_GROUPS = {
 }
 
 # Execution order when --group-by-backend is used
-BACKEND_GROUP_ORDER = ["huggingface", "vllm", "ollama", "api"]
+# Note: openai_vllm runs before vllm to allow subprocess cleanup before in-process backend
+BACKEND_GROUP_ORDER = ["huggingface", "openai_vllm", "vllm", "ollama", "api"]
 
 
 def aggressive_gpu_cleanup(backend_name):
