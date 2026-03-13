@@ -51,6 +51,7 @@ concurrency:
 
 env:
   UV_FROZEN: "1"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -162,6 +163,17 @@ jobs:
           mdx_overall = re.search(r"Overall: .+?(PASS|FAIL)", validate_log)
           mdx_detail = mdx_overall.group(1) if mdx_overall else ""
 
+          # Docstring quality annotation emitted by audit_coverage.py into the log
+          # Format: ::notice title=Docstring quality::message
+          #      or ::warning title=Docstring quality::message
+          quality_match = re.search(r"::(notice|warning|error) title=Docstring quality::(.+)", coverage_log)
+          if quality_match:
+              quality_level, quality_msg = quality_match.group(1), quality_match.group(2)
+              quality_icon = "✅" if quality_level == "notice" else "⚠️"
+              quality_row = f"| Docstring Quality | {quality_icon} {quality_msg} |"
+          else:
+              quality_row = None
+
           lines = [
               "## Docs Build — Validation Summary\n",
               "| Check | Result | Details |",
@@ -169,8 +181,10 @@ jobs:
               f"| Markdownlint | {icon(markdownlint_outcome)} {markdownlint_outcome}{mode} | {lint_detail} |",
               f"| MDX Validation | {icon(validate_outcome)} {validate_outcome}{mode} | {mdx_detail} |",
               f"| API Coverage | {icon(coverage_outcome)} {coverage_outcome}{mode} | {cov_detail} |",
-              "",
           ]
+          if quality_row:
+              lines.append(quality_row)
+          lines.append("")
 
           for title, log in [
               ("Markdownlint output", lint_log),
