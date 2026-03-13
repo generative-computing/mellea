@@ -1,0 +1,11 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "{\"certainty\": 0.3830646019813367}",
+                "role": "assistant"
+            }
+        }
+    ]
+}

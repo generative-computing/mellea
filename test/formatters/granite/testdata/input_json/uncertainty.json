@@ -1,0 +1,25 @@
+{
+    "messages": [
+        {
+            "role": "assistant",
+            "content": "Welcome to pet questions!"
+        },
+        {
+            "role": "user",
+            "content": "Which of my pets have fleas?"
+        }
+    ],
+    "max_completion_tokens": 1024,
+    "extra_body": {
+        "documents": [
+            {
+                "doc_id": "1",
+                "text": "My dog has fleas."
+            },
+            {
+                "doc_id": "2",
+                "text": "My cat does not have fleas."
+            }
+        ]
+    }
+}

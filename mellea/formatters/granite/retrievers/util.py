@@ -5,13 +5,13 @@
 # Standard
 import os
 import pathlib
-import urllib
 import urllib.error
+import urllib.request
 import zipfile
 
 # Third Party
-import pyarrow as pa
-import pyarrow.json as pj
+import pyarrow as pa  # type: ignore[import-not-found]
+import pyarrow.json as pj  # type: ignore[import-not-found]
 
 
 def download_mtrag_corpus(target_dir: str, corpus_name: str) -> pathlib.Path:

@@ -2,6 +2,8 @@
 
 """Example demonstrating OpenTelemetry tracing in Mellea.
 
+This example focuses on distributed tracing. For token metrics, see metrics_example.py.
+
 This example shows how to use the two independent trace scopes:
 1. Application trace - tracks user-facing operations
 2. Backend trace - tracks LLM backend interactions

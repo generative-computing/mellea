@@ -2,7 +2,7 @@
 # SKIP REASON: Requires an AWS bearer token for Bedrock.
 #!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.10"
+# requires-python = ">=3.11"
 # dependencies = [
 #   "mellea[litellm]",
 #   "boto3" # including so that this example works before the next release.

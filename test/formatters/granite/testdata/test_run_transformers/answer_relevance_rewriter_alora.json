@@ -1,0 +1,11 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "{\"answer_relevance_rewrite\": \"Alice, Bob, and Carol attended the meeting.\"}",
+                "role": "assistant"
+            }
+        }
+    ]
+}

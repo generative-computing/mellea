@@ -2,11 +2,13 @@
 
 """Classes and functions that implement the ElasticsearchRetriever."""
 
+from typing import Any
+
 
 class ElasticsearchRetriever:
     """Retriever for documents hosted on an ElasticSearch server."""
 
-    def __init__(self, corpus_name: str, host: str, **kwargs: dict[str, int]):
+    def __init__(self, corpus_name: str, host: str, **kwargs: Any):
         """Initialize ElasticsearchRetriever.
 
         :param hosts: Full url:port to the Elasticsearch server.

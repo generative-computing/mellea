@@ -1,8 +1,6 @@
 import re
-from enum import Enum
-from typing import Literal, TypedDict
-
-from typing_extensions import NotRequired
+from enum import StrEnum
+from typing import Literal, NotRequired, TypedDict
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
@@ -46,7 +44,7 @@ class DecompPipelineResult(TypedDict):
     final_response: NotRequired[str]
 
 
-class DecompBackend(str, Enum):
+class DecompBackend(StrEnum):
     ollama = "ollama"
     openai = "openai"
     rits = "rits"
@@ -116,7 +114,7 @@ def decompose(
     ).parse()
 
     constraint_validation_strategies: dict[str, Literal["code", "llm"]] = {
-        cons_key: validation_decision.generate(m_session, cons_key).parse()
+        cons_key: validation_decision.generate(m_session, cons_key).parse() or "llm"
         for cons_key in task_prompt_constraints
     }
 
@@ -142,7 +140,9 @@ def decompose(
             constraints=[
                 {
                     "constraint": cons_str,
-                    "validation_strategy": constraint_validation_strategies[cons_str],
+                    "validation_strategy": constraint_validation_strategies.get(
+                        cons_str, "llm"
+                    ),
                 }
                 for cons_str in subtask_data.constraints
             ],

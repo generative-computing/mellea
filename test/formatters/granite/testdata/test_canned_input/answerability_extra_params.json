@@ -1,0 +1,25 @@
+{
+  "messages": [
+    {
+      "content": "This request contains some extra parameters. Does it still work?",
+      "role": "user"
+    }
+  ],
+  "model": "original-model-name",
+  "extra_body": {
+    "structured_outputs": {
+      "json": {
+        "type": "string",
+        "enum": [
+          "answerable",
+          "unanswerable"
+        ]
+      }
+    }
+  },
+  "frequency_penalty": 0.1,
+  "n": 5,
+  "max_completion_tokens": 6,
+  "logprobs": true,
+  "top_logprobs": 10
+}

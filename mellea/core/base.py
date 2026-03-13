@@ -8,6 +8,7 @@ import base64
 import binascii
 import datetime
 import enum
+import time
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -16,6 +17,9 @@ from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
 
 import typing_extensions
 from PIL import Image as PILImage
+
+from ..plugins.manager import has_plugins, invoke_hook
+from ..plugins.types import HookType
 
 
 class CBlock:
@@ -49,15 +53,15 @@ class CBlock:
         return self._underlying_value
 
     @value.setter
-    def value(self, v: str):
+    def value(self, v: str) -> None:
         """Sets the value of the block."""
         self._underlying_value = v
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Stringifies the block."""
         return self.value if self.value else ""
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Provides a python-parsable representation of the block (usually)."""
         return f"CBlock({self.value}, {self._meta.__repr__()})"
 
@@ -67,9 +71,9 @@ class ImageBlock(CBlock):
 
     def __init__(self, value: str, meta: dict[str, Any] | None = None):
         """Initializes the ImageBlock with a base64 PNG string representation and some metadata."""
-        assert self.is_valid_base64_png(value), (
-            "Invalid base64 string representation of image."
-        )
+        assert self.is_valid_base64_png(
+            value
+        ), "Invalid base64 string representation of image."
         super().__init__(value, meta)
 
     @staticmethod
@@ -116,7 +120,7 @@ class ImageBlock(CBlock):
         image_base64 = cls.pil_to_base64(image)
         return cls(image_base64, meta)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Provides a python-parsable representation of the block (usually)."""
         return f"ImageBlock({self.value}, {self._meta.__repr__()})"
 
@@ -212,10 +216,26 @@ class ModelOutputThunk(CBlock, Generic[S]):
         )
         self._process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
         self._post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
+        self._on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
 
+        self._start: datetime.datetime | None = None
         self._generate_log: GenerateLog | None = None
 
-    def is_computed(self):
+    def _copy_from(self, other: ModelOutputThunk) -> None:
+        """Copy computed-output fields from *other* into *self*.
+
+        This is used when a hook replaces the MOT: callers already hold a
+        reference to *self*, so we swap the output-relevant state in-place
+        rather than replacing the object.
+        """
+        self._underlying_value = other._underlying_value
+        self._meta = other._meta
+        self.parsed_repr = other.parsed_repr
+        self.tool_calls = other.tool_calls
+        self._thinking = other._thinking
+        self._generate_log = other._generate_log
+
+    def is_computed(self) -> bool:
         """Returns true only if this Thunk has already been filled."""
         return self._computed
 
@@ -227,7 +247,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         return self._underlying_value
 
     @value.setter
-    def value(self, v: str):
+    def value(self, v: str) -> None:
         """Sets the value of the block."""
         self._underlying_value = v
 
@@ -268,8 +288,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
             RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible.
         """
         if self._computed:
-            assert self.value is not None  # If computed, the value cannot be None.
-            return self.value
+            raise RuntimeError(
+                "Streaming has finished and MOT is computed. Subsequent calls to mot.astream() are not permitted."
+            )
 
         do_set_computed = False
 
@@ -282,89 +303,104 @@ class ModelOutputThunk(CBlock, Generic[S]):
             0 if self._underlying_value is None else len(str(self._underlying_value))
         )  # type: ignore
 
-        exception_to_raise = None
-        try:
-            # Type of the chunk depends on the backend.
-            chunks: list[Any | None] = []
-            while True:
-                try:
-                    item = self._async_queue.get_nowait()
-                    chunks.append(item)
-                except asyncio.QueueEmpty:
-                    # We've exhausted the current items in the queue.
-                    break
-
-            # Make sure we always get the minimum chunk size.
-            while len(chunks) <= self._chunk_size:
-                if len(chunks) > 0:
-                    if chunks[-1] is None or isinstance(chunks[-1], Exception):
-                        break  # Hit sentinel value or an error.
-                    # We could switch to relying on the `done` / `finish_reason` field of chunks,
-                    # but that forces us to know about the chunk type here. Prefer sentinel values
-                    # for now.
-
-                item = await self._async_queue.get()
+        # Type of the chunk depends on the backend.
+        chunks: list[Any | None] = []
+        while True:
+            try:
+                item = self._async_queue.get_nowait()
                 chunks.append(item)
+            except asyncio.QueueEmpty:
+                # We've exhausted the current items in the queue.
+                break
 
-            # Process the sentinel value if it's there.
-            if chunks[-1] is None:
-                chunks.pop()  # Remove the sentinel value.
-                do_set_computed = True
+        # Make sure we always get the minimum chunk size.
+        while len(chunks) <= self._chunk_size:
+            if len(chunks) > 0:
+                if chunks[-1] is None or isinstance(chunks[-1], Exception):
+                    break  # Hit sentinel value or an error.
+                # We could switch to relying on the `done` / `finish_reason` field of chunks,
+                # but that forces us to know about the chunk type here. Prefer sentinel values
+                # for now.
 
-                # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk relied on.
-                if self._generate is not None:
-                    self._generate.cancel()
-                if self._generate_extra is not None:
-                    # Covers an hf edge case. The task is done generating anything useful but isn't `done` yet.
-                    await self._generate_extra
-                    self._generate_extra.cancel()
+            item = await self._async_queue.get()
+            chunks.append(item)
 
-                # If ModelOutputThunks get too bulky, we can do additional cleanup here
-                # and set fields to None.
+        # Process the sentinel value if it's there.
+        if chunks[-1] is None:
+            chunks.pop()  # Remove the sentinel value.
+            do_set_computed = True
 
-            elif isinstance(chunks[-1], Exception):
-                # Mark as computed so post_process runs in finally block
-                self._computed = True
-                # Store exception to re-raise after cleanup
-                exception_to_raise = chunks[-1]
+            # Shouldn't be needed, but cancel the Tasks this ModelOutputThunk relied on.
+            if self._generate is not None:
+                self._generate.cancel()
+            if self._generate_extra is not None:
+                # Covers an hf edge case. The task is done generating anything useful but isn't `done` yet.
+                await self._generate_extra
+                self._generate_extra.cancel()
 
-            for chunk in chunks:
-                assert self._process is not None
-                await self._process(self, chunk)
+            # If ModelOutputThunks get too bulky, we can do additional cleanup here
+            # and set fields to None.
 
-            if do_set_computed:
-                assert self._underlying_value is not None
-                self._computed = True
-        finally:
-            # Always call post_process if computed, even on exception
-            # This ensures telemetry spans are properly closed
-            if self._computed:
-                # Only parse if no exception occurred
-                if exception_to_raise is None:
-                    # DO NOT post_process. This means that the entire finally block needs to bermoved.
-                    assert self._post_process is not None
-                    await self._post_process(self)
+        elif isinstance(chunks[-1], Exception):
+            # Close any open telemetry span before propagating the error.
+            # We can't call full post_process here (it assumes success invariants),
+            # but we must not leak the span.
+            span = self._meta.get("_telemetry_span")
+            if span is not None:
+                from ..telemetry import end_backend_span, set_span_error
 
-                    match self._action:
-                        case Component():
-                            self.parsed_repr = self._action._parse(self)
-                        case CBlock():
-                            assert self.value is not None, (
-                                "value must be non-None since this thunk is computed"
-                            )
-                            self.parsed_repr = self.value  # type: ignore
-                        case _:
-                            raise ValueError(
-                                "attempted to astream from a model output thunk with no ._action set"
-                            )
-                    assert self.parsed_repr is not None, (
-                        "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
+                set_span_error(span, chunks[-1])
+                end_backend_span(span)
+                del self._meta["_telemetry_span"]
+            raise chunks[-1]
+
+        for chunk in chunks:
+            assert self._process is not None
+            await self._process(self, chunk)
+
+        if do_set_computed:
+            assert self._underlying_value is not None
+            self._computed = True
+
+            assert self._post_process is not None
+            await self._post_process(self)
+
+            match self._action:
+                case Component():
+                    self.parsed_repr = self._action._parse(self)
+                case CBlock():
+                    assert (
+                        self.value is not None
+                    ), "value must be non-None since this thunk is computed"
+                    self.parsed_repr = self.value  # type: ignore
+                case _:
+                    raise ValueError(
+                        "attempted to astream from a model output thunk with no ._action set"
                     )
-                    return self._underlying_value  # type: ignore
+            assert (
+                self.parsed_repr is not None
+            ), "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
 
-        # Re-raise exception after cleanup if one occurred
-        if exception_to_raise is not None:
-            raise exception_to_raise
+            # --- generation_post_call hook ---
+            if has_plugins(HookType.GENERATION_POST_CALL):
+                from ..plugins.hooks.generation import GenerationPostCallPayload
+
+                glog = self._generate_log
+                prompt = glog.prompt if glog and glog.prompt else ""
+                latency_ms = (
+                    (datetime.datetime.now() - self._start).total_seconds() * 1000
+                    if self._start
+                    else -1
+                )
+                post_payload = GenerationPostCallPayload(
+                    prompt=prompt, model_output=self, latency_ms=latency_ms
+                )
+                await invoke_hook(HookType.GENERATION_POST_CALL, post_payload)
+                # NOTE: If we allow generation_post_call to modify the model output thunk, we need to
+                # set the value and copy over fields here.
+                # replacement = await invoke_hook(...)
+                # if replacement is not None and replacement is not self:
+                #     self._copy_from(replacement)
 
         return (
             self._underlying_value
@@ -372,14 +408,14 @@ class ModelOutputThunk(CBlock, Generic[S]):
             else self._underlying_value[beginning_length:]  # type: ignore
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Provides a python-parsable representation (usually).
 
         Differs from CBlock because `._meta` can be very large for ModelOutputThunks.
         """
         return f"ModelOutputThunk({self.value})"
 
-    def __copy__(self):
+    def __copy__(self) -> ModelOutputThunk:
         """Returns a shallow copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generating."""
         copied = ModelOutputThunk(
             self._underlying_value, self._meta, self.parsed_repr, self.tool_calls
@@ -399,7 +435,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         copied._model_options = self._model_options
         return copied
 
-    def __deepcopy__(self, memo):
+    def __deepcopy__(self, memo: dict) -> ModelOutputThunk:
         """Returns a deep copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generation. Similar to __copy__ but creates deepcopies of _meta, parsed_repr, and most other fields that are objects."""
         # Use __init__ to initialize all fields. Modify the fields that need to be copied/deepcopied below.
         deepcopied = ModelOutputThunk(self._underlying_value)
@@ -451,7 +487,7 @@ class Context(abc.ABC):
     _is_root: bool
     _is_chat_context: bool = True
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Constructs a new root context with no content."""
         self._previous = None
         self._data = None
@@ -464,9 +500,9 @@ class Context(abc.ABC):
         cls: type[ContextT], previous: Context, data: Component | CBlock
     ) -> ContextT:
         """Constructs a new context from an existing context."""
-        assert isinstance(previous, Context), (
-            "Cannot create a new context from a non-Context object."
-        )
+        assert isinstance(
+            previous, Context
+        ), "Cannot create a new context from a non-Context object."
         assert data is not None, "Cannot create a new context from None data."
 
         x = cls()
@@ -525,16 +561,16 @@ class Context(abc.ABC):
         ):
             data = current_context.node_data
             assert data is not None, "Data cannot be None (except for root context)."
-            assert data not in context_list, (
-                "There might be a cycle in the context tree. That is not allowed."
-            )
+            assert (
+                data not in context_list
+            ), "There might be a cycle in the context tree. That is not allowed."
             context_list.append(data)
             last_n_count += 1
 
             current_context = current_context.previous_node  # type: ignore
-            assert current_context is not None, (
-                "Previous context cannot be None (except for root context)."
-            )
+            assert (
+                current_context is not None
+            ), "Previous context cannot be None (except for root context)."
 
         context_list.reverse()
         return context_list
@@ -553,7 +589,7 @@ class Context(abc.ABC):
                 return c
         return None
 
-    def last_turn(self):
+    def last_turn(self) -> ContextTurn | None:
         """The last input/output turn of the context.
 
         This can be partial. If the last event is an input, then the output is None.
@@ -595,7 +631,7 @@ class AbstractMelleaTool(abc.ABC):
     """Name of the tool."""
 
     @abc.abstractmethod
-    def run(self, *args, **kwargs) -> Any:
+    def run(self, *args: Any, **kwargs: Any) -> Any:
         """Runs the tool on the given arguments."""
 
     @property
@@ -677,9 +713,9 @@ def get_images_from_component(c: Component) -> None | list[ImageBlock]:
         imgs = c.images  # type: ignore
         if imgs is not None:
             assert isinstance(imgs, list), "images field must be a list."
-            assert all(isinstance(im, ImageBlock) for im in imgs), (
-                "all elements of images list must be ImageBlocks."
-            )
+            assert all(
+                isinstance(im, ImageBlock) for im in imgs
+            ), "all elements of images list must be ImageBlocks."
             if len(imgs) == 0:
                 return None
             else:

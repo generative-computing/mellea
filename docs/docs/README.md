@@ -1,41 +1,30 @@
-# 📚 Mellea Documentation
+# Mellea documentation
 
-This repository contains the documentation for the [**Mellea**](https://github.com/generative-computing/mellea) project. It provides clear, developer-focused guides and reference materials for working with the Mellea platform.
+This directory contains the source for the [Mellea documentation site](https://docs.mellea.ai).
 
-Visit Mellea documentation site: [https://mellea.ai/](https://mellea.ai)
+## About Mellea
 
----
+Mellea is a library for writing generative programs. Generative programming replaces flaky agents
+and brittle prompts with structured, maintainable, robust, and efficient AI workflows.
 
-## 🔎 About Mellea
+## Running the docs locally
 
-**Mellea** is a library for writing generative programs. Generative programming replaces flaky agents and brittle prompts with structured, maintainable, robust, and efficient AI workflows.
-
----
-
-## 🚀 Getting Started
-
-Follow these steps to run the documentation site locally:
-
-### 1️⃣ Install Mintlify CLI
-
-````bash
-npm install -g mint
-
-
-## 🚀 Getting Started
-
-### 1️⃣ Install Mintlify CLI globally
+### 1. Install Mintlify CLI
 
 ```bash
-npm install -g mint
-````
+npm install -g mintlify
+```
 
-### 2️⃣ Run locally
+### 2. Start the dev server
 
 ```bash
+cd docs/docs
 mint dev
 ```
 
-Your site will be available at [http://localhost:3000](http://localhost:3000).
+The site is available at <http://localhost:3000>.
 
----
+## Contributing
+
+See [CONTRIBUTING.md](https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md) for the general contribution guide and
+[guide/CONTRIBUTING.md](guide/CONTRIBUTING.md) for documentation writing conventions.

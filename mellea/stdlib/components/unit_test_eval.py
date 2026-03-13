@@ -35,7 +35,7 @@ class TestData(BaseModel):
 
     @field_validator("examples")
     @classmethod
-    def validate_examples(cls, v):
+    def validate_examples(cls, v: list[Example]) -> list[Example]:
         """Ensure examples list is not empty."""
         if not v:
             raise ValueError("examples list cannot be empty")
@@ -82,7 +82,7 @@ class TestBasedEval(Component[str]):
 
     def set_judge_context(
         self, input_text: str, prediction: str, targets_for_input: list[str]
-    ):
+    ) -> None:
         """Set context for judge evaluation."""
         if len(targets_for_input) == 0:  # no reference
             target_text = "N/A"

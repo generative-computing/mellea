@@ -10,6 +10,7 @@ pytestmark = [
     pytest.mark.llm,
     pytest.mark.requires_gpu,
     pytest.mark.requires_heavy_ram,
+    pytest.mark.requires_gpu_isolation,
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
         reason="Skipping vLLM tools tests in CI - qualitative test",

@@ -76,7 +76,7 @@ class MelleaTool(AbstractMelleaTool):
         except ImportError as e:
             raise ImportError(
                 f"It appears you are attempting to utilize a langchain tool '{type(tool)}'. "
-                "Please install langchain core: uv pip install langchain-core"
+                "Please install mellea with tools support: pip install 'mellea[tools]'"
             ) from e
 
     @classmethod
@@ -131,7 +131,7 @@ class MelleaTool(AbstractMelleaTool):
         except ImportError as e:
             raise ImportError(
                 f"It appears you are attempting to utilize a smolagents tool '{type(tool)}'. "
-                "Please install mellea with smolagents support: uv pip install 'mellea[smolagents]'"
+                "Please install mellea with tools support: pip install 'mellea[tools]'"
             ) from e
 
     @classmethod
@@ -435,7 +435,6 @@ def validate_tool_arguments(
             if len(unique_types) == 1:
                 param_type = unique_types[0]
             else:
-                # Use modern union syntax (Python 3.10+)
                 from functools import reduce
                 from operator import or_
 

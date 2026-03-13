@@ -1,4 +1,4 @@
-# pytest: ollama, qualitative, llm
+# pytest: ollama, qualitative, llm, slow
 
 from collections.abc import Callable
 from functools import cache

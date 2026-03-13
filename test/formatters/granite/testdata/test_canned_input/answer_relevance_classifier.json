@@ -1,0 +1,67 @@
+{
+  "messages": [
+    {
+      "content": "Who attended the meeting?",
+      "role": "user"
+    },
+    {
+      "content": "Many people attended the meeting.",
+      "role": "assistant"
+    },
+    {
+      "content": "answer_relevance",
+      "role": "user"
+    }
+  ],
+  "extra_body": {
+    "documents": [
+      {
+        "text": "Meeting attendees: Alice, Bob, Carol.",
+        "doc_id": "1"
+      },
+      {
+        "text": "Meeting time: 9:00 am to 11:00 am.",
+        "doc_id": "2"
+      }
+    ],
+    "structured_outputs": {
+      "json": {
+        "properties": {
+          "answer_relevance_analysis": {
+            "title": "Answer Relevance Analysis",
+            "type": "string"
+          },
+          "answer_relevance_category": {
+            "title": "Answer Relevance Category",
+            "type": "string",
+            "enum": [
+              "Pertinent",
+              "Pertinent with relevant extra",
+              "Excessive unnecessary information",
+              "Unduly restrictive",
+              "Too vague or generic",
+              "Contextual misalignment",
+              "Misinterpreted inquiry",
+              "No attempt"
+            ]
+          },
+          "answer_relevance_judgment": {
+            "title": "Answer Relevance Judgment",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "answer_relevance_analysis",
+          "answer_relevance_category",
+          "answer_relevance_judgment"
+        ],
+        "title": "AnswerRelevanceRawOutput",
+        "type": "object"
+      }
+    }
+  },
+  "temperature": 0.0,
+  "max_completion_tokens": 1024,
+  "logprobs": true,
+  "top_logprobs": 10
+}

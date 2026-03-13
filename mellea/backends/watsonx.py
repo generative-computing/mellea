@@ -242,7 +242,7 @@ class WatsonxAIBackend(FormatterBackend):
 
         return model_opts
 
-    async def generate_from_context(
+    async def _generate_from_context(
         self,
         action: Component[C] | CBlock,
         ctx: Context,
@@ -369,6 +369,7 @@ class WatsonxAIBackend(FormatterBackend):
             )
 
         output = ModelOutputThunk(None)
+        output._start = datetime.datetime.now()
         output._context = linearized_context
         output._action = action
         output._model_options = model_opts
@@ -426,7 +427,10 @@ class WatsonxAIBackend(FormatterBackend):
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
 
-            mot._meta["oai_chat_response"] = chunk["choices"][0]
+            # Store full chunk (includes usage information)
+            mot._meta["oai_chat_response"] = chunk
+            # Store choice separately for tool extraction
+            mot._meta["oai_chat_response_choice"] = chunk["choices"][0]
 
         else:  # Streaming.
             message_delta: dict = chunk["choices"][0].get("delta", dict())
@@ -469,7 +473,11 @@ class WatsonxAIBackend(FormatterBackend):
         # OpenAI streamed responses give you chunks of tool calls.
         # As a result, we have to store data between calls and only then
         # check for complete tool calls in the post_processing step.
-        tool_chunk = extract_model_tool_requests(tools, mot._meta["oai_chat_response"])
+        # Use choice for tool extraction (streaming returns choice, not full response)
+        choice_response = mot._meta.get(
+            "oai_chat_response_choice", mot._meta["oai_chat_response"]
+        )
+        tool_chunk = extract_model_tool_requests(tools, choice_response)
         if tool_chunk is not None:
             if mot.tool_calls is None:
                 mot.tool_calls = {}
@@ -477,7 +485,37 @@ class WatsonxAIBackend(FormatterBackend):
             for key, val in tool_chunk.items():
                 mot.tool_calls[key] = val
 
-        # Record telemetry if span is available
+        # Extract token usage from response
+        response = mot._meta.get("oai_chat_response")
+        usage = None
+        if response is not None:
+            # Watsonx responses may have usage information
+            usage = (
+                response.get("usage")
+                if isinstance(response, dict)
+                else getattr(response, "usage", None)
+            )
+
+        # Record metrics if enabled
+        from ..telemetry.metrics import is_metrics_enabled
+
+        if is_metrics_enabled() and usage:
+            from ..telemetry.backend_instrumentation import (
+                get_model_id_str,
+                get_system_name,
+            )
+            from ..telemetry.metrics import record_token_usage_metrics
+            from .utils import get_value
+
+            record_token_usage_metrics(
+                input_tokens=get_value(usage, "prompt_tokens"),
+                output_tokens=get_value(usage, "completion_tokens"),
+                model=get_model_id_str(self),
+                backend=self.__class__.__name__,
+                system=get_system_name(self),
+            )
+
+        # Record tracing if span exists
         span = mot._meta.get("_telemetry_span")
         if span is not None:
             from ..telemetry import end_backend_span
@@ -486,16 +524,9 @@ class WatsonxAIBackend(FormatterBackend):
                 record_token_usage,
             )
 
-            response = mot._meta.get("oai_chat_response")
+            if usage:
+                record_token_usage(span, usage)
             if response is not None:
-                # Watsonx responses may have usage information
-                usage = (
-                    response.get("usage")
-                    if isinstance(response, dict)
-                    else getattr(response, "usage", None)
-                )
-                if usage:
-                    record_token_usage(span, usage)
                 record_response_metadata(span, response)
 
             # Close the span now that async operation is complete

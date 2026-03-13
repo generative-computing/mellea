@@ -1,6 +1,11 @@
-# OpenTelemetry Tracing Examples
+# OpenTelemetry Instrumentation Examples
 
-This directory contains examples demonstrating OpenTelemetry instrumentation in Mellea.
+This directory contains examples demonstrating OpenTelemetry tracing and metrics in Mellea.
+
+## Examples
+
+- **`telemetry_example.py`** - Demonstrates distributed tracing (application and backend traces)
+- **`metrics_example.py`** - Demonstrates token usage metrics collection
 
 ## Quick Start
 
@@ -18,8 +23,25 @@ ollama serve
 
 ### 3. Run Examples
 
-#### Basic Example (No Tracing)
+#### Token Metrics Example
 
+**Console output (simplest):**
+```bash
+export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_CONSOLE=true
+python metrics_example.py
+```
+
+**With OTLP export:**
+```bash
+export MELLEA_METRICS_ENABLED=true
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+python metrics_example.py
+```
+
+#### Tracing Examples
+
+**Basic Example (No Tracing):**
 ```bash
 python telemetry_example.py
 ```

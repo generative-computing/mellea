@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 90 # TODO: need to reduce this after we figure out our testing strategy.
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"] # Need to add 3.13 once we resolve outlines issues.
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - name: Free disk space
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.cache/pre-commit
-          key: pre-commit|${{ env.PY }}|${{ hashFiles('.pre-commit-config.yaml') }}
+          key: pre-commit|${{ env.PY }}|${{ hashFiles('.pre-commit-config.yaml', 'uv.lock') }}
       - name: Install dependencies
         run: uv sync --frozen --all-extras --group dev
       - name: Check style and run tests
