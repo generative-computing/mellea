@@ -154,7 +154,8 @@ response = m.instruct(
 
 ## LangChain and smolagents interop
 
-Import tools directly from LangChain or smolagents:
+Import tools directly from LangChain or smolagents. Install the required
+packages first: `uv pip install langchain-community ddgs`.
 
 ```python
 from langchain_community.tools import DuckDuckGoSearchResults

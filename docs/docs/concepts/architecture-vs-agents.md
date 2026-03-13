@@ -46,6 +46,8 @@ framework that calls Python functions can use Mellea as a tool.
 
 ### smolagents
 
+> **Requires:** `uv pip install smolagents`
+
 ```python
 from mellea import generative, start_session
 from mellea.stdlib.requirements import req, simple_validate

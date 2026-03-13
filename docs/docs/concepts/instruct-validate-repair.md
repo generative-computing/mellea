@@ -185,9 +185,11 @@ print(str(answer))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-`grounding_context` maps string keys to document text. These are injected as
-reference material in the prompt. See [Working with Data](../guide/working-with-data)
-for richer document handling using MObjects and `RichDocument`.
+`grounding_context` maps string keys to document text. The keys are arbitrary
+labels — they appear in the prompt as `[key] = value` so the model can reference
+them by name, but there is no required naming convention (e.g. `"doc0"`, `"annual_report"`,
+`"spec"` all work). See [Working with Data](../guide/working-with-data) for richer
+document handling using MObjects and `RichDocument`.
 
 ## ICL examples
 

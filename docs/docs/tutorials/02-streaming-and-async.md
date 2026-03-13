@@ -203,13 +203,17 @@ asyncio.run(analyze_feedback(
 ## Step 5: Context and concurrency
 
 By default [`start_session()`](../guide/glossary#melleasession) uses [`SimpleContext`](../guide/glossary#context), which is safe for concurrent
-async calls. If you switch to [`ChatContext`](../guide/glossary#context), Mellea logs a warning when parallel
-calls are detected, because concurrent writes can corrupt the context state:
+async calls. If you switch to [`ChatContext`](../guide/glossary#context), Mellea logs a warning because
+concurrent writes can corrupt the context state:
 
 ```text
 WARNING: Not using a SimpleContext with asynchronous requests could cause
 unexpected results due to stale contexts. Ensure you await between requests.
 ```
+
+> **Note:** This warning appears whenever `ChatContext` is used with async methods,
+> even if you `await` each call sequentially. It is safe to ignore when you ensure
+> each call is fully resolved before starting the next.
 
 If you need `ChatContext` (for multi-turn conversation), await each call before
 starting the next:

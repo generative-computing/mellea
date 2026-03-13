@@ -4,6 +4,11 @@ description: "Run Mellea with IBM WatsonX AI using the WatsonxAIBackend."
 # diataxis: how-to
 ---
 
+> **Deprecated:** The native WatsonX backend is deprecated since v0.4. Use the
+> [LiteLLM](../guide/backends-and-configuration#litellm-backend) or
+> [OpenAI](../guide/backends-and-configuration#openai-backend) backend with a
+> WatsonX-compatible endpoint instead.
+
 The WatsonX backend connects to IBM's managed AI platform. It requires an API key,
 project ID, and service URL.
 

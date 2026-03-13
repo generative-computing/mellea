@@ -11,15 +11,21 @@ description: "Break complex tasks into ordered, executable subtasks with the m d
 3. Generate a prompt template for each subtask
 4. Output a ready-to-run Python script that executes each subtask in order
 
-**Prerequisites:** `pip install mellea`, Ollama running locally (or an OpenAI-compatible endpoint).
+**Prerequisites:** Mellea installed (`uv add mellea`), Ollama running locally (or an OpenAI-compatible endpoint).
 
 ## Basic usage
 
 Write your task description to a text file, then run:
 
 ```bash
+mkdir -p ./output
 m decompose run --prompt-file task.txt --out-dir ./output/
 ```
+
+> **Note:** The output directory must already exist — the command will error if it
+> does not. On first run with Ollama, the default model will be downloaded
+> automatically (~15 GB for the full model). Use `--model-id` with a smaller model
+> (e.g. `granite4:micro`) to avoid the large download.
 
 This produces two files in `./output/`:
 

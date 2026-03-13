@@ -94,33 +94,40 @@ These may be doc-only fixes or may indicate real API changes.
   Guardian check output confusing: deprecation warnings + "Guardian returned
   empty result" + false-positive safety failures. Is this expected?
 
-- [ ] **E2** — `tutorials/04-making-agents-reliable.md:406`
-  `MelleaTool.from_callable` crash:
-  `AttributeError: 'MelleaTool' object has no attribute '__name__'`
-  Likely passing a MelleaTool where a callable is expected.
+- [ ] **E2** — `tutorials/04-making-agents-reliable.md:444` — **DOC BUG (fixable)**
+  `web_search` and `calculate` are decorated with `@tool` → already `MelleaTool` objects.
+  `MelleaTool.from_callable()` tries `func.__name__` which `MelleaTool` lacks.
+  **Fix:** `tools=[web_search, calculate]` — no wrapping needed.
 
 - [ ] **E3** — `guide/tools-and-agents.md`
   Missing `ddgs` package for DuckDuckGo search example.
   Needs `uv pip install -U ddgs` note.
 
-- [ ] **E4** — `guide/tools-and-agents.md`
-  `AttributeError: 'ModelOutputThunk' object has no attribute 'body'`
+- [ ] **E4** — `guide/tools-and-agents.md:224` — **DOC BUG (fixable)**
+  `ModelOutputThunk` has no `.body` attribute. With `format=Email`, the parsed
+  Pydantic model lives at `.parsed_repr`.
+  **Fix:** `print(result.parsed_repr.body)`.
 
 - [ ] **E5** — `concepts/architecture-vs-agents.md`
   smolagents example: needs `pip install smolagents` note;
   gives incomplete response + serialization warning.
 
-- [ ] **E6** — `concepts/architecture-vs-agents.md`
-  LangChain `StructuredTool` import fails even after `pip install langchain`.
-  Import path may have changed.
+- [ ] **E6** — `concepts/architecture-vs-agents.md:97` — **DOC BUG (fixable)**
+  `from langchain.tools import StructuredTool` fails — monolithic `langchain` not
+  installed. Mellea depends on `langchain-core>=1.2.7` where `StructuredTool` lives.
+  **Fix:** `from langchain_core.tools import StructuredTool`.
+  Consistent with mellea's own `mellea/backends/tools.py`.
 
-- [ ] **E7** — `concepts/mobjects-and-mify.md`
-  Needs `pip install docling` note.
-  Also: `ModuleNotFoundError: No module named 'mellea.stdlib.docs'`
+- [ ] **E7** — `concepts/mobjects-and-mify.md:96-105` — **DOC BUG (fixable)**
+  `mellea.stdlib.docs` doesn't exist. Correct path: `mellea.stdlib.components.docs`.
+  **Fix:** `from mellea.stdlib.components.docs.richdocument import RichDocument` (and `Table`).
 
-- [ ] **E8** — `guide/act-and-aact.md`
-  `NotImplementedError: parts isn't implemented by default` from
-  `mellea/stdlib/components/docs/document.py`
+- [ ] **E8** — `guide/act-and-aact.md:83-98` — **LIBRARY BUG**
+  Base `Document.parts()` always raises `NotImplementedError`.
+  `Message(documents=[doc])` → framework `generate_walk()` calls `parts()` → crash.
+  No way to use base `Document` directly — effectively abstract without declaring itself so.
+  `Document.parts()` should return its content as a `CBlock` instead of raising.
+  **Action:** File library issue; add known-issue note to doc page.
 
 - [ ] **E9** — `guide/m-decompose.md`
   CLI `m decompose`: output dir must pre-exist; pulls 15.2 GB model without

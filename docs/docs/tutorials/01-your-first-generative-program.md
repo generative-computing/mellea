@@ -13,11 +13,14 @@ By the end you will have covered:
 
 - `instruct()` with user variables and requirements
 - Rejection sampling and `SamplingResult`
-- [`@generative`](../guide/glossary#generative) with `Literal` and [Pydantic](https://docs.pydantic.dev/) return types
 - Composing generative functions into a pipeline
 
+> **`@generative` in depth:** This tutorial uses `@generative` in the final pipeline
+> step. For a dedicated walkthrough of typed returns, `Literal`, and Pydantic models,
+> see [Tutorial 03: Using Generative Slots](../tutorials/03-using-generative-slots).
+
 **Prerequisites:** [Quick Start](../getting-started/quickstart) complete,
-`pip install mellea`, Ollama running locally with `granite4:micro` downloaded.
+Mellea installed (`uv add mellea`), Ollama running locally with `granite4:micro` downloaded.
 
 ---
 
@@ -35,7 +38,8 @@ summary = m.instruct(
     "Support was helpful once I got through."
 )
 print(str(summary))
-# Output will vary — LLM responses depend on model and temperature.
+# Example output (will vary by model and temperature):
+#   "The customer found onboarding confusing and slow, but appreciated the helpful support."
 ```
 
 `instruct()` returns a [`ModelOutputThunk`](../guide/glossary#modeloutputthunk). Calling `str()` on it (or accessing
@@ -204,69 +208,7 @@ control over what to do when the model can not satisfy your requirements.
 
 ---
 
-## Step 6: Typed classification with `@generative`
-
-Switch to [`@generative`](../guide/glossary#generative) when you want the return type enforced at the Python level.
-Add a sentiment classification step to the pipeline:
-
-```python
-from typing import Literal
-from mellea import generative, start_session
-
-@generative
-def classify_sentiment(summary: str) -> Literal["positive", "negative", "mixed"]:
-    """Classify the overall sentiment of the customer feedback summary."""
-
-m = start_session()
-sentiment = classify_sentiment(m, summary="Onboarding was confusing; support was helpful.")
-print(sentiment)
-# Output will vary — LLM responses depend on model and temperature.
-# Expected one of: "positive", "negative", "mixed"
-```
-
-`@generative` generates the prompt from the function signature and docstring.
-The model is constrained to return exactly one of the three allowed values.
-`sentiment` is a Python string — no parsing needed.
-
----
-
-## Step 7: Structured extraction with Pydantic
-
-For richer structured output, use a Pydantic model as the return type:
-
-```python
-from pydantic import BaseModel
-from mellea import generative, start_session
-
-class FeedbackIssues(BaseModel):
-    main_complaint: str
-    positive_aspect: str | None
-    urgency: str  # "low", "medium", "high"
-
-@generative
-def extract_issues(feedback: str) -> FeedbackIssues:
-    """Extract the main complaint, any positive aspect, and urgency level from the feedback."""
-
-m = start_session()
-issues = extract_issues(
-    m,
-    feedback=(
-        "The onboarding was confusing and took far too long. "
-        "Support was helpful once I got through."
-    ),
-)
-print(issues.main_complaint)
-print(issues.positive_aspect)
-print(issues.urgency)
-# Output will vary — LLM responses depend on model and temperature.
-```
-
-The model output is automatically parsed into a `FeedbackIssues` instance.
-Attribute access replaces manual JSON parsing.
-
----
-
-## Step 8: Composing the pipeline
+## Step 6: Composing the pipeline
 
 Assemble all the pieces into a complete pipeline:
 
@@ -357,8 +299,7 @@ call is self-contained.
 | Requirements | Enforces plain-English constraints via IVR |
 | `simple_validate` | Adds deterministic checks (word count, format) |
 | `RejectionSamplingStrategy` | Controls retry budget and exposes `SamplingResult` |
-| `@generative` + `Literal` | Type-safe classification with constrained output |
-| `@generative` + Pydantic | Structured extraction with attribute access |
+| `@generative` | Typed functions with LLM-backed implementations ([Tutorial 03](../tutorials/03-using-generative-slots)) |
 | Composition | Independent typed functions wired into a pipeline |
 
 ---

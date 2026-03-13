@@ -120,16 +120,9 @@ m = MelleaSession(backend=backend)
 
 ## WatsonX backend
 
-> **Backend note:** Requires `pip install "mellea[watsonx]"` and IBM Cloud credentials.
-
-```python
-from mellea import start_session
-
-m = start_session(
-    backend_name="watsonx",
-    model_id="ibm/granite-4-h-small",
-)
-```
+> **Deprecated:** The native WatsonX backend is deprecated. Use the **LiteLLM** or
+> **OpenAI** backend with a WatsonX-compatible endpoint instead.
+> See [IBM WatsonX integration](/integrations/watsonx) for the recommended setup.
 
 ## Model options
 

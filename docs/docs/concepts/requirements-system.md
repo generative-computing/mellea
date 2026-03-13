@@ -62,7 +62,7 @@ r2 = check("Do not mention purple elephants.")
 
 The difference matters: when `check_only=True`, the requirement description is
 evaluated after generation but **not** embedded in the prompt. This avoids the
-[purple elephant effect](https://generative-computing.github.io/blog/) — where
+purple elephant effect — where
 mentioning something in a negative instruction (e.g., "do not mention purple
 elephants") paradoxically increases the chance the model produces it.
 
