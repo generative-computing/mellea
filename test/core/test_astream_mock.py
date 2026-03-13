@@ -1,8 +1,9 @@
 """Deterministic Mock Tests for ModelOutputThunk.astream() incremental return behavior.
 
-Tests that astream() returns only new content added since the beginning of
-each astream() call, not the entire accumulated value. Uses manual queue
-injection to bypass LLM calls and network operations, guaranteeing determinism.
+Tests that astream() returns only the incremental content added during each call.
+All astream() chunks concatenated should equal the full final value. Calling
+astream() on a computed MOT raises RuntimeError. Uses manual queue injection to
+bypass LLM calls and network operations, guaranteeing determinism.
 """
 
 import asyncio
@@ -87,12 +88,13 @@ async def test_astream_multiple_calls_accumulate_correctly():
     mot._async_queue.put_nowait(None)
 
     chunk2 = await mot.astream()
-    assert chunk2 == "chunk"
-
-    final_val = await mot.avalue()
+    # astream() returns only the incremental content added during this call
+    assert chunk2 == "nk"
 
     assert mot.is_computed()
-    assert final_val == "chunk"
+    # All astream() chunks concatenated should equal the full value
+    assert chunk1 + chunk2 == "chunk"
+    assert mot.value == "chunk"
 
 
 @pytest.mark.asyncio
@@ -126,14 +128,14 @@ async def test_astream_empty_beginning():
 
 
 @pytest.mark.asyncio
-async def test_astream_computed_returns_full_value():
-    """Test that astream returns full value when already computed."""
-    # Precomputed thunk skips queue checking completely
+async def test_astream_computed_raises_error():
+    """Test that astream raises RuntimeError when already computed."""
+    # Precomputed thunk is already computed
     mot = ModelOutputThunk(value="Hello, world!")
 
-    # For a precomputed thunk, astream directly returns value
-    result = await mot.astream()
-    assert result == "Hello, world!"
+    # astream() on a computed MOT now raises RuntimeError
+    with pytest.raises(RuntimeError, match="Streaming has finished"):
+        await mot.astream()
 
 
 @pytest.mark.asyncio
@@ -155,8 +157,9 @@ async def test_astream_final_call_returns_full_value():
     # Calling astream here processes "part3" and `None`, flagging it as done
     chunk3 = await mot.astream()
 
-    final_val = await mot.avalue()
+    # The final astream() call returns only the incremental content, not the full value
+    assert chunk3 == "part3"
 
-    # The final chunk logically completes the thunk, returning the full value instead of a slice.
-    assert chunk3 == "part1part2part3"
-    assert chunk3 == final_val
+    # All chunks concatenated equal the full value
+    assert chunk1 + chunk2 + chunk3 == "part1part2part3"
+    assert mot.value == "part1part2part3"
