@@ -81,6 +81,7 @@ By default, validation issues are **reported but do not block** the
 deploy. This allows us to publish while resolving remaining issues.
 
 To enable hard failures, use the `strict_validation` input:
+
 - Via `workflow_dispatch`: check the "Fail the build if validation checks
   fail" checkbox.
 - To make it the permanent default: change `default: false` to
@@ -136,12 +137,17 @@ you're done testing.
 
 Without the label, PRs only run build + validation (no deploy).
 
+> **Fork PRs:** The deploy step requires write access to the upstream
+> repo. PRs from forks will build and validate successfully, but the
+> deploy will fail with a permission error. Use manual dispatch instead
+> (see below), or push the branch to the upstream repo.
+
 ### Manual dispatch
 
 For more control (e.g. deploying to a custom branch):
 
 1. Go to **Actions → Publish Documentation → Run workflow**.
-2. Select your feature branch.
+2. Select your feature branch (must exist on the upstream repo).
 3. Check **"Deploy even from a non-main context"**.
 4. Optionally change the target branch (defaults to `docs/preview`).
 5. Click **Run workflow**.
@@ -149,6 +155,7 @@ For more control (e.g. deploying to a custom branch):
 ## Mintlify configuration
 
 In the Mintlify dashboard (Git Configuration):
+
 - **Staging environment** → branch: `docs/staging`
 - **Production environment** → branch: `docs/production`
 
