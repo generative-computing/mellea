@@ -42,7 +42,7 @@ Dependencies:
     are gracefully disabled. Install with: pip install mellea[telemetry]
 
 Example:
-    from mellea.telemetry import trace_application, create_counter, get_otlp_handler
+    from mellea.telemetry import trace_application, create_counter, get_otlp_log_handler
     import logging
 
     # Trace application operations
@@ -56,12 +56,12 @@ Example:
 
     # Export logs via OTLP
     logger = logging.getLogger("my_app")
-    handler = get_otlp_handler()
+    handler = get_otlp_log_handler()
     if handler:
         logger.addHandler(handler)
 """
 
-from .logging import get_otlp_handler
+from .logging import get_otlp_log_handler
 from .metrics import (
     create_counter,
     create_histogram,
@@ -85,7 +85,7 @@ __all__ = [
     "create_histogram",
     "create_up_down_counter",
     "end_backend_span",
-    "get_otlp_handler",
+    "get_otlp_log_handler",
     "is_application_tracing_enabled",
     "is_backend_tracing_enabled",
     "is_metrics_enabled",

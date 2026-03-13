@@ -13,11 +13,11 @@ Example:
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 
 Programmatic usage:
-    from mellea.telemetry.logging import get_otlp_handler
+    from mellea.telemetry.logging import get_otlp_log_handler
     import logging
 
     logger = logging.getLogger("my_logger")
-    handler = get_otlp_handler()
+    handler = get_otlp_log_handler()
     if handler:
         logger.addHandler(handler)
         logger.info("This log will be exported via OTLP")
@@ -97,7 +97,7 @@ if _LOGS_OTLP:
     _logger_provider = _setup_logger_provider()
 
 
-def get_otlp_handler() -> Any:
+def get_otlp_log_handler() -> Any:
     """Get an OTLP logging handler for Python's logging module.
 
     Returns:
@@ -106,10 +106,10 @@ def get_otlp_handler() -> Any:
 
     Example:
         import logging
-        from mellea.telemetry.logging import get_otlp_handler
+        from mellea.telemetry.logging import get_otlp_log_handler
 
         logger = logging.getLogger("my_app")
-        handler = get_otlp_handler()
+        handler = get_otlp_log_handler()
         if handler:
             logger.addHandler(handler)
             logger.info("This log will be exported via OTLP")

@@ -126,9 +126,9 @@ class FancyLogger:
             logger.addHandler(stream_handler)
 
             # Add OTLP handler if enabled
-            from ..telemetry import get_otlp_handler
+            from ..telemetry import get_otlp_log_handler
 
-            otlp_handler = get_otlp_handler()
+            otlp_handler = get_otlp_log_handler()
             if otlp_handler:
                 otlp_handler.setFormatter(JsonFormatter())
                 logger.addHandler(otlp_handler)

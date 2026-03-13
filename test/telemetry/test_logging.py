@@ -70,17 +70,17 @@ def enable_otlp_logging(monkeypatch):
 
 def test_otlp_logging_disabled_by_default(clean_logging_env):
     """Test that OTLP logging is disabled by default."""
-    from mellea.telemetry.logging import get_otlp_handler
+    from mellea.telemetry.logging import get_otlp_log_handler
 
-    handler = get_otlp_handler()
+    handler = get_otlp_log_handler()
     assert handler is None
 
 
 def test_otlp_logging_enabled_with_env_var(enable_otlp_logging):
     """Test that OTLP logging can be enabled via environment variable."""
-    from mellea.telemetry.logging import get_otlp_handler
+    from mellea.telemetry.logging import get_otlp_log_handler
 
-    handler = get_otlp_handler()
+    handler = get_otlp_log_handler()
     assert handler is not None
     assert isinstance(handler, LoggingHandler)  # type: ignore
 
@@ -97,9 +97,9 @@ def test_otlp_logging_enabled_without_endpoint_warns(monkeypatch, clean_logging_
     with pytest.warns(UserWarning, match="no endpoint is configured"):
         importlib.reload(mellea.telemetry.logging)
 
-    from mellea.telemetry.logging import get_otlp_handler
+    from mellea.telemetry.logging import get_otlp_log_handler
 
-    handler = get_otlp_handler()
+    handler = get_otlp_log_handler()
     assert handler is None
 
 
@@ -116,9 +116,9 @@ def test_otlp_logging_with_various_truthy_values(monkeypatch, clean_logging_env)
 
         importlib.reload(mellea.telemetry.logging)
 
-        from mellea.telemetry.logging import get_otlp_handler
+        from mellea.telemetry.logging import get_otlp_log_handler
 
-        handler = get_otlp_handler()
+        handler = get_otlp_log_handler()
         assert handler is not None, f"Failed for value: {value}"
 
 
@@ -141,14 +141,14 @@ def test_logs_specific_endpoint_takes_precedence(monkeypatch, clean_logging_env)
 # Handler Integration Tests
 
 
-def test_get_otlp_handler_can_be_added_to_logger(enable_otlp_logging):
+def test_get_otlp_log_handler_can_be_added_to_logger(enable_otlp_logging):
     """Test that OTLP handler can be added to a Python logger."""
     import logging
 
-    from mellea.telemetry.logging import get_otlp_handler
+    from mellea.telemetry.logging import get_otlp_log_handler
 
     logger = logging.getLogger("test_logger")
-    handler = get_otlp_handler()
+    handler = get_otlp_log_handler()
 
     assert handler is not None
     logger.addHandler(handler)
@@ -194,6 +194,3 @@ def test_fancy_logger_works_without_otlp(clean_logging_env):
 
     # Verify logger can log messages (backward compatibility)
     logger.info("Test message")
-
-
-# Made with Bob
