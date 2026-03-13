@@ -464,10 +464,47 @@ def extract_imports(code: str) -> list[tuple[str, int | None]]:
     return imports
 
 
+def _mellea_module_exists(module_name: str) -> bool:
+    """Check whether a mellea.* module exists on the filesystem.
+
+    Walks from the repo's ``mellea/`` package directory, checking each
+    dotted component resolves to a directory (package) or ``.py`` file.
+    This avoids actually importing anything, so it's safe to call even
+    when optional dependencies are missing.
+    """
+    mellea_pkg = REPO_ROOT / "mellea"
+    if not mellea_pkg.is_dir():
+        return False
+    parts = module_name.split(".")
+    current = REPO_ROOT
+    for part in parts:
+        candidate_dir = current / part
+        candidate_file = current / f"{part}.py"
+        if candidate_dir.is_dir():
+            current = candidate_dir
+        elif candidate_file.is_file():
+            return True
+        else:
+            return False
+    # Ended on a directory — valid package
+    return (current / "__init__.py").is_file()
+
+
 def module_importable(module_name: str) -> bool:
-    """Check if module_name can be resolved without actually importing."""
+    """Check if module_name can be resolved without actually importing.
+
+    For mellea.* modules, checks the full dotted path on the filesystem
+    so that typos like ``mellea.stdlib.docs`` (should be
+    ``mellea.stdlib.components.docs``) are caught even though the
+    top-level ``mellea`` package exists.
+    """
+    if module_name.startswith("mellea"):
+        return _mellea_module_exists(module_name)
     top = module_name.split(".")[0]
-    return importlib.util.find_spec(top) is not None
+    try:
+        return importlib.util.find_spec(top) is not None
+    except (ModuleNotFoundError, ValueError):
+        return False
 
 
 def classify_module(name: str) -> str:
