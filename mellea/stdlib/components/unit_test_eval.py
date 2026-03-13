@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 from ...core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
+from ...security import SecLevel
 
 
 class Message(BaseModel):
@@ -63,6 +64,16 @@ class TestBasedEval(Component[str]):
         self.targets = targets or []
         self.test_id = test_id
         self.input_ids = input_ids or []
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     def parts(self) -> list[Component | CBlock]:
         """The set of constituent parts of the Component."""

@@ -43,6 +43,7 @@ from ..core import (
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
 from ..helpers import message_to_openai_message, messages_to_docs, send_to_queue
+from ..security import SecLevel, taint_sources
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from ..telemetry.backend_instrumentation import (
@@ -514,8 +515,13 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             other_input,
         )
 
-        output = ModelOutputThunk(None)
+        # Compute taint sources from action and context
+        sources = taint_sources(action, ctx)
+        sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+
+        output = ModelOutputThunk(value=None, sec_level=sec_level, meta={})
         output._start = datetime.datetime.now()
+
         output._context = ctx.view_for_generation()
         output._action = action
         output._model_options = model_options
@@ -789,6 +795,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             output = ModelOutputThunk(None)
             output._start = datetime.datetime.now()
+            # Compute taint sources from action and context
+            sources = taint_sources(action, ctx)
+            sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+
+            output = ModelOutputThunk(value=None, sec_level=sec_level, meta={})
             output._context = ctx.view_for_generation()
             output._action = action
             output._model_options = model_options
@@ -934,6 +945,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             output = ModelOutputThunk(None)
             output._start = datetime.datetime.now()
+            # Compute taint sources from action and context
+            sources = taint_sources(action, ctx)
+            sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+
+            output = ModelOutputThunk(value=None, sec_level=sec_level, meta={})
             output._context = ctx.view_for_generation()
             output._action = action
             output._model_options = model_options
@@ -1251,8 +1267,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         for i, decoded_result in enumerate(decoded_results):
             n_prompt_tokens = inputs["input_ids"][i].size(0)  # type: ignore
             n_completion_tokens = len(sequences_to_decode[i])
+            sources = taint_sources(actions[i], ctx)
+            sec_level = SecLevel.tainted_by(sources) if sources else SecLevel.none()
+
             result = ModelOutputThunk(
                 value=decoded_result,
+                sec_level=sec_level,
                 meta={
                     "usage": {
                         "prompt_tokens": n_prompt_tokens,  # type: ignore
