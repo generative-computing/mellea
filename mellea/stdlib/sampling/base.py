@@ -12,10 +12,6 @@ Sampling strategies control how Mellea handles validation failures during genera
 - **MultiTurnStrategy**: Multi-turn conversational repair (requires ChatContext). Adds validation
   failure reasons as new user messages in the conversation, allowing iterative improvement through
   dialogue. Best for complex tasks and agentic workflows.
-
-All strategies now include detailed validation failure reasons (from ValidationResult.reason) when
-available, allowing the model to understand WHY requirements failed, not just WHICH requirements
-failed. This significantly improves convergence rates, especially for MultiTurnStrategy.
 """
 
 import abc
