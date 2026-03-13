@@ -1,0 +1,22 @@
+{
+  "messages": [
+    {
+      "content": "Hello world.",
+      "role": "user"
+    }
+  ],
+  "extra_body": {
+    "structured_outputs": {
+      "json": {
+        "type": "string",
+        "enum": [
+          "answerable",
+          "unanswerable"
+        ]
+      }
+    }
+  },
+  "max_completion_tokens": 6,
+  "logprobs": true,
+  "top_logprobs": 10
+}

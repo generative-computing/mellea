@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Coroutine
 from typing import Any, Literal, overload
 
@@ -19,6 +20,7 @@ from ..core import (
     GenerateLog,
     ImageBlock,
     ModelOutputThunk,
+    ModelToolCall,
     Requirement,
     S,
     SamplingResult,
@@ -26,6 +28,9 @@ from ..core import (
     ValidationResult,
 )
 from ..helpers import _run_async_in_thread
+from ..plugins.hooks.tool import ToolPostInvokePayload, ToolPreInvokePayload
+from ..plugins.manager import has_plugins, invoke_hook
+from ..plugins.types import HookType
 from ..telemetry import set_span_attribute, trace_application
 from .components import Instruction, Message, MObjectProtocol, ToolMessage, mify
 from .context import SimpleContext
@@ -476,6 +481,9 @@ async def aact(
     Returns:
         A (ModelOutputThunk, Context) if `return_sampling_results` is `False`, else returns a `SamplingResult`.
     """
+    import time
+    import traceback
+
     with trace_application(
         "aact",
         action_type=action.__class__.__name__,
@@ -491,96 +499,164 @@ async def aact(
                 "\nSee the async section of the tutorial: https://github.com/generative-computing/mellea/blob/main/docs/tutorial.md#chapter-12-asynchronicity"
             )
 
-        sampling_result: SamplingResult | None = None
-        generate_logs: list[GenerateLog] = []
+        _component_type_name = type(action).__name__
 
-        if return_sampling_results:
-            assert strategy is not None, (
-                "Must provide a SamplingStrategy when return_sampling_results==True"
+        # --- component_pre_execute hook ---
+        if has_plugins(HookType.COMPONENT_PRE_EXECUTE):
+            from ..plugins.hooks.component import ComponentPreExecutePayload
+
+            pre_exec_payload = ComponentPreExecutePayload(
+                component_type=_component_type_name,
+                action=action,
+                requirements=requirements or [],
+                model_options=model_options or {},
+                format=format,
+                strategy=strategy,
+                tool_calls_enabled=tool_calls,
             )
+            _, pre_exec_payload = await invoke_hook(
+                HookType.COMPONENT_PRE_EXECUTE, pre_exec_payload, backend=backend
+            )
+            strategy = pre_exec_payload.strategy or strategy
+            requirements = pre_exec_payload.requirements or requirements
+            model_options = pre_exec_payload.model_options or model_options
+            format = pre_exec_payload.format
+            tool_calls = pre_exec_payload.tool_calls_enabled
 
-        if strategy is None:
-            # Only use the strategy if one is provided. Add a warning if requirements were passed in though.
-            if requirements is not None and len(requirements) > 0:
-                FancyLogger.get_logger().warning(
-                    "Calling the function with NO strategy BUT requirements. No requirement is being checked!"
+        t0 = time.monotonic()
+
+        try:
+            sampling_result: SamplingResult | None = None
+            generate_logs: list[GenerateLog] = []
+
+            if return_sampling_results:
+                assert strategy is not None, (
+                    "Must provide a SamplingStrategy when return_sampling_results==True"
                 )
 
-            result, new_ctx = await backend.generate_from_context(
-                action,
-                ctx=context,
-                format=format,
-                model_options=model_options,
-                tool_calls=tool_calls,
-            )
-            await result.avalue()
+            if strategy is None:
+                # Only use the strategy if one is provided. Add a warning if requirements were passed in though.
+                if requirements is not None and len(requirements) > 0:
+                    FancyLogger.get_logger().warning(
+                        "Calling the function with NO strategy BUT requirements. No requirement is being checked!"
+                    )
 
-            # ._generate_log should never be None after generation.
-            assert result._generate_log is not None
-            result._generate_log.is_final_result = True
-            generate_logs.append(result._generate_log)
+                result, new_ctx = await backend.generate_from_context(
+                    action,
+                    ctx=context,
+                    format=format,
+                    model_options=model_options,
+                    tool_calls=tool_calls,
+                )
+                await result.avalue()
 
-        else:
-            # Always sample if a strategy is provided, even if no requirements were provided.
-            # Some sampling strategies don't use requirements or set them when instantiated.
-
-            sampling_result = await strategy.sample(
-                action,
-                context=context,
-                backend=backend,
-                requirements=requirements,
-                validation_ctx=None,
-                format=format,
-                model_options=model_options,
-                tool_calls=tool_calls,
-            )
-
-            assert sampling_result.sample_generations is not None
-            for result in sampling_result.sample_generations:
-                assert (
-                    result._generate_log is not None
-                )  # Cannot be None after generation.
+                # ._generate_log should never be None after generation.
+                assert result._generate_log is not None
+                result._generate_log.is_final_result = True
                 generate_logs.append(result._generate_log)
 
-            new_ctx = sampling_result.result_ctx
-            result = sampling_result.result
-            assert sampling_result.result._generate_log is not None
-            assert sampling_result.result._generate_log.is_final_result, (
-                "generate logs from the final result returned by the sampling strategy must be marked as final"
-            )
+            else:
+                # Always sample if a strategy is provided, even if no requirements were provided.
+                # Some sampling strategies don't use requirements or set them when instantiated.
 
-        # Add span attributes for the result
-        set_span_attribute(span, "num_generate_logs", len(generate_logs))
-        if sampling_result:
-            set_span_attribute(span, "sampling_success", bool(sampling_result.result))
+                sampling_result = await strategy.sample(
+                    action,
+                    context=context,
+                    backend=backend,
+                    requirements=requirements,
+                    validation_ctx=None,
+                    format=format,
+                    model_options=model_options,
+                    tool_calls=tool_calls,
+                )
 
-        # Log the model response (truncated for large responses)
-        try:
-            response_value = (
-                str(result.value)
-                if hasattr(result, "value") and result.value
-                else str(result)
-            )
-            # Truncate to 500 chars to avoid overwhelming trace storage
-            if len(response_value) > 500:
-                response_value = response_value[:500] + "..."
-            set_span_attribute(span, "response", response_value)
-            set_span_attribute(
-                span,
-                "response_length",
-                len(str(result.value) if hasattr(result, "value") else str(result)),
-            )
-        except Exception:
-            # If we can't get the response, don't fail the trace
-            pass
+                assert sampling_result.sample_generations is not None
+                for result in sampling_result.sample_generations:
+                    assert (
+                        result._generate_log is not None
+                    )  # Cannot be None after generation.
+                    generate_logs.append(result._generate_log)
 
-        if return_sampling_results:
-            assert (
-                sampling_result is not None
-            )  # Needed for the type checker but should never happen.
-            return sampling_result
-        else:
-            return result, new_ctx
+                new_ctx = sampling_result.result_ctx
+                result = sampling_result.result
+                assert sampling_result.result._generate_log is not None
+                assert sampling_result.result._generate_log.is_final_result, (
+                    "generate logs from the final result returned by the sampling strategy must be marked as final"
+                )
+
+            # Add span attributes for the result
+            set_span_attribute(span, "num_generate_logs", len(generate_logs))
+            if sampling_result:
+                set_span_attribute(
+                    span, "sampling_success", bool(sampling_result.result)
+                )
+
+            # Log the model response (truncated for large responses)
+            try:
+                response_value = (
+                    str(result.value)
+                    if hasattr(result, "value") and result.value
+                    else str(result)
+                )
+                # Truncate to 500 chars to avoid overwhelming trace storage
+                if len(response_value) > 500:
+                    response_value = response_value[:500] + "..."
+                set_span_attribute(span, "response", response_value)
+                set_span_attribute(
+                    span,
+                    "response_length",
+                    len(str(result.value) if hasattr(result, "value") else str(result)),
+                )
+            except Exception:
+                # If we can't get the response, don't fail the trace
+                pass
+
+            # --- component_post_success hook ---
+            if has_plugins(HookType.COMPONENT_POST_SUCCESS):
+                from ..plugins.hooks.component import ComponentPostSuccessPayload
+
+                success_payload = ComponentPostSuccessPayload(
+                    component_type=_component_type_name,
+                    action=action,
+                    result=result,
+                    context_before=context,
+                    context_after=new_ctx,
+                    generate_log=generate_logs[-1] if generate_logs else None,
+                    sampling_results=sampling_result.sample_generations
+                    if sampling_result
+                    else None,
+                    latency_ms=int((time.monotonic() - t0) * 1000),
+                )
+                await invoke_hook(
+                    HookType.COMPONENT_POST_SUCCESS, success_payload, backend=backend
+                )
+
+            if return_sampling_results:
+                assert (
+                    sampling_result is not None
+                )  # Needed for the type checker but should never happen.
+                return sampling_result
+            else:
+                return result, new_ctx
+
+        except Exception as exc:
+            # --- component_post_error hook ---
+            if has_plugins(HookType.COMPONENT_POST_ERROR):
+                from ..plugins.hooks.component import ComponentPostErrorPayload
+
+                error_payload = ComponentPostErrorPayload(
+                    component_type=_component_type_name,
+                    action=action,
+                    error=exc,
+                    error_type=type(exc).__name__,
+                    stack_trace=traceback.format_exc(),
+                    context=context,
+                    model_options=model_options or {},
+                )
+                await invoke_hook(
+                    HookType.COMPONENT_POST_ERROR, error_payload, backend=backend
+                )
+            raise
 
 
 @overload
@@ -759,6 +835,22 @@ async def avalidate(
             validation_target_ctx = validation_target_ctx.add(input)
         validation_target_ctx = validation_target_ctx.add(output)
 
+    # --- validation_pre_check hook ---
+    if has_plugins(HookType.VALIDATION_PRE_CHECK):
+        from ..plugins.hooks.validation import ValidationPreCheckPayload
+
+        pre_payload = ValidationPreCheckPayload(
+            requirements=reqs,
+            target=output,
+            context=validation_target_ctx,
+            model_options=model_options or {},
+        )
+        _, pre_payload = await invoke_hook(
+            HookType.VALIDATION_PRE_CHECK, pre_payload, backend=backend
+        )
+        reqs = pre_payload.requirements
+        model_options = pre_payload.model_options or model_options
+
     rvs: list[ValidationResult] = []
     coroutines: list[Coroutine[Any, Any, ValidationResult]] = []
 
@@ -786,6 +878,22 @@ async def avalidate(
                 #       This is the only scenario where ValidationResults are supposed to line
                 #       up with GenerateLogs.
                 generate_logs.append(None)  # type: ignore
+
+    # --- validation_post_check hook ---
+    if has_plugins(HookType.VALIDATION_POST_CHECK):
+        from ..plugins.hooks.validation import ValidationPostCheckPayload
+
+        post_payload = ValidationPostCheckPayload(
+            requirements=reqs,
+            results=rvs,
+            all_validations_passed=all(bool(r) for r in rvs),
+            passed_count=sum(1 for r in rvs if bool(r)),
+            failed_count=sum(1 for r in rvs if not bool(r)),
+        )
+        _, post_payload = await invoke_hook(
+            HookType.VALIDATION_POST_CHECK, post_payload, backend=backend
+        )
+        rvs = post_payload.results
 
     return rvs
 
@@ -874,7 +982,7 @@ async def atransform(
         tool_calls=True,
     )
 
-    tools = _call_tools(transformed, backend)
+    tools = await _acall_tools(transformed, backend)
 
     # Transform only supports calling one tool call since it cannot currently synthesize multiple outputs.
     # Attempt to choose the best one to call.
@@ -944,26 +1052,83 @@ def _call_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]
     Returns:
         list[ToolMessage]: A list of tool messages that can be empty.
     """
-    # There might be multiple tool calls returned.
+    return _run_async_in_thread(_acall_tools(result, backend))
+
+
+async def _acall_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]:
+    """Call all the tools requested in a result's tool calls object.
+
+    Call tools with tool_pre_invoke / tool_post_invoke hook support.
+
+    Returns:
+        list[ToolMessage]: A list of tool messages that can be empty.
+    """
     outputs: list[ToolMessage] = []
     tool_calls = result.tool_calls
-    if tool_calls:
-        # Call the tools and decide what to do.
-        for name, tool in tool_calls.items():
-            try:
-                output = tool.call_func()
-            except Exception as e:
-                output = e
+    if not tool_calls:
+        return outputs
 
-            # Default to the output. Attempt to properly print it. If that doesn't result in a str,
-            # stringify it.
-            content = str(output)
-            if isinstance(backend, FormatterBackend):
-                content = backend.formatter.print(output)  # type: ignore
-                content = str(content)
+    for name, tool in tool_calls.items():
+        # --- tool_pre_invoke ---
+        if has_plugins(HookType.TOOL_PRE_INVOKE):
+            pre_payload = ToolPreInvokePayload(model_tool_call=tool)
+            _, pre_payload = await invoke_hook(
+                HookType.TOOL_PRE_INVOKE, pre_payload, backend=backend
+            )
+            if pre_payload.model_tool_call is not tool and isinstance(
+                pre_payload.model_tool_call, ModelToolCall
+            ):
+                tool = pre_payload.model_tool_call
 
-            outputs.append(
-                ToolMessage(
+        # --- execute the tool ---
+        t0 = time.monotonic()
+        success = True
+        error: Exception | None = None
+        try:
+            output = tool.call_func()
+        except Exception as e:
+            output = e
+            success = False
+            error = e
+        latency_ms = int((time.monotonic() - t0) * 1000)
+
+        # Default to the output. Attempt to properly print it. If that doesn't result in a str,
+        # stringify it.
+        content = str(output)
+        if isinstance(backend, FormatterBackend):
+            content = backend.formatter.print(output)  # type: ignore
+            content = str(content)
+
+        tool_msg = ToolMessage(
+            role="tool",
+            content=content,
+            tool_output=output,
+            name=name,
+            args=tool.args,
+            tool=tool,
+        )
+
+        # --- tool_post_invoke ---
+        if has_plugins(HookType.TOOL_POST_INVOKE):
+            post_payload = ToolPostInvokePayload(
+                model_tool_call=tool,
+                tool_output=output,
+                tool_message=tool_msg,
+                execution_time_ms=latency_ms,
+                success=success,
+                error=error,
+            )
+            _, post_payload = await invoke_hook(
+                HookType.TOOL_POST_INVOKE, post_payload, backend=backend
+            )
+            # If a plugin modified tool_output, reformat and rebuild the ToolMessage
+            if post_payload.tool_output is not output:
+                output = post_payload.tool_output
+                content = str(output)
+                if isinstance(backend, FormatterBackend):
+                    content = backend.formatter.print(output)  # type: ignore
+                    content = str(content)
+                tool_msg = ToolMessage(
                     role="tool",
                     content=content,
                     tool_output=output,
@@ -971,5 +1136,7 @@ def _call_tools(result: ModelOutputThunk, backend: Backend) -> list[ToolMessage]
                     args=tool.args,
                     tool=tool,
                 )
-            )
+
+        outputs.append(tool_msg)
+
     return outputs

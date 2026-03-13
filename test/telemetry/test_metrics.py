@@ -1,7 +1,6 @@
 """Unit tests for OpenTelemetry metrics instrumentation."""
 
-import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -25,7 +24,11 @@ def clean_metrics_env(monkeypatch):
     """Clean metrics environment variables before each test."""
     monkeypatch.delenv("MELLEA_METRICS_ENABLED", raising=False)
     monkeypatch.delenv("MELLEA_METRICS_CONSOLE", raising=False)
+    monkeypatch.delenv("MELLEA_METRICS_OTLP", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", raising=False)
+    monkeypatch.delenv("MELLEA_METRICS_PROMETHEUS", raising=False)
+    monkeypatch.delenv("OTEL_METRIC_EXPORT_INTERVAL", raising=False)
     monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
     # Force reload of metrics module to pick up env vars
     import importlib
@@ -52,13 +55,6 @@ def enable_metrics(monkeypatch):
     # Reset after test
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "false")
     importlib.reload(mellea.telemetry.metrics)
-
-
-@pytest.fixture
-def metric_reader():
-    """Create an in-memory metric reader for testing."""
-    reader = InMemoryMetricReader()
-    return reader
 
 
 # Configuration Tests
@@ -381,3 +377,277 @@ def test_console_exporter_disabled_by_default(enable_metrics):
     from mellea.telemetry.metrics import _METRICS_CONSOLE
 
     assert _METRICS_CONSOLE is False
+
+
+# OTLP Exporter Tests
+
+
+def test_otlp_explicit_enablement(monkeypatch):
+    """Test that OTLP exporter requires explicit enablement via MELLEA_METRICS_OTLP."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_METRICS_OTLP", "true")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+
+    import importlib
+
+    import mellea.telemetry.metrics
+
+    importlib.reload(mellea.telemetry.metrics)
+
+    from mellea.telemetry.metrics import _METRICS_OTLP
+
+    assert _METRICS_OTLP is True
+
+
+def test_metrics_specific_endpoint_precedence(monkeypatch):
+    """Test that OTEL_EXPORTER_OTLP_METRICS_ENDPOINT takes precedence over general endpoint."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "http://localhost:4318")
+
+    import importlib
+
+    import mellea.telemetry.metrics
+
+    importlib.reload(mellea.telemetry.metrics)
+
+    from mellea.telemetry.metrics import _OTLP_METRICS_ENDPOINT
+
+    assert _OTLP_METRICS_ENDPOINT == "http://localhost:4318"
+
+
+def test_custom_export_interval(monkeypatch):
+    """Test that custom export interval is configured correctly."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("OTEL_METRIC_EXPORT_INTERVAL", "30000")
+
+    import importlib
+
+    import mellea.telemetry.metrics
+
+    importlib.reload(mellea.telemetry.metrics)
+
+    from mellea.telemetry.metrics import _EXPORT_INTERVAL_MILLIS
+
+    assert _EXPORT_INTERVAL_MILLIS == 30000
+
+
+def test_invalid_export_interval_warning(monkeypatch):
+    """Test that invalid export interval produces warning and uses default."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("OTEL_METRIC_EXPORT_INTERVAL", "invalid")
+
+    import importlib
+
+    import mellea.telemetry.metrics
+
+    with pytest.warns(UserWarning, match="Invalid OTEL_METRIC_EXPORT_INTERVAL"):
+        importlib.reload(mellea.telemetry.metrics)
+
+    from mellea.telemetry.metrics import _EXPORT_INTERVAL_MILLIS
+
+    assert _EXPORT_INTERVAL_MILLIS == 60000
+
+
+def test_otlp_enabled_without_endpoint_warning(monkeypatch):
+    """Test that enabling OTLP without endpoint produces helpful warning."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_METRICS_OTLP", "true")
+
+    import importlib
+
+    import mellea.telemetry.metrics
+
+    with pytest.warns(
+        UserWarning,
+        match="OTLP metrics exporter is enabled.*but no endpoint is configured",
+    ):
+        importlib.reload(mellea.telemetry.metrics)
+
+
+# Prometheus Exporter Tests
+
+
+def test_prometheus_exporter_enabled(monkeypatch):
+    """Test that Prometheus metric reader initializes when enabled."""
+    import importlib
+
+    import mellea.telemetry.metrics
+
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
+
+    importlib.reload(mellea.telemetry.metrics)
+
+    from mellea.telemetry.metrics import _METRICS_PROMETHEUS
+
+    assert _METRICS_PROMETHEUS is True
+
+
+def test_prometheus_exporter_import_error_warning(monkeypatch):
+    """Test that missing Prometheus package produces helpful warning."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
+
+    import importlib
+    import sys
+
+    import mellea.telemetry.metrics
+
+    # Temporarily remove the module to simulate ImportError
+    original_modules = sys.modules.copy()
+    sys.modules["opentelemetry.exporter.prometheus"] = None  # type: ignore
+
+    try:
+        with pytest.warns(
+            UserWarning,
+            match="Prometheus exporter is enabled.*but opentelemetry-exporter-prometheus is not installed",
+        ):
+            importlib.reload(mellea.telemetry.metrics)
+    finally:
+        # Restore modules
+        sys.modules.clear()
+        sys.modules.update(original_modules)
+
+
+def test_prometheus_and_otlp_exporters_together(monkeypatch):
+    """Test that Prometheus and OTLP exporters can run simultaneously."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
+    monkeypatch.setenv("MELLEA_METRICS_OTLP", "true")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+
+    import importlib
+
+    import mellea.telemetry.metrics
+
+    importlib.reload(mellea.telemetry.metrics)
+
+    from mellea.telemetry.metrics import _METRICS_OTLP, _METRICS_PROMETHEUS
+
+    assert _METRICS_PROMETHEUS is True
+    assert _METRICS_OTLP is True
+
+
+def test_prometheus_exporter_disabled_by_default(enable_metrics):
+    """Test that Prometheus exporter is disabled by default."""
+    from mellea.telemetry.metrics import _METRICS_PROMETHEUS
+
+    assert _METRICS_PROMETHEUS is False
+
+
+def test_prometheus_exporter_with_console_exporter(monkeypatch):
+    """Test that Prometheus works alongside console exporter."""
+    monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    monkeypatch.setenv("MELLEA_METRICS_PROMETHEUS", "true")
+    monkeypatch.setenv("MELLEA_METRICS_CONSOLE", "true")
+
+    import importlib
+
+    import mellea.telemetry.metrics
+
+    importlib.reload(mellea.telemetry.metrics)
+
+    from mellea.telemetry.metrics import _METRICS_CONSOLE, _METRICS_PROMETHEUS
+
+    assert _METRICS_PROMETHEUS is True
+    assert _METRICS_CONSOLE is True
+
+
+# Token Counter Tests
+
+
+def test_token_counters_lazy_initialization(enable_metrics):
+    """Test that token counters are lazily initialized."""
+    from mellea.telemetry.metrics import _input_token_counter, _output_token_counter
+
+    # Initially None
+    assert _input_token_counter is None
+    assert _output_token_counter is None
+
+    # Call record_token_usage_metrics
+    from mellea.telemetry.metrics import record_token_usage_metrics
+
+    record_token_usage_metrics(
+        input_tokens=100,
+        output_tokens=50,
+        model="llama2:7b",
+        backend="OllamaBackend",
+        system="ollama",
+    )
+
+    # Now should be initialized
+    from mellea.telemetry.metrics import _input_token_counter, _output_token_counter
+
+    assert _input_token_counter is not None
+    assert _output_token_counter is not None
+
+
+def test_record_token_usage_metrics_with_valid_tokens(enable_metrics):
+    """Test recording token usage with valid token counts."""
+    from mellea.telemetry.metrics import record_token_usage_metrics
+
+    # Should not raise
+    record_token_usage_metrics(
+        input_tokens=150,
+        output_tokens=50,
+        model="gpt-4",
+        backend="OpenAIBackend",
+        system="openai",
+    )
+
+
+def test_record_token_usage_metrics_with_none_tokens(enable_metrics):
+    """Test recording token usage with None values (graceful handling)."""
+    from mellea.telemetry.metrics import record_token_usage_metrics
+
+    # Should not raise
+    record_token_usage_metrics(
+        input_tokens=None,
+        output_tokens=None,
+        model="llama2:7b",
+        backend="OllamaBackend",
+        system="ollama",
+    )
+
+
+def test_record_token_usage_metrics_with_zero_tokens(enable_metrics):
+    """Test recording token usage with zero values (should not record)."""
+    from mellea.telemetry.metrics import record_token_usage_metrics
+
+    # Should not raise, but won't record zeros
+    record_token_usage_metrics(
+        input_tokens=0,
+        output_tokens=0,
+        model="llama2:7b",
+        backend="OllamaBackend",
+        system="ollama",
+    )
+
+
+def test_record_token_usage_metrics_noop_when_disabled(clean_metrics_env):
+    """Test that record_token_usage_metrics is no-op when metrics disabled."""
+    from mellea.telemetry.metrics import record_token_usage_metrics
+
+    # Should not raise and should be no-op
+    record_token_usage_metrics(
+        input_tokens=100,
+        output_tokens=50,
+        model="llama2:7b",
+        backend="OllamaBackend",
+        system="ollama",
+    )
+
+    # Counters should still be None (not initialized)
+    from mellea.telemetry.metrics import _input_token_counter, _output_token_counter
+
+    assert _input_token_counter is None
+    assert _output_token_counter is None
+
+
+def test_record_token_usage_metrics_exported_in_public_api():
+    """Test that record_token_usage_metrics is exported in public API."""
+    from mellea.telemetry import record_token_usage_metrics
+
+    assert record_token_usage_metrics is not None
+    assert callable(record_token_usage_metrics)

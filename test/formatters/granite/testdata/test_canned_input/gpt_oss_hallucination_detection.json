@@ -1,0 +1,70 @@
+{
+  "messages": [
+    {
+      "content": "[{\"text\": \"The only type of fish that is yellow is the purple bumble fish.\", \"doc_id\": \"1\"}]",
+      "role": "user"
+    },
+    {
+      "content": "Hello there, how can I help you?",
+      "role": "assistant"
+    },
+    {
+      "content": "Tell me about some yellow fish.",
+      "role": "user"
+    },
+    {
+      "content": "<i0> Purple bumble fish are yellow. <i1> Green bumble fish are also yellow.",
+      "role": "assistant"
+    },
+    {
+      "content": "Split the last assistant response into individual sentences. For each sentence in the last assistant response, identify the faithfulness by comparing with the provided documents and generate the faithfulness reasoning and faithfulness decision. Ensure that your output includes all response sentence IDs, and for each response sentence ID, provide the corresponding faithfulness reasoning and faithfulness decision. The output must be a json structure.\n",
+      "role": "user"
+    }
+  ],
+  "extra_body": {
+    "structured_outputs": {
+      "json": {
+        "$defs": {
+          "HallucinationOutputEntry": {
+            "properties": {
+              "r": {
+                "minimum": 0,
+                "title": "Sentence Num",
+                "type": "integer"
+              },
+              "f": {
+                "title": "Is Faithful",
+                "type": "string",
+                "enum": [
+                  "faithful",
+                  "partial",
+                  "unfaithful"
+                ]
+              },
+              "e": {
+                "title": "Reasoning",
+                "type": "string"
+              }
+            },
+            "required": [
+              "r",
+              "e",
+              "f"
+            ],
+            "title": "HallucinationOutputEntry",
+            "type": "object"
+          }
+        },
+        "items": {
+          "$ref": "#/$defs/HallucinationOutputEntry"
+        },
+        "title": "HallucinationOutput",
+        "type": "array"
+      }
+    }
+  },
+  "temperature": 0.0,
+  "max_completion_tokens": 4096,
+  "logprobs": true,
+  "top_logprobs": 10
+}

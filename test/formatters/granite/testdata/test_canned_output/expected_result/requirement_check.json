@@ -1,0 +1,29 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "{\"requirement_likelihood\": 1.0}",
+                "role": "assistant",
+                "tool_calls": [],
+                "reasoning_content": null
+            },
+            "finish_reason": "stop"
+        }
+    ],
+    "prompt_logprobs": null,
+    "id": "chatcmpl-161ba1db8d6b4d05bbd5658b6d27c798",
+    "created": 1758304397,
+    "model": "requirement_check",
+    "object": "chat.completion",
+    "service_tier": null,
+    "system_fingerprint": null,
+    "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 293,
+        "total_tokens": 295,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": null
+    },
+    "kv_transfer_params": null
+}

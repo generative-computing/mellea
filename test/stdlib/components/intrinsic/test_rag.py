@@ -9,6 +9,7 @@ import pytest
 import torch
 
 from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
@@ -29,16 +30,13 @@ DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 """Location of data files for the tests in this file."""
 
 
-BASE_MODEL = "ibm-granite/granite-4.0-micro"
-
-
 @pytest.fixture(name="backend", scope="module")
 def _backend():
     """Backend used by the tests in this file. Module-scoped to avoid reloading the 3B model for each test."""
     # Prevent thrashing if the default device is CPU
     torch.set_num_threads(4)
 
-    backend_ = LocalHFBackend(model_id=BASE_MODEL)
+    backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.hf_model_name)  # type: ignore
     yield backend_
 
     # Code after yield is cleanup code.

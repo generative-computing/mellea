@@ -149,7 +149,7 @@ class Requirement(Component[str]):
                 context=val_ctx,
             )
 
-    def parts(self):
+    def parts(self) -> list[Component | CBlock]:
         """Returns all of the constituent parts of a Requirement."""
         return []
 

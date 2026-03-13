@@ -1,0 +1,78 @@
+{
+    "messages": [
+        {
+            "role": "user",
+            "content": "the most common form of user interface used on pc's today is called a"
+        },
+        {
+            "role": "assistant",
+            "content": "The most common form of user interface used on personal computers today is the graphical user interface (GUI). It typically follows the windows, icons, menus, pointer (WIMP) paradigm, which includes visual elements like windows, icons, menus, and a pointer to interact with information stored in computers."
+        },
+        {
+            "role": "user",
+            "content": "Advantages of using command line interface"
+        },
+        {
+            "role": "assistant",
+            "content": "While I don't have specific data comparing it directly to the most common user interfaces today (which are GUIs), the command line interface (CLI) does have several advantages as described in the documents:\n1. **Efficiency**: A CLI can be faster for entering large vocabularies of commands or queries, especially when coupled with a wide range of options. This is often the case with operating system command shells.\n2. **Low resource requirements**: CLIs generally require fewer system resources to implement compared to GUIs.\n3. **Ease of accessing options**: With commands and their options given in a few characters, an experienced user might find it easier to access and remember the options in a CLI.\n4. **Automation of repetitive tasks**: CLIs often support mechanisms for storing frequently used command sequences in a disk file for re-use. This can extend to a scripting language that takes parameters and variable options.\n5. **Command history**: A command-line history can be kept, allowing review or repetition of commands.\nHowever, it's important to note that these advantages can depend on the specific use case and the user's familiarity with the CLI."
+        },
+        {
+            "role": "user",
+            "content": "Is the language that descended from Common Brittonic still spoken today, or has it become extinct?"
+        }
+    ],
+    "extra_body": {
+        "documents": [
+            {
+                "doc_id": "0",
+                "text": "Celtic Britons\nCommon Brittonic developed from the Insular branch of the Proto - Celtic language that developed in the British Isles after arriving from the continent in the 7th century BC . The language eventually began to diverge ; some linguists have grouped subsequent developments as Western and Southwestern Brittonic languages . Western Brittonic developed into Welsh in Wales and the Cumbric language in the Hen Ogledd or `` Old North '' of Britain ( modern northern England and southern Scotland ) , while the Southwestern dialect became Cornish in Cornwall and South West England and Breton in Armorica . Pictish is now generally accepted to descend from Common Brittonic , rather than being a separate Celtic language . Welsh and Breton survive today ; Cumbric and Pictish became extinct in the 12th century . Cornish had become extinct by the 19th century but has been the subject of language revitalization since the 20th century ."
+            },
+            {
+                "doc_id": "1",
+                "text": "Celtic Britons\nWales , Cornwall and Brittany continued to retain a distinct Brittonic culture , identity and language , which they have maintained to the present day . The Welsh language and Breton language remain widely spoken , and the Cornish language , once close to extinction , has experienced a revival since the 20th century . The vast majority of place names and names of geographical features in Wales , Cornwall and Brittany are Brittonic , and Brittonic family and personal names remain common ."
+            },
+            {
+                "doc_id": "2",
+                "text": "Celtic Britons\nThe Britons spoke an Insular Celtic language known as Common Brittonic . Brittonic was spoken throughout the island of Britain ( in modern terms , England , Wales and Scotland ) , as well as offshore islands such as the Isle of Man , Scilly Isles , Orkneys , Hebrides , Isle of Wight and Shetlands . According to early medieval historical tradition , such as The Dream of Macsen Wledig , the post-Roman Celtic - speakers of Armorica were colonists from Britain , resulting in the Breton language , a language related to Welsh and identical to Cornish in the early period and still used today . Thus the area today is called Brittany ( Br . Breizh , Fr . Bretagne , derived from Britannia ) ."
+            },
+            {
+                "doc_id": "3",
+                "text": "Welsh language\nWelsh evolved from Common Brittonic , the Celtic language spoken by the ancient Celtic Britons . Classified as Insular Celtic , the British language probably arrived in Britain during the Bronze Age or Iron Age and was probably spoken throughout the island south of the Firth of Forth . During the Early Middle Ages the British language began to fragment due to increased dialect differentiation , evolving into Welsh and the other Brittonic languages . It is not clear when Welsh became distinct ."
+            },
+            {
+                "doc_id": "4",
+                "text": "Celtic Britons\nThe Britons , also known as Celtic Britons or Ancient Britons , were Celtic people who inhabited Great Britain from the British Iron Age into the Middle Ages , at which point their culture and language diverged into the modern Welsh , Cornish and Bretons ( among others ) . They spoke the Common Brittonic language , the ancestor to the modern Brittonic languages ."
+            },
+            {
+                "doc_id": "5",
+                "text": "Celtic Britons\nWith the beginning of Anglo - Saxon settlement and Gaelic Scots in the 5th century , the culture and language of the Britons fragmented and much of their territory was taken over by the Anglo - Saxons and Scots Gaels . The extent to which this cultural and linguistic change was accompanied by wholesale changes in the population is still a matter of discussion . During this period some Britons migrated to mainland Europe and established significant settlements in Brittany ( now part of France ) as well as Britonia in modern Galicia , Spain . By the 11th century , remaining Brittonic Celtic - speaking populations had split into distinct groups : the Welsh in Wales , the Cornish in Cornwall , the Bretons in Brittany , and the people of the Hen Ogledd ( `` Old North '' ) in southern Scotland and northern England . Common Brittonic developed into the distinct Brittonic languages : Welsh , Cumbric , Cornish and Breton ."
+            },
+            {
+                "doc_id": "6",
+                "text": "Celtic Britons\nHowever , by the beginning of the 12th century , the Anglo - Saxons and Gaels had become the dominant cultural force in most of the formerly Brittonic ruled territory in Britain , and the language and culture of the native Britons was thereafter gradually replaced in those regions , remaining only in Wales , Cornwall , Scilly Isles and Brittany , and for a time in parts of Cumbria , Strathclyde , and eastern Galloway ."
+            },
+            {
+                "doc_id": "7",
+                "text": "Celtic Britons\nAt the same time , some Britons established themselves in what is now called Brittany . There they set up their own small kingdoms and the Breton language developed there from Brittonic Insular Celtic rather than Gaulish or Frankish . A further Brittonic colony , Britonia , was also set up at this time in Gallaecia in northwestern Spain ."
+            },
+            {
+                "doc_id": "8",
+                "text": "Celtic Britons\nThe Welsh word Brython was introduced into English usage by John Rhys in 1884 as a term unambiguously referring to the P - Celtic speakers of Great Britain , to complement Goidel ; hence the adjective Brythonic referring to the group of languages . `` Brittonic languages '' is a more recent coinage ( first attested 1923 according to the Oxford English Dictionary ) intended to refer to the ancient Britons specifically ."
+            },
+            {
+                "doc_id": "9",
+                "text": "Celtic Britons\nThroughout their existence , the territory inhabited by the Britons was composed of numerous ever - changing areas controlled by Brittonic tribes . The extent of their territory before and during the Roman period is unclear , but is generally believed to include the whole of the island of Great Britain , at least as far north as the Clyde - Forth isthmus , and if the Picts are included as Brittonic speaking people ( as they more usually are ) , the entirety of Great Britain and its offshore island groups . The territory north of the Firth of Forth was largely inhabited by the Picts ; little direct evidence has been left of the Pictish language , but place names and Pictish personal names recorded in the later Irish annals suggest it was indeed related to the Common Brittonic language rather than to the Goidelic ( Gaelic ) languages of the Irish , Scots and Manx ; indeed their Goidelic Irish name , Cruithne , is cognate with Brythonic Priteni . After the invasion of north western Britain by Gaelic speaking Celts from Ireland from the 6th century AD onwards , part of the Pictish territory was eventually absorbed into the Gaelic kingdoms of Dál Riata and Alba , which became Scotland . The Isle of Man , Shetland , Hebrides and the Orkney islands were originally inhabited by Britons also , but eventually became respectively Manx and Scots Gaelic speaking territories , while the Scilly isles and Anglesey ( Ynys Mon ) remained Brittonic and the originally Brittonic Isle of Wight was taken by Anglo - Saxons ."
+            },
+            {
+                "doc_id": "10",
+                "text": "Welsh language\nJanet Davies proposed that the origins of Welsh language were much less definite ; in The Welsh Language : A History , she proposes that Welsh may have been around even earlier than 600 AD . This is evidenced by the dropping of final syllables from Brittonic : * bardos `` poet '' became bardd , and * abona `` river '' became afon . Though both Davies and Jackson cite minor changes in syllable structure and sounds as evidence for the creation of Old Welsh , Davies suggests it may be more appropriate to refer to this derivative language as Lingua Brittanica rather than characterizing it as a new language altogether ."
+            },
+            {
+                "doc_id": "11",
+                "text": "Wales\nIn his 1707 work Archaeologia Britannica Edward Lhuyd , keeper of the Ashmolean Museum , noted the similarity between the two Celtic language families : Brythonic or P -- Celtic ( Breton , Cornish and Welsh ) ; and Goidelic or Q -- Celtic ( Irish , Manx and Scottish Gaelic ) . He argued that the Brythonic languages originated in Gaul ( France ) , and that the Goidelic languages originated in the Iberian Peninsula . Lhuyd concluded that as the languages had been of Celtic origin , the people who spoke those languages were Celts . ( According to a more recent hypothesis , also widely embraced today , Goidelic and Brythonic languages , collectively known as Insular Celtic languages , evolved together for some time separately from Continental Celtic languages such as Gaulish and Celtiberian . ) From the 18th century , the peoples of Brittany , Cornwall , Ireland , Isle of Man , Scotland and Wales were known increasingly as Celts , and they are regarded as the modern Celtic nations today ."
+            }
+        ]
+    },
+    "temperature": 0.0,
+    "max_completion_tokens": 512
+}

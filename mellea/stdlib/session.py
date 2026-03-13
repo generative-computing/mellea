@@ -26,6 +26,9 @@ from ..core import (
     SamplingStrategy,
     ValidationResult,
 )
+from ..helpers import _run_async_in_thread
+from ..plugins.manager import has_plugins, invoke_hook
+from ..plugins.types import HookType
 from ..stdlib import functional as mfuncs
 from ..telemetry import set_span_attribute, trace_application
 from .components import Message
@@ -102,6 +105,7 @@ def start_session(
     ctx: Context | None = None,
     *,
     model_options: dict | None = None,
+    plugins: list[Any] | None = None,
     **backend_kwargs,
 ) -> MelleaSession:
     """Start a new Mellea session. Can be used as a context manager or called directly.
@@ -125,6 +129,9 @@ def start_session(
             Use ChatContext() for chat-style conversations.
         model_options: Additional model configuration options that will be passed
             to the backend (e.g., temperature, max_tokens, etc.).
+        plugins: Optional list of plugins scoped to this session. Accepts
+            ``@hook``-decorated functions, ``@plugin``-decorated class instances,
+            ``MelleaPlugin`` instances, or ``PluginSet`` instances.
         **backend_kwargs: Additional keyword arguments passed to the backend constructor.
 
     Returns:
@@ -178,6 +185,23 @@ def start_session(
         model_id=model_id_str,
         context_type=ctx.__class__.__name__ if ctx else "SimpleContext",
     ):
+        # --- session_pre_init hook ---
+        if has_plugins(HookType.SESSION_PRE_INIT):
+            from ..plugins.hooks.session import SessionPreInitPayload
+
+            pre_payload = SessionPreInitPayload(
+                backend_name=backend_name,
+                model_id=model_id_str,
+                model_options=model_options,
+                context_type=ctx.__class__.__name__ if ctx else "SimpleContext",
+            )
+            _, pre_payload = _run_async_in_thread(
+                invoke_hook(HookType.SESSION_PRE_INIT, pre_payload)
+            )
+            # Apply writable field modifications
+            model_id_str = pre_payload.model_id
+            model_options = pre_payload.model_options
+
         backend_class = backend_name_to_class(backend_name)
         if backend_class is None:
             raise Exception(
@@ -195,7 +219,26 @@ def start_session(
             + (f", model_options={model_options}" if model_options else "")
         )
 
-        return MelleaSession(backend, ctx)
+        session = MelleaSession(backend, ctx)
+
+        # Register session-scoped plugins
+        if plugins:
+            from ..plugins.registry import register as register_plugins
+
+            register_plugins(plugins, session_id=session.id)
+
+        # --- session_post_init hook ---
+        if has_plugins(HookType.SESSION_POST_INIT):
+            from ..plugins.hooks.session import SessionPostInitPayload
+
+            post_payload = SessionPostInitPayload(
+                session_id=session.id, model_id=model_id_str, context=session.ctx
+            )
+            _run_async_in_thread(
+                invoke_hook(HookType.SESSION_POST_INIT, post_payload, backend=backend)
+            )
+
+        return session
 
 
 class MelleaSession:
@@ -221,6 +264,9 @@ class MelleaSession:
             backend (Backend): This is always required.
             ctx (Context): The way in which the model's context will be managed. By default, each interaction with the model is a stand-alone interaction, so we use SimpleContext as the default.
         """
+        import uuid
+
+        self.id = str(uuid.uuid4())
         self.backend = backend
         self.ctx: Context = ctx if ctx is not None else SimpleContext()
         self._session_logger = FancyLogger.get_logger()
@@ -283,10 +329,34 @@ class MelleaSession:
 
     def reset(self):
         """Reset the context state."""
+        if has_plugins(HookType.SESSION_RESET):
+            from ..plugins.hooks.session import SessionResetPayload
+
+            payload = SessionResetPayload(previous_context=self.ctx)
+            _run_async_in_thread(
+                invoke_hook(HookType.SESSION_RESET, payload, backend=self.backend)
+            )
         self.ctx = self.ctx.reset_to_new()
 
     def cleanup(self) -> None:
         """Clean up session resources."""
+        if has_plugins(HookType.SESSION_CLEANUP):
+            from ..plugins.hooks.session import SessionCleanupPayload
+
+            payload = SessionCleanupPayload(
+                context=self.ctx, interaction_count=len(self.ctx.as_list())
+            )
+            _run_async_in_thread(
+                invoke_hook(HookType.SESSION_CLEANUP, payload, backend=self.backend)
+            )
+
+        # Deregister session-scoped plugins — must run whenever plugins are
+        # enabled, regardless of whether any plugin subscribes to SESSION_CLEANUP.
+        if has_plugins():
+            from ..plugins.manager import deregister_session_plugins
+
+            deregister_session_plugins(self.id)
+
         self.reset()
         if hasattr(self.backend, "close"):
             self.backend.close()  # type: ignore

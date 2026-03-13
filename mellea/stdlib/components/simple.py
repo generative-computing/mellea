@@ -1,12 +1,14 @@
 """SimpleComponent."""
 
+from typing import Any
+
 from ...core import CBlock, Component, ModelOutputThunk
 
 
 class SimpleComponent(Component[str]):
     """A Component that is make up of named spans."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         """Initialized a simple component of the constructor's kwargs."""
         for key in kwargs.keys():
             if type(kwargs[key]) is str:
@@ -14,11 +16,11 @@ class SimpleComponent(Component[str]):
         self._kwargs_type_check(kwargs)
         self._kwargs = kwargs
 
-    def parts(self):
+    def parts(self) -> list[Component | CBlock]:
         """Returns the values of the kwargs."""
         return list(self._kwargs.values())
 
-    def _kwargs_type_check(self, kwargs):
+    def _kwargs_type_check(self, kwargs: dict[str, Any]) -> bool:
         for key in kwargs.keys():
             value = kwargs[key]
             assert issubclass(type(value), Component) or issubclass(
@@ -28,14 +30,14 @@ class SimpleComponent(Component[str]):
         return True
 
     @staticmethod
-    def make_simple_string(kwargs):
+    def make_simple_string(kwargs: dict[str, Any]) -> str:
         """Uses <|key|>value</|key|> to represent a simple component."""
         return "\n".join(
             [f"<|{key}|>{value}</|{key}|>" for (key, value) in kwargs.items()]
         )
 
     @staticmethod
-    def make_json_string(kwargs):
+    def make_json_string(kwargs: dict[str, Any]) -> str:
         """Uses json."""
         str_args = dict()
         for key in kwargs.keys():
@@ -48,7 +50,7 @@ class SimpleComponent(Component[str]):
 
         return json.dumps(str_args)
 
-    def format_for_llm(self):
+    def format_for_llm(self) -> str:
         """Uses a string rep."""
         return SimpleComponent.make_json_string(self._kwargs)
 

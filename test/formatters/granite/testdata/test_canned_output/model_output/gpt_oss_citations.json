@@ -1,0 +1,14 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "[{\"r\": 0, \"c\": [6, 8]}, {\"r\": 1, \"c\": []}]",
+                "role": "assistant",
+                "tool_calls": []
+            },
+            "logprobs": null,
+            "finish_reason": "stop"
+        }
+    ]
+}

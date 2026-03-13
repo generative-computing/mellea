@@ -104,12 +104,20 @@ def test_format(session) -> None:
 @pytest.mark.qualitative
 @pytest.mark.timeout(150)
 async def test_generate_from_raw(session) -> None:
-    prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
+    # Note capital letter "W" at the beginning of each prompt. This capital letter is
+    # very important to the ollama version of Granite 4.0 micro, the current default
+    # model for Mellea.
+    prompts = ["What is 1+1?", "What is 2+2?", "What is 3+3?", "What is 4+4?"]
 
     results = await session.backend.generate_from_raw(
         actions=[CBlock(value=prompt) for prompt in prompts],
         ctx=session.ctx,
-        model_options={ModelOption.CONTEXT_WINDOW: 2048},
+        model_options={
+            ModelOption.CONTEXT_WINDOW: 2048,
+            # With raw prompts and high temperature, a response of arbitrary
+            # length is normal operation.
+            ModelOption.MAX_NEW_TOKENS: 100,
+        },
     )
 
     assert len(results) == len(prompts)

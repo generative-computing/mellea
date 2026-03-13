@@ -311,7 +311,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             ).past_key_values
         return dc
 
-    async def generate_from_context(
+    async def _generate_from_context(
         self,
         action: Component[C] | CBlock,
         ctx: Context,
@@ -498,8 +498,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         #       us having specific caching for each Component/Message.
 
         generate_input, other_input = (
-            # type: ignore
-            granite_formatters.base.util.chat_completion_request_to_transformers_inputs(
+            granite_formatters.base.util.chat_completion_request_to_transformers_inputs(  # type: ignore
                 rewritten, self._tokenizer, self._model
             )
         )
@@ -516,6 +515,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         output = ModelOutputThunk(None)
+        output._start = datetime.datetime.now()
         output._context = ctx.view_for_generation()
         output._action = action
         output._model_options = model_options
@@ -788,6 +788,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
             output = ModelOutputThunk(None)
+            output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action
             output._model_options = model_options
@@ -932,6 +933,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
             output = ModelOutputThunk(None)
+            output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action
             output._model_options = model_options
@@ -1053,17 +1055,59 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
 
-        # Record telemetry if span is available
         span = mot._meta.get("_telemetry_span")
+        from ..telemetry.metrics import is_metrics_enabled
+
+        metrics_enabled = is_metrics_enabled()
+
+        # Extract token counts only if needed
+        hf_output = mot._meta.get("hf_output")
+        n_prompt, n_completion = None, None
+        if (span is not None or metrics_enabled) and isinstance(
+            hf_output, GenerateDecoderOnlyOutput
+        ):
+            # HuggingFace local models don't provide usage objects, but we can
+            # calculate token counts from sequences
+            try:
+                if input_ids is not None and hf_output.sequences is not None:
+                    n_prompt = input_ids.shape[1]
+                    n_completion = hf_output.sequences[0].shape[0] - n_prompt
+            except Exception:
+                pass
+
+        # Record metrics if enabled
+        if metrics_enabled and n_prompt is not None:
+            from ..telemetry.backend_instrumentation import (
+                get_model_id_str,
+                get_system_name,
+            )
+            from ..telemetry.metrics import record_token_usage_metrics
+
+            record_token_usage_metrics(
+                input_tokens=n_prompt,
+                output_tokens=n_completion,
+                model=get_model_id_str(self),
+                backend=self.__class__.__name__,
+                system=get_system_name(self),
+            )
+
+        # Record tracing if span exists
         if span is not None:
             from ..telemetry import end_backend_span
-            from ..telemetry.backend_instrumentation import record_response_metadata
+            from ..telemetry.backend_instrumentation import (
+                record_response_metadata,
+                record_token_usage,
+            )
 
-            # HuggingFace local models don't typically provide token counts
-            # but we can record response metadata if available
-            hf_output = mot._meta.get("hf_output")
             if isinstance(hf_output, GenerateDecoderOnlyOutput):
                 record_response_metadata(span, hf_output)
+                if n_prompt is not None:
+                    usage = {
+                        "prompt_tokens": n_prompt,
+                        "completion_tokens": n_completion,
+                        "total_tokens": n_prompt + n_completion,
+                    }
+                    record_token_usage(span, usage)
 
             # Close the span now that async operation is complete
             end_backend_span(span)

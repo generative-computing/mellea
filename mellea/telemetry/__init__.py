@@ -23,7 +23,11 @@ Configuration:
     Metrics:
         - MELLEA_METRICS_ENABLED: Enable metrics collection (default: false)
         - MELLEA_METRICS_CONSOLE: Print metrics to console (default: false)
+        - MELLEA_METRICS_OTLP: Enable OTLP metrics exporter (default: false)
+        - MELLEA_METRICS_PROMETHEUS: Enable Prometheus metric reader (default: false)
         - OTEL_EXPORTER_OTLP_ENDPOINT: OTLP endpoint for metric export (optional)
+        - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: Metrics-specific OTLP endpoint (optional)
+        - OTEL_METRIC_EXPORT_INTERVAL: Export interval in milliseconds (default: 60000)
         - OTEL_SERVICE_NAME: Service name for metrics (default: mellea)
 
 Dependencies:
@@ -48,6 +52,7 @@ from .metrics import (
     create_histogram,
     create_up_down_counter,
     is_metrics_enabled,
+    record_token_usage_metrics,
 )
 from .tracing import (
     end_backend_span,
@@ -68,6 +73,7 @@ __all__ = [
     "is_application_tracing_enabled",
     "is_backend_tracing_enabled",
     "is_metrics_enabled",
+    "record_token_usage_metrics",
     "set_span_attribute",
     "set_span_error",
     "start_backend_span",

@@ -36,7 +36,7 @@ async def send_to_queue(
         await aqueue.put(e)
 
 
-async def wait_for_all_mots(mots: list[ModelOutputThunk]):
+async def wait_for_all_mots(mots: list[ModelOutputThunk]) -> None:
     """Helper function to make waiting for multiple ModelOutputThunks to be computed easier.
 
     All ModelOutputThunks must be from the same event loop. This should always be the case in sampling
@@ -73,7 +73,7 @@ class ClientCache:
         self.capacity = capacity
         self.cache: OrderedDict = OrderedDict()
 
-    def current_size(self):
+    def current_size(self) -> int:
         """Just return the size of the key set. This isn't necessarily safe."""
         return len(self.cache.keys())
 
@@ -87,7 +87,7 @@ class ClientCache:
             self.cache[key] = value
             return value
 
-    def put(self, key: int, value: Any):
+    def put(self, key: int, value: Any) -> None:
         """Put a value into the cache."""
         if key in self.cache:
             # If the key exists, move it to the end (most recent)

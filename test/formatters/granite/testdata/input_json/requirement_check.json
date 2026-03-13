@@ -1,0 +1,28 @@
+{
+  "messages": [
+    {
+      "role": "assistant",
+      "content": "Hello there, welcome to math questions!"
+    },
+    {
+      "content": "What is the square root of 4?",
+      "role": "user"
+    },
+    {
+      "role": "assistant",
+      "content": "The square root of 4 is 2."
+    },
+    {
+      "content": "What is six times seven?",
+      "role": "user"
+    }
+  ],
+  "extra_body": {
+    "documents": [
+      {
+          "doc_id": "1",
+          "text": "\nHere's a list of math problems that are on the homework assignment:\n\n1) 12+5=17\n2) 20-8=12\n3) 6*7=42\n4) 45/9=5\n5) 13*2=26\n6) 99+11=110\n7) 100-35=65\n\n"
+      }
+    ]
+  }
+}

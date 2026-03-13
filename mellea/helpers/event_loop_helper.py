@@ -13,7 +13,7 @@ R = TypeVar("R")
 class _EventLoopHandler:
     """A class that handles the event loop for Mellea code. Do not directly instantiate this. Use `_run_async_in_thread`."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Instantiates an EventLoopHandler. Used to ensure consistency when calling async code from sync code in Mellea.
 
         Do not instantiate this class. Rely on the exported `_run_async_in_thread` function.
@@ -25,7 +25,7 @@ class _EventLoopHandler:
         )
         self._thread.start()
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Delete the event loop handler."""
         self._close_event_loop()
 
@@ -37,7 +37,7 @@ class _EventLoopHandler:
                 for task in tasks:
                     task.cancel()
 
-                async def finalize_tasks():
+                async def finalize_tasks() -> None:
                     # TODO: We can log errors here if needed.
                     await asyncio.gather(*tasks, return_exceptions=True)
 
