@@ -11,14 +11,20 @@ uv run poe apidocs-preview   # Generate fresh docs to /tmp and run quality audit
 uv run poe apidocs-quality   # Audit docstring quality (public symbols, no methods)
 uv run poe apidocs-orphans   # Find MDX files not referenced in docs.json navigation
 uv run poe apidocs-validate  # Verify coverage + MDX syntax
-uv run poe apidocs-clean     # Remove generated artefacts
+uv run poe apidocs-clean     # Remove generated artifacts
 ```
 
 Makefile shims are also available if you prefer `make apidocs` etc.
 
+To build and preview locally with Mintlify:
+
+```bash
+uv run poe apidocs && cd docs/docs && mintlify dev
+```
+
 The `apidocs` task runs `build.py`, which calls `generate-ast.py` then
 `decorate_api_mdx.py` in sequence. Both the `docs/docs/api/` directory and the
-`docs/docs/api-reference.mdx` landing page are **fully generated artefacts** —
+`docs/docs/api-reference.mdx` landing page are **fully generated artifacts** —
 do not commit or edit them by hand.
 
 ## Pipeline Overview
