@@ -113,28 +113,26 @@ After training an aLoRA classifier for our task, we would like to use that class
 
 <CodeGroup>
 ```python Python
-backend = ...
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
 
-# assumption the `m` backend must be a Huggingface or alora-compatible vLLM backend, with the same base model from which we trained the alora.
+class StemboltAdapter(CustomIntrinsicAdapter):
+    def __init__(self, base_model_name:str="granite-4.0-micro"):
+        super().__init__(
+            model_id="$USERNAME/stembolts", # REPLACE $USERNAME WITH YOUR HUGGINGFACE USERNAME
+            intrinsic_name="stembolts",
+            base_model_name=base_model_name,
+        )
 
-# ollama does NOT yet support LoRA or aLoRA adapters.
-
-backend.add_alora(
-HFConstraintAlora(
-name="stembolts_failuremode_alora",
-path_or_model_id="stembolts/failuremode-alora", # can also be the checkpoint path
-generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>",
-backend=m.backend,
+backend = LocalHFBackend(
+    model_id="ibm-granite/granite-4.0-micro", cache=SimpleLRUCache(5)
 )
-)
 
+backend.add_adapter(StemboltAdapter(base_model_name="granite-4.0-micro"))
 ````
 </CodeGroup>
-In the above arguments, `path_or_model_id` refers to the model checkpoint from last step, i.e., the `m alora train` process.
+In the above, `model_id` refers to the HuggingFace model ID of the uploaded adapter from the last step, i.e., the `m alora upload` process.
 
-<Note>
-The `generation_prompt` passed to your `backend.add_alora` call should exactly match the prompt used for training.
-</Note>
 We are now ready to create a M session, define the requirement, and run the instruction:
 
 <CodeGroup>
