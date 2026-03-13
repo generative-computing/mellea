@@ -83,17 +83,29 @@ jobs:
       # -- Validate static docs ------------------------------------------------
 
       - name: Lint static docs (markdownlint)
-        run: npx --yes markdownlint-cli "docs/docs/**/*.md" --config docs/docs/.markdownlint.json
+        id: markdownlint
+        run: |
+          set -o pipefail
+          npx --yes markdownlint-cli "docs/docs/**/*.md" --config docs/docs/.markdownlint.json 2>&1 \
+            | tee /tmp/markdownlint.log
         continue-on-error: ${{ inputs.strict_validation != true }}
 
       # -- Validate generated API docs -----------------------------------------
 
       - name: Validate MDX syntax and links
-        run: uv run python tooling/docs-autogen/validate.py docs/docs/api --skip-coverage
+        id: validate_mdx
+        run: |
+          set -o pipefail
+          uv run python tooling/docs-autogen/validate.py docs/docs/api --skip-coverage 2>&1 \
+            | tee /tmp/validate_mdx.log
         continue-on-error: ${{ inputs.strict_validation != true }}
 
       - name: Audit API coverage
-        run: uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --threshold 80
+        id: audit_coverage
+        run: |
+          set -o pipefail
+          uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --threshold 80 2>&1 \
+            | tee /tmp/audit_coverage.log
         continue-on-error: ${{ inputs.strict_validation != true }}
 
       # -- Upload artifact for deploy job --------------------------------------
@@ -105,6 +117,78 @@ jobs:
           name: docs-site
           path: docs/docs/
           retention-days: 7
+
+      # -- Write job summary ---------------------------------------------------
+
+      - name: Write job summary
+        if: always()
+        run: |
+          python3 - <<'PYEOF'
+          import os, re
+
+          def icon(outcome):
+              return "✅" if outcome == "success" else ("❌" if outcome == "failure" else "⏭️")
+
+          def read_log(path):
+              try:
+                  return open(path).read().strip()
+              except FileNotFoundError:
+                  return ""
+
+          markdownlint_outcome = "${{ steps.markdownlint.outcome }}"
+          validate_outcome = "${{ steps.validate_mdx.outcome }}"
+          coverage_outcome = "${{ steps.audit_coverage.outcome }}"
+          strict = "${{ inputs.strict_validation }}" == "true"
+          mode = "" if strict else " *(soft-fail)*"
+
+          lint_log = read_log("/tmp/markdownlint.log")
+          validate_log = read_log("/tmp/validate_mdx.log")
+          coverage_log = read_log("/tmp/audit_coverage.log")
+
+          # Count markdownlint issues (lines matching file:line:col format)
+          lint_issues = len([l for l in lint_log.splitlines() if re.match(r'.+:\d+:\d+ ', l)])
+          lint_detail = f"{lint_issues} issue(s)" if lint_issues else "no issues"
+
+          # Extract coverage stats from audit_coverage output
+          cov_pct = re.search(r"Coverage:\s+(\S+%)", coverage_log)
+          cov_sym = re.search(r"Documented:\s+(\d+)", coverage_log)
+          cov_tot = re.search(r"Total classes \+ functions:\s+(\d+)", coverage_log)
+          cov_detail = (
+              f"{cov_pct.group(1)} ({cov_sym.group(1)}/{cov_tot.group(1)} symbols)"
+              if cov_pct and cov_sym and cov_tot else ""
+          )
+
+          # MDX overall result line
+          mdx_overall = re.search(r"Overall: .+?(PASS|FAIL)", validate_log)
+          mdx_detail = mdx_overall.group(1) if mdx_overall else ""
+
+          lines = [
+              "## Docs Build — Validation Summary\n",
+              "| Check | Result | Details |",
+              "|-------|--------|---------|",
+              f"| Markdownlint | {icon(markdownlint_outcome)} {markdownlint_outcome}{mode} | {lint_detail} |",
+              f"| MDX Validation | {icon(validate_outcome)} {validate_outcome}{mode} | {mdx_detail} |",
+              f"| API Coverage | {icon(coverage_outcome)} {coverage_outcome}{mode} | {cov_detail} |",
+              "",
+          ]
+
+          for title, log in [
+              ("Markdownlint output", lint_log),
+              ("MDX validation output", validate_log),
+              ("API coverage output", coverage_log),
+          ]:
+              if log:
+                  lines += [
+                      f"<details><summary>{title}</summary>\n",
+                      "```text",
+                      log[:3000] + (" [truncated]" if len(log) > 3000 else ""),
+                      "```",
+                      "</details>\n",
+                  ]
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("\n".join(lines))
+          PYEOF
 
   # ---------------------------------------------------------------------------
   # Deploy to orphan branch
