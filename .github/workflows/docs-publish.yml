@@ -218,17 +218,17 @@ jobs:
               lines.append(quality_row)
           lines.append("")
 
-          for title, log in [
-              ("Markdownlint output", lint_log),
-              ("MDX validation output", validate_log),
-              ("API coverage output", coverage_display_log),
-              ("Docstring quality details", quality_log),
+          for title, log, limit in [
+              ("Markdownlint output", lint_log, 5_000),
+              ("MDX validation output", validate_log, 5_000),
+              ("API coverage output", coverage_display_log, 5_000),
+              ("Docstring quality details", quality_log, 100_000),
           ]:
               if log:
                   lines += [
                       f"<details><summary>{title}</summary>\n",
                       "```text",
-                      log[:3000] + (" [truncated]" if len(log) > 3000 else ""),
+                      log[:limit] + (" [truncated]" if len(log) > limit else ""),
                       "```",
                       "</details>\n",
                   ]
