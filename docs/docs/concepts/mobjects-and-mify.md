@@ -93,7 +93,7 @@ Mellea provides `mified` wrappers around [Docling](https://github.com/docling-pr
 documents for working with PDFs and other rich documents.
 
 ```python
-from mellea.stdlib.docs.richdocument import RichDocument
+from mellea.stdlib.components.docs.richdocument import RichDocument
 
 rd = RichDocument.from_document_file("https://arxiv.org/pdf/1906.04043")
 ```
@@ -102,7 +102,7 @@ This loads the PDF and parses it into Mellea's intermediate representation. From
 extract structured elements:
 
 ```python
-from mellea.stdlib.docs.richdocument import Table
+from mellea.stdlib.components.docs.richdocument import Table
 
 table: Table = rd.get_tables()[0]
 print(table.to_markdown())

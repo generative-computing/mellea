@@ -79,23 +79,23 @@ print(str(result))
 
 ## Working with Documents
 
-Use `Document` to pass structured text with optional title and ID metadata:
+Pass document content directly in a `Message`:
 
 ```python
 from mellea import start_session
-from mellea.stdlib.components import Document, Message
+from mellea.stdlib.components import Message
 
 m = start_session()
-doc = Document(
-    "Mellea is a framework for structured LLM programming.",
-    title="Mellea Overview",
-    doc_id="doc-1",
-)
-msg = Message("user", "Summarize this document.", documents=[doc])
+msg = Message("user", "Summarize: Mellea is a framework for structured LLM programming.")
 result = m.act(msg, strategy=None)
 print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
+
+> **Note:** The base `Document` class does not yet support being embedded inside a
+> `Message` ([#636](https://github.com/generative-computing/mellea/issues/636)).
+> For rich document processing (PDFs, tables), use `RichDocument` from
+> `mellea.stdlib.components.docs` — see [Working with Data](./working-with-data).
 
 For rich document processing (PDFs, tables), see
 [Working with Data](./working-with-data).

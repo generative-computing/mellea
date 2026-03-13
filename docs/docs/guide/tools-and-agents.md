@@ -221,7 +221,7 @@ async def main():
         tools=[search_tool],
         format=Email,
     )
-    print(result.body)
+    print(result.parsed_repr.body)
 
 asyncio.run(main())
 # Output will vary — LLM responses depend on model and temperature.

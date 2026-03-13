@@ -407,7 +407,6 @@ goal is reached or the step budget is exhausted:
 import asyncio
 import mellea
 from mellea.backends import tool
-from mellea.backends.tools import MelleaTool
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.frameworks.react import react
 from mellea.stdlib.requirements.safety.guardian import GuardianCheck, GuardianRisk
@@ -440,10 +439,7 @@ async def run_agent(goal: str) -> str:
         goal=goal,
         context=ChatContext(),
         backend=m.backend,
-        tools=[
-            MelleaTool.from_callable(web_search),
-            MelleaTool.from_callable(calculate),
-        ],
+        tools=[web_search, calculate],
     )
     return str(result)
 

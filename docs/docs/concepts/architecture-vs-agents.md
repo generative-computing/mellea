@@ -94,7 +94,7 @@ enforced before the result is returned.
 ### LangChain
 
 ```python
-from langchain.tools import StructuredTool
+from langchain_core.tools import StructuredTool
 from mellea import start_session
 from mellea.stdlib.requirements import req, simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
