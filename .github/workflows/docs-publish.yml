@@ -63,12 +63,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -105,7 +105,7 @@ jobs:
         id: audit_coverage
         run: |
           set -o pipefail
-          uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --threshold 80 2>&1 \
+          uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --threshold 80 --quality 2>&1 \
             | tee /tmp/audit_coverage.log
         continue-on-error: ${{ inputs.strict_validation != true }}
 
@@ -113,7 +113,7 @@ jobs:
 
       - name: Upload docs artifact
         if: success() || (inputs.strict_validation != true)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docs-site
           path: docs/docs/
@@ -222,7 +222,7 @@ jobs:
 
     steps:
       - name: Download docs artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: docs-site
           path: docs-site/

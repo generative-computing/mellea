@@ -701,9 +701,13 @@ def main():
         failed = True
 
     if _IN_GHA:
-        if quality_issues:
+        if not args.quality:
             _gha_cmd(
-                "error" if (args.fail_on_quality and quality_issues) else "warning",
+                "notice", "Docstring quality", "skipped (pass --quality to enable)"
+            )
+        elif quality_issues:
+            _gha_cmd(
+                "error" if args.fail_on_quality else "warning",
                 "Docstring quality",
                 f"{len(quality_issues)} issue(s) found — run audit_coverage.py --quality locally for details",
             )
