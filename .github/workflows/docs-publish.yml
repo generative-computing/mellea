@@ -161,9 +161,28 @@ jobs:
               if cov_pct and cov_sym and cov_tot else ""
           )
 
-          # MDX overall result line
-          mdx_overall = re.search(r"Overall: .+?(PASS|FAIL)", validate_log)
-          mdx_detail = mdx_overall.group(1) if mdx_overall else ""
+          # Parse per-check error counts from validate output.
+          # Each check prints "N errors found" on the next line when it fails.
+          def parse_validate_detail(log):
+              counts = {}
+              for label, key in [
+                  ("Source links", "source"), ("MDX syntax", "syntax"),
+                  ("Internal links", "links"), ("Anchor collisions", "anchors"),
+              ]:
+                  m = re.search(rf"{label}: (?:PASS|FAIL)(?:\s+(\d+) errors found)?", log, re.DOTALL)
+                  if m:
+                      counts[key] = int(m.group(1)) if m.group(1) else 0
+              total = sum(counts.values())
+              if not total:
+                  return "no issues"
+              parts = []
+              if counts.get("syntax"):  parts.append(f"{counts['syntax']} syntax error(s)")
+              if counts.get("links"):   parts.append(f"{counts['links']} broken link(s)")
+              if counts.get("anchors"): parts.append(f"{counts['anchors']} anchor collision(s)")
+              if counts.get("source"):  parts.append(f"{counts['source']} source link error(s)")
+              return ", ".join(parts)
+
+          mdx_detail = parse_validate_detail(validate_log)
 
           # Docstring quality annotation emitted by audit_coverage.py into the log
           # Format: ::notice title=Docstring quality::message
@@ -173,17 +192,19 @@ jobs:
               quality_level, quality_msg = quality_match.group(1), quality_match.group(2)
               quality_icon = "✅" if quality_level == "notice" else "⚠️"
               quality_status = "pass" if quality_level == "notice" else "warning"
-              # Strip "run audit_coverage.py --quality locally for details" since we run it here
-              quality_detail = re.sub(r"\s*—\s*run audit_coverage\.py.*$", "", quality_msg)
+              quality_detail = re.sub(r"\s*—\s*see job summary.*$", "", quality_msg)
               quality_row = f"| Docstring Quality | {quality_icon} {quality_status}{mode} | {quality_detail} |"
           else:
               quality_row = None
 
-          # Extract docstring quality section from coverage log (starts after quality header)
-          quality_log = ""
+          # Split coverage log at quality section to avoid duplicate output in collapsibles
           quality_start = coverage_log.find("🔬 Running docstring quality")
           if quality_start != -1:
               quality_log = coverage_log[quality_start:]
+              coverage_display_log = coverage_log[:quality_start].strip()
+          else:
+              quality_log = ""
+              coverage_display_log = coverage_log
 
           lines = [
               "## Docs Build — Validation Summary\n",
@@ -200,7 +221,7 @@ jobs:
           for title, log in [
               ("Markdownlint output", lint_log),
               ("MDX validation output", validate_log),
-              ("API coverage output", coverage_log),
+              ("API coverage output", coverage_display_log),
               ("Docstring quality details", quality_log),
           ]:
               if log:
