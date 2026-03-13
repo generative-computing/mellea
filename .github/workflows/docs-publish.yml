@@ -1,4 +1,4 @@
-name: Publish Documentation
+name: Docs
 
 # Builds, validates, and deploys documentation to orphan deployment branches.
 # Mintlify reads from these branches — main stays clean of generated artifacts.

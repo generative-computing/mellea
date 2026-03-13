@@ -52,7 +52,7 @@ output — static guides plus generated API reference.
 
 ## What the pipeline does
 
-The `docs-publish.yml` workflow runs these steps:
+The `docs-publish.yml` workflow (`Docs` in GitHub Actions) runs these steps:
 
 1. **Install dependencies** — `uv sync --all-extras --group dev` installs
    mellea from local source along with build tooling (griffe, mdxify).
@@ -146,7 +146,7 @@ Without the label, PRs only run build + validation (no deploy).
 
 For more control (e.g. deploying to a custom branch):
 
-1. Go to **Actions → Publish Documentation → Run workflow**.
+1. Go to **Actions → Docs → Run workflow**.
 2. Select your feature branch (must exist on the upstream repo).
 3. Check **"Deploy even from a non-main context"**.
 4. Optionally change the target branch (defaults to `docs/preview`).
