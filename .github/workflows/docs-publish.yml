@@ -283,3 +283,28 @@ jobs:
             Branch:  ${{ github.ref_name }}
             Trigger: ${{ github.event_name }}${{ github.event.pull_request.number && format(' (PR #{0})', github.event.pull_request.number) || '' }}
             Run:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Write deploy summary
+        if: always()
+        run: |
+          TARGET="${{ steps.target.outputs.branch }}"
+          REPO="${{ github.repository }}"
+          SHA="${{ github.sha }}"
+          if [ "${{ job.status }}" = "success" ]; then
+            STATUS="✅ Deployed"
+            DETAIL="Published to [\`${TARGET}\`](https://github.com/${REPO}/tree/${TARGET})"
+          else
+            STATUS="❌ Failed"
+            DETAIL="Attempted deploy to \`${TARGET}\`"
+          fi
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ## Docs Deploy — ${STATUS}
+
+          | | |
+          |-|-|
+          | Branch | \`${TARGET}\` |
+          | Source | \`${SHA:0:7}\` |
+          | Trigger | ${{ github.event_name }}${{ github.event.pull_request.number && format(' (PR #{0})', github.event.pull_request.number) || '' }} |
+
+          ${DETAIL}
+          EOF
