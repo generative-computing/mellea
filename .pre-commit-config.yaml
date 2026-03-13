@@ -51,9 +51,14 @@ repos:
         language: system
         pass_filenames: false
         files: (docs/docs/.*\.mdx$|tooling/docs-autogen/)
+      # TODO(#616): Move to normal commit flow once docstring quality issues reach 0.
+      # Griffe loads the full package (~10s), so this is manual-only for now to avoid
+      # slowing down every Python commit. Re-enable (remove stages: [manual]) and add
+      # --fail-on-quality once quality issues are resolved.
       - id: docs-docstring-quality
         name: Audit docstring quality (informational)
         entry: bash -c 'test -d docs/docs/api && uv run --no-sync python tooling/docs-autogen/audit_coverage.py --quality --no-methods --docs-dir docs/docs/api || true'
         language: system
         pass_filenames: false
         files: (mellea/.*\.py$|cli/.*\.py$)
+        stages: [manual]

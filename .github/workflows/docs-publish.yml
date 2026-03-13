@@ -132,7 +132,9 @@ jobs:
 
           def read_log(path):
               try:
-                  return open(path).read().strip()
+                  raw = open(path).read().strip()
+                  # Strip ANSI escape codes (colour output from uv/pytest etc.)
+                  return re.sub(r'\x1b\[[0-9;]*[mK]', '', raw)
               except FileNotFoundError:
                   return ""
 
