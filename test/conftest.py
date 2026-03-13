@@ -179,23 +179,72 @@ BACKEND_GROUPS = {
     "huggingface": {
         "marker": "huggingface",
         "description": "HuggingFace backend tests (GPU)",
+        "needs_gpu_cleanup": True,
     },
     "vllm": {
         "marker": "vllm",
         "description": "vLLM backend tests (GPU, shared backend)",
+        "needs_gpu_cleanup": True,
     },
     "ollama": {
         "marker": "ollama",
         "description": "Ollama backend tests (local server)",
+        "needs_gpu_cleanup": False,
     },
     "api": {
         "marker": "requires_api_key",
         "description": "API-based backends (OpenAI, Watsonx, Bedrock)",
+        "needs_gpu_cleanup": False,
     },
 }
 
 # Execution order when --group-by-backend is used
 BACKEND_GROUP_ORDER = ["huggingface", "vllm", "ollama", "api"]
+
+
+def aggressive_gpu_cleanup(backend_name):
+    """Aggressive GPU cleanup between backend groups.
+
+    Args:
+        backend_name: Name of the backend for logging
+    """
+    logger = FancyLogger.get_logger()
+    logger.info(f"{backend_name} group: Starting aggressive GPU cleanup...")
+
+    import gc
+    import time
+
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            logger.info(f"{backend_name} group: No GPU, skipping cleanup")
+            return
+
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+        torch.cuda.reset_accumulated_memory_stats()
+
+        # Set expandable segments for better memory management
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+        # Cleanup NCCL process groups
+        if torch.distributed.is_initialized():
+            try:
+                torch.distributed.destroy_process_group()
+            except Exception:
+                pass
+
+        # Multi-pass cleanup between backend groups (more aggressive than per-test)
+        for _ in range(5):
+            gc.collect()
+            torch.cuda.empty_cache()
+            time.sleep(0.5)
+
+        logger.info(f"{backend_name} group: GPU cleanup complete")
+    except ImportError:
+        logger.warning(f"{backend_name} group: PyTorch not available")
 
 
 # ============================================================================
@@ -603,10 +652,38 @@ def pytest_runtest_setup(item):
     - pytest --ignore-ram-check
     - pytest --ignore-ollama-check
     - pytest --ignore-api-key-check
+
+    Also handles aggressive GPU cleanup between backend groups when
+    --group-by-backend is enabled.
     """
     capabilities = get_system_capabilities()
     gh_run = int(os.environ.get("CICD", 0))
     config = item.config
+
+    # Handle backend group cleanup when --group-by-backend is used
+    if config.getoption("--group-by-backend", default=False):
+        # Track the current backend group across test runs
+        if not hasattr(pytest_runtest_setup, "_last_backend_group"):
+            pytest_runtest_setup._last_backend_group = None
+
+        # Determine which backend group this test belongs to
+        current_group = None
+        for group_name in BACKEND_GROUP_ORDER:
+            marker = BACKEND_GROUPS[group_name]["marker"]
+            if item.get_closest_marker(marker):
+                current_group = group_name
+                break
+
+        # If we're switching to a new backend group, do aggressive cleanup
+        if (
+            current_group != pytest_runtest_setup._last_backend_group
+            and pytest_runtest_setup._last_backend_group is not None
+        ):
+            prev_group = pytest_runtest_setup._last_backend_group
+            if BACKEND_GROUPS[prev_group]["needs_gpu_cleanup"]:
+                aggressive_gpu_cleanup(prev_group)
+
+        pytest_runtest_setup._last_backend_group = current_group
 
     # Check for override flags from CLI
     ignore_all = config.getoption("--ignore-all-checks", default=False)
