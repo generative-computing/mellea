@@ -156,11 +156,12 @@ For more control (e.g. deploying to a custom branch):
 
 In the Mintlify dashboard (Git Configuration):
 
-- **Staging environment** → branch: `docs/staging`
-- **Production environment** → branch: `docs/production`
+- **Staging environment** → branch: `docs/staging`, docs directory: `/` (root)
+- **Production environment** → branch: `docs/production`, docs directory: `/` (root)
 
-The `docs.json` (Mintlify config file) is included in the deployment
-branches alongside the content — it is part of the assembled output.
+The deployment branches contain only documentation — `docs.json` sits at
+the root, not under `docs/docs/` as it does on `main`. Set the docs
+directory to `/` (root), not `docs/docs`.
 
 ## Pre-commit hooks
 
