@@ -57,7 +57,7 @@ repos:
       # --fail-on-quality once quality issues are resolved.
       - id: docs-docstring-quality
         name: Audit docstring quality (informational)
-        entry: bash -c 'test -d docs/docs/api && uv run --no-sync python tooling/docs-autogen/audit_coverage.py --quality --no-methods --docs-dir docs/docs/api || true'
+        entry: bash -c 'test -d docs/docs/api && uv run --no-sync python tooling/docs-autogen/audit_coverage.py --quality --docs-dir docs/docs/api || true'
         language: system
         pass_filenames: false
         files: (mellea/.*\.py$|cli/.*\.py$)
