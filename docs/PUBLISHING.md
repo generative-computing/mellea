@@ -73,7 +73,17 @@ The `docs-publish.yml` workflow (`Docs` in GitHub Actions) runs these steps:
      public symbols
 
 4. **Deploy** — uses `peaceiris/actions-gh-pages` to force-push the
-   combined output to the target orphan branch.
+   combined output to the target orphan branch. Each deploy commit records
+   the source SHA, branch, trigger event, PR number (if applicable), and a
+   direct link to the Actions run that produced it:
+
+   ```text
+   docs: publish from <sha>
+
+   Branch:  <ref_name>
+   Trigger: <event_name> (PR #N)
+   Run:     https://github.com/generative-computing/mellea/actions/runs/<id>
+   ```
 
 ### Validation strictness
 
