@@ -253,4 +253,9 @@ jobs:
           force_orphan: true
           user_name: "github-actions[bot]"
           user_email: "github-actions[bot]@users.noreply.github.com"
-          commit_message: "docs: publish from ${{ github.sha }}"
+          commit_message: |
+            docs: publish from ${{ github.sha }}
+
+            Branch:  ${{ github.ref_name }}
+            Trigger: ${{ github.event_name }}${{ github.event.pull_request.number && format(' (PR #{0})', github.event.pull_request.number) || '' }}
+            Run:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
