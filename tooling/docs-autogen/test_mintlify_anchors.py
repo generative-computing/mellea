@@ -72,5 +72,3 @@ def test_mintlify_anchors():
 
 if __name__ == "__main__":
     exit(test_mintlify_anchors())
-
-# Made with Bob

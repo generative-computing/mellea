@@ -317,5 +317,3 @@ Just regular text with {braces} that should not be escaped.
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
-# Made with Bob
