@@ -69,9 +69,7 @@ Example usage:
 from mellea.cli.decompose.pipeline import decompose, DecompBackend
 import json
 
-query = """Our company is planning a large corporate team-building event later this year, and I need help putting together a complete strategy and execution plan.
-
-The event will likely involve somewhere between 100 and 300 employees and the goal is to strengthen team cohesion, improve collaboration across departments, boost morale, and create a memorable experience for everyone involved. I’d like you to help me create a full event strategy document that covers everything from early planning through post-event evaluation."""
+query = """I will visit Grand Canyon National Park for 3 days in early May. Please create a travel itinerary that includes major scenic viewpoints and short hiking trails. The daily walking distance should stay under 6 miles, and each day should include at least one sunset or sunrise viewpoint."""
 
 result = decompose(
     task_prompt=query,
@@ -93,9 +91,9 @@ The pipeline then executes each step and produces the final answer.
 
 This example highlights three key ideas:
 
-- **Task Decomposition** — break complex problems into smaller reasoning steps.  
-- **Generative Pipelines** — conduct LLM workflows as an programmatic pipeline instead of single prompts.  
-- **Modular Prompts** — separate prompt design from execution logic using reusable modules.
+- **Task Decomposition and Execution** — analyze complex problems into smaller planning and execution steps.  
+- **Generative Mellea Program** — conduct LLM workflows as an programmatic pipeline instead of single call.  
+- **Instruction Modular** — separate instruction design from execution logic using reusable modules.
 
 ---
 
