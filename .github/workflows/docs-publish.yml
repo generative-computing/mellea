@@ -170,9 +170,18 @@ jobs:
           if quality_match:
               quality_level, quality_msg = quality_match.group(1), quality_match.group(2)
               quality_icon = "✅" if quality_level == "notice" else "⚠️"
-              quality_row = f"| Docstring Quality | {quality_icon} {quality_msg} |"
+              quality_status = "pass" if quality_level == "notice" else "warning"
+              # Strip "run audit_coverage.py --quality locally for details" since we run it here
+              quality_detail = re.sub(r"\s*—\s*run audit_coverage\.py.*$", "", quality_msg)
+              quality_row = f"| Docstring Quality | {quality_icon} {quality_status}{mode} | {quality_detail} |"
           else:
               quality_row = None
+
+          # Extract docstring quality section from coverage log (starts after quality header)
+          quality_log = ""
+          quality_start = coverage_log.find("🔬 Running docstring quality")
+          if quality_start != -1:
+              quality_log = coverage_log[quality_start:]
 
           lines = [
               "## Docs Build — Validation Summary\n",
@@ -190,6 +199,7 @@ jobs:
               ("Markdownlint output", lint_log),
               ("MDX validation output", validate_log),
               ("API coverage output", coverage_log),
+              ("Docstring quality details", quality_log),
           ]:
               if log:
                   lines += [

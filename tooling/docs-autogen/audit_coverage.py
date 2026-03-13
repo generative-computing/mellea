@@ -709,7 +709,7 @@ def main():
             _gha_cmd(
                 "error" if args.fail_on_quality else "warning",
                 "Docstring quality",
-                f"{len(quality_issues)} issue(s) found — run audit_coverage.py --quality locally for details",
+                f"{len(quality_issues)} issue(s) found — see job summary for details",
             )
         else:
             _gha_cmd(
