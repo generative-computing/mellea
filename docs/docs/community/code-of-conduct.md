@@ -85,7 +85,7 @@ moderate community spaces.
 ### How to report
 
 Report instances of abusive, harassing, or otherwise unacceptable behavior by
-contacting the project team at **<melleaadmin@ibm.com>**. All complaints are
+contacting the project team at **[melleaadmin@ibm.com](mailto:melleaadmin@ibm.com)**. All complaints are
 reviewed and investigated promptly and fairly.
 
 When reporting a violation, include:
@@ -110,7 +110,7 @@ it to investigate and resolve the issue.
 ### Appeals
 
 If you believe an enforcement decision was made in error, request a review by
-emailing <melleaadmin@ibm.com> with "Appeal" in the subject line. Reviews are
+emailing [melleaadmin@ibm.com](mailto:melleaadmin@ibm.com) with "Appeal" in the subject line. Reviews are
 handled by a different maintainer where possible.
 
 ## Enforcement guidelines
