@@ -108,67 +108,20 @@ def generate_validated_qiskit_code(
         return ""
 
 
-# Mellea IVR loop budget
-MAX_REPAIR_ATTEMPTS = 5
+def test_qiskit_code_validation() -> None:
+    """Test Qiskit code validation with deprecated code that needs fixing.
 
-# Mellea accessible backend
-DEFAULT_BACKEND: Literal["ollama", "hf", "openai", "watsonx", "litellm"] = "ollama"
+    This test demonstrates the IVR pattern by providing deprecated Qiskit code
+    that uses old APIs (BasicAer, execute) and having the LLM fix it to use
+    modern Qiskit APIs that pass QKT validation rules.
+    """
+    # Model selection - uncomment one to try different models
+    # model_id = "granite4:micro-h"
+    # model_id = "granite4:small-h"
+    model_id = "hf.co/Qiskit/mistral-small-3.2-24b-qiskit-GGUF:latest"
 
-# DEFAULT_MODEL_ID = "granite4:micro-h"
-# DEFAULT_MODEL_ID = "granite4:small-h"
-DEFAULT_MODEL_ID = "hf.co/Qiskit/mistral-small-3.2-24b-qiskit-GGUF:latest"
-
-# Model options to play around with
-MODEL_OPTIONS = {ModelOption.TEMPERATURE: 0.8, ModelOption.MAX_NEW_TOKENS: 2048}
-
-
-# Set a prompt or uncomment one of the sample prompts
-
-# PROMPT = "create a bell state circuit"
-# PROMPT = "use qiskit to list fake backends"
-# PROMPT = "give me a random qiskit circuit"
-
-###############################################################################
-
-# PROMPT = """Complete this code:
-# ```python
-# from qiskit import QuantumCircuit
-
-# qc = QuantumCircuit(3)
-# qc.toffoli(0, 1, 2)
-
-# # draw the circuit
-# ```
-# """
-
-###############################################################################
-
-# PROMPT = """from qiskit import QuantumCircuit
-# from qiskit_ibm_runtime import QiskitRuntimeService
-
-# # define a Bell circuit and run it in ibm_salamanca using QiskitRuntimeService"""
-
-###############################################################################
-
-# PROMPT = """from qiskit.circuit.random import random_circuit
-# from qiskit.quantum_info import SparsePauliOp
-# from qiskit_ibm_runtime import Estimator, Options, QiskitRuntimeService, Session
-
-# # create a Qiskit random circuit named "circuit" with 2 qubits, depth 2, seed 1.
-# # After that, generate an observable type SparsePauliOp("IY"). Run it in the backend "ibm_sherbrooke" using QiskitRuntimeService inside a session
-# # Instantiate the runtime Estimator primitive using the session and the options optimization level 3 and resilience level 2. Run the estimator
-# # Conclude the code printing the observable, expectation value and the metadata of the job."""
-
-###############################################################################
-
-# PROMPT = """from qiskit import QuantumCircuit
-
-# # create an entanglement state circuit
-# """
-
-###############################################################################
-
-PROMPT = """from qiskit import BasicAer, QuantumCircuit, execute
+    # Prompt - replace with your own or see README.md for examples
+    prompt = """from qiskit import BasicAer, QuantumCircuit, execute
 
 backend = BasicAer.get_backend('qasm_simulator')
 
@@ -180,25 +133,17 @@ qc.measure_all()
 # run circuit on the simulator
 """
 
-
-def test_qiskit_code_validation() -> None:
-    """Test Qiskit code validation with deprecated code that needs fixing.
-
-    This test demonstrates the IVR pattern by providing deprecated Qiskit code
-    that uses old APIs (BasicAer, execute) and having the LLM fix it to use
-    modern Qiskit APIs that pass QKT validation rules.
-    """
     print("\n====== Prompt ======")
-    print(PROMPT)
+    print(prompt)
     print("======================\n")
 
     with mellea.start_session(
-        model_id=DEFAULT_MODEL_ID,
-        backend_name=DEFAULT_BACKEND,
-        model_options=MODEL_OPTIONS,
+        model_id=model_id,
+        backend_name="ollama",
+        model_options={ModelOption.TEMPERATURE: 0.8, ModelOption.MAX_NEW_TOKENS: 2048},
     ) as m:
         start_time = time.time()
-        code = generate_validated_qiskit_code(m, PROMPT, MAX_REPAIR_ATTEMPTS)
+        code = generate_validated_qiskit_code(m, prompt, max_repair_attempts=5)
         elapsed = time.time() - start_time
 
     print(f"\n====== Result ({elapsed:.1f}s) ======")
