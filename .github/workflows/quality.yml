@@ -51,7 +51,7 @@ jobs:
           ollama pull granite4:micro-h
       - name: Run Tests
         id: tests
-        run: uv run -m pytest -v --tb=short --junit-xml=/tmp/pytest-results.xml test
+        run: uv run -m pytest -v --junit-xml=/tmp/pytest-results.xml test
       - name: Send failure message tests
         if: failure() # This step will only run if a previous step failed
         run: echo "Tests failed. Please verify that tests are working locally."
