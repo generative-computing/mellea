@@ -724,7 +724,7 @@ class DropDuplicates(InPlaceTransformation):
                         f"deduplication be present in all rows. "
                         f"Element is: {element}"
                     )
-            key = (element[t] for t in self.target_fields)
+            key = tuple(element[t] for t in self.target_fields)
             key_to_record[key] = element
         return list(key_to_record.values())
 
