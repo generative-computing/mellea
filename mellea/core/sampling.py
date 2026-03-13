@@ -4,7 +4,14 @@ import abc
 from typing import Generic
 
 from .backend import Backend, BaseModelSubclass
-from .base import CBlock, Component, Context, ModelOutputThunk, S
+from .base import (
+    CBlock,
+    Component,
+    ComputedModelOutputThunk,
+    Context,
+    ModelOutputThunk,
+    S,
+)
 from .requirement import Requirement, ValidationResult
 
 
@@ -16,7 +23,7 @@ class SamplingResult(CBlock, Generic[S]):
         result_index: int,
         success: bool,
         *,
-        sample_generations: list[ModelOutputThunk[S]] | None = None,
+        sample_generations: list[ComputedModelOutputThunk[S]] | None = None,
         sample_validations: list[list[tuple[Requirement, ValidationResult]]]
         | None = None,
         sample_actions: list[Component] | None = None,
@@ -57,7 +64,7 @@ class SamplingResult(CBlock, Generic[S]):
         self.sample_contexts = sample_contexts
 
     @property
-    def result(self) -> ModelOutputThunk[S]:
+    def result(self) -> ComputedModelOutputThunk[S]:
         """The final output or result from applying the sampling strategy."""
         return self.sample_generations[self.result_index]
 

@@ -82,6 +82,7 @@ async def react(
             strategy=None,
             model_options=model_options,
             tool_calls=True,
+            await_result=True,
         )
 
         # Have to assert this due to type hints.

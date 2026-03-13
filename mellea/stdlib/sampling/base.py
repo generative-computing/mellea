@@ -19,6 +19,8 @@ from copy import deepcopy
 
 import tqdm
 
+from mellea.core.base import ComputedModelOutputThunk
+
 from ...core import (
     Backend,
     BaseModelSubclass,
@@ -202,6 +204,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 tool_calls=tool_calls,
             )
             await result.avalue()
+            result = ComputedModelOutputThunk(result)
 
             # Sampling strategies may use different components from the original
             # action. This might cause discrepancies in the expected parsed_repr

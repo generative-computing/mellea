@@ -670,6 +670,7 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                     strategy=extracted.strategy,
                     format=self._response_model,
                     model_options=extracted.model_options,
+                    await_result=True,
                 )
             else:
                 # We know these aren't None from the `extract_args_and_kwargs` function.
@@ -683,8 +684,12 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                     strategy=extracted.strategy,
                     format=self._response_model,
                     model_options=extracted.model_options,
+                    await_result=True,
                 )
 
+            assert response.is_computed(), (
+                "unexpectedly received uncomputed model output thunk in async generative slot"
+            )
             assert response.parsed_repr is not None
             if context is None:
                 return response.parsed_repr

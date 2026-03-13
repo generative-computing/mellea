@@ -128,6 +128,7 @@ test = [
     "nbmake>=1.5.5",  # Notebook testing
     "sentencepiece==0.2.1",  # Necessary for test_huggingface_tools test because of Mistral model
     "jsonschema",
+    "pytest-mypy-plugins==4.0.0",
     # Example-only dependencies (run via pytest)
     "langchain-community>=0.3.0",
     "ddgs>=9.0.0",  # Required by DuckDuckGoSearchResults in langchain-community
@@ -304,7 +305,7 @@ disable_error_code = [
 # -----------------------------
 
 [tool.codespell]
-ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,Wight'
+ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,strat,Wight'
 check-filenames = true
 check-hidden = false
 regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=[A-Z])|\\d+"

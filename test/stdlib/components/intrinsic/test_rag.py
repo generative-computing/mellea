@@ -9,7 +9,7 @@ import pytest
 import torch
 
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
+from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
@@ -36,7 +36,8 @@ def _backend():
     # Prevent thrashing if the default device is CPU
     torch.set_num_threads(4)
 
-    backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.hf_model_name)  # type: ignore
+    # No adapters for hybrid version.
+    backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name)  # type: ignore
     yield backend_
 
     # Code after yield is cleanup code.

@@ -1,0 +1,17 @@
+"""CLI for fixing async calls after top-level ainstruct, aquery, and aact contract change.."""
+
+from enum import Enum
+
+import typer
+
+fix_app = typer.Typer(name="fix", help="Fix code for API changes.")
+
+
+class FixMode(str, Enum):
+    ADD_AWAIT_RESULT = "add-await-result"
+    ADD_STREAM_LOOP = "add-stream-loop"
+
+
+from cli.fix.commands import fix_async  # noqa: E402
+
+fix_app.command("async")(fix_async)
