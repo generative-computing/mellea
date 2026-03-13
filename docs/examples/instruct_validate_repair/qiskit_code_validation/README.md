@@ -219,3 +219,11 @@ If using smaller models (e.g., `granite4:micro-h`), they may not have enough Qis
 ModuleNotFoundError: No module named 'flake8_qiskit_migration'
 ```
 **Solution**: Use `uv run` which auto-installs dependencies
+
+## Future Work
+
+The following enhancements are planned for future iterations:
+
+1. **MultiTurnStrategy Integration** - Try using `MultiTurnStrategy` (see [Sampling Strategies](../README.md#sampling-strategies)) which builds conversation history by adding validation failures as new user messages, to see if this approach improves results over the current `RepairTemplateStrategy` which adds failures directly to the instruction.
+
+2. **Enable Smaller Models** - Add system prompt or grounding context with Qiskit API documentation to help smaller models perform accurate migrations. This would allow removing the `pytest.mark.skip` marker and make the example run in standard test suites.
