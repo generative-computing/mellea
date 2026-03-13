@@ -42,4 +42,18 @@ repos:
         args: [--config, docs/docs/.markdownlint.json]
         files: ^docs/docs/.*\.md$
 
-
+  # Docs validation hooks — skip gracefully when generated docs are not present
+  - repo: local
+    hooks:
+      - id: docs-mdx-validate
+        name: Validate generated MDX docs
+        entry: bash -c 'test -d docs/docs/api && uv run --no-sync python tooling/docs-autogen/validate.py docs/docs/api --skip-coverage || true'
+        language: system
+        pass_filenames: false
+        files: (docs/docs/.*\.mdx$|tooling/docs-autogen/)
+      - id: docs-docstring-quality
+        name: Audit docstring quality (informational)
+        entry: bash -c 'test -d docs/docs/api && uv run --no-sync python tooling/docs-autogen/audit_coverage.py --quality --no-methods --docs-dir docs/docs/api || true'
+        language: system
+        pass_filenames: false
+        files: (mellea/.*\.py$|cli/.*\.py$)
