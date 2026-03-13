@@ -33,9 +33,9 @@ on:
         type: boolean
         default: false
       target_branch:
-        description: "Override deploy target branch (default: docs/staging)"
+        description: "Override deploy target branch (default: docs/preview)"
         type: string
-        default: "docs/staging"
+        default: "docs/preview"
       strict_validation:
         description: "Fail the build if validation checks fail"
         type: boolean
