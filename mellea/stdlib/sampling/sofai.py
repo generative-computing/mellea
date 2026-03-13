@@ -18,9 +18,9 @@ from ...core import (
     Backend,
     BaseModelSubclass,
     Component,
+    ComputedModelOutputThunk,
     Context,
     FancyLogger,
-    ModelOutputThunk,
     Requirement,
     S,
     SamplingResult,
@@ -105,7 +105,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: list[Component],
-        past_results: list[ModelOutputThunk],
+        past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
         """Create targeted feedback message from validation results.
@@ -151,7 +151,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
     @staticmethod
     def select_from_failure(
         sampled_actions: list[Component],
-        sampled_results: list[ModelOutputThunk],
+        sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
         """Select the most informed attempt (last) when all fail.
@@ -412,7 +412,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         original_context: Context,
         last_result_ctx: Context,
         last_action: Component,
-        sampled_results: list[ModelOutputThunk],
+        sampled_results: list[ComputedModelOutputThunk],
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]],
         loop_count: int,
     ) -> tuple[Component, Context]:
@@ -500,7 +500,9 @@ class SOFAISamplingStrategy(SamplingStrategy):
         format: type[BaseModelSubclass] | None,
         model_options: dict | None,
         tool_calls: bool,
-    ) -> tuple[ModelOutputThunk, Context, list[tuple[Requirement, ValidationResult]]]:
+    ) -> tuple[
+        ComputedModelOutputThunk, Context, list[tuple[Requirement, ValidationResult]]
+    ]:
         """Generate with a solver and validate the result.
 
         Args:
@@ -525,6 +527,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
             tool_calls=tool_calls,
         )
         await result.avalue()
+        computed_result = ComputedModelOutputThunk(result)
 
         # Note: Unlike base.py which sets result.parsed_repr = action.parse(result),
         # we skip this because MOTs are immutable. The parsed_repr was set by the
@@ -539,13 +542,13 @@ class SOFAISamplingStrategy(SamplingStrategy):
             reqs=reqs_for_validation,
             context=result_ctx,
             backend=session_backend,
-            output=result,
+            output=computed_result,
             format=None,
             model_options=model_options,
         )
         constraint_scores = list(zip(reqs, val_scores))
 
-        return result, result_ctx, constraint_scores
+        return computed_result, result_ctx, constraint_scores
 
     # =========================================================================
     # Main Sample Method
@@ -606,7 +609,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         reqs: list[Requirement] = list(requirements) if requirements else []
 
         # State tracking for all attempts
-        sampled_results: list[ModelOutputThunk] = []
+        sampled_results: list[ComputedModelOutputThunk] = []
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         sampled_actions: list[Component] = []
         sample_contexts: list[Context] = []

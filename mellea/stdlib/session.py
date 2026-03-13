@@ -23,6 +23,7 @@ from ..core import (
     BaseModelSubclass,
     CBlock,
     Component,
+    ComputedModelOutputThunk,
     Context,
     FancyLogger,
     GenerateLog,
@@ -410,7 +411,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk[S]: ...
+    ) -> ComputedModelOutputThunk[S]: ...
 
     @overload
     def act(
@@ -487,7 +488,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk[str]: ...
+    ) -> ComputedModelOutputThunk[str]: ...
 
     @overload
     def instruct(
@@ -531,7 +532,7 @@ class MelleaSession:
             description: The description of the instruction.
             requirements: A list of requirements that the instruction can be validated against.
             icl_examples: A list of in-context-learning examples that the instruction can be validated against.
-            grounding_context: A list of grounding contexts that the instruction can use. They can bind as variables using a (key: str, value: str | ContentBlock) tuple.
+            grounding_context: A list of grounding contexts that the instruction can use. They can bind as variables using a (key: str, value: str | CBlock | Component) tuple.
             user_variables: A dict of user-defined variables used to fill in Jinja placeholders in other parameters. This requires that all other provided parameters are provided as strings.
             prefix: A prefix string or ContentBlock to use when generating the instruction.
             output_prefix: A string or ContentBlock that defines a prefix for the output generation. Usually you do not need this.
@@ -655,7 +656,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk:
+    ) -> ComputedModelOutputThunk:
         """Query method for retrieving information from an object.
 
         Args:
@@ -666,7 +667,7 @@ class MelleaSession:
             tool_calls: If true, the model may make tool calls. Defaults to False.
 
         Returns:
-            ModelOutputThunk: The result of the query as processed by the backend.
+            ComputedModelOutputThunk: The result of the query as processed by the backend.
         """
         result, context = mfuncs.query(
             obj=obj,
@@ -718,11 +719,40 @@ class MelleaSession:
         action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
-        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        strategy: None = None,
         return_sampling_results: Literal[False] = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: Literal[True],
+    ) -> ComputedModelOutputThunk[S]: ...
+
+    @overload
+    async def aact(
+        self,
+        action: Component[S],
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: SamplingStrategy,
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: bool = False,
+    ) -> ComputedModelOutputThunk[S]: ...
+
+    @overload
+    async def aact(
+        self,
+        action: Component[S],
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: None = None,
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: Literal[False] = False,
     ) -> ModelOutputThunk[S]: ...
 
     @overload
@@ -736,6 +766,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: bool = False,
     ) -> SamplingResult[S]: ...
 
     async def aact(
@@ -748,6 +779,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: bool = False,
     ) -> ModelOutputThunk[S] | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
@@ -759,9 +791,11 @@ class MelleaSession:
             format: if set, the BaseModel to use for constrained decoding.
             model_options: additional model options, which will upsert into the model/backend's defaults.
             tool_calls: if true, tool calling is enabled.
+            await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. Default is False.
 
         Returns:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+            When await_result=False and strategy=None, returns uncomputed ModelOutputThunk that can be streamed.
         """
         r = await mfuncs.aact(
             action,
@@ -773,6 +807,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            await_result=await_result,
         )  # type: ignore
 
         if isinstance(r, SamplingResult):
@@ -795,11 +830,52 @@ class MelleaSession:
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
-        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        strategy: None = None,
         return_sampling_results: Literal[False] = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: Literal[True],
+    ) -> ComputedModelOutputThunk[str]: ...
+
+    @overload
+    async def ainstruct(
+        self,
+        description: str,
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: SamplingStrategy,
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: bool = False,
+    ) -> ComputedModelOutputThunk[str]: ...
+
+    @overload
+    async def ainstruct(
+        self,
+        description: str,
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: None = None,
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: Literal[False] = False,
     ) -> ModelOutputThunk[str]: ...
 
     @overload
@@ -819,6 +895,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: bool = False,
     ) -> SamplingResult[str]: ...
 
     async def ainstruct(
@@ -837,6 +914,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: bool = False,
     ) -> ModelOutputThunk[str] | SamplingResult[str]:
         """Generates from an instruction.
 
@@ -854,9 +932,11 @@ class MelleaSession:
             model_options: Additional model options, which will upsert into the model/backend's defaults.
             tool_calls: If true, tool calling is enabled.
             images: A list of images to be used in the instruction or None if none.
+            await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. Default is False.
 
         Returns:
-            A ``ModelOutputThunk`` if ``return_sampling_results`` is ``False``,
+            A ``ComputedModelOutputThunk`` if ``strategy`` is ``None`` and ``await_results`` is ``False``,
+            else returns a ``ModelOutputThunk`` if return_sampling_results`` is ``False``,
             else a ``SamplingResult``.
         """
         r = await mfuncs.ainstruct(
@@ -875,6 +955,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            await_result=await_result,
         )
 
         if isinstance(r, SamplingResult):
@@ -960,6 +1041,7 @@ class MelleaSession:
             input=input,
         )
 
+    @overload
     async def aquery(
         self,
         obj: Any,
@@ -968,6 +1050,30 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: Literal[True],
+    ) -> ComputedModelOutputThunk: ...
+
+    @overload
+    async def aquery(
+        self,
+        obj: Any,
+        query: str,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: Literal[False] = False,
+    ) -> ModelOutputThunk: ...
+
+    async def aquery(
+        self,
+        obj: Any,
+        query: str,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: bool = False,
     ) -> ModelOutputThunk:
         """Query method for retrieving information from an object.
 
@@ -977,6 +1083,7 @@ class MelleaSession:
             format:  format for output parsing.
             model_options: Model options to pass to the backend.
             tool_calls: If true, the model may make tool calls. Defaults to False.
+            await_result: if False (default), returns uncomputed ModelOutputThunk. If True, awaits and returns ComputedModelOutputThunk.
 
         Returns:
             ModelOutputThunk: The result of the query as processed by the backend.
@@ -989,6 +1096,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            await_result=await_result,  # type: ignore[call-overload]
         )
         self.ctx = context
         return result

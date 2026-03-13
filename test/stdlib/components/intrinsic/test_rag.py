@@ -36,7 +36,8 @@ def _backend():
     # Prevent thrashing if the default device is CPU
     torch.set_num_threads(4)
 
-    backend_ = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")  # type: ignore
+    # No adapters for hybrid version.
+    backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name)  # type: ignore
     yield backend_
 
     from test.conftest import cleanup_gpu_backend

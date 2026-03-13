@@ -60,8 +60,8 @@ async def test_async_await_with_chat_context(m_session):
 
     m1 = Message(role="user", content="1")
     m2 = Message(role="user", content="2")
-    r1 = await m_session.aact(m1, strategy=None)
-    r2 = await m_session.aact(m2, strategy=None)
+    r1 = await m_session.aact(m1, strategy=None, await_result=True)
+    r2 = await m_session.aact(m2, strategy=None, await_result=True)
 
     # This should be the order of these items in the session's context.
     history = [r2, m2, r1, m1]

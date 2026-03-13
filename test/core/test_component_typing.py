@@ -17,6 +17,7 @@ from mellea.core import (
     Requirement,
     ValidationResult,
 )
+from mellea.core.base import ComputedModelOutputThunk
 from mellea.stdlib.components import Instruction, Message
 from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.sampling import BaseSamplingStrategy
@@ -191,7 +192,7 @@ async def test_generating_with_sampling(session):
         @staticmethod
         def select_from_failure(
             sampled_actions: list[Component],
-            sampled_results: list[ModelOutputThunk],
+            sampled_results: list[ComputedModelOutputThunk],
             sampled_val: list[list[tuple[Requirement, ValidationResult]]],
         ) -> int:
             return len(sampled_actions) - 1
@@ -201,7 +202,7 @@ async def test_generating_with_sampling(session):
             old_ctx: Context,
             new_ctx: Context,
             past_actions: list[Component],
-            past_results: list[ModelOutputThunk],
+            past_results: list[ComputedModelOutputThunk],
             past_val: list[list[tuple[Requirement, ValidationResult]]],
         ) -> tuple[Component, Context]:
             return Instruction("print another number 100 greater"), old_ctx
