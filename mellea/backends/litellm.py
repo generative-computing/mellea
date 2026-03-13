@@ -7,9 +7,12 @@ import json
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, overload
 
+import logging
+
 import litellm
 import litellm.litellm_core_utils
 import litellm.litellm_core_utils.get_supported_openai_params
+
 
 from ..backends import model_ids
 from ..core import (
@@ -48,7 +51,13 @@ from .tools import (
     validate_tool_arguments,
 )
 
-format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
+format: None = (
+    None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
+)
+
+# LiteLLM's INFO logs are very noisy (logs every completion call). Suppress them.
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 
 
 class LiteLLMBackend(FormatterBackend):
@@ -61,6 +70,7 @@ class LiteLLMBackend(FormatterBackend):
         formatter: ChatFormatter | None = None,
         base_url: str | None = "http://localhost:11434",
         model_options: dict | None = None,
+        num_retries: int = 0,
     ):
         """Initialize an OpenAI compatible backend using the [LiteLLM Python SDK](https://docs.litellm.ai/docs/#litellm-python-sdk).
 
@@ -71,6 +81,7 @@ class LiteLLMBackend(FormatterBackend):
             formatter: A custom formatter based on backend.If None, defaults to TemplateFormatter
             base_url : Base url for LLM API. Defaults to None.
             model_options : Generation options to pass to the LLM. Defaults to None.
+            num_retries : Number of retries on failure, using LiteLLM's built-in exponential backoff. Defaults to 0.
         """
         super().__init__(
             model_id=model_id,
@@ -89,6 +100,8 @@ class LiteLLMBackend(FormatterBackend):
             self._base_url = "http://localhost:11434/v1"  # ollama
         else:
             self._base_url = base_url
+
+        self._num_retries = num_retries
 
         # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
         # These are usually values that must be extracted before hand or that are common among backend providers.
@@ -131,9 +144,11 @@ class LiteLLMBackend(FormatterBackend):
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
         )
+
         span = start_generate_span(
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         )
+
         mot = await self._generate_from_chat_context_standard(
             action,
             ctx,
@@ -224,10 +239,20 @@ class LiteLLMBackend(FormatterBackend):
         # We want to flag both for the end user.
         standard_openai_subset = litellm.get_standard_openai_params(backend_specific)
         unknown_keys = []  # Keys that are unknown to litellm.
-        unsupported_openai_params = []  # OpenAI params that are known to litellm but not supported for this model/provider.
+        unsupported_openai_params = (
+            []
+        )  # OpenAI params that are known to litellm but not supported for this model/provider.
+        # Bedrock-specific pass-through params that LiteLLM accepts but doesn't list as supported OpenAI params.
+        known_provider_passthrough = {
+            "additional_model_request_fields",
+            "additional_model_response_field_paths",
+        }
+
         for key in backend_specific.keys():
             if key not in supported_params:
-                if key in standard_openai_subset:
+                if key in known_provider_passthrough:
+                    pass  # Expected provider-specific params; no warning needed.
+                elif key in standard_openai_subset:
                     # LiteLLM is pretty confident that this standard OpenAI parameter won't work.
                     unsupported_openai_params.append(key)
                 else:
@@ -252,8 +277,9 @@ class LiteLLMBackend(FormatterBackend):
         action: Component[C] | CBlock,
         ctx: Context,
         *,
-        _format: type[BaseModelSubclass]
-        | None = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
+        _format: (
+            type[BaseModelSubclass] | None
+        ) = None,  # Type[BaseModelSubclass] is a class object of a subclass of BaseModel
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk[C]:
@@ -261,9 +287,9 @@ class LiteLLMBackend(FormatterBackend):
 
         model_opts = self._simplify_and_merge(model_options)
         linearized_context = ctx.view_for_generation()
-        assert linearized_context is not None, (
-            "Cannot generate from a non-linear context in a FormatterBackend."
-        )
+        assert (
+            linearized_context is not None
+        ), "Cannot generate from a non-linear context in a FormatterBackend."
         # Convert our linearized context into a sequence of chat messages. Template formatters have a standard way of doing this.
         messages: list[Message] = self.formatter.to_chat_messages(linearized_context)
 
@@ -321,6 +347,7 @@ class LiteLLMBackend(FormatterBackend):
             tools=formatted_tools,
             reasoning_effort=thinking,  # type: ignore
             drop_params=True,  # See note in `_make_backend_specific_and_remove`.
+            num_retries=self._num_retries,
             **extra_params,
             **model_specific_options,
         )
@@ -389,6 +416,16 @@ class LiteLLMBackend(FormatterBackend):
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
 
+            if getattr(choice, "logprobs", None) is not None:
+                mot._meta["logprobs"] = choice.logprobs
+
+            # In some cases (converse API) Bedrock returns logprobs via additionalModelResponseFields.
+            additional_fields = getattr(chunk, "model_extra", {}) or {}
+            if "additionalModelResponseFields" in additional_fields:
+                mot._meta["additionalModelResponseFields"] = additional_fields[
+                    "additionalModelResponseFields"
+                ]
+
             mot._meta["litellm_chat_response"] = chunk.choices[0].model_dump()
 
         elif isinstance(chunk, litellm.ModelResponseStream):  # type: ignore
@@ -403,6 +440,12 @@ class LiteLLMBackend(FormatterBackend):
             content_chunk = message_delta.content
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
+
+            stream_logprobs = getattr(chunk.choices[0], "logprobs", None)
+            if stream_logprobs is not None:
+                if "logprobs" not in mot._meta:
+                    mot._meta["logprobs"] = []
+                mot._meta["logprobs"].append(stream_logprobs)
 
             if mot._meta.get("litellm_chat_response_streamed", None) is None:
                 mot._meta["litellm_chat_response_streamed"] = []
@@ -420,6 +463,7 @@ class LiteLLMBackend(FormatterBackend):
     ):
         """Called when generation is done."""
         # Reconstruct the chat_response from chunks if streamed.
+
         streamed_chunks = mot._meta.get("litellm_chat_response_streamed", None)
         if streamed_chunks is not None:
             # Must handle ollama differently due to: https://github.com/BerriAI/litellm/issues/14579.
@@ -431,12 +475,12 @@ class LiteLLMBackend(FormatterBackend):
                 streamed_chunks, force_all_tool_calls_separate=separate_tools
             )
 
-        assert mot._action is not None, (
-            "ModelOutputThunks should have their action assigned during generation"
-        )
-        assert mot._model_options is not None, (
-            "ModelOutputThunks should have their model_opts assigned during generation"
-        )
+        assert (
+            mot._action is not None
+        ), "ModelOutputThunks should have their action assigned during generation"
+        assert (
+            mot._model_options is not None
+        ), "ModelOutputThunks should have their model_opts assigned during generation"
 
         # OpenAI-like streamed responses potentially give you chunks of tool calls.
         # As a result, we have to store data between calls and only then
@@ -444,6 +488,7 @@ class LiteLLMBackend(FormatterBackend):
         tool_chunk = extract_model_tool_requests(
             tools, mot._meta["litellm_chat_response"]
         )
+
         if tool_chunk is not None:
             if mot.tool_calls is None:
                 mot.tool_calls = {}
@@ -466,6 +511,7 @@ class LiteLLMBackend(FormatterBackend):
         }
         generate_log.action = mot._action
         generate_log.result = mot
+
         mot._generate_log = generate_log
 
         # Record telemetry now that response is available
@@ -575,7 +621,10 @@ class LiteLLMBackend(FormatterBackend):
             prompts = [self.formatter.print(action) for action in actions]
 
             completion_response = await litellm.atext_completion(
-                model=self._model_id, prompt=prompts, **model_specific_options
+                model=self._model_id,
+                prompt=prompts,
+                num_retries=self._num_retries,
+                **model_specific_options,
             )
 
         # Necessary for type checker.
@@ -596,9 +645,11 @@ class LiteLLMBackend(FormatterBackend):
             output._model_options = model_opts
             output._meta = {
                 "litellm_chat_response": res.model_dump(),
-                "usage": completion_response.usage.model_dump()
-                if completion_response.usage
-                else None,
+                "usage": (
+                    completion_response.usage.model_dump()
+                    if completion_response.usage
+                    else None
+                ),
             }
 
             output.parsed_repr = (

@@ -2,12 +2,62 @@
 
 import os
 
+import logging
+
+import boto3
+import botocore.exceptions
+
+# botocore logs a credential-resolution message on every boto3.Session() call. Suppress it.
+logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
 from openai import OpenAI
 from openai.pagination import SyncPage
 
 from mellea.backends.litellm import LiteLLMBackend
 from mellea.backends.model_ids import ModelIdentifier
 from mellea.backends.openai import OpenAIBackend
+
+
+def _assert_region(region: str | None) -> str:
+    resolved_region = (
+        region
+        or os.environ.get("AWS_REGION_NAME")
+        or os.environ.get("AWS_DEFAULT_REGION")
+        or os.environ.get("AWS_REGION")
+    )
+    assert (
+        resolved_region is not None
+    ), "you must specify a region: pass `region` explicitly or set AWS_REGION_NAME, AWS_DEFAULT_REGION, or AWS_REGION."
+
+
+def _assert_bedrock_auth() -> None:
+    """Raises if no valid AWS credentials can be resolved.
+
+    Accepts any credential source that boto3 supports:
+    - Static env vars (AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY)
+    - Named profile (AWS_PROFILE or ~/.aws/credentials)
+    - ECS task role (AWS_CONTAINER_CREDENTIALS_RELATIVE_URI)
+    - EC2 / ECS instance profile (IMDSv2)
+    - LiteLLM-specific Bedrock API key (AWS_BEARER_TOKEN_BEDROCK)
+    """
+    if "AWS_BEARER_TOKEN_BEDROCK" in os.environ:
+        return
+
+    try:
+        creds = boto3.Session().get_credentials()
+        if creds is None:
+            raise botocore.exceptions.NoCredentialsError()
+        # Resolve to catch expired/invalid assume-role chains early.
+        creds.get_frozen_credentials()
+    except botocore.exceptions.NoCredentialsError:
+        raise AssertionError(
+            "No AWS credentials found. Provide one of:\n"
+            "  - AWS_BEARER_TOKEN_BEDROCK (Bedrock API key)\n"
+            "  - AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY\n"
+            "  - AWS_PROFILE pointing to a configured profile\n"
+            "  - An IAM role attached to the instance/task (EC2, ECS, Lambda)"
+        )
+    except botocore.exceptions.NoRegionError:
+        pass  # Credentials exist; region is validated separately.
 
 
 def _make_region_for_uri(region: str | None):
@@ -40,27 +90,14 @@ def stringify_mantle_model_ids(region: str | None = None) -> str:
 
 
 def create_bedrock_litellm_backend(
-    model_id: ModelIdentifier | str, region: str | None = None
+    model_id: ModelIdentifier | str, region: str | None = None, num_retries: int = 15
 ) -> LiteLLMBackend:
     """Returns a LiteLLM backend that points to Bedrock for model `model_id`.
 
     Use this instead of `create_bedrock_openai_backend` when you need auth with an AWS_ACCESS_KEY_ID.
     """
-    if "AWS_BEARER_TOKEN_BEDROCK" in os.environ and "AWS_ACCESS_KEY_ID" in os.environ:
-        # TODO maybe warn and note we default to AWS_BEARER_TOKEN_BEDROCK (that's what litellm does).
-        pass
-    elif "AWS_BEARER_TOKEN_BEDROCK" not in os.environ:
-        assert "AWS_ACCESS_KEY_ID" in os.environ, (
-            "You must specify a AWS_ACCESS_KEY_ID environment variable. To use a Bedrock API Key instead, use create_bedrock_openai_backend"
-        )
-        assert "AWS_SECRET_ACCESS_KEY" in os.environ, (
-            "You must specify a AWS_SECRET_ACCESS_KEY environment variable. To use a Bedrock API Key instead, use create_bedrock_openai_backend"
-        )
-
-    assert region is not None or "AWS_REGION_NAME" in os.environ, (
-        "you must specify a region."
-    )
-    region = region if region is not None else os.environ["AWS_REGION_NAME"]
+    _assert_bedrock_auth()
+    _assert_region(region)
 
     model_name = ""
     match model_id:
@@ -73,11 +110,12 @@ def create_bedrock_litellm_backend(
                 model_name = model_id.bedrock_litellm_name
         case str():
             model_name = model_id
-    assert model_name != "", (
-        f"Model identifier {model_id} does not specify a bedrock_name."
-    )
+    assert (
+        model_name != ""
+    ), f"Model identifier {model_id} does not specify a bedrock_name."
 
-    backend = LiteLLMBackend(model_id=model_name)
+    backend = LiteLLMBackend(model_id=model_name, num_retries=num_retries)
+
     # TODO litellm doesn't even appear to use this...?
     backend._base_url = None  # type: ignore
     return backend
