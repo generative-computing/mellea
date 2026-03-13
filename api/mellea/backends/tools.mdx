@@ -1,0 +1,345 @@
+---
+title: "mellea.backends.tools"
+sidebarTitle: "mellea.backends.tools"
+description: "Utilities for dealing with LLM tools."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Utilities for dealing with LLM tools.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `tool` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L157" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+tool(func: Callable | None = None, name: str | None = None) -> MelleaTool | Callable[[Callable], MelleaTool]
+```
+
+
+Decorator to mark a function as a Mellea tool.
+
+This decorator wraps a function to make it usable as a tool without
+requiring explicit MelleaTool.from_callable() calls. The decorated
+function returns a MelleaTool instance that must be called via .run().
+
+**Args:**
+- `func`: The function to decorate (when used without arguments)
+- `name`: Optional custom name for the tool (defaults to function name)
+
+**Returns:**
+- A MelleaTool instance. Use .run() to invoke the tool.
+- The returned object passes isinstance(result, MelleaTool) checks.
+
+**Examples:**
+
+Basic usage:
+```python
+>>> @tool
+... def get_weather(location: str, days: int = 1) -> dict:
+...     '''Get weather forecast.
+...
+...     Args:
+...         location: City name
+...         days: Number of days to forecast
+...     '''
+...     return {{"location": location, "forecast": "sunny"}}
+>>>
+>>> # The decorated function IS a MelleaTool
+>>> isinstance(get_weather, MelleaTool)  # True
+>>>
+>>> # Can be used directly in tools list (no extraction needed)
+>>> tools = [get_weather]
+>>>
+>>> # Must use .run() to invoke the tool
+>>> result = get_weather.run(location="Boston")
+With custom name (as decorator):
+>>> @tool(name="weather_api")
+... def get_weather(location: str) -> dict:
+...     return {{"location": location}}
+>>>
+>>> result = get_weather.run(location="New York")
+With custom name (as function):
+>>> def new_tool(): ...
+>>> differently_named_tool = tool(new_tool, name="different_name")
+```
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add_tools_from_model_options` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L220" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+add_tools_from_model_options(tools_dict: dict[str, AbstractMelleaTool], model_options: dict[str, Any])
+```
+
+
+If model_options has tools, add those tools to the tools_dict.
+
+Accepts MelleaTool instances or @tool decorated functions.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add_tools_from_context_actions` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L259" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+add_tools_from_context_actions(tools_dict: dict[str, AbstractMelleaTool], ctx_actions: list[Component | CBlock] | None)
+```
+
+
+If any of the actions in ctx_actions have tools in their template_representation, add those to the tools_dict.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `convert_tools_to_json` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L279" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+convert_tools_to_json(tools: dict[str, AbstractMelleaTool]) -> list[dict]
+```
+
+
+Convert tools to json dict representation.
+
+Notes:
+- Huggingface transformers library lets you pass in an array of functions but doesn't like methods.
+- WatsonxAI uses `from langchain_ibm.chat_models import convert_to_openai_tool` in their demos, but it gives the same values.
+- OpenAI uses the same format / schema.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `json_extraction` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L290" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+json_extraction(text: str) -> Generator[dict, None, None]
+```
+
+
+Yields the next valid json object in a given string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `find_func` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L310" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+find_func(d) -> tuple[str | None, Mapping | None]
+```
+
+
+Find the first function in a json-like dictionary.
+
+Most llms output tool requests in the form `...\{"name": string, "arguments": \{\}\}...`
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parse_tools` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L338" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parse_tools(llm_response: str) -> list[tuple[str, Mapping]]
+```
+
+
+A simple parser that will scan a string for tools and attempt to extract them; only works for json based outputs.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `validate_tool_arguments` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L350" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+validate_tool_arguments(tool: AbstractMelleaTool, args: Mapping[str, Any]) -> dict[str, Any]
+```
+
+
+Validate and optionally coerce tool arguments against tool's JSON schema.
+
+This function validates tool call arguments extracted from LLM responses against
+the tool's JSON schema from as_json_tool. It can automatically coerce common type
+mismatches (e.g., string "30" to int 30) and provides detailed error messages.
+
+**Args:**
+- `tool`: The MelleaTool instance to validate against
+- `args`: Raw arguments from model (post-JSON parsing)
+- `coerce_types`: If True, attempt type coercion for common cases (default\: True)
+- `strict`: If True, raise ValidationError on failures; if False, log warnings
+    and return original args (default\: False)
+
+**Returns:**
+- Validated and optionally coerced arguments dict
+
+**Raises:**
+- `ValidationError`: If strict=True and validation fails
+
+**Examples:**
+
+```python
+>>> def get_weather(location: str, days: int = 1) -> dict:
+...     return {{"location": location, "days": days}}
+>>> tool = MelleaTool.from_callable(get_weather)
+>>> # LLM returns days as string
+>>> args = {{"location": "Boston", "days": "3"}}
+>>> validated = validate_tool_arguments(tool, args)
+>>> validated
+{{'location': 'Boston', 'days': 3}}
+>>> # Strict mode raises on validation errors
+>>> bad_args = {{"location": "Boston", "days": "not_a_number"}}
+>>> validate_tool_arguments(tool, bad_args, strict=True)
+Traceback (most recent call last):
+...
+pydantic.ValidationError: ...
+```
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `convert_function_to_ollama_tool` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L718" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+convert_function_to_ollama_tool(func: Callable, name: str | None = None) -> OllamaTool
+```
+
+
+Imported from Ollama.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `MelleaTool` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L19" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Tool class to represent a tool.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `run` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L37" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+run(self, *args, **kwargs) -> Any
+```
+
+Run the tool with the given arguments.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `as_json_tool` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L42" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+as_json_tool(self) -> dict[str, Any]
+```
+
+Return the tool converted to a OpenAI compatible JSON object.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `from_langchain` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L47" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+from_langchain(cls, tool: Any)
+```
+
+Create a Tool from a langchain tool object.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `from_smolagents` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L83" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+from_smolagents(cls, tool: Any)
+```
+
+Create a Tool from a HuggingFace smolagents tool object.
+
+**Args:**
+- `tool`: A smolagents.Tool instance
+
+**Returns:**
+- A Mellea tool wrapping the smolagents tool
+
+**Raises:**
+- `ImportError`: If smolagents is not installed
+- `ValueError`: If tool is not a smolagents Tool instance
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `from_callable` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L138" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+from_callable(cls, func: Callable, name: str | None = None)
+```
+
+Create a Tool from a callable.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SubscriptableBaseModel` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L543" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Class imported from Ollama.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L616" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get(self, key: str, default: Any = None) -> Any
+```
+
+Get.
+
+```python
+>>> msg = Message(role='user')
+>>> msg.get('role')
+'user'
+>>> msg = Message(role='user')
+>>> msg.get('nonexistent')
+>>> msg = Message(role='user')
+>>> msg.get('nonexistent', 'default')
+'default'
+>>> msg = Message(role='user', tool_calls=[ Message.ToolCall(function=Message.ToolCall.Function(name='foo', arguments={{}}))])
+>>> msg.get('tool_calls')[0]['function']['name']
+'foo'
+```
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `OllamaTool` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/tools.py#L635" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Class imported from Ollama.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

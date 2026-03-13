@@ -1,0 +1,57 @@
+---
+title: "mellea.formatters.granite.retrievers.elasticsearch"
+sidebarTitle: "mellea.formatters.granite.retrievers.elasticsearch"
+description: "Classes and functions that implement the ElasticsearchRetriever."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Classes and functions that implement the ElasticsearchRetriever.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ElasticsearchRetriever` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/retrievers/elasticsearch.py#L8" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Retriever for documents hosted on an ElasticSearch server.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `create_es_body` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/retrievers/elasticsearch.py#L29" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+create_es_body(self, limit, query)
+```
+
+Create a query body for Elasticsearch.
+
+:param limit: Max number of documents to retrieve.
+:param query: Query string for retrieving documents.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `retrieve` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/retrievers/elasticsearch.py#L52" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+retrieve(self, query: str, top_k: int = 5) -> list[dict]
+```
+
+Run a query and return results.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

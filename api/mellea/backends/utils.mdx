@@ -1,0 +1,65 @@
+---
+title: "mellea.backends.utils"
+sidebarTitle: "mellea.backends.utils"
+description: "Utilities for Backends."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Utilities for Backends.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_value` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/utils.py#L20" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_value(obj: Any, key: str) -> Any
+```
+
+
+Get value from dict or object attribute.
+
+**Args:**
+- `obj`: Dict or object
+- `key`: Key or attribute name
+
+**Returns:**
+- Value if found, None otherwise
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `to_chat` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/utils.py#L35" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+to_chat(action: Component | CBlock, ctx: Context, formatter: ChatFormatter, system_prompt: str | None) -> list[Chat]
+```
+
+
+Converts a context and an action into a series of dicts to be passed to apply_chat_template .
+
+This function is used by local inference backends.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `to_tool_calls` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/utils.py#L75" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+to_tool_calls(tools: dict[str, AbstractMelleaTool], decoded_result: str) -> dict[str, ModelToolCall] | None
+```
+
+
+Parse a tool call string.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

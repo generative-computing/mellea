@@ -1,0 +1,56 @@
+---
+title: "mellea.backends.bedrock"
+sidebarTitle: "mellea.backends.bedrock"
+description: "Helpers for creating bedrock backends from openai/litellm."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Helpers for creating bedrock backends from openai/litellm.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `list_mantle_models` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/bedrock.py#L24" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+list_mantle_models(region: str | None = None) -> list
+```
+
+
+Helper function get getting all models available at a bedrock-mantle endpoint.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `stringify_mantle_model_ids` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/bedrock.py#L34" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+stringify_mantle_model_ids(region: str | None = None) -> str
+```
+
+
+Helper function for getting a human-readable list of all models available at the mantle endpoint for an AWS region.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `create_bedrock_mantle_backend` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/backends/bedrock.py#L41" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+create_bedrock_mantle_backend(model_id: ModelIdentifier | str, region: str | None = None) -> OpenAIBackend
+```
+
+
+Returns an OpenAI backend that points to Bedrock mantle for model `model_id`.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,201 @@
+---
+title: "mellea.formatters.granite.base.io"
+sidebarTitle: "mellea.formatters.granite.base.io"
+description: "Input and output processing for chat completions-like APIs."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Input and output processing for chat completions-like APIs.
+
+
+
+
+
+Classes and functions that implement common aspects of input and output string
+processing for chat completions-like APIs.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `InputProcessor` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/io.py#L19" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Interface for generic input processors.
+
+An input processor exposes an API to transform a chat completion request into a string prompt.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `transform` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/io.py#L26" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+transform(self, chat_completion: ChatCompletion, add_generation_prompt: bool = True) -> str
+```
+
+Convert the structured representation of the inputs to a completion request.
+
+Converts the structured representation of the inputs to a completion request into
+the string representation of the tokens that should be sent to the model to
+implement said request.
+
+:param chat_completion: Structured representation of the inputs
+:param add_generation_prompt: If ``True``, the returned prompt string will
+    contain a prefix of the next assistant response for use as a prompt to a
+    generation request. Otherwise, the prompt will only contain the messages and
+    documents in ``input``.
+
+:returns: String that can be passed to the model's tokenizer to create a prompt
+    for generation.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `OutputProcessor` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/io.py#L46" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Base class for generic output processors.
+
+An output processor exposes an API to transform model output into a structured
+representation of the information.
+
+This interface is generic; see individual classes for more specific arguments.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `transform` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/io.py#L56" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+transform(self, model_output: str, chat_completion: ChatCompletion | None = None) -> AssistantMessage
+```
+
+Convert the model output into a structured representation.
+
+Convert the model output generated into a structured representation of the
+information.
+
+:param model_output: String output of the a generation request, potentially
+    incomplete if it was a streaming request
+:param chat_completion: The chat completion request that produced
+    ``model_output``. Parameters of the request can determine how the output
+    should be decoded.
+
+:returns: The parsed output so far, as an instance of :class:`AssistantMessage`
+    possibly with model-specific extension fields.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ChatCompletionRewriter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/io.py#L75" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Base class for objects that rewrite a chat completion request.
+
+Base class for objects that rewrite a chat completion request into another chat
+completion request.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `transform` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/io.py#L82" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+transform(**kwargs) -> ChatCompletion
+```
+
+Rewrite a chat completion request into another one.
+
+Rewrite a chat completion request into another chat completion request.
+Does not modify the original :class:`ChatCompletion` object.
+
+:param chat_completion: Original chat completion request, either as a dataclass
+    or as the JSON representation of one.
+
+:returns: Rewritten copy of ``chat_completion``.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ChatCompletionResultProcessor` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/io.py#L122" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Base class for chat completion result processors.
+
+Base class for objects that convert the raw json result of a chat completion request
+into a JSON object with model-specific postprocessing applied.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `transform` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/io.py#L129" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+transform(self, chat_completion_response: ChatCompletionResponse | dict | pydantic.BaseModel, chat_completion: ChatCompletion | None = None) -> ChatCompletionResponse
+```
+
+Parse the result of a chat completion.
+
+:param chat_completion_response: Response to a chat completion request as
+    a parsed dataclass, parsed JSON value, or OpenAI dataclass
+:param chat_completion: The chat completion request that produced
+    ``chat_completion_response``. Required by some implementations in order
+    to decode references to part of the original request.
+
+:returns: Rewritten copy of ``chat_completion``.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Retriever` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/io.py#L174" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Base class for document retrievers.
+
+Provides APIs for searching by text snippet and for inserting new documents.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `retrieve` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/io.py#L181" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+retrieve(self, query: str, top_k: int = 10) -> list[Document]
+```
+
+Retrieve the top k matches of a query from the corpus.
+
+:param query: Query string to use for lookup
+:param top_k: Number of top-k results to return
+
+:returns: Pyarrow table with fields: "id", "title", "url", "begin", "end",
+    "text", "score"
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

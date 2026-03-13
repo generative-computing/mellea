@@ -1,0 +1,97 @@
+---
+title: "mellea.formatters.granite.granite3.types"
+sidebarTitle: "mellea.formatters.granite.granite3.types"
+description: "Type definitions that are shared within the Granite 3 family of models."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Type definitions that are shared within the Granite 3 family of models.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Hallucination` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/granite3/types.py#L22" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Hallucination data as returned by the model output parser.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Citation` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/granite3/types.py#L33" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Citation data as returned by the model output parser.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Granite3Controls` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/granite3/types.py#L46" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Granite 3.x controls record.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Granite3Kwargs` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/granite3/types.py#L77" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Granite 3 keyword arguments.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Granite3ChatCompletion` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/granite3/types.py#L84" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Class that represents the inputs common to IBM Granite 3.x models.
+
+Class that represents the inputs that are common to models of the IBM Granite 3.x
+family.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `controls` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/granite3/types.py#L91" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+controls(self) -> Granite3Controls
+```
+
+:returns: An appropriate Granite 3 controls record for the chat completion
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `thinking` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/granite3/types.py#L98" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+thinking(self) -> bool
+```
+
+:returns: ``True`` if thinking mode is enabled for this request
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Granite3AssistantMessage` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/granite3/types.py#L170" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+An assistant message with Granite 3 specific fields.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

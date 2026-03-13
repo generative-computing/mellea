@@ -1,0 +1,54 @@
+---
+title: "mellea.plugins.base"
+sidebarTitle: "mellea.plugins.base"
+description: "Base types for the Mellea plugin system."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Base types for the Mellea plugin system.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `PluginMeta` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/plugins/base.py#L18" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Metadata attached to Plugin subclasses.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Plugin` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/plugins/base.py#L52" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Base class for multi-hook Mellea plugins.
+
+Subclasses get automatic context-manager support and plugin metadata::
+
+    class PIIRedactor(Plugin, name="pii-redactor", priority=5):
+        @hook(HookType.COMPONENT_PRE_EXECUTE, mode=PluginMode.SEQUENTIAL)
+        async def redact_input(self, payload, ctx):
+            ...
+
+    with PIIRedactor():
+        result = session.instruct("...")
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `PluginViolationError` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/plugins/base.py#L123" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Raised when a plugin blocks execution in enforce mode.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

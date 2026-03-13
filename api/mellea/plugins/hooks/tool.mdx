@@ -1,0 +1,49 @@
+---
+title: "mellea.plugins.hooks.tool"
+sidebarTitle: "mellea.plugins.hooks.tool"
+description: "Tool execution hook payloads."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Tool execution hook payloads.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ToolPreInvokePayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/plugins/hooks/tool.py#L10" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Payload for ``tool_pre_invoke`` — before tool/function invocation.
+
+**Attributes:**
+- `model_tool_call`: The `[`ModelToolCall`](../../core/base#class-modeltoolcall)` about to be executed (writable —
+plugins may modify arguments or swap the tool entirely).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ToolPostInvokePayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/plugins/hooks/tool.py#L21" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Payload for ``tool_post_invoke`` — after tool execution.
+
+**Attributes:**
+- `model_tool_call`: The `[`ModelToolCall`](../../core/base#class-modeltoolcall)` that was executed.
+- `tool_output`: The return value of the tool function (writable —
+plugins may transform the output before it is formatted).
+- `tool_message`: The ``ToolMessage`` constructed from the output.
+- `execution_time_ms`: Wall-clock time of the tool execution in milliseconds.
+- `success`: ``True`` if the tool executed without raising an exception.
+- `error`: The ``Exception`` raised during execution, or ``None`` on success.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

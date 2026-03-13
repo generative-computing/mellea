@@ -1,0 +1,101 @@
+---
+title: "mellea.formatters.granite.intrinsics.input"
+sidebarTitle: "mellea.formatters.granite.intrinsics.input"
+description: "Classes and functions that implement common aspects of input processing for intrinsics."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Classes and functions that implement common aspects of input processing for intrinsics.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `sentence_delimiter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/intrinsics/input.py#L36" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+sentence_delimiter(tag, sentence_num) -> str
+```
+
+
+Return a tag string that identifies the beginning of the indicated sentence.
+
+:param tag: tag string, i.e. "i" or "c"
+:param sentence_num: index of sentence
+:return: Tag string (including trailing space) that identifies the beginning of
+    the indicated sentence in sentence-tagged text.
+:rtype: str
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `mark_sentence_boundaries` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/intrinsics/input.py#L48" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+mark_sentence_boundaries(split_strings: list[list[str]], tag_prefix: str) -> list[str]
+```
+
+
+Modify input strings by inserting sentence boundary markers.
+
+Modify one or more input strings by inserting a tag in the form
+``<[prefix][number]>``
+at the location of each sentence boundary.
+
+:param split_strings: Input string(s), pre-split into sentences
+:param tag_prefix: String to place before the number part of each tagged
+    sentence boundary.
+
+:returns: List of input strings with all sentence boundaries marked.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `move_documents_to_message` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/intrinsics/input.py#L74" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+move_documents_to_message(chat_completion: ChatCompletion | dict, how: str = 'string') -> ChatCompletion | dict
+```
+
+
+Move RAG documents from extra_body to first message.
+
+By convention, our canned JSON requests place RAG documents in extra_body/documents.
+Some models do not accept this parameter.
+This function edits a request by putting the documents into the first turn of the
+messages.
+
+:param chat_completion: A chat completion request as dataclass or parsed JSON
+:param how: How to serialize the documents; supported values are "string" and "json"
+
+:returns: A copy of ``chat_completion`` with any documents under ``extra_body``
+    moved to the first message. Returned type will be the same as the input type.
+    May return original object if no edits are necessary.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `IntrinsicsRewriter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/intrinsics/input.py#L153" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+General-purpose chat completion rewriter for intrinsics.
+
+General-purpose chat completion rewriter for use with models that implement
+LLM intrinsics. Reads parameters of the model's input and output formats
+from a YAML configuration file and edits the input chat completion appropriately.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

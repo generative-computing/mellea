@@ -1,0 +1,92 @@
+---
+title: "mellea.stdlib.components.react"
+sidebarTitle: "mellea.stdlib.components.react"
+description: "Components used for ReACT."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Components used for ReACT.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ReactInitiator` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/stdlib/components/react.py#L27" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+`ReactInitiator` is used at the start of the ReACT loop to prime the model.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/stdlib/components/react.py#L41" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parts(self) -> list[Component | CBlock]
+```
+
+The set of all the constituent parts of the [`Component`](../../core/base#class-component).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/stdlib/components/react.py#L45" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format_for_llm(self) -> TemplateRepresentation
+```
+
+Formats the [`Component`](../../core/base#class-component) into a [`TemplateRepresentation`](../../core/base#class-templaterepresentation) or string.
+
+Returns: a [`TemplateRepresentation`](../../core/base#class-templaterepresentation) whose tools always includes a finalizer tool.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ReactThought` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/stdlib/components/react.py#L77" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+ReactThought signals that a thinking step should be done.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/stdlib/components/react.py#L83" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parts(self) -> list[Component | CBlock]
+```
+
+Component has no parts.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/stdlib/components/react.py#L91" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format_for_llm(self) -> TemplateRepresentation
+```
+
+Formats the [`Component`](../../core/base#class-component) into a [`TemplateRepresentation`](../../core/base#class-templaterepresentation) or string.
+
+Returns: a [`TemplateRepresentation`](../../core/base#class-templaterepresentation) whose tools always includes a finalizer tool.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
