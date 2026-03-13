@@ -4,7 +4,7 @@ description: "Development setup, coding standards, and PR process for Mellea con
 # diataxis: how-to
 ---
 
-**Prerequisites:** Python 3.10+, [uv](https://docs.astral.sh/uv/getting-started/installation/) installed, [Ollama](https://ollama.com/download) installed.
+**Prerequisites:** Python 3.11+, [uv](https://docs.astral.sh/uv/getting-started/installation/) installed, [Ollama](https://ollama.com/download) installed.
 
 ## Contribution pathways
 

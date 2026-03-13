@@ -4,7 +4,7 @@ description: "Install Mellea and set up your Python environment."
 # diataxis: tutorial
 ---
 
-**Prerequisites:** Python 3.10+, [pip](https://pip.pypa.io/) or [uv](https://docs.astral.sh/uv/) available.
+**Prerequisites:** Python 3.11+, [pip](https://pip.pypa.io/) or [uv](https://docs.astral.sh/uv/) available.
 
 ## Install
 

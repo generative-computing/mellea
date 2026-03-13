@@ -9,7 +9,7 @@ for local inference. It is designed for experimental Mellea features — aLoRA a
 constrained decoding, and span-based context — that are not yet available on
 server-based backends.
 
-**Prerequisites:** `pip install 'mellea[hf]'`, Python 3.10+, local model weights.
+**Prerequisites:** `pip install 'mellea[hf]'`, Python 3.11+, local model weights.
 
 > **Tip:** For everyday local inference without experimental features, use
 > [Ollama](./ollama) — it is simpler to set up and well suited for development.
