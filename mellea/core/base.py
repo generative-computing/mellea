@@ -196,6 +196,15 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
         self._thinking: str | None = None
+        self.usage: dict[str, int] | None = None
+        """Usage information following OpenAI API standard.
+
+        Core fields: 'prompt_tokens', 'completion_tokens', 'total_tokens'.
+        Populated by backends during post_processing. None if unavailable.
+
+        Future: May include optional breakdown fields like 'completion_tokens_details'
+        and 'prompt_tokens_details' for advanced features (reasoning, audio, caching).
+        """
 
         # Used for tracking generation.
         self._context: list[Component | CBlock] | None = None
@@ -233,6 +242,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self.parsed_repr = other.parsed_repr
         self.tool_calls = other.tool_calls
         self._thinking = other._thinking
+        self.usage = other.usage
         self._generate_log = other._generate_log
 
     def is_computed(self) -> bool:

@@ -496,6 +496,10 @@ class WatsonxAIBackend(FormatterBackend):
                 else getattr(response, "usage", None)
             )
 
+        # Populate standardized usage field (WatsonX uses OpenAI format)
+        if usage:
+            mot.usage = usage
+
         # Record metrics if enabled
         from ..telemetry.metrics import is_metrics_enabled
 

@@ -625,6 +625,10 @@ class OpenAIBackend(FormatterBackend):
         if usage is None:
             usage = mot._meta.get("oai_streaming_usage")
 
+        # Populate standardized usage field (OpenAI format already matches)
+        if usage:
+            mot.usage = usage
+
         # Record metrics if enabled
         from ..telemetry.metrics import is_metrics_enabled
 

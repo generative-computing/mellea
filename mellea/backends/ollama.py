@@ -622,6 +622,14 @@ class OllamaModelBackend(FormatterBackend):
         )
         completion_tokens = getattr(response, "eval_count", None) if response else None
 
+        # Populate standardized usage field (convert to OpenAI format)
+        if prompt_tokens is not None or completion_tokens is not None:
+            mot.usage = {
+                "prompt_tokens": prompt_tokens or 0,
+                "completion_tokens": completion_tokens or 0,
+                "total_tokens": (prompt_tokens or 0) + (completion_tokens or 0),
+            }
+
         # Record metrics if enabled
         from ..telemetry.metrics import is_metrics_enabled
 

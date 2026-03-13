@@ -488,6 +488,10 @@ class LiteLLMBackend(FormatterBackend):
         if usage is None:
             usage = mot._meta.get("litellm_streaming_usage")
 
+        # Populate standardized usage field (LiteLLM uses OpenAI format)
+        if usage:
+            mot.usage = usage
+
         # Record metrics if enabled
         from ..telemetry.metrics import is_metrics_enabled
 

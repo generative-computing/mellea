@@ -1075,6 +1075,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             except Exception:
                 pass
 
+        # Populate standardized usage field (convert to OpenAI format)
+        if n_prompt is not None and n_completion is not None:
+            mot.usage = {
+                "prompt_tokens": n_prompt,
+                "completion_tokens": n_completion,
+                "total_tokens": n_prompt + n_completion,
+            }
+
         # Record metrics if enabled
         if metrics_enabled and n_prompt is not None:
             from ..telemetry.backend_instrumentation import (
