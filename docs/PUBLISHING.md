@@ -44,10 +44,11 @@ changes will be overwritten without warning on the next pipeline run.
 | --- | --- | --- |
 | `docs/staging` | Push to `main` (paths: `docs/**`, `mellea/**`, `cli/**`, `tooling/docs-autogen/**`) | Preview environment for reviewing docs before release |
 | `docs/production` | GitHub release published | Production docs site served to users |
+| `docs/preview` | PR with `docs-preview` label, or `workflow_dispatch` | Throwaway branch for validating the full pipeline |
 
-Both branches are true orphan branches (no shared commit history with
-`main`). They contain only the assembled documentation output — static
-guides plus generated API reference.
+All deployment branches are true orphan branches (no shared commit
+history with `main`). They contain only the assembled documentation
+output — static guides plus generated API reference.
 
 ## What the pipeline does
 
@@ -127,17 +128,23 @@ npx mintlify dev
 
 ## Testing the pipeline from a PR
 
-The workflow supports a manual dispatch override for testing before merge:
+### Label-based preview (recommended)
+
+Add the **`docs-preview`** label to your PR. This triggers the full
+pipeline including deployment to `docs/preview`. Remove the label when
+you're done testing.
+
+Without the label, PRs only run build + validation (no deploy).
+
+### Manual dispatch
+
+For more control (e.g. deploying to a custom branch):
 
 1. Go to **Actions → Publish Documentation → Run workflow**.
 2. Select your feature branch.
 3. Check **"Deploy even from a non-main context"**.
-4. Set **"Override deploy target branch"** to something like
-   `docs/test-my-feature` (to avoid overwriting staging/production).
+4. Optionally change the target branch (defaults to `docs/preview`).
 5. Click **Run workflow**.
-
-This will build, validate, and deploy to your custom branch so you can
-point Mintlify at it for verification.
 
 ## Mintlify configuration
 
