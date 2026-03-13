@@ -124,11 +124,11 @@ uv run poe apidocs-clean
 # Validate generated MDX (syntax, links, anchors)
 uv run poe apidocs-validate
 
-# Audit API coverage
+# Audit API coverage (add --quality to also run docstring quality, as CI does)
 uv run python tooling/docs-autogen/audit_coverage.py \
-    --docs-dir docs/docs/api --threshold 80
+    --docs-dir docs/docs/api --threshold 80 --quality
 
-# Audit docstring quality
+# Audit docstring quality only (via poe alias)
 uv run poe apidocs-quality
 
 # Find orphan MDX files not in navigation
