@@ -222,7 +222,7 @@ jobs:
               ("Markdownlint output", lint_log, 5_000),
               ("MDX validation output", validate_log, 5_000),
               ("API coverage output", coverage_display_log, 5_000),
-              ("Docstring quality details", quality_log, 100_000),
+              ("Docstring quality details", quality_log, 1_000_000),
           ]:
               if log:
                   lines += [
