@@ -1,0 +1,95 @@
+---
+title: "mellea.formatters.granite.retrievers.embeddings"
+sidebarTitle: "mellea.formatters.granite.retrievers.embeddings"
+description: "Classes and functions that implement the InMemoryRetriever."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Classes and functions that implement the InMemoryRetriever.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `compute_embeddings` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/retrievers/embeddings.py#L87" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+compute_embeddings(corpus, embedding_model_name: str, chunk_size: int = 512, overlap: int = 128)
+```
+
+
+Split documents into windows and compute embeddings for each of the the windows.
+
+:param corpus: PyArrow Table of documents as returned by :func:`read_corpus()`.
+    Should have the columns ``["id", "url", "title", "text"]``
+:param embedding_model_name: Hugging Face model name for the model that computes
+    embeddings. Also used for tokenizing.
+:param chunk_size: Maximum size of chunks to split documents into, in embedding
+    model tokens; must be less than or equal to the embedding model's maximum
+    sequence length.
+:param overlap: Target overlap between adjacent chunks, in embedding model tokens.
+    Actual begins and ends of chunks will be on sentence boundaries.
+
+:returns: PyArrow Table of chunks of the corpus, with schema
+    ````["id", "url", "title", "begin", "end", "text", "embedding"]``
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `write_embeddings` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/retrievers/embeddings.py#L179" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+write_embeddings(target_dir: str, corpus_name: str, embeddings, chunks_per_partition: int = 10000) -> pathlib.Path
+```
+
+
+Write embeddings.
+
+Write the embeddings produced by :func:`compute_embeddings()` to a directory of
+Parquet files on local disk.
+
+:param target_dir: Location where the files should be written (in a subdirectory)
+:param corpus_name: Corpus name to use in generating a location for writing files
+:param chunks_per_partition: Number of document chunks to write to each partition
+  of the Parquet file
+
+:param returns: Path where data was written
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `InMemoryRetriever` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/retrievers/embeddings.py#L214" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Simple retriever that keeps docs and embeddings in memory.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `retrieve` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/retrievers/embeddings.py#L253" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+retrieve(self, query: str, top_k: int = 5) -> list[dict]
+```
+
+Run a query and return results.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

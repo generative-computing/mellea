@@ -1,0 +1,183 @@
+---
+title: "mellea.telemetry.backend_instrumentation"
+sidebarTitle: "mellea.telemetry.backend_instrumentation"
+description: "Backend instrumentation helpers for OpenTelemetry tracing."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Backend instrumentation helpers for OpenTelemetry tracing.
+
+
+
+
+
+Follows OpenTelemetry Gen-AI semantic conventions:
+https://opentelemetry.io/docs/specs/semconv/gen-ai/
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_model_id_str` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/telemetry/backend_instrumentation.py#L13" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_model_id_str(backend: Any) -> str
+```
+
+
+Extract model_id string from a backend instance.
+
+**Args:**
+- `backend`: Backend instance
+
+**Returns:**
+- String representation of the model_id
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_system_name` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/telemetry/backend_instrumentation.py#L30" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_system_name(backend: Any) -> str
+```
+
+
+Get the Gen-AI system name from backend.
+
+**Args:**
+- `backend`: Backend instance
+
+**Returns:**
+- System name (e.g., 'openai', 'ollama', 'huggingface')
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_context_size` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/telemetry/backend_instrumentation.py#L56" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_context_size(ctx: Any) -> int
+```
+
+
+Get the size of a context.
+
+**Args:**
+- `ctx`: Context object
+
+**Returns:**
+- Number of items in context, or 0 if cannot be determined
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `instrument_generate_from_context` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/telemetry/backend_instrumentation.py#L75" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+instrument_generate_from_context(backend: Any, action: Any, ctx: Any, format: Any = None, tool_calls: bool = False)
+```
+
+
+Create a backend trace span for generate_from_context.
+
+Follows Gen-AI semantic conventions for chat operations.
+
+**Args:**
+- `backend`: Backend instance
+- `action`: Action component
+- `ctx`: Context
+- `format`: Response format (BaseModel subclass or None)
+- `tool_calls`: Whether tool calling is enabled
+
+**Returns:**
+- Context manager for the trace span
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `start_generate_span` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/telemetry/backend_instrumentation.py#L113" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+start_generate_span(backend: Any, action: Any, ctx: Any, format: Any = None, tool_calls: bool = False)
+```
+
+
+Start a backend trace span for generate_from_context (without auto-closing).
+
+Use this for async operations where the span should remain open until
+post-processing completes.
+
+**Args:**
+- `backend`: Backend instance
+- `action`: Action component
+- `ctx`: Context
+- `format`: Response format (BaseModel subclass or None)
+- `tool_calls`: Whether tool calling is enabled
+
+**Returns:**
+- Span object or None if tracing is disabled
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `instrument_generate_from_raw` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/telemetry/backend_instrumentation.py#L154" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+instrument_generate_from_raw(backend: Any, num_actions: int, format: Any = None, tool_calls: bool = False)
+```
+
+
+Create a backend trace span for generate_from_raw.
+
+Follows Gen-AI semantic conventions for text generation operations.
+
+**Args:**
+- `backend`: Backend instance
+- `num_actions`: Number of actions in the batch
+- `format`: Response format (BaseModel subclass or None)
+- `tool_calls`: Whether tool calling is enabled
+
+**Returns:**
+- Context manager for the trace span
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `record_token_usage` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/telemetry/backend_instrumentation.py#L190" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+record_token_usage(span: Any, usage: Any) -> None
+```
+
+
+Record token usage metrics following Gen-AI semantic conventions.
+
+**Args:**
+- `span`: The span object (may be None if tracing is disabled)
+- `usage`: Usage object or dict from the LLM response (e.g., OpenAI usage object)
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `record_response_metadata` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/telemetry/backend_instrumentation.py#L219" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+record_response_metadata(span: Any, response: Any, model_id: str | None = None) -> None
+```
+
+
+Record response metadata following Gen-AI semantic conventions.
+
+**Args:**
+- `span`: The span object (may be None if tracing is disabled)
+- `response`: Response object or dict from the LLM
+- `model_id`: Model ID used for the response (if different from request)
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

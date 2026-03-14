@@ -1,0 +1,61 @@
+---
+title: "mellea.plugins.pluginset"
+sidebarTitle: "mellea.plugins.pluginset"
+description: "PluginSet — composable groups of hooks and plugins."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+PluginSet — composable groups of hooks and plugins.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `PluginSet` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/plugins/pluginset.py#L9" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A named, composable group of hook functions and plugin instances.
+
+PluginSets are inert containers — they do not register anything themselves.
+Registration happens when they are passed to ``register()`` or
+``start_session(plugins=[...])``.
+
+PluginSets can be nested: a PluginSet can contain other PluginSets.
+
+PluginSets also support the context manager protocol for temporary activation::
+
+    with PluginSet("observability", [log_hook, audit_hook]):
+        result, ctx = instruct("Summarize this", ctx, backend)
+
+    # or async
+    async with PluginSet("guards", [safety_hook]):
+        result, ctx = await ainstruct("Generate code", ctx, backend)
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `flatten` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/plugins/pluginset.py#L40" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+flatten(self) -> list[tuple[Callable | Any, int | None]]
+```
+
+Recursively flatten nested PluginSets into ``(item, priority_override)`` pairs.
+
+When this set has a priority, it overrides the priorities of all nested
+items — including items inside nested ``PluginSet`` instances.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

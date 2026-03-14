@@ -1,0 +1,73 @@
+---
+title: "mellea.plugins.hooks.component"
+sidebarTitle: "mellea.plugins.hooks.component"
+description: "Component lifecycle hook payloads."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Component lifecycle hook payloads.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ComponentPreExecutePayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/plugins/hooks/component.py#L10" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Payload for ``component_pre_execute`` — before component execution via ``aact()``.
+
+**Attributes:**
+- `component_type`: Class name of the component being executed.
+- `action`: The `[`Component`](../../core/base#class-component)` or `[`CBlock`](../../core/base#class-cblock)` about to be executed.
+- `context_view`: Optional snapshot of the context as a list.
+- `requirements`: List of `[`Requirement`](../../core/requirement#class-requirement)` instances for validation (writable).
+- `model_options`: Dict of model options passed to the backend (writable).
+- `format`: Optional ``BaseModel`` subclass for structured output / constrained decoding (writable).
+- `strategy`: Optional `[`SamplingStrategy`](../../core/sampling#class-samplingstrategy)` instance controlling retry logic (writable).
+- `tool_calls_enabled`: Whether tool calling is enabled for this execution (writable).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ComponentPostSuccessPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/plugins/hooks/component.py#L34" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Payload for ``component_post_success`` — after successful component execution.
+
+**Attributes:**
+- `component_type`: Class name of the executed component.
+- `action`: The `[`Component`](../../core/base#class-component)` or `[`CBlock`](../../core/base#class-cblock)` that was executed.
+- `result`: The `[`ModelOutputThunk`](../../core/base#class-modeloutputthunk)` containing the generation result.
+- `context_before`: The `[`Context`](../../core/base#class-context)` before execution.
+- `context_after`: The `[`Context`](../../core/base#class-context)` after execution (with action + result appended).
+- `generate_log`: The `[`GenerateLog`](../../core/base#class-generatelog)` from the final generation pass.
+- `sampling_results`: Optional list of `[`ModelOutputThunk`](../../core/base#class-modeloutputthunk)` from all sampling attempts.
+- `latency_ms`: Wall-clock time for the full execution in milliseconds.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ComponentPostErrorPayload` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/plugins/hooks/component.py#L61" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Payload for ``component_post_error`` — after component execution fails.
+
+**Attributes:**
+- `component_type`: Class name of the component that failed.
+- `action`: The `[`Component`](../../core/base#class-component)` or `[`CBlock`](../../core/base#class-cblock)` that was being executed.
+- `error`: The ``Exception`` that was raised.
+- `error_type`: Class name of the exception (e.g. ``"ValueError"``).
+- `stack_trace`: Formatted traceback string.
+- `context`: The `[`Context`](../../core/base#class-context)` at the time of the error.
+- `model_options`: Dict of model options that were in effect.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

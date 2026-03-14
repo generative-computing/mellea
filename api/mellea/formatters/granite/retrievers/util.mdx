@@ -1,0 +1,72 @@
+---
+title: "mellea.formatters.granite.retrievers.util"
+sidebarTitle: "mellea.formatters.granite.retrievers.util"
+description: "Various utility functions relating to the MTRAG benchmark data set."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Various utility functions relating to the MTRAG benchmark data set.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `download_mtrag_corpus` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/retrievers/util.py#L17" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+download_mtrag_corpus(target_dir: str, corpus_name: str) -> pathlib.Path
+```
+
+
+Download a corpus file from the MTRAG benchmark if the file hasn't already present.
+
+:param target_dir: Location where the file should be written if not already present.
+:param corpus_name: Should be one of "cloud", "clapnq", "fiqa", or "govt"
+
+:returns: Path to the downloaded (or cached) file.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `read_mtrag_corpus` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/retrievers/util.py#L42" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+read_mtrag_corpus(corpus_file: str | pathlib.Path) -> pa.Table
+```
+
+
+Read the documents from one of the MTRAG benchmark's corpora.
+
+:param corpus_file: Location where the corpus data is located.
+
+:returns: Documents from the corpus as a Pyarrow table, with schema
+    ``["id", "url", "title", "text"]``
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `download_mtrag_embeddings` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/retrievers/util.py#L84" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+download_mtrag_embeddings(embedding_name: str, corpus_name: str, target_dir: str)
+```
+
+
+Download precomputed embeddings for a corpus in the MTRAG benchmark.
+
+:param embedding_name: Name of SentenceTransformers embedding model that was used
+ to create the embeddings.
+:param corpus_name: Should be one of "cloud", "clapnq", "fiqa", or "govt"
+:param target_dir: Location where Parquet files with names "part_001.parquet",
+ "part_002.parquet", etc. will be written.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

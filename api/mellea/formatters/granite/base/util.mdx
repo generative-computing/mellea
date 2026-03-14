@@ -1,0 +1,147 @@
+---
+title: "mellea.formatters.granite.base.util"
+sidebarTitle: "mellea.formatters.granite.base.util"
+description: "Common utility functions for the library and tests."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Common utility functions for the library and tests.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `import_optional` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/util.py#L30" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+import_optional(extra_name: str)
+```
+
+
+Handle optional imports.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `nltk_check` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/util.py#L45" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+nltk_check(feature_name: str)
+```
+
+
+Variation on import_optional for nltk.
+
+:param feature_name: Name of feature that requires NLTK
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `find_substring_in_text` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/util.py#L60" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+find_substring_in_text(substring: str, text: str) -> list[dict]
+```
+
+
+Find all substring matches in text.
+
+Given two strings - substring and text - find and return all
+matches of substring within text. For each match return its begin and end index.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `random_uuid` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/util.py#L75" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+random_uuid() -> str
+```
+
+
+:returns: hexadecimal data suitable to use as a unique identifier
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `load_transformers_lora` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/util.py#L80" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+load_transformers_lora(local_or_remote_path)
+```
+
+
+Load transformers LoRA model.
+
+AutoModelForCausalLM.from_pretrained() is supposed to auto-load base models if you
+pass it a LoRA adapter's config, but that auto-loading is very broken as of 8/2025.
+Workaround powers activate!
+
+Only works if ``transformers`` and ``peft`` are installed
+
+:returns: Tuple of LoRA model and tokenizer
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `chat_completion_request_to_transformers_inputs` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/util.py#L107" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+chat_completion_request_to_transformers_inputs(request, tokenizer = None, model = None, constrained_decoding_prefix = None) -> tuple[dict, dict]
+```
+
+
+Translate an OpenAI-style chat completion request.
+
+Translate an OpenAI-style chat completion request into an input for a Transformers
+``generate()`` call.
+
+:param request: Request as parsed JSON or equivalent dataclass
+:param tokenizer: Pointer to the HuggingFace tokenizer that will be used to handle
+    this request. Only required if the request uses constrained decoding.
+:param model: Pointer to the HuggingFace model that will be used to handle
+    this request. Only required if the request uses constrained decoding.
+:param constrained_decoding_prefix: Optional generation prefix to append to the
+    prompt
+
+:returns: Tuple of:
+    * kwargs to pass to generation
+    * Additional stuff to pass to generate_with_transformers
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `generate_with_transformers` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/base/util.py#L278" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+generate_with_transformers(tokenizer, model, generate_input: dict, other_input: dict) -> ChatCompletionResponse
+```
+
+
+Call Transformers generate and get usable results.
+
+All the extra steps necessary to call the :func:`generate()` method of a
+Transformers model and get back usable results, rolled into a single function.
+
+There are quite a few extra steps.
+
+:param tokenizer: Tokenizer for the model, required at several stages of generation
+:param model: Initialized model object.
+:param generate_input: Parameters to pass to the generate() method, usually
+    generated by :func:`chat_completion_request_to_transformers_inputs()`
+:param other_input: Additional kwargs that
+    :func:`chat_completion_request_to_transformers_inputs()` added to encompass
+    aspects of the original request that Transformers APIs don't handle natively.
+
+:returns: A chat completion response in OpenAI format
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,39 @@
+---
+title: "mellea.plugins.context"
+sidebarTitle: "mellea.plugins.context"
+description: "Plugin context factory — maps Mellea domain objects to ContextForge GlobalContext."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Plugin context factory — maps Mellea domain objects to ContextForge GlobalContext.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `build_global_context` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/plugins/context.py#L18" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+build_global_context(**extra_fields: Any) -> Any
+```
+
+
+Build a ContextForge ``GlobalContext`` from Mellea domain objects.
+
+The global context carries lightweight, cross-cutting ambient metadata
+(e.g. ``backend_name``) that is useful to every hook regardless of type.
+Hook-specific data (context, session, action, etc.) belongs on the typed
+payload, not here.
+
+Returns ``None`` if ContextForge is not installed.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

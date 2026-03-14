@@ -1,0 +1,154 @@
+---
+title: "mellea.formatters.granite.granite3.granite32.input"
+sidebarTitle: "mellea.formatters.granite.granite3.granite32.input"
+description: "Input and output processing for the Granite 3.2 family of models."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Input and output processing for the Granite 3.2 family of models.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Granite32InputProcessor` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/granite3/granite32/input.py#L30" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Input processor for version 3.2 of the main Granite models, all sizes.
+
+This input processor is based on the Jinja template that was used during
+supervised fine tuning of these models. This template is as follows:
+```
+{{%- if messages[0]['role'] == 'system' %}}
+    {{%- set system_message = messages[0]['content'] %}}
+    {{%- set loop_messages = messages[1:] %}}
+{{%- else %}}
+    {{%- set system_message = \"Knowledge Cutoff Date: April 2024.\nToday's Date: \"
+      + strftime_now('%B %d, %Y') + \".\nYou are Granite, developed by IBM.\" %}}
+    {{%- if tools and documents %}}
+            {{%- set system_message = system_message + \" You are a helpful AI
+            assistant with access to the following tools.
+              When a tool is required to answer the user's query, respond with
+              <|tool_call|> followed by a JSON list of tools used. If a tool does
+              not exist in the provided list of tools, notify the user that you do
+              not have the ability to fulfill the request.\n\nWrite the response to
+              the user's input by strictly aligning with the facts in the provided
+              documents. If the information needed to answer the question is not
+              available in the documents, inform the user that the question cannot
+              be answered based on the available data.\" %}}
+    {{%- elif tools %}}
+            {{%- set system_message = system_message + \" You are a helpful AI
+            assistant with access to the following tools. When a tool is required to
+            answer the user's query, respond with <|tool_call|> followed by a JSON
+            list of tools used. If a tool does not exist in the provided list of
+            tools, notify the user that you do not have the ability to fulfill the
+            request.\" %}}
+    {{%- elif documents %}}
+            {{%- set system_message = system_message + \" Write the response to the
+            user's input by strictly aligning with the facts in the provided
+            documents. If the information needed to answer the question is not
+            available in the documents, inform the user that the question cannot be
+            answered based on the available data.\" %}}
+    {{%- elif thinking %}}
+            {{%- set system_message = system_message + \" You are a helpful AI
+            assistant.\nRespond to every user query in a comprehensive and detailed
+            way. You can write down your thoughts and reasoning process before
+            responding. In the thought process, engage in a comprehensive cycle of
+            analysis, summarization, exploration, reassessment, reflection,
+            backtracing, and iteration to develop well-considered thinking process.
+            In the response section, based on various attempts, explorations, and
+            reflections from the thoughts section, systematically present the final
+            solution that you deem correct. The response should summarize the
+            thought process. Write your thoughts after 'Here is my thought process:'
+            and write your response after 'Here is my response:' for each user
+            query.\" %}}
+    {{%- else %}}
+            {{%- set system_message = system_message + \" You are a helpful AI
+            assistant.\" %}}
+    {{%- endif %}}
+    {{%- if 'citations' in controls and documents %}}
+        {{%- set system_message = system_message + '\n\nIn your response, use the
+        symbols <co> and </co> to indicate when a fact comes from a document in the
+        search result, e.g <co>0</co> for a fact from document 0. Afterwards, list
+        all the citations with their corresponding documents in an ordered list.' %}}
+    {{%- endif %}}
+    {{%- if 'hallucinations' in controls and documents %}}
+        {{%- set system_message = system_message + '\n\nFinally, after the response
+        is written, include a numbered list of sentences from the response that are
+        potentially hallucinated and not based in the documents.' %}}
+    {{%- endif %}}
+    {{%- set loop_messages = messages %}}
+{{%- endif %}}
+{{{{- '<|start_of_role|>system<|end_of_role|>' + system_message +
+    '<|end_of_text|>\n' }}}}
+{{%- if tools %}}
+    {{{{- '<|start_of_role|>tools<|end_of_role|>' }}}}
+    {{{{- tools | tojson(indent=4) }}}}
+    {{{{- '<|end_of_text|>\n' }}}}
+{{%- endif %}}
+{{%- if documents %}}
+    {{{{- '<|start_of_role|>documents<|end_of_role|>' }}}}
+    {{%- for document in documents %}}
+        {{{{- 'Document ' + loop.index0 | string + '\n' }}}}
+        {{{{- document['text'] }}}}
+        {{%- if not loop.last %}}
+            {{{{- '\n\n'}}}}
+        {{%- endif%}}
+    {{%- endfor %}}
+    {{{{- '<|end_of_text|>\n' }}}}
+{{%- endif %}}
+{{%- for message in loop_messages %}}
+    {{{{- '<|start_of_role|>' + message['role'] + '<|end_of_role|>' +
+    message['content'] + '<|end_of_text|>\n' }}}}
+    {{%- if loop.last and add_generation_prompt %}}
+        {{{{- '<|start_of_role|>assistant' }}}}
+        {{%- if controls %}}
+            {{{{- ' ' + controls | tojson()}}}}
+        {{%- endif %}}
+        {{{{- '<|end_of_role|>' }}}}
+    {{%- endif %}}
+{{%- endfor %}}
+```
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `sanitize` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/granite3/granite32/input.py#L224" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+sanitize(cls, chat_completion, parts = 'all')
+```
+
+Sanitize chat completion.
+
+Call the parent sanitize function with the specific remove special
+tokens function for this Granite version.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `transform` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.3.2/mellea/formatters/granite/granite3/granite32/input.py#L232" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+transform(self, chat_completion: ChatCompletion, add_generation_prompt: bool = True) -> str
+```
+
+Transform chat completion to prompt string.
+
+Downcast to a Model-specific request type with possible additional fields.
+This operation also performs additional validation.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
