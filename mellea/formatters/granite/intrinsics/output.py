@@ -461,23 +461,27 @@ class DecodeSentences(AddFieldsTransformation):
         config: dict,
         input_path_expr: list[str | int | None],
         /,
-        source: str,
+        source: str | list[str],
         output_names: dict,
     ):
         """Initialize DecodeSentences transformation rule.
 
-        :param source: Name of the location to look for sentences; can be "last_message"
-             or "documents".
+        :param source: Name (or list of names) of the location(s) to look for
+            sentences; each name can be "last_message", "documents", or
+            "all_but_last_message".
         :param output_names: Names of new result fields to add
         """
         super().__init__(config, input_path_expr)
 
-        allowed_sources = ("last_message", "documents")
-        if source not in allowed_sources:
-            raise ValueError(
-                f"'source' argument must be one of {allowed_sources}. "
-                f"Received '{source}'"
-            )
+        if isinstance(source, str):
+            source = [source]
+        allowed_sources = ("last_message", "documents", "all_but_last_message")
+        for s in source:
+            if s not in allowed_sources:
+                raise ValueError(
+                    f"'source' argument must be one of {allowed_sources}. "
+                    f"Received '{s}'"
+                )
         self.source = source
 
         if not isinstance(output_names, dict):
@@ -485,7 +489,9 @@ class DecodeSentences(AddFieldsTransformation):
                 f"Expected mapping for output_names, but received {output_names}"
             )
         for k in output_names:
-            if source == "documents" and k == "document_id":
+            if "documents" in source and k == "document_id":
+                continue
+            if "all_but_last_message" in source and k == "message_index":
                 continue
             if k not in ("begin", "end", "text"):
                 raise ValueError(f"Unexpected key '{k}' in output_names")
@@ -495,6 +501,7 @@ class DecodeSentences(AddFieldsTransformation):
         self.end_name = output_names.get("end")
         self.text_name = output_names.get("text")
         self.document_id_name = output_names.get("document_id")
+        self.message_index_name = output_names.get("message_index")
 
         if config["docs_as_message"] and config["docs_as_message"] not in [
             "json",
@@ -519,77 +526,114 @@ class DecodeSentences(AddFieldsTransformation):
                 f"'{self.rule_name()}' rule requires this object."
             )
 
-        if self.source == "documents":
-            tag = self.config["sentence_boundaries"]["documents"]
-            if tag is None:
-                raise ValueError(
-                    f"'{self.rule_name()}' attempting to decode document sentences, "
-                    f"but 'sentence_boundaries' section of config file is missing "
-                    f"the entry that tells how to tag document sentence boundaries."
-                )
+        begins: list[int] = []
+        ends: list[int] = []
+        texts: list[str] = []
+        document_ids: list[str | None] = []
+        message_indices: list[int | None] = []
+        next_sentence_num = 0
 
-            documents: list[Document] = []
-            if not self.config["docs_as_message"]:
-                # Most common path: Documents from extra_body
-                if chat_completion.extra_body is not None:
-                    documents = chat_completion.extra_body.documents or []
-            else:
-                # Model requires documents in a user message. Decode the message.
-                if self.config["docs_as_message"] == "json":
-                    documents_json = json.loads(chat_completion.messages[0].content)
-                    documents = [Document.model_validate(d) for d in documents_json]
-                elif self.config["docs_as_message"] == "roles":
-                    for message in chat_completion.messages:
-                        if message.role.startswith("document "):
-                            document = Document(
-                                doc_id=message.role[len("document ") :],
-                                text=message.content,
-                            )
-                            documents.append(document)
-                else:
+        for src in self.source:
+            if src == "documents":
+                tag = self.config["sentence_boundaries"]["documents"]
+                if tag is None:
                     raise ValueError(
-                        f"Unsupported doc type {self.config['docs_as_message']}"
+                        f"'{self.rule_name()}' attempting to decode document sentences, "
+                        f"but 'sentence_boundaries' section of config file is missing "
+                        f"the entry that tells how to tag document sentence boundaries."
                     )
 
-            # De-split the sentences in each document in turn. Sentence numbers
-            # start at zero on the first document and continue in subsequent documents.
-            begins = []
-            ends = []
-            texts = []
-            document_ids = []
+                documents: list[Document] = []
+                if not self.config["docs_as_message"]:
+                    # Most common path: Documents from extra_body
+                    if chat_completion.extra_body is not None:
+                        documents = chat_completion.extra_body.documents or []
+                else:
+                    # Model requires documents in a user message. Decode the message.
+                    if self.config["docs_as_message"] == "json":
+                        documents_json = json.loads(chat_completion.messages[0].content)
+                        documents = [Document.model_validate(d) for d in documents_json]
+                    elif self.config["docs_as_message"] == "roles":
+                        for message in chat_completion.messages:
+                            if message.role.startswith("document "):
+                                document = Document(
+                                    doc_id=message.role[len("document ") :],
+                                    text=message.content,
+                                )
+                                documents.append(document)
+                    else:
+                        raise ValueError(
+                            f"Unsupported doc type {self.config['docs_as_message']}"
+                        )
 
-            next_sentence_num = 0
-            for d in documents:
-                local_results = _desplit_sentences(d.text, tag, next_sentence_num)
+                # De-split sentences; numbers start at next_sentence_num and continue
+                # across documents.
+                for d in documents:
+                    local_results = _desplit_sentences(d.text, tag, next_sentence_num)
+                    num_local_sentences = len(local_results["begins"])
+                    begins.extend(local_results["begins"])
+                    ends.extend(local_results["ends"])
+                    texts.extend(local_results["texts"])
+                    document_ids.extend([d.doc_id] * num_local_sentences)
+                    message_indices.extend([None] * num_local_sentences)
+                    next_sentence_num += num_local_sentences
+
+            elif src == "last_message":
+                tag = self.config["sentence_boundaries"]["last_message"]
+                if tag is None:
+                    raise ValueError(
+                        f"'{self.rule_name()}' attempting to decode the last message, "
+                        f"but 'sentence_boundaries' section of config file is missing "
+                        f"the entry that tells how to tag message sentence boundaries."
+                    )
+
+                # Use second-to-last turn if the input processing added an instruction turn
+                message_ix = -2 if self.config["instruction"] else -1
+                target_text = chat_completion.messages[message_ix].content
+                local_results = _desplit_sentences(target_text, tag, next_sentence_num)
                 num_local_sentences = len(local_results["begins"])
                 begins.extend(local_results["begins"])
                 ends.extend(local_results["ends"])
                 texts.extend(local_results["texts"])
-                document_ids.extend([d.doc_id] * num_local_sentences)
+                document_ids.extend([None] * num_local_sentences)
+                message_indices.extend([None] * num_local_sentences)
                 next_sentence_num += num_local_sentences
 
-            return {
-                "begins": begins,
-                "ends": ends,
-                "texts": texts,
-                "document_ids": document_ids,
-            }
-        if self.source == "last_message":
-            tag = self.config["sentence_boundaries"]["last_message"]
-            if tag is None:
-                raise ValueError(
-                    f"'{self.rule_name()}' attempting to decode the last message, "
-                    f"but 'sentence_boundaries' section of config file is missing "
-                    f"the entry that tells how to tag message sentence boundaries."
-                )
+            elif src == "all_but_last_message":
+                tag = self.config["sentence_boundaries"]["all_but_last_message"]
+                if tag is None:
+                    raise ValueError(
+                        f"'{self.rule_name()}' attempting to decode conversation "
+                        f"history sentences, but 'sentence_boundaries' section of "
+                        f"config file is missing the entry that tells how to tag "
+                        f"all_but_last_message sentence boundaries."
+                    )
 
-            # Use second-to-last turn if the input processing added an instruction turn
-            message_ix = -2 if self.config["instruction"] else -1
-            target_text = chat_completion.messages[message_ix].content
+                # Use second-to-last as the boundary if an instruction turn was added
+                last_ix = -2 if self.config["instruction"] else -1
+                history_messages = chat_completion.messages[:last_ix]
+                for i, message in enumerate(history_messages):
+                    local_results = _desplit_sentences(
+                        message.content, tag, next_sentence_num
+                    )
+                    num_local_sentences = len(local_results["begins"])
+                    begins.extend(local_results["begins"])
+                    ends.extend(local_results["ends"])
+                    texts.extend(local_results["texts"])
+                    document_ids.extend([None] * num_local_sentences)
+                    message_indices.extend([i] * num_local_sentences)
+                    next_sentence_num += num_local_sentences
 
-            return _desplit_sentences(target_text, tag, 0)
+            else:
+                raise ValueError(f"Unexpected source string '{src}'")
 
-        raise ValueError(f"Unexpected source string '{self.source}'")
+        return {
+            "begins": begins,
+            "ends": ends,
+            "texts": texts,
+            "document_ids": document_ids,
+            "message_indices": message_indices,
+        }
 
     def _transform(self, value: Any, path: tuple, prepare_output: dict) -> dict:
         # Unpack global values we set aside during the prepare phase
@@ -597,6 +641,7 @@ class DecodeSentences(AddFieldsTransformation):
         ends = prepare_output["ends"]
         texts = prepare_output["texts"]
         document_ids = prepare_output.get("document_ids")
+        message_indices = prepare_output.get("message_indices")
 
         if not isinstance(value, int):
             raise TypeError(
@@ -614,6 +659,8 @@ class DecodeSentences(AddFieldsTransformation):
             result[self.text_name] = texts[sentence_num]
         if self.document_id_name is not None:
             result[self.document_id_name] = document_ids[sentence_num]  # type: ignore[index]
+        if self.message_index_name is not None:
+            result[self.message_index_name] = message_indices[sentence_num]  # type: ignore[index]
         return result
 
 
