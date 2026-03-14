@@ -101,6 +101,12 @@ def main():
         )
         print(f"Email: {str(email)[:100]}...")
 
+        # Token usage is available on the result from instruct()
+        if email.usage:
+            print(f"  → Prompt tokens: {email.usage['prompt_tokens']}")
+            print(f"  → Completion tokens: {email.usage['completion_tokens']}")
+            print(f"  → Total tokens: {email.usage['total_tokens']}")
+
         # Example 3: Multiple operations
         print("\n3. Multiple operations...")
         text = "Hello, how are you today?"
