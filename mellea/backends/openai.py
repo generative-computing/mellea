@@ -629,24 +629,9 @@ class OpenAIBackend(FormatterBackend):
         if usage:
             mot.usage = usage
 
-        # Record metrics if enabled
-        from ..telemetry.metrics import is_metrics_enabled
-
-        if is_metrics_enabled() and usage:
-            from ..telemetry.backend_instrumentation import (
-                get_model_id_str,
-                get_system_name,
-            )
-            from ..telemetry.metrics import record_token_usage_metrics
-            from .utils import get_value
-
-            record_token_usage_metrics(
-                input_tokens=get_value(usage, "prompt_tokens"),
-                output_tokens=get_value(usage, "completion_tokens"),
-                model=get_model_id_str(self),
-                backend=self.__class__.__name__,
-                system=get_system_name(self),
-            )
+        # Populate model and provider metadata
+        mot.model = str(self.model_id)
+        mot.provider = "openai"
 
         # Record telemetry now that response is available
         span = mot._meta.get("_telemetry_span")

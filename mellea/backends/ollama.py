@@ -630,23 +630,9 @@ class OllamaModelBackend(FormatterBackend):
                 "total_tokens": (prompt_tokens or 0) + (completion_tokens or 0),
             }
 
-        # Record metrics if enabled
-        from ..telemetry.metrics import is_metrics_enabled
-
-        if is_metrics_enabled():
-            from ..telemetry.backend_instrumentation import (
-                get_model_id_str,
-                get_system_name,
-            )
-            from ..telemetry.metrics import record_token_usage_metrics
-
-            record_token_usage_metrics(
-                input_tokens=prompt_tokens,
-                output_tokens=completion_tokens,
-                model=get_model_id_str(self),
-                backend=self.__class__.__name__,
-                system=get_system_name(self),
-            )
+        # Populate model and provider metadata
+        mot.model = str(self.model_id)
+        mot.provider = "ollama"
 
         # Record telemetry and close span now that response is available
         span = mot._meta.get("_telemetry_span")

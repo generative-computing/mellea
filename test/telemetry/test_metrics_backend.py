@@ -142,12 +142,12 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, s
 
     # Verify input token counter
     input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "ollama"}
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "ollama"}
     )
 
     # Verify output token counter
     output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "ollama"}
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.provider.name": "ollama"}
     )
 
     # Ollama should always return token counts
@@ -198,11 +198,11 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
 
     # OpenAI always provides token counts
     input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "openai"}
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "openai"}
     )
 
     output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "openai"}
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.provider.name": "openai"}
     )
 
     assert input_tokens is not None, "Input tokens should be recorded"
@@ -246,11 +246,11 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
     metrics_data = metric_reader.get_metrics_data()
 
     input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "watsonx"}
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "watsonx"}
     )
 
     output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "watsonx"}
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.provider.name": "watsonx"}
     )
 
     assert input_tokens is not None, "Input tokens should be recorded"
@@ -306,11 +306,11 @@ async def test_litellm_token_metrics_integration(
     metrics_data = metric_reader.get_metrics_data()
 
     input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "litellm"}
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "litellm"}
     )
 
     output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "litellm"}
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.provider.name": "litellm"}
     )
 
     # LiteLLM with Ollama backend should always provide token counts
@@ -357,11 +357,13 @@ async def test_huggingface_token_metrics_integration(
 
     # HuggingFace computes token counts locally
     input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "huggingface"}
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "huggingface"}
     )
 
     output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "huggingface"}
+        metrics_data,
+        "mellea.llm.tokens.output",
+        {"gen_ai.provider.name": "huggingface"},
     )
 
     assert input_tokens is not None, "Input tokens should be recorded"

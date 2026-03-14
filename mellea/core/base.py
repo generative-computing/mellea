@@ -206,6 +206,20 @@ class ModelOutputThunk(CBlock, Generic[S]):
         and 'prompt_tokens_details' for advanced features (reasoning, audio, caching).
         """
 
+        self.model: str | None = None
+        """Model identifier that generated this output.
+
+        Examples: 'gpt-4', 'llama2:7b', 'meta-llama/Llama-2-7b-hf'.
+        Populated by backends. None if unavailable.
+        """
+
+        self.provider: str | None = None
+        """Provider that generated this output.
+
+        Examples: 'openai', 'ollama', 'huggingface', 'watsonx'.
+        Populated by backends. None if unavailable.
+        """
+
         # Used for tracking generation.
         self._context: list[Component | CBlock] | None = None
         self._action: Component | CBlock | None = None
@@ -243,6 +257,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self.tool_calls = other.tool_calls
         self._thinking = other._thinking
         self.usage = other.usage
+        self.model = other.model
+        self.provider = other.provider
         self._generate_log = other._generate_log
 
     def is_computed(self) -> bool:
@@ -443,6 +459,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
         copied._context = self._context
         copied._generate_log = self._generate_log
         copied._model_options = self._model_options
+        copied.usage = self.usage
+        copied.model = self.model
+        copied.provider = self.provider
         return copied
 
     def __deepcopy__(self, memo: dict) -> ModelOutputThunk:
@@ -472,6 +491,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
         )  # The items in a context should be immutable.
         deepcopied._generate_log = copy(self._generate_log)
         deepcopied._model_options = copy(self._model_options)
+        deepcopied.usage = deepcopy(self.usage) if self.usage else None
+        deepcopied.model = self.model
+        deepcopied.provider = self.provider
         return deepcopied
 
 
