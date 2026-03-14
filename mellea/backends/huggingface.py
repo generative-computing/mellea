@@ -1075,21 +1075,20 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             except Exception:
                 pass
 
-        # Record metrics if enabled
-        if metrics_enabled and n_prompt is not None:
-            from ..telemetry.backend_instrumentation import (
-                get_model_id_str,
-                get_system_name,
-            )
-            from ..telemetry.metrics import record_token_usage_metrics
+        # Populate standardized usage field (convert to OpenAI format)
+        if n_prompt is not None and n_completion is not None:
+            mot.usage = {
+                "prompt_tokens": n_prompt,
+                "completion_tokens": n_completion,
+                "total_tokens": n_prompt + n_completion,
+            }
 
-            record_token_usage_metrics(
-                input_tokens=n_prompt,
-                output_tokens=n_completion,
-                model=get_model_id_str(self),
-                backend=self.__class__.__name__,
-                system=get_system_name(self),
-            )
+        # Populate model and provider metadata
+        if hasattr(self.model_id, "hf_model_name"):
+            mot.model = str(self.model_id.hf_model_name)  # type: ignore
+        else:
+            mot.model = str(self.model_id)
+        mot.provider = "huggingface"
 
         # Record tracing if span exists
         if span is not None:

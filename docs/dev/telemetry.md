@@ -129,9 +129,8 @@ All token metrics include these attributes following Gen-AI semantic conventions
 
 | Attribute | Description | Example Values |
 |-----------|-------------|----------------|
-| `gen_ai.system` | Backend system name | `openai`, `ollama`, `watsonx`, `litellm`, `huggingface` |
+| `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `watsonx`, `litellm`, `huggingface` |
 | `gen_ai.request.model` | Model identifier | `gpt-4`, `llama3.2:7b`, `granite-3.1-8b-instruct` |
-| `mellea.backend` | Backend class name | `OpenAIBackend`, `OllamaBackend`, `WatsonxBackend` |
 
 #### Backend Support
 
@@ -365,12 +364,30 @@ if is_metrics_enabled():
     print("Token metrics are being collected")
 ```
 
+Access token usage data from `ModelOutputThunk`:
+
+```python
+from mellea import start_session
+
+with start_session() as m:
+    result = m.instruct("Write a haiku about programming")
+    
+    # Access token usage (follows OpenAI API format)
+    if result.usage:
+        print(f"Prompt tokens: {result.usage['prompt_tokens']}")
+        print(f"Completion tokens: {result.usage['completion_tokens']}")
+        print(f"Total tokens: {result.usage['total_tokens']}")
+```
+
+The `usage` field is a dictionary with three keys: `prompt_tokens`, `completion_tokens`, and `total_tokens`. All backends populate this field consistently.
+
 #### Performance
 
-- **Zero overhead when disabled**: When `MELLEA_METRICS_ENABLED=false` (default), `record_token_usage_metrics()` returns immediately with no processing
+- **Zero overhead when disabled**: When `MELLEA_METRICS_ENABLED=false` (default), the TokenMetricsPlugin is not registered and has no overhead
 - **Minimal overhead when enabled**: Counter increments are extremely fast (~nanoseconds per operation)
 - **Async export**: Metrics are batched and exported asynchronously (default: every 60 seconds)
 - **Non-blocking**: Metric recording never blocks LLM calls
+- **Automatic collection**: Metrics are recorded via hooks after generation completes—no manual instrumentation needed
 
 #### Use Cases
 

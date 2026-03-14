@@ -407,13 +407,9 @@ def _get_token_counters() -> tuple[Any, Any]:
 
 
 def record_token_usage_metrics(
-    input_tokens: int | None,
-    output_tokens: int | None,
-    model: str,
-    backend: str,
-    system: str,
+    input_tokens: int | None, output_tokens: int | None, model: str, provider: str
 ) -> None:
-    """Record token usage metrics following Gen-AI semantic conventions.
+    """Record token usage metrics following OpenTelemetry Gen-AI semantic conventions.
 
     This is a no-op when metrics are disabled, ensuring zero overhead.
 
@@ -421,16 +417,14 @@ def record_token_usage_metrics(
         input_tokens: Number of input tokens (prompt tokens), or None if unavailable
         output_tokens: Number of output tokens (completion tokens), or None if unavailable
         model: Model identifier (e.g., "gpt-4", "llama2:7b")
-        backend: Backend class name (e.g., "OpenAIBackend", "OllamaBackend")
-        system: Gen-AI system name (e.g., "openai", "ollama", "watsonx")
+        provider: Provider name (e.g., "openai", "ollama", "watsonx")
 
     Example:
         record_token_usage_metrics(
             input_tokens=150,
             output_tokens=50,
             model="llama2:7b",
-            backend="OllamaBackend",
-            system="ollama"
+            provider="ollama"
         )
     """
     # Early return if metrics are disabled (zero overhead)
@@ -440,12 +434,8 @@ def record_token_usage_metrics(
     # Get the token counters (lazily initialized)
     input_counter, output_counter = _get_token_counters()
 
-    # Prepare attributes following Gen-AI semantic conventions
-    attributes = {
-        "gen_ai.system": system,
-        "gen_ai.request.model": model,
-        "mellea.backend": backend,
-    }
+    # Prepare attributes following OTel Gen-AI semantic conventions
+    attributes = {"gen_ai.provider.name": provider, "gen_ai.request.model": model}
 
     # Record input tokens if available
     if input_tokens is not None and input_tokens > 0:
@@ -454,6 +444,30 @@ def record_token_usage_metrics(
     # Record output tokens if available
     if output_tokens is not None and output_tokens > 0:
         output_counter.add(output_tokens, attributes)
+
+
+# Auto-register TokenMetricsPlugin when metrics are enabled
+if _OTEL_AVAILABLE and _METRICS_ENABLED:
+    try:
+        from mellea.plugins.registry import register
+        from mellea.telemetry.metrics_plugins import TokenMetricsPlugin
+
+        # Idempotent registration (supports module reloads in tests)
+        try:
+            register(TokenMetricsPlugin())
+        except ValueError as e:
+            # Already registered (expected during module reloads in tests)
+            warnings.warn(
+                f"TokenMetricsPlugin already registered: {e}", UserWarning, stacklevel=2
+            )
+    except ImportError:
+        warnings.warn(
+            "Metrics are enabled but the plugin framework is not installed. "
+            "Token usage metrics will not be recorded automatically. "
+            "Install with: pip install mellea[telemetry]",
+            UserWarning,
+            stacklevel=2,
+        )
 
 
 __all__ = [
