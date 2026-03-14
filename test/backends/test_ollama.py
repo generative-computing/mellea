@@ -196,6 +196,14 @@ async def test_async_avalue(session) -> None:
     assert m1_final_val is not None
     assert m1_final_val == mot1.value
 
+    # Verify telemetry fields are populated
+    assert mot1.usage is not None
+    assert mot1.usage["prompt_tokens"] >= 0
+    assert mot1.usage["completion_tokens"] > 0
+    assert mot1.usage["total_tokens"] > 0
+    assert mot1.model is not None
+    assert mot1.provider == "ollama"
+
 
 def test_multiple_asyncio_runs(session) -> None:
     async def test():
