@@ -39,13 +39,14 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
 
 
 _RAG_REPO = "ibm-granite/granite-lib-rag-r1.0"
-_CORE_REPO = "ibm-granite/rag-intrinsics-lib"
+_CORE_REPO = "ibm-granite/granitelib-core-r1.0"
 
 
 _INTRINSICS_CATALOG_ENTRIES = [
     ############################################
     # Core Intrinsics
     ############################################
+    IntriniscsCatalogEntry(name="context-attribution", repo_id=_CORE_REPO),
     IntriniscsCatalogEntry(name="requirement_check", repo_id=_CORE_REPO),
     IntriniscsCatalogEntry(name="uncertainty", repo_id=_CORE_REPO),
     ############################################
