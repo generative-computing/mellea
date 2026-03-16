@@ -215,7 +215,12 @@ def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
             )
 
     if getattr(member, "is_class", False):
-        # Args section check for classes: look at __init__ typed parameters
+        # Args section check for classes: look at __init__ typed parameters.
+        # Variadic *args/**kwargs are excluded by kind (same logic as function check).
+        _variadic_kinds = {
+            griffe.ParameterKind.var_positional,
+            griffe.ParameterKind.var_keyword,
+        }
         init = member.members.get("__init__")
         if init:
             init_params = getattr(init, "parameters", None)
@@ -223,7 +228,7 @@ def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
                 p.name
                 for p in (init_params or [])
                 if p.name not in ("self", "cls")
-                and not p.name.startswith("*")
+                and getattr(p, "kind", None) not in _variadic_kinds
                 and p.annotation is not None
             ]
             if typed_params and not _ARGS_RE.search(doc_text):
@@ -505,23 +510,19 @@ def find_documented_symbols(docs_dir: Path) -> set[str]:
         # Read file to find documented symbols
         content = mdx_file.read_text()
 
-        # Look for heading patterns that indicate symbol documentation
-        # The actual format is: ### <span>...FUNC</span> `symbol_name`
-        # or: ### <span>...CLASS</span> `ClassName`
+        # Look for heading patterns that indicate symbol documentation.
+        # mdxify output format (0.2.37+): ### `SymbolName` <sup>...</sup>
+        # Legacy formats kept for compatibility with older generated files.
+        patterns = [
+            r"^##\s+(?:class|function|attribute)\s+(\w+)",  # very old
+            r"###\s+<span[^>]*>(?:FUNC|CLASS|ATTR)</span>\s+`(\w+)`",  # intermediate
+            r"^###\s+`(\w+)`",  # current mdxify 0.2.37+
+        ]
 
-        # Match both old format and new format
-        # Old: ## class Base, ## function generative
-        # New: ### <span>...FUNC</span> `blockify`, ### <span>...CLASS</span> `Component`
-        old_pattern = r"^##\s+(?:class|function|attribute)\s+(\w+)"
-        new_pattern = r"###\s+<span[^>]*>(?:FUNC|CLASS|ATTR)</span>\s+`(\w+)`"
-
-        for match in re.finditer(old_pattern, content, re.MULTILINE):
-            symbol_name = match.group(1)
-            documented.add(f"{module_path}.{symbol_name}")
-
-        for match in re.finditer(new_pattern, content, re.MULTILINE):
-            symbol_name = match.group(1)
-            documented.add(f"{module_path}.{symbol_name}")
+        for pattern in patterns:
+            for match in re.finditer(pattern, content, re.MULTILINE):
+                symbol_name = match.group(1)
+                documented.add(f"{module_path}.{symbol_name}")
 
     return documented
 

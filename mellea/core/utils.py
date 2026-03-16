@@ -21,10 +21,11 @@ class RESTHandler(logging.Handler):
     variable is set. Failures are silently suppressed to avoid disrupting the
     application.
 
-    Attributes:
+    Args:
         api_url (str): The URL of the REST endpoint that receives log records.
-        method (str): The HTTP method used when sending records (default ``"POST"``).
-        headers (dict): HTTP headers sent with each request; defaults to ``{"Content-Type": "application/json"}``.
+        method (str): HTTP method to use when sending records (default ``"POST"``).
+        headers (dict | None): HTTP headers to send; defaults to
+            ``{"Content-Type": "application/json"}`` when ``None``.
     """
 
     def __init__(
