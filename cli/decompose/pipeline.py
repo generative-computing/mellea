@@ -122,9 +122,10 @@ def decompose(
 ) -> DecompPipelineResult:
     """Break a task prompt into structured subtasks using a multi-step LLM pipeline.
 
-    Orchestrates five sequential LLM calls to produce a fully structured
+    Orchestrates a series of sequential LLM calls to produce a fully structured
     decomposition: subtask listing, constraint extraction, validation strategy
     selection, prompt template generation, and per-subtask constraint assignment.
+    The number of calls depends on the number of constraints extracted.
 
     Args:
         task_prompt: Natural-language description of the task to decompose.
