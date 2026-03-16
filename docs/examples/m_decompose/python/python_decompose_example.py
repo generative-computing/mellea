@@ -176,7 +176,7 @@ def display_results(result: DecompPipelineResult):
     print(f"\n🔍 Constraints Identified ({len(result['identified_constraints'])}):")
     for i, constraint in enumerate(result["identified_constraints"], 1):
         print(f"  {i}. {constraint['constraint']}")
-        print(f"     Validation: {constraint['validation_strategy']}")
+        print(f"     Validation: {constraint['val_strategy']}")
 
     print(f"\n🎯 Detailed Subtasks ({len(result['subtasks'])}):")
     for i, subtask_detail in enumerate(result["subtasks"], 1):
