@@ -24,7 +24,7 @@ OLD_LAYOUT_REPOS = [
     "generative-computing/core-intrinsics-lib",
 ]
 """Repositories (aka "models") on Hugging Face Hub that use the old layout of
-``<task>/<adapter type>/<base model>``.
+`<task>/<adapter type>/<base model>`.
 """
 
 BASE_MODEL_TO_CANONICAL_NAME = {

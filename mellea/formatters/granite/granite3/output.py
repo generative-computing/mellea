@@ -81,7 +81,7 @@ def parse_hallucinations_text(hallucinations_text: str) -> list[dict]:
         hallucinations_text: Raw text from the model's "# Hallucinations:" section.
 
     Returns:
-        List of dicts, each with ``hallucination_id``, ``risk``, and ``response_text`` keys.
+        List of dicts, each with `hallucination_id`, `risk`, and `response_text` keys.
     """
     hallucinations = []
 
@@ -178,14 +178,14 @@ def add_hallucination_response_spans(
 
     Args:
         hallucination_info: Parsed hallucination list as returned by
-            ``parse_hallucinations_text``.
+            `parse_hallucinations_text`.
         response_text_without_citations: Full response text with citation tags removed.
         remove_citations_from_response_text: Callable that strips citation tags from
             a substring of the response.
 
     Returns:
-        Deep copy of ``hallucination_info`` with ``response_text``, ``response_begin``,
-        and ``response_end`` populated for each entry.
+        Deep copy of `hallucination_info` with `response_text`, `response_begin`,
+        and `response_end` populated for each entry.
     """
     augmented_hallucination_info = copy.deepcopy(hallucination_info)
 
@@ -243,11 +243,11 @@ def add_citation_context_spans(
 
     Args:
         citation_info: List of citation dicts as produced by the model output parser.
-        docs: List of source document dicts, each with ``citation_id``, ``doc_id``,
-            and ``text`` keys.
+        docs: List of source document dicts, each with `citation_id`, `doc_id`,
+            and `text` keys.
 
     Returns:
-        Deep copy of ``citation_info`` with ``context_begin`` and ``context_end``
+        Deep copy of `citation_info` with `context_begin` and `context_end`
         populated for each entry.
     """
     augmented_citation_info = copy.deepcopy(citation_info)

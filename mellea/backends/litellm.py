@@ -56,17 +56,17 @@ class LiteLLMBackend(FormatterBackend):
 
     Args:
         model_id (str): The LiteLLM model identifier string; typically
-            ``"<provider>/<model_creator>/<model_name>"``.
+            `"<provider>/<model_creator>/<model_name>"`.
         formatter (ChatFormatter | None): Formatter for rendering components.
-            Defaults to ``TemplateFormatter``.
+            Defaults to `TemplateFormatter`.
         base_url (str | None): Base URL for the LLM API endpoint; defaults to
             the Ollama local endpoint.
         model_options (dict | None): Default model options for generation requests.
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from backend-specific option names to
-            Mellea ``ModelOption`` sentinel keys.
-        from_mellea_model_opts_map (dict): Mapping from Mellea ``ModelOption`` sentinel
+            Mellea `ModelOption` sentinel keys.
+        from_mellea_model_opts_map (dict): Mapping from Mellea `ModelOption` sentinel
             keys to backend-specific option names.
     """
 
@@ -134,10 +134,10 @@ class LiteLLMBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generate a completion for ``action`` given ``ctx`` via the LiteLLM chat API.
+        """Generate a completion for `action` given `ctx` via the LiteLLM chat API.
 
-        Delegates to ``_generate_from_chat_context_standard``. Only chat contexts are
-        supported; raises ``NotImplementedError`` otherwise.
+        Delegates to `_generate_from_chat_context_standard`. Only chat contexts are
+        supported; raises `NotImplementedError` otherwise.
 
         Args:
             action (Component[C] | CBlock): The component or content block to generate
@@ -147,12 +147,12 @@ class LiteLLMBackend(FormatterBackend):
                 structured/constrained output decoding.
             model_options (dict | None): Per-call model options that override the
                 backend's defaults.
-            tool_calls (bool): If ``True``, expose available tools to the model and
+            tool_calls (bool): If `True`, expose available tools to the model and
                 parse tool-call responses.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
-                and an updated context that includes ``action`` and the new output.
+                and an updated context that includes `action` and the new output.
         """
         assert ctx.is_chat_context, NotImplementedError(
             "The Openai backend only supports chat-like contexts."
@@ -395,9 +395,9 @@ class LiteLLMBackend(FormatterBackend):
     ):
         """Accumulate content and thinking tokens from a single LiteLLM response chunk.
 
-        Called during generation for each ``ModelResponse`` (non-streaming) or
-        ``ModelResponseStream`` chunk (streaming). Tool call parsing is deferred to
-        ``post_processing``.
+        Called during generation for each `ModelResponse` (non-streaming) or
+        `ModelResponseStream` chunk (streaming). Tool call parsing is deferred to
+        `post_processing`.
 
         Args:
             mot (ModelOutputThunk): The output thunk being populated.
@@ -475,7 +475,7 @@ class LiteLLMBackend(FormatterBackend):
                 used for logging.
             tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
             thinking: The thinking/reasoning effort level passed to the model, or
-                ``None`` if reasoning mode was not enabled.
+                `None` if reasoning mode was not enabled.
             _format: The structured output format class used during generation, if any.
         """
         # Reconstruct the chat_response from chunks if streamed.
@@ -634,7 +634,7 @@ class LiteLLMBackend(FormatterBackend):
             actions (Sequence[Component[C] | CBlock]): Actions to generate completions for.
             ctx (Context): The current generation context.
             format (type[BaseModelSubclass] | None): Optional Pydantic model for
-                structured output; passed as ``guided_json`` in the request body.
+                structured output; passed as `guided_json` in the request body.
             model_options (dict | None): Per-call model options.
             tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
 

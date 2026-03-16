@@ -2,7 +2,7 @@
 
 """JSON parsing utilities for Granite intrinsic formatters.
 
-Provides a fast, position-aware JSON literal parser (``JsonLiteralWithPosition``) used
+Provides a fast, position-aware JSON literal parser (`JsonLiteralWithPosition`) used
 to extract and re-score tokens inside structured model outputs. The module also defines
 compiled regular expressions for JSON structural characters, numbers, booleans, and
 null values that are used throughout the Granite intrinsic formatting pipeline.
@@ -68,7 +68,7 @@ def find_string_offsets(json_data: str) -> list[tuple[int, int, str]]:
         json_data: String containing valid JSON.
 
     Returns:
-        Begin and end offsets of all strings in ``json_data``, including
+        Begin and end offsets of all strings in `json_data`, including
         the double quotes.
     """
     result = []
@@ -89,11 +89,11 @@ def non_string_offsets(json_str, compiled_regex, string_begins, string_ends):
     Args:
         json_str: Original string of valid JSON data.
         compiled_regex: Compiled regex for the target token type.
-        string_begins: Table of string begin offsets within ``json_str``.
-        string_ends: Table of string end offsets within ``json_str``.
+        string_begins: Table of string begin offsets within `json_str`.
+        string_ends: Table of string end offsets within `json_str`.
 
     Returns:
-        List of ``(begin, end, matched_string)`` tuples.
+        List of `(begin, end, matched_string)` tuples.
     """
     offsets = []
     for match in compiled_regex.finditer(json_str):
@@ -117,7 +117,7 @@ def tokenize_json(json_str: str):
         json_str: String representation of valid JSON data.
 
     Returns:
-        List of tuples of ``(begin, end, value, type)``.
+        List of tuples of `(begin, end, value, type)`.
     """
     string_offsets = find_string_offsets(json_str)
     string_begins = [s[0] for s in string_offsets]
@@ -150,11 +150,11 @@ def reparse_value(tokens, offset) -> tuple[Any, int]:
     Assumes valid JSON.
 
     Args:
-        tokens: Token stream as produced by ``tokenize_json()``.
+        tokens: Token stream as produced by `tokenize_json()`.
         offset: Token offset at which to start parsing.
 
     Returns:
-        Tuple of ``(parsed_value, next_offset)``.
+        Tuple of `(parsed_value, next_offset)`.
 
     Raises:
         ValueError: If an unexpected delimiter token or unknown token type is
@@ -177,19 +177,19 @@ def reparse_value(tokens, offset) -> tuple[Any, int]:
 
 
 def reparse_object(tokens, offset) -> tuple[dict, int]:
-    """Parse a JSON object from the token stream, starting after the opening ``{``.
+    """Parse a JSON object from the token stream, starting after the opening `{`.
 
     Subroutine called by :func:`reparse_value` when an opening curly brace is
-    encountered. Consumes tokens until the matching closing ``}`` is found.
+    encountered. Consumes tokens until the matching closing `}` is found.
 
     Args:
-        tokens: Token stream as produced by ``tokenize_json()``.
-        offset (int): Token offset immediately after the opening ``{`` delimiter.
+        tokens: Token stream as produced by `tokenize_json()`.
+        offset (int): Token offset immediately after the opening `{` delimiter.
 
     Returns:
-        tuple[dict, int]: A tuple of ``(parsed_dict, next_offset)`` where
-            ``parsed_dict`` maps string keys to parsed values (possibly
-            :class:`JsonLiteralWithPosition` instances) and ``next_offset``
+        tuple[dict, int]: A tuple of `(parsed_dict, next_offset)` where
+            `parsed_dict` maps string keys to parsed values (possibly
+            :class:`JsonLiteralWithPosition` instances) and `next_offset`
             is the position of the next unconsumed token.
 
     Raises:
@@ -231,19 +231,19 @@ def reparse_object(tokens, offset) -> tuple[dict, int]:
 
 
 def reparse_list(tokens, offset) -> tuple[list, int]:
-    """Parse a JSON array from the token stream, starting after the opening ``[``.
+    """Parse a JSON array from the token stream, starting after the opening `[`.
 
     Subroutine called by :func:`reparse_value` when an opening square bracket is
-    encountered. Consumes tokens until the matching closing ``]`` is found.
+    encountered. Consumes tokens until the matching closing `]` is found.
 
     Args:
-        tokens: Token stream as produced by ``tokenize_json()``.
-        offset (int): Token offset immediately after the opening ``[`` delimiter.
+        tokens: Token stream as produced by `tokenize_json()`.
+        offset (int): Token offset immediately after the opening `[` delimiter.
 
     Returns:
-        tuple[list, int]: A tuple of ``(parsed_list, next_offset)`` where
-            ``parsed_list`` contains the parsed elements (possibly
-            :class:`JsonLiteralWithPosition` instances) and ``next_offset``
+        tuple[list, int]: A tuple of `(parsed_list, next_offset)` where
+            `parsed_list` contains the parsed elements (possibly
+            :class:`JsonLiteralWithPosition` instances) and `next_offset`
             is the position of the next unconsumed token.
 
     Raises:
@@ -276,8 +276,8 @@ def reparse_json_with_offsets(json_str: str) -> Any:
         json_str: String known to contain valid JSON data.
 
     Returns:
-        Parsed representation of ``json_str``, with literals at the leaf nodes of
-        the parse tree replaced with ``JsonLiteralWithPosition`` instances containing
+        Parsed representation of `json_str`, with literals at the leaf nodes of
+        the parse tree replaced with `JsonLiteralWithPosition` instances containing
         position information.
     """
     tokens = tokenize_json(json_str)
@@ -291,7 +291,7 @@ def scalar_paths(parsed_json) -> list[tuple]:
         parsed_json: JSON data parsed into native Python objects.
 
     Returns:
-        A list of paths to scalar values within ``parsed_json``, where each
+        A list of paths to scalar values within `parsed_json`, where each
         path is expressed as a tuple. The root element of a bare scalar is an empty
         tuple.
     """
@@ -315,7 +315,7 @@ def all_paths(parsed_json) -> list[tuple]:
         parsed_json: JSON data parsed into native Python objects.
 
     Returns:
-        A list of paths to all elements of the parse tree of ``parsed_json``,
+        A list of paths to all elements of the parse tree of `parsed_json`,
         where each path is expressed as a tuple. The root element of a bare scalar is
         an empty tuple.
     """
@@ -335,13 +335,13 @@ def fetch_path(json_value: Any, path: tuple):
     Args:
         json_value: Parsed JSON value.
         path: A tuple of names/numbers that indicates a path from root to a leaf
-            or internal node of ``json_value``.
+            or internal node of `json_value`.
 
     Returns:
         The node at the indicated path.
 
     Raises:
-        TypeError: If ``path`` is not a tuple, if a path element is not a string
+        TypeError: If `path` is not a tuple, if a path element is not a string
             or integer, or if an intermediate node is not a dict or list.
     """
     if not isinstance(path, tuple):
@@ -375,10 +375,10 @@ def replace_path(json_value: Any, path: tuple, new_value: Any) -> Any:
         new_value: New value to place at the indicated location.
 
     Returns:
-        The modified input, or ``new_value`` itself if the root was replaced.
+        The modified input, or `new_value` itself if the root was replaced.
 
     Raises:
-        TypeError: If ``path`` is not a tuple, or if any error propagated from
+        TypeError: If `path` is not a tuple, or if any error propagated from
             :func:`fetch_path` during path traversal.
     """
     if not isinstance(path, tuple):
@@ -395,7 +395,7 @@ def parse_inline_json(json_response: dict) -> dict:
     """Replace the JSON strings in message contents with parsed JSON.
 
     Args:
-        json_response: Parsed JSON representation of a ``ChatCompletionResponse`` object.
+        json_response: Parsed JSON representation of a `ChatCompletionResponse` object.
 
     Returns:
         Deep copy of the input with JSON message content strings replaced by parsed
@@ -416,12 +416,12 @@ def make_begin_to_token_table(logprobs: ChatCompletionLogProbs | None):
     """Create a table mapping token begin positions to token indices.
 
     Args:
-        logprobs: The token log probabilities from the chat completion, or ``None``
+        logprobs: The token log probabilities from the chat completion, or `None`
             if the chat completion request did not ask for logprobs.
 
     Returns:
         A dictionary mapping token begin positions to token indices,
-        or ``None`` if ``logprobs`` is ``None``.
+        or `None` if `logprobs` is `None`.
     """
     if logprobs is None:
         return None

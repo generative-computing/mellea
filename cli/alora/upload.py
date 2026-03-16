@@ -1,9 +1,9 @@
 """Upload a trained LoRA or aLoRA adapter to Hugging Face Hub.
 
 Creates the target repository if it does not already exist and pushes the entire
-adapter weights directory (output of ``save_pretrained``) to the repository root.
-Requires an authenticated Hugging Face token set via the ``HF_TOKEN`` environment
-variable or ``huggingface-cli login``.
+adapter weights directory (output of `save_pretrained`) to the repository root.
+Requires an authenticated Hugging Face token set via the `HF_TOKEN` environment
+variable or `huggingface-cli login`.
 """
 
 import os
@@ -20,7 +20,7 @@ def upload_model(weight_path: str, model_name: str, private: bool = True):
         private (bool): Whether the repo should be private. Default: True.
 
     Raises:
-        FileNotFoundError: If ``weight_path`` does not exist on disk.
+        FileNotFoundError: If `weight_path` does not exist on disk.
         OSError: If no Hugging Face authentication token is found.
         RuntimeError: If creating or accessing the Hugging Face repository fails.
     """

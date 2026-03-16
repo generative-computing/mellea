@@ -1,8 +1,8 @@
 """Core decomposition pipeline that breaks a task prompt into structured subtasks.
 
-Provides the ``decompose()`` function, which orchestrates a series of LLM calls
+Provides the `decompose()` function, which orchestrates a series of LLM calls
 (subtask listing, constraint extraction, validation strategy selection, prompt
-generation, and constraint assignment) to produce a ``DecompPipelineResult``
+generation, and constraint assignment) to produce a `DecompPipelineResult`
 containing subtasks, per-subtask prompts, constraints, and dependency information.
 Supports Ollama, OpenAI-compatible, and RITS inference backends.
 """
@@ -35,7 +35,7 @@ class ConstraintResult(TypedDict):
     Attributes:
         constraint (str): Natural-language description of the constraint.
         validation_strategy (str): Strategy assigned to validate the constraint;
-            either ``"code"`` or ``"llm"``.
+            either `"code"` or `"llm"`.
     """
 
     constraint: str
@@ -52,11 +52,11 @@ class DecompSubtasksResult(TypedDict):
         constraints (list[ConstraintResult]): List of constraints assigned to
             this subtask, each with a validation strategy.
         prompt_template (str): Jinja2 prompt template string for this subtask,
-            with ``{{ variable }}`` placeholders for inputs and prior subtask results.
+            with `{{ variable }}` placeholders for inputs and prior subtask results.
         input_vars_required (list[str]): Ordered list of user-provided input
-            variable names referenced in ``prompt_template``.
+            variable names referenced in `prompt_template`.
         depends_on (list[str]): Ordered list of subtask tags whose results are
-            referenced in ``prompt_template``.
+            referenced in `prompt_template`.
         generated_response (str): Optional field holding the model response
             produced during execution; not present until the subtask runs.
     """
@@ -131,17 +131,17 @@ def decompose(
         task_prompt: Natural-language description of the task to decompose.
         user_input_variable: Optional list of variable names that will be
             templated into generated prompts as user-provided input data. Pass
-            ``None`` or an empty list if the task requires no input variables.
+            `None` or an empty list if the task requires no input variables.
         model_id: Model name or ID used for all pipeline steps.
-        backend: Inference backend -- ``"ollama"``, ``"openai"``, or ``"rits"``.
+        backend: Inference backend -- `"ollama"`, `"openai"`, or `"rits"`.
         backend_req_timeout: Request timeout in seconds for model inference calls.
         backend_endpoint: Base URL of the OpenAI-compatible endpoint. Required
-            when ``backend`` is ``"openai"`` or ``"rits"``.
+            when `backend` is `"openai"` or `"rits"`.
         backend_api_key: API key for the configured endpoint. Required when
-            ``backend`` is ``"openai"`` or ``"rits"``.
+            `backend` is `"openai"` or `"rits"`.
 
     Returns:
-        A ``DecompPipelineResult`` containing the original prompt, subtask list,
+        A `DecompPipelineResult` containing the original prompt, subtask list,
         identified constraints, and fully annotated subtask objects with prompt
         templates, constraint assignments, and dependency information.
     """

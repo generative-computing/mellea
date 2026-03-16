@@ -12,15 +12,15 @@ class ElasticsearchRetriever:
     retrieve the top-k matching documents for a given natural language query.
 
     Attributes:
-        hosts (str): Full ``url:port`` connection string to the Elasticsearch
-            server; stored from the ``host`` constructor argument.
+        hosts (str): Full `url:port` connection string to the Elasticsearch
+            server; stored from the `host` constructor argument.
 
     Args:
         corpus_name (str): Name of the Elasticsearch index to query.
-        host (str): Full ``url:port`` connection string to the Elasticsearch
+        host (str): Full `url:port` connection string to the Elasticsearch
             server.
         **kwargs (Any): Additional keyword arguments forwarded to the
-            ``Elasticsearch`` client constructor.
+            `Elasticsearch` client constructor.
     """
 
     def __init__(self, corpus_name: str, host: str, **kwargs: Any):
@@ -67,11 +67,11 @@ class ElasticsearchRetriever:
 
         Args:
             query (str): Natural language query string to search for.
-            top_k (int): Maximum number of documents to return. Defaults to ``5``.
+            top_k (int): Maximum number of documents to return. Defaults to `5`.
 
         Returns:
-            list[dict]: List of matching documents, each with keys ``doc_id``,
-                ``text``, and ``score``.
+            list[dict]: List of matching documents, each with keys `doc_id`,
+                `text`, and `score`.
         """
         body = self.create_es_body(top_k, query)
 

@@ -1,8 +1,8 @@
 """Abstract interfaces for sampling strategies and their results.
 
-``SamplingStrategy`` defines the contract for all sampling algorithms: an async
-``sample`` method that takes an action, context, backend, and requirements, and
-returns a ``SamplingResult``. ``SamplingResult`` records the chosen generation
+`SamplingStrategy` defines the contract for all sampling algorithms: an async
+`sample` method that takes an action, context, backend, and requirements, and
+returns a `SamplingResult`. `SamplingResult` records the chosen generation
 alongside the full history of intermediate samples, their validation outcomes,
 and associated contexts — enabling detailed post-hoc inspection of the sampling
 process.
@@ -20,7 +20,7 @@ class SamplingResult(CBlock, Generic[S]):
     """Stores the results from a sampling operation. This includes successful and failed samplings.
 
     Args:
-        result_index (int): Index into ``sample_generations`` identifying the chosen final output.
+        result_index (int): Index into `sample_generations` identifying the chosen final output.
         success (bool): Whether the sampling operation produced a passing result.
         sample_generations (list[ModelOutputThunk[S]] | None): All output thunks generated during sampling.
         sample_validations (list[list[tuple[Requirement, ValidationResult]]] | None): Per-generation validation
@@ -29,16 +29,16 @@ class SamplingResult(CBlock, Generic[S]):
         sample_contexts (list[Context] | None): The contexts associated with each generation.
 
     Attributes:
-        result_index (int): Index into ``sample_generations`` identifying the chosen final output.
+        result_index (int): Index into `sample_generations` identifying the chosen final output.
         success (bool): Whether the sampling operation produced a passing result.
         sample_generations (list[ModelOutputThunk[S]]): All output thunks generated during
-            sampling; always a list (``None`` input is normalised to ``[]``).
+            sampling; always a list (`None` input is normalised to `[]`).
         sample_validations (list[list[tuple[Requirement, ValidationResult]]]): Per-generation
-            validation results; always a list (``None`` input is normalised to ``[]``).
+            validation results; always a list (`None` input is normalised to `[]`).
         sample_actions (list[Component]): The actions used to produce each generation;
-            always a list (``None`` input is normalised to ``[]``).
+            always a list (`None` input is normalised to `[]`).
         sample_contexts (list[Context]): The contexts associated with each generation;
-            always a list (``None`` input is normalised to ``[]``).
+            always a list (`None` input is normalised to `[]`).
     """
 
     def __init__(

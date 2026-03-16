@@ -1,9 +1,9 @@
-"""``SimpleComponent``: a lightweight named-span component.
+"""`SimpleComponent`: a lightweight named-span component.
 
-``SimpleComponent`` accepts arbitrary keyword arguments (strings, ``CBlock``s, or
-``Component``s) and renders them as a JSON object keyed by the argument names. It is
+`SimpleComponent` accepts arbitrary keyword arguments (strings, `CBlock`s, or
+`Component`s) and renders them as a JSON object keyed by the argument names. It is
 the go-to component type for ad-hoc prompts that do not require a dedicated
-``Component`` subclass or a Jinja2 template.
+`Component` subclass or a Jinja2 template.
 """
 
 from typing import Any
@@ -37,11 +37,11 @@ class SimpleComponent(Component[str]):
 
     @staticmethod
     def make_simple_string(kwargs: dict[str, Any]) -> str:
-        """Render keyword arguments as ``<|key|>value</|key|>`` tagged strings.
+        """Render keyword arguments as `<|key|>value</|key|>` tagged strings.
 
         Args:
-            kwargs (dict[str, Any]): Mapping of span names to their ``CBlock`` or
-                ``Component`` values.
+            kwargs (dict[str, Any]): Mapping of span names to their `CBlock` or
+                `Component` values.
 
         Returns:
             str: Newline-joined tagged representation of all keyword arguments.
@@ -54,13 +54,13 @@ class SimpleComponent(Component[str]):
     def make_json_string(kwargs: dict[str, Any]) -> str:
         """Serialize keyword arguments to a JSON string.
 
-        Each value is converted to its string representation: ``CBlock`` and
-        ``ModelOutputThunk`` values use their ``.value`` attribute, while
-        ``Component`` values use ``format_for_llm()``.
+        Each value is converted to its string representation: `CBlock` and
+        `ModelOutputThunk` values use their `.value` attribute, while
+        `Component` values use `format_for_llm()`.
 
         Args:
-            kwargs (dict[str, Any]): Mapping of span names to ``CBlock``, ``Component``,
-                or ``ModelOutputThunk`` values.
+            kwargs (dict[str, Any]): Mapping of span names to `CBlock`, `Component`,
+                or `ModelOutputThunk` values.
 
         Returns:
             str: JSON-encoded representation of the keyword arguments.
@@ -79,7 +79,7 @@ class SimpleComponent(Component[str]):
     def format_for_llm(self) -> str:
         """Format this component as a JSON string representation for the language model.
 
-        Delegates to ``make_json_string`` using the stored keyword arguments.
+        Delegates to `make_json_string` using the stored keyword arguments.
 
         Returns:
             str: JSON-encoded string of all named spans in this component.

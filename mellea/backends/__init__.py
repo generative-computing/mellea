@@ -1,10 +1,10 @@
 """Backend implementations for the mellea inference layer.
 
 This package exposes the concrete machinery for connecting mellea to language model
-servers. It bundles ``FormatterBackend`` (a prompt-engineering base class for legacy
-models), ``ModelIdentifier`` (portable cross-platform model names), ``ModelOption``
-(generation parameters such as token limits), ``SimpleLRUCache`` (KV-cache
-management), and ``MelleaTool`` / ``tool`` (LLM tool definitions). Reach for this
+servers. It bundles `FormatterBackend` (a prompt-engineering base class for legacy
+models), `ModelIdentifier` (portable cross-platform model names), `ModelOption`
+(generation parameters such as token limits), `SimpleLRUCache` (KV-cache
+management), and `MelleaTool` / `tool` (LLM tool definitions). Reach for this
 package when configuring a backend, declaring tools, or tuning inference options.
 """
 

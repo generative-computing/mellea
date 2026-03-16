@@ -1,10 +1,10 @@
 """Core abstractions for the mellea library.
 
 This package defines the fundamental interfaces and data structures on which every
-other layer of mellea is built: the ``Backend``, ``Formatter``, and
-``SamplingStrategy`` protocols; the ``Component``, ``CBlock``, ``Context``, and
-``ModelOutputThunk`` data types that flow through the inference pipeline; and
-``Requirement`` / ``ValidationResult`` for constrained generation. Start here when
+other layer of mellea is built: the `Backend`, `Formatter`, and
+`SamplingStrategy` protocols; the `Component`, `CBlock`, `Context`, and
+`ModelOutputThunk` data types that flow through the inference pipeline; and
+`Requirement` / `ValidationResult` for constrained generation. Start here when
 building a new backend, formatter, or sampling strategy, or when you need the type
 definitions shared across the library.
 """

@@ -1,9 +1,9 @@
-"""Entrypoint for the ``m`` command-line tool.
+"""Entrypoint for the `m` command-line tool.
 
-Wires together all CLI sub-applications into a single Typer root command: ``m serve``
-(start a model-serving endpoint), ``m alora`` (train and upload LoRA/aLoRA adapters),
-``m decompose`` (LLM-driven task decomposition), and ``m eval`` (test-based model
-evaluation). Run ``m --help`` to see all available sub-commands.
+Wires together all CLI sub-applications into a single Typer root command: `m serve`
+(start a model-serving endpoint), `m alora` (train and upload LoRA/aLoRA adapters),
+`m decompose` (LLM-driven task decomposition), and `m eval` (test-based model
+evaluation). Run `m --help` to see all available sub-commands.
 """
 
 import typer
@@ -21,9 +21,9 @@ cli = typer.Typer(name="m", no_args_is_help=True)
 def callback() -> None:
     """Mellea command-line tool for LLM-powered workflows.
 
-    Provides sub-commands for serving models (``m serve``), training and uploading
-    adapters (``m alora``), decomposing tasks into subtasks (``m decompose``), and
-    running test-based evaluation pipelines (``m eval``).
+    Provides sub-commands for serving models (`m serve`), training and uploading
+    adapters (`m alora`), decomposing tasks into subtasks (`m decompose`), and
+    running test-based evaluation pipelines (`m eval`).
     """
 
 

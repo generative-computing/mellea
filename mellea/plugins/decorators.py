@@ -26,10 +26,10 @@ def hook(
     """Register an async function or method as a hook handler.
 
     Args:
-        hook_type: The hook point name (e.g., ``"generation_pre_call"``).
-        mode: Execution mode — ``PluginMode.SEQUENTIAL`` (default), ``PluginMode.CONCURRENT``,
-              ``PluginMode.AUDIT``, or ``PluginMode.FIRE_AND_FORGET``.
-        priority: Lower numbers execute first. For methods on a ``Plugin`` subclass, falls back
+        hook_type: The hook point name (e.g., `"generation_pre_call"`).
+        mode: Execution mode — `PluginMode.SEQUENTIAL` (default), `PluginMode.CONCURRENT`,
+              `PluginMode.AUDIT`, or `PluginMode.FIRE_AND_FORGET`.
+        priority: Lower numbers execute first. For methods on a `Plugin` subclass, falls back
                   to the class-level priority, then 50. For standalone functions, defaults to 50.
     """
 

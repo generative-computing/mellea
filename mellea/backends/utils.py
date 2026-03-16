@@ -1,10 +1,10 @@
 """Shared utility functions used across formatter-based backend implementations.
 
-Provides ``to_chat``, which converts a ``Context`` and a ``Component`` action into
-the list of role/content dicts expected by ``apply_chat_template``; and
-``to_tool_calls``, which parses a raw model output string into validated
-``ModelToolCall`` objects. These helpers are consumed internally by all
-``FormatterBackend`` subclasses.
+Provides `to_chat`, which converts a `Context` and a `Component` action into
+the list of role/content dicts expected by `apply_chat_template`; and
+`to_tool_calls`, which parses a raw model output string into validated
+`ModelToolCall` objects. These helpers are consumed internally by all
+`FormatterBackend` subclasses.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ def to_chat(
         system_prompt: Optional system prompt to prepend; overrides any system message in the context.
 
     Returns:
-        List of role/content dicts suitable for ``apply_chat_template``.
+        List of role/content dicts suitable for `apply_chat_template`.
     """
     assert ctx.is_chat_context
 
@@ -94,11 +94,11 @@ def to_tool_calls(
     """Parse a tool call string.
 
     Args:
-        tools: Mapping of tool name to the corresponding ``AbstractMelleaTool`` object.
+        tools: Mapping of tool name to the corresponding `AbstractMelleaTool` object.
         decoded_result: Raw model output string that may contain tool call markup.
 
     Returns:
-        Dict mapping tool name to validated ``ModelToolCall``, or ``None`` if no tool calls were found.
+        Dict mapping tool name to validated `ModelToolCall`, or `None` if no tool calls were found.
     """
     model_tool_calls: dict[str, ModelToolCall] = dict()
     for tool_name, tool_args in parse_tools(decoded_result):

@@ -51,7 +51,7 @@ class GuardianRisk(Enum):
         """Return a list of all available risk type identifiers.
 
         Returns:
-            list[str]: String values of all ``GuardianRisk`` enum members.
+            list[str]: String values of all `GuardianRisk` enum members.
         """
         return [risk.value for risk in cls]
 
@@ -90,17 +90,17 @@ class GuardianCheck(Requirement):
 
     Args:
         risk (str | GuardianRisk | None): The type of risk to check for.  Required
-            unless ``custom_criteria`` is provided.
-        backend_type (BackendType): Backend type to use -- ``"ollama"`` or
-            ``"huggingface"``.
+            unless `custom_criteria` is provided.
+        backend_type (BackendType): Backend type to use -- `"ollama"` or
+            `"huggingface"`.
         model_version (str | None): Specific Guardian model version.  Defaults to
             the appropriate 8B model for the chosen backend.
         device (str | None): Device string for HuggingFace inference (e.g.
-            ``"cuda"``).
+            `"cuda"`).
         ollama_url (str): Base URL for the Ollama server.
         thinking (bool): Enable chain-of-thought reasoning mode in the Guardian model.
         custom_criteria (str | None): Free-text criteria string used in place of a
-            standard ``GuardianRisk`` value.
+            standard `GuardianRisk` value.
         context_text (str | None): Context document for groundedness checks.
         tools (list[dict] | None): Tool schemas for function-call validation.
         backend (Backend | None): Pre-initialised backend instance to reuse; avoids
@@ -202,8 +202,8 @@ class GuardianCheck(Requirement):
     def get_effective_risk(self) -> str:
         """Return the effective risk criteria to use for validation.
 
-        Returns the ``custom_criteria`` string when one was provided, otherwise
-        returns the ``risk`` identifier set during initialisation.
+        Returns the `custom_criteria` string when one was provided, otherwise
+        returns the `risk` identifier set during initialisation.
 
         Returns:
             str: The active risk/criteria string forwarded to the Guardian model.
@@ -215,7 +215,7 @@ class GuardianCheck(Requirement):
         """Return a list of all available standard risk type identifiers.
 
         Returns:
-            list[str]: String values of all ``GuardianRisk`` enum members.
+            list[str]: String values of all `GuardianRisk` enum members.
         """
         return GuardianRisk.get_available_risks()
 
@@ -250,7 +250,7 @@ class GuardianCheck(Requirement):
         """Validate a conversation using Granite Guardian via the selected backend.
 
         Builds a minimal chat context from the current session context, invokes the
-        Guardian model, and parses its ``<score>yes/no</score>`` output.  A ``"No"``
+        Guardian model, and parses its `<score>yes/no</score>` output.  A `"No"`
         label (risk not detected) is treated as a passing validation result.
 
         Args:
@@ -263,8 +263,8 @@ class GuardianCheck(Requirement):
                 Guardian backend call.
 
         Returns:
-            ValidationResult: ``result=True`` when the content is considered safe
-            (Guardian returns ``"No"``), ``result=False`` otherwise.
+            ValidationResult: `result=True` when the content is considered safe
+            (Guardian returns `"No"`), `result=False` otherwise.
         """
         logger = self._logger
 

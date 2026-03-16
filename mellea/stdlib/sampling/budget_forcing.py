@@ -25,25 +25,25 @@ from .sampling_algos import think_budget_forcing
 class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
     """Sampling strategy that enforces a token budget for chain-of-thought reasoning.
 
-    Extends ``RejectionSamplingStrategy`` with explicit control over the ``<think>``
+    Extends `RejectionSamplingStrategy` with explicit control over the `<think>`
     block size and the answer block size. On each loop iteration,
-    ``think_budget_forcing`` interleaves forced-thinking and final-answer generation,
+    `think_budget_forcing` interleaves forced-thinking and final-answer generation,
     after which the standard rejection-sampling validation pass determines whether to
     accept or retry.
 
-    Currently only supports the ``OllamaModelBackend``.
+    Currently only supports the `OllamaModelBackend`.
 
     Args:
         think_max_tokens (int | None): Tokens allocated for the thinking block.
-            Defaults to ``4096``.
+            Defaults to `4096`.
         answer_max_tokens (int | None): Tokens allocated for the answer block.
-            ``None`` means unbounded.
+            `None` means unbounded.
         start_think_token (str | None): Token opening the thinking block.
-            Defaults to ``"<think>"``.
+            Defaults to `"<think>"`.
         end_think_token (str | None): Token closing the thinking block.
-            Defaults to ``"</think>"``.
+            Defaults to `"</think>"`.
         begin_response_token (str | None): Optional token opening the response
-            block. Defaults to ``""``.
+            block. Defaults to `""`.
         end_response_token (str): Token closing the response block.
         think_more_suffix (str | None): Suffix to force continued thinking.
             Empty string disables forcing.

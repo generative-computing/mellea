@@ -1,10 +1,10 @@
-"""``MObject``, ``Query``, ``Transform``, and ``MObjectProtocol`` for query/transform workflows.
+"""`MObject`, `Query`, `Transform`, and `MObjectProtocol` for query/transform workflows.
 
-Defines the ``MObjectProtocol`` protocol for objects that can be queried and
-transformed by an LLM, and the concrete ``MObject`` base class that implements it.
-Also provides the ``Query`` and ``Transform`` ``Component`` subtypes, which wrap an
+Defines the `MObjectProtocol` protocol for objects that can be queried and
+transformed by an LLM, and the concrete `MObject` base class that implements it.
+Also provides the `Query` and `Transform` `Component` subtypes, which wrap an
 object with a natural-language question or mutation instruction respectively. These
-primitives underpin ``@mify`` and can be composed directly to build document Q&A
+primitives underpin `@mify` and can be composed directly to build document Q&A
 or structured extraction pipelines.
 """
 
@@ -19,9 +19,9 @@ from ...core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 
 
 class Query(Component[str]):
-    """A ``Component`` that pairs an ``MObject`` with a natural-language question.
+    """A `Component` that pairs an `MObject` with a natural-language question.
 
-    Wraps the object and its query string into a ``TemplateRepresentation`` so the
+    Wraps the object and its query string into a `TemplateRepresentation` so the
     formatter can render both together in a prompt, optionally forwarding the
     object's tools and fields to the template.
 
@@ -47,7 +47,7 @@ class Query(Component[str]):
         """Format this query for the language model.
 
         Returns:
-            TemplateRepresentation | str: A ``TemplateRepresentation`` containing
+            TemplateRepresentation | str: A `TemplateRepresentation` containing
             the query string, the wrapped object, and any tools or fields from the
             object's own representation.
         """
@@ -77,10 +77,10 @@ class Query(Component[str]):
 
 
 class Transform(Component[str]):
-    """A ``Component`` that pairs an ``MObject`` with a natural-language mutation instruction.
+    """A `Component` that pairs an `MObject` with a natural-language mutation instruction.
 
     Wraps the object and its transformation description into a
-    ``TemplateRepresentation`` so the formatter can render both together in a prompt,
+    `TemplateRepresentation` so the formatter can render both together in a prompt,
     optionally forwarding the object's tools and fields to the template.
 
     Args:
@@ -105,7 +105,7 @@ class Transform(Component[str]):
         """Format this transform for the language model.
 
         Returns:
-            TemplateRepresentation | str: A ``TemplateRepresentation`` containing
+            TemplateRepresentation | str: A `TemplateRepresentation` containing
             the transformation description, the wrapped object, and any tools or
             fields from the object's own representation.
         """
@@ -153,7 +153,7 @@ class MObjectProtocol(Protocol):
             query (str): The query string.
 
         Returns:
-            Query: A ``Query`` component wrapping this object and the given
+            Query: A `Query` component wrapping this object and the given
             query string.
         """
         ...
@@ -165,7 +165,7 @@ class MObjectProtocol(Protocol):
             transformation (str): The transformation description string.
 
         Returns:
-            Transform: A ``Transform`` component wrapping this object and the
+            Transform: A `Transform` component wrapping this object and the
             given transformation description.
         """
         ...
@@ -173,7 +173,7 @@ class MObjectProtocol(Protocol):
     def content_as_string(self) -> str:
         """Return the content of this MObject as a plain string.
 
-        The default value is just ``str(self)``.
+        The default value is just `str(self)`.
         Subclasses should override this method.
 
         Returns:
@@ -184,7 +184,7 @@ class MObjectProtocol(Protocol):
     def _get_all_members(self) -> dict[str, Callable]:
         """Return all methods from this MObject that are not inherited from the superclass.
 
-        Undocumented methods and methods with ``[no-index]`` in their docstring
+        Undocumented methods and methods with `[no-index]` in their docstring
         are ignored.
         """
         ...
@@ -192,8 +192,8 @@ class MObjectProtocol(Protocol):
     def format_for_llm(self) -> TemplateRepresentation | str:
         """Return the template representation used by the formatter.
 
-        The default ``TemplateRepresentation`` uses automatic parsing for tools
-        and fields. Content is retrieved from ``content_as_string()``.
+        The default `TemplateRepresentation` uses automatic parsing for tools
+        and fields. Content is retrieved from `content_as_string()`.
 
         Returns:
             TemplateRepresentation | str: The formatted representation for the
@@ -207,13 +207,13 @@ class MObjectProtocol(Protocol):
 
 
 class MObject(Component[str]):
-    """An extension of ``Component`` for adding query and transform operations.
+    """An extension of `Component` for adding query and transform operations.
 
     Args:
-        query_type (type): The ``Query`` subclass to use when constructing query
-            components. Defaults to ``Query``.
-        transform_type (type): The ``Transform`` subclass to use when constructing
-            transform components. Defaults to ``Transform``.
+        query_type (type): The `Query` subclass to use when constructing query
+            components. Defaults to `Query`.
+        transform_type (type): The `Transform` subclass to use when constructing
+            transform components. Defaults to `Transform`.
     """
 
     def __init__(
@@ -238,7 +238,7 @@ class MObject(Component[str]):
             query (str): The query string.
 
         Returns:
-            Query: A ``Query`` component wrapping this object and the given
+            Query: A `Query` component wrapping this object and the given
             query string.
         """
         return self._query_type(self, query)
@@ -250,7 +250,7 @@ class MObject(Component[str]):
             transformation (str): The transformation description string.
 
         Returns:
-            Transform: A ``Transform`` component wrapping this object and the
+            Transform: A `Transform` component wrapping this object and the
             given transformation description.
         """
         return self._transform_type(self, transformation)
@@ -258,7 +258,7 @@ class MObject(Component[str]):
     def content_as_string(self) -> str:
         """Return the content of this MObject as a plain string.
 
-        The default value is just ``str(self)``.
+        The default value is just `str(self)`.
         Subclasses should override this method.
 
         Returns:
@@ -269,7 +269,7 @@ class MObject(Component[str]):
     def _get_all_members(self) -> dict[str, Callable]:
         """Return all methods from this MObject except methods of the superclass.
 
-        Undocumented methods and methods with ``[no-index]`` in their docstring
+        Undocumented methods and methods with `[no-index]` in their docstring
         are ignored.
         """
         all_members: dict[str, Callable] = dict(
@@ -293,8 +293,8 @@ class MObject(Component[str]):
     def format_for_llm(self) -> TemplateRepresentation | str:
         """Return the template representation used by the formatter.
 
-        The default ``TemplateRepresentation`` uses automatic parsing for tools
-        and fields. Content is retrieved from ``content_as_string()``.
+        The default `TemplateRepresentation` uses automatic parsing for tools
+        and fields. Content is retrieved from `content_as_string()`.
 
         Returns:
             TemplateRepresentation | str: The formatted representation for the

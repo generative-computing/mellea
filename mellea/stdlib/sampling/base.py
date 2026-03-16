@@ -44,7 +44,7 @@ class BaseSamplingStrategy(SamplingStrategy):
 
     Args:
         loop_budget (int): Maximum number of generate/validate cycles. Must be
-            greater than 0. Defaults to ``1``.
+            greater than 0. Defaults to `1`.
         requirements (list[Requirement] | None): Global requirements evaluated
             on every sample. When set, overrides per-call requirements.
 

@@ -91,7 +91,7 @@ def check_answerability(
 
     Args:
         question: Question that the user has posed in response to the last turn in
-            ``context``.
+            `context`.
         documents: Document snippets retrieved that may or may not answer the
             indicated question.
         context: Chat context containing the conversation thus far.
@@ -119,12 +119,12 @@ def rewrite_question(
 
     Args:
         question: Question that the user has posed in response to the last turn in
-            ``context``.
+            `context`.
         context: Chat context containing the conversation thus far.
         backend: Backend instance that supports adding the LoRA or aLoRA adapters.
 
     Returns:
-        Rewritten version of ``question``.
+        Rewritten version of `question`.
     """
     result_json = _call_intrinsic(
         "query_rewrite", context.add(Message("user", question)), backend
@@ -176,8 +176,8 @@ def find_citations(
 
     Args:
         response: Potential assistant response.
-        documents: Documents that were used to generate ``response``. These documents
-            should set the ``doc_id`` field; otherwise the intrinsic will be unable to
+        documents: Documents that were used to generate `response`. These documents
+            should set the `doc_id` field; otherwise the intrinsic will be unable to
             specify which document was the source of a given citation.
         context: Context of the dialog between user and assistant at the point where
             the user has just asked a question that will be answered with RAG documents.
@@ -185,9 +185,9 @@ def find_citations(
             intrinsic.
 
     Returns:
-        List of records with the following fields: ``response_begin``,
-        ``response_end``, ``response_text``, ``citation_doc_id``, ``citation_begin``,
-        ``citation_end``, ``citation_text``. Begin and end offsets are character
+        List of records with the following fields: `response_begin`,
+        `response_end`, `response_text`, `citation_doc_id`, `citation_begin`,
+        `citation_end`, `citation_text`. Begin and end offsets are character
         offsets into their respective UTF-8 strings.
     """
     result_json = _call_intrinsic(
@@ -241,16 +241,16 @@ def flag_hallucinated_content(
 
     Args:
         response: The assistant's response to the user's question in the last turn
-            of ``context``.
-        documents: Document snippets that were used to generate ``response``.
+            of `context`.
+        documents: Document snippets that were used to generate `response`.
         context: A chat log that ends with a user asking a question.
         backend: Backend instance that supports the adapters that implement this
             intrinsic.
 
     Returns:
-        List of records with the following fields: ``response_begin``,
-        ``response_end``, ``response_text``, ``faithfulness_likelihood``,
-        ``explanation``.
+        List of records with the following fields: `response_begin`,
+        `response_end`, `response_text`, `faithfulness_likelihood`,
+        `explanation`.
     """
     result_json = _call_intrinsic(
         "hallucination_detection",
@@ -272,8 +272,8 @@ def rewrite_answer_for_relevance(
 
     Args:
         response: The assistant's response to the user's question in the last turn
-            of ``context``.
-        documents: Document snippets that were used to generate ``response``.
+            of `context`.
+        documents: Document snippets that were used to generate `response`.
         context: A chat log that ends with a user asking a question.
         backend: Backend instance that supports the adapters that implement this
             intrinsic.

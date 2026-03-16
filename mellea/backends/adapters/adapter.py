@@ -1,10 +1,10 @@
 """Adapter classes for adding fine-tuned modules to inference backends.
 
-Defines the abstract ``Adapter`` base class and its concrete subclasses
-``LocalHFAdapter`` (for locally loaded HuggingFace models) and ``IntrinsicAdapter``
+Defines the abstract `Adapter` base class and its concrete subclasses
+`LocalHFAdapter` (for locally loaded HuggingFace models) and `IntrinsicAdapter`
 (for adapters whose metadata is stored in Mellea's intrinsic catalog). Also provides
-``get_adapter_for_intrinsic`` for resolving the right adapter class given an
-intrinsic name, and ``AdapterMixin`` for backends that support runtime adapter
+`get_adapter_for_intrinsic` for resolving the right adapter class given an
+intrinsic name, and `AdapterMixin` for backends that support runtime adapter
 loading and unloading.
 """
 
@@ -25,18 +25,18 @@ class Adapter(abc.ABC):
     """An adapter that can be added to a single backend.
 
     An adapter can only be registered with one backend at a time. Use
-    ``adapter.qualified_name`` when referencing the adapter after adding it.
+    `adapter.qualified_name` when referencing the adapter after adding it.
 
     Args:
         name (str): Human-readable name of the adapter.
         adapter_type (AdapterType): Enum describing the adapter type (e.g.
-            ``AdapterType.LORA`` or ``AdapterType.ALORA``).
+            `AdapterType.LORA` or `AdapterType.ALORA`).
 
     Attributes:
         qualified_name (str): Unique name used for loading and lookup; formed
-            as ``"<name>_<adapter_type.value>"``.
+            as `"<name>_<adapter_type.value>"`.
         backend (Backend | None): The backend this adapter has been added to,
-            or ``None`` if not yet added.
+            or `None` if not yet added.
         path (str | None): Filesystem path to the adapter weights; set when
             the adapter is added to a backend.
     """
@@ -58,7 +58,7 @@ class Adapter(abc.ABC):
 class LocalHFAdapter(Adapter):
     """Abstract adapter subclass for locally loaded HuggingFace model backends.
 
-    Subclasses must implement ``get_local_hf_path`` to return the filesystem path
+    Subclasses must implement `get_local_hf_path` to return the filesystem path
     from which adapter weights should be loaded given a base model name.
     """
 
@@ -68,7 +68,7 @@ class LocalHFAdapter(Adapter):
 
         Args:
             base_model_name (str): The base model name; typically the last component
-                of the HuggingFace model ID (e.g. ``"granite-4.0-micro"``).
+                of the HuggingFace model ID (e.g. `"granite-4.0-micro"`).
 
         Returns:
             str: Filesystem path to the adapter weights directory.
@@ -83,29 +83,29 @@ class IntrinsicAdapter(LocalHFAdapter):
 
     * implement intrinsic functions
     * are packaged as LoRA or aLoRA adapters on top of a base model
-    * use the shared model loading code in ``mellea.formatters.granite.intrinsics``
+    * use the shared model loading code in `mellea.formatters.granite.intrinsics`
     * use the shared input and output processing code in
-      ``mellea.formatters.granite.intrinsics``
+      `mellea.formatters.granite.intrinsics`
 
     Args:
-        intrinsic_name (str): Name of the intrinsic (e.g. ``"answerability"``); the
-            adapter's ``qualified_name`` will be derived from this.
+        intrinsic_name (str): Name of the intrinsic (e.g. `"answerability"`); the
+            adapter's `qualified_name` will be derived from this.
         adapter_type (AdapterType): Enum describing the adapter type; defaults to
-            ``AdapterType.ALORA``.
+            `AdapterType.ALORA`.
         config_file (str | pathlib.Path | None): Path to a YAML config file defining
             the intrinsic's I/O transformations; mutually exclusive with
-            ``config_dict``.
+            `config_dict`.
         config_dict (dict | None): Dict defining the intrinsic's I/O transformations;
-            mutually exclusive with ``config_file``.
+            mutually exclusive with `config_file`.
         base_model_name (str | None): Base model name used to look up the I/O
-            processing config when neither ``config_file`` nor ``config_dict`` are
+            processing config when neither `config_file` nor `config_dict` are
             provided.
 
     Attributes:
         intrinsic_name (str): Name of the intrinsic this adapter implements.
         intrinsic_metadata (IntriniscsCatalogEntry): Catalog metadata for the intrinsic.
         base_model_name (str | None): Base model name provided at construction, if any.
-        adapter_type (AdapterType): The adapter type (``LORA`` or ``ALORA``).
+        adapter_type (AdapterType): The adapter type (`LORA` or `ALORA`).
         config (dict): Parsed I/O transformation configuration for the intrinsic.
     """
 
@@ -178,7 +178,7 @@ class IntrinsicAdapter(LocalHFAdapter):
 
         Args:
             base_model_name (str): The base model name; typically the last component
-                of the HuggingFace model ID (e.g. ``"granite-3.3-8b-instruct"``).
+                of the HuggingFace model ID (e.g. `"granite-3.3-8b-instruct"`).
 
         Returns:
             str: Filesystem path to the downloaded adapter weights directory.
@@ -217,15 +217,15 @@ def get_adapter_for_intrinsic(
     """Find an adapter from a dict of available adapters based on the intrinsic name and its allowed adapter types.
 
     Args:
-        intrinsic_name (str): The name of the intrinsic, e.g. ``"answerability"``.
+        intrinsic_name (str): The name of the intrinsic, e.g. `"answerability"`.
         intrinsic_adapter_types (list[AdapterType] | tuple[AdapterType, ...]): The
             adapter types allowed for this intrinsic, e.g.
-            ``[AdapterType.ALORA, AdapterType.LORA]``.
+            `[AdapterType.ALORA, AdapterType.LORA]`.
         available_adapters (dict[str, T]): The available adapters to choose from;
-            maps ``adapter.qualified_name`` to the adapter object.
+            maps `adapter.qualified_name` to the adapter object.
 
     Returns:
-        T | None: The first matching adapter found, or ``None`` if no match exists.
+        T | None: The first matching adapter found, or `None` if no match exists.
     """
     adapter = None
     for adapter_type in intrinsic_adapter_types:
@@ -242,8 +242,8 @@ class AdapterMixin(Backend, abc.ABC):
 
     Attributes:
         base_model_name (str): The short model name used to identify adapter
-            variants (e.g. ``"granite-3.3-8b-instruct"`` for
-            ``"ibm-granite/granite-3.3-8b-instruct"``).
+            variants (e.g. `"granite-3.3-8b-instruct"` for
+            `"ibm-granite/granite-3.3-8b-instruct"`).
     """
 
     @property
@@ -252,7 +252,7 @@ class AdapterMixin(Backend, abc.ABC):
         """Return the short model name used for adapter variant lookup.
 
         Returns:
-            str: The base model name (e.g. ``"granite-3.3-8b-instruct"``).
+            str: The base model name (e.g. `"granite-3.3-8b-instruct"`).
         """
 
     @abc.abstractmethod
@@ -270,11 +270,11 @@ class AdapterMixin(Backend, abc.ABC):
     def load_adapter(self, adapter_qualified_name: str):
         """Load a previously registered adapter into the underlying model.
 
-        The adapter must have been registered via ``add_adapter`` before calling
+        The adapter must have been registered via `add_adapter` before calling
         this method.
 
         Args:
-            adapter_qualified_name (str): The ``adapter.qualified_name`` of the
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
                 adapter to load.
         """
 
@@ -283,7 +283,7 @@ class AdapterMixin(Backend, abc.ABC):
         """Unload a previously loaded adapter from the underlying model.
 
         Args:
-            adapter_qualified_name (str): The ``adapter.qualified_name`` of the
+            adapter_qualified_name (str): The `adapter.qualified_name` of the
                 adapter to unload.
         """
 
@@ -293,7 +293,7 @@ class AdapterMixin(Backend, abc.ABC):
 
         Returns:
             list[str]: Qualified adapter names for all adapters that have been
-                loaded via ``load_adapter``.
+                loaded via `load_adapter`.
 
         Raises:
             NotImplementedError: If the concrete backend subclass has not
@@ -311,16 +311,16 @@ class CustomIntrinsicAdapter(IntrinsicAdapter):
     a subclass of this class. Creating a subclass of this class appears to be a cosmetic
     boilerplate development task that isn't actually necessary for any existing use case.
 
-    This class has the same functionality as ``IntrinsicAdapter``, except that its
+    This class has the same functionality as `IntrinsicAdapter`, except that its
     constructor monkey-patches Mellea global variables to enable the backend to load
     the user's adapter. The code that performs this monkey-patching is marked as a
     temporary hack.
 
     Args:
         model_id (str): The HuggingFace model ID used for downloading model weights;
-            expected format is ``"<user-id>/<repo-name>"``.
+            expected format is `"<user-id>/<repo-name>"`.
         intrinsic_name (str | None): Catalog name for the intrinsic; defaults to the
-            repository name portion of ``model_id`` if not provided.
+            repository name portion of `model_id` if not provided.
         base_model_name (str): The short name of the base model (NOT its repo ID).
     """
 

@@ -14,18 +14,18 @@ from ..core import (
 class DummyBackend(Backend):
     """A backend for smoke testing.
 
-    Returns predetermined string responses in sequence, or ``"dummy"`` if no
+    Returns predetermined string responses in sequence, or `"dummy"` if no
     responses are provided. Intended for unit tests and integration smoke tests
     where real model inference is not needed.
 
     Args:
         responses (list[str] | None): Ordered list of strings to return on
-            successive ``generate_from_context`` calls, or ``None`` to always
-            return ``"dummy"``.
+            successive `generate_from_context` calls, or `None` to always
+            return `"dummy"`.
 
     Attributes:
-        idx (int): Index of the next response to return from ``responses``;
-            starts at ``0`` and increments on each call.
+        idx (int): Index of the next response to return from `responses`;
+            starts at `0` and increments on each call.
     """
 
     def __init__(self, responses: list[str] | None):
@@ -42,16 +42,16 @@ class DummyBackend(Backend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Return the next predetermined response for ``action`` given ``ctx``.
+        """Return the next predetermined response for `action` given `ctx`.
 
-        If ``responses`` is ``None``, always returns the string ``"dummy"``.
-        Otherwise returns the next item from ``responses`` in order.
+        If `responses` is `None`, always returns the string `"dummy"`.
+        Otherwise returns the next item from `responses` in order.
 
         Args:
             action (Component[C] | CBlock): The component or content block to generate
                 a completion for.
             ctx (Context): The current generation context.
-            format (type[BaseModelSubclass] | None): Must be ``None``; constrained
+            format (type[BaseModelSubclass] | None): Must be `None`; constrained
                 decoding is not supported.
             model_options (dict | None): Ignored by this backend.
             tool_calls (bool): Ignored by this backend.
@@ -61,8 +61,8 @@ class DummyBackend(Backend):
                 response and an updated context.
 
         Raises:
-            AssertionError: If ``format`` is not ``None``.
-            Exception: If all responses from ``responses`` have been consumed.
+            AssertionError: If `format` is not `None`.
+            Exception: If all responses from `responses` have been consumed.
         """
         assert format is None, "The DummyBackend does not support constrained decoding."
         if self.responses is None:

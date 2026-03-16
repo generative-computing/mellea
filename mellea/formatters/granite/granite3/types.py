@@ -24,13 +24,13 @@ class Hallucination(pydantic.BaseModel):
 
     Attributes:
         hallucination_id (str): Unique identifier for the hallucination entry.
-        risk (str): Risk level of the hallucination, e.g. ``"low"`` or ``"high"``.
+        risk (str): Risk level of the hallucination, e.g. `"low"` or `"high"`.
         reasoning (str | None): Optional model-provided reasoning for why this
             sentence was flagged.
         response_text (str): The portion of the response text that is flagged.
-        response_begin (int): Start character offset of ``response_text`` within
+        response_begin (int): Start character offset of `response_text` within
             the full response string.
-        response_end (int): End character offset (exclusive) of ``response_text``
+        response_end (int): End character offset (exclusive) of `response_text`
             within the full response string.
     """
 
@@ -49,15 +49,15 @@ class Citation(pydantic.BaseModel):
         citation_id (str): Unique identifier assigned to this citation.
         doc_id (str): Identifier of the source document being cited.
         context_text (str): Verbatim text from the source document that is cited.
-        context_begin (int): Start character offset of ``context_text`` within
+        context_begin (int): Start character offset of `context_text` within
             the source document.
-        context_end (int): End character offset (exclusive) of ``context_text``
+        context_end (int): End character offset (exclusive) of `context_text`
             within the source document.
         response_text (str): The portion of the response text that makes this
             citation.
-        response_begin (int): Start character offset of ``response_text`` within
+        response_begin (int): Start character offset of `response_text` within
             the response string.
-        response_end (int): End character offset (exclusive) of ``response_text``
+        response_end (int): End character offset (exclusive) of `response_text`
             within the response string.
     """
 
@@ -79,14 +79,14 @@ class Granite3Controls(pydantic.BaseModel):
     and originality style.
 
     Attributes:
-        citations (bool | None): When ``True``, instructs the model to annotate
+        citations (bool | None): When `True`, instructs the model to annotate
             factual claims with inline citation markers.
-        hallucinations (bool | None): When ``True``, instructs the model to
+        hallucinations (bool | None): When `True`, instructs the model to
             append a list of sentences that may be hallucinated.
-        length (str | None): Requested response length; must be ``"short"``,
-            ``"long"``, or ``None`` for no constraint.
+        length (str | None): Requested response length; must be `"short"`,
+            `"long"`, or `None` for no constraint.
         originality (str | None): Requested response originality style; must be
-            ``"extractive"``, ``"abstractive"``, or ``None``.
+            `"extractive"`, `"abstractive"`, or `None`.
     """
 
     citations: bool | None = None
@@ -127,8 +127,8 @@ class Granite3Kwargs(ChatTemplateKwargs, NoDefaultsMixin):
         controls (Granite3Controls | None): Optional output control flags that
             enable or configure citations, hallucination detection, response
             length, and originality style.
-        thinking (bool): When ``True``, enables chain-of-thought reasoning mode.
-            Defaults to ``False``.
+        thinking (bool): When `True`, enables chain-of-thought reasoning mode.
+            Defaults to `False`.
     """
 
     controls: Granite3Controls | None = None
@@ -158,8 +158,8 @@ class Granite3ChatCompletion(GraniteChatCompletion):
         """Return whether chain-of-thought thinking mode is enabled.
 
         Returns:
-            bool: ``True`` if the ``thinking`` flag is set in the chat template
-                kwargs; ``False`` otherwise.
+            bool: `True` if the `thinking` flag is set in the chat template
+                kwargs; `False` otherwise.
         """
         kwargs = self.extra_body.chat_template_kwargs if self.extra_body else None
         return bool(kwargs and isinstance(kwargs, Granite3Kwargs) and kwargs.thinking)
@@ -170,7 +170,7 @@ class Granite3ChatCompletion(GraniteChatCompletion):
         """Validate Granite 3 chat template kwargs and convert to dataclass.
 
         Validates kwargs that are specific to Granite 3 chat templates and converts
-        the ``chat_template_kwargs`` field to a Granite 3-specific dataclass.
+        the `chat_template_kwargs` field to a Granite 3-specific dataclass.
 
         Other arguments are currently passed through without checking.
         """

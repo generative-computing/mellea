@@ -40,7 +40,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
     results. If S1 Solver fails after exhausting the budget or shows no
     improvement, escalates to a single attempt with S2 Solver (slow model).
 
-    The strategy leverages ``ValidationResult.reason`` fields to provide targeted
+    The strategy leverages `ValidationResult.reason` fields to provide targeted
     feedback for repair, enabling more effective iterative improvement.
 
     Args:
@@ -51,9 +51,9 @@ class SOFAISamplingStrategy(SamplingStrategy):
         s2_solver_mode (Literal["fresh_start", "continue_chat", "best_attempt"]):
             How to invoke the S2 solver when S1 fails.
         loop_budget (int): Maximum number of S1 repair attempts before escalating
-            to S2. Must be greater than 0. Defaults to ``3``.
+            to S2. Must be greater than 0. Defaults to `3`.
         judge_backend (Backend | None): Optional backend for LLM-as-Judge
-            validation. If ``None``, falls back to the session backend.
+            validation. If `None`, falls back to the session backend.
         feedback_strategy (Literal["simple", "first_error", "all_errors"]):
             Detail level of repair feedback provided to the S1 solver.
 

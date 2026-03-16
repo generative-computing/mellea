@@ -1,10 +1,10 @@
-"""``Requirement`` interface for constrained and validated generation.
+"""`Requirement` interface for constrained and validated generation.
 
-A ``Requirement`` pairs a human-readable description with a validation function that
-inspects a ``Context`` (and optionally a backend) to determine whether a model output
-meets a constraint. ``ValidationResult`` carries the pass/fail verdict along with an
-optional reason, score, and the ``ModelOutputThunk`` produced during validation.
-Helper factories such as ``default_output_to_bool`` make it easy to build requirements
+A `Requirement` pairs a human-readable description with a validation function that
+inspects a `Context` (and optionally a backend) to determine whether a model output
+meets a constraint. `ValidationResult` carries the pass/fail verdict along with an
+optional reason, score, and the `ModelOutputThunk` produced during validation.
+Helper factories such as `default_output_to_bool` make it easy to build requirements
 without boilerplate.
 """
 
@@ -23,7 +23,7 @@ class ValidationResult:
         result (bool): Boolean indicating whether the requirement passed.
         reason (str | None): Optional human-readable explanation for the verdict.
         score (float | None): Optional numeric score returned by the validator.
-        thunk (ModelOutputThunk | None): The ``ModelOutputThunk`` produced during LLM-as-a-Judge validation, if applicable.
+        thunk (ModelOutputThunk | None): The `ModelOutputThunk` produced during LLM-as-a-Judge validation, if applicable.
         context (Context | None): The context associated with the validation backend call, if applicable.
 
     """
@@ -68,7 +68,7 @@ class ValidationResult:
         """Return a boolean value based on the validation result.
 
         Returns:
-            bool: ``True`` if the requirement passed, ``False`` otherwise.
+            bool: `True` if the requirement passed, `False` otherwise.
         """
         return self._result
 
@@ -84,10 +84,10 @@ def default_output_to_bool(x: CBlock | str) -> bool:
     also checks if any of the words in the output are "yes" (case-insensitive).
 
     Args:
-        x: The model output to evaluate, as a ``CBlock`` or plain string.
+        x: The model output to evaluate, as a `CBlock` or plain string.
 
     Returns:
-        ``True`` if the output indicates a "yes" answer, ``False`` otherwise.
+        `True` if the output indicates a "yes" answer, `False` otherwise.
     """
     output = str(x)
 
@@ -106,12 +106,12 @@ class Requirement(Component[str]):
 
     Args:
         description (str | None): A natural-language description of the requirement. Sometimes included in
-            ``Instruction`` prompts; use ``check_only=True`` to suppress this.
+            `Instruction` prompts; use `check_only=True` to suppress this.
         validation_fn (Callable[[Context], ValidationResult] | None): If provided, this function is executed
-            instead of LLM-as-a-Judge. The ``bool()`` of its return value defines pass/fail.
+            instead of LLM-as-a-Judge. The `bool()` of its return value defines pass/fail.
         output_to_bool (Callable[[CBlock | str], bool] | None): Translates LLM-as-a-Judge output to a boolean.
             Defaults to a "yes"-detection heuristic.
-        check_only (bool): When ``True``, the requirement description is excluded from ``Instruction`` prompts.
+        check_only (bool): When `True`, the requirement description is excluded from `Instruction` prompts.
 
     Attributes:
         description (str | None): A natural-language description of the requirement.
@@ -119,7 +119,7 @@ class Requirement(Component[str]):
             output into a boolean pass/fail result.
         validation_fn (Callable[[Context], ValidationResult] | None): Optional custom validation
             function that bypasses the LLM-as-a-Judge strategy entirely.
-        check_only (bool): When ``True``, the requirement description is excluded from ``Instruction``
+        check_only (bool): When `True`, the requirement description is excluded from `Instruction`
             prompts to avoid influencing model output.
     """
 
@@ -150,12 +150,12 @@ class Requirement(Component[str]):
     ) -> ValidationResult:
         """Chooses the appropriate validation strategy and applies it to the given context.
 
-        Uses ``validation_fn`` if one was provided, otherwise falls back to LLM-as-a-Judge
+        Uses `validation_fn` if one was provided, otherwise falls back to LLM-as-a-Judge
         by generating a judgement response with the backend.
 
         Args:
             backend (Backend): The inference backend used when the LLM-as-a-Judge strategy is selected.
-            ctx (Context): The context to validate, which must contain a ``ModelOutputThunk`` as its last output.
+            ctx (Context): The context to validate, which must contain a `ModelOutputThunk` as its last output.
             format (type[BaseModelSubclass] | None): Optional structured output format for the judgement call.
             model_options (dict | None): Optional model options to pass to the backend during the judgement call.
 
@@ -194,14 +194,14 @@ class Requirement(Component[str]):
         return []
 
     def format_for_llm(self) -> TemplateRepresentation | str:
-        """Returns a ``TemplateRepresentation`` for LLM-as-a-Judge evaluation of this requirement.
+        """Returns a `TemplateRepresentation` for LLM-as-a-Judge evaluation of this requirement.
 
-        Populates the template with the requirement's ``description`` and the stored model
-        ``_output``. Must only be called from within a ``validate`` call for this same requirement,
-        after ``_output`` has been set.
+        Populates the template with the requirement's `description` and the stored model
+        `_output`. Must only be called from within a `validate` call for this same requirement,
+        after `_output` has been set.
 
         Returns:
-            TemplateRepresentation | str: A ``TemplateRepresentation`` containing the description
+            TemplateRepresentation | str: A `TemplateRepresentation` containing the description
             and the model output to be judged.
         """
         assert self._output is not None, (

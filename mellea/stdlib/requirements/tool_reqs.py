@@ -1,9 +1,9 @@
-"""``Requirement`` factories for tool-use validation.
+"""`Requirement` factories for tool-use validation.
 
-Provides ``uses_tool``, a ``Requirement`` factory that validates whether a model
+Provides `uses_tool`, a `Requirement` factory that validates whether a model
 response includes a call to a specified tool — useful when you need to enforce tool
 invocation via rejection sampling rather than relying solely on the model's
-``tool_choice`` setting. Also provides ``tool_arg_validator``, which validates the
+`tool_choice` setting. Also provides `tool_arg_validator`, which validates the
 value of a specific argument to a named tool. Both accept either the tool's string
 name or its callable.
 """
@@ -30,10 +30,10 @@ def uses_tool(tool_name: str | Callable, check_only: bool = False) -> Requiremen
         tool_name: The tool that must be called; this can be either the name of the tool or the Callable for the tool.
         check_only: Propagates to the Requirement.
 
-    Use ``tool_choice`` if the OpenAI ``tool_choice`` model option is supported by your model and inference engine.
+    Use `tool_choice` if the OpenAI `tool_choice` model option is supported by your model and inference engine.
 
     Returns:
-        A ``Requirement`` that validates whether the specified tool was called.
+        A `Requirement` that validates whether the specified tool was called.
     """
     tool_name = _name2str(tool_name)
 
@@ -74,7 +74,7 @@ def tool_arg_validator(
         2. should this be done automatically when the user provides asserts in their function body?
 
     Returns:
-        A ``Requirement`` that validates the specified tool argument.
+        A `Requirement` that validates the specified tool argument.
     """
     if tool_name:
         tool_name = _name2str(tool_name)

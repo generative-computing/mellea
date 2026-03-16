@@ -1,13 +1,13 @@
 """Code interpreter tool and execution environments for agentic workflows.
 
-Provides ``ExecutionResult`` (capturing stdout, stderr, success, and optional static
-analysis output) and three concrete ``ExecutionEnvironment`` implementations:
-``StaticAnalysisEnvironment`` (parse and import-check only, no execution),
-``UnsafeEnvironment`` (subprocess execution in the current Python environment), and
-``LLMSandboxEnvironment`` (Docker-isolated execution via ``llm-sandbox``). All
-environments support an optional ``allowed_imports`` allowlist. The top-level
-``code_interpreter`` and ``local_code_interpreter`` functions are ready to be wrapped
-as ``MelleaTool`` instances for ReACT or other agentic loops.
+Provides `ExecutionResult` (capturing stdout, stderr, success, and optional static
+analysis output) and three concrete `ExecutionEnvironment` implementations:
+`StaticAnalysisEnvironment` (parse and import-check only, no execution),
+`UnsafeEnvironment` (subprocess execution in the current Python environment), and
+`LLMSandboxEnvironment` (Docker-isolated execution via `llm-sandbox`). All
+environments support an optional `allowed_imports` allowlist. The top-level
+`code_interpreter` and `local_code_interpreter` functions are ready to be wrapped
+as `MelleaTool` instances for ReACT or other agentic loops.
 """
 
 import ast
@@ -40,13 +40,13 @@ class ExecutionResult:
     TODO: should we also be trying to pass back the value of the final expression evaluated, or the value of locals() and globals()?
 
     Args:
-        success (bool): ``True`` if execution succeeded (exit code 0 or
-            static-analysis passed); ``False`` otherwise.
-        stdout (str | None): Captured standard output, or ``None`` if
+        success (bool): `True` if execution succeeded (exit code 0 or
+            static-analysis passed); `False` otherwise.
+        stdout (str | None): Captured standard output, or `None` if
             execution was skipped.
-        stderr (str | None): Captured standard error, or ``None`` if
+        stderr (str | None): Captured standard error, or `None` if
             execution was skipped.
-        skipped (bool): ``True`` when execution was not attempted.
+        skipped (bool): `True` when execution was not attempted.
         skip_message (str | None): Explanation of why execution was skipped.
         analysis_result (Any | None): Optional payload from static-analysis
             environments.
@@ -95,7 +95,7 @@ class ExecutionEnvironment(ABC):
 
     Args:
         allowed_imports (list[str] | None): Allowlist of top-level module names
-            that generated code may import. ``None`` disables the import check.
+            that generated code may import. `None` disables the import check.
 
     """
 
@@ -129,8 +129,8 @@ class StaticAnalysisEnvironment(ExecutionEnvironment):
                 compatibility.
 
         Returns:
-            ExecutionResult: Result with ``skipped=True`` and the parsed AST in
-            ``analysis_result`` on success, or a syntax-error description on
+            ExecutionResult: Result with `skipped=True` and the parsed AST in
+            `analysis_result` on success, or a syntax-error description on
             failure.
         """
         try:
@@ -243,9 +243,9 @@ class LLMSandboxEnvironment(ExecutionEnvironment):
     def execute(self, code: str, timeout: int) -> ExecutionResult:
         """Execute code using llm-sandbox in an isolated Docker container.
 
-        Checks the import allowlist first, then delegates to a ``SandboxSession``
-        from the ``llm-sandbox`` package. Returns a skipped result if
-        ``llm-sandbox`` is not installed.
+        Checks the import allowlist first, then delegates to a `SandboxSession`
+        from the `llm-sandbox` package. Returns a skipped result if
+        `llm-sandbox` is not installed.
 
         Args:
             code (str): The Python source code to execute.
@@ -339,7 +339,7 @@ def code_interpreter(code: str) -> ExecutionResult:
         code: The Python code to execute.
 
     Returns:
-        An ``ExecutionResult`` with stdout, stderr, and a success flag.
+        An `ExecutionResult` with stdout, stderr, and a success flag.
     """
     exec_env = LLMSandboxEnvironment(allowed_imports=None)
     return exec_env.execute(code, 60)
@@ -352,7 +352,7 @@ def local_code_interpreter(code: str) -> ExecutionResult:
         code: The Python code to execute.
 
     Returns:
-        An ``ExecutionResult`` with stdout, stderr, and a success flag.
+        An `ExecutionResult` with stdout, stderr, and a success flag.
     """
     exec_env = UnsafeEnvironment(allowed_imports=None)
     return exec_env.execute(code, 60)

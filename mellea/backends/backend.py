@@ -1,10 +1,10 @@
-"""``FormatterBackend``: base class for prompt-engineering backends.
+"""`FormatterBackend`: base class for prompt-engineering backends.
 
-``FormatterBackend`` extends the abstract ``Backend`` with a ``ChatFormatter`` and
-a ``ModelIdentifier``, bridging mellea's generative programming primitives to models
+`FormatterBackend` extends the abstract `Backend` with a `ChatFormatter` and
+a `ModelIdentifier`, bridging mellea's generative programming primitives to models
 that do not yet natively support spans or structured fine-tuning. Concrete backend
-implementations (e.g. Ollama, HuggingFace, OpenAI) subclass ``FormatterBackend`` and
-supply the model-specific ``generate_from_context`` logic.
+implementations (e.g. Ollama, HuggingFace, OpenAI) subclass `FormatterBackend` and
+supply the model-specific `generate_from_context` logic.
 """
 
 import abc
@@ -31,7 +31,7 @@ class FormatterBackend(Backend, abc.ABC):
     Args:
         model_id (str | ModelIdentifier): The model identifier to use for generation.
         formatter (ChatFormatter): The formatter used to convert components into prompts.
-        model_options (dict | None): Default model options; if ``None``, an empty dict
+        model_options (dict | None): Default model options; if `None`, an empty dict
             is used.
 
     """

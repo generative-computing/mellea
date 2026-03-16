@@ -73,13 +73,13 @@ class LocalVLLMBackend(FormatterBackend):
     Args:
         model_id (str | ModelIdentifier): HuggingFace model ID used to load model weights via vLLM.
         formatter (ChatFormatter | None): Formatter for rendering components into prompts.
-            Defaults to a ``TemplateFormatter`` for the given ``model_id``.
+            Defaults to a `TemplateFormatter` for the given `model_id`.
         model_options (dict | None): Default model options for generation requests.
 
     Attributes:
         to_mellea_model_opts_map (dict): Mapping from backend-specific option names to
-            Mellea ``ModelOption`` sentinel keys.
-        from_mellea_model_opts_map (dict): Mapping from Mellea ``ModelOption`` sentinel
+            Mellea `ModelOption` sentinel keys.
+        from_mellea_model_opts_map (dict): Mapping from Mellea `ModelOption` sentinel
             keys to backend-specific option names.
         engine_args (dict): vLLM engine arguments used at instantiation; retained so the
             engine can be restarted when the event loop changes.
@@ -249,7 +249,7 @@ class LocalVLLMBackend(FormatterBackend):
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generate a completion for ``action`` given the current ``ctx`` using the vLLM engine.
+        """Generate a completion for `action` given the current `ctx` using the vLLM engine.
 
         Args:
             action (Component[C] | CBlock): The component or content block to generate a
@@ -260,13 +260,13 @@ class LocalVLLMBackend(FormatterBackend):
             model_options (dict | None): Per-call model options that override the
                 backend's defaults.
             generate_logs (list[GenerateLog] | None): Optional list to which a
-                ``GenerateLog`` entry will be appended.
-            tool_calls (bool): If ``True``, expose available tools to the model and
+                `GenerateLog` entry will be appended.
+            tool_calls (bool): If `True`, expose available tools to the model and
                 parse tool-call responses.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
-                and an updated context that includes ``action`` and the new output.
+                and an updated context that includes `action` and the new output.
         """
         await self.do_generate_walk(action)
 
@@ -392,7 +392,7 @@ class LocalVLLMBackend(FormatterBackend):
         """Accumulate text from a single vLLM output chunk into the model output thunk.
 
         Called during streaming or final generation to add each incremental result to
-        ``mot._underlying_value``.
+        `mot._underlying_value`.
 
         Args:
             mot (ModelOutputThunk): The output thunk being populated.
@@ -424,7 +424,7 @@ class LocalVLLMBackend(FormatterBackend):
                 class used during generation, if any.
             tool_calls (bool): Whether tool calling was enabled for this request.
             tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
-            seed: The random seed used during generation, or ``None``.
+            seed: The random seed used during generation, or `None`.
         """
         # The ModelOutputThunk must be computed by this point.
         assert mot.value is not None

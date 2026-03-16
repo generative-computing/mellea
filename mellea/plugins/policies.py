@@ -19,18 +19,18 @@ def _build_policies() -> dict[str, Any]:
 
     Mutability is enforced at **two layers**:
 
-    1. **Execution mode** (cpex) — only ``SEQUENTIAL`` and ``TRANSFORM`` plugins
-       can modify payloads.  ``AUDIT``, ``CONCURRENT``, and ``FIRE_AND_FORGET``
+    1. **Execution mode** (cpex) — only `SEQUENTIAL` and `TRANSFORM` plugins
+       can modify payloads.  `AUDIT`, `CONCURRENT`, and `FIRE_AND_FORGET`
        plugins have their modifications silently discarded by cpex regardless of
        what this table says.
 
     2. **Field-level policy** (this table) — for modes that *can* modify, this
        table restricts *which* fields are writable.  cpex applies
-       ``HookPayloadPolicy`` after each plugin returns, accepting only changes
+       `HookPayloadPolicy` after each plugin returns, accepting only changes
        to listed fields and discarding the rest.
 
     Hooks absent from this table are observe-only; with
-    ``DefaultHookPolicy.DENY`` (the Mellea default), any modification attempt
+    `DefaultHookPolicy.DENY` (the Mellea default), any modification attempt
     on an unlisted hook is rejected by cpex at runtime.
     """
     if not _HAS_PLUGIN_FRAMEWORK:
