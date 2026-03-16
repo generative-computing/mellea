@@ -57,7 +57,7 @@ def ensure_plugin_manager() -> Any:
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
             "Plugin system requires the ContextForge plugin framework. "
-            "Install it with: pip install 'mellea[contextforge]'"
+            "Install it with: pip install 'mellea[hooks]'"
         )
 
     if _plugin_manager is None:
@@ -93,7 +93,7 @@ async def initialize_plugins(
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
             "Plugin system requires the ContextForge plugin framework. "
-            "Install it with: pip install 'mellea[contextforge]'"
+            "Install it with: pip install 'mellea[hooks]'"
         )
 
     register_mellea_hooks()

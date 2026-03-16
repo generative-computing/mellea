@@ -134,23 +134,22 @@ class PluginViolationError(Exception):
         super().__init__(f"Plugin blocked {hook_type}: {detail}{reason}")
 
 
-class MelleaBasePayload(PluginPayload):
-    """Frozen base — all payloads are immutable by design.
-
-    Plugins must use ``model_copy(update={...})`` to propose modifications
-    and return the copy via ``PluginResult.modified_payload``.  The plugin
-    manager applies the hook's ``HookPayloadPolicy`` to filter changes to
-    writable fields only.
-    """
-
-    session_id: str | None = None
-    request_id: str = ""
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    hook: str = ""
-    user_metadata: dict[str, Any] = Field(default_factory=dict)
-
-
 if _HAS_PLUGIN_FRAMEWORK:
+
+    class MelleaBasePayload(PluginPayload):
+        """Frozen base — all payloads are immutable by design.
+
+        Plugins must use ``model_copy(update={...})`` to propose modifications
+        and return the copy via ``PluginResult.modified_payload``.  The plugin
+        manager applies the hook's ``HookPayloadPolicy`` to filter changes to
+        writable fields only.
+        """
+
+        session_id: str | None = None
+        request_id: str = ""
+        timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+        hook: str = ""
+        user_metadata: dict[str, Any] = Field(default_factory=dict)
 
     class MelleaPlugin(_CpexPlugin):
         """Base class for Mellea plugins with lifecycle hooks and typed accessors.
@@ -230,13 +229,23 @@ if _HAS_PLUGIN_FRAMEWORK:
 
 else:
     # Provide a stub when the plugin framework is not installed.
-    class MelleaPlugin:  # type: ignore[no-redef]
-        """Stub — install ``mcp-contextforge-gateway`` for full plugin support."""
+    class MelleaBasePayload:  # type: ignore[no-redef]
+        """Stub — install ``"mellea[hooks]"`` for full plugin support."""
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D107
             raise ImportError(
                 "MelleaPlugin requires the ContextForge plugin framework. "
-                "Install it with: pip install 'mellea[contextforge]'"
+                "Install it with: pip install 'mellea[hooks]'"
+            )
+
+    # Provide a stub when the plugin framework is not installed.
+    class MelleaPlugin:  # type: ignore[no-redef]
+        """Stub — install ``"mellea[hooks]"`` for full plugin support."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D107
+            raise ImportError(
+                "MelleaPlugin requires the ContextForge plugin framework. "
+                "Install it with: pip install 'mellea[hooks]'"
             )
 
     # Provide an alias when the plugin framework is not installed.
