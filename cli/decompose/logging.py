@@ -1,12 +1,6 @@
+import logging
+import sys
 from enum import StrEnum
-
-try:
-    from mellea.logger import get_logger as _mellea_get_logger
-except ImportError as e:
-    raise ImportError(
-        "Failed to import Mellea logger. "
-        "Please update m_decompose/logging.py to match your local Mellea logger import path."
-    ) from e
 
 
 class LogMode(StrEnum):
@@ -14,19 +8,36 @@ class LogMode(StrEnum):
     debug = "debug"
 
 
-def get_logger(name: str, log_mode: LogMode = LogMode.demo):
-    logger = _mellea_get_logger(name)
-
-    # Assumes Mellea logger supports setLevel like stdlib logger.
-    if log_mode == LogMode.debug:
-        logger.setLevel("DEBUG")
-    else:
-        logger.setLevel("INFO")
-
-    return logger
+_CONFIGURED = False
 
 
-def log_section(logger, title: str) -> None:
+def configure_logging(log_mode: LogMode = LogMode.demo) -> None:
+    global _CONFIGURED
+
+    level = logging.DEBUG if log_mode == LogMode.debug else logging.INFO
+
+    root_logger = logging.getLogger()
+
+    if not _CONFIGURED:
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(
+            logging.Formatter("[%(levelname)s] %(name)s | %(message)s")
+        )
+        root_logger.handlers.clear()
+        root_logger.addHandler(handler)
+        _CONFIGURED = True
+
+    root_logger.setLevel(level)
+
+    logging.getLogger("m_decompose").setLevel(level)
+    logging.getLogger("mellea").setLevel(level)
+
+
+def get_logger(name: str) -> logging.Logger:
+    return logging.getLogger(name)
+
+
+def log_section(logger: logging.Logger, title: str) -> None:
     logger.info("")
     logger.info("=" * 72)
     logger.info(title)

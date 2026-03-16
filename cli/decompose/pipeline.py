@@ -8,7 +8,7 @@ from mellea.backends import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.backends.openai import OpenAIBackend
 
-from .logging import LogMode, get_logger, log_section
+from .logging import LogMode, configure_logging, get_logger, log_section
 from .prompt_modules import (
     constraint_extractor,
     general_instructions,
@@ -80,9 +80,9 @@ def build_backend_session(
     backend_req_timeout: int = 300,
     backend_endpoint: str | None = None,
     backend_api_key: str | None = None,
-    log_mode: LogMode = LogMode.demo,
+    log_mode: LogMode = LogMode.demo,  # kept for signature compatibility
 ) -> MelleaSession:
-    logger = get_logger("m_decompose.backend", log_mode)
+    logger = get_logger("m_decompose.backend")
     log_section(logger, "backend")
 
     logger.info("backend      : %s", backend.value)
@@ -149,9 +149,9 @@ def build_backend_session(
 def task_decompose(
     m_session: MelleaSession,
     task_prompt: str,
-    log_mode: LogMode = LogMode.demo,
+    log_mode: LogMode = LogMode.demo,  # kept for compatibility
 ) -> tuple[list[SubtaskItem], list[str]]:
-    logger = get_logger("m_decompose.task_decompose", log_mode)
+    logger = get_logger("m_decompose.task_decompose")
     log_section(logger, "task_decompose")
 
     logger.info("generating subtask list")
@@ -181,9 +181,9 @@ def task_decompose(
 def constraint_validate(
     m_session: MelleaSession,
     task_constraints: list[str],
-    log_mode: LogMode = LogMode.demo,
+    log_mode: LogMode = LogMode.demo,  # kept for compatibility
 ) -> dict[str, ConstraintValData]:
-    logger = get_logger("m_decompose.constraint_validate", log_mode)
+    logger = get_logger("m_decompose.constraint_validate")
     log_section(logger, "constraint_validate")
 
     constraint_val_data: dict[str, ConstraintValData] = {}
@@ -191,7 +191,9 @@ def constraint_validate(
     for idx, cons_key in enumerate(task_constraints, start=1):
         logger.info("constraint [%02d]: %s", idx, cons_key)
 
-        val_strategy = validation_decision.generate(m_session, cons_key).parse() or "llm"
+        val_strategy = (
+            validation_decision.generate(m_session, cons_key).parse() or "llm"
+        )
         logger.info("  strategy: %s", val_strategy)
 
         val_fn: str | None = None
@@ -219,9 +221,9 @@ def task_execute(
     user_input_variable: list[str],
     subtasks: list[SubtaskItem],
     task_constraints: list[str],
-    log_mode: LogMode = LogMode.demo,
+    log_mode: LogMode = LogMode.demo,  # kept for compatibility
 ) -> list[SubtaskPromptConstraintsItem]:
-    logger = get_logger("m_decompose.task_execute", log_mode)
+    logger = get_logger("m_decompose.task_execute")
     log_section(logger, "task_execute")
 
     logger.info("generating prompt templates for subtasks")
@@ -246,7 +248,9 @@ def task_execute(
         ).parse()
     )
 
-    logger.info("constraint assignment completed: %d", len(subtask_prompts_with_constraints))
+    logger.info(
+        "constraint assignment completed: %d", len(subtask_prompts_with_constraints)
+    )
     for i, item in enumerate(subtask_prompts_with_constraints, start=1):
         logger.info(
             "  [%02d] tag=%s | assigned_constraints=%d",
@@ -271,9 +275,9 @@ def finalize_result(
     task_constraints: list[str],
     constraint_val_data: dict[str, ConstraintValData],
     subtask_prompts_with_constraints: list[SubtaskPromptConstraintsItem],
-    log_mode: LogMode = LogMode.demo,
+    log_mode: LogMode = LogMode.demo,  # kept for compatibility
 ) -> DecompPipelineResult:
-    logger = get_logger("m_decompose.finalize_result", log_mode)
+    logger = get_logger("m_decompose.finalize_result")
     log_section(logger, "finalize_result")
 
     decomp_subtask_result: list[DecompSubtasksResult] = []
@@ -316,7 +320,9 @@ def finalize_result(
         )
 
         logger.debug("  prompt_template=%s", subtask_result["prompt_template"])
-        logger.debug("  general_instructions=%s", subtask_result["general_instructions"])
+        logger.debug(
+            "  general_instructions=%s", subtask_result["general_instructions"]
+        )
 
         decomp_subtask_result.append(subtask_result)
 
@@ -356,7 +362,8 @@ def decompose(
     backend_api_key: str | None = None,
     log_mode: LogMode = LogMode.demo,
 ) -> DecompPipelineResult:
-    logger = get_logger("m_decompose.pipeline", log_mode)
+    configure_logging(log_mode)
+    logger = get_logger("m_decompose.pipeline")
     log_section(logger, "m_decompose pipeline")
 
     if user_input_variable is None:

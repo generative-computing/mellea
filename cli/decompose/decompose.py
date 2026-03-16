@@ -10,7 +10,7 @@ from typing import Annotated
 
 import typer
 
-from .logging import LogMode, get_logger, log_section
+from .logging import LogMode, configure_logging, get_logger, log_section
 from .pipeline import DecompBackend, DecompPipelineResult, DecompSubtasksResult
 
 
@@ -179,7 +179,8 @@ def run(
         ),
     ] = LogMode.demo,
 ) -> None:
-    logger = get_logger("m_decompose.cli", log_mode)
+    configure_logging(log_mode)
+    logger = get_logger("m_decompose.cli")
 
     try:
         from jinja2 import Environment, FileSystemLoader
