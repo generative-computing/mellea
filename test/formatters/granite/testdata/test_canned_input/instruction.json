@@ -1,0 +1,30 @@
+{
+  "messages": [
+    {
+      "content": "Welcome to fish detector.",
+      "role": "assistant"
+    },
+    {
+      "content": "I have a pet named George.",
+      "role": "user"
+    },
+    {
+      "content": "{ This text should be inside curly braces. }\nHere's the text of the last message: I have a pet named George.\nDoes the last message talk about fish? \nAll pets named 'George' are fish.\n",
+      "role": "user"
+    }
+  ],
+  "model": "dummy-model-1b",
+  "extra_body": {
+    "structured_outputs": {
+      "json": {
+        "type": "string",
+        "enum": [
+          "fish",
+          "not fish"
+        ]
+      }
+    }
+  },
+  "max_completion_tokens": 42,
+  "temperature": 0.75
+}

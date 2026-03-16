@@ -1,0 +1,29 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "{\"answer_relevance_analysis\": \"The inquiry asks for the attendees of the meeting. The response provides a vague and non-specific answer that does not address the inquiry.\", \"answer_relevance_category\": \"No attempt\", \"answer_relevance_likelihood\": 0.0}",
+                "role": "assistant",
+                "tool_calls": [],
+                "reasoning_content": null
+            },
+            "finish_reason": "stop"
+        }
+    ],
+    "prompt_logprobs": null,
+    "id": "chatcmpl-8c3505e704e644d9bb484d12288ed3a6",
+    "created": 1758654279,
+    "model": "answer_relevance_classifier",
+    "object": "chat.completion",
+    "service_tier": null,
+    "system_fingerprint": null,
+    "usage": {
+        "completion_tokens": 71,
+        "prompt_tokens": 186,
+        "total_tokens": 257,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": null
+    },
+    "kv_transfer_params": null
+}

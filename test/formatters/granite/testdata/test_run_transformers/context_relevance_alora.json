@@ -1,0 +1,11 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "{\"context_relevance\": 1.1277377087120176e-06}",
+                "role": "assistant"
+            }
+        }
+    ]
+}

@@ -1,5 +1,9 @@
 """Tests for hook payload policies."""
 
+import pytest
+
+pytest.importorskip("cpex", reason="cpex not installed")
+
 from mellea.plugins.policies import MELLEA_HOOK_PAYLOAD_POLICIES
 
 

@@ -1,0 +1,30 @@
+{
+  "messages": [
+    {
+      "content": "You have access to the following documents:\n\n[Document 1]\nThe square root of 4 is 2.",
+      "role": "user"
+    },
+    {
+      "content": "Hello there, how can I help you?",
+      "role": "assistant"
+    },
+    {
+      "content": "What is the square root of 4?",
+      "role": "user"
+    }
+  ],
+  "extra_body": {
+    "structured_outputs": {
+      "json": {
+        "type": "string",
+        "enum": [
+          "answerable",
+          "unanswerable"
+        ]
+      }
+    }
+  },
+  "max_completion_tokens": 25,
+  "logprobs": true,
+  "top_logprobs": 10
+}

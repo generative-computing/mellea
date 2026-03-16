@@ -1,0 +1,24 @@
+{
+  "messages": [
+    {
+      "role": "assistant",
+      "content": "Welcome to pet questions!"
+    },
+    {
+      "content": "What is the population of Australia?",
+      "role": "user"
+    }
+  ],
+  "extra_body": {
+    "documents": [
+      {
+          "doc_id": "1",
+          "text": "My dog has fleas."
+      },
+      {
+          "doc_id": "2",
+          "text": "My cat does not have fleas."
+      }
+    ]
+  }
+}

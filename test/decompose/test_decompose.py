@@ -23,7 +23,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task A",
                 "tag": "TASK_A",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do A",
                 "input_vars_required": [],
@@ -32,7 +31,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task B",
                 "tag": "TASK_B",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do B",
                 "input_vars_required": [],
@@ -41,7 +39,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task C",
                 "tag": "TASK_C",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do C",
                 "input_vars_required": [],
@@ -63,7 +60,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task C",
                 "tag": "TASK_C",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do C",
                 "input_vars_required": [],
@@ -72,7 +68,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task B",
                 "tag": "TASK_B",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do B",
                 "input_vars_required": [],
@@ -81,7 +76,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task A",
                 "tag": "TASK_A",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do A",
                 "input_vars_required": [],
@@ -103,7 +97,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task D",
                 "tag": "TASK_D",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do D",
                 "input_vars_required": [],
@@ -112,7 +105,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task C",
                 "tag": "TASK_C",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do C",
                 "input_vars_required": [],
@@ -121,7 +113,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task B",
                 "tag": "TASK_B",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do B",
                 "input_vars_required": [],
@@ -130,7 +121,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task A",
                 "tag": "TASK_A",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do A",
                 "input_vars_required": [],
@@ -152,7 +142,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task B",
                 "tag": "task_b",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do B",
                 "input_vars_required": [],
@@ -161,7 +150,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task A",
                 "tag": "TASK_A",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do A",
                 "input_vars_required": [],
@@ -182,7 +170,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task B",
                 "tag": "TASK_B",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do B",
                 "input_vars_required": [],
@@ -191,7 +178,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task A",
                 "tag": "TASK_A",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do A",
                 "input_vars_required": [],
@@ -201,7 +187,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task D",
                 "tag": "TASK_D",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do D",
                 "input_vars_required": [],
@@ -210,7 +195,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task C",
                 "tag": "TASK_C",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do C",
                 "input_vars_required": [],
@@ -235,7 +219,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task B",
                 "tag": "TASK_B",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do B",
                 "input_vars_required": [],
@@ -247,7 +230,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Task A",
                 "tag": "TASK_A",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do A",
                 "input_vars_required": [],
@@ -268,7 +250,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "3. Do task C",
                 "tag": "TASK_C",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do C",
                 "input_vars_required": [],
@@ -277,7 +258,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "2. Do task B",
                 "tag": "TASK_B",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do B",
                 "input_vars_required": [],
@@ -286,7 +266,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "1. Do task A",
                 "tag": "TASK_A",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do A",
                 "input_vars_required": [],
@@ -308,7 +287,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "2. Numbered task B",
                 "tag": "TASK_B",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do B",
                 "input_vars_required": [],
@@ -317,7 +295,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "Unnumbered task A",
                 "tag": "TASK_A",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do A",
                 "input_vars_required": [],
@@ -338,7 +315,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "4. Final task",
                 "tag": "TASK_D",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do D",
                 "input_vars_required": [],
@@ -347,7 +323,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "3. Third task",
                 "tag": "TASK_C",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do C",
                 "input_vars_required": [],
@@ -356,7 +331,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "2. Second task",
                 "tag": "TASK_B",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do B",
                 "input_vars_required": [],
@@ -365,7 +339,6 @@ class TestReorderSubtasksHappyPath:
             {
                 "subtask": "1. First task",
                 "tag": "TASK_A",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do A",
                 "input_vars_required": [],
@@ -393,7 +366,6 @@ class TestReorderSubtasksUnhappyPath:
             {
                 "subtask": "Task A",
                 "tag": "TASK_A",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do A",
                 "input_vars_required": [],
@@ -402,7 +374,6 @@ class TestReorderSubtasksUnhappyPath:
             {
                 "subtask": "Task B",
                 "tag": "TASK_B",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do B",
                 "input_vars_required": [],
@@ -419,7 +390,6 @@ class TestReorderSubtasksUnhappyPath:
             {
                 "subtask": "Task A",
                 "tag": "TASK_A",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do A",
                 "input_vars_required": [],
@@ -428,7 +398,6 @@ class TestReorderSubtasksUnhappyPath:
             {
                 "subtask": "Task B",
                 "tag": "TASK_B",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do B",
                 "input_vars_required": [],
@@ -437,7 +406,6 @@ class TestReorderSubtasksUnhappyPath:
             {
                 "subtask": "Task C",
                 "tag": "TASK_C",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do C",
                 "input_vars_required": [],
@@ -454,7 +422,6 @@ class TestReorderSubtasksUnhappyPath:
             {
                 "subtask": "Task A",
                 "tag": "TASK_A",
-                "general_instructions": "",
                 "constraints": [],
                 "prompt_template": "Do A",
                 "input_vars_required": [],
@@ -492,7 +459,6 @@ class TestVerifyUserVariablesHappyPath:
                 {
                     "subtask": "Task A",
                     "tag": "TASK_A",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do A",
                     "input_vars_required": [],
@@ -516,7 +482,6 @@ class TestVerifyUserVariablesHappyPath:
                 {
                     "subtask": "Task A",
                     "tag": "TASK_A",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do A with {{ USER_INPUT }}",
                     "input_vars_required": ["USER_INPUT"],
@@ -539,7 +504,6 @@ class TestVerifyUserVariablesHappyPath:
                 {
                     "subtask": "Task A",
                     "tag": "TASK_A",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do A",
                     "input_vars_required": ["user_input"],  # lowercase
@@ -563,7 +527,6 @@ class TestVerifyUserVariablesHappyPath:
                 {
                     "subtask": "Task A",
                     "tag": "TASK_A",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do A",
                     "input_vars_required": [],
@@ -572,7 +535,6 @@ class TestVerifyUserVariablesHappyPath:
                 {
                     "subtask": "Task B",
                     "tag": "TASK_B",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do B",
                     "input_vars_required": [],
@@ -597,7 +559,6 @@ class TestVerifyUserVariablesHappyPath:
                 {
                     "subtask": "Task B",
                     "tag": "TASK_B",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do B",
                     "input_vars_required": [],
@@ -606,7 +567,6 @@ class TestVerifyUserVariablesHappyPath:
                 {
                     "subtask": "Task A",
                     "tag": "TASK_A",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do A",
                     "input_vars_required": [],
@@ -631,7 +591,6 @@ class TestVerifyUserVariablesHappyPath:
                 {
                     "subtask": "Task D",
                     "tag": "TASK_D",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do D",
                     "input_vars_required": [],
@@ -640,7 +599,6 @@ class TestVerifyUserVariablesHappyPath:
                 {
                     "subtask": "Task C",
                     "tag": "TASK_C",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do C",
                     "input_vars_required": [],
@@ -649,7 +607,6 @@ class TestVerifyUserVariablesHappyPath:
                 {
                     "subtask": "Task B",
                     "tag": "TASK_B",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do B",
                     "input_vars_required": [],
@@ -658,7 +615,6 @@ class TestVerifyUserVariablesHappyPath:
                 {
                     "subtask": "Task A",
                     "tag": "TASK_A",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do A",
                     "input_vars_required": [],
@@ -687,7 +643,6 @@ class TestVerifyUserVariablesUnHappyPath:
                 {
                     "subtask": "Task A",
                     "tag": "TASK_A",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do A",
                     "input_vars_required": ["MISSING_VAR"],
@@ -712,7 +667,6 @@ class TestVerifyUserVariablesUnHappyPath:
                 {
                     "subtask": "Task A",
                     "tag": "TASK_A",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do A",
                     "input_vars_required": ["VAR1", "VAR2"],
@@ -737,7 +691,6 @@ class TestVerifyUserVariablesUnHappyPath:
                 {
                     "subtask": "Task A",
                     "tag": "TASK_A",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do A",
                     "input_vars_required": [],
@@ -762,7 +715,6 @@ class TestVerifyUserVariablesUnHappyPath:
                 {
                     "subtask": "Task B",
                     "tag": "TASK_B",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do B",
                     "input_vars_required": [],
@@ -771,7 +723,6 @@ class TestVerifyUserVariablesUnHappyPath:
                 {
                     "subtask": "Task A",
                     "tag": "TASK_A",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do A",
                     "input_vars_required": [],
@@ -793,7 +744,6 @@ class TestVerifyUserVariablesUnHappyPath:
                 {
                     "subtask": "Task A",
                     "tag": "TASK_A",
-                    "general_instructions": "",
                     "constraints": [],
                     "prompt_template": "Do A",
                     "input_vars_required": ["REQUIRED_VAR"],

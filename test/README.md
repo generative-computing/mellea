@@ -17,59 +17,61 @@ uv run pytest -m slow
 
 ## Environment Variables
 
-- `CICD=1` - Enable CI mode (skips qualitative tests, enables aggressive memory cleanup)
+- `CICD=1` - Enable CI mode (skips qualitative tests, enables GPU process isolation)
 - `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` - Helps with GPU memory fragmentation
 
-## Heavy GPU Tests - Automatic Process Isolation
+## Heavy GPU Tests - Process Isolation
 
-**Heavy GPU tests (HuggingFace, vLLM) automatically use process isolation when multiple test modules are detected.**
+**Heavy GPU tests (HuggingFace, vLLM) can use process isolation to guarantee GPU memory release between test modules.**
 
 ### Why Process Isolation?
 
-Heavy GPU backends (HuggingFace, vLLM) hold GPU memory at the process level. Even with aggressive cleanup (garbage collection, CUDA cache clearing, etc.), GPU memory remains locked by the CUDA driver until the process exits. When running multiple heavy GPU test modules in sequence, this causes OOM errors.
+Heavy GPU backends (HuggingFace, vLLM) hold GPU memory at the process level. Even with aggressive cleanup (garbage collection, CUDA cache clearing, etc.), GPU memory remains locked by the CUDA driver until the process exits. When running multiple heavy GPU test modules in sequence, this can cause OOM errors.
 
 ### How It Works
 
-The collection hook in `test/conftest.py` detects multiple modules with `requires_heavy_ram` marker and automatically:
+Process isolation is **opt-in** via the `--isolate-heavy` flag or `CICD=1` environment variable. When enabled, the collection hook in `test/conftest.py`:
 
-1. Runs each module in a separate subprocess
-2. Sets required environment variables (`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`)
-3. Ensures full GPU memory release between modules
-4. Reports results from all modules
+1. Detects modules marked with `@pytest.mark.requires_gpu_isolation`
+2. Runs each marked module in a separate subprocess
+3. Sets required environment variables (`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`)
+4. Ensures full GPU memory release between modules
+5. Reports results from all modules
 
 ### Usage
 
 ```bash
-# Run all heavy GPU tests with automatic isolation
-uv run pytest -m requires_heavy_ram
+# Normal execution (no isolation) - fast, but may hit GPU OOM with multiple heavy modules
+uv run pytest test/backends/test_vllm.py test/backends/test_huggingface.py
 
-# Run vLLM tests specifically
-uv run pytest -m vllm
+# With isolation (opt-in) - slower, but guarantees GPU memory release
+uv run pytest test/backends/test_vllm.py test/backends/test_huggingface.py --isolate-heavy
 
-# Run HuggingFace tests specifically
-uv run pytest -m huggingface
+# Run all heavy GPU tests with isolation
+uv run pytest -m requires_gpu_isolation --isolate-heavy
 
-# Single module runs normally (no isolation needed)
-uv run pytest test/backends/test_vllm.py
+# CI automatically enables isolation (via CICD=1)
+CICD=1 uv run pytest test/backends/
 
-# Works with other pytest options
-uv run pytest -m "requires_heavy_ram and not qualitative"
+# Single module runs normally (no isolation needed even with flag)
+uv run pytest test/backends/test_vllm.py --isolate-heavy
 ```
 
 ### Affected Tests
 
-Tests marked with `@pytest.mark.requires_heavy_ram`:
+Tests marked with `@pytest.mark.requires_gpu_isolation`:
 - `test/backends/test_huggingface.py` - HuggingFace backend tests
-- `test/backends/test_huggingface_tools.py` - HuggingFace tool calling
+- `test/backends/test_huggingface_tools.py` - HuggingFace tool calling tests
 - `test/backends/test_vllm.py` - vLLM backend tests
-- `test/backends/test_vllm_tools.py` - vLLM tool calling
+- `test/backends/test_vllm_tools.py` - vLLM tool calling tests
 
 ### Technical Details
 
-- **Single module**: Runs normally in the main pytest process
+- **Opt-in by default**: Use `--isolate-heavy` flag or set `CICD=1`
+- **Single module**: Runs normally even with isolation flag (no subprocess overhead)
 - **Multiple modules**: Each runs in its own subprocess with full GPU memory isolation
-- **No external server needed**: Tests instantiate `LocalVLLMBackend` directly
-- **Automatic detection**: Based on `@pytest.mark.vllm` marker
+- **Test discovery**: Works normally (`pytest --collect-only`) - isolation only happens during execution
+- **Marker-based**: Only modules with `@pytest.mark.requires_gpu_isolation` are isolated
 
 ## GPU Testing on CUDA Systems
 
@@ -141,9 +143,10 @@ However, this creates the "Parent Trap": the parent pytest process holds a CUDA 
 See [`MARKERS_GUIDE.md`](MARKERS_GUIDE.md) for complete marker documentation.
 
 Key markers for GPU testing:
-- `@pytest.mark.vllm` - Requires vLLM backend (local, GPU required, auto-isolated)
+- `@pytest.mark.vllm` - Requires vLLM backend (local, GPU required)
 - `@pytest.mark.huggingface` - Requires HuggingFace backend (local, GPU-heavy)
-- `@pytest.mark.requires_gpu` - Requires GPU hardware
+- `@pytest.mark.requires_gpu` - Requires GPU hardware (capability check)
+- `@pytest.mark.requires_gpu_isolation` - Requires OS-level process isolation for GPU memory (execution strategy)
 - `@pytest.mark.requires_heavy_ram` - Requires 48GB+ RAM
 - `@pytest.mark.slow` - Tests taking >5 minutes
 

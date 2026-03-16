@@ -1,0 +1,11 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "{\"answer_relevance_analysis\": \"The inquiry asks who attended the meeting. The response provides a vague and general answer without specifying the attendees. This does not address the user's question.\", \"answer_relevance_category\": \"No attempt\", \"answer_relevance_likelihood\": 0.0}",
+                "role": "assistant"
+            }
+        }
+    ]
+}

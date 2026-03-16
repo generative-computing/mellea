@@ -1,0 +1,11 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "{\"answer_relevance_analysis\": \"The inquiry asks who attended the meeting. The response provides a general statement about many people attending the meeting, which is not specific to the meeting attended by Alice, Bob, and Carol. This is not a direct or complete answer to the user's question.\", \"answer_relevance_category\": \"Misinterpreted inquiry\", \"answer_relevance_likelihood\": 0.0}",
+                "role": "assistant"
+            }
+        }
+    ]
+}

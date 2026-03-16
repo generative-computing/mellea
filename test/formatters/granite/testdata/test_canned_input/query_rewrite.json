@@ -1,0 +1,47 @@
+{
+  "messages": [
+    {
+      "content": "Welcome to pet questions!",
+      "role": "assistant"
+    },
+    {
+      "content": "I have two pets, a dog named Rex and a cat named Lucy.",
+      "role": "user"
+    },
+    {
+      "content": "Great, what would you like to share about them?",
+      "role": "assistant"
+    },
+    {
+      "content": "Rex spends a lot of time in the backyard and outdoors, and Luna is always inside.",
+      "role": "user"
+    },
+    {
+      "content": "Sounds good! Rex must love exploring outside, while Lucy probably enjoys her cozy indoor life.",
+      "role": "assistant"
+    },
+    {
+      "content": "But is he more likely to get fleas because of that?",
+      "role": "user"
+    }
+  ],
+  "extra_body": {
+    "structured_outputs": {
+      "json": {
+        "properties": {
+          "rewritten_question": {
+            "title": "Rewritten Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rewritten_question"
+        ],
+        "title": "QueryRewriteOutput",
+        "type": "object"
+      }
+    }
+  },
+  "temperature": 0.0,
+  "max_completion_tokens": 1024
+}
