@@ -253,6 +253,43 @@ def validate_anchor_collisions(docs_dir: Path) -> tuple[int, list[str]]:
     return len(errors), errors
 
 
+def validate_rst_docstrings(source_dir: Path) -> tuple[int, list[str]]:
+    """Scan Python source files for RST double-backtick notation in docstrings.
+
+    RST-style ``Symbol`` double-backtick markup interacts badly with the
+    add_cross_references step: the regex matches the inner single-backtick
+    boundary and generates a broken link wrapped in an extra code span, e.g.
+    ``Backend`` → `[`Backend`](url)` which Mintlify renders as raw text
+    rather than a clickable link.
+
+    Args:
+        source_dir: Root of the Python source tree to scan (e.g. repo/mellea)
+
+    Returns:
+        Tuple of (error_count, error_messages)
+    """
+    errors = []
+    # Match ``Word`` where Word starts with a letter (RST inline literal)
+    pattern = re.compile(r"``([A-Za-z][^`]*)``")
+
+    for py_file in source_dir.rglob("*.py"):
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except Exception:
+            continue
+
+        for line_num, line in enumerate(content.splitlines(), 1):
+            if pattern.search(line):
+                rel = py_file.relative_to(source_dir.parent)
+                errors.append(
+                    f"{rel}:{line_num}: RST double-backtick notation — "
+                    f"use single backticks for Markdown/MDX compatibility\n"
+                    f"  {line.strip()[:100]}"
+                )
+
+    return len(errors), errors
+
+
 def generate_report(
     source_link_errors: list[str],
     coverage_passed: bool,
@@ -260,6 +297,7 @@ def generate_report(
     mdx_errors: list[str],
     link_errors: list[str],
     anchor_errors: list[str],
+    rst_docstring_errors: list[str] | None = None,
 ) -> dict:
     """Generate validation report.
 
@@ -294,12 +332,18 @@ def generate_report(
             "error_count": len(anchor_errors),
             "errors": anchor_errors,
         },
+        "rst_docstrings": {
+            "passed": len(rst_docstring_errors or []) == 0,
+            "error_count": len(rst_docstring_errors or []),
+            "errors": rst_docstring_errors or [],
+        },
         "overall_passed": (
             len(source_link_errors) == 0
             and coverage_passed
             and len(mdx_errors) == 0
             and len(link_errors) == 0
             and len(anchor_errors) == 0
+            # rst_docstrings is a warning only — does not fail the build
         ),
     }
 
@@ -319,6 +363,12 @@ def main():
     parser.add_argument("--output", help="Output JSON report file")
     parser.add_argument(
         "--skip-coverage", action="store_true", help="Skip coverage validation"
+    )
+    parser.add_argument(
+        "--source-dir",
+        type=Path,
+        default=None,
+        help="Python source root to scan for RST double-backtick notation (e.g. mellea/)",
     )
     args = parser.parse_args()
 
@@ -356,6 +406,11 @@ def main():
     print("Checking anchor collisions...")
     _, anchor_errors = validate_anchor_collisions(docs_dir)
 
+    rst_docstring_errors: list[str] = []
+    if args.source_dir:
+        print("Checking source docstrings for RST double-backtick notation...")
+        _, rst_docstring_errors = validate_rst_docstrings(args.source_dir)
+
     # Generate report
     report = generate_report(
         source_link_errors,
@@ -364,6 +419,7 @@ def main():
         mdx_errors,
         link_errors,
         anchor_errors,
+        rst_docstring_errors,
     )
 
     # Print results
@@ -398,6 +454,13 @@ def main():
     if not report["anchor_collisions"]["passed"]:
         print(f"   {report['anchor_collisions']['error_count']} errors found")
 
+    if args.source_dir:
+        print(
+            f"✅ RST docstrings: {'PASS' if report['rst_docstrings']['passed'] else 'FAIL'}"
+        )
+        if not report["rst_docstrings"]["passed"]:
+            print(f"   {report['rst_docstrings']['error_count']} occurrences found")
+
     print("\n" + "=" * 60)
     print(f"Overall: {'✅ PASS' if report['overall_passed'] else '❌ FAIL'}")
     print("=" * 60)
@@ -405,7 +468,13 @@ def main():
     # Print detailed errors
     if not report["overall_passed"]:
         print("\nDetailed Errors:")
-        for error in source_link_errors + mdx_errors + link_errors + anchor_errors:
+        for error in (
+            source_link_errors
+            + mdx_errors
+            + link_errors
+            + anchor_errors
+            + rst_docstring_errors
+        ):
             print(f"  • {error}")
 
     # Save report
