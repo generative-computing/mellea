@@ -1,8 +1,8 @@
-"""``Document`` component for grounding model inputs with text passages.
+"""`Document` component for grounding model inputs with text passages.
 
-``Document`` wraps a text passage with an optional ``title`` and ``doc_id``, and
+`Document` wraps a text passage with an optional `title` and `doc_id`, and
 renders them inline as a formatted citation string for the model. Documents are
-typically attached to a ``Message`` via its ``documents`` parameter, enabling
+typically attached to a `Message` via its `documents` parameter, enabling
 retrieval-augmented generation (RAG) workflows.
 """
 
@@ -13,7 +13,7 @@ from ....core import CBlock, Component, ModelOutputThunk
 class Document(Component[str]):
     """A text passage with optional metadata for grounding model inputs.
 
-    Documents are typically attached to a ``Message`` via its ``documents``
+    Documents are typically attached to a `Message` via its `documents`
     parameter to enable retrieval-augmented generation (RAG) workflows.
 
     Args:
@@ -34,7 +34,7 @@ class Document(Component[str]):
 
         Returns:
             list[Component | CBlock]: An empty list by default since the base
-            ``Document`` class has no constituent parts. Subclasses may override
+            `Document` class has no constituent parts. Subclasses may override
             this method to return meaningful parts.
         """
         return []

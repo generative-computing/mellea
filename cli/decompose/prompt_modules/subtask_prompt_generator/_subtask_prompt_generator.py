@@ -50,13 +50,13 @@ class _SubtaskPromptGenerator(PromptModule):
             its generated "prompt_template" (`str`).
 
             For example
-            ```
+            ``
             [ SubtaskPromptItem(subtask=<str>, tag=<str>, prompt_template=<str>),
               SubtaskPromptItem(subtask=<str>, tag=<str>, prompt_template=<str>) ]
-            ```
+            ``
 
             You can use dot notation to access the values. For example
-            ```
+            ``
             task_prompt = "..." # Original task prompt to be the reference when generating subtask prompts
             mellea_session = MelleaSession(...) # A mellea session with a backend
             subtasks = [ ("1. Read the document and write a summary", "DOCUMENT_SUMMARY"),
@@ -74,7 +74,7 @@ class _SubtaskPromptGenerator(PromptModule):
             subtask_0: str = result[0].subtask
             tag_0: str = result[0].tag
             prompt_template_0: str = result[0].prompt_template
-            ```
+            ``
 
         Raises:
             TagExtractionError: An error occurred trying to extract content from the
@@ -150,9 +150,9 @@ class _SubtaskPromptGenerator(PromptModule):
 
                 Let's say your task is for writing emails addressed to a prospect of a given company, then this task
                 needs to ingest some variables, e.g.
-                ```
+                ``
                 user_input_var_names = ["YOUR_NAME", "PROSPECT_NAME", "PROSPECT_COMPANY", "PRODUCT_DESCRIPTION"]
-                ```
+                ``
             subtasks_and_tags (`Sequence[tuple[str, str]]`): A list of subtasks and their respective tags.
 
                 This was designed to receive the parsed result of the `subtask_list`
@@ -161,12 +161,12 @@ class _SubtaskPromptGenerator(PromptModule):
                 The list is composed of `tuple[str, str]` objects where the first position is
                 the subtask title/description in natural language and the second position is a tag/variable
                 with a descriptive name related to its subtask. e.g.
-                ```
+                ``
                 subtasks_and_tags = [
                     ("1. Read the document and write a summary", "DOCUMENT_SUMMARY"),
                     ("2. Write the 3 most important phrases as bullets", "IMPORTANT_PHRASES"),
                 ]
-                ```
+                ``
 
         Returns:
             PromptModuleString: A `PromptModuleString` class containing the generated output.

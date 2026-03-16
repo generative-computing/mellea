@@ -1,10 +1,10 @@
-"""The ``@mify`` decorator for turning Python objects into ``Component``s.
+"""The `@mify` decorator for turning Python objects into `Component`s.
 
-``mify`` wraps an existing Python class or instance with the ``MifiedProtocol``
+`mify` wraps an existing Python class or instance with the `MifiedProtocol`
 interface, exposing its fields as named spans and its documented methods as
-``MelleaTool`` instances callable by the LLM. The resulting ``MifiedProtocol`` object
+`MelleaTool` instances callable by the LLM. The resulting `MifiedProtocol` object
 can be queried, transformed, and formatted for a language model without any manual
-``Component`` subclassing. Use ``mify`` when you have an existing domain object
+`Component` subclassing. Use `mify` when you have an existing domain object
 (dataclass, Pydantic model, or plain class) that you want to expose directly to an
 LLM-driven pipeline.
 """
@@ -66,7 +66,7 @@ class MifiedProtocol(MObjectProtocol, Protocol):
             query (str): The natural-language query string.
 
         Returns:
-            Query: A ``Query`` component wrapping this object and the given query.
+            Query: A `Query` component wrapping this object and the given query.
         """
         return self._query_type(self, query)
 
@@ -79,7 +79,7 @@ class MifiedProtocol(MObjectProtocol, Protocol):
             transformation (str): The natural-language transformation description.
 
         Returns:
-            Transform: A ``Transform`` component wrapping this object and the
+            Transform: A `Transform` component wrapping this object and the
             given transformation description.
         """
         return self._transform_type(self, transformation)
@@ -89,8 +89,8 @@ class MifiedProtocol(MObjectProtocol, Protocol):
 
         [no-index]
 
-        Delegates to the ``stringify_func`` passed to ``mify`` when one was
-        provided; otherwise falls back to ``str(self)``.
+        Delegates to the `stringify_func` passed to `mify` when one was
+        provided; otherwise falls back to `str(self)`.
 
         Returns:
             str: String representation of the mified object's content.
@@ -193,14 +193,14 @@ class MifiedProtocol(MObjectProtocol, Protocol):
         return narrowed
 
     def format_for_llm(self) -> TemplateRepresentation:
-        """Return the ``TemplateRepresentation`` for this mified object.
+        """Return the `TemplateRepresentation` for this mified object.
 
         [no-index]
 
-        Sets the ``TemplateRepresentation`` fields based on the object and the
-        configuration values supplied to ``mify`` (fields, templates, tools, etc.).
+        Sets the `TemplateRepresentation` fields based on the object and the
+        configuration values supplied to `mify` (fields, templates, tools, etc.).
 
-        See the ``mify`` decorator for more details.
+        See the `mify` decorator for more details.
 
         Returns:
             TemplateRepresentation: The formatted representation including args,
@@ -243,17 +243,17 @@ class MifiedProtocol(MObjectProtocol, Protocol):
 
         [no-index]
 
-        Delegates to ``_parse`` and wraps any exception in a
-        ``ComponentParseError`` to give callers a consistent error type.
+        Delegates to `_parse` and wraps any exception in a
+        `ComponentParseError` to give callers a consistent error type.
 
         Args:
             computed (ModelOutputThunk): The raw model output to parse.
 
         Returns:
-            str: The string value extracted from ``computed``.
+            str: The string value extracted from `computed`.
 
         Raises:
-            ComponentParseError: If ``_parse`` raises any exception during
+            ComponentParseError: If `_parse` raises any exception during
                 parsing.
         """
         try:
@@ -316,46 +316,46 @@ def mify(*args, **kwargs):  # noqa: D417
 
     Args:
         obj: A class or an instance of a class to mify. Omit when using as a
-            decorator with arguments (e.g. ``@mify(fields_include={...})``).
+            decorator with arguments (e.g. `@mify(fields_include={...})`).
         query_type: A specific query component type to use when querying a model.
-            Defaults to ``Query``.
+            Defaults to `Query`.
         transform_type: A specific transform component type to use when
-            transforming with a model. Defaults to ``Transform``.
+            transforming with a model. Defaults to `Transform`.
         fields_include: Fields of the object to include in its representation to
-            models. When set, ``stringify_func`` is not used.
+            models. When set, `stringify_func` is not used.
         fields_exclude: Fields of the object to exclude from its representation
             to models.
         funcs_include: Functions of the object to expose as tools to models.
         funcs_exclude: Functions of the object to hide from models.
         template: A Jinja2 template string. Takes precedence over
-            ``template_order`` when provided.
+            `template_order` when provided.
         template_order: A template name or list of names used when searching for
             applicable templates.
         parsing_func: Not yet implemented.
         stringify_func: A callable used to create a string representation of the
-            object for ``content_as_string``.
+            object for `content_as_string`.
 
     Returns:
         An object if an object was passed in or a decorator (callable) to mify classes.
 
         If an object is returned, that object will be the same object that was passed in.
         For example,
-        ```
+        ``
         obj = mify(obj)
         obj.format_for_llm()
-        ```
+        ``
         and
-        ```
+        ``
         mify(obj)
         obj.format_for_llm()
-        ```
+        ``
         are equivalent.
 
         Most IDEs will not correctly show the type hints for the newly added functions
         for either an mify object or instances of an mified class. For IDE support, write
-        ```
+        ``
         assert isinstance(obj, MifiedProtocol)
-        ```
+        ``
     """
     # Grab and remove obj if it exists in kwargs. Otherwise, it's the only arg.
     obj = kwargs.pop("obj", None)

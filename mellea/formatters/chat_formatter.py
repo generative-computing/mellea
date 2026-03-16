@@ -1,9 +1,9 @@
-"""``ChatFormatter`` for converting context histories to chat-message lists.
+"""`ChatFormatter` for converting context histories to chat-message lists.
 
-``ChatFormatter`` is the standard formatter used by mellea's legacy backends. Its
-``to_chat_messages`` method linearises a sequence of ``Component`` and ``CBlock``
-objects into ``Message`` objects with ``user``, ``assistant``, or ``tool`` roles,
-handling ``ModelOutputThunk`` responses, image attachments, and parsed structured
+`ChatFormatter` is the standard formatter used by mellea's legacy backends. Its
+`to_chat_messages` method linearises a sequence of `Component` and `CBlock`
+objects into `Message` objects with `user`, `assistant`, or `tool` roles,
+handling `ModelOutputThunk` responses, image attachments, and parsed structured
 outputs. Concrete backends call this formatter when preparing input for a chat
 completion endpoint.
 """
@@ -25,9 +25,9 @@ class ChatFormatter(Formatter):
         """Convert a linearized chat history into a list of chat messages.
 
         Iterates over each element in the context history and converts it to a
-        ``Message`` with an appropriate role. ``ModelOutputThunk`` instances are
-        treated as assistant responses, while all other ``Component`` and
-        ``CBlock`` objects default to the ``user`` role. Image attachments and
+        `Message` with an appropriate role. `ModelOutputThunk` instances are
+        treated as assistant responses, while all other `Component` and
+        `CBlock` objects default to the `user` role. Image attachments and
         parsed structured outputs are handled transparently.
 
         Args:
@@ -35,7 +35,7 @@ class ChatFormatter(Formatter):
                 components and code blocks to convert.
 
         Returns:
-            list[Message]: A list of ``Message`` objects ready for submission to
+            list[Message]: A list of `Message` objects ready for submission to
                 a chat completion endpoint.
         """
 

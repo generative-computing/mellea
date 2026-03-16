@@ -1,10 +1,10 @@
 """Components that implement the ReACT (Reason + Act) agentic pattern.
 
-Provides ``ReactInitiator``, which primes the model with a goal and a tool list, and
-``ReactThought``, which signals a thinking step. Also exports the
-``MELLEA_FINALIZER_TOOL`` sentinel string used to signal loop termination. These
-components are consumed by ``mellea.stdlib.frameworks.react``, which orchestrates the
-reasoning-acting cycle until the model invokes ``final_answer`` or the step budget
+Provides `ReactInitiator`, which primes the model with a goal and a tool list, and
+`ReactThought`, which signals a thinking step. Also exports the
+`MELLEA_FINALIZER_TOOL` sentinel string used to signal loop termination. These
+components are consumed by `mellea.stdlib.frameworks.react`, which orchestrates the
+reasoning-acting cycle until the model invokes `final_answer` or the step budget
 is exhausted.
 """
 
@@ -38,7 +38,7 @@ class ReactInitiator(Component[str]):
     Args:
         goal (str): The objective of the react loop.
         tools (list[AbstractMelleaTool] | None): Tools available to the agent.
-            ``None`` is treated as an empty list.
+            `None` is treated as an empty list.
 
     Attributes:
         goal (CBlock): The objective of the react loop wrapped as a content block.
@@ -99,7 +99,7 @@ class ReactThought(Component[str]):
     def parts(self) -> list[Component | CBlock]:
         """Return the constituent parts of this component.
 
-        ``ReactThought`` has no sub-components; it solely triggers a thinking step.
+        `ReactThought` has no sub-components; it solely triggers a thinking step.
 
         Returns:
             list[Component | CBlock]: Always an empty list.

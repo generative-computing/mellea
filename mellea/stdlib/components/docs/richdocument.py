@@ -1,10 +1,10 @@
-"""``RichDocument``, ``Table``, and related helpers backed by Docling.
+"""`RichDocument`, `Table`, and related helpers backed by Docling.
 
-``RichDocument`` wraps a ``DoclingDocument`` (e.g. produced by converting a PDF or
-Markdown file) and renders it as Markdown for a language model. ``Table`` represents a
-single table within a Docling document and provides ``transpose``, ``to_markdown``, and
-query/transform helpers. Use ``RichDocument.from_document_file`` to convert a PDF or
-other supported format, and ``get_tables()`` to extract structured table data for
+`RichDocument` wraps a `DoclingDocument` (e.g. produced by converting a PDF or
+Markdown file) and renders it as Markdown for a language model. `Table` represents a
+single table within a Docling document and provides `transpose`, `to_markdown`, and
+query/transform helpers. Use `RichDocument.from_document_file` to convert a PDF or
+other supported format, and `get_tables()` to extract structured table data for
 downstream LLM-driven Q&A or transformation tasks.
 """
 
@@ -25,11 +25,11 @@ from ..mobject import MObject, Query, Transform
 
 
 class RichDocument(Component[str]):
-    """A ``RichDocument`` is a block of content backed by a ``DoclingDocument``.
+    """A `RichDocument` is a block of content backed by a `DoclingDocument`.
 
     Provides helper functions for working with the document and extracting parts
-    such as tables. Use ``from_document_file`` to convert PDFs or other formats,
-    and ``save``/``load`` for persistence.
+    such as tables. Use `from_document_file` to convert PDFs or other formats,
+    and `save`/`load` for persistence.
 
     Args:
         doc (DoclingDocument): The underlying Docling document to wrap.
@@ -67,7 +67,7 @@ class RichDocument(Component[str]):
         return computed.value if computed.value is not None else ""
 
     def docling(self) -> DoclingDocument:
-        """Return the underlying ``DoclingDocument``.
+        """Return the underlying `DoclingDocument`.
 
         Returns:
             DoclingDocument: The wrapped Docling document instance.
@@ -82,12 +82,12 @@ class RichDocument(Component[str]):
         """Return all tables found in this document.
 
         Returns:
-            list[Table]: A list of ``Table`` objects extracted from the document.
+            list[Table]: A list of `Table` objects extracted from the document.
         """
         return [Table(x, self.docling()) for x in self.docling().tables]
 
     def save(self, filename: str | Path) -> None:
-        """Save the underlying ``DoclingDocument`` to a JSON file for later reuse.
+        """Save the underlying `DoclingDocument` to a JSON file for later reuse.
 
         Args:
             filename (str | Path): Destination file path for the serialized
@@ -99,14 +99,14 @@ class RichDocument(Component[str]):
 
     @classmethod
     def load(cls, filename: str | Path) -> RichDocument:
-        """Load a ``RichDocument`` from a previously saved ``DoclingDocument`` JSON file.
+        """Load a `RichDocument` from a previously saved `DoclingDocument` JSON file.
 
         Args:
             filename (str | Path): Path to a JSON file previously created by
-                ``RichDocument.save``.
+                `RichDocument.save`.
 
         Returns:
-            RichDocument: A new ``RichDocument`` wrapping the loaded document.
+            RichDocument: A new `RichDocument` wrapping the loaded document.
         """
         if type(filename) is str:
             filename = Path(filename)
@@ -115,14 +115,14 @@ class RichDocument(Component[str]):
 
     @classmethod
     def from_document_file(cls, source: str | Path | DocumentStream) -> RichDocument:
-        """Convert a document file to a ``RichDocument`` using Docling.
+        """Convert a document file to a `RichDocument` using Docling.
 
         Args:
             source (str | Path | DocumentStream): Path or stream for the
                 source document (e.g. a PDF or Markdown file).
 
         Returns:
-            RichDocument: A new ``RichDocument`` wrapping the converted document.
+            RichDocument: A new `RichDocument` wrapping the converted document.
         """
         pipeline_options = PdfPipelineOptions(
             images_scale=2.0, generate_picture_images=True
@@ -139,7 +139,7 @@ class RichDocument(Component[str]):
 
 
 class TableQuery(Query):
-    """A ``Query`` component specialised for ``Table`` objects.
+    """A `Query` component specialised for `Table` objects.
 
     Formats the table as Markdown alongside the query string so the LLM receives
     both the structured table content and the natural-language question.
@@ -157,7 +157,7 @@ class TableQuery(Query):
         """Return the constituent parts of this table query.
 
         Returns:
-            list[Component | CBlock]: A list containing the wrapped ``Table``
+            list[Component | CBlock]: A list containing the wrapped `Table`
             object.
         """
         cs: list[Component | CBlock] = [self._obj]
@@ -186,7 +186,7 @@ class TableQuery(Query):
 
 
 class TableTransform(Transform):
-    """A ``Transform`` component specialised for ``Table`` objects.
+    """A `Transform` component specialised for `Table` objects.
 
     Formats the table as Markdown alongside the transformation instruction so the
     LLM receives both the structured table content and the mutation description.
@@ -204,7 +204,7 @@ class TableTransform(Transform):
         """Return the constituent parts of this table transform.
 
         Returns:
-            list[Component | CBlock]: A list containing the wrapped ``Table``
+            list[Component | CBlock]: A list containing the wrapped `Table`
             object.
         """
         cs: list[Component | CBlock] = [self._obj]
@@ -236,11 +236,11 @@ class TableTransform(Transform):
 
 
 class Table(MObject):
-    """A ``Table`` represents a single table within a larger Docling Document.
+    """A `Table` represents a single table within a larger Docling Document.
 
     Args:
-        ti (TableItem): The Docling ``TableItem`` extracted from the document.
-        doc (DoclingDocument): The parent ``DoclingDocument``. Passing ``None``
+        ti (TableItem): The Docling `TableItem` extracted from the document.
+        doc (DoclingDocument): The parent `DoclingDocument`. Passing `None`
             may cause downstream Docling functions to fail.
     """
 
@@ -252,7 +252,7 @@ class Table(MObject):
 
     @classmethod
     def from_markdown(cls, md: str) -> Table | None:
-        """Create a ``Table`` from a Markdown string by round-tripping through Docling.
+        """Create a `Table` from a Markdown string by round-tripping through Docling.
 
         Wraps the Markdown in a minimal document, converts it with Docling, and
         returns the first table found.
@@ -261,8 +261,8 @@ class Table(MObject):
             md (str): A Markdown string containing at least one table.
 
         Returns:
-            Table | None: The first ``Table`` extracted from the Markdown, or
-            ``None`` if no table could be found.
+            Table | None: The first `Table` extracted from the Markdown, or
+            `None` if no table could be found.
         """
         fake_doc = f"# X\n\n{md}\n"
         bs = io.BytesIO(fake_doc.encode("utf-8"))
@@ -276,7 +276,7 @@ class Table(MObject):
         """Return the constituent parts of this table component.
 
         The current implementation always returns an empty list because the
-        table is rendered entirely through ``format_for_llm``.
+        table is rendered entirely through `format_for_llm`.
 
         Returns:
             list[Component | CBlock]: Always an empty list.
@@ -292,11 +292,11 @@ class Table(MObject):
         return self._ti.export_to_markdown(self._doc)
 
     def transpose(self) -> Table | None:
-        """Transpose this table and return the result as a new ``Table``.
+        """Transpose this table and return the result as a new `Table`.
 
         Returns:
-            Table | None: A new transposed ``Table``, or ``None`` if the
-            transposed Markdown cannot be parsed back into a ``Table``.
+            Table | None: A new transposed `Table`, or `None` if the
+            transposed Markdown cannot be parsed back into a `Table`.
         """
         t = self._ti.export_to_dataframe().transpose()
         return Table.from_markdown(t.to_markdown())
@@ -305,8 +305,8 @@ class Table(MObject):
         """Return the table representation for the Formatter.
 
         Returns:
-            TemplateRepresentation | str: A ``TemplateRepresentation`` that
-            renders the table as its Markdown string using a ``{{table}}``
+            TemplateRepresentation | str: A `TemplateRepresentation` that
+            renders the table as its Markdown string using a `{{table}}`
             template.
         """
         return TemplateRepresentation(

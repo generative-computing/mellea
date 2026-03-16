@@ -45,11 +45,11 @@ def _map_mode(mode: PluginMode) -> Any:
 
 
 def modify(payload: Any, **field_updates: Any) -> Any:
-    """Convenience helper for returning a modifying ``PluginResult``.
+    """Convenience helper for returning a modifying `PluginResult`.
 
-    Creates an immutable copy of ``payload`` with ``field_updates`` applied and
-    wraps it in a ``PluginResult(continue_processing=True)``.  Only fields
-    listed in the hook's ``HookPayloadPolicy.writable_fields`` will be accepted
+    Creates an immutable copy of `payload` with `field_updates` applied and
+    wraps it in a `PluginResult(continue_processing=True)`.  Only fields
+    listed in the hook's `HookPayloadPolicy.writable_fields` will be accepted
     by the framework; changes to read-only fields are silently discarded.
 
     Mirrors :func:`block` for the modification case::
@@ -83,12 +83,12 @@ def block(
     description: str = "",
     details: dict[str, Any] | None = None,
 ) -> Any:
-    """Convenience helper for returning a blocking ``PluginResult``.
+    """Convenience helper for returning a blocking `PluginResult`.
 
     Args:
         reason: Short reason for the violation.
         code: Machine-readable violation code.
-        description: Longer description (defaults to ``reason``).
+        description: Longer description (defaults to `reason`).
         details: Additional structured details.
     """
     if not _HAS_PLUGIN_FRAMEWORK:
@@ -114,11 +114,11 @@ def register(
 ) -> None:
     """Register plugins globally or for a specific session.
 
-    When ``session_id`` is ``None``, plugins are global (fire for all invocations).
-    When ``session_id`` is provided, plugins fire only within that session.
+    When `session_id` is `None`, plugins are global (fire for all invocations).
+    When `session_id` is provided, plugins fire only within that session.
 
-    Accepts standalone ``@hook`` functions, ``@plugin``-decorated class instances,
-    ``MelleaPlugin`` instances, ``PluginSet`` instances, or lists thereof.
+    Accepts standalone `@hook` functions, `@plugin`-decorated class instances,
+    `MelleaPlugin` instances, `PluginSet` instances, or lists thereof.
     """
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
@@ -146,9 +146,9 @@ def _register_single(
 ) -> None:
     """Register a single hook function or plugin instance.
 
-    - Standalone functions with ``_mellea_hook_meta``: wrapped in ``_FunctionHookAdapter``
-    - ``@plugin``-decorated class instances: methods with ``_mellea_hook_meta`` discovered
-    - ``MelleaPlugin`` instances: registered directly
+    - Standalone functions with `_mellea_hook_meta`: wrapped in `_FunctionHookAdapter`
+    - `@plugin`-decorated class instances: methods with `_mellea_hook_meta` discovered
+    - `MelleaPlugin` instances: registered directly
     """
     meta: HookMeta | None = getattr(item, "_mellea_hook_meta", None)
     plugin_meta: PluginMeta | None = getattr(type(item), "_mellea_plugin_meta", None)
@@ -235,7 +235,7 @@ def _register_single(
 if _HAS_PLUGIN_FRAMEWORK:
 
     class _FunctionHookAdapter(Plugin):
-        """Adapts a standalone ``@hook``-decorated function into a ContextForge Plugin."""
+        """Adapts a standalone `@hook`-decorated function into a ContextForge Plugin."""
 
         def __init__(
             self,
@@ -284,15 +284,15 @@ if _HAS_PLUGIN_FRAMEWORK:
             return result
 
     class _MethodHookAdapter(Plugin):
-        """Adapts a single ``@hook``-decorated bound method from a ``Plugin`` class.
+        """Adapts a single `@hook`-decorated bound method from a `Plugin` class.
 
-        Each ``@hook`` method on a ``@plugin``-decorated class gets its own adapter
-        so that per-method execution modes (``SEQUENTIAL``, ``FIRE_AND_FORGET``, etc.)
-        are respected.  The adapter name is ``"<plugin_name>.<hook_type>"``.
+        Each `@hook` method on a `@plugin`-decorated class gets its own adapter
+        so that per-method execution modes (`SEQUENTIAL`, `FIRE_AND_FORGET`, etc.)
+        are respected.  The adapter name is `"<plugin_name>.<hook_type>"`.
 
-        Note: ``initialize()`` and ``shutdown()`` delegate to the underlying class
+        Note: `initialize()` and `shutdown()` delegate to the underlying class
         instance and may be called once per registered hook method.  Make them
-        idempotent when using the ``Plugin`` base class with multiple hook methods.
+        idempotent when using the `Plugin` base class with multiple hook methods.
         """
 
         def __init__(
@@ -346,7 +346,7 @@ if _HAS_PLUGIN_FRAMEWORK:
 else:
     # Provide a stub when the plugin framework is not installed.
     class _FunctionHookAdapter:  # type: ignore[no-redef]
-        """Stub — install ``"mellea[hooks]"`` for full plugin support."""
+        """Stub — install `"mellea[hooks]"` for full plugin support."""
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             raise ImportError(
@@ -356,7 +356,7 @@ else:
 
     # Provide a stub when the plugin framework is not installed.
     class _MethodHookAdapter:  # type: ignore[no-redef]
-        """Stub — install ``"mellea[hooks]"`` for full plugin support."""
+        """Stub — install `"mellea[hooks]"` for full plugin support."""
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             raise ImportError(
@@ -368,7 +368,7 @@ else:
 class _PluginScope:
     """Context manager returned by :func:`plugin_scope`.
 
-    Supports both synchronous and asynchronous ``with`` statements.
+    Supports both synchronous and asynchronous `with` statements.
     """
 
     def __init__(self, items: list[Callable | Any | PluginSet]) -> None:
@@ -453,9 +453,9 @@ def unregister(
 ) -> None:
     """Unregister globally-registered plugins.
 
-    Accepts the same items as :func:`register`: standalone ``@hook``-decorated
-    functions, ``Plugin`` subclass instances, ``MelleaPlugin`` instances,
-    ``PluginSet`` instances, or lists thereof.
+    Accepts the same items as :func:`register`: standalone `@hook`-decorated
+    functions, `Plugin` subclass instances, `MelleaPlugin` instances,
+    `PluginSet` instances, or lists thereof.
 
     Silently ignores items that are not currently registered.
     """
@@ -485,11 +485,11 @@ def unregister(
 def plugin_scope(*items: Callable | Any | PluginSet) -> _PluginScope:
     """Return a context manager that temporarily registers plugins for a block of code.
 
-    Accepts the same items as :func:`register`: standalone ``@hook``-decorated
-    functions, ``@plugin``-decorated class instances, ``MelleaPlugin`` instances,
+    Accepts the same items as :func:`register`: standalone `@hook`-decorated
+    functions, `@plugin`-decorated class instances, `MelleaPlugin` instances,
     and :class:`~mellea.plugins.PluginSet` instances — or any mix thereof.
 
-    Supports both synchronous and asynchronous ``with`` statements::
+    Supports both synchronous and asynchronous `with` statements::
 
         # Sync functional API
         with plugin_scope(log_hook, audit_plugin):

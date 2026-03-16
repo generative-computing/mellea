@@ -245,15 +245,15 @@ def chat(
         content: The message text to send.
         context: The current conversation context.
         backend: The backend used to generate the response.
-        role: The role for the outgoing message (default ``"user"``).
+        role: The role for the outgoing message (default `"user"`).
         images: Optional list of images to include in the message.
-        user_variables: Optional Jinja variable substitutions applied to ``content``.
+        user_variables: Optional Jinja variable substitutions applied to `content`.
         format: Optional Pydantic model for constrained decoding of the response.
         model_options: Additional model options to merge with backend defaults.
         tool_calls: If true, tool calling is enabled.
 
     Returns:
-        Tuple of the assistant ``Message`` and the updated ``Context``.
+        Tuple of the assistant `Message` and the updated `Context`.
     """
     if user_variables is not None:
         content_resolved = Instruction.apply_user_dict_from_jinja(
@@ -294,17 +294,17 @@ def validate(
     """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
 
     Args:
-        reqs: A single ``Requirement`` or a list of them to validate.
+        reqs: A single `Requirement` or a list of them to validate.
         context: The current conversation context.
         backend: The backend used for LLM-as-a-judge requirements.
-        output: Optional model output ``CBlock`` to validate against instead of the context.
+        output: Optional model output `CBlock` to validate against instead of the context.
         format: Optional Pydantic model for constrained decoding.
         model_options: Additional model options to merge with backend defaults.
         generate_logs: Optional list to append generation logs to.
-        input: Optional input ``CBlock`` to include alongside ``output`` when validating.
+        input: Optional input `CBlock` to include alongside `output` when validating.
 
     Returns:
-        List of ``ValidationResult`` objects, one per requirement.
+        List of `ValidationResult` objects, one per requirement.
     """
     # Run everything in the specific event loop for this session.
 
@@ -819,15 +819,15 @@ async def achat(
         content: The message text to send.
         context: The current conversation context.
         backend: The backend used to generate the response.
-        role: The role for the outgoing message (default ``"user"``).
+        role: The role for the outgoing message (default `"user"`).
         images: Optional list of images to include in the message.
-        user_variables: Optional Jinja variable substitutions applied to ``content``.
+        user_variables: Optional Jinja variable substitutions applied to `content`.
         format: Optional Pydantic model for constrained decoding of the response.
         model_options: Additional model options to merge with backend defaults.
         tool_calls: If true, tool calling is enabled.
 
     Returns:
-        Tuple of the assistant ``Message`` and the updated ``Context``.
+        Tuple of the assistant `Message` and the updated `Context`.
     """
     if user_variables is not None:
         content_resolved = Instruction.apply_user_dict_from_jinja(
@@ -867,17 +867,17 @@ async def avalidate(
     """Asynchronous version of .validate; validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
 
     Args:
-        reqs: A single ``Requirement`` or a list of them to validate.
+        reqs: A single `Requirement` or a list of them to validate.
         context: The current conversation context.
         backend: The backend used for LLM-as-a-judge requirements.
-        output: Optional model output ``CBlock`` to validate against instead of the context.
+        output: Optional model output `CBlock` to validate against instead of the context.
         format: Optional Pydantic model for constrained decoding.
         model_options: Additional model options to merge with backend defaults.
         generate_logs: Optional list to append generation logs to.
-        input: Optional input ``CBlock`` to include alongside ``output`` when validating.
+        input: Optional input `CBlock` to include alongside `output` when validating.
 
     Returns:
-        List of ``ValidationResult`` objects, one per requirement.
+        List of `ValidationResult` objects, one per requirement.
     """
     # Turn a solitary requirement in to a list of requirements, and then reqify if needed.
     reqs = [reqs] if not isinstance(reqs, list) else reqs

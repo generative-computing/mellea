@@ -45,12 +45,12 @@ class TransformationRule(abc.ABC):
         config (dict): Configuration of the parent output processor, as parsed YAML.
         input_path_expr (list[str | int | None]): Path expression matching all
             instances of the field that this rule transforms. Elements can be
-            strings for object fields, integers for list indices, or ``None``
+            strings for object fields, integers for list indices, or `None`
             for wildcard matches.
 
     Attributes:
         YAML_NAME (str | None): The name used to identify this rule in YAML
-            configuration files. Subclasses must set this to a non-``None`` string.
+            configuration files. Subclasses must set this to a non-`None` string.
     """
 
     YAML_NAME: str | None = None
@@ -92,7 +92,7 @@ class TransformationRule(abc.ABC):
 
         :param parsed_json: Output of running model results through
             :func:`json.loads()`, plus applying zero or more transformation rules.
-        :returns: List of paths within ``parsed_json`` that match this rule's input
+        :returns: List of paths within `parsed_json` that match this rule's input
             path spec.
         """
         return [p for p in json_util.all_paths(parsed_json) if self._is_input_path(p)]
@@ -101,10 +101,10 @@ class TransformationRule(abc.ABC):
         """Return the YAML name that identifies this transformation rule.
 
         Returns:
-            str: The value of ``YAML_NAME`` for this rule subclass.
+            str: The value of `YAML_NAME` for this rule subclass.
 
         Raises:
-            ValueError: If ``YAML_NAME`` has not been set by the subclass.
+            ValueError: If `YAML_NAME` has not been set by the subclass.
         """
         if self.YAML_NAME is None:
             raise ValueError(f"Attempted to fetch missing rule name for {type(self)}")
@@ -144,13 +144,13 @@ class TransformationRule(abc.ABC):
                 through :func:`json_util.reparse_json_with_offsets()`,
                 preserving position information on literal values.
             logprobs (ChatCompletionLogProbs | None): Optional logprobs result
-                associated with the original model output string, or ``None``
+                associated with the original model output string, or `None`
                 if no logprobs were present.
             chat_completion (ChatCompletion | None): The chat completion request
                 that produced this output. Required by some rules.
 
         Returns:
-            Any: Transformed copy of ``parsed_json`` after applying this rule.
+            Any: Transformed copy of `parsed_json` after applying this rule.
         """
         paths = self._matching_paths(parsed_json)
         prepare_output = self._prepare(
@@ -179,7 +179,7 @@ class TransformationRule(abc.ABC):
         :param prepare_output: Dictionary of global data that this object's
             :func:`self._prepare()` method has set aside
 
-        :returns: A modified version of ``result``, which may be modified in place or
+        :returns: A modified version of `result`, which may be modified in place or
             a fresh copy.
         """
         raise NotImplementedError()
@@ -188,7 +188,7 @@ class TransformationRule(abc.ABC):
 class InPlaceTransformation(TransformationRule):
     """Base class for TransformationRules that replace values in place in JSON.
 
-    Base class for ``TransformationRule``s that replace values in place in the source
+    Base class for `TransformationRule`s that replace values in place in the source
     JSON. The values replaced can be a scalar, object, or list.
     """
 
@@ -218,7 +218,7 @@ class InPlaceTransformation(TransformationRule):
 class AddFieldsTransformation(TransformationRule):
     """Base class for TransformationRules that add values to JSON.
 
-    Base class for ``TransformationRule``s that add one or more values adjacent to
+    Base class for `TransformationRule`s that add one or more values adjacent to
     an existing value in the source JSON.
     """
 
@@ -231,7 +231,7 @@ class AddFieldsTransformation(TransformationRule):
         :param prepare_output: Dictionary of global data that this object's
             :func:`self._prepare()` method has set aside
 
-        :returns: A modified version of ``result``, which may be modified in place or
+        :returns: A modified version of `result`, which may be modified in place or
             a fresh copy.
         """
         if len(path) == 0:
@@ -287,11 +287,11 @@ class TokenToFloat(InPlaceTransformation):
             instances of the field that this rule transforms.
         categories_to_values (dict[str | int | bool, float] | None): Mapping
             from categorical labels to floating-point values. Defaults to
-            ``None``.
+            `None`.
 
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always
-            ``"likelihood"``.
+            `"likelihood"`.
     """
 
     YAML_NAME = "likelihood"
@@ -430,7 +430,7 @@ def _desplit_sentences(
     :param tag: String such as that appears in every sentence boundary marker, e.g.
         "i" => "<i123>"
     :param first_sentence_num: Number we expect to see in the first sentence boundary
-        marker in ``target_text``.
+        marker in `target_text`.
 
     :returns: Self-describing dictionary of lists.
     """
@@ -486,26 +486,26 @@ class DecodeSentences(AddFieldsTransformation):
         input_path_expr (list[str | int | None]): Path expression matching all
             instances of the field that this rule transforms.
         source (str): Name of the location to look for sentences; must be
-            ``"last_message"`` or ``"documents"``.
-        output_names (dict): Mapping from output role name (``"begin"``,
-            ``"end"``, ``"text"``, ``"document_id"``) to the name of the new
+            `"last_message"` or `"documents"`.
+        output_names (dict): Mapping from output role name (`"begin"`,
+            `"end"`, `"text"`, `"document_id"`) to the name of the new
             field to add in the result JSON.
 
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always
-            ``"decode_sentences"``.
+            `"decode_sentences"`.
         begin_name (str | None): Name of the output field that receives the
-            sentence begin offset; extracted from ``output_names``, or ``None``
+            sentence begin offset; extracted from `output_names`, or `None`
             if not configured.
         end_name (str | None): Name of the output field that receives the
-            sentence end offset; extracted from ``output_names``, or ``None``
+            sentence end offset; extracted from `output_names`, or `None`
             if not configured.
         text_name (str | None): Name of the output field that receives the
-            sentence text; extracted from ``output_names``, or ``None`` if not
+            sentence text; extracted from `output_names`, or `None` if not
             configured.
         document_id_name (str | None): Name of the output field that receives
-            the document ID (only used when ``source="documents"``); extracted
-            from ``output_names``, or ``None`` if not configured.
+            the document ID (only used when `source="documents"`); extracted
+            from `output_names`, or `None` if not configured.
     """
 
     YAML_NAME = "decode_sentences"
@@ -521,10 +521,10 @@ class DecodeSentences(AddFieldsTransformation):
         """Initialize DecodeSentences with a source location and output field name mapping.
 
         Raises:
-            ValueError: If ``source`` is not ``"last_message"`` or
-                ``"documents"``, or if an unexpected key is found in
-                ``output_names``.
-            TypeError: If ``output_names`` is not a dict.
+            ValueError: If `source` is not `"last_message"` or
+                `"documents"`, or if an unexpected key is found in
+                `output_names`.
+            TypeError: If `output_names` is not a dict.
         """
         super().__init__(config, input_path_expr)
 
@@ -681,7 +681,7 @@ class Explode(InPlaceTransformation):
 
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always
-            ``"explode"``.
+            `"explode"`.
         target_field (str): Name of the list-valued field within each record
             to expand.
     """
@@ -749,7 +749,7 @@ class DropDuplicates(InPlaceTransformation):
 
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always
-            ``"drop_duplicates"``.
+            `"drop_duplicates"`.
         target_fields (list): Names of fields used to determine whether two
             records are considered duplicates.
     """
@@ -806,7 +806,7 @@ class Project(InPlaceTransformation):
 
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always
-            ``"project"``.
+            `"project"`.
         retained_fields (dict): Mapping from original field name to the
             (possibly renamed) output field name. Initialized from either a
             list of field names (identity mapping) or an explicit mapping.
@@ -857,7 +857,7 @@ class Nest(InPlaceTransformation):
 
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always
-            ``"nest"``.
+            `"nest"`.
         field_name (str): Name of the single field in the output JSON object
             that wraps each matching value.
     """
@@ -896,11 +896,11 @@ class MergeSpans(InPlaceTransformation):
         end_field (str): Name of the field that holds the end offset of spans.
         text_field (str | None): Optional field containing covered text strings
             that should be concatenated when spans are merged. Defaults to
-            ``None``.
+            `None`.
 
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always
-            ``"merge_spans"``.
+            `"merge_spans"`.
     """
 
     YAML_NAME = "merge_spans"
@@ -1063,16 +1063,16 @@ _HARMONY_END_TOKENS = frozenset({"<|end|>", "<|return|>", "<|end_of_text|>"})
 
 
 def _find_final_channel_header(token_strings: list[str]) -> int | None:
-    """Find the token index of the final ``<|message|>`` token in a token sequence.
+    """Find the token index of the final `<|message|>` token in a token sequence.
 
-    Find the token index of ``<|message|>`` that ends the last
-    ``<|channel|> final <|message|>`` header in the token sequence.
+    Find the token index of `<|message|>` that ends the last
+    `<|channel|> final <|message|>` header in the token sequence.
 
     Matches are done on exact token values so that the single special token
-    ``<|channel|>`` is never confused with regular tokens that happen to
-    concatenate to the same string (e.g. ``['<|', 'channel', '|>']``).
+    `<|channel|>` is never confused with regular tokens that happen to
+    concatenate to the same string (e.g. `['<|', 'channel', '|>']`).
 
-    :returns: Index of the ``<|message|>`` token, or ``None``.
+    :returns: Index of the `<|message|>` token, or `None`.
     """
     last_match = None
     i = 0
@@ -1111,11 +1111,11 @@ def _logprobs_workaround(
 
     This function walks the logprob token sequence, matching individual
     tokens (not concatenated strings) to locate the final channel header.
-    This ensures that the single special token ``<|channel|>`` is never
+    This ensures that the single special token `<|channel|>` is never
     confused with regular tokens that concatenate to the same string.
 
     :param logprobs: Logprobs from a chat completion choice.
-    :returns: ``(content, trimmed_logprobs)`` or ``None`` if no final channel
+    :returns: `(content, trimmed_logprobs)` or `None` if no final channel
         is found.
     """
     if logprobs.content is None:
@@ -1164,10 +1164,10 @@ class IntrinsicsResultProcessor(ChatCompletionResultProcessor):
 
     Args:
         config_file (str | pathlib.Path | None): Optional path to a YAML
-            configuration file. Exactly one of ``config_file`` and
-            ``config_dict`` must be provided.
+            configuration file. Exactly one of `config_file` and
+            `config_dict` must be provided.
         config_dict (dict | None): Optional pre-parsed YAML configuration dict.
-            Exactly one of ``config_file`` and ``config_dict`` must be
+            Exactly one of `config_file` and `config_dict` must be
             provided.
     """
 

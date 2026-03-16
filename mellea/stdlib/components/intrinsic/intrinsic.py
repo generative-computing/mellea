@@ -1,10 +1,10 @@
-"""``Intrinsic`` component for invoking fine-tuned adapter capabilities.
+"""`Intrinsic` component for invoking fine-tuned adapter capabilities.
 
-An ``Intrinsic`` component references a named adapter from Mellea's intrinsic catalog
+An `Intrinsic` component references a named adapter from Mellea's intrinsic catalog
 and transforms a chat completion request — typically by injecting new messages,
 modifying model parameters, or applying structured output constraints. It must be
-paired with a backend that supports adapter loading (e.g. ``LocalHFBackend`` with an
-attached ``IntrinsicAdapter``).
+paired with a backend that supports adapter loading (e.g. `LocalHFBackend` with an
+attached `IntrinsicAdapter`).
 """
 
 from ....backends.adapters import AdapterType, fetch_intrinsic_metadata
@@ -63,9 +63,9 @@ class Intrinsic(Component[str]):
         return []  # TODO revisit this.
 
     def format_for_llm(self) -> TemplateRepresentation | str:
-        """Not implemented for the base ``Intrinsic`` class.
+        """Not implemented for the base `Intrinsic` class.
 
-        ``Intrinsic`` components are intended to be used as the *action* passed
+        `Intrinsic` components are intended to be used as the *action* passed
         directly to the backend, not as a part of the context rendered by the
         formatter.
 
@@ -73,8 +73,8 @@ class Intrinsic(Component[str]):
             TemplateRepresentation | str: Never returns; always raises.
 
         Raises:
-            NotImplementedError: Always, because ``Intrinsic`` does not
-                implement ``format_for_llm`` by default.
+            NotImplementedError: Always, because `Intrinsic` does not
+                implement `format_for_llm` by default.
         """
         raise NotImplementedError(
             "`Intrinsic` doesn't implement format_for_llm by default. You should only "

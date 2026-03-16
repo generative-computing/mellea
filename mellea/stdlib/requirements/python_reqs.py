@@ -69,11 +69,11 @@ def _has_python_code_listing(ctx: Context) -> ValidationResult:
     # Look for code blocks with python specifier
     import re
 
-    # Pattern for ```python ... ``` blocks
-    python_blocks = re.findall(r"```python\s*\n(.*?)\n```", content, re.DOTALL)
+    # Pattern for `python ... ` blocks
+    python_blocks = re.findall(r"``python\s*\n(.*?)\n``", content, re.DOTALL)
 
     # Pattern for generic ``` blocks
-    generic_blocks = re.findall(r"```\s*\n(.*?)\n```", content, re.DOTALL)
+    generic_blocks = re.findall(r"``\s*\n(.*?)\n``", content, re.DOTALL)
 
     all_blocks = []
 
@@ -146,17 +146,17 @@ class PythonExecutionReq(Requirement):
     and validates or executes it according to the configured execution mode.
 
     Args:
-        timeout (int): Maximum seconds to allow code to run. Defaults to ``5``.
-        allow_unsafe_execution (bool): If ``True``, execute code directly with
+        timeout (int): Maximum seconds to allow code to run. Defaults to `5`.
+        allow_unsafe_execution (bool): If `True`, execute code directly with
             subprocess. Use only with trusted sources.
         allowed_imports (list[str] | None): Allowlist of importable top-level
-            modules. ``None`` allows any import.
-        use_sandbox (bool): If ``True``, use ``llm-sandbox`` for Docker-based
+            modules. `None` allows any import.
+        use_sandbox (bool): If `True`, use `llm-sandbox` for Docker-based
             isolated execution.
 
     Attributes:
         validation_fn (Callable[[Context], ValidationResult]): The validation
-            function attached to this requirement; always non-``None``.
+            function attached to this requirement; always non-`None`.
     """
 
     def __init__(

@@ -13,8 +13,8 @@ class AdapterType(enum.Enum):
     """Possible types of adapters for a backend.
 
     Attributes:
-        LORA (str): Standard LoRA adapter; value ``"lora"``.
-        ALORA (str): Activated LoRA adapter; value ``"alora"``.
+        LORA (str): Standard LoRA adapter; value `"lora"`.
+        ALORA (str): Activated LoRA adapter; value `"alora"`.
     """
 
     LORA = "lora"
@@ -29,12 +29,12 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
     Attributes:
         name (str): User-visible name of the intrinsic.
         internal_name (str | None): Internal name used for adapter loading, or
-            ``None`` if the same as ``name``.
+            `None` if the same as `name`.
         repo_id (str): HuggingFace repository where adapters for the intrinsic
             are located.
         adapter_types (tuple[AdapterType, ...]): Adapter types known to be
             available for this intrinsic; defaults to
-            ``(AdapterType.LORA, AdapterType.ALORA)``.
+            `(AdapterType.LORA, AdapterType.ALORA)`.
     """
 
     name: str = pydantic.Field(description="User-visible name of the intrinsic.")
@@ -108,7 +108,7 @@ def fetch_intrinsic_metadata(intrinsic_name: str) -> IntriniscsCatalogEntry:
             intrinsic.
 
     Raises:
-        ValueError: If ``intrinsic_name`` is not a known intrinsic name.
+        ValueError: If `intrinsic_name` is not a known intrinsic name.
     """
     if intrinsic_name not in _INTRINSICS_CATALOG:
         raise ValueError(

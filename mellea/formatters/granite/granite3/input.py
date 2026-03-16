@@ -81,7 +81,7 @@ You are Granite, developed by IBM."""
     def _build_controls_record(chat_completion: Granite3ChatCompletion) -> dict | None:
         """Build a Granite 3 controls record.
 
-        Use the output control flags in ``inputs`` to build a version of the
+        Use the output control flags in `inputs` to build a version of the
         undocumented arbitrary JSON data regarding output controls that the Jinja
         template expected to see in the input for each chat completion request.
 

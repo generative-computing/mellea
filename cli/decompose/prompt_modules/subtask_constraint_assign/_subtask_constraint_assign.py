@@ -55,7 +55,7 @@ class _SubtaskConstraintAssign(PromptModule):
             Note that the result "constraints" list can be empty.
 
             For example
-            ```
+            ``
             [ SubtaskPromptConstraintsItem(
                   subtask=<str>,
                   tag=<str>,
@@ -64,10 +64,10 @@ class _SubtaskConstraintAssign(PromptModule):
               ),
               ...
             ]
-            ```
+            ``
 
             You can use dot notation to access the values. For example
-            ```
+            ``
             result: PromptModuleString = # Result of the subtask_constraint_assign.generate() method
 
             parsed_result: list[SubtaskPromptConstraintsItem] = result.parse()
@@ -76,7 +76,7 @@ class _SubtaskConstraintAssign(PromptModule):
             tag_0: str = result[0].tag
             prompt_template_0: str = result[0].prompt_template
             constraints_0: list[str] = result[0].constraints
-            ```
+            ``
 
         Raises:
             TagExtractionError: An error occurred trying to extract content from the
@@ -171,12 +171,12 @@ class _SubtaskConstraintAssign(PromptModule):
                 the subtask title/description in natural language, the second position is a tag/variable
                 with a descriptive name related to its subtask, and the third position is the template
                 prompt for an LLM to execute the subtask. e.g.
-                ```
+                ``
                 subtasks_tags_and_prompts = [
                     ("1. Read the document and write a summary", "DOCUMENT_SUMMARY", "<template_prompt>"),
                     ("2. Write the 3 most important phrases as bullets", "IMPORTANT_PHRASES", "<template_prompt>")
                 ]
-                ```
+                ``
             constraint_list (`Sequence[str]`): A list of constraints written in natural language.
 
                 This was designed to take in a list of constraints identified from the prompt

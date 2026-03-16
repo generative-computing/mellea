@@ -94,8 +94,8 @@ def compute_embeddings(
     """Split documents into windows and compute embeddings for each of the the windows.
 
     Args:
-        corpus: PyArrow Table of documents as returned by ``read_corpus()``.
-            Should have the columns ``["id", "url", "title", "text"]``.
+        corpus: PyArrow Table of documents as returned by `read_corpus()`.
+            Should have the columns `["id", "url", "title", "text"]`.
         embedding_model_name: Hugging Face model name for the model that computes
             embeddings. Also used for tokenizing.
         chunk_size: Maximum size of chunks to split documents into, in embedding
@@ -106,7 +106,7 @@ def compute_embeddings(
 
     Returns:
         PyArrow Table of chunks of the corpus, with schema
-        ``["id", "url", "title", "begin", "end", "text", "embedding"]``.
+        `["id", "url", "title", "begin", "end", "text", "embedding"]`.
     """
     # Third Party
     import pyarrow as pa
@@ -192,7 +192,7 @@ def write_embeddings(
     Args:
         target_dir: Location where the files should be written (in a subdirectory).
         corpus_name: Corpus name used to generate the output directory name.
-        embeddings: PyArrow Table produced by ``compute_embeddings()``.
+        embeddings: PyArrow Table produced by `compute_embeddings()`.
         chunks_per_partition: Number of document chunks to write to each Parquet
             partition file.
 
@@ -221,8 +221,8 @@ class InMemoryRetriever:
 
     Args:
         data_file_or_table: Parquet file of document snippets and embeddings, or an equivalent
-            in-memory PyArrow Table. Should have columns ``id``, ``begin``, ``end``, ``text``,
-            and ``embedding``.
+            in-memory PyArrow Table. Should have columns `id`, `begin`, `end`, `text`,
+            and `embedding`.
         embedding_model_name (str): Name of the Sentence Transformers model to use for embeddings.
             Must match the model used to compute embeddings in the data file.
     """
@@ -263,7 +263,7 @@ class InMemoryRetriever:
             top_k: Number of top results to return.
 
         Returns:
-            List of dicts with keys ``doc_id``, ``text``, and ``score``.
+            List of dicts with keys `doc_id`, `text`, and `score`.
         """
         # Third Party
         import pyarrow as pa

@@ -12,13 +12,13 @@ class ModelOption:
 
     Create a dictionary containing model options like this:
 
-    ```python
+    ``python
     from mellea.backends import ModelOption
     model_options = {
         ModelOption.TEMPERATURE : 0.0,
         ModelOption.SYSTEM_PROMPT : "You are a helpful assistant"
     }
-    ```
+    ``
 
     Attributes:
         TOOLS (str): Sentinel key for a list or dict of tools to expose for tool calling.
@@ -44,7 +44,7 @@ class ModelOption:
 
     @staticmethod
     def replace_keys(options: dict, from_to: dict[str, str]) -> dict[str, Any]:
-        """Return a new dict with selected keys in ``options`` renamed according to ``from_to``.
+        """Return a new dict with selected keys in `options` renamed according to `from_to`.
 
         Returns a new dict with the keys in `options` replaced with the corresponding value for that key in `from_to`.
 
@@ -56,14 +56,14 @@ class ModelOption:
           the source key is always absent in the output.
 
         Example:
-        ```python
+        ``python
         >>> options = {"k1": "v1", "k2": "v2", "M1": "m1"}
         >>> from_to = {"k1": "M1", "k2": "M2"}
 
         >>> new_options = replace_keys(options, from_to)
         >>> print(new_options)
         ... {"M1": "m1", "M2": "v2"}
-        ```
+        ``
 
         * Notice that "M1" keeps the original value "m1", rather than "v1".
         * Notice that both "k1" and "k2" are absent in the output.
@@ -112,16 +112,16 @@ class ModelOption:
 
     @staticmethod
     def remove_special_keys(model_options: dict[str, Any]) -> dict[str, Any]:
-        """Return a copy of ``model_options`` with all sentinel-valued keys removed.
+        """Return a copy of `model_options` with all sentinel-valued keys removed.
 
-        Sentinel keys are those whose names start with ``@@@`` (e.g. ``ModelOption.TOOLS``).
+        Sentinel keys are those whose names start with `@@@` (e.g. `ModelOption.TOOLS`).
         These are Mellea-internal keys that must not be forwarded to backend APIs.
 
         Args:
             model_options (dict[str, Any]): A model options dictionary that may contain sentinel keys.
 
         Returns:
-            dict[str, Any]: A new dictionary with all ``@@@``-prefixed keys omitted.
+            dict[str, Any]: A new dictionary with all `@@@`-prefixed keys omitted.
         """
         new_options = {}
         for k, v in model_options.items():
@@ -133,7 +133,7 @@ class ModelOption:
     def merge_model_options(
         persistent_opts: dict[str, Any], overwrite_opts: dict[str, Any] | None
     ) -> dict[str, Any]:
-        """Merge two model-options dicts, with ``overwrite_opts`` taking precedence on conflicts.
+        """Merge two model-options dicts, with `overwrite_opts` taking precedence on conflicts.
 
         Creates a new dict that contains all keys and values from persistent opts and overwrite opts.
         If there are duplicate keys, overwrite opts key value pairs will be used.
@@ -141,7 +141,7 @@ class ModelOption:
         Args:
             persistent_opts (dict[str, Any]): Base model options (lower precedence).
             overwrite_opts (dict[str, Any] | None): Per-call model options that override
-                ``persistent_opts`` on key conflicts; ``None`` is treated as empty.
+                `persistent_opts` on key conflicts; `None` is treated as empty.
 
         Returns:
             dict[str, Any]: A new merged dictionary.

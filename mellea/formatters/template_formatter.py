@@ -1,9 +1,9 @@
-"""``TemplateFormatter``: Jinja2-template-based formatter for legacy backends.
+"""`TemplateFormatter`: Jinja2-template-based formatter for legacy backends.
 
-``TemplateFormatter`` extends ``ChatFormatter`` to look up a per-component Jinja2
-template at rendering time, allowing each ``Component`` type to control its own
-prompt representation. Template discovery walks a configurable ``template_path`` and
-the built-in templates directory; results are cached in a ``SimpleLRUCache`` for
+`TemplateFormatter` extends `ChatFormatter` to look up a per-component Jinja2
+template at rendering time, allowing each `Component` type to control its own
+prompt representation. Template discovery walks a configurable `template_path` and
+the built-in templates directory; results are cached in a `SimpleLRUCache` for
 performance. Use this formatter when your backend requires hand-crafted prompts
 rather than a generic chat-message rendering.
 """
@@ -26,8 +26,8 @@ from .chat_formatter import ChatFormatter
 class TemplateFormatter(ChatFormatter):
     """Formatter that uses Jinja2 templates to render components into prompt strings.
 
-    Template discovery walks a configurable ``template_path`` and the built-in
-    templates directory. Results are optionally cached in a ``SimpleLRUCache``
+    Template discovery walks a configurable `template_path` and the built-in
+    templates directory. Results are optionally cached in a `SimpleLRUCache`
     for performance. Use this formatter when your backend requires hand-crafted
     prompts rather than generic chat-message rendering.
 
@@ -36,10 +36,10 @@ class TemplateFormatter(ChatFormatter):
             Should match the template directory structure.
         template_path (str): An alternate location where templates can be found.
             Will be preferred over all other template directories even if a less exact match is found.
-            Defaults to ``""``.
-        use_template_cache (bool): When ``True``, caches template lookup results. Set to ``False``
-            if you plan to change ``model_id`` or ``template_path`` after construction.
-            Defaults to ``True``.
+            Defaults to `""`.
+        use_template_cache (bool): When `True`, caches template lookup results. Set to `False`
+            if you plan to change `model_id` or `template_path` after construction.
+            Defaults to `True`.
 
     Example::
 

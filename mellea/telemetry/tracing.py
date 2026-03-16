@@ -96,7 +96,7 @@ def is_application_tracing_enabled() -> bool:
 
     Returns:
         True if application tracing has been enabled via the
-        ``MELLEA_TRACE_APPLICATION`` environment variable.
+        `MELLEA_TRACE_APPLICATION` environment variable.
     """
     return _TRACE_APPLICATION_ENABLED
 
@@ -106,7 +106,7 @@ def is_backend_tracing_enabled() -> bool:
 
     Returns:
         True if backend tracing has been enabled via the
-        ``MELLEA_TRACE_BACKEND`` environment variable.
+        `MELLEA_TRACE_BACKEND` environment variable.
     """
     return _TRACE_BACKEND_ENABLED
 

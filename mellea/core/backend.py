@@ -1,10 +1,10 @@
-"""Abstract ``Backend`` interface and generation-walk utilities.
+"""Abstract `Backend` interface and generation-walk utilities.
 
-Defines the ``Backend`` abstract base class whose two key abstract methods —
-``generate_from_context`` (context-aware single-action generation) and
-``generate_from_raw`` (context-free batch generation) — all concrete backends must
-implement. Also provides ``generate_walk``, which traverses a ``Component`` tree to
-find un-computed ``ModelOutputThunk`` leaves that need to be resolved before rendering.
+Defines the `Backend` abstract base class whose two key abstract methods —
+`generate_from_context` (context-aware single-action generation) and
+`generate_from_raw` (context-free batch generation) — all concrete backends must
+implement. Also provides `generate_walk`, which traverses a `Component` tree to
+find un-computed `ModelOutputThunk` leaves that need to be resolved before rendering.
 """
 
 import abc
@@ -42,10 +42,10 @@ BaseModelSubclass = typing_extensions.TypeVar(
 class Backend(abc.ABC):
     """Abstract base class for all inference backends.
 
-    All concrete backends must implement ``generate_from_context`` (context-aware
-    single-action generation) and ``generate_from_raw`` (context-free batch
-    generation). The ``do_generate_walk`` / ``do_generate_walks`` helpers can be
-    used to pre-compute any unresolved ``ModelOutputThunk`` leaves before rendering.
+    All concrete backends must implement `generate_from_context` (context-aware
+    single-action generation) and `generate_from_raw` (context-free batch
+    generation). The `do_generate_walk` / `do_generate_walks` helpers can be
+    used to pre-compute any unresolved `ModelOutputThunk` leaves before rendering.
     """
 
     @final
@@ -162,16 +162,16 @@ class Backend(abc.ABC):
             tool_calls: Always set to false unless supported by backend.
 
         Returns:
-            list[ModelOutputThunk]: A list of output thunks, one per action, in the same order as ``actions``.
+            list[ModelOutputThunk]: A list of output thunks, one per action, in the same order as `actions`.
         """
 
     async def do_generate_walk(
         self, action: CBlock | Component | ModelOutputThunk
     ) -> None:
-        """Awaits all uncomputed ``ModelOutputThunk`` leaves reachable from ``action``.
+        """Awaits all uncomputed `ModelOutputThunk` leaves reachable from `action`.
 
-        Traverses the component tree rooted at ``action`` via ``generate_walk``, collects
-        any uncomputed ``ModelOutputThunk`` nodes, and concurrently awaits them all.
+        Traverses the component tree rooted at `action` via `generate_walk`, collects
+        any uncomputed `ModelOutputThunk` nodes, and concurrently awaits them all.
 
         Args:
             action (CBlock | Component | ModelOutputThunk): The root node to traverse.
@@ -188,10 +188,10 @@ class Backend(abc.ABC):
     async def do_generate_walks(
         self, actions: list[CBlock | Component | ModelOutputThunk]
     ) -> None:
-        """Awaits all uncomputed ``ModelOutputThunk`` leaves reachable from each action in ``actions``.
+        """Awaits all uncomputed `ModelOutputThunk` leaves reachable from each action in `actions`.
 
-        Traverses the component tree of every action in the list via ``generate_walk``, collects
-        all uncomputed ``ModelOutputThunk`` nodes across all actions, and concurrently awaits them.
+        Traverses the component tree of every action in the list via `generate_walk`, collects
+        all uncomputed `ModelOutputThunk` nodes across all actions, and concurrently awaits them.
 
         Args:
             actions (list[CBlock | Component | ModelOutputThunk]): The list of root nodes to traverse.
@@ -209,18 +209,18 @@ class Backend(abc.ABC):
 
 
 def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputThunk]:
-    """Return all uncomputed ``ModelOutputThunk`` leaves reachable from ``c``.
+    """Return all uncomputed `ModelOutputThunk` leaves reachable from `c`.
 
     Args:
-        c: A ``CBlock``, ``Component``, or ``ModelOutputThunk`` to traverse.
+        c: A `CBlock`, `Component`, or `ModelOutputThunk` to traverse.
 
     Returns:
-        A flat list of uncomputed ``ModelOutputThunk`` instances in the order
-        they need to be resolved (depth-first over ``Component.parts()``).
+        A flat list of uncomputed `ModelOutputThunk` instances in the order
+        they need to be resolved (depth-first over `Component.parts()`).
 
     Raises:
-        ValueError: If any element encountered during traversal is not a ``CBlock``,
-            ``Component``, or ``ModelOutputThunk``.
+        ValueError: If any element encountered during traversal is not a `CBlock`,
+            `Component`, or `ModelOutputThunk`.
     """
     match c:
         case ModelOutputThunk() if not c.is_computed():

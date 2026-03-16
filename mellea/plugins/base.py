@@ -66,13 +66,13 @@ class Plugin:
     def __init_subclass__(
         cls, *, name: str = "", priority: int = 50, **kwargs: Any
     ) -> None:
-        """Set plugin metadata on subclasses that provide a ``name``."""
+        """Set plugin metadata on subclasses that provide a `name`."""
         super().__init_subclass__(**kwargs)
         if name:
             cls._mellea_plugin_meta = PluginMeta(name=name, priority=priority)  # type: ignore[attr-defined]
 
     def __enter__(self) -> Any:
-        """Register this plugin for the duration of a ``with`` block."""
+        """Register this plugin for the duration of a `with` block."""
         return _plugin_cm_enter(self)
 
     def __exit__(
@@ -85,7 +85,7 @@ class Plugin:
         _plugin_cm_exit(self, exc_type, exc_val, exc_tb)
 
     async def __aenter__(self) -> Any:
-        """Async variant — delegates to ``__enter__``."""
+        """Async variant — delegates to `__enter__`."""
         return self.__enter__()
 
     async def __aexit__(
@@ -94,7 +94,7 @@ class Plugin:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Async variant — delegates to ``__exit__``."""
+        """Async variant — delegates to `__exit__`."""
         self.__exit__(exc_type, exc_val, exc_tb)
 
 
@@ -139,9 +139,9 @@ if _HAS_PLUGIN_FRAMEWORK:
     class MelleaBasePayload(PluginPayload):
         """Frozen base — all payloads are immutable by design.
 
-        Plugins must use ``model_copy(update={...})`` to propose modifications
-        and return the copy via ``PluginResult.modified_payload``.  The plugin
-        manager applies the hook's ``HookPayloadPolicy`` to filter changes to
+        Plugins must use `model_copy(update={...})` to propose modifications
+        and return the copy via `PluginResult.modified_payload`.  The plugin
+        manager applies the hook's `HookPayloadPolicy` to filter changes to
         writable fields only.
         """
 
@@ -154,9 +154,9 @@ if _HAS_PLUGIN_FRAMEWORK:
     class MelleaPlugin(_CpexPlugin):
         """Base class for Mellea plugins with lifecycle hooks and typed accessors.
 
-        Use this when you need lifecycle hooks (``initialize``/``shutdown``)
-        or typed context accessors.  For simpler plugins, prefer ``@hook``
-        on standalone functions or ``@plugin`` on plain classes.
+        Use this when you need lifecycle hooks (`initialize`/`shutdown`)
+        or typed context accessors.  For simpler plugins, prefer `@hook`
+        on standalone functions or `@plugin` on plain classes.
 
         Instances support the context manager protocol for temporary activation::
 
@@ -193,7 +193,7 @@ if _HAS_PLUGIN_FRAMEWORK:
             return self._config.config or {}
 
         def __enter__(self) -> MelleaPlugin:
-            """Register this plugin for the duration of a ``with`` block."""
+            """Register this plugin for the duration of a `with` block."""
             if getattr(self, "_scope_id", None) is not None:
                 raise RuntimeError(
                     f"MelleaPlugin {self.name!r} is already active as a context manager. "
@@ -218,11 +218,11 @@ if _HAS_PLUGIN_FRAMEWORK:
                 self._scope_id = None  # type: ignore[assignment]
 
         async def __aenter__(self) -> MelleaPlugin:
-            """Async variant — delegates to the synchronous ``__enter__``."""
+            """Async variant — delegates to the synchronous `__enter__`."""
             return self.__enter__()
 
         async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-            """Async variant — delegates to the synchronous ``__exit__``."""
+            """Async variant — delegates to the synchronous `__exit__`."""
             self.__exit__(exc_type, exc_val, exc_tb)
 
     PluginResult: TypeAlias = _CFPluginResult  # type: ignore[misc]
@@ -230,7 +230,7 @@ if _HAS_PLUGIN_FRAMEWORK:
 else:
     # Provide a stub when the plugin framework is not installed.
     class MelleaBasePayload:  # type: ignore[no-redef]
-        """Stub — install ``"mellea[hooks]"`` for full plugin support."""
+        """Stub — install `"mellea[hooks]"` for full plugin support."""
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D107
             raise ImportError(
@@ -240,7 +240,7 @@ else:
 
     # Provide a stub when the plugin framework is not installed.
     class MelleaPlugin:  # type: ignore[no-redef]
-        """Stub — install ``"mellea[hooks]"`` for full plugin support."""
+        """Stub — install `"mellea[hooks]"` for full plugin support."""
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D107
             raise ImportError(

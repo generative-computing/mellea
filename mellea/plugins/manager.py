@@ -34,7 +34,7 @@ DEFAULT_HOOK_POLICY: Literal["allow"] | Literal["deny"] = "deny"
 def has_plugins(hook_type: HookType | None = None) -> bool:
     """Fast check: are plugins configured and available for the given hook type.
 
-    When ``hook_type`` is provided, also checks whether any plugin has
+    When `hook_type` is provided, also checks whether any plugin has
     registered a handler for that specific hook, enabling callers to skip
     payload construction entirely when no plugin subscribes.
     """
@@ -46,7 +46,7 @@ def has_plugins(hook_type: HookType | None = None) -> bool:
 
 
 def get_plugin_manager() -> Any | None:
-    """Returns the initialized PluginManager, or ``None`` if plugins are not configured."""
+    """Returns the initialized PluginManager, or `None` if plugins are not configured."""
     return _plugin_manager
 
 
@@ -151,12 +151,12 @@ async def invoke_hook(
 ) -> tuple[Any | None, MelleaBasePayload]:
     """Invoke a hook if plugins are configured.
 
-    Returns ``(result, possibly-modified-payload)``.
-    If plugins are not configured, returns ``(None, original_payload)`` immediately.
+    Returns `(result, possibly-modified-payload)`.
+    If plugins are not configured, returns `(None, original_payload)` immediately.
 
     Three layers of no-op guards ensure zero overhead when plugins are not configured:
-    1. ``_plugins_enabled`` boolean — single pointer dereference
-    2. ``has_hooks_for(hook_type)`` — skips when no plugin subscribes
+    1. `_plugins_enabled` boolean — single pointer dereference
+    2. `has_hooks_for(hook_type)` — skips when no plugin subscribes
     3. Returns immediately when either guard fails
     """
     if not _plugins_enabled or _plugin_manager is None:

@@ -40,15 +40,15 @@ def eval_run(
     Args:
         test_files: Paths to JSON/JSONL files containing test cases.
         backend: Generation backend name.
-        model: Generation model name, or ``None`` for the default.
+        model: Generation model name, or `None` for the default.
         max_gen_tokens: Maximum tokens to generate for each response.
-        judge_backend: Judge backend name, or ``None`` to reuse the generation
+        judge_backend: Judge backend name, or `None` to reuse the generation
             backend.
-        judge_model: Judge model name, or ``None`` for the default.
+        judge_model: Judge model name, or `None` for the default.
         max_judge_tokens: Maximum tokens for the judge model's output.
         output_path: File path prefix for the results file.
-        output_format: Output format -- ``"json"`` or ``"jsonl"``.
-        continue_on_error: If ``True``, skip failed tests instead of raising.
+        output_format: Output format -- `"json"` or `"jsonl"`.
+        continue_on_error: If `True`, skip failed tests instead of raising.
     """
     from cli.eval.runner import run_evaluations
 

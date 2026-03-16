@@ -1,8 +1,8 @@
 """Execution engine for the test-based LLM evaluation pipeline.
 
-Loads JSON test files into ``TestBasedEval`` objects and, for each test, runs a
+Loads JSON test files into `TestBasedEval` objects and, for each test, runs a
 generator model to produce responses and a separate judge model to score them. Parses
-the judge output for a ``{"score": ..., "justification": ...}`` JSON fragment,
+the judge output for a `{"score": ..., "justification": ...}` JSON fragment,
 aggregates per-input pass/fail counts, and saves the full results to JSON or JSONL.
 """
 
@@ -30,7 +30,7 @@ class InputEvalResult:
         input_text (str): The raw input text sent to the generation model.
         model_output (str): The text response produced by the generation model.
         validation_passed (bool): Whether the judge scored this response as passing.
-        score (int): Numeric score assigned by the judge (``1`` for pass, ``0`` for fail).
+        score (int): Numeric score assigned by the judge (`1` for pass, `0` for fail).
         validation_reason (str): Justification text returned by the judge model.
 
     """
@@ -53,8 +53,8 @@ class InputEvalResult:
         """Serialise the input evaluation result to a plain dictionary.
 
         Returns:
-            dict: A dictionary with keys ``"input"``, ``"model_output"``,
-            ``"passed"``, ``"score"``, and ``"justification"``.
+            dict: A dictionary with keys `"input"`, `"model_output"`,
+            `"passed"`, `"score"`, and `"justification"`.
         """
         return {
             "input": self.input_text,
@@ -77,7 +77,7 @@ class TestEvalResult:
     Attributes:
         passed_count (int): Number of inputs that received a passing score.
         total_count (int): Total number of inputs evaluated.
-        pass_rate (float): Fraction of inputs that passed (``passed_count / total_count``).
+        pass_rate (float): Fraction of inputs that passed (`passed_count / total_count`).
     """
 
     def __init__(self, test_eval: TestBasedEval, input_results: list[InputEvalResult]):
@@ -88,11 +88,11 @@ class TestEvalResult:
         """Serialise the test evaluation result to a plain dictionary.
 
         Returns:
-            dict: A dictionary containing the test metadata (``"test_id"``,
-            ``"source"``, ``"name"``, ``"instructions"``), per-input results
-            under ``"input_results"``, expected targets under
-            ``"expected_targets"``, and summary counts (``"passed"``,
-            ``"total_count"``, ``"pass_rate"``).
+            dict: A dictionary containing the test metadata (`"test_id"`,
+            `"source"`, `"name"`, `"instructions"`), per-input results
+            under `"input_results"`, expected targets under
+            `"expected_targets"`, and summary counts (`"passed"`,
+            `"total_count"`, `"pass_rate"`).
         """
         return {
             "test_id": self.test_eval.test_id,
@@ -125,18 +125,18 @@ def create_session(
     """Create a mellea session with the specified backend and model.
 
     Args:
-        backend: Backend name: ``"ollama"``, ``"openai"``, ``"hf"``,
-            ``"watsonx"``, or ``"litellm"``.
-        model: Model ID or ``ModelIdentifier`` attribute name, or ``None``
+        backend: Backend name: `"ollama"`, `"openai"`, `"hf"`,
+            `"watsonx"`, or `"litellm"`.
+        model: Model ID or `ModelIdentifier` attribute name, or `None`
             to use the default model.
-        max_tokens: Maximum number of tokens to generate, or ``None`` for
+        max_tokens: Maximum number of tokens to generate, or `None` for
             the backend default.
 
     Returns:
-        A configured ``MelleaSession`` ready for generation.
+        A configured `MelleaSession` ready for generation.
 
     Raises:
-        ValueError: If ``backend`` is not one of the supported backend names.
+        ValueError: If `backend` is not one of the supported backend names.
         Exception: Re-raised from backend or session construction if
             initialisation fails.
     """
@@ -230,20 +230,20 @@ def run_evaluations(
 
     Args:
         test_files: List of paths to JSON test files. Each file should contain
-            ``"id"``, ``"source"``, ``"name"``, ``"instructions"``, and
-            ``"examples"`` fields.
+            `"id"`, `"source"`, `"name"`, `"instructions"`, and
+            `"examples"` fields.
         backend: Backend name for the generation model.
-        model: Model ID for the generator, or ``None`` for the default.
-        max_gen_tokens: Maximum tokens for the generator, or ``None`` for the
+        model: Model ID for the generator, or `None` for the default.
+        max_gen_tokens: Maximum tokens for the generator, or `None` for the
             backend default.
-        judge_backend: Backend name for the judge model, or ``None`` to reuse
+        judge_backend: Backend name for the judge model, or `None` to reuse
             the generation backend.
-        judge_model: Model ID for the judge, or ``None`` for the default.
-        max_judge_tokens: Maximum tokens for the judge, or ``None`` for the
+        judge_model: Model ID for the judge, or `None` for the default.
+        max_judge_tokens: Maximum tokens for the judge, or `None` for the
             backend default.
         output_path: File path prefix for saving results.
-        output_format: Output format: ``"json"`` or ``"jsonl"``.
-        continue_on_error: If ``True``, skip failed test evaluations instead of
+        output_format: Output format: `"json"` or `"jsonl"`.
+        continue_on_error: If `True`, skip failed test evaluations instead of
             raising.
     """
     all_test_evals: list[TestBasedEval] = []
@@ -314,16 +314,16 @@ def execute_test_eval(
 ) -> TestEvalResult:
     """Execute a single test evaluation.
 
-    For each input in the test, generates a response using ``generation_session``,
-    then validates using ``judge_session``.
+    For each input in the test, generates a response using `generation_session`,
+    then validates using `judge_session`.
 
     Args:
-        test_eval: The ``TestBasedEval`` object containing inputs and targets.
-        generation_session: ``MelleaSession`` used to produce model responses.
-        judge_session: ``MelleaSession`` used to score model responses.
+        test_eval: The `TestBasedEval` object containing inputs and targets.
+        generation_session: `MelleaSession` used to produce model responses.
+        judge_session: `MelleaSession` used to score model responses.
 
     Returns:
-        A ``TestEvalResult`` with per-input pass/fail outcomes.
+        A `TestEvalResult` with per-input pass/fail outcomes.
     """
     input_results = []
 
@@ -373,8 +373,8 @@ def parse_judge_output(judge_output: str):
         judge_output: Raw text output from the judge model.
 
     Returns:
-        A ``(score, justification)`` tuple where ``score`` is an integer (or
-        ``None`` if parsing failed) and ``justification`` is an explanatory
+        A `(score, justification)` tuple where `score` is an integer (or
+        `None` if parsing failed) and `justification` is an explanatory
         string.
     """
     try:
@@ -401,10 +401,10 @@ def save_results(results: list[TestEvalResult], output_path: str, output_format:
     """Persist evaluation results to disk in JSON or JSONL format.
 
     Args:
-        results: List of ``TestEvalResult`` objects to serialise.
+        results: List of `TestEvalResult` objects to serialise.
         output_path: Destination file path (extension may be appended if it
-            does not match ``output_format``).
-        output_format: Format string: ``"json"`` or ``"jsonl"``.
+            does not match `output_format`).
+        output_format: Format string: `"json"` or `"jsonl"`.
     """
     output_path_obj = Path(output_path)
     if output_path_obj.suffix != f".{output_format}":
@@ -441,7 +441,7 @@ def summary_stats(results: list[TestEvalResult]):
     """Print aggregated pass-rate statistics for a set of evaluation results.
 
     Args:
-        results: List of ``TestEvalResult`` objects to summarise.
+        results: List of `TestEvalResult` objects to summarise.
     """
     total_inputs = sum(r.total_count for r in results)
     passed_inputs = sum(r.passed_count for r in results)

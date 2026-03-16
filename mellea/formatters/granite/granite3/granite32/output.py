@@ -6,7 +6,7 @@ Parser which receives Granite 3.2 model output and returns the constituents of t
 output.
 
 The input to the parser is assumed to be as follows:
-    ```
+    ``
     response_text
 
     # Citations:
@@ -14,7 +14,7 @@ The input to the parser is assumed to be as follows:
 
     # Hallucinations:
     hallucinations_text
-    ```
+    ``
 
 The output from the lowest level of the parser is a dictionary as follows:
 
@@ -24,7 +24,7 @@ The output from the lowest level of the parser is a dictionary as follows:
     * "response": Model response text without the above constituents
 
 This dict is further refined into dataclasses before being returned as an extended
-``AssistantMessage``.
+`AssistantMessage`.
 """
 
 # Standard
@@ -75,7 +75,7 @@ def _parse_citations_text(citations_text: str) -> list[dict]:
     Given the citations text output by model under the "# Citations:" section,
     extract the citation info as an array of the form:
 
-    ```
+    ``
     [
         {
             "citation_id": "Citation ID output by model",
@@ -84,7 +84,7 @@ def _parse_citations_text(citations_text: str) -> list[dict]:
         },
         ...
     ]
-    ```
+    ``
     """
     citations: list[dict] = []
 
@@ -619,9 +619,9 @@ class Granite32OutputProcessor(OutputProcessor):
         Args:
             model_output (str): Raw text output from the Granite 3.2 model.
             chat_completion (ChatCompletion | None): The original chat completion
-                request that produced ``model_output``. Used to determine which
+                request that produced `model_output`. Used to determine which
                 output features (thinking, tools, citations, hallucinations) to
-                parse. Defaults to ``None``.
+                parse. Defaults to `None`.
 
         Returns:
             AssistantMessage: A :class:`Granite3AssistantMessage` containing the

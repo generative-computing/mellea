@@ -24,7 +24,7 @@ def _needs_logprobs(transformations: list | None) -> bool:
 
     :param transformations: Contents of the field by the same name in the YAML file
     :type transformations: list
-    :return: ``True`` if this intrinsic produces a field for which logprobs need to be
+    :return: `True` if this intrinsic produces a field for which logprobs need to be
         enabled for downstream result decoding to succeed.
     :rtype: bool
     """
@@ -37,7 +37,7 @@ def sentence_delimiter(tag, sentence_num) -> str:
     """Return a tag string that identifies the beginning of the indicated sentence.
 
     Args:
-        tag: Tag string prefix, e.g. ``"i"`` or ``"c"``.
+        tag: Tag string prefix, e.g. `"i"` or `"c"`.
         sentence_num: Zero-based index of the sentence.
 
     Returns:
@@ -53,7 +53,7 @@ def mark_sentence_boundaries(
     """Modify input strings by inserting sentence boundary markers.
 
     Modify one or more input strings by inserting a tag in the form
-    ``<[prefix][number]>``
+    `<[prefix][number]>`
     at the location of each sentence boundary.
 
     Args:
@@ -87,19 +87,19 @@ def move_documents_to_message(
 
     Args:
         chat_completion: A chat completion request as dataclass or parsed JSON.
-        how: How to serialize the documents; supported values are ``"string"``,
-            ``"json"``, and ``"roles"``.
+        how: How to serialize the documents; supported values are `"string"`,
+            `"json"`, and `"roles"`.
 
     Returns:
-        A copy of ``chat_completion`` with any documents under ``extra_body``
+        A copy of `chat_completion` with any documents under `extra_body`
         moved to the first message. Returned type will be the same as the input type.
         May return original object if no edits are necessary.
 
     Raises:
-        TypeError: If ``chat_completion`` is not a :class:`ChatCompletion` or
-            ``dict``.
-        ValueError: If ``how`` is not one of ``"string"``, ``"json"``, or
-            ``"roles"``.
+        TypeError: If `chat_completion` is not a :class:`ChatCompletion` or
+            `dict`.
+        ValueError: If `how` is not one of `"string"`, `"json"`, or
+            `"roles"`.
     """
     if isinstance(chat_completion, ChatCompletion):
         should_return_dataclass = True
@@ -172,9 +172,9 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
 
     Args:
         config_file (str | pathlib.Path | None): Path to the YAML configuration file for the
-            target intrinsic. Mutually exclusive with ``config_dict``.
+            target intrinsic. Mutually exclusive with `config_dict`.
         config_dict (dict | None): Inline configuration dictionary. Mutually exclusive with
-            ``config_file``.
+            `config_file`.
         model_name (str | None): Optional model name used to locate model-specific overrides
             within the configuration.
 
@@ -184,18 +184,18 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
         parameters (dict): Additional parameters (key-value pairs) that this
             rewriter adds to all chat completion requests.
         extra_body_parameters (dict): Extended vLLM-specific parameters that go
-            under the ``extra_body`` element of each request. These are merged
-            with any existing ``extra_body`` content in incoming requests.
+            under the `extra_body` element of each request. These are merged
+            with any existing `extra_body` content in incoming requests.
         instruction (str | None): Optional instruction template. When present,
             a new user message is appended with the formatted instruction.
         sentence_boundaries (dict[str, str] | None): Optional sentence-boundary
-            marking specification, mapping location strings (``"last_message"``
-            or ``"documents"``) to marker prefixes (e.g. ``"c"`` produces
-            ``<c0>``, ``<c1>``, …).
+            marking specification, mapping location strings (`"last_message"`
+            or `"documents"`) to marker prefixes (e.g. `"c"` produces
+            `<c0>`, `<c1>`, …).
         docs_as_message (str | None): Optional specification for moving
-            documents from ``extra_body/documents`` to a user message at the
-            start of the messages list. Value must be ``"string"``, ``"json"``,
-            or ``"roles"``.
+            documents from `extra_body/documents` to a user message at the
+            start of the messages list. Value must be `"string"`, `"json"`,
+            or `"roles"`.
     """
 
     config: dict
@@ -209,8 +209,8 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
     completion requests."""
 
     extra_body_parameters: dict
-    """Extended vLLM-specific parameters that go under the ``extra_body`` element of
-    the parameters field. These parameters need to be merged with any ``extra_body``
+    """Extended vLLM-specific parameters that go under the `extra_body` element of
+    the parameters field. These parameters need to be merged with any `extra_body`
     content that is present in incoming requests."""
 
     instruction: str | None
@@ -226,7 +226,7 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
 
     docs_as_message: str | None
     """
-    Optional specification for moving documents from ``extra_body/documents`` to a
+    Optional specification for moving documents from `extra_body/documents` to a
     user message at the beginning of the messages list. Value specifies how to serialize
     the documents into the message: "string" or "json".
     """

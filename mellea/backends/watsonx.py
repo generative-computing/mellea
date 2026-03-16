@@ -59,24 +59,24 @@ class WatsonxAIBackend(FormatterBackend):
 
     Args:
         model_id (str | ModelIdentifier): WatsonX model identifier. Defaults to
-            ``model_ids.IBM_GRANITE_4_HYBRID_SMALL``.
+            `model_ids.IBM_GRANITE_4_HYBRID_SMALL`.
         formatter (ChatFormatter | None): Formatter for rendering components.
-            Defaults to ``TemplateFormatter``.
+            Defaults to `TemplateFormatter`.
         base_url (str | None): URL for the WatsonX ML deployment endpoint;
-            defaults to the ``WATSONX_URL`` environment variable.
+            defaults to the `WATSONX_URL` environment variable.
         model_options (dict | None): Default model options for generation requests.
         api_key (str | None): WatsonX API key; defaults to the
-            ``WATSONX_API_KEY`` environment variable.
+            `WATSONX_API_KEY` environment variable.
         project_id (str | None): WatsonX project ID; defaults to the
-            ``WATSONX_PROJECT_ID`` environment variable.
+            `WATSONX_PROJECT_ID` environment variable.
 
     Attributes:
         to_mellea_model_opts_map_chats (dict): Mapping from chat-endpoint option names
-            to Mellea ``ModelOption`` sentinel keys.
+            to Mellea `ModelOption` sentinel keys.
         from_mellea_model_opts_map_chats (dict): Mapping from Mellea sentinel keys to
             chat-endpoint option names.
         to_mellea_model_opts_map_completions (dict): Mapping from completions-endpoint
-            option names to Mellea ``ModelOption`` sentinel keys.
+            option names to Mellea `ModelOption` sentinel keys.
         from_mellea_model_opts_map_completions (dict): Mapping from Mellea sentinel
             keys to completions-endpoint option names.
     """
@@ -272,10 +272,10 @@ class WatsonxAIBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generate a completion for ``action`` given ``ctx`` via the WatsonX chat API.
+        """Generate a completion for `action` given `ctx` via the WatsonX chat API.
 
-        Delegates to ``generate_from_chat_context``. Only chat contexts are
-        supported; raises ``NotImplementedError`` otherwise.
+        Delegates to `generate_from_chat_context`. Only chat contexts are
+        supported; raises `NotImplementedError` otherwise.
 
         Args:
             action (Component[C] | CBlock): The component or content block to generate
@@ -285,12 +285,12 @@ class WatsonxAIBackend(FormatterBackend):
                 structured/constrained output decoding.
             model_options (dict | None): Per-call model options that override the
                 backend's defaults.
-            tool_calls (bool): If ``True``, expose available tools to the model and
+            tool_calls (bool): If `True`, expose available tools to the model and
                 parse tool-call responses.
 
         Returns:
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
-                and an updated context that includes ``action`` and the new output.
+                and an updated context that includes `action` and the new output.
         """
         assert ctx.is_chat_context, NotImplementedError(
             "The watsonx.ai backend only supports chat-like contexts."
@@ -334,13 +334,13 @@ class WatsonxAIBackend(FormatterBackend):
             _format (type[BaseModelSubclass] | None): Optional Pydantic model class for
                 structured output decoding.
             model_options (dict | None): Per-call model options.
-            tool_calls (bool): If ``True``, expose available tools and parse responses.
+            tool_calls (bool): If `True`, expose available tools and parse responses.
 
         Returns:
             ModelOutputThunk[C]: A thunk holding the (lazy) model output.
 
         Raises:
-            Exception: If ``action`` is an ``ALoraRequirement``, which is not
+            Exception: If `action` is an `ALoraRequirement`, which is not
                 supported by this backend.
             RuntimeError: If not called from a thread with a running event loop.
         """
@@ -465,8 +465,8 @@ class WatsonxAIBackend(FormatterBackend):
     async def processing(self, mot: ModelOutputThunk, chunk: dict):
         """Accumulate content from a single WatsonX response dict into the output thunk.
 
-        Called for each non-streaming chat dict (with a ``"message"`` key) or
-        streaming delta dict (with a ``"delta"`` key). Tool call parsing is
+        Called for each non-streaming chat dict (with a `"message"` key) or
+        streaming delta dict (with a `"delta"` key). Tool call parsing is
         handled in the post-processing step.
 
         Args:
@@ -533,7 +533,7 @@ class WatsonxAIBackend(FormatterBackend):
             conversation (list[dict]): The chat conversation sent to the model,
                 used for logging.
             tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
-            seed: The random seed used during generation, or ``None``.
+            seed: The random seed used during generation, or `None`.
             _format: The structured output format class used during generation, if any.
         """
         # Reconstruct the chat_response from chunks if streamed.
@@ -665,7 +665,7 @@ class WatsonxAIBackend(FormatterBackend):
         """Generate completions for multiple actions without chat templating via WatsonX.
 
         Passes formatted prompt strings directly to WatsonX's generate endpoint.
-        The ``format`` parameter is not supported and will be ignored with a warning.
+        The `format` parameter is not supported and will be ignored with a warning.
 
         Args:
             actions (Sequence[Component[C] | CBlock]): Actions to generate completions for.

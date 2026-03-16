@@ -32,7 +32,7 @@ class Granite32InputProcessor(Granite3InputProcessor):
 
     This input processor is based on the Jinja template that was used during
     supervised fine tuning of these models. This template is as follows:
-    ```
+    ``
     {%- if messages[0]['role'] == 'system' %}
         {%- set system_message = messages[0]['content'] %}
         {%- set loop_messages = messages[1:] %}
@@ -122,7 +122,7 @@ class Granite32InputProcessor(Granite3InputProcessor):
             {{- '<|end_of_role|>' }}
         {%- endif %}
     {%- endfor %}
-    ```
+    ``
     """
 
     def _build_default_system_message(
@@ -227,7 +227,7 @@ class Granite32InputProcessor(Granite3InputProcessor):
         Args:
             chat_completion: The chat completion request to sanitize.
             parts (str): Which parts of the chat completion to sanitize;
-                defaults to ``"all"``.
+                defaults to `"all"`.
 
         Returns:
             The sanitized chat completion with all Granite 3.2 special tokens
@@ -243,17 +243,17 @@ class Granite32InputProcessor(Granite3InputProcessor):
         Args:
             chat_completion (ChatCompletion): The structured chat completion request
                 to convert into a tokenizer-ready prompt string.
-            add_generation_prompt (bool): When ``True``, appends the assistant role
+            add_generation_prompt (bool): When `True`, appends the assistant role
                 header to the end of the prompt to trigger generation. Defaults to
-                ``True``.
+                `True`.
 
         Returns:
             str: The prompt string formatted for the Granite 3.2 model tokenizer.
 
         Raises:
             ValueError: If conflicting options are specified, such as enabling
-                ``thinking`` mode together with documents, tools, or a custom
-                system message; or enabling ``citations`` or ``hallucinations``
+                `thinking` mode together with documents, tools, or a custom
+                system message; or enabling `citations` or `hallucinations`
                 with a custom system message.
         """
         chat_completion = Granite32ChatCompletion.model_validate(

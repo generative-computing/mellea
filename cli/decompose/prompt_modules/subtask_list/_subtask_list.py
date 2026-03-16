@@ -58,18 +58,18 @@ class _SubtaskList(PromptModule):
             `tuple` contains the generated "subtask" (`str`) and its generated "tag" (`str`).
 
             For example
-            ```
+            ``
             [ SubtaskItem(subtask=<str>, tag=<str>),
               SubtaskItem(subtask=<str>, tag=<str>) ]
-            ```
+            ``
 
             You can use dot notation to access the values. For example
-            ```
+            ``
             result: PromptModuleString = subtask_list.generate(task_prompt, mellea_session)
             parsed_result: list[SubtaskItem] = result.parse()
             subtask_0: str = result[0].subtask
             tag_0: str = result[0].tag
-            ```
+            ``
 
         Raises:
             TagExtractionError: An error occurred trying to extract content from the
