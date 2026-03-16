@@ -8,7 +8,6 @@ import base64
 import binascii
 import datetime
 import enum
-import time
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -17,9 +16,6 @@ from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
 
 import typing_extensions
 from PIL import Image as PILImage
-
-from ..plugins.manager import has_plugins, invoke_hook
-from ..plugins.types import HookType
 
 
 class CBlock:
@@ -216,9 +212,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         )
         self._process: Callable[[ModelOutputThunk, Any], Coroutine] | None = None
         self._post_process: Callable[[ModelOutputThunk], Coroutine] | None = None
-        self._on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
 
-        self._start: datetime.datetime | None = None
         self._generate_log: GenerateLog | None = None
 
     def _copy_from(self, other: ModelOutputThunk) -> None:
@@ -380,6 +374,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             assert self.parsed_repr is not None, (
                 "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
             )
+<<<<<<< HEAD
 
             # --- generation_post_call hook ---
             if has_plugins(HookType.GENERATION_POST_CALL):
@@ -401,6 +396,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 # replacement = await invoke_hook(...)
                 # if replacement is not None and replacement is not self:
                 #     self._copy_from(replacement)
+=======
+            return self._underlying_value  # type: ignore
+>>>>>>> parent of dd14229 (feat: hook system and plugin support for Mellea (#582))
 
         return (
             self._underlying_value

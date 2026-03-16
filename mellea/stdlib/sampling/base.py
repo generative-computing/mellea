@@ -32,8 +32,6 @@ from ...core import (
     SamplingStrategy,
     ValidationResult,
 )
-from ...plugins.manager import has_plugins, invoke_hook
-from ...plugins.types import HookType
 from ...stdlib import functional as mfuncs
 from ..components import Instruction, Message
 from ..context import ChatContext
@@ -162,28 +160,10 @@ class BaseSamplingStrategy(SamplingStrategy):
         reqs = list(set(reqs))
 
         loop_count = 0
-
-        # --- sampling_loop_start hook ---
-        effective_loop_budget = self.loop_budget
-        if has_plugins(HookType.SAMPLING_LOOP_START):
-            from ...plugins.hooks.sampling import SamplingLoopStartPayload
-
-            start_payload = SamplingLoopStartPayload(
-                strategy_name=type(self).__name__,
-                action=action,
-                context=context,
-                requirements=reqs,
-                loop_budget=self.loop_budget,
-            )
-            _, start_payload = await invoke_hook(
-                HookType.SAMPLING_LOOP_START, start_payload, backend=backend
-            )
-            effective_loop_budget = start_payload.loop_budget
-
         loop_budget_range_iterator = (
-            tqdm.tqdm(range(effective_loop_budget))  # type: ignore
+            tqdm.tqdm(range(self.loop_budget))  # type: ignore
             if show_progress
-            else range(effective_loop_budget)  # type: ignore
+            else range(self.loop_budget)  # type: ignore
         )
 
         next_action = deepcopy(action)
@@ -231,49 +211,13 @@ class BaseSamplingStrategy(SamplingStrategy):
             sampled_actions.append(next_action)
             sample_contexts.append(result_ctx)
 
-            all_validations_passed = all(bool(s[1]) for s in constraint_scores)
-
-            # --- sampling_iteration hook ---
-            if has_plugins(HookType.SAMPLING_ITERATION):
-                from ...plugins.hooks.sampling import SamplingIterationPayload
-
-                iter_payload = SamplingIterationPayload(
-                    iteration=loop_count,
-                    action=next_action,
-                    result=result,
-                    validation_results=constraint_scores,
-                    all_validations_passed=all_validations_passed,
-                    valid_count=sum(1 for s in constraint_scores if bool(s[1])),
-                    total_count=len(constraint_scores),
-                )
-                await invoke_hook(
-                    HookType.SAMPLING_ITERATION, iter_payload, backend=backend
-                )
-
             # if all vals are true -- break and return success
-            if all_validations_passed:
+            if all(bool(s[1]) for s in constraint_scores):
                 flog.info("SUCCESS")
                 assert (
                     result._generate_log is not None
                 )  # Cannot be None after generation.
                 result._generate_log.is_final_result = True
-
-                # --- sampling_loop_end hook (success) ---
-                if has_plugins(HookType.SAMPLING_LOOP_END):
-                    from ...plugins.hooks.sampling import SamplingLoopEndPayload
-
-                    end_payload = SamplingLoopEndPayload(
-                        success=True,
-                        iterations_used=loop_count,
-                        final_result=result,
-                        final_action=next_action,
-                        final_context=result_ctx,
-                        all_results=sampled_results,
-                        all_validations=sampled_scores,
-                    )
-                    await invoke_hook(
-                        HookType.SAMPLING_LOOP_END, end_payload, backend=backend
-                    )
 
                 # SUCCESS !!!!
                 return SamplingResult(
@@ -309,23 +253,6 @@ class BaseSamplingStrategy(SamplingStrategy):
                 sampled_scores,
             )
 
-            # --- sampling_repair hook ---
-            if has_plugins(HookType.SAMPLING_REPAIR):
-                from ...plugins.hooks.sampling import SamplingRepairPayload
-
-                repair_payload = SamplingRepairPayload(
-                    repair_type=getattr(self, "_get_repair_type", lambda: "unknown")(),
-                    failed_action=sampled_actions[-1],
-                    failed_result=sampled_results[-1],
-                    failed_validations=sampled_scores[-1],
-                    repair_action=next_action,
-                    repair_context=next_context,
-                    repair_iteration=loop_count,
-                )
-                await invoke_hook(
-                    HookType.SAMPLING_REPAIR, repair_payload, backend=backend
-                )
-
         flog.info(
             f"Invoking select_from_failure after {len(sampled_results)} failed attempts."
         )
@@ -342,25 +269,6 @@ class BaseSamplingStrategy(SamplingStrategy):
             sampled_results[best_failed_index]._generate_log is not None
         )  # Cannot be None after generation.
         sampled_results[best_failed_index]._generate_log.is_final_result = True  # type: ignore
-
-        # --- sampling_loop_end hook (failure) ---
-        if has_plugins(HookType.SAMPLING_LOOP_END):
-            from ...plugins.hooks.sampling import SamplingLoopEndPayload
-
-            _final_ctx = (
-                sample_contexts[best_failed_index] if sample_contexts else context
-            )
-            end_payload = SamplingLoopEndPayload(
-                success=False,
-                iterations_used=loop_count,
-                final_result=sampled_results[best_failed_index],
-                final_action=sampled_actions[best_failed_index],
-                final_context=_final_ctx,
-                failure_reason=f"Budget exhausted after {loop_count} iterations",
-                all_results=sampled_results,
-                all_validations=sampled_scores,
-            )
-            await invoke_hook(HookType.SAMPLING_LOOP_END, end_payload, backend=backend)
 
         return SamplingResult(
             result_index=best_failed_index,

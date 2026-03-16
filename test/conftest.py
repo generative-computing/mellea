@@ -206,11 +206,6 @@ def pytest_configure(config):
         "markers", "llm: Tests that make LLM calls (needs at least Ollama)"
     )
 
-    # Plugin acceptance markers
-    config.addinivalue_line(
-        "markers", "plugins: Acceptance tests that register all built-in plugin sets"
-    )
-
     # Store vLLM isolation flag in config
     config._vllm_process_isolation = False
 

@@ -135,8 +135,11 @@
           {
             "group": "Troubleshooting",
             "pages": [
-              "troubleshooting/common-errors",
-              "troubleshooting/faq"
+              "core-concept/tuning",
+              "core-concept/adapters",
+              "core-concept/alora",
+              "core-concept/interoperability",
+              "core-concept/plugins"
             ]
           }
         ]
