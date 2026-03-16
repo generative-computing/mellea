@@ -31,6 +31,12 @@ Detects when model outputs contain hallucinated information.
 ### query_rewrite.py
 Rewrites queries for better retrieval or understanding.
 
+### uncertainty.py
+Estimates the model's certainty about answering a question.
+
+### requirement_check.py
+Detect if text adheres to provided requirements.
+
 ## Concepts Demonstrated
 
 - **Intrinsic Functions**: Specialized model capabilities beyond text generation
@@ -48,8 +54,8 @@ from mellea.stdlib.components import Intrinsic
 import mellea.stdlib.functional as mfuncs
 
 # Create backend and adapter
-backend = LocalHFBackend(model_id="ibm-granite/granite-3.3-8b-instruct")
-adapter = IntrinsicAdapter("requirement_check", 
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+adapter = IntrinsicAdapter("requirement_check",
                                base_model_name=backend.base_model_name)
 backend.add_adapter(adapter)
 
@@ -71,6 +77,7 @@ out, new_ctx = mfuncs.act(
 - **context_relevance**: Assess context-query relevance
 - **hallucination_detection**: Detect hallucinated content
 - **query_rewrite**: Improve query formulation
+- **uncertainty**: Estimate certainty about answering a question
 
 ## Related Documentation
 
