@@ -161,12 +161,6 @@ def pytest_addoption(parser):
         default=False,
         help="Register all acceptance plugin sets for every test",
     )
-    add_option_safe(
-        "--isolate-heavy",
-        action="store_true",
-        default=False,
-        help="Run heavy GPU tests in isolated subprocesses (slower, but guarantees CUDA memory release)",
-    )
 
 
 def pytest_configure(config):
@@ -607,14 +601,9 @@ async def register_acceptance_sets(request):
         # If plugins are enabled, we don't need to re-enable them for this specific test.
         return
 
-    from mellea.plugins.registry import _HAS_PLUGIN_FRAMEWORK
-
-    if not _HAS_PLUGIN_FRAMEWORK:
-        yield
-        return
-
     from mellea.plugins import register
     from mellea.plugins.manager import shutdown_plugins
+
     from test.plugins._acceptance_sets import ALL_ACCEPTANCE_SETS
 
     for ps in ALL_ACCEPTANCE_SETS:
@@ -633,14 +622,9 @@ async def auto_register_acceptance_sets(request):
         yield
         return
 
-    from mellea.plugins.registry import _HAS_PLUGIN_FRAMEWORK
-
-    if not _HAS_PLUGIN_FRAMEWORK:
-        yield
-        return
-
     from mellea.plugins import register
     from mellea.plugins.manager import shutdown_plugins
+
     from test.plugins._acceptance_sets import ALL_ACCEPTANCE_SETS
 
     for ps in ALL_ACCEPTANCE_SETS:

@@ -49,15 +49,15 @@ class CBlock:
         return self._underlying_value
 
     @value.setter
-    def value(self, v: str) -> None:
+    def value(self, v: str):
         """Sets the value of the block."""
         self._underlying_value = v
 
-    def __str__(self) -> str:
+    def __str__(self):
         """Stringifies the block."""
         return self.value if self.value else ""
 
-    def __repr__(self) -> str:
+    def __repr__(self):
         """Provides a python-parsable representation of the block (usually)."""
         return f"CBlock({self.value}, {self._meta.__repr__()})"
 
@@ -116,7 +116,7 @@ class ImageBlock(CBlock):
         image_base64 = cls.pil_to_base64(image)
         return cls(image_base64, meta)
 
-    def __repr__(self) -> str:
+    def __repr__(self):
         """Provides a python-parsable representation of the block (usually)."""
         return f"ImageBlock({self.value}, {self._meta.__repr__()})"
 
@@ -215,21 +215,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
         self._generate_log: GenerateLog | None = None
 
-    def _copy_from(self, other: ModelOutputThunk) -> None:
-        """Copy computed-output fields from *other* into *self*.
-
-        This is used when a hook replaces the MOT: callers already hold a
-        reference to *self*, so we swap the output-relevant state in-place
-        rather than replacing the object.
-        """
-        self._underlying_value = other._underlying_value
-        self._meta = other._meta
-        self.parsed_repr = other.parsed_repr
-        self.tool_calls = other.tool_calls
-        self._thinking = other._thinking
-        self._generate_log = other._generate_log
-
-    def is_computed(self) -> bool:
+    def is_computed(self):
         """Returns true only if this Thunk has already been filled."""
         return self._computed
 
@@ -241,7 +227,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         return self._underlying_value
 
     @value.setter
-    def value(self, v: str) -> None:
+    def value(self, v: str):
         """Sets the value of the block."""
         self._underlying_value = v
 
@@ -282,9 +268,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
             RuntimeError: If called when the ModelOutputThunk's generate function is not async compatible.
         """
         if self._computed:
-            raise RuntimeError(
-                "Streaming has finished and MOT is computed. Subsequent calls to mot.astream() are not permitted."
-            )
+            assert self.value is not None  # If computed, the value cannot be None.
+            return self.value
 
         do_set_computed = False
 
@@ -374,31 +359,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             assert self.parsed_repr is not None, (
                 "enforce constraint that a computed ModelOutputThunk has a non-None parsed_repr"
             )
-<<<<<<< HEAD
-
-            # --- generation_post_call hook ---
-            if has_plugins(HookType.GENERATION_POST_CALL):
-                from ..plugins.hooks.generation import GenerationPostCallPayload
-
-                glog = self._generate_log
-                prompt = glog.prompt if glog and glog.prompt else ""
-                latency_ms = (
-                    (datetime.datetime.now() - self._start).total_seconds() * 1000
-                    if self._start
-                    else -1
-                )
-                post_payload = GenerationPostCallPayload(
-                    prompt=prompt, model_output=self, latency_ms=latency_ms
-                )
-                await invoke_hook(HookType.GENERATION_POST_CALL, post_payload)
-                # NOTE: If we allow generation_post_call to modify the model output thunk, we need to
-                # set the value and copy over fields here.
-                # replacement = await invoke_hook(...)
-                # if replacement is not None and replacement is not self:
-                #     self._copy_from(replacement)
-=======
             return self._underlying_value  # type: ignore
->>>>>>> parent of dd14229 (feat: hook system and plugin support for Mellea (#582))
 
         return (
             self._underlying_value
@@ -406,14 +367,14 @@ class ModelOutputThunk(CBlock, Generic[S]):
             else self._underlying_value[beginning_length:]  # type: ignore
         )
 
-    def __repr__(self) -> str:
+    def __repr__(self):
         """Provides a python-parsable representation (usually).
 
         Differs from CBlock because `._meta` can be very large for ModelOutputThunks.
         """
         return f"ModelOutputThunk({self.value})"
 
-    def __copy__(self) -> ModelOutputThunk:
+    def __copy__(self):
         """Returns a shallow copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generating."""
         copied = ModelOutputThunk(
             self._underlying_value, self._meta, self.parsed_repr, self.tool_calls
@@ -433,7 +394,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         copied._model_options = self._model_options
         return copied
 
-    def __deepcopy__(self, memo: dict) -> ModelOutputThunk:
+    def __deepcopy__(self, memo):
         """Returns a deep copy of the ModelOutputThunk. A copied ModelOutputThunk cannot be used for generation; don't copy over fields associated with generation. Similar to __copy__ but creates deepcopies of _meta, parsed_repr, and most other fields that are objects."""
         # Use __init__ to initialize all fields. Modify the fields that need to be copied/deepcopied below.
         deepcopied = ModelOutputThunk(self._underlying_value)
@@ -485,7 +446,7 @@ class Context(abc.ABC):
     _is_root: bool
     _is_chat_context: bool = True
 
-    def __init__(self) -> None:
+    def __init__(self):
         """Constructs a new root context with no content."""
         self._previous = None
         self._data = None
@@ -587,7 +548,7 @@ class Context(abc.ABC):
                 return c
         return None
 
-    def last_turn(self) -> ContextTurn | None:
+    def last_turn(self):
         """The last input/output turn of the context.
 
         This can be partial. If the last event is an input, then the output is None.
@@ -629,7 +590,7 @@ class AbstractMelleaTool(abc.ABC):
     """Name of the tool."""
 
     @abc.abstractmethod
-    def run(self, *args: Any, **kwargs: Any) -> Any:
+    def run(self, *args, **kwargs) -> Any:
         """Runs the tool on the given arguments."""
 
     @property
