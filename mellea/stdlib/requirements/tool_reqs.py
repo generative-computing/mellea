@@ -15,7 +15,7 @@ def _name2str(tool_name: str | Callable) -> str:
             raise TypeError(f"Expected Callable or str but found: {type(tool_name)}")
 
 
-def uses_tool(tool_name: str | Callable, check_only=False):
+def uses_tool(tool_name: str | Callable, check_only: bool = False) -> Requirement:
     """Forces the model to call a given tool.
 
     Args:
@@ -26,7 +26,7 @@ def uses_tool(tool_name: str | Callable, check_only=False):
     """
     tool_name = _name2str(tool_name)
 
-    def _validate(ctx: Context):
+    def _validate(ctx: Context) -> ValidationResult:
         output = ctx.last_output()
         assert output is not None
         if output.tool_calls is None:
@@ -65,7 +65,7 @@ def tool_arg_validator(
     if tool_name:
         tool_name = _name2str(tool_name)
 
-    def _validate(ctx: Context):
+    def _validate(ctx: Context) -> ValidationResult:
         output = ctx.last_output()
         assert output is not None
 

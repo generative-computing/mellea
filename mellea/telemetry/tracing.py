@@ -15,6 +15,7 @@ Configuration via environment variables:
 """
 
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
 from importlib.metadata import version
 from typing import Any
@@ -50,7 +51,7 @@ _CONSOLE_EXPORT = os.getenv("MELLEA_TRACE_CONSOLE", "false").lower() in (
 )
 
 
-def _setup_tracer_provider():
+def _setup_tracer_provider() -> Any:
     """Set up the global tracer provider with OTLP exporter if configured."""
     if not _OTEL_AVAILABLE:
         return None
@@ -101,7 +102,7 @@ def is_backend_tracing_enabled() -> bool:
 
 
 @contextmanager
-def trace_application(name: str, **attributes: Any):
+def trace_application(name: str, **attributes: Any) -> Generator[Any, None, None]:
     """Create an application trace span if application tracing is enabled.
 
     Args:
@@ -122,7 +123,7 @@ def trace_application(name: str, **attributes: Any):
 
 
 @contextmanager
-def trace_backend(name: str, **attributes: Any):
+def trace_backend(name: str, **attributes: Any) -> Generator[Any, None, None]:
     """Create a backend trace span if backend tracing is enabled.
 
     Follows Gen-AI semantic conventions for LLM operations.
@@ -147,7 +148,7 @@ def trace_backend(name: str, **attributes: Any):
         yield None
 
 
-def start_backend_span(name: str, **attributes: Any):
+def start_backend_span(name: str, **attributes: Any) -> Any:
     """Start a backend trace span without auto-closing (for async operations).
 
     Use this when you need to manually control span lifecycle, such as for

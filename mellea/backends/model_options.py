@@ -92,7 +92,7 @@ class ModelOption:
         return new_options
 
     @staticmethod
-    def remove_special_keys(model_options) -> dict[str, Any]:
+    def remove_special_keys(model_options: dict[str, Any]) -> dict[str, Any]:
         """Removes all sentiel-valued keys (i.e., those that start with @@@)."""
         new_options = {}
         for k, v in model_options.items():

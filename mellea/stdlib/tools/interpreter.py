@@ -45,7 +45,7 @@ class ExecutionResult:
     """ Used for returning results from static analyses. """
     analysis_result: Any | None = None
 
-    def to_validationresult_reason(self):
+    def to_validationresult_reason(self) -> str:
         """Maps an ExecutionResult to a ValidationResult reason.
 
         TODO: Downstream use of this method is really hacky. A far better solution is for `ExecutionResult` to implement the `ValidationResult` interface.
@@ -59,8 +59,10 @@ class ExecutionResult:
             reason = self.skip_message
         else:
             if self.success:
+                assert self.stdout is not None
                 reason = self.stdout
             else:
+                assert self.stderr is not None
                 reason = self.stderr
         return reason
 

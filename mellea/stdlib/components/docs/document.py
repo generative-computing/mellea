@@ -15,7 +15,7 @@ class Document(Component[str]):
 
     def parts(self) -> list[Component | CBlock]:
         """The set of all the constituent parts of the `Component`."""
-        raise NotImplementedError("parts isn't implemented by default")
+        return []
 
     def format_for_llm(self) -> str:
         """Formats the `Document` into a string.

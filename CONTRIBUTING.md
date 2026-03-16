@@ -293,6 +293,9 @@ Tests are categorized using pytest markers:
 - `@pytest.mark.llm` - Makes LLM calls (needs at least Ollama)
 - `@pytest.mark.slow` - Tests taking >5 minutes (skipped via `SKIP_SLOW=1`)
 
+**Execution Strategy Markers:**
+- `@pytest.mark.requires_gpu_isolation` - Requires OS-level process isolation to clear CUDA memory (use with `--isolate-heavy` or `CICD=1`)
+
 **Default behavior:**
 - `uv run pytest` skips slow tests (>5 min) but runs qualitative tests
 - Use `pytest -m "not qualitative"` for fast tests only (~2 min)
@@ -363,8 +366,10 @@ print(m.last_prompt())
 ## Additional Resources
 
 ### Documentation
+
+- **[Docs writing guide](docs/docs/guide/CONTRIBUTING.md)** - Conventions, PR checklist, and review process for documentation contributions
 - **[Tutorial](docs/tutorial.md)** - Comprehensive guide to Mellea concepts
-- **[API Documentation](https://mellea.ai/)** - Full API reference
+- **[API Documentation](https://docs.mellea.ai)** - Published documentation site
 - **[Test Markers Guide](test/MARKERS_GUIDE.md)** - Detailed pytest marker documentation
 - **[AGENTS.md](AGENTS.md)** - Guidelines for AI assistants working on Mellea internals
 - **[AGENTS_TEMPLATE.md](docs/AGENTS_TEMPLATE.md)** - Template for projects using Mellea

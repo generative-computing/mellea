@@ -5,6 +5,7 @@ from functools import reduce
 from typing import Any
 
 import torch
+from transformers import PreTrainedModel
 from transformers.cache_utils import DynamicCache
 from transformers.tokenization_utils_base import BatchEncoding
 
@@ -30,7 +31,7 @@ def merge_dynamic_caches(caches: Iterable[DynamicCache]) -> DynamicCache:
 
 
 def tokens_to_legacy_cache(
-    model, device: str, tokens_or_cache: BatchEncoding | DynamicCache
+    model: PreTrainedModel, device: str, tokens_or_cache: BatchEncoding | DynamicCache
 ) -> Iterable[LegacyCache]:
     """Prefills and returns Ks and Vs as a LegacyCache."""
     if type(tokens_or_cache) is DynamicCache:

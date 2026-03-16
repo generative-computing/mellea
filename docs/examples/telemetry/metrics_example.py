@@ -1,22 +1,45 @@
 # pytest: ollama, llm
 
-"""Example demonstrating OpenTelemetry metrics in Mellea.
+"""Example demonstrating OpenTelemetry metrics exporters in Mellea.
 
-This example shows how to use token usage metrics to track LLM consumption.
+This example shows how to use token usage metrics with different exporters:
+- Console: Print metrics to console for debugging
+- OTLP: Export to OpenTelemetry Protocol collectors
+- Prometheus: Expose HTTP endpoint for Prometheus scraping
 
 Run with different configurations:
 
-# Enable metrics with console output (simplest)
+# 1. Console exporter (simplest - for debugging)
 export MELLEA_METRICS_ENABLED=true
 export MELLEA_METRICS_CONSOLE=true
 python metrics_example.py
 
-# Enable metrics with OTLP export (requires OTLP collector)
+# 2. OTLP exporter (production observability)
 export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_OTLP=true
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 export OTEL_SERVICE_NAME=mellea-metrics-example
 python metrics_example.py
+
+# 3. Prometheus exporter (Prometheus monitoring)
+export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_PROMETHEUS=true
+python metrics_example.py
+# Then access metrics at: curl http://localhost:9464/metrics
+
+# 4. Multiple exporters simultaneously
+export MELLEA_METRICS_ENABLED=true
+export MELLEA_METRICS_CONSOLE=true
+export MELLEA_METRICS_OTLP=true
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export MELLEA_METRICS_PROMETHEUS=true
+python metrics_example.py
+
+# For OTLP Collector and Prometheus setup instructions, see:
+# docs/dev/telemetry.md
 """
+
+import os
 
 from mellea import generative, start_session
 from mellea.stdlib.requirements import req
@@ -48,6 +71,14 @@ def main():
         return
 
     print("✓ Token metrics enabled")
+
+    # When Prometheus is enabled, start an HTTP server to expose metrics
+    if os.getenv("MELLEA_METRICS_PROMETHEUS", "false").lower() == "true":
+        from prometheus_client import start_http_server
+
+        start_http_server(9464)
+        print("✓ Prometheus endpoint: http://localhost:9464/metrics")
+
     print("=" * 60)
 
     # Start a session - metrics recorded automatically
@@ -83,7 +114,22 @@ def main():
 
     print("\n" + "=" * 60)
     print("Example complete! Token metrics recorded.")
-    print("=" * 60)
+
+    # When Prometheus is enabled, keep the process running so the endpoint can be scraped
+    if os.getenv("MELLEA_METRICS_PROMETHEUS", "false").lower() == "true":
+        print("Prometheus endpoint still available at http://localhost:9464/metrics")
+        print("Press Ctrl+C to exit.")
+        print("=" * 60)
+
+        import time
+
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\nShutting down.")
+    else:
+        print("=" * 60)
 
 
 if __name__ == "__main__":
