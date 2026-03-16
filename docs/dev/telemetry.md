@@ -52,6 +52,13 @@ Telemetry is configured via environment variables:
 | `MELLEA_METRICS_PROMETHEUS` | Enable Prometheus metric reader (registers with prometheus_client registry) | `false` |
 | `OTEL_METRIC_EXPORT_INTERVAL` | Export interval in milliseconds | `60000` |
 
+#### Logging Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MELLEA_LOGS_OTLP` | Enable OTLP logs exporter | `false` |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | OTLP logs-specific endpoint (overrides general endpoint) | None |
+
 ### Application Trace Scope
 
 The application tracer (`mellea.application`) instruments:
@@ -561,6 +568,105 @@ Enable at least one exporter:
 - OTLP: `export MELLEA_METRICS_OTLP=true` + endpoint
 - Prometheus: `export MELLEA_METRICS_PROMETHEUS=true`
 
+### OTLP Logging Export
+
+Mellea's internal logging (via `FancyLogger`) can export logs to OTLP collectors for centralized log aggregation and analysis. This complements the existing tracing and metrics capabilities.
+
+**Note**: OTLP logging is **disabled by default** and requires explicit enablement. When disabled, Mellea's logging works normally (console + REST handlers) with zero overhead.
+
+#### Configuration
+
+Enable OTLP log export with environment variables:
+
+```bash
+# Enable OTLP logs exporter
+export MELLEA_LOGS_OTLP=true
+
+# Configure OTLP endpoint (required)
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+
+# Optional: Use logs-specific endpoint (overrides general endpoint)
+export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318
+
+# Optional: Set service name
+export OTEL_SERVICE_NAME=my-mellea-app
+```
+
+#### How It Works
+
+When enabled, Mellea's `FancyLogger` adds an OpenTelemetry `LoggingHandler` alongside existing handlers:
+- **Console handler**: Continues to work normally
+- **REST handler**: Continues to work normally
+- **OTLP handler**: Exports logs to configured OTLP collector (new)
+
+Logs are exported using OpenTelemetry's Logs API with batched processing for efficiency.
+
+#### OTLP Collector Setup Example
+
+```bash
+# Create otel-collector-config.yaml
+cat > otel-collector-config.yaml <<EOF
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+exporters:
+  debug:
+    verbosity: detailed
+  file:
+    path: ./mellea-logs.json
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      exporters: [debug, file]
+EOF
+
+# Start OTLP collector
+docker run -p 4317:4317 \
+  -v $(pwd)/otel-collector-config.yaml:/etc/otelcol/config.yaml \
+  -v $(pwd):/logs \
+  otel/opentelemetry-collector:latest
+```
+
+#### Integration with Observability Platforms
+
+OTLP logs work with any OTLP-compatible platform:
+- **Grafana Loki**: Log aggregation and querying
+- **Elasticsearch**: Log storage and analysis
+- **Datadog**: Unified logs, traces, and metrics
+- **New Relic**: Centralized logging
+- **Splunk**: Log analysis and monitoring
+
+#### Performance
+
+- **Zero overhead when disabled**: No OTLP handler created, no performance impact
+- **Batched export**: Logs are batched and exported asynchronously
+- **Non-blocking**: Log export never blocks application code
+- **Minimal overhead when enabled**: OpenTelemetry's efficient batching minimizes impact
+
+#### Troubleshooting
+
+**Logs not appearing:**
+1. Verify `MELLEA_LOGS_OTLP=true` is set
+2. Check that OTLP endpoint is configured and reachable
+3. Verify OTLP collector is running and configured to receive logs
+4. Check collector logs for connection errors
+
+**Warning about missing endpoint:**
+```
+WARNING: OTLP logs exporter is enabled but no endpoint is configured
+```
+Set either `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`.
+
+**Connection refused:**
+1. Verify OTLP collector is running: `docker ps | grep otel`
+2. Check endpoint URL is correct (default: `http://localhost:4317`)
+3. Verify network connectivity: `curl http://localhost:4317`
+
 ### Future Enhancements
 
 Planned improvements to telemetry:
@@ -578,6 +684,5 @@ Planned improvements to telemetry:
 - Integration with LangSmith and other LLM observability tools
 
 **Logging:**
-- Structured logging with OpenTelemetry Logs API
-- Log correlation with traces and metrics
-- Log export to OTLP collectors
+- Log correlation with traces and metrics (automatic trace/span ID injection)
+- Structured log attributes for better querying

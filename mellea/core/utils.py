@@ -1,4 +1,10 @@
-"""Utils for Core Library."""
+"""Logging utilities for the mellea core library.
+
+Provides ``FancyLogger``, a singleton logger with colour-coded console output and
+an optional REST handler (``RESTHandler``) that forwards log records to a local
+``/api/receive`` endpoint when the ``FLOG`` environment variable is set. All
+internal mellea modules obtain their logger via ``FancyLogger.get_logger()``.
+"""
 
 import json
 import logging
@@ -9,7 +15,18 @@ import requests
 
 
 class RESTHandler(logging.Handler):
-    """RESTHandler for logging."""
+    """Logging handler that forwards records to a local REST endpoint.
+
+    Sends log records as JSON to ``/api/receive`` when the ``FLOG`` environment
+    variable is set. Failures are silently suppressed to avoid disrupting the
+    application.
+
+    Args:
+        api_url (str): The URL of the REST endpoint that receives log records.
+        method (str): HTTP method to use when sending records (default ``"POST"``).
+        headers (dict | None): HTTP headers to send; defaults to
+            ``{"Content-Type": "application/json"}`` when ``None``.
+    """
 
     def __init__(
         self, api_url: str, method: str = "POST", headers: dict[str, str] | None = None
@@ -21,7 +38,13 @@ class RESTHandler(logging.Handler):
         self.headers = headers or {"Content-Type": "application/json"}
 
     def emit(self, record: logging.LogRecord) -> None:
-        """Attempts to emit a record to FLOG, or silently fails."""
+        """Forwards a log record to the REST endpoint when the ``FLOG`` environment variable is set.
+
+        Silently suppresses any network or HTTP errors to avoid disrupting the application.
+
+        Args:
+            record (logging.LogRecord): The log record to forward.
+        """
         if os.environ.get("FLOG"):
             log_data = self.format(record)
             try:
@@ -38,10 +61,21 @@ class RESTHandler(logging.Handler):
 
 
 class JsonFormatter(logging.Formatter):
-    """Logging formatter for JSON."""
+    """Logging formatter that serialises log records as structured JSON dicts.
+
+    Includes timestamp, level, message, module, function name, line number,
+    process ID, thread ID, and (if present) exception information.
+    """
 
     def format(self, record):  # type: ignore
-        """Formats record as a JSON serializable object."""
+        """Formats a log record as a JSON-serialisable dictionary.
+
+        Includes timestamp, level, message, module, function name, line number,
+        process ID, thread ID, and exception info if present.
+
+        Args:
+            record (logging.LogRecord): The log record to format.
+        """
         log_record = {
             "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,
@@ -58,7 +92,17 @@ class JsonFormatter(logging.Formatter):
 
 
 class CustomFormatter(logging.Formatter):
-    """A nice custom formatter copied from [Sergey Pleshakov's post on StackOverflow](https://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output)."""
+    """A nice custom formatter copied from [Sergey Pleshakov's post on StackOverflow](https://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output).
+
+    Attributes:
+        cyan (str): ANSI escape code for cyan text, used for DEBUG messages.
+        grey (str): ANSI escape code for grey text, used for INFO messages.
+        yellow (str): ANSI escape code for yellow text, used for WARNING messages.
+        red (str): ANSI escape code for red text, used for ERROR messages.
+        bold_red (str): ANSI escape code for bold red text, used for CRITICAL messages.
+        reset (str): ANSI escape code to reset text colour.
+        FORMATS (dict): Mapping from logging level integer to the colour-formatted format string.
+    """
 
     cyan = "\033[96m"  # Cyan
     grey = "\x1b[38;20m"
@@ -77,14 +121,38 @@ class CustomFormatter(logging.Formatter):
     }
 
     def format(self, record: logging.LogRecord) -> str:
-        """The format fn."""
+        """Formats a log record using a colour-coded ANSI format string based on the record's log level.
+
+        Args:
+            record (logging.LogRecord): The log record to format.
+
+        Returns:
+            str: The formatted log record string with ANSI colour codes applied.
+        """
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(log_fmt, datefmt="%H:%M:%S")
         return formatter.format(record)
 
 
 class FancyLogger:
-    """A fancy logger."""
+    """Singleton logger with colour-coded console output and optional REST forwarding.
+
+    Obtain the shared logger instance via ``FancyLogger.get_logger()``. Log level
+    defaults to ``INFO`` but can be raised to ``DEBUG`` by setting the ``DEBUG``
+    environment variable. When the ``FLOG`` environment variable is set, records are
+    also forwarded to a local ``/api/receive`` REST endpoint via ``RESTHandler``.
+
+    Attributes:
+        logger (logging.Logger | None): The shared ``logging.Logger`` instance; ``None`` until first call to ``get_logger()``.
+        CRITICAL (int): Numeric level for critical log messages (50).
+        FATAL (int): Alias for ``CRITICAL`` (50).
+        ERROR (int): Numeric level for error log messages (40).
+        WARNING (int): Numeric level for warning log messages (30).
+        WARN (int): Alias for ``WARNING`` (30).
+        INFO (int): Numeric level for informational log messages (20).
+        DEBUG (int): Numeric level for debug log messages (10).
+        NOTSET (int): Numeric level meaning no level is set (0).
+    """
 
     logger = None
 
@@ -126,5 +194,14 @@ class FancyLogger:
             # stream_handler.setLevel(logging.INFO)
             stream_handler.setFormatter(CustomFormatter(datefmt="%H:%M:%S,%03d"))
             logger.addHandler(stream_handler)
+
+            # Add OTLP handler if enabled
+            from ..telemetry import get_otlp_log_handler
+
+            otlp_handler = get_otlp_log_handler()
+            if otlp_handler:
+                otlp_handler.setFormatter(JsonFormatter())
+                logger.addHandler(otlp_handler)
+
             FancyLogger.logger = logger
         return FancyLogger.logger

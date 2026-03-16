@@ -215,7 +215,12 @@ def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
             )
 
     if getattr(member, "is_class", False):
-        # Args section check for classes: look at __init__ typed parameters
+        # Args section check for classes: look at __init__ typed parameters.
+        # Variadic *args/**kwargs are excluded by kind (same logic as function check).
+        _variadic_kinds = {
+            griffe.ParameterKind.var_positional,
+            griffe.ParameterKind.var_keyword,
+        }
         init = member.members.get("__init__")
         if init:
             init_params = getattr(init, "parameters", None)
@@ -223,7 +228,7 @@ def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
                 p.name
                 for p in (init_params or [])
                 if p.name not in ("self", "cls")
-                and not p.name.startswith("*")
+                and getattr(p, "kind", None) not in _variadic_kinds
                 and p.annotation is not None
             ]
             if typed_params and not _ARGS_RE.search(doc_text):
@@ -238,21 +243,23 @@ def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
                     }
                 )
 
-        # Attributes section check: flag when public non-method attributes exist
-        pub_attrs = [
-            n
-            for n, m in member.members.items()
-            if not n.startswith("_") and getattr(m, "is_attribute", False)
-        ]
-        if pub_attrs and not _ATTRIBUTES_RE.search(doc_text):
-            sample = ", ".join(pub_attrs[:3]) + ("..." if len(pub_attrs) > 3 else "")
-            issues.append(
-                {
-                    "path": full_path,
-                    "kind": "no_attributes",
-                    "detail": f"public attributes [{sample}] have no Attributes section",
-                }
+            # Duplicate Args check: Option C requires Args: on the class docstring only.
+            # Flag when __init__ has its own Args: section in addition to the class's.
+            init_doc = getattr(init, "docstring", None)
+            init_doc_text = (
+                init_doc.value.strip() if (init_doc and init_doc.value) else ""
             )
+            if _ARGS_RE.search(init_doc_text) and _ARGS_RE.search(doc_text):
+                issues.append(
+                    {
+                        "path": full_path,
+                        "kind": "duplicate_init_args",
+                        "detail": (
+                            "Args: in both class and __init__ docstrings "
+                            "(Option C: place Args: on class docstring only)"
+                        ),
+                    }
+                )
 
     return issues
 
@@ -272,9 +279,14 @@ def audit_docstring_quality(
     - no_args: function with parameters but no Args/Parameters section
     - no_returns: function with a non-trivial return annotation but no Returns section
     - no_raises: function whose source contains raise but has no Raises section
-    - no_class_args: class whose __init__ has typed params but no Args section
-    - no_attributes: class with public attributes but no Attributes section
+    - no_class_args: class whose __init__ has typed params but no Args section on the class
+    - duplicate_init_args: Args: present in both class docstring and __init__ (Option C violation)
     - param_mismatch: Args section documents names absent from the real signature
+
+    Note: Attributes: sections are intentionally not enforced. Under the Option C
+    convention, Attributes: is only used when stored values differ in type or
+    behaviour from the constructor inputs (e.g. type transforms, computed values,
+    class constants). Pure-echo entries that repeat Args: verbatim are omitted.
 
     Only symbols (and methods whose parent class) present in `documented` are
     checked when that set is provided — ensuring the audit is scoped to what is
@@ -372,7 +384,7 @@ def _print_quality_report(issues: list[dict]) -> None:
         "no_returns": "Missing Returns section",
         "no_raises": "Missing Raises section",
         "no_class_args": "Missing class Args section",
-        "no_attributes": "Missing Attributes section",
+        "duplicate_init_args": "Duplicate Args: in class + __init__ (Option C violation)",
         "param_mismatch": "Param name mismatches (documented but not in signature)",
     }
 
@@ -389,7 +401,7 @@ def _print_quality_report(issues: list[dict]) -> None:
         "no_returns",
         "no_raises",
         "no_class_args",
-        "no_attributes",
+        "duplicate_init_args",
         "param_mismatch",
     ):
         items = by_kind.get(kind, [])
@@ -402,8 +414,6 @@ def _print_quality_report(issues: list[dict]) -> None:
         for item in sorted(items, key=lambda x: x["path"]):
             print(f"  {item['path']}")
             print(f"    {item['detail']}")
-            if _IN_GHA:
-                _gha_cmd("error", label, f"{item['path']} — {item['detail']}")
 
 
 def audit_nav_orphans(docs_dir: Path, source_dir: Path) -> list[str]:
@@ -500,23 +510,19 @@ def find_documented_symbols(docs_dir: Path) -> set[str]:
         # Read file to find documented symbols
         content = mdx_file.read_text()
 
-        # Look for heading patterns that indicate symbol documentation
-        # The actual format is: ### <span>...FUNC</span> `symbol_name`
-        # or: ### <span>...CLASS</span> `ClassName`
+        # Look for heading patterns that indicate symbol documentation.
+        # mdxify output format (0.2.37+): ### `SymbolName` <sup>...</sup>
+        # Legacy formats kept for compatibility with older generated files.
+        patterns = [
+            r"^##\s+(?:class|function|attribute)\s+(\w+)",  # very old
+            r"###\s+<span[^>]*>(?:FUNC|CLASS|ATTR)</span>\s+`(\w+)`",  # intermediate
+            r"^###\s+`(\w+)`",  # current mdxify 0.2.37+
+        ]
 
-        # Match both old format and new format
-        # Old: ## class Base, ## function generative
-        # New: ### <span>...FUNC</span> `blockify`, ### <span>...CLASS</span> `Component`
-        old_pattern = r"^##\s+(?:class|function|attribute)\s+(\w+)"
-        new_pattern = r"###\s+<span[^>]*>(?:FUNC|CLASS|ATTR)</span>\s+`(\w+)`"
-
-        for match in re.finditer(old_pattern, content, re.MULTILINE):
-            symbol_name = match.group(1)
-            documented.add(f"{module_path}.{symbol_name}")
-
-        for match in re.finditer(new_pattern, content, re.MULTILINE):
-            symbol_name = match.group(1)
-            documented.add(f"{module_path}.{symbol_name}")
+        for pattern in patterns:
+            for match in re.finditer(pattern, content, re.MULTILINE):
+                symbol_name = match.group(1)
+                documented.add(f"{module_path}.{symbol_name}")
 
     return documented
 
@@ -701,11 +707,15 @@ def main():
         failed = True
 
     if _IN_GHA:
-        if quality_issues:
+        if not args.quality:
             _gha_cmd(
-                "error" if (args.fail_on_quality and quality_issues) else "warning",
+                "notice", "Docstring quality", "skipped (pass --quality to enable)"
+            )
+        elif quality_issues:
+            _gha_cmd(
+                "error" if args.fail_on_quality else "warning",
                 "Docstring quality",
-                f"{len(quality_issues)} issue(s) found — run audit_coverage.py --quality locally for details",
+                f"{len(quality_issues)} issue(s) found — see job summary for details",
             )
         else:
             _gha_cmd(

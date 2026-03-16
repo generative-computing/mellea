@@ -1,4 +1,12 @@
-"""Server Type Helpers."""
+"""Utilities for detecting and classifying the target inference server.
+
+Defines the ``_ServerType`` enum (``LOCALHOST``, ``OPENAI``, ``REMOTE_VLLM``,
+``UNKNOWN``) and ``_server_type``, which classifies a URL by hostname. Also provides
+``is_vllm_server_with_structured_output``, which probes a server's ``/version``
+endpoint to determine whether it supports the ``structured_outputs`` parameter
+introduced in vLLM ≥ 0.12.0. Used by the OpenAI-compatible backend to choose between
+``guided_json`` and ``structured_outputs`` request formats.
+"""
 
 import json
 from collections.abc import Mapping
@@ -45,8 +53,11 @@ def is_vllm_server_with_structured_output(
     v0.12.0 was the last version to support guided_json params. It's now under structured_outputs.
 
     Args:
-        base_url : Base url for LLM API.
-        headers : additional headers to pass to the request.
+        base_url: Base url for LLM API.
+        headers: Additional headers to pass to the request.
+
+    Returns:
+        True if the server is vLLM >= v0.12.0, False otherwise.
     """
     # Not using the models endpoint for now. Assuming version is enough.
     # vllm_provider_endpoint = str(self._client.base_url).join("/models")

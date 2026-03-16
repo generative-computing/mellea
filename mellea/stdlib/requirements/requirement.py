@@ -9,16 +9,28 @@ from ..components.intrinsic import Intrinsic
 
 
 class LLMaJRequirement(Requirement):
-    """A requirement that always uses LLM-as-a-Judge. Any available constraint ALoRA will be ignored."""
+    """A requirement that always uses LLM-as-a-Judge. Any available constraint ALoRA will be ignored.
+
+    Attributes:
+        use_aloras (bool): Always ``False`` for this class; ALoRA adapters are
+            never used even if they are available.
+    """
 
     use_aloras: bool = False
 
 
 def requirement_check_to_bool(x: CBlock | str) -> bool:
-    """Checks if a given output should be marked converted to `True`.
+    """Checks if a given output should be marked converted to ``True``.
 
-    By default, the requirement check alora outputs: `{"requirement_likelihood": 0.0}`.
-    True if >.5
+    By default, the requirement check alora outputs: ``{"requirement_likelihood": 0.0}``.
+    Returns ``True`` if the likelihood value is > 0.5.
+
+    Args:
+        x: ALoRA output string or CBlock containing JSON with a
+            ``requirement_likelihood`` field.
+
+    Returns:
+        True if the extracted likelihood exceeds 0.5, False otherwise.
     """
     output = str(x)
     req_dict: dict[str, Any] = json.loads(output)
@@ -37,15 +49,23 @@ def requirement_check_to_bool(x: CBlock | str) -> bool:
 
 
 class ALoraRequirement(Requirement, Intrinsic):
-    """A requirement that always uses an (possibly specified) ALora. If an exception is thrown during the ALora execution path, `mellea` will fall back to LLMaJ. But that is the only case where LLMaJ will be used."""
+    """A requirement validated by an ALoRA adapter; falls back to LLM-as-a-Judge only on error.
+
+    If an exception is thrown during the ALoRA execution path, ``mellea`` will
+    fall back to LLMaJ. That is the only case where LLMaJ will be used.
+
+    Args:
+        description (str): Human-readable requirement description.
+        intrinsic_name (str | None): Name of the ALoRA intrinsic to use.
+            Defaults to ``"requirement_check"``.
+
+    Attributes:
+        use_aloras (bool): Always ``True``; this class always attempts to use
+            ALoRA adapters for validation.
+    """
 
     def __init__(self, description: str, intrinsic_name: str | None = None):
-        """A requirement that is validated by an ALora.
-
-        Args:
-            description: See `Requirement.__init__`
-            intrinsic_name: the name of the intrinsic; must match the adapter
-        """
+        """Initialize ALoraRequirement with a description and optional intrinsic adapter name."""
         # TODO: We may want to actually do the validation_fn here so that we can set the score.
         super().__init__(
             description, validation_fn=None, output_to_bool=requirement_check_to_bool
@@ -64,9 +84,18 @@ class ALoraRequirement(Requirement, Intrinsic):
 
 
 def reqify(r: str | Requirement) -> Requirement:
-    """Maps strings to Requirements.
+    """Map strings to Requirements.
 
     This is a utility method for functions that allow you to pass in Requirements as either explicit Requirement objects or strings that you intend to be interpreted as requirements.
+
+    Args:
+        r: A ``Requirement`` object or a plain string description to wrap as one.
+
+    Returns:
+        A ``Requirement`` instance.
+
+    Raises:
+        Exception: If ``r`` is neither a ``str`` nor a ``Requirement`` instance.
     """
     if type(r) is str:
         return Requirement(r)
@@ -77,12 +106,28 @@ def reqify(r: str | Requirement) -> Requirement:
 
 
 def req(*args, **kwargs) -> Requirement:
-    """Shorthand for Requirement.__init__."""
+    """Shorthand for ``Requirement.__init__``.
+
+    Args:
+        *args: Positional arguments forwarded to ``Requirement.__init__``.
+        **kwargs: Keyword arguments forwarded to ``Requirement.__init__``.
+
+    Returns:
+        A new ``Requirement`` instance.
+    """
     return Requirement(*args, **kwargs)
 
 
 def check(*args, **kwargs) -> Requirement:
-    """Shorthand for Requirement.__init__(..., check_only=True)."""
+    """Shorthand for ``Requirement.__init__(..., check_only=True)``.
+
+    Args:
+        *args: Positional arguments forwarded to ``Requirement.__init__``.
+        **kwargs: Keyword arguments forwarded to ``Requirement.__init__``.
+
+    Returns:
+        A new ``Requirement`` instance with ``check_only=True``.
+    """
     return Requirement(*args, **kwargs, check_only=True)
 
 
@@ -116,6 +161,13 @@ def simple_validate(
     Args:
         fn: the simple validation function that takes a string and returns either a bool or (bool, str)
         reason: only used if the provided function returns a bool; if the validation function fails, a static reason for that failure to give to the llm when repairing
+
+    Returns:
+        A validation function that takes a ``Context`` and returns a ``ValidationResult``.
+
+    Raises:
+        ValueError: If ``fn`` returns a type other than ``bool`` or
+            ``tuple[bool, str]``.
     """
 
     def validate(ctx: Context) -> ValidationResult:
