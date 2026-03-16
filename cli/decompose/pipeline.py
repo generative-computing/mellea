@@ -130,9 +130,9 @@ def decompose(
 
     constraint_val_data: dict[str, ConstraintValData] = {}
 
-    for cons_key in constraint_val_strategy:
+    for cons_key in constraint_val_strategies:
         constraint_val_data[cons_key] = {
-            "val_strategy": constraint_val_strategy[cons_key]["val_strategy"],
+            "val_strategy": constraint_val_strategies[cons_key]["val_strategy"],
             "val_fn": None,
         }
         if constraint_val_data[cons_key]["val_strategy"] == "code":
