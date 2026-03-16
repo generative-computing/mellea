@@ -239,7 +239,22 @@ def chat(
     model_options: dict | None = None,
     tool_calls: bool = False,
 ) -> tuple[Message, Context]:
-    """Sends a simple chat message and returns the response. Adds both messages to the Context."""
+    """Sends a simple chat message and returns the response. Adds both messages to the Context.
+
+    Args:
+        content: The message text to send.
+        context: The current conversation context.
+        backend: The backend used to generate the response.
+        role: The role for the outgoing message (default ``"user"``).
+        images: Optional list of images to include in the message.
+        user_variables: Optional Jinja variable substitutions applied to ``content``.
+        format: Optional Pydantic model for constrained decoding of the response.
+        model_options: Additional model options to merge with backend defaults.
+        tool_calls: If true, tool calling is enabled.
+
+    Returns:
+        Tuple of the assistant ``Message`` and the updated ``Context``.
+    """
     if user_variables is not None:
         content_resolved = Instruction.apply_user_dict_from_jinja(
             user_variables, content
@@ -276,7 +291,21 @@ def validate(
     | None = None,  # TODO: Can we get rid of gen logs here and in act?
     input: CBlock | None = None,
 ) -> list[ValidationResult]:
-    """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
+    """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
+
+    Args:
+        reqs: A single ``Requirement`` or a list of them to validate.
+        context: The current conversation context.
+        backend: The backend used for LLM-as-a-judge requirements.
+        output: Optional model output ``CBlock`` to validate against instead of the context.
+        format: Optional Pydantic model for constrained decoding.
+        model_options: Additional model options to merge with backend defaults.
+        generate_logs: Optional list to append generation logs to.
+        input: Optional input ``CBlock`` to include alongside ``output`` when validating.
+
+    Returns:
+        List of ``ValidationResult`` objects, one per requirement.
+    """
     # Run everything in the specific event loop for this session.
 
     out = _run_async_in_thread(
@@ -784,7 +813,22 @@ async def achat(
     model_options: dict | None = None,
     tool_calls: bool = False,
 ) -> tuple[Message, Context]:
-    """Sends a simple chat message and returns the response. Adds both messages to the Context."""
+    """Sends a simple chat message and returns the response. Adds both messages to the Context.
+
+    Args:
+        content: The message text to send.
+        context: The current conversation context.
+        backend: The backend used to generate the response.
+        role: The role for the outgoing message (default ``"user"``).
+        images: Optional list of images to include in the message.
+        user_variables: Optional Jinja variable substitutions applied to ``content``.
+        format: Optional Pydantic model for constrained decoding of the response.
+        model_options: Additional model options to merge with backend defaults.
+        tool_calls: If true, tool calling is enabled.
+
+    Returns:
+        Tuple of the assistant ``Message`` and the updated ``Context``.
+    """
     if user_variables is not None:
         content_resolved = Instruction.apply_user_dict_from_jinja(
             user_variables, content
@@ -820,7 +864,21 @@ async def avalidate(
     generate_logs: list[GenerateLog] | None = None,
     input: CBlock | None = None,
 ) -> list[ValidationResult]:
-    """Asynchronous version of .validate; validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
+    """Asynchronous version of .validate; validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
+
+    Args:
+        reqs: A single ``Requirement`` or a list of them to validate.
+        context: The current conversation context.
+        backend: The backend used for LLM-as-a-judge requirements.
+        output: Optional model output ``CBlock`` to validate against instead of the context.
+        format: Optional Pydantic model for constrained decoding.
+        model_options: Additional model options to merge with backend defaults.
+        generate_logs: Optional list to append generation logs to.
+        input: Optional input ``CBlock`` to include alongside ``output`` when validating.
+
+    Returns:
+        List of ``ValidationResult`` objects, one per requirement.
+    """
     # Turn a solitary requirement in to a list of requirements, and then reqify if needed.
     reqs = [reqs] if not isinstance(reqs, list) else reqs
     reqs = [Requirement(req) if type(req) is str else req for req in reqs]

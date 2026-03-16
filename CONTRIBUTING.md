@@ -132,20 +132,76 @@ Use **[Google-style docstrings](https://google.github.io/styleguide/pyguide.html
 ```python
 def extract_entities(text: str, entity_types: list[str]) -> dict[str, list[str]]:
     """Extract named entities from text.
-    
+
     Args:
         text: The input text to analyze.
         entity_types: List of entity types to extract (e.g., ["PERSON", "ORG"]).
-    
+
     Returns:
         Dictionary mapping entity types to lists of extracted entities.
-    
+
     Example:
         >>> extract_entities("Alice works at IBM", ["PERSON", "ORG"])
         {"PERSON": ["Alice"], "ORG": ["IBM"]}
     """
     ...
 ```
+
+#### Class and `__init__` docstrings
+
+Place `Args:` on the **class docstring only**. The `__init__` docstring should be a
+single summary sentence with no `Args:` section. This keeps hover docs clean in IDEs
+and ensures the docs pipeline (which skips `__init__`) publishes the full parameter
+list.
+
+```python
+class MyComponent(Component[str]):
+    """A component that does something useful.
+
+    Args:
+        name (str): Human-readable label for this component.
+        max_tokens (int): Upper bound on generated tokens.
+    """
+
+    def __init__(self, name: str, max_tokens: int = 256) -> None:
+        """Initialize MyComponent with a name and token budget."""
+        self.name = name
+        self.max_tokens = max_tokens
+```
+
+Add an `Attributes:` section on the class docstring **only** when a stored attribute
+differs in type or behaviour from the constructor input — for example, when a `str`
+argument is wrapped into a `CBlock`, or when a class-level constant is relevant to
+callers. Pure-echo entries that repeat `Args:` verbatim should be omitted.
+
+#### Validating docstrings
+
+Run the coverage and quality audit to check your changes before committing:
+
+```bash
+# Build fresh API docs then audit quality (documented symbols only)
+uv run python tooling/docs-autogen/generate-ast.py
+uv run python tooling/docs-autogen/audit_coverage.py \
+    --quality --no-methods --docs-dir docs/docs/api
+```
+
+Key checks the audit enforces:
+
+| Check | Meaning |
+|-------|---------|
+| `no_class_args` | Class has typed `__init__` params but no `Args:` on the class docstring |
+| `duplicate_init_args` | `Args:` appears in both the class and `__init__` docstrings (Option C violation) |
+| `no_args` | Standalone function has params but no `Args:` section |
+| `no_returns` | Function has a non-trivial return annotation but no `Returns:` section |
+| `param_mismatch` | `Args:` documents names not present in the actual signature |
+
+**IDE hover verification** — open any of these existing classes in VS Code and hover
+over the class name or a constructor call to confirm the hover card shows `Args:` once
+with no duplication:
+
+- `ReactInitiator` ([mellea/stdlib/components/react.py](mellea/stdlib/components/react.py)) — `Args:` + `Attributes:` (`goal: str → CBlock` transform)
+- `BaseSamplingStrategy` ([mellea/stdlib/sampling/base.py](mellea/stdlib/sampling/base.py)) — `Args:` only, no `Attributes:` (pure-echo removed)
+- `TokenToFloat` ([mellea/formatters/granite/intrinsics/output.py](mellea/formatters/granite/intrinsics/output.py)) — `Attributes:` for `YAML_NAME` class constant
 
 ### Code Style
 

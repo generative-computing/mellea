@@ -89,7 +89,7 @@ Tests/examples automatically skip if system lacks required resources. Heavy exam
 ## 4. Coding Standards
 - **Types required** on all core functions
 - **Docstrings are prompts** — be specific, the LLM reads them
-- **Google-style docstrings**
+- **Google-style docstrings** — `Args:` on the **class docstring only**; `__init__` gets a single summary sentence. Add `Attributes:` only when a stored value differs in type/behaviour from its constructor input (type transforms, computed values, class constants). See CONTRIBUTING.md for a full example.
 - **Ruff** for linting/formatting
 - Use `...` in `@generative` function bodies
 - Prefer primitives over classes

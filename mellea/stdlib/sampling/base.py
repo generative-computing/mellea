@@ -40,20 +40,22 @@ from ..context import ChatContext
 
 
 class BaseSamplingStrategy(SamplingStrategy):
-    """Base class for multiple strategies that rejects samples based on given instructions."""
+    """Base class for multiple strategies that reject samples based on given instructions.
+
+    Args:
+        loop_budget (int): Maximum number of generate/validate cycles. Must be
+            greater than 0. Defaults to ``1``.
+        requirements (list[Requirement] | None): Global requirements evaluated
+            on every sample. When set, overrides per-call requirements.
+
+    """
 
     loop_budget: int
 
     def __init__(
         self, *, loop_budget: int = 1, requirements: list[Requirement] | None = None
     ):
-        """Initialize a new instance of the class with default parameters.
-
-        Args:
-            loop_budget: Number of times to iterate through the process. Must be greater than 0.
-            validate: Function to validate the results against requirements. If None, validation is provided later through setter.
-            generate: Function to generate new model output thunks. If None, generate is provided later through setter.
-            requirements: List of requirements to test against. If None, test all requirements attached to the given instruction.
+        """Initialize BaseSamplingStrategy with a loop budget and optional global requirements.
 
         Raises:
             AssertionError: If loop_budget is not greater than 0.

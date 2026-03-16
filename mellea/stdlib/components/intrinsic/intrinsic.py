@@ -1,31 +1,41 @@
-"""Module for Intrinsics."""
+"""``Intrinsic`` component for invoking fine-tuned adapter capabilities.
+
+An ``Intrinsic`` component references a named adapter from Mellea's intrinsic catalog
+and transforms a chat completion request — typically by injecting new messages,
+modifying model parameters, or applying structured output constraints. It must be
+paired with a backend that supports adapter loading (e.g. ``LocalHFBackend`` with an
+attached ``IntrinsicAdapter``).
+"""
 
 from ....backends.adapters import AdapterType, fetch_intrinsic_metadata
 from ....core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 
 
 class Intrinsic(Component[str]):
-    """A component representing an intrinsic."""
+    """A component representing an intrinsic fine-tuned adapter capability.
+
+    Intrinsics transform a chat completion request by injecting messages,
+    modifying model parameters, or applying structured output constraints.
+    Must be paired with a backend that supports adapter loading.
+
+    Args:
+        intrinsic_name (str): The user-visible name of the intrinsic; must match
+            a known name in Mellea's intrinsics catalog.
+        intrinsic_kwargs (dict | None): Optional keyword arguments required by
+            the intrinsic at invocation time.
+
+    Attributes:
+        metadata: The intrinsic metadata fetched from the catalog.
+        intrinsic_kwargs (dict): Keyword arguments passed to the intrinsic.
+        intrinsic_name (str): User-visible name of this intrinsic (property).
+        adapter_types (tuple[AdapterType, ...]): Available adapter types that
+            implement this intrinsic (property).
+    """
 
     def __init__(
         self, intrinsic_name: str, intrinsic_kwargs: dict | None = None
     ) -> None:
-        """A component for rewriting messages using intrinsics.
-
-        Intrinsics are special components that transform a chat completion request.
-        These transformations typically take the form of:
-        - parameter changes (typically structured outputs)
-        - adding new messages to the chat
-        - editing existing messages
-
-        An intrinsic component should correspond to a loaded adapter.
-
-        Args:
-            intrinsic_name: the user-visible name of the intrinsic; must match a known
-                name in Mellea's intrinsics catalog.
-            intrinsic_kwargs: some intrinsics require kwargs when utilizing them;
-                provide them here
-        """
+        """Initialize Intrinsic by fetching metadata for the named intrinsic from the catalog."""
         self.metadata = fetch_intrinsic_metadata(intrinsic_name)
         if intrinsic_kwargs is None:
             intrinsic_kwargs = {}
@@ -42,19 +52,29 @@ class Intrinsic(Component[str]):
         return self.metadata.adapter_types
 
     def parts(self) -> list[Component | CBlock]:
-        """The set of all the constituent parts of the `Intrinsic`.
+        """Return the constituent parts of this intrinsic component.
 
-        Will need to be implemented by subclasses since not all intrinsics are output
-        as text / messages.
+        Will need to be implemented by subclasses since not all intrinsics
+        produce text or message output.
+
+        Returns:
+            list[Component | CBlock]: Always an empty list for the base class.
         """
         return []  # TODO revisit this.
 
     def format_for_llm(self) -> TemplateRepresentation | str:
-        """`Intrinsic` doesn't implement `format_for_default`.
+        """Not implemented for the base ``Intrinsic`` class.
 
-        Formats the `Intrinsic` into a `TemplateRepresentation` or string.
+        ``Intrinsic`` components are intended to be used as the *action* passed
+        directly to the backend, not as a part of the context rendered by the
+        formatter.
 
-        Returns: a `TemplateRepresentation` or string
+        Returns:
+            TemplateRepresentation | str: Never returns; always raises.
+
+        Raises:
+            NotImplementedError: Always, because ``Intrinsic`` does not
+                implement ``format_for_llm`` by default.
         """
         raise NotImplementedError(
             "`Intrinsic` doesn't implement format_for_llm by default. You should only "

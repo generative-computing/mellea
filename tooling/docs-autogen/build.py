@@ -49,11 +49,6 @@ def main():
         "Use to generate docs for a different checkout, e.g. --source-dir ../mellea-b",
     )
     parser.add_argument(
-        "--no-venv",
-        action="store_true",
-        help="Skip venv creation (pass to generate-ast.py)",
-    )
-    parser.add_argument(
         "--skip-generation", action="store_true", help="Skip AST generation"
     )
     parser.add_argument(
@@ -79,7 +74,6 @@ def main():
             str(
                 output_dir.parent
             ),  # generate-ast.py expects docs/docs, not docs/docs/api
-            "--no-venv",  # Always use current environment
             "--source-dir",
             str(repo_root),
         ]
@@ -126,7 +120,6 @@ def main():
             str(script_dir / "generate-ast.py"),
             "--docs-root",
             str(output_dir.parent),
-            "--no-venv",
             "--nav-only",
             "--source-dir",
             str(repo_root),

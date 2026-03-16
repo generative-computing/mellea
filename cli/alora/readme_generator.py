@@ -1,3 +1,13 @@
+"""LLM-assisted generator for adapter intrinsic README files.
+
+Uses a ``MelleaSession`` with rejection sampling to derive README template variables
+from a JSONL training dataset — including a high-level description, the inferred
+Python argument list, and Jinja2-renderable sample rows. Validates the generated
+output with deterministic requirements (correct naming conventions, syntactically
+valid argument lists) before rendering the final ``INTRINSIC_README.md`` via a
+Jinja2 template.
+"""
+
 import ast
 import json
 import os
@@ -12,6 +22,18 @@ from mellea.stdlib.session import MelleaSession
 
 
 class ReadmeTemplateVars(BaseModel):
+    """Pydantic model holding all variables required to render the intrinsic README template.
+
+    Attributes:
+        high_level_description (str): A 2-3 sentence description of what the intrinsic adapter does.
+        dataset_description (str): Brief description of the training dataset contents and format.
+        userid (str): HuggingFace user ID (the namespace portion of the model name).
+        intrinsic_name (str): Short snake_case identifier for the intrinsic (e.g. ``"carbchecker"``).
+        intrinsic_name_camelcase (str): CamelCase version of ``intrinsic_name`` (e.g. ``"CarbChecker"``).
+        arglist (str): Python function argument list with type hints (e.g. ``"description: str"``).
+        arglist_without_type_annotations (str): Argument list without type hints (e.g. ``"description"``).
+    """
+
     high_level_description: str
     dataset_description: str
     userid: str
@@ -119,8 +141,20 @@ def make_readme_jinja_dict(
     """Generate all template variables for the intrinsic README using an LLM.
 
     Loads the first five lines of the JSONL dataset, determines the input structure,
-    and uses m.instruct with deterministic requirements and rejection sampling to
+    and uses ``m.instruct`` with deterministic requirements and rejection sampling to
     generate README template variables.
+
+    Args:
+        m: Active ``MelleaSession`` to use for LLM generation.
+        dataset_path: Path to the JSONL training dataset file.
+        base_model: Base model ID or path used to train the adapter.
+        prompt_file: Path to the prompt format file (empty string if not provided).
+        name: Destination model name on Hugging Face Hub
+            (e.g. ``"acme/carbchecker-alora"``).
+        hints: Optional string of additional domain hints to include in the prompt.
+
+    Returns:
+        Dict of Jinja2 template variables for rendering the ``INTRINSIC_README.md``.
     """
     # Load first 5 lines of the dataset.
     samples = []
@@ -260,8 +294,19 @@ def generate_readme(
 ) -> str:
     """Generate an INTRINSIC_README.md file from the dataset and template.
 
-    Creates a MelleaSession, uses the LLM to generate template variables,
-    renders the Jinja template, and writes the result to output_path.
+    Creates a ``MelleaSession``, uses the LLM to generate template variables,
+    renders the Jinja template, and writes the result to ``output_path``.
+
+    Args:
+        dataset_path: Path to the JSONL training dataset file.
+        base_model: Base model ID or path used to train the adapter.
+        prompt_file: Path to the prompt format file, or ``None``.
+        output_path: Destination path for the generated README file.
+        name: Destination model name on Hugging Face Hub.
+        hints: Optional string of additional domain hints for the LLM.
+
+    Returns:
+        The path to the written output file (same as ``output_path``).
     """
     from jinja2 import Environment, FileSystemLoader
 
