@@ -65,16 +65,7 @@ class OllamaModelBackend(FormatterBackend):
         base_url: str | None = None,
         model_options: dict | None = None,
     ):
-        """Initializes an ollama backend for local models.
-
-        WARNING: may use up a lot of your machine's memory.
-
-        Args:
-            model_id (str | ModelIdentifier): Ollama model ID. If ModelIdentifier, then an `ollama_name` must be provided by that ModelIdentifier.
-            base_url (str): Endpoint that is serving the model API; defaults to env(OLLAMA_HOST) or `http://localhost:11434`
-            model_options (dict): Ollama model options
-            formatter (Formatter): formatter for creating input
-        """
+        """Initialize an Ollama backend, connecting to the server and pulling the model if needed."""
         super().__init__(
             model_id=model_id,
             formatter=(

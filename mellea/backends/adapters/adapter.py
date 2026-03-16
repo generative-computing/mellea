@@ -33,8 +33,6 @@ class Adapter(abc.ABC):
             ``AdapterType.LORA`` or ``AdapterType.ALORA``).
 
     Attributes:
-        name (str): Human-readable name of the adapter.
-        adapter_type (AdapterType): Adapter type (``LORA`` or ``ALORA``).
         qualified_name (str): Unique name used for loading and lookup; formed
             as ``"<name>_<adapter_type.value>"``.
         backend (Backend | None): The backend this adapter has been added to,
@@ -44,15 +42,7 @@ class Adapter(abc.ABC):
     """
 
     def __init__(self, name: str, adapter_type: AdapterType):
-        """An adapter that can be added to a backend.
-
-        Note: An adapter can only be added to a single backend.
-
-        Args:
-            name: name of the adapter; when referencing this adapter, use
-                adapter.qualified_name
-            adapter_type: enum describing what type of adapter it is (ie LORA / ALORA)
-        """
+        """Initialize Adapter with a name and adapter type."""
         self.name = name
         self.adapter_type = adapter_type
         self.qualified_name = name + "_" + adapter_type.value
@@ -127,20 +117,7 @@ class IntrinsicAdapter(LocalHFAdapter):
         config_dict: dict | None = None,
         base_model_name: str | None = None,
     ):
-        """Entry point for creating IntrinsicAdapter objects.
-
-        An adapter that can be added to either an `OpenAIBackend` or a `LocalHFBackend`.
-        Most intrinsics support LoRA or aLoRA adapter types.
-
-        Args:
-            intrinsic_name: name of the intrinsic; the local name of the loaded adapter
-                that implements this intrinsic will be adapter.qualified_name
-            adapter_type: enum describing what type of adapter it is (ie LORA / ALORA)
-            config_file: optional; file for defining the intrinsic / transformations
-            config_dict: optional; dict for defining the intrinsic / transformations
-            base_model_name: optional; if provided with no config_file/config_dict,
-                will be used to look up the IO processing config for this adapter
-        """
+        """Initialize IntrinsicAdapter for the named intrinsic, loading its I/O configuration."""
         super().__init__(intrinsic_name, adapter_type)
 
         self.intrinsic_name = intrinsic_name
@@ -350,13 +327,7 @@ class CustomIntrinsicAdapter(IntrinsicAdapter):
     def __init__(
         self, *, model_id: str, intrinsic_name: str | None = None, base_model_name: str
     ):
-        """Custom granite adapters.
-
-        Args:
-            model_id: the huggingface model id. Used for downloading model weights.
-            intrinsic_name (optional): catalog name. Defaults to the repo name if none is provided. For example, nfulton/stembolts model_id uses an intrinsic name of stembolts.
-            base_model_name: the name (NOT repo_id) of the model.
-        """
+        """Initialize CustomIntrinsicAdapter and patch the global intrinsics catalog if needed."""
         assert re.match(".*/.*", model_id), (
             "expected a huggingface model id with format <user-id>/<repo-name>"
         )

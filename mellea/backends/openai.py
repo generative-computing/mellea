@@ -89,8 +89,6 @@ class OpenAIBackend(FormatterBackend):
             option names to Mellea ``ModelOption`` sentinel keys.
         from_mellea_model_opts_map_completions (dict): Mapping from Mellea sentinel keys
             to completions-endpoint option names.
-        default_to_constraint_checking_alora (bool): Whether aLoRA constraint checking
-            is enabled by default.
     """
 
     def __init__(
@@ -104,17 +102,7 @@ class OpenAIBackend(FormatterBackend):
         api_key: str | None = None,
         **kwargs,
     ):
-        """Initialize and OpenAI compatible backend. For any additional kwargs that you need to pass the the client, pass them as a part of **kwargs.
-
-        Args:
-            model_id : A generic model identifier or OpenAI compatible string. Defaults to model_ids.IBM_GRANITE_4_HYBRID_MICRO.
-            formatter: A custom formatter based on backend.If None, defaults to TemplateFormatter
-            base_url : Base url for LLM API. Defaults to None.
-            model_options : Generation options to pass to the LLM. Defaults to None.
-            default_to_constraint_checking_alora: If set to False then aloras will be deactivated. This is primarily for performance benchmarking and debugging.
-            api_key : API key for generation. Defaults to None.
-            kwargs : additional kwargs to pass when creating the OpenAI client.
-        """
+        """Initialize an OpenAI-compatible backend with the given model ID and API credentials."""
         super().__init__(
             model_id=model_id,
             formatter=(

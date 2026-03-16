@@ -35,22 +35,7 @@ class Intrinsic(Component[str]):
     def __init__(
         self, intrinsic_name: str, intrinsic_kwargs: dict | None = None
     ) -> None:
-        """A component for rewriting messages using intrinsics.
-
-        Intrinsics are special components that transform a chat completion request.
-        These transformations typically take the form of:
-        - parameter changes (typically structured outputs)
-        - adding new messages to the chat
-        - editing existing messages
-
-        An intrinsic component should correspond to a loaded adapter.
-
-        Args:
-            intrinsic_name (str): The user-visible name of the intrinsic; must match
-                a known name in Mellea's intrinsics catalog.
-            intrinsic_kwargs (dict | None): Some intrinsics require kwargs when
-                utilizing them; provide them here.
-        """
+        """Initialize Intrinsic by fetching metadata for the named intrinsic from the catalog."""
         self.metadata = fetch_intrinsic_metadata(intrinsic_name)
         if intrinsic_kwargs is None:
             intrinsic_kwargs = {}

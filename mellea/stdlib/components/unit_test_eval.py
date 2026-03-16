@@ -86,10 +86,6 @@ class TestBasedEval(Component[str]):
         test_id (str | None): Optional unique identifier for this test.
         input_ids (list[str] | None): Optional identifiers for each input.
 
-    Attributes:
-        source (str): Origin identifier for this test dataset.
-        name (str): Human-readable name for this test.
-        instructions (str): Evaluation guidelines used by the judge model.
     """
 
     def __init__(
@@ -102,18 +98,7 @@ class TestBasedEval(Component[str]):
         test_id: str | None = None,
         input_ids: list[str] | None = None,
     ):
-        """Initialize TestBasedEval (for a single unit test).
-
-        Args:
-            source (str): Origin identifier for this test dataset.
-            name (str): Human-readable name for this test.
-            instructions (str): Evaluation guidelines used by the judge model.
-            inputs (list[str]): The input texts for each example.
-            targets (list[list[str]] | None): Expected target strings for each
-                input. ``None`` is treated as an empty list.
-            test_id (str | None): Optional unique identifier for this test.
-            input_ids (list[str] | None): Optional identifiers for each input.
-        """
+        """Initialize TestBasedEval with source, name, instructions, inputs, and optional targets."""
         self.source = source
         self.name = name
         self.instructions = instructions

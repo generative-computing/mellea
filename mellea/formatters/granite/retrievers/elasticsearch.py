@@ -12,11 +12,8 @@ class ElasticsearchRetriever:
     retrieve the top-k matching documents for a given natural language query.
 
     Attributes:
-        corpus_name (str): Name of the Elasticsearch index to query.
         hosts (str): Full ``url:port`` connection string to the Elasticsearch
-            server.
-        kwargs (dict): Additional keyword arguments forwarded to the
-            ``Elasticsearch`` client constructor.
+            server; stored from the ``host`` constructor argument.
 
     Args:
         corpus_name (str): Name of the Elasticsearch index to query.
@@ -27,15 +24,7 @@ class ElasticsearchRetriever:
     """
 
     def __init__(self, corpus_name: str, host: str, **kwargs: Any):
-        """Initialize ElasticsearchRetriever.
-
-        Args:
-            corpus_name (str): Name of the Elasticsearch index to query.
-            host (str): Full ``url:port`` connection string to the Elasticsearch
-                server.
-            **kwargs (Any): Additional keyword arguments forwarded to the
-                ``Elasticsearch`` client constructor.
-        """
+        """Initialize ElasticsearchRetriever with index name and connection details."""
         # Third Party
         from elasticsearch import Elasticsearch  # type: ignore[import-not-found]
 

@@ -238,8 +238,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             Mellea ``ModelOption`` sentinel keys.
         from_mellea_model_opts_map (dict): Mapping from Mellea sentinel keys to
             HF-specific option names.
-        default_to_constraint_checking_alora (bool): Whether aLoRA constraint checking
-            is enabled by default.
     """
 
     _cached_blocks: dict[str, DynamicCache] = dict()
@@ -255,19 +253,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         default_to_constraint_checking_alora: bool = True,
         model_options: dict | None = None,
     ):
-        """Attempt to load model weights using the model_id by default, or using `custom_config` if provided.
-
-        WARNING: initializing a `LocalHFBackend` will download and load the model on your *local* machine.
-
-        Args:
-            model_id (str | ModelIdentifier): Used to load the model *and tokenizer* via transformers Auto* classes, and then moves the model to the best available device (cuda > mps > cpu). If loading the model and/or tokenizer from a string will not work, or if you want to use a different device string, then you can use custom_config.
-            formatter (Formatter): A mechanism for turning `stdlib` stuff into strings. Experimental Span-based models should use `mellea.backends.span.*` backends.
-            use_caches (bool): If set to False, then caching will not be used even if a Cache is provided.
-            cache (Optional[Cache]): The caching strategy to use. If None, `LRUCache(3)` will be used.
-            custom_config (Optional[TransformersTorchConfig]): Overrides loading from the `model_id`. If set, then the specified tokenizer/model/device will be used instead of auto-loading from the model_id.
-            default_to_constraint_checking_alora: If set to False then aloras will be deactivated. This is primarily for performance benchmarking and debugging.
-            model_options (Optional[dict]): Default model options.
-        """
+        """Load model weights from the given model ID, or from a custom config if provided."""
         formatter = (
             formatter if formatter is not None else TemplateFormatter(model_id=model_id)
         )

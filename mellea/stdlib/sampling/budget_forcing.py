@@ -51,21 +51,6 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
         loop_budget (int): Rejection-sampling loop count. Must be > 0.
         requirements (list[Requirement] | None): Requirements to validate against.
 
-    Attributes:
-        think_max_tokens (int | None): Maximum tokens allocated for the thinking
-            block. ``None`` means no budget (zero-think case).
-        answer_max_tokens (int | None): Maximum tokens allocated for the answer
-            block. ``None`` means unbounded (generate until EoS).
-        start_think_token (str | None): Token that opens the thinking block,
-            e.g. ``"<think>"``.
-        end_think_token (str | None): Token that closes the thinking block,
-            e.g. ``"</think>"``.
-        begin_response_token (str | None): Optional token that opens the
-            response block, e.g. ``"<response>"``.
-        end_response_token (str): Token that closes the response block.
-        think_more_suffix (str | None): Suffix appended to force continued
-            thinking. Empty string disables forced thinking.
-        answer_suffix (str | None): Suffix appended to elicit a final answer.
     """
 
     think_max_tokens: int | None
@@ -91,21 +76,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
         loop_budget: int = 1,
         requirements: list[Requirement] | None,
     ):
-        r"""Initialize class.
-
-        Inherits from RejectionSamplingStrategy.
-
-        Args:
-            think_max_tokens: Number of tokens for think block
-            answer_max_tokens: Number of tokens allocated for answer portion, if set to None answer tokens will be unlimited
-            start_think_token: Special start of think block token defaults to '<think>'
-            end_think_token: Special end of think block token defaults to '</think>'
-            begin_response_token: Special begin of response block token e.g. '<response>' defaults to ""
-            end_response_token: Special end of response block token e.g. '</response>' defaults to ""
-            think_more_suffix: Suffix for continue thinking e.g. "\nWait let's think more carefully" to force the model to think more, defaults to "".  If set to "", no force thinking will be applied, the token budget will be become an upper bound.
-            answer_suffix: Suffix to obtain final answer, default to "\nThe final answer is:"
-            loop_budget: Number of times to iterate through the process. Must be greater than 0.
-            requirements: List of requirements to test against. If None, test all requirements attached to the given instruction.
+        r"""Initialize BudgetForcingSamplingStrategy with token budget parameters and rejection-sampling settings.
 
         Raises:
             AssertionError: If loop_budget is not greater than 0.

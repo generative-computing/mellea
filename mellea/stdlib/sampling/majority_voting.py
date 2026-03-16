@@ -32,11 +32,9 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
             against. If ``None``, uses per-call requirements.
 
     Attributes:
-        number_of_samples (int): Number of candidate samples to draw and compare.
-        weighted (bool): Whether to apply per-sample weights before voting.
-            Currently not implemented; reserved for future use.
         symmetric (bool): Whether the similarity metric is symmetric, allowing
-            the upper-triangle score matrix to be mirrored.
+            the upper-triangle score matrix to be mirrored; always ``True`` for
+            this base class.
     """
 
     number_of_samples: int
@@ -51,18 +49,7 @@ class BaseMBRDSampling(RejectionSamplingStrategy):
         loop_budget: int = 1,
         requirements: list[Requirement] | None = None,
     ):
-        """Initialize a new abstract Minimum Bayes Risk Decoding (MBRD) Sampling Strategy with default parameters.
-
-        Inherits from RejectionSamplingStrategy. Will generate up to loop_budget x number_of_samples requests. If no
-        requirements are provided here or in sample(...), will only generate number_of_samples requests.
-
-        Classes that inherit from this must implement the `compare_strings` function.
-
-        Args:
-            number_of_samples: Number of samples to generate and use for majority voting
-            weighted: Not Implemented. If True, weights the score before getting the final majority vote
-            loop_budget: Inner rejection sampling number of times to iterate through the process. Must be greater than 0.
-            requirements: List of requirements to test against. If None, test all requirements attached to the given instruction.
+        """Initialize BaseMBRDSampling with the number of samples, weighting flag, and inner loop budget.
 
         Raises:
             AssertionError: If loop_budget is not greater than 0.
@@ -214,15 +201,10 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
         requirements (list[Requirement] | None): Requirements to validate against.
 
     Attributes:
-        number_of_samples (int): Number of candidate samples to generate.
         match_types (list[str]): Extraction target types used for parsing math
-            expressions (e.g. ``["latex", "axpr"]``).
-        float_rounding (int): Number of decimal places used when comparing
-            floating-point results.
-        strict (bool): Whether strict comparison mode is enforced (variables
-            matter; sets are not comparable with tuples).
-        allow_set_relation_comp (bool): Whether set-relation comparisons are
-            permitted in all cases.
+            expressions; always ``["latex", "axpr"]``, computed at init.
+        symmetric (bool): Inherited from ``BaseMBRDSampling``; always ``True``
+            for this strategy (set explicitly at init).
     """
 
     number_of_samples: int
@@ -242,23 +224,7 @@ class MajorityVotingStrategyForMath(BaseMBRDSampling):
         loop_budget: int = 1,
         requirements: list[Requirement] | None = None,
     ):
-        """Initialize a new instance of MajorityVoting Sampling Strategy for Math with default parameters.
-
-        Will generate up to loop_budget x number_of_samples requests. If no
-        requirements are provided here or in sample(...), will only generate number_of_samples requests.
-
-        Args:
-            number_of_samples: Number of samples to generate and use for majority voting
-            float_rounding: Number of decimal places to round floats to. Defaults to 6.
-            strict: Whether to enforce strict comparison mode. Defaults to True.
-                - In strict mode: Variables matter and sets are not comparable with tuples
-                - In non-strict mode: Variables are matched by position and sets can be compared with tuples
-            allow_set_relation_comp: Whether to allow set - relation (e.g 1 < x < 2 and (1, 2)) comparison. Defaults to False.
-                - If True, set - relation comparison will be allowed in all cases.
-                - If False, set - relation comparison will be allowed only if the prediction is a set.
-            weighted: Not Implemented. If True, weights the score before getting the final majority vote
-            loop_budget: Inner rejection sampling number of times to iterate through the process. Must be greater than 0.
-            requirements: List of requirements to test against. If None, test all requirements attached to the given instruction.
+        """Initialize MajorityVotingStrategyForMath with math-comparison settings and sampling parameters.
 
         Raises:
             AssertionError: If loop_budget is not greater than 0.
@@ -349,16 +315,7 @@ class MBRDRougeLStrategy(BaseMBRDSampling):
         loop_budget: int = 1,
         requirements: list[Requirement] | None = None,
     ):
-        """Initialize a new instance of MBRDRougeL Sampling Strategy with default parameters.
-
-        Will generate up to loop_budget x number_of_samples requests. If no
-        requirements are provided here or in sample(...), will only generate number_of_samples requests.
-
-        Args:
-            number_of_samples: Number of samples to generate and use for majority voting
-            weighted: Not Implemented. If True, weights the score before getting the final majority vote
-            loop_budget: Inner rejection sampling number of times to iterate through the process. Must be greater than 0.
-            requirements: List of requirements to test against. If None, test all requirements attached to the given instruction.
+        """Initialize MBRDRougeLStrategy with RougeL scoring and sampling parameters.
 
         Raises:
             AssertionError: If loop_budget is not greater than 0.

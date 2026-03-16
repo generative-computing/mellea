@@ -51,19 +51,6 @@ class ExecutionResult:
         analysis_result (Any | None): Optional payload from static-analysis
             environments.
 
-    Attributes:
-        success (bool): ``True`` if the code executed with exit code 0 or if a
-            static-analysis check passed; ``False`` otherwise.
-        stdout (str | None): Standard output captured from the subprocess, or
-            ``None`` if execution was skipped.
-        stderr (str | None): Standard error captured from the subprocess, or
-            ``None`` if execution was skipped.
-        skipped (bool): ``True`` when execution was not attempted (e.g. due to
-            unauthorized imports or a missing sandbox dependency).
-        skip_message (str | None): Human-readable explanation of why execution
-            was skipped, when ``skipped`` is ``True``.
-        analysis_result (Any | None): Optional payload returned by static-analysis
-            environments (e.g. the parsed AST tree or a ``SyntaxError`` instance).
     """
 
     success: bool
@@ -110,18 +97,10 @@ class ExecutionEnvironment(ABC):
         allowed_imports (list[str] | None): Allowlist of top-level module names
             that generated code may import. ``None`` disables the import check.
 
-    Attributes:
-        allowed_imports (list[str] | None): Allowlist of top-level module names that
-            generated code may import. ``None`` disables the import check entirely.
     """
 
     def __init__(self, allowed_imports: list[str] | None = None):
-        """Initialize with optional import restrictions.
-
-        Args:
-            allowed_imports (list[str] | None): List of allowed import modules.
-                ``None`` means any import is allowed.
-        """
+        """Initialize ExecutionEnvironment with an optional import allowlist."""
         self.allowed_imports = allowed_imports
 
     @abstractmethod

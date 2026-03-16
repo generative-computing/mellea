@@ -31,12 +31,7 @@ class Query(Component[str]):
     """
 
     def __init__(self, obj: Component, query: str) -> None:
-        """Initializes a new instance of Query with the provided object and query.
-
-        Args:
-            obj (Component): The object to be queried.
-            query (str): The query string used for querying the object.
-        """
+        """Initialize Query with the object to query and a natural-language question string."""
         self._obj = obj
         self._query = query
 
@@ -94,12 +89,7 @@ class Transform(Component[str]):
     """
 
     def __init__(self, obj: Component, transformation: str) -> None:
-        """Initializes a new instance of Transform with the provided object and transformation description.
-
-        Args:
-            obj (Component): The object to be transformed.
-            transformation (str): The string describing the desired transformation.
-        """
+        """Initialize Transform with the object to transform and a natural-language description."""
         self._obj = obj
         self._transformation = transformation
 
@@ -229,13 +219,7 @@ class MObject(Component[str]):
     def __init__(
         self, *, query_type: type = Query, transform_type: type = Transform
     ) -> None:
-        """Initializes a new instance of MObject with a specified query type and transformation type.
-
-        Args:
-            query_type (type): The type of query to be used. Defaults to ``Query``.
-            transform_type (type): The type of transform to be used. Defaults to
-                ``Transform``.
-        """
+        """Initialize MObject with a query type and transform type for building query/transform components."""
         self._query_type = query_type
         self._transform_type = transform_type
 

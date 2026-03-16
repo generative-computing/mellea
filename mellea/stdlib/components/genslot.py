@@ -107,13 +107,7 @@ class Argument:
         name: str | None = None,
         value: str | None = None,
     ):
-        """Create an Argument with optional name, annotation, and value.
-
-        Args:
-            annotation (str | None): The parameter's type annotation as a string.
-            name (str | None): The parameter name.
-            value (str | None): The bound value for this parameter as a string.
-        """
+        """Initialize Argument with optional name, type annotation, and bound value."""
         self._argument_dict: ArgumentDict = {
             "name": name,
             "annotation": annotation,
@@ -132,12 +126,7 @@ class Arguments(CBlock):
     """
 
     def __init__(self, arguments: list[Argument]):
-        """Create a textual representation of a list of arguments.
-
-        Args:
-            arguments (list[Argument]): The list of bound function arguments to
-                render as a formatted string.
-        """
+        """Initialize Arguments by rendering a list of Argument objects as a formatted string."""
         # Make meta the original list of arguments and create a list of textual representations.
         meta: dict[str, Any] = {}
         text_args = []
@@ -158,17 +147,10 @@ class ArgPreconditionRequirement(Requirement):
         req (Requirement): The underlying requirement to wrap. All method calls
             are delegated to this requirement.
 
-    Attributes:
-        req (Requirement): The wrapped underlying requirement instance.
     """
 
     def __init__(self, req: Requirement):
-        """Can only be instantiated from existing requirements. All function calls are delegated to the underlying requirement.
-
-        Args:
-            req (Requirement): The requirement to wrap for argument precondition
-                validation.
-        """
+        """Initialize ArgPreconditionRequirement by wrapping an existing Requirement."""
         self.req = req
 
     def __getattr__(self, name):
@@ -197,13 +179,7 @@ class PreconditionException(Exception):
     def __init__(
         self, message: str, validation_results: list[ValidationResult]
     ) -> None:
-        """Exception raised when validation fails for a generative slot's arguments.
-
-        Args:
-            message (str): The error message describing the precondition failure.
-            validation_results (list[ValidationResult]): The list of validation
-                results from the failed preconditions.
-        """
+        """Initialize PreconditionException with a message and the list of failed validation results."""
         super().__init__(message)
         self.validation = validation_results
 
@@ -220,11 +196,7 @@ class Function(Generic[P, R]):
     """
 
     def __init__(self, func: Callable[P, R]):
-        """Wrap a callable and capture its metadata via ``describe_function``.
-
-        Args:
-            func (Callable[P, R]): The callable to wrap.
-        """
+        """Initialize Function by wrapping a callable and capturing its metadata."""
         self._func: Callable[P, R] = func
         self._function_dict: FunctionDict = describe_function(func)
 
@@ -365,10 +337,7 @@ class GenerativeSlot(Component[R], Generic[P, R]):
     """
 
     def __init__(self, func: Callable[P, R]):
-        """A generative slot function that converts a given `func` to a generative slot.
-
-        Args:
-            func: A callable function
+        """Initialize GenerativeSlot by wrapping the given callable and validating its parameter names.
 
         Raises:
             ValueError: if the decorated function has a parameter name used by generative slots

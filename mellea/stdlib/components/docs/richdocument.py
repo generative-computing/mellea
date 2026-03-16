@@ -36,11 +36,7 @@ class RichDocument(Component[str]):
     """
 
     def __init__(self, doc: DoclingDocument):
-        """Create a ``RichDocument`` wrapping the provided ``DoclingDocument``.
-
-        Args:
-            doc (DoclingDocument): The Docling document to wrap.
-        """
+        """Initialize RichDocument by wrapping the provided DoclingDocument."""
         self._doc = doc
 
     def parts(self) -> list[Component | CBlock]:
@@ -154,12 +150,7 @@ class TableQuery(Query):
     """
 
     def __init__(self, obj: Table, query: str) -> None:
-        """Initializes a new instance of the ``TableQuery`` class.
-
-        Args:
-            obj (Table): The table object to which the query applies.
-            query (str): The query string.
-        """
+        """Initialize TableQuery for the given table and natural-language query."""
         super().__init__(obj, query)
 
     def parts(self) -> list[Component | CBlock]:
@@ -206,12 +197,7 @@ class TableTransform(Transform):
     """
 
     def __init__(self, obj: Table, transformation: str) -> None:
-        """Initializes a new instance of the ``TableTransform`` class.
-
-        Args:
-            obj (Table): The table object to which the transform applies.
-            transformation (str): The transformation description string.
-        """
+        """Initialize TableTransform for the given table and transformation description."""
         super().__init__(obj, transformation)
 
     def parts(self) -> list[Component | CBlock]:
@@ -259,13 +245,7 @@ class Table(MObject):
     """
 
     def __init__(self, ti: TableItem, doc: DoclingDocument):
-        """Create a ``Table`` wrapping a Docling ``TableItem``.
-
-        Args:
-            ti (TableItem): The Docling table item to wrap.
-            doc (DoclingDocument): The parent Docling document. If ``None``,
-                some Docling extraction functions may fail.
-        """
+        """Initialize Table by wrapping a Docling TableItem and its parent document."""
         super().__init__(query_type=TableQuery, transform_type=TableTransform)
         self._ti = ti
         self._doc = doc

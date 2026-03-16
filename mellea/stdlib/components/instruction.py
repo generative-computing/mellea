@@ -58,18 +58,7 @@ class Instruction(Component[str]):
         output_prefix: str | CBlock | None = None,
         images: list[ImageBlock] | None = None,
     ):
-        """Initializes an instruction. All strings will be converted into CBlocks.
-
-        Args:
-            description (str): The description of the instruction.
-            requirements (List[Requirement | str]): A list of requirements that the instruction can be validated against.
-            icl_examples (List[str | CBlock]): A list of in-context-learning examples that the instruction can be validated against.
-            grounding_context (Dict[str, str | CBlock | Component]): A list of grounding contexts that the instruction can use. They can bind as variables using a (key: str, value: str | ContentBlock) tuple.
-            user_variables (Dict[str, str]): A dict of user-defined variables used to fill in Jinja placeholders in other parameters. This requires that all other provided parameters are provided as strings.
-            prefix (Optional[str | CBlock]): A prefix string or ContentBlock to use when generating the instruction.
-            output_prefix (Optional[str | CBlock]): A string or ContentBlock that defines a prefix for the output generation. Usually you do not need this.
-            images (Optional[List[ImageCBlock]]): A list of images to use in the instruction.
-        """
+        """Initialize Instruction, converting all string inputs to CBlocks and applying any Jinja2 variables."""
         requirements = [] if requirements is None else requirements
         icl_examples = [] if icl_examples is None else icl_examples
         grounding_context = dict() if grounding_context is None else grounding_context

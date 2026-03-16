@@ -24,17 +24,12 @@ class DummyBackend(Backend):
             return ``"dummy"``.
 
     Attributes:
-        responses (list[str] | None): The list of predetermined responses, or
-            ``None`` if the backend always returns ``"dummy"``.
-        idx (int): Index of the next response to return from ``responses``.
+        idx (int): Index of the next response to return from ``responses``;
+            starts at ``0`` and increments on each call.
     """
 
     def __init__(self, responses: list[str] | None):
-        """Initializes the dummy backend, optionally with a list of dummy responses.
-
-        Args:
-            responses: If `None`, then the dummy backend always returns "dummy". Otherwise, returns the next item from responses. The generate function will throw an exception if a generate call is made after the list is exhausted.
-        """
+        """Initialize the dummy backend with an optional list of predetermined responses."""
         self.responses = responses
         self.idx = 0
 

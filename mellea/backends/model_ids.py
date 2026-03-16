@@ -27,14 +27,6 @@ class ModelIdentifier:
         bedrock_name (str | None): AWS Bedrock model ID (e.g. ``"openai.gpt-oss-20b"``).
         hf_tokenizer_name (str | None): HuggingFace tokenizer ID; defaults to ``hf_model_name`` if ``None``.
 
-    Attributes:
-        hf_model_name (str | None): HuggingFace Hub model repository ID.
-        ollama_name (str | None): Ollama model tag.
-        watsonx_name (str | None): WatsonX AI model ID.
-        mlx_name (str | None): MLX model identifier.
-        openai_name (str | None): OpenAI API model name.
-        bedrock_name (str | None): AWS Bedrock model ID.
-        hf_tokenizer_name (str | None): HuggingFace tokenizer ID; same as ``hf_model_name`` when ``None``.
     """
 
     hf_model_name: str | None = None

@@ -232,16 +232,7 @@ class InMemoryRetriever:
         data_file_or_table,  #: pathlib.Path | str | pa.Table,
         embedding_model_name: str,
     ):
-        """Simple retriever that keeps docs and embeddings in memory.
-
-        Args:
-            data_file_or_table: Parquet file of document snippets and embeddings,
-                or an equivalent in-memory PyArrow Table. Should have columns
-                ``id``, ``begin``, ``end``, ``text``, and ``embedding``.
-            embedding_model_name: Name of the Sentence Transformers model to use for
-                embeddings. Must match the model used to compute embeddings in the
-                data file.
-        """
+        """Initialize InMemoryRetriever by loading embeddings and the sentence transformer model."""
         # Third Party
         import pyarrow as pa
         import pyarrow.parquet as pq

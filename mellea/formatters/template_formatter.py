@@ -41,10 +41,6 @@ class TemplateFormatter(ChatFormatter):
             if you plan to change ``model_id`` or ``template_path`` after construction.
             Defaults to ``True``.
 
-    Attributes:
-        model_id (str | ModelIdentifier): The model identifier used to locate
-            model-specific templates during rendering.
-
     Example::
 
         formatter = TemplateFormatter(model_id="my-model", template_path="/path/to/templates")
@@ -58,21 +54,7 @@ class TemplateFormatter(ChatFormatter):
         template_path: str = "",
         use_template_cache: bool = True,
     ):
-        """Initialise a ``TemplateFormatter``.
-
-        Args:
-            model_id (str | ModelIdentifier): Describes the model for which
-                templates will be looked up. Should match the template
-                directory structure.
-            template_path (str): An alternate location where templates can be
-                found. Will be preferred over all other template directories
-                even if a less exact match is found. Defaults to ``""``.
-            use_template_cache (bool): When ``True``, caches the location of
-                the most recently used templates so that future lookups are
-                skipped. Set to ``False`` if you plan on changing ``model_id``
-                or ``template_path`` after the formatter has been created.
-                Defaults to ``True``.
-        """
+        """Initialize TemplateFormatter for the given model ID with optional template path and caching."""
         self.model_id = model_id
         self._template_path: str = template_path
 

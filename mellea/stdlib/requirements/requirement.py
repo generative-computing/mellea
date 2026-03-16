@@ -65,12 +65,7 @@ class ALoraRequirement(Requirement, Intrinsic):
     """
 
     def __init__(self, description: str, intrinsic_name: str | None = None):
-        """A requirement that is validated by an ALora.
-
-        Args:
-            description: See `Requirement.__init__`
-            intrinsic_name: the name of the intrinsic; must match the adapter
-        """
+        """Initialize ALoraRequirement with a description and optional intrinsic adapter name."""
         # TODO: We may want to actually do the validation_fn here so that we can set the score.
         super().__init__(
             description, validation_fn=None, output_to_bool=requirement_check_to_bool

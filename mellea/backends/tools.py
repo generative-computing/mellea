@@ -35,9 +35,6 @@ class MelleaTool(AbstractMelleaTool):
         as_json_tool (dict[str, Any]): The OpenAI-compatible JSON schema dict describing
             the tool's parameters.
 
-    Attributes:
-        name (str): The registered name of this tool.
-        as_json_tool (dict[str, Any]): OpenAI-compatible JSON schema dict for this tool.
     """
 
     # Tool is what we pass as a model option / as input

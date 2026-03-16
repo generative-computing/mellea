@@ -57,16 +57,6 @@ class SOFAISamplingStrategy(SamplingStrategy):
         feedback_strategy (Literal["simple", "first_error", "all_errors"]):
             Detail level of repair feedback provided to the S1 solver.
 
-    Attributes:
-        s1_solver_backend (Backend): Backend for the fast S1 solver.
-        s2_solver_backend (Backend): Backend for the slow S2 solver.
-        s2_solver_mode (str): How to invoke the S2 solver: ``"fresh_start"``,
-            ``"continue_chat"``, or ``"best_attempt"``.
-        loop_budget (int): Maximum S1 attempts before escalating to S2.
-        judge_backend (Backend | None): Optional third backend for LLM-as-Judge
-            validation. ``None`` uses the session backend.
-        feedback_strategy (str): Detail level of feedback: ``"simple"``,
-            ``"first_error"``, or ``"all_errors"``.
     """
 
     def __init__(
@@ -81,24 +71,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         judge_backend: Backend | None = None,
         feedback_strategy: Literal["simple", "first_error", "all_errors"] = "simple",
     ):
-        """Initialize SOFAI sampling strategy with two solvers.
-
-        Args:
-            s1_solver_backend: Backend for S1 Solver (fast model for iterative solving).
-            s2_solver_backend: Backend for S2 Solver (slow model for escalation).
-            s2_solver_mode: How to invoke S2 Solver:
-                - "fresh_start": Same prompt as S1 solver (clean slate)
-                - "continue_chat": Fresh start input + S1 iteration/feedback history
-                - "best_attempt": Fresh start input + best S1 attempt + its feedback
-            loop_budget: Maximum attempts for S1 Solver before falling back to S2 Solver.
-            judge_backend: Optional third backend for LLM-as-Judge validation.
-                If provided, this backend will be used for validation when no custom
-                validation_fn is provided. Priority: validation_fn > judge_backend > session backend.
-            feedback_strategy: Control detail level of LLM-as-Judge feedback:
-                - "simple": Binary yes/no validation, no detailed feedback (default)
-                - "first_error": Provide only the first mistake found with detailed feedback
-                - "all_errors": Provide comprehensive feedback about all mistakes
-                Note: Only used when judge_backend is provided and requirement has no validation_fn.
+        """Initialize SOFAISamplingStrategy with S1/S2 solver backends, loop budget, and feedback settings.
 
         Raises:
             TypeError: If backends are not Backend instances.

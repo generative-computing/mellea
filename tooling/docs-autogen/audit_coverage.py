@@ -238,21 +238,23 @@ def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
                     }
                 )
 
-        # Attributes section check: flag when public non-method attributes exist
-        pub_attrs = [
-            n
-            for n, m in member.members.items()
-            if not n.startswith("_") and getattr(m, "is_attribute", False)
-        ]
-        if pub_attrs and not _ATTRIBUTES_RE.search(doc_text):
-            sample = ", ".join(pub_attrs[:3]) + ("..." if len(pub_attrs) > 3 else "")
-            issues.append(
-                {
-                    "path": full_path,
-                    "kind": "no_attributes",
-                    "detail": f"public attributes [{sample}] have no Attributes section",
-                }
+            # Duplicate Args check: Option C requires Args: on the class docstring only.
+            # Flag when __init__ has its own Args: section in addition to the class's.
+            init_doc = getattr(init, "docstring", None)
+            init_doc_text = (
+                init_doc.value.strip() if (init_doc and init_doc.value) else ""
             )
+            if _ARGS_RE.search(init_doc_text) and _ARGS_RE.search(doc_text):
+                issues.append(
+                    {
+                        "path": full_path,
+                        "kind": "duplicate_init_args",
+                        "detail": (
+                            "Args: in both class and __init__ docstrings "
+                            "(Option C: place Args: on class docstring only)"
+                        ),
+                    }
+                )
 
     return issues
 
@@ -272,9 +274,14 @@ def audit_docstring_quality(
     - no_args: function with parameters but no Args/Parameters section
     - no_returns: function with a non-trivial return annotation but no Returns section
     - no_raises: function whose source contains raise but has no Raises section
-    - no_class_args: class whose __init__ has typed params but no Args section
-    - no_attributes: class with public attributes but no Attributes section
+    - no_class_args: class whose __init__ has typed params but no Args section on the class
+    - duplicate_init_args: Args: present in both class docstring and __init__ (Option C violation)
     - param_mismatch: Args section documents names absent from the real signature
+
+    Note: Attributes: sections are intentionally not enforced. Under the Option C
+    convention, Attributes: is only used when stored values differ in type or
+    behaviour from the constructor inputs (e.g. type transforms, computed values,
+    class constants). Pure-echo entries that repeat Args: verbatim are omitted.
 
     Only symbols (and methods whose parent class) present in `documented` are
     checked when that set is provided — ensuring the audit is scoped to what is
@@ -372,7 +379,7 @@ def _print_quality_report(issues: list[dict]) -> None:
         "no_returns": "Missing Returns section",
         "no_raises": "Missing Raises section",
         "no_class_args": "Missing class Args section",
-        "no_attributes": "Missing Attributes section",
+        "duplicate_init_args": "Duplicate Args: in class + __init__ (Option C violation)",
         "param_mismatch": "Param name mismatches (documented but not in signature)",
     }
 
@@ -389,7 +396,7 @@ def _print_quality_report(issues: list[dict]) -> None:
         "no_returns",
         "no_raises",
         "no_class_args",
-        "no_attributes",
+        "duplicate_init_args",
         "param_mismatch",
     ):
         items = by_kind.get(kind, [])

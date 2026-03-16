@@ -92,15 +92,7 @@ class LocalVLLMBackend(FormatterBackend):
         *,
         model_options: dict | None = None,
     ):
-        """Attempt to load model weights using the model_id by default, or using `custom_config` if provided.
-
-        WARNING: initializing a `LocalHFBackend` will download and load the model on your *local* machine.
-
-        Args:
-            model_id (str | ModelIdentifier): Used to load the model *and tokenizer* via transformers Auto* classes, and then moves the model to the best available device (cuda > mps > cpu). If loading the model and/or tokenizer from a string will not work, or if you want to use a different device string, then you can use custom_config.
-            formatter (Formatter): A mechanism for turning `stdlib` stuff into strings. Experimental Span-based models should use `mellea.backends.span.*` backends.
-            model_options (Optional[dict]): Default model options.
-        """
+        """Load model weights via vLLM and initialize the async inference engine."""
         formatter = (
             formatter if formatter is not None else TemplateFormatter(model_id=model_id)
         )

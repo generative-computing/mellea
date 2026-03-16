@@ -46,13 +46,7 @@ class ReactInitiator(Component[str]):
     """
 
     def __init__(self, goal: str, tools: list[AbstractMelleaTool] | None):
-        """`ReactInitiator` is used at the start of the ReACT loop to prime the model.
-
-        Args:
-            goal (str): The objective of the react loop.
-            tools (list[AbstractMelleaTool] | None): A list of tools that are
-                available to the react agent; ``None`` is treated as an empty list.
-        """
+        """Initialize ReactInitiator with a goal string and optional list of available tools."""
         self.goal = CBlock(goal)
         self.tools = tools or []
 

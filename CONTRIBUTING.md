@@ -132,20 +132,47 @@ Use **[Google-style docstrings](https://google.github.io/styleguide/pyguide.html
 ```python
 def extract_entities(text: str, entity_types: list[str]) -> dict[str, list[str]]:
     """Extract named entities from text.
-    
+
     Args:
         text: The input text to analyze.
         entity_types: List of entity types to extract (e.g., ["PERSON", "ORG"]).
-    
+
     Returns:
         Dictionary mapping entity types to lists of extracted entities.
-    
+
     Example:
         >>> extract_entities("Alice works at IBM", ["PERSON", "ORG"])
         {"PERSON": ["Alice"], "ORG": ["IBM"]}
     """
     ...
 ```
+
+#### Class and `__init__` docstrings
+
+Place `Args:` on the **class docstring only**. The `__init__` docstring should be a
+single summary sentence with no `Args:` section. This keeps hover docs clean in IDEs
+and ensures the docs pipeline (which skips `__init__`) publishes the full parameter
+list.
+
+```python
+class MyComponent(Component[str]):
+    """A component that does something useful.
+
+    Args:
+        name (str): Human-readable label for this component.
+        max_tokens (int): Upper bound on generated tokens.
+    """
+
+    def __init__(self, name: str, max_tokens: int = 256) -> None:
+        """Initialize MyComponent with a name and token budget."""
+        self.name = name
+        self.max_tokens = max_tokens
+```
+
+Add an `Attributes:` section on the class docstring **only** when a stored attribute
+differs in type or behaviour from the constructor input — for example, when a `str`
+argument is wrapped into a `CBlock`, or when a class-level constant is relevant to
+callers. Pure-echo entries that repeat `Args:` verbatim should be omitted.
 
 ### Code Style
 

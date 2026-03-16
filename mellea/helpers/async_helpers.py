@@ -89,18 +89,12 @@ class ClientCache:
         capacity (int): Maximum number of entries to hold before evicting the least recently used.
 
     Attributes:
-        capacity (int): Maximum number of entries the cache can hold.
-        cache (OrderedDict): Ordered dictionary storing the cached key-value pairs in LRU order.
+        cache (OrderedDict): Ordered dictionary storing cached key-value pairs in LRU
+            order; always initialised empty at construction.
     """
 
     def __init__(self, capacity: int):
-        """Initializes the LRU cache with a certain capacity.
-
-        The `ClientCache` either contains a value or it doesn't.
-
-        Args:
-            capacity: Maximum number of entries to hold before evicting the least recently used.
-        """
+        """Initialize the client LRU cache with the given capacity."""
         self.capacity = capacity
         self.cache: OrderedDict = OrderedDict()
 

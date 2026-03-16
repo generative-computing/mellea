@@ -121,20 +121,7 @@ class GuardianCheck(Requirement):
         tools: list[dict] | None = None,
         backend: Backend | None = None,
     ):
-        """Initialize GuardianCheck using existing backends with minimal glue.
-
-        Args:
-            risk: The type of risk to check for (harm, jailbreak, etc.)
-            backend_type: Type of backend to use ("ollama" or "huggingface")
-            model_version: Specific model version to use
-            device: Device for model inference (for HuggingFace)
-            ollama_url: URL for Ollama server
-            thinking: Enable thinking/reasoning mode
-            custom_criteria: Custom criteria for validation
-            context_text: Context document for groundedness checks
-            tools: Tool schemas for function call validation
-            backend: Pre-initialized backend to reuse (avoids loading model multiple times)
-        """
+        """Initialize GuardianCheck with a risk type, backend configuration, and optional criteria."""
         super().__init__(check_only=True)
 
         warnings.warn(

@@ -166,14 +166,7 @@ class PythonExecutionReq(Requirement):
         allowed_imports: list[str] | None = None,
         use_sandbox: bool = False,
     ):
-        """Initialize execution validator.
-
-        Args:
-            timeout: Maximum seconds to allow code to run before timing out.
-            allow_unsafe_execution: If True, execute code directly with subprocess (unsafe).
-            allowed_imports: List of allowed import modules when using execution. None means any import is allowed.
-            use_sandbox: If True, use llm-sandbox for secure Docker-based execution.
-        """
+        """Initialize PythonExecutionReq with execution mode, timeout, and import allowlist settings."""
         self._timeout = timeout
         self._allow_unsafe = allow_unsafe_execution
         self._allowed_imports = allowed_imports

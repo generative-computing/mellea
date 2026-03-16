@@ -41,8 +41,6 @@ class Message(Component["Message"]):
     Attributes:
         Role (type): Type alias for the allowed role literals: ``"system"``,
             ``"user"``, ``"assistant"``, or ``"tool"``.
-        role (str): The role associated with this message.
-        content (str): The plain-text content of this message.
     """
 
     Role = Literal["system", "user", "assistant", "tool"]
@@ -55,14 +53,7 @@ class Message(Component["Message"]):
         images: None | list[ImageBlock] = None,
         documents: None | list[Document] = None,
     ):
-        """Initializer for Chat messages.
-
-        Args:
-            role (str): The role that this message came from (e.g., user, assistant).
-            content (str): The content of the message.
-            images (list[ImageBlock]): The images associated with the message if any.
-            documents (list[Document]): documents associated with the message if any.
-        """
+        """Initialize a Message with a role, text content, and optional images and documents."""
         self.role = role
         self.content = content  # TODO this should be private.
         self._content_cblock = CBlock(self.content)
@@ -203,8 +194,8 @@ class ToolMessage(Message):
         tool (ModelToolCall): The ``ModelToolCall`` representation.
 
     Attributes:
-        name (str): The name of the tool or function that was called.
-        arguments (Mapping[str, Any]): The arguments that were passed to the tool.
+        arguments (Mapping[str, Any]): The arguments that were passed to the
+            tool; stored from the ``args`` constructor parameter.
     """
 
     def __init__(
@@ -216,16 +207,7 @@ class ToolMessage(Message):
         args: Mapping[str, Any],
         tool: ModelToolCall,
     ):
-        """Initializer for Chat messages.
-
-        Args:
-            role: the role of this message. Most backends/models use something like tool.
-            content: The content of the message; should be a stringified version of the tool_output.
-            name: The name of the tool/function.
-            args: The args required to call the function.
-            tool_output: the output of the tool/function call.
-            tool: the ModelToolCall representation.
-        """
+        """Initialize a ToolMessage with role, content, tool output, name, args, and tool call."""
         super().__init__(role, content)
         self.name = name
         self.arguments = args

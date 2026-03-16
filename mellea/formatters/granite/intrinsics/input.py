@@ -238,19 +238,7 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
         config_dict: dict | None = None,
         model_name: str | None = None,
     ):
-        """Initialize the IntrinsicsRewriter.
-
-        Args:
-            config_file (str | pathlib.Path | None): Optional location of the
-                YAML configuration file. Exactly one of ``config_file`` and
-                ``config_dict`` must be provided.
-            config_dict (dict | None): Optional pre-parsed contents of the YAML
-                configuration file (result of ``yaml.safe_load()``). Exactly one
-                of ``config_file`` and ``config_dict`` must be provided.
-            model_name (str | None): Optional model name to inject into chat
-                completion requests. ``None`` uses the default from the
-                configuration. Defaults to ``None``.
-        """
+        """Initialize IntrinsicsRewriter from a YAML config file or dict."""
         config = make_config_dict(config_file, config_dict)
         if config is None:
             raise ValueError("config cannot be None")

@@ -26,11 +26,6 @@ class ValidationResult:
         thunk (ModelOutputThunk | None): The ``ModelOutputThunk`` produced during LLM-as-a-Judge validation, if applicable.
         context (Context | None): The context associated with the validation backend call, if applicable.
 
-    Attributes:
-        reason (str | None): Human-readable explanation for the pass/fail verdict, if provided.
-        score (float | None): Optional numeric score returned by the validator.
-        thunk (ModelOutputThunk | None): The ``ModelOutputThunk`` produced during LLM-as-a-Judge validation, if applicable.
-        context (Context | None): The context associated with the validation backend call, if applicable.
     """
 
     def __init__(
@@ -42,17 +37,7 @@ class ValidationResult:
         thunk: ModelOutputThunk | None = None,
         context: Context | None = None,
     ):
-        """The result of a requirement's validation.
-
-        A ValidationResult's result field always contains a definitive pass/fail. The other fields can be used to communicate additional information about that result.
-
-        Args:
-            result: a boolean that is true if the requirement passed
-            reason: a reason for the result
-            score: if your validator gives you a score back, you can add this as metadata
-            thunk: if your validator utilizes a backend to generate a response, the ModelOutputThunk returned from that request
-            context: if your validator utilizes a backend to generate a response, the context associated with that response
-        """
+        """Initialize ValidationResult with a pass/fail boolean and optional metadata."""
         self._result = result
         self._reason = reason
         self._score = score
@@ -146,16 +131,7 @@ class Requirement(Component[str]):
         output_to_bool: Callable[[CBlock | str], bool] | None = default_output_to_bool,
         check_only: bool = False,
     ):
-        """A Requirement, interpreted over a Context.
-
-          By default, requirements are validated by the model using LLM-as-a-Judge (or a `constraint` LoRA when available). However, you can also provide a `validate` function with arbitrary behavior.
-
-        Args:
-            description: A natural-language description of the requirement. This will sometimes be included in `Instruction` prompts; if you do not want the requirement to be included in the prompt to avoid [Purple Elephant Effects](https://${PROJECT_URL}/llm-requirement-engineering-and-purple-elephants/) use check_only=True.
-            validation_fn: If provided, this function will be executed instead of using LLM-as-a-Judge. The `bool()` for the function's output defines whether the requirement passes.
-            output_to_bool: An `output_to_bool` may be provided so that the library can translate the LLM-as-a-judge or ALora output into a boolean value. If none is provided, we will look for 'yes' (case-insensitive) in the LLMaJ output.
-            check_only: If set, then `Instruction` will not include this requirement in its prompt.
-        """
+        """Initialize Requirement with an optional description, validation function, and output converter."""
         self.description = description
         self.output_to_bool = output_to_bool
         self.validation_fn = validation_fn

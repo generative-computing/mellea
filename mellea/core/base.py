@@ -49,13 +49,7 @@ class CBlock:
         *,
         cache: bool = False,
     ):
-        """Initializes the CBlock with a string and some metadata.
-
-        Args:
-            value (str | None): the underlying value stored in this CBlock
-            meta (dict[str, Any] | None): Any meta-information about this CBlock (e.g., the inference engine's Completion object).
-            cache (bool): If set to `True` then this CBlock's KV cache might be stored by the inference engine. Experimental.
-        """
+        """Initialize CBlock with a string value and optional metadata."""
         if value is not None and not isinstance(value, str):
             raise TypeError("value to a Cblock should always be a string or None")
         self._underlying_value = value
@@ -93,11 +87,7 @@ class ImageBlock(CBlock):
     """
 
     def __init__(self, value: str, meta: dict[str, Any] | None = None):
-        """Initializes the ImageBlock with a base64 PNG string representation and some metadata.
-
-        Args:
-            value (str): A valid base64-encoded PNG string (with or without a data URI prefix).
-            meta (dict[str, Any] | None): Optional metadata to associate with this image block.
+        """Initialize ImageBlock with a base64-encoded PNG string, validating the encoding.
 
         Raises:
             AssertionError: If ``value`` is not a valid base64-encoded PNG string.
@@ -280,14 +270,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
         parsed_repr: S | None = None,
         tool_calls: dict[str, ModelToolCall] | None = None,
     ):
-        """Initializes as a CBlock, optionally also with a parsed representation from an output formatter.
-
-        Args:
-            value (str | None): The raw model output string, or ``None`` if not yet computed.
-            meta (dict[str, Any] | None): Optional metadata from the inference engine (e.g., completion object).
-            parsed_repr (S | None): An already-parsed representation to attach; set when re-wrapping existing output.
-            tool_calls (dict[str, ModelToolCall] | None): Tool calls returned by the model alongside the text output.
-        """
+        """Initialize ModelOutputThunk with an optional pre-computed value and metadata."""
         super().__init__(value, meta)
 
         self.parsed_repr: S | None = parsed_repr

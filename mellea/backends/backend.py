@@ -43,13 +43,7 @@ class FormatterBackend(Backend, abc.ABC):
         *,
         model_options: dict | None = None,
     ):
-        """Initializes a formatter-based backend for `model_id`.
-
-        Args:
-            model_id (str): The model_id to use.
-            formatter (Formatter): The formatter to use for converting components into (fragments of) prompts.
-            model_options (Optional[dict]): The model options to use; if None, sensible defaults will be provided.
-        """
+        """Initialize a formatter-based backend for the given model ID."""
         self.model_id = model_id
         self.model_options = model_options if model_options is not None else {}
         self.formatter: ChatFormatter = formatter

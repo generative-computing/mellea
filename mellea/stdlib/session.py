@@ -291,20 +291,16 @@ class MelleaSession:
             ``SimpleContext`` if ``None``.
 
     Attributes:
-        ctx (Context): The active conversation context. Updated after every call that
-            produces model output.
-        backend (Backend): The backend used for model inference throughout the session.
+        ctx (Context): The active conversation context; never ``None`` (defaults
+            to a fresh ``SimpleContext`` when ``None`` is passed). Updated after
+            every call that produces model output.
+        id (str): Unique session UUID assigned at construction.
     """
 
     ctx: Context
 
     def __init__(self, backend: Backend, ctx: Context | None = None):
-        """Initializes a new Mellea session with the provided backend and context.
-
-        Args:
-            backend (Backend): This is always required.
-            ctx (Context): The way in which the model's context will be managed. By default, each interaction with the model is a stand-alone interaction, so we use SimpleContext as the default.
-        """
+        """Initialize MelleaSession with a backend and optional conversation context."""
         import uuid
 
         self.id = str(uuid.uuid4())

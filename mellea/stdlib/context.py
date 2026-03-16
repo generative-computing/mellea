@@ -23,12 +23,7 @@ class ChatContext(Context):
     """
 
     def __init__(self, *, window_size: int | None = None):
-        """Constructs a new chat context.
-
-        Args:
-            window_size (int | None): Maximum number of context turns to include when
-                calling ``view_for_generation``. ``None`` means unlimited history.
-        """
+        """Initialize ChatContext with an optional sliding-window size."""
         super().__init__()
         self._window_size = window_size
 

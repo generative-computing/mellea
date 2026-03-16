@@ -51,27 +51,13 @@ class TransformationRule(abc.ABC):
     Attributes:
         YAML_NAME (str | None): The name used to identify this rule in YAML
             configuration files. Subclasses must set this to a non-``None`` string.
-        config (dict): Configuration of the parent output processor, as parsed YAML.
-        input_path_expr (list[str | int | None]): Path expression matching all
-            instances of the field that this rule transforms. Elements can be
-            strings for object fields, integers for list indices, or ``None``
-            for wildcard matches.
     """
 
     YAML_NAME: str | None = None
     """Subclasses should set this to the name of the rule in YAML config files."""
 
     def __init__(self, config: dict, input_path_expr: list[str | int | None]):
-        """Initialize the TransformationRule.
-
-        Args:
-            config (dict): Configuration of the parent output processor, as
-                parsed YAML.
-            input_path_expr (list[str | int | None]): Path expression that
-                matches all instances of the field that this rule transforms.
-                Elements can be strings for object fields, ints for list
-                indices, or ``None`` for wildcard matches.
-        """
+        """Initialize TransformationRule with a config dict and a path expression."""
         self.config = config
         self.input_path_expr = input_path_expr
 
@@ -306,9 +292,6 @@ class TokenToFloat(InPlaceTransformation):
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always
             ``"likelihood"``.
-        categories_to_values (dict[str | int | bool, float] | None): Mapping
-            from categorical label strings or values to their corresponding
-            floating-point numeric values.
     """
 
     YAML_NAME = "likelihood"
@@ -320,17 +303,7 @@ class TokenToFloat(InPlaceTransformation):
         /,
         categories_to_values: dict[str | int | bool, float] | None = None,
     ):
-        """Initialize TokenToFloat transformation rule.
-
-        Args:
-            config (dict): Configuration of the parent output processor, as
-                parsed YAML.
-            input_path_expr (list[str | int | None]): Path expression that
-                matches all instances of the field that this rule transforms.
-            categories_to_values (dict[str | int | bool, float] | None):
-                Mapping from categorical labels to floating-point values.
-                Defaults to ``None``.
-        """
+        """Initialize TokenToFloat with an optional mapping from categorical labels to float values."""
         super().__init__(config, input_path_expr)
         self.categories_to_values = categories_to_values
 
@@ -521,17 +494,18 @@ class DecodeSentences(AddFieldsTransformation):
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always
             ``"decode_sentences"``.
-        source (str): Where to look for tagged sentences; either
-            ``"last_message"`` or ``"documents"``.
         begin_name (str | None): Name of the output field that receives the
-            sentence begin offset, or ``None`` if not configured.
+            sentence begin offset; extracted from ``output_names``, or ``None``
+            if not configured.
         end_name (str | None): Name of the output field that receives the
-            sentence end offset, or ``None`` if not configured.
+            sentence end offset; extracted from ``output_names``, or ``None``
+            if not configured.
         text_name (str | None): Name of the output field that receives the
-            sentence text, or ``None`` if not configured.
+            sentence text; extracted from ``output_names``, or ``None`` if not
+            configured.
         document_id_name (str | None): Name of the output field that receives
-            the document ID (only used when ``source="documents"``), or
-            ``None`` if not configured.
+            the document ID (only used when ``source="documents"``); extracted
+            from ``output_names``, or ``None`` if not configured.
     """
 
     YAML_NAME = "decode_sentences"
@@ -544,18 +518,7 @@ class DecodeSentences(AddFieldsTransformation):
         source: str,
         output_names: dict,
     ):
-        """Initialize DecodeSentences transformation rule.
-
-        Args:
-            config (dict): Configuration of the parent output processor, as
-                parsed YAML.
-            input_path_expr (list[str | int | None]): Path expression that
-                matches all instances of the field that this rule transforms.
-            source (str): Name of the location to look for sentences; must be
-                ``"last_message"`` or ``"documents"``.
-            output_names (dict): Mapping from output role name (``"begin"``,
-                ``"end"``, ``"text"``, ``"document_id"``) to the name of the
-                new field to add in the result JSON.
+        """Initialize DecodeSentences with a source location and output field name mapping.
 
         Raises:
             ValueError: If ``source`` is not ``"last_message"`` or
@@ -938,14 +901,6 @@ class MergeSpans(InPlaceTransformation):
     Attributes:
         YAML_NAME (str): YAML configuration key for this rule; always
             ``"merge_spans"``.
-        group_fields (list): Fields used for grouping records before merging
-            contiguous spans.
-        begin_field (str): Name of the field that holds the begin offset of
-            each span.
-        end_field (str): Name of the field that holds the end offset of each
-            span.
-        text_field (str | None): Optional name of the field containing covered
-            text strings that are concatenated when spans are merged.
     """
 
     YAML_NAME = "merge_spans"
@@ -960,21 +915,7 @@ class MergeSpans(InPlaceTransformation):
         end_field: str,
         text_field: str | None = None,
     ):
-        """Initialize MergeSpans transformation rule.
-
-        Args:
-            config: Parsed YAML config for IO processing.
-            input_path_expr: Path expression for the list of records to merge.
-            group_fields (list): List of fields used for grouping prior to
-                merging spans.
-            begin_field (str): Name of the field that holds the begin offset of
-                spans.
-            end_field (str): Name of the field that holds the end offset of
-                spans.
-            text_field (str | None): Optional field containing covered text
-                strings that should be concatenated when spans are merged.
-                Defaults to ``None``.
-        """
+        """Initialize MergeSpans with span field names and optional grouping fields."""
         super().__init__(config, input_path_expr)
         self._type_check("group_fields", group_fields, list)
         self._type_check("begin_field", begin_field, str)
@@ -1242,16 +1183,7 @@ class IntrinsicsResultProcessor(ChatCompletionResultProcessor):
         config_file: str | pathlib.Path | None = None,
         config_dict: dict | None = None,
     ):
-        """Initialize IntrinsicsResultProcessor.
-
-        Args:
-            config_file (str | pathlib.Path | None): Optional path to a YAML
-                configuration file. Exactly one of ``config_file`` and
-                ``config_dict`` must be provided.
-            config_dict (dict | None): Optional pre-parsed YAML configuration
-                dict. Exactly one of ``config_file`` and ``config_dict`` must
-                be provided.
-        """
+        """Initialize IntrinsicsResultProcessor from a YAML config file or dict."""
         config = make_config_dict(config_file, config_dict)
         if config is None:
             raise ValueError("config cannot be None")

@@ -21,20 +21,10 @@ class Document(Component[str]):
         title (str | None): An optional human-readable title for the document.
         doc_id (str | None): An optional unique identifier for the document.
 
-    Attributes:
-        text (str): The text content of this document.
-        title (str | None): Human-readable title, or ``None`` if not set.
-        doc_id (str | None): Unique identifier, or ``None`` if not set.
     """
 
     def __init__(self, text: str, title: str | None = None, doc_id: str | None = None):
-        """Create a document object. Should typically be used as a list in the ``_docs`` field of ``Message``.
-
-        Args:
-            text (str): The text content of the document.
-            title (str | None): An optional human-readable title.
-            doc_id (str | None): An optional unique identifier.
-        """
+        """Initialize Document with text content and optional title and ID."""
         self.text = text
         self.title = title
         self.doc_id = doc_id

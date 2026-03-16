@@ -67,21 +67,12 @@ class SimpleLRUCache(Cache):
             evicted value whenever an entry is removed to make room for a new one.
 
     Attributes:
-        capacity (int): Maximum number of items this cache will hold.
-        cache (OrderedDict): Internal ordered dict used for LRU tracking.
-        on_evict (Callable[[Any], None] | None): Eviction callback, or ``None`` if not set.
+        cache (OrderedDict): Internal ordered dict used for LRU tracking; always
+            initialised empty at construction.
     """
 
     def __init__(self, capacity: int, on_evict: Callable[[Any], None] | None = None):
-        """Initializes the LRU cache with a certain capacity.
-
-        The `SimpleLRUCache` either contains a value or it doesn't. There is no cache hierarchy. Take care when choosing `capacity`. In practice usually a small value will be fine, but ideally you should try to choose a capacity based upon your available device memory and the context size of your model.
-
-        Args:
-            capacity: Maximum number of items to store in the cache.
-            on_evict: Optional callback function called when an item is evicted from the cache.
-                      This can be used to free resources (e.g., GPU memory) when items are removed.
-        """
+        """Initialize the LRU cache with a fixed capacity and optional eviction callback."""
         self.capacity = capacity
         self.cache: OrderedDict = OrderedDict()
         self.on_evict = on_evict

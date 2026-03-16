@@ -92,17 +92,7 @@ class WatsonxAIBackend(FormatterBackend):
         project_id: str | None = None,
         **kwargs,
     ):
-        """A generic watsonx backend that wraps around the ibm_watsonx_ai sdk.
-
-        Args:
-            model_id  : Model id. Defaults to model_ids.IBM_GRANITE_4_HYBRID_SMALL.
-            formatter : input formatter. Defaults to TemplateFormatter in __init__.
-            base_url  : url for watson ML deployment. Defaults to env(WATSONX_URL).
-            model_options : Global model options to pass to the model. Defaults to None.
-            api_key : watsonx API key. Defaults to None.
-            project_id : watsonx project ID. Defaults to None.
-            kwargs : extra kwargs passed to model inference creation.
-        """
+        """Initialize a WatsonX AI backend using the ibm_watsonx_ai SDK."""
         # There are bugs with the Watsonx python sdk related to async event loops;
         # using the same watsonx backend across multiple event loops causes errors.
         warnings.warn(
