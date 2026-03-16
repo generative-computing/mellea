@@ -71,6 +71,13 @@ def _extract_jinja_vars(prompt_template: str) -> list[str]:
     return re.findall(RE_JINJA_VAR, prompt_template)
 
 
+def _preview_text(text: str, max_len: int = 240) -> str:
+    text = " ".join(text.strip().split())
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + " ..."
+
+
 # -------------------------------------------------------------------
 # backend
 # -------------------------------------------------------------------
@@ -163,9 +170,7 @@ def task_decompose(
 
     logger.info("extracting task constraints")
     task_constraints: list[str] = constraint_extractor.generate(
-        m_session,
-        task_prompt,
-        enforce_same_words=False,
+        m_session, task_prompt, enforce_same_words=False
     ).parse()
 
     logger.info("constraints found: %d", len(task_constraints))
@@ -204,10 +209,7 @@ def constraint_validate(
         else:
             logger.info("  validation mode: llm")
 
-        constraint_val_data[cons_key] = {
-            "val_strategy": val_strategy,
-            "val_fn": val_fn,
-        }
+        constraint_val_data[cons_key] = {"val_strategy": val_strategy, "val_fn": val_fn}
 
     return constraint_val_data
 
@@ -312,8 +314,7 @@ def finalize_result(
             constraints=subtask_constraints,
             prompt_template=subtask_data.prompt_template,
             general_instructions=general_instructions.generate(
-                m_session,
-                input_str=subtask_data.prompt_template,
+                m_session, input_str=subtask_data.prompt_template
             ).parse(),
             input_vars_required=input_vars_required,
             depends_on=depends_on,
@@ -372,6 +373,11 @@ def decompose(
     logger.info("log_mode       : %s", log_mode.value)
     logger.info("user_input_vars: %s", user_input_variable or "[]")
 
+    if log_mode == LogMode.debug:
+        logger.info("user_query     : %s", task_prompt)
+    else:
+        logger.info("user_query     : %s", _preview_text(task_prompt))
+
     m_session = build_backend_session(
         model_id=model_id,
         backend=backend,
@@ -382,15 +388,11 @@ def decompose(
     )
 
     subtasks, task_constraints = task_decompose(
-        m_session=m_session,
-        task_prompt=task_prompt,
-        log_mode=log_mode,
+        m_session=m_session, task_prompt=task_prompt, log_mode=log_mode
     )
 
     constraint_val_data = constraint_validate(
-        m_session=m_session,
-        task_constraints=task_constraints,
-        log_mode=log_mode,
+        m_session=m_session, task_constraints=task_constraints, log_mode=log_mode
     )
 
     subtask_prompts_with_constraints = task_execute(

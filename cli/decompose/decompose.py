@@ -54,8 +54,7 @@ def reorder_subtasks(
 
 
 def verify_user_variables(
-    decomp_data: DecompPipelineResult,
-    input_var: list[str] | None,
+    decomp_data: DecompPipelineResult, input_var: list[str] | None
 ) -> DecompPipelineResult:
     if input_var is None:
         input_var = []
@@ -140,7 +139,9 @@ def run(
     ] = DecompBackend.ollama,
     backend_req_timeout: Annotated[
         int,
-        typer.Option(help='Timeout in seconds for backend requests. Defaults to "300".'),
+        typer.Option(
+            help='Timeout in seconds for backend requests. Defaults to "300".'
+        ),
     ] = 300,
     backend_endpoint: Annotated[
         str | None,
@@ -150,9 +151,7 @@ def run(
     ] = None,
     backend_api_key: Annotated[
         str | None,
-        typer.Option(
-            help='Backend API key. Required for "openai" and "rits".'
-        ),
+        typer.Option(help='Backend API key. Required for "openai" and "rits".'),
     ] = None,
     version: Annotated[
         DecompVersion,
@@ -198,8 +197,7 @@ def run(
         logger.info("input_vars     : %s", input_var or "[]")
 
         environment = Environment(
-            loader=FileSystemLoader(this_file_dir),
-            autoescape=False,
+            loader=FileSystemLoader(this_file_dir), autoescape=False
         )
 
         ver = (
