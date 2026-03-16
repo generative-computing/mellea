@@ -123,7 +123,7 @@ def decompose(
         m_session, task_prompt, enforce_same_words=False
     ).parse()
 
-    constraint_validation_strategies: dict[str, Literal["code", "llm"]] = {
+    constraint_val_strategies: dict[str, Literal["code", "llm"]] = {
         cons_key: validation_decision.generate(m_session, cons_key).parse() or "llm"
         for cons_key in task_prompt_constraints
     }
