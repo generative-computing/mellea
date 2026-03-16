@@ -311,7 +311,8 @@ def run(
 
         decomp_dir = out_dir / out_name
         val_fn_dir = decomp_dir / "validations"
-        val_fn_dir.mkdir(parents=True)
+        decomp_dir.mkdir(parents=True, exist_ok=False)
+        val_fn_dir.mkdir(exist_ok=True)
 
         (val_fn_dir / "__init__.py").touch()
 
@@ -337,4 +338,4 @@ def run(
         if decomp_dir.exists() and decomp_dir.is_dir():
             shutil.rmtree(decomp_dir)
 
-        raise Exception
+        raise

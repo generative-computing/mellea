@@ -132,7 +132,7 @@ def decompose(
 
     for cons_key in constraint_val_strategies:
         constraint_val_data[cons_key] = {
-            "val_strategy": constraint_val_strategies[cons_key]["val_strategy"],
+            "val_strategy": constraint_val_strategies[cons_key],
             "val_fn": None,
         }
         if constraint_val_data[cons_key]["val_strategy"] == "code":
