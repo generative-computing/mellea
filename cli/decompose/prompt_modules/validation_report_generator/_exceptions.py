@@ -5,7 +5,9 @@ class ValidationReportError(Exception):
     def __init__(self, error_message: str, **kwargs: dict[str, Any]):
         self.error_message = error_message
         self.__dict__.update(kwargs)
-        super().__init__(f'Module Error "validation_report_generator"; {self.error_message}')
+        super().__init__(
+            f'Module Error "validation_report_generator"; {self.error_message}'
+        )
 
 
 class BackendGenerationError(ValidationReportError):
