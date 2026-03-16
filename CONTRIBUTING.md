@@ -42,7 +42,7 @@ to melleaadmin@ibm.com.
 
 - Python 3.10 or higher (3.13+ requires [Rust compiler](https://www.rust-lang.org/tools/install) for outlines)
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended) or conda/mamba
-- [Ollama](https://ollama.com/download) (for local testing)
+- [Ollama](https://ollama.com/download) with [required models](#required-models) (for local testing) 
 
 ### Installation with `uv` (Recommended)
 
@@ -328,6 +328,16 @@ CICD=1 uv run pytest
 uv run ruff format .
 uv run ruff check .
 ```
+
+### Required Models
+
+#### Ollama
+- `granite4:micro-h`
+- `granite3.2-vision`
+- `granite4:micro`
+- `qwen2.5vl:7b`
+
+_Note: ollama models can be obtained by running `ollama pull <model>`_
 
 ### Test Markers
 
