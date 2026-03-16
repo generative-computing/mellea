@@ -53,7 +53,7 @@ The rendered documentation site is at [docs.mellea.ai](https://docs.mellea.ai).
 ## Evaluation and observability
 
 - [Handling exceptions](evaluation-and-observability/handling-exceptions.md)
-- [Metrics and telemetry](evaluation-and-observability/metrics-and-telemetry.md)
+- [Telemetry](evaluation-and-observability/telemetry.md)
 
 ## Advanced
 

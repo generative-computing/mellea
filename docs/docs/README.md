@@ -19,7 +19,7 @@ npm install -g mintlify
 
 ```bash
 cd docs/docs
-mint dev
+mintlify dev
 ```
 
 The site is available at <http://localhost:3000>.

@@ -36,7 +36,7 @@ export MELLEA_METRICS_PROMETHEUS=true
 python metrics_example.py
 
 # For OTLP Collector and Prometheus setup instructions, see:
-# docs/dev/telemetry.md
+# docs/docs/evaluation-and-observability/metrics.md
 """
 
 import os

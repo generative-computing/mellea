@@ -67,7 +67,8 @@
               "how-to/use-images-and-vision",
               "how-to/build-a-rag-pipeline",
               "how-to/refactor-prompts-with-cli",
-              "how-to/unit-test-generative-code"
+              "how-to/unit-test-generative-code",
+              "how-to/handling-exceptions"
             ]
           },
           {
@@ -99,10 +100,16 @@
           {
             "group": "Evaluation and Observability",
             "pages": [
-              "evaluation-and-observability/handling-exceptions",
-              "evaluation-and-observability/metrics-and-telemetry",
-              "evaluation-and-observability/opentelemetry-tracing",
-              "evaluation-and-observability/evaluate-with-llm-as-a-judge"
+              "evaluation-and-observability/evaluate-with-llm-as-a-judge",
+              {
+                "group": "Telemetry",
+                "pages": [
+                  "evaluation-and-observability/telemetry",
+                  "evaluation-and-observability/tracing",
+                  "evaluation-and-observability/metrics",
+                  "evaluation-and-observability/logging"
+                ]
+              }
             ]
           },
           {

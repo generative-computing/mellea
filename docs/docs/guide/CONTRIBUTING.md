@@ -352,7 +352,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for the full validation workflow.
 
 ```bash
 cd docs/docs
-mint dev
+mintlify dev
 # Site available at http://localhost:3000
 ```
 
@@ -396,7 +396,7 @@ markdownlint docs/docs/guide/your-page.md
 - [ ] `**See also:**` footer present with relevant cross-links (Mintlify generates prev/next automatically).
 - [ ] `docs.json` updated if new page added; old MDX page removed from nav if replaced.
 - [ ] `index.mdx` landing page cards reviewed — add a card if the new page is a major entry point (key pattern, integration, or prominent how-to); keep total cards per section to ≤ 8.
-- [ ] Previewed locally with `mint dev`.
+- [ ] Previewed locally with `mintlify dev`.
 - [ ] Non-deterministic LLM output noted.
 - [ ] Backend-specific code blocks flagged with `> **Backend note:**`.
 - [ ] No visible TODO placeholders — missing content tracked as GitHub issues.

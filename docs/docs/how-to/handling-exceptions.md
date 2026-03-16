@@ -296,7 +296,7 @@ if not result.success:
 ```
 
 For structured telemetry across all calls, see
-[Metrics and Telemetry](./metrics-and-telemetry).
+[Telemetry](./telemetry).
 
 ---
 
