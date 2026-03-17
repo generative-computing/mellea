@@ -8,6 +8,7 @@ import pytest
 from validate import (
     generate_report,
     validate_doc_imports,
+    validate_examples_catalogue,
     validate_internal_links,
     validate_mdx_syntax,
     validate_source_links,
@@ -261,6 +262,86 @@ def test_generate_report_all_pass():
     assert report["mdx_syntax"]["passed"] is True
     assert report["internal_links"]["passed"] is True
     assert report["overall_passed"] is True
+
+
+def test_validate_examples_catalogue_pass():
+    """Test examples catalogue check passes when all dirs are listed."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        docs_root = Path(tmpdir)
+        examples_dir = docs_root / "examples"
+        examples_dir.mkdir()
+        index_dir = docs_root / "docs" / "examples"
+        index_dir.mkdir(parents=True)
+
+        # Create an example directory with a .py file
+        (examples_dir / "my_example").mkdir()
+        (examples_dir / "my_example" / "demo.py").write_text("# demo")
+
+        # Create index listing it
+        (index_dir / "index.md").write_text("| `my_example/` | A demo example |")
+
+        error_count, errors = validate_examples_catalogue(docs_root)
+        assert error_count == 0
+        assert len(errors) == 0
+
+
+def test_validate_examples_catalogue_missing():
+    """Test examples catalogue check catches unlisted directories."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        docs_root = Path(tmpdir)
+        examples_dir = docs_root / "examples"
+        examples_dir.mkdir()
+        index_dir = docs_root / "docs" / "examples"
+        index_dir.mkdir(parents=True)
+
+        # Create an example directory with a .py file
+        (examples_dir / "unlisted_example").mkdir()
+        (examples_dir / "unlisted_example" / "demo.py").write_text("# demo")
+
+        # Create index that does NOT mention it
+        (index_dir / "index.md").write_text("| `other/` | Something else |")
+
+        error_count, errors = validate_examples_catalogue(docs_root)
+        assert error_count == 1
+        assert "unlisted_example" in errors[0]
+
+
+def test_validate_examples_catalogue_skips_helper():
+    """Test examples catalogue check skips the helper directory."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        docs_root = Path(tmpdir)
+        examples_dir = docs_root / "examples"
+        examples_dir.mkdir()
+        index_dir = docs_root / "docs" / "examples"
+        index_dir.mkdir(parents=True)
+
+        # Create helper directory (should be skipped)
+        (examples_dir / "helper").mkdir()
+        (examples_dir / "helper" / "utils.py").write_text("# utils")
+
+        (index_dir / "index.md").write_text("# Examples")
+
+        error_count, _errors = validate_examples_catalogue(docs_root)
+        assert error_count == 0
+
+
+def test_validate_examples_catalogue_skips_empty_dirs():
+    """Test examples catalogue check skips directories with no .py files."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        docs_root = Path(tmpdir)
+        examples_dir = docs_root / "examples"
+        examples_dir.mkdir()
+        index_dir = docs_root / "docs" / "examples"
+        index_dir.mkdir(parents=True)
+
+        # Create directory with only non-Python files
+        (examples_dir / "data_only").mkdir()
+        (examples_dir / "data_only" / "data.json").write_text("{}")
+
+        (index_dir / "index.md").write_text("# Examples")
+
+        error_count, _errors = validate_examples_catalogue(docs_root)
+        assert error_count == 0
 
 
 if __name__ == "__main__":
