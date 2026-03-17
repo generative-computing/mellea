@@ -71,7 +71,9 @@ class ExecutionResult:
     def to_validationresult_reason(self) -> str:
         """Maps an ExecutionResult to a ValidationResult reason.
 
-        TODO: Downstream use of this method is really hacky. A far better solution is for `ExecutionResult` to implement the `ValidationResult` interface.
+        Returns:
+            The skip message if the execution was skipped, stdout on success,
+            or stderr on failure.
         """
         assert self.skip_message is not None or (
             self.stderr is not None and self.stdout is not None

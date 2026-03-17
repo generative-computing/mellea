@@ -47,6 +47,9 @@ class PluginSet:
 
         When this set has a priority, it overrides the priorities of all nested
         items — including items inside nested ``PluginSet`` instances.
+
+        Returns:
+            Flattened list of ``(item, priority_override)`` pairs.
         """
         result: list[tuple[Callable | Any, int | None]] = []
         for item in self.items:

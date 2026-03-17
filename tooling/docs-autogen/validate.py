@@ -290,6 +290,39 @@ def validate_rst_docstrings(source_dir: Path) -> tuple[int, list[str]]:
     return len(errors), errors
 
 
+def validate_stale_files(docs_root: Path) -> tuple[int, list[str]]:
+    """Check for stale files that should have been cleaned up.
+
+    Detects review artifacts, superseded files, and other content that
+    accumulates during doc rewrites and should not ship in a release.
+
+    Args:
+        docs_root: The ``docs/`` directory (parent of ``docs/docs/``).
+
+    Returns:
+        Tuple of (error_count, error_messages).
+    """
+    errors = []
+
+    # Review tracker artifacts (e.g. PR601-REVIEW.md)
+    for f in docs_root.glob("*REVIEW*"):
+        errors.append(f"Stale review artifact: {f.relative_to(docs_root)}")
+
+    # Superseded landing page: docs/index.md replaced by docs/docs/index.mdx
+    old_index = docs_root / "index.md"
+    new_index = docs_root / "docs" / "index.mdx"
+    if old_index.exists() and new_index.exists():
+        errors.append("Stale file: index.md — superseded by docs/index.mdx")
+
+    # Legacy tutorial: docs/tutorial.md replaced by docs/docs/tutorials/
+    old_tutorial = docs_root / "tutorial.md"
+    tutorials_dir = docs_root / "docs" / "tutorials"
+    if old_tutorial.exists() and tutorials_dir.is_dir():
+        errors.append("Stale file: tutorial.md — superseded by docs/tutorials/")
+
+    return len(errors), errors
+
+
 def generate_report(
     source_link_errors: list[str],
     coverage_passed: bool,
@@ -298,12 +331,16 @@ def generate_report(
     link_errors: list[str],
     anchor_errors: list[str],
     rst_docstring_errors: list[str] | None = None,
+    stale_errors: list[str] | None = None,
 ) -> dict:
     """Generate validation report.
 
     Returns:
-        Report dictionary with all validation results
+        Report dictionary with all validation results.
     """
+    if stale_errors is None:
+        stale_errors = []
+
     return {
         "source_links": {
             "passed": len(source_link_errors) == 0,
@@ -337,12 +374,18 @@ def generate_report(
             "error_count": len(rst_docstring_errors or []),
             "errors": rst_docstring_errors or [],
         },
+        "stale_files": {
+            "passed": len(stale_errors) == 0,
+            "error_count": len(stale_errors),
+            "errors": stale_errors,
+        },
         "overall_passed": (
             len(source_link_errors) == 0
             and coverage_passed
             and len(mdx_errors) == 0
             and len(link_errors) == 0
             and len(anchor_errors) == 0
+            and len(stale_errors) == 0
             # rst_docstrings is a warning only — does not fail the build
         ),
     }
@@ -369,6 +412,10 @@ def main():
         type=Path,
         default=None,
         help="Python source root to scan for RST double-backtick notation (e.g. mellea/)",
+    )
+    parser.add_argument(
+        "--docs-root",
+        help="Root docs/ directory for stale-file checks (default: parent of docs_dir)",
     )
     args = parser.parse_args()
 
@@ -411,6 +458,10 @@ def main():
         print("Checking source docstrings for RST double-backtick notation...")
         _, rst_docstring_errors = validate_rst_docstrings(args.source_dir)
 
+    print("Checking for stale files...")
+    docs_root = Path(args.docs_root) if args.docs_root else docs_dir.parent
+    _, stale_errors = validate_stale_files(docs_root)
+
     # Generate report
     report = generate_report(
         source_link_errors,
@@ -420,6 +471,7 @@ def main():
         link_errors,
         anchor_errors,
         rst_docstring_errors,
+        stale_errors,
     )
 
     # Print results
@@ -461,6 +513,10 @@ def main():
         if not report["rst_docstrings"]["passed"]:
             print(f"   {report['rst_docstrings']['error_count']} occurrences found")
 
+    print(f"✅ Stale files: {'PASS' if report['stale_files']['passed'] else 'FAIL'}")
+    if not report["stale_files"]["passed"]:
+        print(f"   {report['stale_files']['error_count']} errors found")
+
     print("\n" + "=" * 60)
     print(f"Overall: {'✅ PASS' if report['overall_passed'] else '❌ FAIL'}")
     print("=" * 60)
@@ -468,13 +524,15 @@ def main():
     # Print detailed errors
     if not report["overall_passed"]:
         print("\nDetailed Errors:")
-        for error in (
+        all_errors = (
             source_link_errors
             + mdx_errors
             + link_errors
             + anchor_errors
             + rst_docstring_errors
-        ):
+            + stale_errors
+        )
+        for error in all_errors:
             print(f"  • {error}")
 
     # Save report

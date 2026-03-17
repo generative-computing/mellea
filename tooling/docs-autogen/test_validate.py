@@ -10,6 +10,7 @@ from validate import (
     validate_internal_links,
     validate_mdx_syntax,
     validate_source_links,
+    validate_stale_files,
 )
 
 
@@ -125,6 +126,55 @@ def test_validate_internal_links_external_ignored():
         error_count, errors = validate_internal_links(docs_dir)
         assert error_count == 0
         assert len(errors) == 0
+
+
+def test_validate_stale_files_clean():
+    """Test stale-file check passes when no stale files exist."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        docs_root = Path(tmpdir)
+        (docs_root / "docs").mkdir()
+        (docs_root / "PUBLISHING.md").write_text("legit file")
+
+        error_count, errors = validate_stale_files(docs_root)
+        assert error_count == 0
+        assert len(errors) == 0
+
+
+def test_validate_stale_files_review_artifact():
+    """Test stale-file check catches review tracker files."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        docs_root = Path(tmpdir)
+        (docs_root / "PR601-REVIEW.md").write_text("review notes")
+
+        error_count, errors = validate_stale_files(docs_root)
+        assert error_count == 1
+        assert "review artifact" in errors[0].lower()
+
+
+def test_validate_stale_files_superseded_index():
+    """Test stale-file check catches superseded index.md."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        docs_root = Path(tmpdir)
+        (docs_root / "index.md").write_text("old landing page")
+        (docs_root / "docs").mkdir()
+        (docs_root / "docs" / "index.mdx").write_text("new landing page")
+
+        error_count, errors = validate_stale_files(docs_root)
+        assert error_count == 1
+        assert "superseded" in errors[0].lower()
+
+
+def test_validate_stale_files_superseded_tutorial():
+    """Test stale-file check catches superseded tutorial.md."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        docs_root = Path(tmpdir)
+        (docs_root / "tutorial.md").write_text("old tutorial")
+        (docs_root / "docs").mkdir()
+        (docs_root / "docs" / "tutorials").mkdir()
+
+        error_count, errors = validate_stale_files(docs_root)
+        assert error_count == 1
+        assert "superseded" in errors[0].lower()
 
 
 def test_generate_report():
