@@ -37,6 +37,9 @@ Estimates the model's certainty about answering a question.
 ### requirement_check.py
 Detect if text adheres to provided requirements.
 
+### context_attribution.py
+Identifies sentences in conversation history and documents that most influenced the response.
+
 ## Concepts Demonstrated
 
 - **Intrinsic Functions**: Specialized model capabilities beyond text generation
@@ -78,6 +81,7 @@ out, new_ctx = mfuncs.act(
 - **hallucination_detection**: Detect hallucinated content
 - **query_rewrite**: Improve query formulation
 - **uncertainty**: Estimate certainty about answering a question
+- **context-attribution**: Identify context sentences that most influenced response
 
 ## Related Documentation
 
