@@ -581,7 +581,11 @@ class WatsonxAIBackend(FormatterBackend):
             mot.usage = usage
 
         # Populate model and provider metadata
-        mot.model = str(self.model_id)
+        mot.model = (
+            self.model_id.watsonx_name
+            if isinstance(self.model_id, ModelIdentifier)
+            else str(self.model_id)
+        )
         mot.provider = "watsonx"
 
         # Record tracing if span exists

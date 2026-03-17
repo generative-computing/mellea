@@ -697,15 +697,19 @@ class OllamaModelBackend(FormatterBackend):
         completion_tokens = getattr(response, "eval_count", None) if response else None
 
         # Populate standardized usage field (convert to OpenAI format)
-        if prompt_tokens is not None or completion_tokens is not None:
+        if prompt_tokens is not None and completion_tokens is not None:
             mot.usage = {
-                "prompt_tokens": prompt_tokens or 0,
-                "completion_tokens": completion_tokens or 0,
-                "total_tokens": (prompt_tokens or 0) + (completion_tokens or 0),
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
             }
 
         # Populate model and provider metadata
-        mot.model = str(self.model_id)
+        mot.model = (
+            self.model_id.ollama_name
+            if isinstance(self.model_id, ModelIdentifier)
+            else str(self.model_id)
+        )
         mot.provider = "ollama"
 
         # Record telemetry and close span now that response is available
@@ -718,14 +722,8 @@ class OllamaModelBackend(FormatterBackend):
             )
 
             if response:
-                # Ollama responses may have usage information
-                if prompt_tokens is not None or completion_tokens is not None:
-                    usage = {
-                        "prompt_tokens": prompt_tokens,
-                        "completion_tokens": completion_tokens,
-                        "total_tokens": (prompt_tokens or 0) + (completion_tokens or 0),
-                    }
-                    record_token_usage(span, usage)
+                if mot.usage:
+                    record_token_usage(span, mot.usage)
                 record_response_metadata(span, response)
 
             # Close the span now that telemetry is recorded

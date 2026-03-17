@@ -1177,13 +1177,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             if isinstance(hf_output, GenerateDecoderOnlyOutput):
                 record_response_metadata(span, hf_output)
-                if n_prompt is not None:
-                    usage = {
-                        "prompt_tokens": n_prompt,
-                        "completion_tokens": n_completion,
-                        "total_tokens": n_prompt + n_completion,
-                    }
-                    record_token_usage(span, usage)
+                if mot.usage:
+                    record_token_usage(span, mot.usage)
 
             # Close the span now that async operation is complete
             end_backend_span(span)

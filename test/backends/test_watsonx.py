@@ -212,7 +212,7 @@ async def test_async_avalue(session):
     assert mot1.usage["prompt_tokens"] >= 0
     assert mot1.usage["completion_tokens"] > 0
     assert mot1.usage["total_tokens"] > 0
-    assert mot1.model is not None
+    assert isinstance(mot1.model, str)
     assert mot1.provider == "watsonx"
 
 

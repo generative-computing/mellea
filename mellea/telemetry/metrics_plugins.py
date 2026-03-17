@@ -37,7 +37,7 @@ class TokenMetricsPlugin(Plugin, name="token_metrics", priority=50):
         ...     result = session.instruct("Hello, world!")
     """
 
-    @hook("generation_post_call", mode=PluginMode.SEQUENTIAL)
+    @hook("generation_post_call", mode=PluginMode.FIRE_AND_FORGET)
     async def record_token_metrics(
         self, payload: GenerationPostCallPayload, context: dict[str, Any]
     ) -> None:

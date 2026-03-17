@@ -721,7 +721,7 @@ class OpenAIBackend(FormatterBackend):
             mot.usage = usage
 
         # Populate model and provider metadata
-        mot.model = str(self.model_id)
+        mot.model = self._model_id
         mot.provider = "openai"
 
         # Record telemetry now that response is available
