@@ -3,6 +3,7 @@
 Tests that backends correctly record token metrics through the telemetry system.
 """
 
+import asyncio
 import os
 
 import pytest
@@ -137,6 +138,8 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, s
     await mot.avalue()
 
     # Force metrics export and collection
+    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
+    await asyncio.sleep(0.05)
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -193,6 +196,8 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
         await mot.astream()
     await mot.avalue()
 
+    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
+    await asyncio.sleep(0.05)
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -242,6 +247,8 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
     )
     await mot.avalue()
 
+    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
+    await asyncio.sleep(0.05)
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -302,6 +309,8 @@ async def test_litellm_token_metrics_integration(
         await mot.astream()
     await mot.avalue()
 
+    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
+    await asyncio.sleep(0.05)
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
@@ -352,6 +361,8 @@ async def test_huggingface_token_metrics_integration(
         await mot.astream()
     await mot.avalue()
 
+    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
+    await asyncio.sleep(0.05)
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
