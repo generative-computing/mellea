@@ -118,6 +118,39 @@ def fix_source_links(content: str, version: str) -> str:
 
 
 # =========================
+# RST double-backtick normalisation
+# =========================
+
+_RST_DOUBLE_BACKTICK_RE = re.compile(r"``([^`]+)``")
+
+
+def normalize_rst_backticks(content: str) -> str:
+    """Convert RST-style double-backtick literals to single-backtick Markdown.
+
+    Replaces ``Symbol`` with `Symbol` in MDX prose (outside fenced code blocks).
+    This prevents add_cross_references from generating malformed link syntax such
+    as `[`Backend`](url)` where the link is wrapped in an extra code span and
+    renders as raw text rather than a clickable link.
+
+    Args:
+        content: MDX file content
+
+    Returns:
+        Content with ``x`` replaced by `x` outside code fences
+    """
+    lines = content.splitlines(keepends=True)
+    result = []
+    in_fence = False
+    for line in lines:
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+        if not in_fence:
+            line = _RST_DOUBLE_BACKTICK_RE.sub(r"`\1`", line)
+        result.append(line)
+    return "".join(result)
+
+
+# =========================
 # MDX escaping
 # =========================
 
@@ -801,11 +834,17 @@ def process_mdx_file(
     else:
         module_path = path.stem
 
-    # Step 1: Fix GitHub source links
-    text = fix_source_links(original, version)
+    # Step 0.5: Normalise RST double-backtick notation → single backtick
+    # Must run before add_cross_references so ``Symbol`` doesn't generate `[`Symbol`](url)`
+    text = normalize_rst_backticks(original)
 
-    # Step 2: Inject preamble
+    # Step 1: Fix GitHub source links
+    text = fix_source_links(text, version)
+
+    # Step 2: Inject preamble (docstring cache text may also contain RST notation;
+    # inject_preamble runs after normalize so the injected text needs a second pass)
     text = inject_preamble(text, module_path, docstring_cache)
+    text = normalize_rst_backticks(text)
 
     # Step 3: inject SidebarFix
     text = inject_sidebar_fix(text)

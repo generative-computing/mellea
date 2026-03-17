@@ -47,7 +47,8 @@
               "concepts/requirements-system",
               "concepts/architecture-vs-agents",
               "concepts/context-and-sessions",
-              "concepts/mobjects-and-mify"
+              "concepts/mobjects-and-mify",
+              "concepts/plugins"
             ]
           },
           {

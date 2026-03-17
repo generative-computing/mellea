@@ -16,7 +16,12 @@ from pydantic import Field
 
 @dataclass(frozen=True)
 class PluginMeta:
-    """Metadata attached to Plugin subclasses."""
+    """Metadata attached to Plugin subclasses.
+
+    Args:
+        name: Unique identifier for the plugin.
+        priority: Execution priority — lower numbers execute first.
+    """
 
     name: str
     priority: int = 50
@@ -121,7 +126,14 @@ if TYPE_CHECKING:
 
 
 class PluginViolationError(Exception):
-    """Raised when a plugin blocks execution in enforce mode."""
+    """Raised when a plugin blocks execution in enforce mode.
+
+    Args:
+        hook_type: The hook point where the violation occurred.
+        reason: Human-readable reason for the violation.
+        code: Machine-readable violation code.
+        plugin_name: Name of the plugin that raised the violation.
+    """
 
     def __init__(  # noqa: D107
         self, hook_type: str, reason: str, code: str = "", plugin_name: str = ""

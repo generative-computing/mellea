@@ -97,7 +97,7 @@ jobs:
         id: validate_mdx
         run: |
           set -o pipefail
-          uv run python tooling/docs-autogen/validate.py docs/docs/api --skip-coverage 2>&1 \
+          uv run python tooling/docs-autogen/validate.py docs/docs/api --skip-coverage --docs-root docs 2>&1 \
             | tee /tmp/validate_mdx.log
         continue-on-error: ${{ inputs.strict_validation != true }}
 
@@ -168,6 +168,7 @@ jobs:
               for label, key in [
                   ("Source links", "source"), ("MDX syntax", "syntax"),
                   ("Internal links", "links"), ("Anchor collisions", "anchors"),
+                  ("Stale files", "stale"),
               ]:
                   m = re.search(rf"{label}: (?:PASS|FAIL)(?:\s+(\d+) errors found)?", log, re.DOTALL)
                   if m:
@@ -180,6 +181,7 @@ jobs:
               if counts.get("links"):   parts.append(f"{counts['links']} broken link(s)")
               if counts.get("anchors"): parts.append(f"{counts['anchors']} anchor collision(s)")
               if counts.get("source"):  parts.append(f"{counts['source']} source link error(s)")
+              if counts.get("stale"):   parts.append(f"{counts['stale']} stale file(s)")
               return ", ".join(parts)
 
           mdx_detail = parse_validate_detail(validate_log)

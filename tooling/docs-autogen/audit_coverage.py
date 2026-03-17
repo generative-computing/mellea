@@ -103,6 +103,7 @@ def discover_public_symbols(
 
 _ARGS_RE = re.compile(r"^\s*(Args|Arguments|Parameters)\s*:", re.MULTILINE)
 _RETURNS_RE = re.compile(r"^\s*Returns\s*:", re.MULTILINE)
+_YIELDS_RE = re.compile(r"^\s*Yields\s*:", re.MULTILINE)
 _RAISES_RE = re.compile(r"^\s*Raises\s*:", re.MULTILINE)
 _ATTRIBUTES_RE = re.compile(r"^\s*Attributes\s*:", re.MULTILINE)
 # Matches an indented param entry inside an Args block: "    param_name:" or "    param_name (type):"
@@ -111,6 +112,11 @@ _ATTRIBUTES_RE = re.compile(r"^\s*Attributes\s*:", re.MULTILINE)
 _ARGS_ENTRY_RE = re.compile(r"^\s{4,}(\w+)\s*(?:\([^)]*\))?\s*:\s", re.MULTILINE)
 # Return annotations that need no Returns section
 _TRIVIAL_RETURNS = {"None", "NoReturn", "Never", "never", ""}
+
+# Return annotations that indicate a generator (should use Yields, not Returns)
+_GENERATOR_RETURN_PATTERNS = re.compile(
+    r"Generator|Iterator|AsyncGenerator|AsyncIterator"
+)
 
 
 def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
@@ -187,21 +193,28 @@ def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
                         }
                     )
 
-        # Returns section check: only flag when there is an explicit non-trivial annotation
+        # Returns/Yields section check: only flag when there is an explicit non-trivial annotation.
+        # Generator return types (Generator, Iterator, etc.) require Yields:, not Returns:.
         returns = getattr(member, "returns", None)
         ret_str = str(returns).strip() if returns else ""
-        if (
-            ret_str
-            and ret_str not in _TRIVIAL_RETURNS
-            and not _RETURNS_RE.search(doc_text)
-        ):
-            issues.append(
-                {
-                    "path": full_path,
-                    "kind": "no_returns",
-                    "detail": f"return type {ret_str!r} has no Returns section",
-                }
-            )
+        if ret_str and ret_str not in _TRIVIAL_RETURNS:
+            is_generator = bool(_GENERATOR_RETURN_PATTERNS.search(ret_str))
+            if is_generator and not _YIELDS_RE.search(doc_text):
+                issues.append(
+                    {
+                        "path": full_path,
+                        "kind": "no_yields",
+                        "detail": f"return type {ret_str!r} is a generator — needs Yields section, not Returns",
+                    }
+                )
+            elif not is_generator and not _RETURNS_RE.search(doc_text):
+                issues.append(
+                    {
+                        "path": full_path,
+                        "kind": "no_returns",
+                        "detail": f"return type {ret_str!r} has no Returns section",
+                    }
+                )
 
         # Raises section check: only flag when the source contains explicit raise statements
         source = getattr(member, "source", None) or ""
@@ -278,6 +291,7 @@ def audit_docstring_quality(
     - short: docstring below short_threshold words
     - no_args: function with parameters but no Args/Parameters section
     - no_returns: function with a non-trivial return annotation but no Returns section
+    - no_yields: generator function (Generator/Iterator return type) but no Yields section
     - no_raises: function whose source contains raise but has no Raises section
     - no_class_args: class whose __init__ has typed params but no Args section on the class
     - duplicate_init_args: Args: present in both class docstring and __init__ (Option C violation)
@@ -382,6 +396,7 @@ def _print_quality_report(issues: list[dict]) -> None:
         "short": "Short docstrings",
         "no_args": "Missing Args section",
         "no_returns": "Missing Returns section",
+        "no_yields": "Missing Yields section (generator)",
         "no_raises": "Missing Raises section",
         "no_class_args": "Missing class Args section",
         "duplicate_init_args": "Duplicate Args: in class + __init__ (Option C violation)",
@@ -399,6 +414,7 @@ def _print_quality_report(issues: list[dict]) -> None:
         "short",
         "no_args",
         "no_returns",
+        "no_yields",
         "no_raises",
         "no_class_args",
         "duplicate_init_args",

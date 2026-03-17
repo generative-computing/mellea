@@ -190,7 +190,12 @@ class Requirement(Component[str]):
             )
 
     def parts(self) -> list[Component | CBlock]:
-        """Returns all of the constituent parts of a Requirement."""
+        """Returns all of the constituent parts of a Requirement.
+
+        Returns:
+            List of constituent components. Empty by default; subclasses override
+            to expose their internal structure.
+        """
         return []
 
     def format_for_llm(self) -> TemplateRepresentation | str:

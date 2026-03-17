@@ -322,7 +322,11 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._generate_log = other._generate_log
 
     def is_computed(self) -> bool:
-        """Returns true only if this Thunk has already been filled."""
+        """Returns true only if this Thunk has already been filled.
+
+        Returns:
+            ``True`` if the thunk value has been set, ``False`` otherwise.
+        """
         return self._computed
 
     @property
@@ -738,6 +742,9 @@ class Context(abc.ABC):
         """The last input/output turn of the context.
 
         This can be partial. If the last event is an input, then the output is None.
+
+        Returns:
+            The most recent turn, or ``None`` if the context is empty.
         """
         history = self.as_list(last_n_components=2)
 
