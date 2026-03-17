@@ -264,6 +264,7 @@ class MelleaSession:
             ctx (Context): The way in which the model's context will be used. By default, we use SimpleContext as the default.
         """
         import uuid
+
         self.id = str(uuid.uuid4())
         self.backend = backend
         self.ctx: Context = ctx if ctx is not None else SimpleContext()
@@ -359,7 +360,7 @@ class MelleaSession:
             from ..plugins.manager import deregister_session_plugins
 
             deregister_session_plugins(self.id)
-            
+
         if hasattr(self.backend, "close"):
             self.backend.close()  # type: ignore
 

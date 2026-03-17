@@ -448,7 +448,6 @@ def decompose(
         templates, constraint assignments, and dependency information.
     """
 
-
     configure_logging(log_mode)
     logger = get_logger("m_decompose.pipeline")
     log_section(logger, "m_decompose pipeline")
