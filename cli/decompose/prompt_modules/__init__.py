@@ -7,4 +7,7 @@ from .subtask_list import subtask_list as subtask_list
 from .subtask_prompt_generator import (
     subtask_prompt_generator as subtask_prompt_generator,
 )
+from .validation_code_generator import (
+    validation_code_generator as validation_code_generator,
+)
 from .validation_decision import validation_decision as validation_decision
