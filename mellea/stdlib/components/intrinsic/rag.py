@@ -2,7 +2,10 @@
 
 import collections.abc
 
-from ....backends.adapters import AdapterMixin
+from ....backends import ModelOption
+from ....backends.adapters import AdapterMixin, AdapterType, IntrinsicAdapter
+from ....core import FancyLogger
+from ....stdlib import functional as mfuncs
 from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
@@ -163,7 +166,7 @@ def flag_hallucinated_content(
     documents: collections.abc.Iterable[Document],
     context: ChatContext,
     backend: AdapterMixin,
-) -> float:
+) -> list[dict]:
     """Flag potentially-hallucinated sentences in an agent's response.
 
     Intrinsic function that checks whether the sentences in an agent's response to a
@@ -183,9 +186,33 @@ def flag_hallucinated_content(
         ``response_end``, ``response_text``, ``faithfulness_likelihood``,
         ``explanation``.
     """
+
+    logger = FancyLogger.get_logger()
+
+    # Log input
+    doc_list = list(documents)
+    logger.info(
+        f"flag_hallucinated_content input: response_len={len(response)}, "
+        f"num_documents={len(doc_list)}, context_len={len(context.as_list())}"
+    )
+
     result_json = call_intrinsic(
         "hallucination_detection",
-        context.add(Message("assistant", response, documents=list(documents))),
+        context.add(Message("assistant", response, documents=doc_list)),
         backend,
     )
+
+    # Log output
+    num_segments = len(result_json) if isinstance(result_json, list) else 0
+    if num_segments > 0:
+        hallucinated_count = sum(
+            1 for r in result_json if r.get("faithfulness_likelihood", 1.0) < 0.5
+        )
+        logger.info(
+            f"flag_hallucinated_content output: total_segments={num_segments}, "
+            f"potentially_hallucinated={hallucinated_count}"
+        )
+    else:
+        logger.info("flag_hallucinated_content output: no segments detected")
+
     return result_json
