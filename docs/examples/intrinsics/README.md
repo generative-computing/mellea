@@ -37,6 +37,13 @@ Estimates the model's certainty about answering a question.
 ### requirement_check.py
 Detect if text adheres to provided requirements.
 
+### factuality_detection.py
+Detects if the the model's output is factually incorrect relative to context.
+
+### factuality_correction.py
+Corrects a factually incorrect response relative to context.
+
+
 ## Concepts Demonstrated
 
 - **Intrinsic Functions**: Specialized model capabilities beyond text generation
@@ -78,6 +85,8 @@ out, new_ctx = mfuncs.act(
 - **hallucination_detection**: Detect hallucinated content
 - **query_rewrite**: Improve query formulation
 - **uncertainty**: Estimate certainty about answering a question
+- **factuality_detection**: Detect factually incorrect responses
+- **factuality_correction**: Correct factually incorrect responses
 
 ## Related Documentation
 
