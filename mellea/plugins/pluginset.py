@@ -23,6 +23,11 @@ class PluginSet:
         # or async
         async with PluginSet("guards", [safety_hook]):
             result, ctx = await ainstruct("Generate code", ctx, backend)
+
+    Args:
+        name: Human-readable label for this group.
+        items: Hook functions, plugin instances, or nested ``PluginSet`` instances.
+        priority: Optional priority override applied to all items in this set.
     """
 
     def __init__(  # noqa: D107

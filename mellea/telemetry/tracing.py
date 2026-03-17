@@ -116,11 +116,14 @@ def trace_application(name: str, **attributes: Any) -> Generator[Any, None, None
     """Create an application trace span if application tracing is enabled.
 
     Args:
-        name: Name of the span
-        **attributes: Additional attributes to add to the span
+        name: Name of the span.
+        **attributes: Additional attributes to add to the span.
 
     Yields:
-        The span object if tracing is enabled, otherwise a no-op context manager
+        The span object if tracing is enabled, otherwise ``None``.
+
+    Returns:
+        A context manager yielding the active span or ``None``.
     """
     if _TRACE_APPLICATION_ENABLED and _application_tracer is not None:
         with _application_tracer.start_as_current_span(name) as span:  # type: ignore
@@ -139,11 +142,14 @@ def trace_backend(name: str, **attributes: Any) -> Generator[Any, None, None]:
     Follows Gen-AI semantic conventions for LLM operations.
 
     Args:
-        name: Name of the span
-        **attributes: Additional attributes to add to the span
+        name: Name of the span.
+        **attributes: Additional attributes to add to the span.
 
     Yields:
-        The span object if tracing is enabled, otherwise a no-op context manager
+        The span object if tracing is enabled, otherwise ``None``.
+
+    Returns:
+        A context manager yielding the active span or ``None``.
     """
     if _TRACE_BACKEND_ENABLED and _backend_tracer is not None:
         with _backend_tracer.start_as_current_span(name) as span:  # type: ignore
