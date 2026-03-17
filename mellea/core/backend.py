@@ -9,17 +9,13 @@ find un-computed ``ModelOutputThunk`` leaves that need to be resolved before ren
 
 import abc
 import asyncio
-import functools
 import itertools
-import time
 from collections.abc import Sequence
-from typing import final, overload
+from typing import overload
 
 import pydantic
 import typing_extensions
 
-from ..plugins.manager import has_plugins, invoke_hook
-from ..plugins.types import HookType
 from .base import C, CBlock, Component, Context, ModelOutputThunk
 from .utils import FancyLogger
 
@@ -60,44 +56,14 @@ class Backend(abc.ABC):
     ) -> tuple[ModelOutputThunk[C], Context]:
         """Generates a model output from a context. May not mutate the context. This must be called from a running event loop as it creates a task to run the generation request.
 
-        Args:
-            action: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
-            ctx: The rest of the context.
-            format: A response format to used for structured outputs / constrained decoding.
-            model_options: Any model options to upsert into the defaults for this call.
-            tool_calls: If `True`, then tool calls are extracts from the `action` `Component`. Assumption: if tool_calls is enabled, then the action `Component` has a TemplateRepresentation
-
-        Returns:
-            a tuple of (ModelOutputThunk, Context) where the Context is the new context after the generation has been completed.
-        """
-        # --- generation_pre_call hook ---
-        if has_plugins(HookType.GENERATION_PRE_CALL):
-            from ..plugins.hooks.generation import GenerationPreCallPayload
-
-            pre_payload = GenerationPreCallPayload(
-                action=action,
-                context=ctx,
-                format=format,
-                model_options=model_options or {},
-                tool_calls=tool_calls,
-            )
-            _, pre_payload = await invoke_hook(
-                HookType.GENERATION_PRE_CALL, pre_payload, backend=self
-            )
-            model_options = pre_payload.model_options
-            format = pre_payload.format
-            tool_calls = pre_payload.tool_calls
-
-        return await self._generate_from_context(
-            action,
-            ctx,
-            format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
+    All concrete backends must implement ``generate_from_context`` (context-aware
+    single-action generation) and ``generate_from_raw`` (context-free batch
+    generation). The ``do_generate_walk`` / ``do_generate_walks`` helpers can be
+    used to pre-compute any unresolved ``ModelOutputThunk`` leaves before rendering.
+    """
 
     @abc.abstractmethod
-    async def _generate_from_context(
+    async def generate_from_context(
         self,
         action: Component[C] | CBlock,
         ctx: Context,
@@ -106,7 +72,7 @@ class Backend(abc.ABC):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Backend implementers should override this method to generate the actual response.
+        """Generates a model output from a context. May not mutate the context. This must be called from a running event loop as it creates a task to run the generation request.
 
         Args:
             action: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.

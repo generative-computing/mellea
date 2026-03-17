@@ -450,10 +450,8 @@ def _get_non_duplicate_members(
         inspect.getmembers(
             obj,
             # Checks for ismethod or isfunction because of the methods added from the MifiedProtocol.
-            predicate=lambda x: (
-                (inspect.ismethod(x) or inspect.isfunction(x))
-                and x.__name__ not in dict(inspect.getmembers(check_duplicates)).keys()
-            ),
+            predicate=lambda x: (inspect.ismethod(x) or inspect.isfunction(x))
+            and x.__name__ not in dict(inspect.getmembers(check_duplicates)).keys(),
         )
     )
     return members
@@ -476,9 +474,8 @@ def _get_non_duplicate_fields(
         if k not in dict(
             inspect.getmembers(
                 check_duplicates,
-                predicate=lambda x: (
-                    not inspect.isfunction(x) and not inspect.ismethod(x)
-                ),
+                predicate=lambda x: not inspect.isfunction(x)
+                and not inspect.ismethod(x),
             )
         ):
             narrowed[k] = v

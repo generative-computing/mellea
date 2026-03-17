@@ -341,7 +341,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             ).past_key_values
         return dc
 
-    async def _generate_from_context(
+    async def generate_from_context(
         self,
         action: Component[C] | CBlock,
         ctx: Context,
@@ -547,7 +547,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         #       us having specific caching for each Component/Message.
 
         generate_input, other_input = (
-            granite_formatters.base.util.chat_completion_request_to_transformers_inputs(  # type: ignore
+            # type: ignore
+            granite_formatters.base.util.chat_completion_request_to_transformers_inputs(
                 rewritten, self._tokenizer, self._model
             )
         )
@@ -564,7 +565,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         output = ModelOutputThunk(None)
-        output._start = datetime.datetime.now()
         output._context = ctx.view_for_generation()
         output._action = action
         output._model_options = model_options
@@ -837,7 +837,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
             output = ModelOutputThunk(None)
-            output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action
             output._model_options = model_options
@@ -982,7 +981,6 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
             output = ModelOutputThunk(None)
-            output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action
             output._model_options = model_options
