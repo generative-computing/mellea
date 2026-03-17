@@ -52,7 +52,7 @@ def modify(payload: Any, **field_updates: Any) -> Any:
     listed in the hook's ``HookPayloadPolicy.writable_fields`` will be accepted
     by the framework; changes to read-only fields are silently discarded.
 
-    Mirrors :func:`block` for the modification case::
+    Mirrors ``block()`` for the modification case::
 
         # instead of:
         modified = payload.model_copy(update={"model_output": new_mot})
@@ -64,6 +64,12 @@ def modify(payload: Any, **field_updates: Any) -> Any:
     Args:
         payload: The original (frozen) payload received by the hook.
         **field_updates: Fields to update on the payload copy.
+
+    Returns:
+        A ``PluginResult`` with ``continue_processing=True`` and the modified payload.
+
+    Raises:
+        ImportError: If the ContextForge plugin framework is not installed.
     """
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
@@ -90,6 +96,12 @@ def block(
         code: Machine-readable violation code.
         description: Longer description (defaults to ``reason``).
         details: Additional structured details.
+
+    Returns:
+        A ``PluginResult`` with ``continue_processing=False`` and a violation.
+
+    Raises:
+        ImportError: If the ContextForge plugin framework is not installed.
     """
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
@@ -119,6 +131,16 @@ def register(
 
     Accepts standalone ``@hook`` functions, ``@plugin``-decorated class instances,
     ``MelleaPlugin`` instances, ``PluginSet`` instances, or lists thereof.
+
+    Args:
+        items: One or more plugins to register — standalone ``@hook`` functions,
+            ``@plugin``-decorated class instances, ``MelleaPlugin`` instances,
+            ``PluginSet`` instances, or a list of any combination.
+        session_id: Optional session identifier. When provided, the plugins are
+            scoped to that session and automatically deregistered on session cleanup.
+
+    Raises:
+        ImportError: If the ContextForge plugin framework is not installed.
     """
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
@@ -366,7 +388,7 @@ else:
 
 
 class _PluginScope:
-    """Context manager returned by :func:`plugin_scope`.
+    """Context manager returned by ``plugin_scope()``.
 
     Supports both synchronous and asynchronous ``with`` statements.
     """
@@ -453,11 +475,18 @@ def unregister(
 ) -> None:
     """Unregister globally-registered plugins.
 
-    Accepts the same items as :func:`register`: standalone ``@hook``-decorated
+    Accepts the same items as ``register()``: standalone ``@hook``-decorated
     functions, ``Plugin`` subclass instances, ``MelleaPlugin`` instances,
     ``PluginSet`` instances, or lists thereof.
 
     Silently ignores items that are not currently registered.
+
+    Args:
+        items: One or more plugins to unregister — same types accepted by
+            ``register()``.
+
+    Raises:
+        ImportError: If the ContextForge plugin framework is not installed.
     """
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
@@ -485,9 +514,9 @@ def unregister(
 def plugin_scope(*items: Callable | Any | PluginSet) -> _PluginScope:
     """Return a context manager that temporarily registers plugins for a block of code.
 
-    Accepts the same items as :func:`register`: standalone ``@hook``-decorated
+    Accepts the same items as ``register()``: standalone ``@hook``-decorated
     functions, ``@plugin``-decorated class instances, ``MelleaPlugin`` instances,
-    and :class:`~mellea.plugins.PluginSet` instances — or any mix thereof.
+    and ``PluginSet`` instances — or any mix thereof.
 
     Supports both synchronous and asynchronous ``with`` statements::
 

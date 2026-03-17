@@ -39,6 +39,17 @@ Shows how to use custom validation functions for complex requirements.
 - Using `simple_validate()` helper
 - Combining multiple validation strategies
 
+### qiskit_code_validation/qiskit_code_validation.py
+Advanced example demonstrating IVR pattern for Qiskit code generation with external validation.
+
+**Key Features:**
+- Integrating external validation tools (flake8-qiskit-migration)
+- Automatic repair of deprecated Qiskit APIs
+- Pre-condition validation of input code
+- Custom validation functions for linters
+
+**See:** [qiskit_code_validation/README.md](qiskit_code_validation/README.md) for full documentation and example prompts.
+
 ### multiturn_strategy_example.py
 Demonstrates MultiTurnStrategy for conversational repair with validation feedback.
 

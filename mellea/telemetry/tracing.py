@@ -92,12 +92,22 @@ if _OTEL_AVAILABLE and (_TRACE_APPLICATION_ENABLED or _TRACE_BACKEND_ENABLED):
 
 
 def is_application_tracing_enabled() -> bool:
-    """Check if application tracing is enabled."""
+    """Check if application tracing is enabled.
+
+    Returns:
+        True if application tracing has been enabled via the
+        ``MELLEA_TRACE_APPLICATION`` environment variable.
+    """
     return _TRACE_APPLICATION_ENABLED
 
 
 def is_backend_tracing_enabled() -> bool:
-    """Check if backend tracing is enabled."""
+    """Check if backend tracing is enabled.
+
+    Returns:
+        True if backend tracing has been enabled via the
+        ``MELLEA_TRACE_BACKEND`` environment variable.
+    """
     return _TRACE_BACKEND_ENABLED
 
 
@@ -106,11 +116,11 @@ def trace_application(name: str, **attributes: Any) -> Generator[Any, None, None
     """Create an application trace span if application tracing is enabled.
 
     Args:
-        name: Name of the span
-        **attributes: Additional attributes to add to the span
+        name: Name of the span.
+        **attributes: Additional attributes to add to the span.
 
     Yields:
-        The span object if tracing is enabled, otherwise a no-op context manager
+        The span object if tracing is enabled, otherwise ``None``.
     """
     if _TRACE_APPLICATION_ENABLED and _application_tracer is not None:
         with _application_tracer.start_as_current_span(name) as span:  # type: ignore
@@ -129,11 +139,11 @@ def trace_backend(name: str, **attributes: Any) -> Generator[Any, None, None]:
     Follows Gen-AI semantic conventions for LLM operations.
 
     Args:
-        name: Name of the span
-        **attributes: Additional attributes to add to the span
+        name: Name of the span.
+        **attributes: Additional attributes to add to the span.
 
     Yields:
-        The span object if tracing is enabled, otherwise a no-op context manager
+        The span object if tracing is enabled, otherwise ``None``.
     """
     if _TRACE_BACKEND_ENABLED and _backend_tracer is not None:
         with _backend_tracer.start_as_current_span(name) as span:  # type: ignore

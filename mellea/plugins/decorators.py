@@ -10,7 +10,13 @@ from mellea.plugins.types import PluginMode
 
 @dataclass(frozen=True)
 class HookMeta:
-    """Metadata attached by the @hook decorator."""
+    """Metadata attached by the @hook decorator.
+
+    Args:
+        hook_type: The hook point name (e.g., ``"generation_pre_call"``).
+        mode: Execution mode for the hook handler.
+        priority: Execution priority — lower numbers execute first.
+    """
 
     hook_type: str
     mode: PluginMode = PluginMode.SEQUENTIAL
@@ -31,6 +37,12 @@ def hook(
               ``PluginMode.AUDIT``, or ``PluginMode.FIRE_AND_FORGET``.
         priority: Lower numbers execute first. For methods on a ``Plugin`` subclass, falls back
                   to the class-level priority, then 50. For standalone functions, defaults to 50.
+
+    Returns:
+        A decorator that attaches ``HookMeta`` to the decorated function.
+
+    Raises:
+        TypeError: If the decorated function is not ``async def``.
     """
 
     def decorator(fn: Callable) -> Callable:

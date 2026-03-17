@@ -1,4 +1,12 @@
-"""Budget forcing implementation."""
+"""Budget-forcing generation algorithm for thinking models.
+
+Implements ``think_budget_forcing``, which extends a model's reasoning phase by
+repeatedly appending a "think more" suffix whenever the model attempts to close its
+``<think>`` block prematurely, following the method proposed in arXiv:2501.19393.
+Generation is split into a thinking pass (bounded by ``think_max_tokens``) and an
+answer pass (bounded by ``answer_max_tokens``), using the raw completions API of an
+``OllamaModelBackend``.
+"""
 
 from typing import Any
 
@@ -14,7 +22,7 @@ from ....core import (
 )
 
 
-async def think_budget_forcing(  # noqa: D417
+async def think_budget_forcing(
     backend: OllamaModelBackend,
     action: CBlock | Component,
     *,
@@ -38,16 +46,31 @@ async def think_budget_forcing(  # noqa: D417
     This is performed via multi-step generation. The model will be called multiple times until requirements are met, in other words, the response will be assembled conditionally.
 
     Args:
-        backend: OllamaModelBackend
-        action: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
-        think_max_tokens: Budget in number of tokens allocated for the think block
-        answer_max_tokens: Budget in number of tokens allocated for the summary and answer block, None indicates unbounded answer, generating till EoS
-        start_think_token: String indicating start of think block, default <think>
-        end_think_token: String indicating end of think block, default </think>
-        begin_response_token: Used by certain models, string indicating start of response block, e.g. "<response>", default None
-        think_more_suffix: String to append to force continued thinking, e.g. "\nWait" if set to None we will not force additional thinking. Use None for upper-bound budget case
-        answer_suffix: String to append to force a final answer
+        backend: OllamaModelBackend instance to use for generation.
+        action: The last item of the context, passed as an ``action`` instead of as part
+            of the ``ctx``. See ``docs/dev/generate_signature_decisions.md``.
+        ctx: The current conversation context.
+        format: Optional Pydantic model for constrained decoding of the response.
+        tool_calls: If ``True``, tool calling is enabled.
+        think_max_tokens: Budget in number of tokens allocated for the think block.
+        answer_max_tokens: Budget in number of tokens allocated for the summary and
+            answer block; ``None`` indicates unbounded answer, generating till EoS.
+        start_think_token: String indicating start of think block, default ``<think>``.
+        end_think_token: String indicating end of think block, default ``</think>``.
+        begin_response_token: Used by certain models, string indicating start of
+            response block, e.g. ``"<response>"``, default ``""``.
+        think_more_suffix: String to append to force continued thinking, e.g.
+            ``"\nWait"``; if ``None``, additional thinking is not forced (upper-bound
+            budget case).
+        answer_suffix: String to append to force a final answer.
         model_options: Any model options to upsert into the defaults for this call.
+
+    Returns:
+        ModelOutputThunk: The assembled thinking and answer response.
+
+    Raises:
+        Exception: If the backend returns generation results without the
+            required ``meta`` information (e.g. token usage counts).
 
     Assumptions:
         -  The chat template is applied on prompt, with think mode enabled

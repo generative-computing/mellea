@@ -20,7 +20,19 @@ from ..base.types import (
 
 
 class Hallucination(pydantic.BaseModel):
-    """Hallucination data as returned by the model output parser."""
+    """Hallucination data as returned by the model output parser.
+
+    Attributes:
+        hallucination_id (str): Unique identifier for the hallucination entry.
+        risk (str): Risk level of the hallucination, e.g. ``"low"`` or ``"high"``.
+        reasoning (str | None): Optional model-provided reasoning for why this
+            sentence was flagged.
+        response_text (str): The portion of the response text that is flagged.
+        response_begin (int): Start character offset of ``response_text`` within
+            the full response string.
+        response_end (int): End character offset (exclusive) of ``response_text``
+            within the full response string.
+    """
 
     hallucination_id: str
     risk: str
@@ -31,7 +43,23 @@ class Hallucination(pydantic.BaseModel):
 
 
 class Citation(pydantic.BaseModel):
-    """Citation data as returned by the model output parser."""
+    """Citation data as returned by the model output parser.
+
+    Attributes:
+        citation_id (str): Unique identifier assigned to this citation.
+        doc_id (str): Identifier of the source document being cited.
+        context_text (str): Verbatim text from the source document that is cited.
+        context_begin (int): Start character offset of ``context_text`` within
+            the source document.
+        context_end (int): End character offset (exclusive) of ``context_text``
+            within the source document.
+        response_text (str): The portion of the response text that makes this
+            citation.
+        response_begin (int): Start character offset of ``response_text`` within
+            the response string.
+        response_end (int): End character offset (exclusive) of ``response_text``
+            within the response string.
+    """
 
     citation_id: str
     doc_id: str
@@ -44,7 +72,22 @@ class Citation(pydantic.BaseModel):
 
 
 class Granite3Controls(pydantic.BaseModel):
-    """Granite 3.x controls record."""
+    """Control flags for Granite 3.x model output behaviour.
+
+    Specifies which optional output features the model should produce, such as
+    inline citations, hallucination risk annotations, response length constraints,
+    and originality style.
+
+    Attributes:
+        citations (bool | None): When ``True``, instructs the model to annotate
+            factual claims with inline citation markers.
+        hallucinations (bool | None): When ``True``, instructs the model to
+            append a list of sentences that may be hallucinated.
+        length (str | None): Requested response length; must be ``"short"``,
+            ``"long"``, or ``None`` for no constraint.
+        originality (str | None): Requested response originality style; must be
+            ``"extractive"``, ``"abstractive"``, or ``None``.
+    """
 
     citations: bool | None = None
     hallucinations: bool | None = None
@@ -75,7 +118,18 @@ class Granite3Controls(pydantic.BaseModel):
 
 
 class Granite3Kwargs(ChatTemplateKwargs, NoDefaultsMixin):
-    """Granite 3 keyword arguments."""
+    """Chat template keyword arguments specific to IBM Granite 3.x models.
+
+    Extends :class:`ChatTemplateKwargs` with Granite 3-specific options for
+    output control flags and chain-of-thought (thinking) mode.
+
+    Attributes:
+        controls (Granite3Controls | None): Optional output control flags that
+            enable or configure citations, hallucination detection, response
+            length, and originality style.
+        thinking (bool): When ``True``, enables chain-of-thought reasoning mode.
+            Defaults to ``False``.
+    """
 
     controls: Granite3Controls | None = None
     thinking: bool = False
@@ -89,14 +143,24 @@ class Granite3ChatCompletion(GraniteChatCompletion):
     """
 
     def controls(self) -> Granite3Controls:
-        """:returns: An appropriate Granite 3 controls record for the chat completion"""
+        """Return the Granite 3 controls record for this chat completion request.
+
+        Returns:
+            Granite3Controls: The controls record from the chat template kwargs,
+                or an empty :class:`Granite3Controls` if none were specified.
+        """
         kwargs = self.extra_body.chat_template_kwargs if self.extra_body else None
         if kwargs and isinstance(kwargs, Granite3Kwargs) and kwargs.controls:
             return kwargs.controls
         return Granite3Controls()
 
     def thinking(self) -> bool:
-        """:returns: ``True`` if thinking mode is enabled for this request"""
+        """Return whether chain-of-thought thinking mode is enabled.
+
+        Returns:
+            bool: ``True`` if the ``thinking`` flag is set in the chat template
+                kwargs; ``False`` otherwise.
+        """
         kwargs = self.extra_body.chat_template_kwargs if self.extra_body else None
         return bool(kwargs and isinstance(kwargs, Granite3Kwargs) and kwargs.thinking)
 
@@ -168,7 +232,19 @@ class Granite3ChatCompletion(GraniteChatCompletion):
 
 
 class Granite3AssistantMessage(AssistantMessage):
-    """An assistant message with Granite 3 specific fields."""
+    """An assistant message with Granite 3 specific fields.
+
+    Attributes:
+        reasoning_content (str | None): Optional chain-of-thought reasoning text
+            produced before the final response.
+        citations (list[Citation] | None): Optional list of citations parsed from
+            the model output.
+        documents (list[Document] | None): Optional list of documents referenced
+            in the model output.
+        hallucinations (list[Hallucination] | None): Optional list of hallucination
+            annotations parsed from the model output.
+        stop_reason (str | None): Optional reason the model stopped generating.
+    """
 
     reasoning_content: str | None = None
     citations: list[Citation] | None = None

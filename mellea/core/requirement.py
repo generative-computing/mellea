@@ -1,4 +1,12 @@
-"""Interface for Requirements."""
+"""``Requirement`` interface for constrained and validated generation.
+
+A ``Requirement`` pairs a human-readable description with a validation function that
+inspects a ``Context`` (and optionally a backend) to determine whether a model output
+meets a constraint. ``ValidationResult`` carries the pass/fail verdict along with an
+optional reason, score, and the ``ModelOutputThunk`` produced during validation.
+Helper factories such as ``default_output_to_bool`` make it easy to build requirements
+without boilerplate.
+"""
 
 import re
 from collections.abc import Callable
@@ -9,7 +17,16 @@ from .base import CBlock, Component, Context, ModelOutputThunk, TemplateRepresen
 
 
 class ValidationResult:
-    """ValidationResults store the output of a Requirement's validation. They can be used to return additional info from validation functions, which is useful for sampling/repairing."""
+    """ValidationResults store the output of a Requirement's validation. They can be used to return additional info from validation functions, which is useful for sampling/repairing.
+
+    Args:
+        result (bool): Boolean indicating whether the requirement passed.
+        reason (str | None): Optional human-readable explanation for the verdict.
+        score (float | None): Optional numeric score returned by the validator.
+        thunk (ModelOutputThunk | None): The ``ModelOutputThunk`` produced during LLM-as-a-Judge validation, if applicable.
+        context (Context | None): The context associated with the validation backend call, if applicable.
+
+    """
 
     def __init__(
         self,
@@ -20,17 +37,7 @@ class ValidationResult:
         thunk: ModelOutputThunk | None = None,
         context: Context | None = None,
     ):
-        """The result of a requirement's validation.
-
-        A ValidationResult's result field always contains a definitive pass/fail. The other fields can be used to communicate additional information about that result.
-
-        Args:
-            result: a boolean that is true if the requirement passed
-            reason: a reason for the result
-            score: if your validator gives you a score back, you can add this as metadata
-            thunk: if your validator utilizes a backend to generate a response, the ModelOutputThunk returned from that request
-            context: if your validator utilizes a backend to generate a response, the context associated with that response
-        """
+        """Initialize ValidationResult with a pass/fail boolean and optional metadata."""
         self._result = result
         self._reason = reason
         self._score = score
@@ -58,7 +65,11 @@ class ValidationResult:
         return self._context
 
     def as_bool(self) -> bool:
-        """Return a boolean value based on the result."""
+        """Return a boolean value based on the validation result.
+
+        Returns:
+            bool: ``True`` if the requirement passed, ``False`` otherwise.
+        """
         return self._result
 
     def __bool__(self) -> bool:
@@ -67,10 +78,16 @@ class ValidationResult:
 
 
 def default_output_to_bool(x: CBlock | str) -> bool:
-    """Checks if a given output should be marked converted to `True`.
+    """Convert a model output string to a boolean by checking for a "yes" answer.
 
-    Checks if the output is exactly equal to "yes" or "y" (case-insensitive). If not, it will also
-    check if any of the words in the output are "yes" (case-insensitive).
+    Checks if the output is exactly equal to "yes" or "y" (case-insensitive). If not,
+    also checks if any of the words in the output are "yes" (case-insensitive).
+
+    Args:
+        x: The model output to evaluate, as a ``CBlock`` or plain string.
+
+    Returns:
+        ``True`` if the output indicates a "yes" answer, ``False`` otherwise.
     """
     output = str(x)
 
@@ -85,7 +102,26 @@ def default_output_to_bool(x: CBlock | str) -> bool:
 
 
 class Requirement(Component[str]):
-    """Requirements are a special type of Component used as input to the Validate step in Instruct/Validate/Repair patterns."""
+    """Requirements are a special type of Component used as input to the Validate step in Instruct/Validate/Repair patterns.
+
+    Args:
+        description (str | None): A natural-language description of the requirement. Sometimes included in
+            ``Instruction`` prompts; use ``check_only=True`` to suppress this.
+        validation_fn (Callable[[Context], ValidationResult] | None): If provided, this function is executed
+            instead of LLM-as-a-Judge. The ``bool()`` of its return value defines pass/fail.
+        output_to_bool (Callable[[CBlock | str], bool] | None): Translates LLM-as-a-Judge output to a boolean.
+            Defaults to a "yes"-detection heuristic.
+        check_only (bool): When ``True``, the requirement description is excluded from ``Instruction`` prompts.
+
+    Attributes:
+        description (str | None): A natural-language description of the requirement.
+        output_to_bool (Callable[[CBlock | str], bool] | None): Function used to convert LLM-as-a-Judge
+            output into a boolean pass/fail result.
+        validation_fn (Callable[[Context], ValidationResult] | None): Optional custom validation
+            function that bypasses the LLM-as-a-Judge strategy entirely.
+        check_only (bool): When ``True``, the requirement description is excluded from ``Instruction``
+            prompts to avoid influencing model output.
+    """
 
     def __init__(
         self,
@@ -95,16 +131,7 @@ class Requirement(Component[str]):
         output_to_bool: Callable[[CBlock | str], bool] | None = default_output_to_bool,
         check_only: bool = False,
     ):
-        """A Requirement, interpreted over a Context.
-
-          By default, requirements are validated by the model using LLM-as-a-Judge (or a `constraint` LoRA when available). However, you can also provide a `validate` function with arbitrary behavior.
-
-        Args:
-            description: A natural-language description of the requirement. This will sometimes be included in `Instruction` prompts; if you do not want the requirement to be included in the prompt to avoid [Purple Elephant Effects](https://${PROJECT_URL}/llm-requirement-engineering-and-purple-elephants/) use check_only=True.
-            validation_fn: If provided, this function will be executed instead of using LLM-as-a-Judge. The `bool()` for the function's output defines whether the requirement passes.
-            output_to_bool: An `output_to_bool` may be provided so that the library can translate the LLM-as-a-judge or ALora output into a boolean value. If none is provided, we will look for 'yes' (case-insensitive) in the LLMaJ output.
-            check_only: If set, then `Instruction` will not include this requirement in its prompt.
-        """
+        """Initialize Requirement with an optional description, validation function, and output converter."""
         self.description = description
         self.output_to_bool = output_to_bool
         self.validation_fn = validation_fn
@@ -121,7 +148,20 @@ class Requirement(Component[str]):
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
     ) -> ValidationResult:
-        """Chooses the appropriate validation strategy and applies that strategy."""
+        """Chooses the appropriate validation strategy and applies it to the given context.
+
+        Uses ``validation_fn`` if one was provided, otherwise falls back to LLM-as-a-Judge
+        by generating a judgement response with the backend.
+
+        Args:
+            backend (Backend): The inference backend used when the LLM-as-a-Judge strategy is selected.
+            ctx (Context): The context to validate, which must contain a ``ModelOutputThunk`` as its last output.
+            format (type[BaseModelSubclass] | None): Optional structured output format for the judgement call.
+            model_options (dict | None): Optional model options to pass to the backend during the judgement call.
+
+        Returns:
+            ValidationResult: The result of the validation, including a boolean pass/fail and optional metadata.
+        """
         if self.validation_fn is not None:
             # Python validation strategy
             return self.validation_fn(ctx)
@@ -150,11 +190,25 @@ class Requirement(Component[str]):
             )
 
     def parts(self) -> list[Component | CBlock]:
-        """Returns all of the constituent parts of a Requirement."""
+        """Returns all of the constituent parts of a Requirement.
+
+        Returns:
+            List of constituent components. Empty by default; subclasses override
+            to expose their internal structure.
+        """
         return []
 
     def format_for_llm(self) -> TemplateRepresentation | str:
-        """Some object protocol magic happens here with management of the output."""
+        """Returns a ``TemplateRepresentation`` for LLM-as-a-Judge evaluation of this requirement.
+
+        Populates the template with the requirement's ``description`` and the stored model
+        ``_output``. Must only be called from within a ``validate`` call for this same requirement,
+        after ``_output`` has been set.
+
+        Returns:
+            TemplateRepresentation | str: A ``TemplateRepresentation`` containing the description
+            and the model output to be judged.
+        """
         assert self._output is not None, (
             "Object protocol error: should never try to templatize a Requirement except inside of a validate call for that same requirement."
         )
