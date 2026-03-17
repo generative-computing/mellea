@@ -618,9 +618,10 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
         Uses zero-copy class reassignment: calling `ComputedModelOutputThunk(thunk)` reassigns
         the thunk's `__class__` to `ComputedModelOutputThunk` without creating a new object.
         """
-        if not self.is_computed():
+        # Call the underlying value. It's already been cast as a ComputedModelOutputThunk, so it's .is_computed() value is always True.
+        if not self._computed:
             raise ValueError(
-                "ComputedModelOutputThunk requires a computed ModelOutputThunk; but .is_computed() is False."
+                "ComputedModelOutputThunk requires a computed ModelOutputThunk; but ._computed is False."
             )
         if self.value is None:
             raise ValueError("ComputedModelOutputThunk requires a non-None value.")
@@ -633,7 +634,7 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
     async def astream(self) -> str:
         """Cannot astream from ComputedModelOutputThunks. Use .value() instead."""
         raise RuntimeError(
-            "Cannot stream from a ComputedModelOutputThunk."
+            "Cannot stream from a ComputedModelOutputThunk. "
             "This thunk is already fully computed and does not support streaming."
         )
 

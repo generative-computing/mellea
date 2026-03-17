@@ -22,8 +22,13 @@ def test_computed_thunk_requires_computed_thunk():
     """Test that ComputedModelOutputThunk requires a computed ModelOutputThunk."""
     uncomputed_thunk = ModelOutputThunk(value=None)
 
+    assert not uncomputed_thunk._computed, (
+        "thunk should be uncomputed when passed a None value"
+    )
+
     with pytest.raises(
-        ValueError, match="ComputedModelOutputThunk requires a non-None value"
+        ValueError,
+        match="ComputedModelOutputThunk requires a computed ModelOutputThunk;",
     ):
         ComputedModelOutputThunk(uncomputed_thunk)
 
