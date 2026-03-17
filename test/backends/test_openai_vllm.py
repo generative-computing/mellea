@@ -45,6 +45,8 @@ def vllm_process():
                 "vllm",
                 "serve",
                 IBM_GRANITE_4_MICRO_3B.hf_model_name,
+                "--served-model-name",
+                IBM_GRANITE_4_MICRO_3B.hf_model_name,
                 "--enable-lora",
                 "--dtype",
                 "bfloat16",
