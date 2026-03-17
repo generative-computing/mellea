@@ -1,4 +1,11 @@
-"""Interfaces for Backends and Generation."""
+"""Abstract ``Backend`` interface and generation-walk utilities.
+
+Defines the ``Backend`` abstract base class whose two key abstract methods —
+``generate_from_context`` (context-aware single-action generation) and
+``generate_from_raw`` (context-free batch generation) — all concrete backends must
+implement. Also provides ``generate_walk``, which traverses a ``Component`` tree to
+find un-computed ``ModelOutputThunk`` leaves that need to be resolved before rendering.
+"""
 
 import abc
 import asyncio
@@ -29,7 +36,13 @@ BaseModelSubclass = typing_extensions.TypeVar(
 
 
 class Backend(abc.ABC):
-    """An abstract `Backend`."""
+    """Abstract base class for all inference backends.
+
+    All concrete backends must implement ``generate_from_context`` (context-aware
+    single-action generation) and ``generate_from_raw`` (context-free batch
+    generation). The ``do_generate_walk`` / ``do_generate_walks`` helpers can be
+    used to pre-compute any unresolved ``ModelOutputThunk`` leaves before rendering.
+    """
 
     @abc.abstractmethod
     async def generate_from_context(
@@ -95,12 +108,22 @@ class Backend(abc.ABC):
             format: A response format to used for structured outputs / constrained decoding. Note: some backends do not support this parameter. They will log warnings and continue to generate.
             model_options: Any model options to upsert into the defaults for this call.
             tool_calls: Always set to false unless supported by backend.
+
+        Returns:
+            list[ModelOutputThunk]: A list of output thunks, one per action, in the same order as ``actions``.
         """
 
     async def do_generate_walk(
         self, action: CBlock | Component | ModelOutputThunk
     ) -> None:
-        """Does the generation walk."""
+        """Awaits all uncomputed ``ModelOutputThunk`` leaves reachable from ``action``.
+
+        Traverses the component tree rooted at ``action`` via ``generate_walk``, collects
+        any uncomputed ``ModelOutputThunk`` nodes, and concurrently awaits them all.
+
+        Args:
+            action (CBlock | Component | ModelOutputThunk): The root node to traverse.
+        """
         _to_compute = list(generate_walk(action))
         coroutines = [x.avalue() for x in _to_compute]
         # The following log message might get noisy. Feel free to remove if so.
@@ -113,7 +136,14 @@ class Backend(abc.ABC):
     async def do_generate_walks(
         self, actions: list[CBlock | Component | ModelOutputThunk]
     ) -> None:
-        """Does the generation walk."""
+        """Awaits all uncomputed ``ModelOutputThunk`` leaves reachable from each action in ``actions``.
+
+        Traverses the component tree of every action in the list via ``generate_walk``, collects
+        all uncomputed ``ModelOutputThunk`` nodes across all actions, and concurrently awaits them.
+
+        Args:
+            actions (list[CBlock | Component | ModelOutputThunk]): The list of root nodes to traverse.
+        """
         _to_compute = []
         for action in actions:
             _to_compute.extend(list(generate_walk(action)))
@@ -127,7 +157,19 @@ class Backend(abc.ABC):
 
 
 def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputThunk]:
-    """Returns the generation walk ordering for a Span."""
+    """Return all uncomputed ``ModelOutputThunk`` leaves reachable from ``c``.
+
+    Args:
+        c: A ``CBlock``, ``Component``, or ``ModelOutputThunk`` to traverse.
+
+    Returns:
+        A flat list of uncomputed ``ModelOutputThunk`` instances in the order
+        they need to be resolved (depth-first over ``Component.parts()``).
+
+    Raises:
+        ValueError: If any element encountered during traversal is not a ``CBlock``,
+            ``Component``, or ``ModelOutputThunk``.
+    """
     match c:
         case ModelOutputThunk() if not c.is_computed():
             return [c]

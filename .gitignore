@@ -456,3 +456,4 @@ pyrightconfig.json
 # Generated API documentation (built by tooling/docs-autogen/)
 docs/docs/api/
 docs/docs/api-reference.mdx
+.venv-docs-autogen/

@@ -1,4 +1,13 @@
 # decompose/decompose.py
+"""Implementation of the ``m decompose run`` CLI command.
+
+Accepts a task prompt (from a text file or interactive input), calls the multi-step
+LLM decomposition pipeline to produce a structured list of subtasks each with
+constraints and inter-subtask dependencies, then validates and topologically reorders
+the subtasks before writing a JSON result file and a rendered Python script to the
+specified output directory.
+"""
+
 import json
 import keyword
 import re
@@ -15,6 +24,16 @@ from .pipeline import DecompBackend, DecompPipelineResult, DecompSubtasksResult
 
 
 class DecompVersion(StrEnum):
+    """Available versions of the decomposition pipeline template.
+
+    Newer versions must be declared last to ensure ``latest`` always resolves to
+    the most recent template.
+
+    Attributes:
+        latest (str): Sentinel value that resolves to the last declared version.
+        v1 (str): Version 1 of the decomposition pipeline template.
+    """
+
     latest = "latest"
     v1 = "v1"
     v2 = "v2"
@@ -178,9 +197,7 @@ def run(
         ),
     ] = LogMode.demo,
 ) -> None:
-    configure_logging(log_mode)
-    logger = get_logger("m_decompose.cli")
-
+    """Runs the decomposition pipeline."""
     try:
         from jinja2 import Environment, FileSystemLoader
 

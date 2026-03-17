@@ -27,6 +27,15 @@ def create_dict(input_array, **key_attrib_names: str) -> dict:
 
     Given an array of dicts and the name of attribute(s) within the array, return a
     dict containing the contents of the array indexed by the given attribute(s)
+
+    Args:
+        input_array: Iterable of dicts to index.
+        **key_attrib_names: Keyword arguments whose values are attribute names within
+            each dict. The resulting key is a hyphen-joined concatenation of those
+            attribute values.
+
+    Returns:
+        Dict mapping the concatenated attribute value(s) to the original dict entry.
     """
     new_dict: dict = {}
 
@@ -67,6 +76,12 @@ def parse_hallucinations_text(hallucinations_text: str) -> list[dict]:
         },
         ...
     ]
+
+    Args:
+        hallucinations_text: Raw text from the model's "# Hallucinations:" section.
+
+    Returns:
+        List of dicts, each with ``hallucination_id``, ``risk``, and ``response_text`` keys.
     """
     hallucinations = []
 
@@ -160,6 +175,17 @@ def add_hallucination_response_spans(
                             text (without citation tags)"
         "response_end": "The end index of "response_text" within the response
                             text (without citation tags)"
+
+    Args:
+        hallucination_info: Parsed hallucination list as returned by
+            ``parse_hallucinations_text``.
+        response_text_without_citations: Full response text with citation tags removed.
+        remove_citations_from_response_text: Callable that strips citation tags from
+            a substring of the response.
+
+    Returns:
+        Deep copy of ``hallucination_info`` with ``response_text``, ``response_begin``,
+        and ``response_end`` populated for each entry.
     """
     augmented_hallucination_info = copy.deepcopy(hallucination_info)
 
@@ -214,6 +240,15 @@ def add_citation_context_spans(
         "context_begin": "The begin index of "context_text" within document with
                             ID doc_id"
         "context_end": "The end index of "context_text" within document with ID doc_id"
+
+    Args:
+        citation_info: List of citation dicts as produced by the model output parser.
+        docs: List of source document dicts, each with ``citation_id``, ``doc_id``,
+            and ``text`` keys.
+
+    Returns:
+        Deep copy of ``citation_info`` with ``context_begin`` and ``context_end``
+        populated for each entry.
     """
     augmented_citation_info = copy.deepcopy(citation_info)
     docs_by_cit_doc_id = create_dict(

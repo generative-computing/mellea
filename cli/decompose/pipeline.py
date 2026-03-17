@@ -1,4 +1,13 @@
 # decompose/pipeline.py
+"""Core decomposition pipeline that breaks a task prompt into structured subtasks.
+
+Provides the ``decompose()`` function, which orchestrates a series of LLM calls
+(subtask listing, constraint extraction, validation strategy selection, prompt
+generation, and constraint assignment) to produce a ``DecompPipelineResult``
+containing subtasks, per-subtask prompts, constraints, and dependency information.
+Supports Ollama, OpenAI-compatible, and RITS inference backends.
+"""
+
 import re
 from enum import StrEnum
 from typing import Literal, NotRequired, TypedDict
@@ -29,6 +38,14 @@ class ConstraintValData(TypedDict):
 
 
 class ConstraintResult(TypedDict):
+    """A single constraint paired with its assigned validation strategy.
+
+    Attributes:
+        constraint (str): Natural-language description of the constraint.
+        validation_strategy (str): Strategy assigned to validate the constraint;
+            either ``"code"`` or ``"llm"``.
+    """
+
     constraint: str
     val_strategy: Literal["code", "llm"]
     val_fn: str | None
@@ -36,6 +53,24 @@ class ConstraintResult(TypedDict):
 
 
 class DecompSubtasksResult(TypedDict):
+    """The full structured result for one decomposed subtask.
+
+    Attributes:
+        subtask (str): Natural-language description of the subtask.
+        tag (str): Short identifier for the subtask, used as a variable name
+            in Jinja2 templates and dependency references.
+        constraints (list[ConstraintResult]): List of constraints assigned to
+            this subtask, each with a validation strategy.
+        prompt_template (str): Jinja2 prompt template string for this subtask,
+            with ``{{ variable }}`` placeholders for inputs and prior subtask results.
+        input_vars_required (list[str]): Ordered list of user-provided input
+            variable names referenced in ``prompt_template``.
+        depends_on (list[str]): Ordered list of subtask tags whose results are
+            referenced in ``prompt_template``.
+        generated_response (str): Optional field holding the model response
+            produced during execution; not present until the subtask runs.
+    """
+
     subtask: str
     tag: str
     constraints: list[ConstraintResult]
@@ -47,6 +82,21 @@ class DecompSubtasksResult(TypedDict):
 
 
 class DecompPipelineResult(TypedDict):
+    """The complete output of a decomposition pipeline run.
+
+    Attributes:
+        original_task_prompt (str): The raw task prompt provided by the user.
+        subtask_list (list[str]): Ordered list of subtask descriptions produced
+            by the subtask-listing stage.
+        identified_constraints (list[ConstraintResult]): Constraints extracted
+            from the original task prompt, each with a validation strategy.
+        subtasks (list[DecompSubtasksResult]): Fully annotated subtask objects
+            with prompt templates, constraint assignments, and dependency
+            information.
+        final_response (str): Optional field holding the aggregated final
+            response produced during execution; not present until the pipeline runs.
+    """
+
     original_task_prompt: str
     subtask_list: list[str]
     identified_constraints: list[ConstraintResult]
@@ -55,6 +105,14 @@ class DecompPipelineResult(TypedDict):
 
 
 class DecompBackend(StrEnum):
+    """Inference backends supported by the decomposition pipeline.
+
+    Attributes:
+        ollama (str): Local Ollama inference server backend.
+        openai (str): Any OpenAI-compatible HTTP endpoint backend.
+        rits (str): IBM RITS (Remote Inference and Training Service) backend.
+    """
+
     ollama = "ollama"
     openai = "openai"
     rits = "rits"
@@ -363,6 +421,34 @@ def decompose(
     backend_api_key: str | None = None,
     log_mode: LogMode = LogMode.demo,
 ) -> DecompPipelineResult:
+    """Break a task prompt into structured subtasks using a multi-step LLM pipeline.
+
+    Orchestrates a series of sequential LLM calls to produce a fully structured
+    decomposition: subtask listing, constraint extraction, validation strategy
+    selection, prompt template generation, and per-subtask constraint assignment.
+    The number of calls depends on the number of constraints extracted.
+
+    Args:
+        task_prompt: Natural-language description of the task to decompose.
+        user_input_variable: Optional list of variable names that will be
+            templated into generated prompts as user-provided input data. Pass
+            ``None`` or an empty list if the task requires no input variables.
+        model_id: Model name or ID used for all pipeline steps.
+        backend: Inference backend -- ``"ollama"``, ``"openai"``, or ``"rits"``.
+        backend_req_timeout: Request timeout in seconds for model inference calls.
+        backend_endpoint: Base URL of the OpenAI-compatible endpoint. Required
+            when ``backend`` is ``"openai"`` or ``"rits"``.
+        backend_api_key: API key for the configured endpoint. Required when
+            ``backend`` is ``"openai"`` or ``"rits"``.
+        log_mode: Mode of logging detail to emit during pipeline execution.
+
+    Returns:
+        A ``DecompPipelineResult`` containing the original prompt, subtask list,
+        identified constraints, and fully annotated subtask objects with prompt
+        templates, constraint assignments, and dependency information.
+    """
+
+
     configure_logging(log_mode)
     logger = get_logger("m_decompose.pipeline")
     log_section(logger, "m_decompose pipeline")
