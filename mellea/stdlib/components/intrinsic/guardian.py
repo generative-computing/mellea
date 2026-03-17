@@ -26,6 +26,7 @@ def factuality_detection(context: ChatContext, backend: AdapterMixin) -> float:
 
 ### Scoring Schema: If the last assistant's text meets the criteria, return 'yes'; otherwise, return 'no'.
 """
+
     context = context.add(Message("user", detector_message))
     result_json = call_intrinsic("factuality_detection", context, backend)
     return result_json["score"]
@@ -42,6 +43,7 @@ def factuality_correction(context: ChatContext, backend: AdapterMixin) -> float:
 
     :return: Correct assistant response.
     """
+
     corrector_message = """
 <guardian>As a judge agent, your role is to help assess whether the provided text meets the given judging criteria, utilizing all available information, including conversations, documents, and tools.
 
@@ -49,6 +51,7 @@ def factuality_correction(context: ChatContext, backend: AdapterMixin) -> float:
 
 ### Scoring Schema: If the last assistant's text meets the criteria, return a corrected version of the assistant's message based on the given context; otherwise, return 'none'.
 """
+
     context = context.add(Message("user", corrector_message))
     result_json = call_intrinsic("factuality_correction", context, backend)
     return result_json["correction"]
