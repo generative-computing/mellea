@@ -26,15 +26,30 @@ except KeyError as e:
     print(f"ERROR: One or more required environment variables are not set; {e}")
     exit(1)
 {%- endif %}
-{% for item in subtasks %}
-{% set i = loop.index0 %}
-# {{ item.subtask }} - {{ item.tag }}
+{%- for item in subtasks %}
+
+
+{{ item.tag | lower }}_gnrl = textwrap.dedent(
+    R"""
+    {{ item.general_instructions | trim | indent(width=4, first=False) }}
+    """.strip()
+)
 {{ item.tag | lower }} = m.instruct(
+    {%- if not item.input_vars_required %}
+    {{ item.subtask[3:] | trim | tojson }},
+    {%- else %}
     textwrap.dedent(
         R"""
-        {{ item.prompt_template | trim | indent(width=8, first=False) }}
+        {{ item.subtask[3:] | trim }}
+
+        Here are the input variables and their content:
+        {%- for var in item.input_vars_required %}
+
+        - {{ var | upper }} = {{ "{{" }}{{ var | upper }}{{ "}}" }}
+        {%- endfor %}
         """.strip()
     ),
+    {%- endif %}
     {%- if item.constraints %}
     requirements=[
         {%- for c in item.constraints %}
@@ -51,18 +66,19 @@ except KeyError as e:
     {%- else %}
     requirements=None,
     {%- endif %}
-    {%- if loop.first and not user_inputs %}
-    {%- else %}
+    {%- if item.input_vars_required %}
     user_variables={
         {%- for var in item.input_vars_required %}
         {{ var | upper | tojson }}: {{ var | lower }},
         {%- endfor %}
-        
+    },
+    {%- endif %}
+    grounding_context={
+        "GENERAL_INSTRUCTIONS": {{ item.tag | lower }}_gnrl,
         {%- for var in item.depends_on %}
         {{ var | upper | tojson }}: {{ var | lower }}.value,
         {%- endfor %}
     },
-    {%- endif %}
 )
 assert {{ item.tag | lower }}.value is not None, 'ERROR: task "{{ item.tag | lower }}" execution failed'
 {%- if loop.last %}
