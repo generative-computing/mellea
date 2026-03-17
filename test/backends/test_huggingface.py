@@ -64,7 +64,11 @@ def backend():
     backend.add_adapter(
         IntrinsicAdapter("answerability", base_model_name=backend.base_model_name)
     )
-    return backend
+    yield backend
+
+    from test.conftest import cleanup_gpu_backend
+
+    cleanup_gpu_backend(backend, "huggingface")
 
 
 @pytest.fixture(scope="function")

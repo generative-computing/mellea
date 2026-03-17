@@ -57,10 +57,9 @@ def backend(shared_vllm_backend):
     )
     yield backend
 
-    # Cleanup using shared function (best-effort within module)
-    from test.conftest import cleanup_vllm_backend
+    from test.conftest import cleanup_gpu_backend
 
-    cleanup_vllm_backend(backend)
+    cleanup_gpu_backend(backend, "vllm-tools")
 
 
 @pytest.fixture(scope="function")
