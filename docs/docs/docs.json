@@ -155,6 +155,7 @@
                 "group": "backends",
                 "pages": [
                   "api/mellea/backends/backend",
+                  "api/mellea/backends/backends",
                   "api/mellea/backends/bedrock",
                   "api/mellea/backends/cache",
                   "api/mellea/backends/dummy",
@@ -183,6 +184,7 @@
                 "pages": [
                   "api/mellea/core/backend",
                   "api/mellea/core/base",
+                  "api/mellea/core/core",
                   "api/mellea/core/formatter",
                   "api/mellea/core/requirement",
                   "api/mellea/core/sampling",
@@ -193,6 +195,7 @@
                 "group": "formatters",
                 "pages": [
                   "api/mellea/formatters/chat_formatter",
+                  "api/mellea/formatters/formatters",
                   "api/mellea/formatters/template_formatter",
                   {
                     "group": "granite",
@@ -257,8 +260,33 @@
                 "group": "helpers",
                 "pages": [
                   "api/mellea/helpers/async_helpers",
+                  "api/mellea/helpers/helpers",
                   "api/mellea/helpers/openai_compatible_helpers",
                   "api/mellea/helpers/server_type"
+                ]
+              },
+              {
+                "group": "plugins",
+                "pages": [
+                  "api/mellea/plugins/base",
+                  "api/mellea/plugins/context",
+                  "api/mellea/plugins/decorators",
+                  "api/mellea/plugins/manager",
+                  "api/mellea/plugins/plugins",
+                  "api/mellea/plugins/pluginset",
+                  "api/mellea/plugins/registry",
+                  "api/mellea/plugins/types",
+                  {
+                    "group": "hooks",
+                    "pages": [
+                      "api/mellea/plugins/hooks/component",
+                      "api/mellea/plugins/hooks/generation",
+                      "api/mellea/plugins/hooks/sampling",
+                      "api/mellea/plugins/hooks/session",
+                      "api/mellea/plugins/hooks/tool",
+                      "api/mellea/plugins/hooks/validation"
+                    ]
+                  }
                 ]
               },
               {
@@ -267,6 +295,7 @@
                   "api/mellea/stdlib/context",
                   "api/mellea/stdlib/functional",
                   "api/mellea/stdlib/session",
+                  "api/mellea/stdlib/stdlib",
                   {
                     "group": "components",
                     "pages": [
@@ -342,6 +371,7 @@
                 "group": "telemetry",
                 "pages": [
                   "api/mellea/telemetry/backend_instrumentation",
+                  "api/mellea/telemetry/logging",
                   "api/mellea/telemetry/metrics",
                   "api/mellea/telemetry/telemetry",
                   "api/mellea/telemetry/tracing"
@@ -366,6 +396,7 @@
               {
                 "group": "decompose",
                 "pages": [
+                  "api/cli/decompose/__init__",
                   "api/cli/decompose/decompose",
                   "api/cli/decompose/pipeline",
                   "api/cli/decompose/utils"
@@ -375,6 +406,7 @@
                 "group": "eval",
                 "pages": [
                   "api/cli/eval/commands",
+                  "api/cli/eval/eval",
                   "api/cli/eval/runner"
                 ]
               }
@@ -420,26 +452,89 @@
     "thumbsRating": true
   },
   "redirects": [
-    { "source": "/overview/overview", "destination": "/getting-started/quickstart" },
-    { "source": "/overview/mellea-welcome", "destination": "/concepts/generative-programming" },
-    { "source": "/overview/generative-programming", "destination": "/concepts/generative-programming" },
-    { "source": "/overview/architecture", "destination": "/guide/backends-and-configuration" },
-    { "source": "/core-concept/instruct-validate-repair", "destination": "/concepts/instruct-validate-repair" },
-    { "source": "/core-concept/requirements", "destination": "/concepts/requirements-system" },
-    { "source": "/core-concept/generative-slots", "destination": "/guide/generative-functions" },
-    { "source": "/core-concept/mobjects", "destination": "/concepts/mobjects-and-mify" },
-    { "source": "/core-concept/agents", "destination": "/guide/tools-and-agents" },
-    { "source": "/core-concept/context-management", "destination": "/how-to/use-context-and-sessions" },
-    { "source": "/core-concept/alora", "destination": "/advanced/lora-and-alora-adapters" },
-    { "source": "/core-concept/tuning", "destination": "/advanced/lora-and-alora-adapters" },
-    { "source": "/core-concept/modeloptions", "destination": "/how-to/configure-model-options" },
-    { "source": "/core-concept/interoperability", "destination": "/integrations/mcp" },
-    { "source": "/integrations/mcp-and-m-serve", "destination": "/integrations/mcp" },
-    { "source": "/core-concept/adapters", "destination": "/guide/tools-and-agents" },
-    { "source": "/core-concept/contribution-guide", "destination": "/guide/CONTRIBUTING" },
-    { "source": "/core-concept/prompt-engineering", "destination": "/advanced/mellea-core-internals" },
-    { "source": "/integrations/bedrock-and-watsonx", "destination": "/integrations/bedrock" },
-    { "source": "/integrations/huggingface-and-vllm", "destination": "/integrations/huggingface" },
-    { "source": "/integrations/langchain-and-smolagents", "destination": "/integrations/langchain" }
+    {
+      "source": "/overview/overview",
+      "destination": "/getting-started/quickstart"
+    },
+    {
+      "source": "/overview/mellea-welcome",
+      "destination": "/concepts/generative-programming"
+    },
+    {
+      "source": "/overview/generative-programming",
+      "destination": "/concepts/generative-programming"
+    },
+    {
+      "source": "/overview/architecture",
+      "destination": "/guide/backends-and-configuration"
+    },
+    {
+      "source": "/core-concept/instruct-validate-repair",
+      "destination": "/concepts/instruct-validate-repair"
+    },
+    {
+      "source": "/core-concept/requirements",
+      "destination": "/concepts/requirements-system"
+    },
+    {
+      "source": "/core-concept/generative-slots",
+      "destination": "/guide/generative-functions"
+    },
+    {
+      "source": "/core-concept/mobjects",
+      "destination": "/concepts/mobjects-and-mify"
+    },
+    {
+      "source": "/core-concept/agents",
+      "destination": "/guide/tools-and-agents"
+    },
+    {
+      "source": "/core-concept/context-management",
+      "destination": "/how-to/use-context-and-sessions"
+    },
+    {
+      "source": "/core-concept/alora",
+      "destination": "/advanced/lora-and-alora-adapters"
+    },
+    {
+      "source": "/core-concept/tuning",
+      "destination": "/advanced/lora-and-alora-adapters"
+    },
+    {
+      "source": "/core-concept/modeloptions",
+      "destination": "/how-to/configure-model-options"
+    },
+    {
+      "source": "/core-concept/interoperability",
+      "destination": "/integrations/mcp"
+    },
+    {
+      "source": "/integrations/mcp-and-m-serve",
+      "destination": "/integrations/mcp"
+    },
+    {
+      "source": "/core-concept/adapters",
+      "destination": "/guide/tools-and-agents"
+    },
+    {
+      "source": "/core-concept/contribution-guide",
+      "destination": "/guide/CONTRIBUTING"
+    },
+    {
+      "source": "/core-concept/prompt-engineering",
+      "destination": "/advanced/mellea-core-internals"
+    },
+    {
+      "source": "/integrations/bedrock-and-watsonx",
+      "destination": "/integrations/bedrock"
+    },
+    {
+      "source": "/integrations/huggingface-and-vllm",
+      "destination": "/integrations/huggingface"
+    },
+    {
+      "source": "/integrations/langchain-and-smolagents",
+      "destination": "/integrations/langchain"
+    }
   ]
 }

@@ -1,4 +1,13 @@
-"""Various Helpers and Utilities."""
+"""Low-level helpers and utilities supporting mellea backends.
+
+This package provides the internal plumbing used by the built-in backend
+implementations: async utilities (``send_to_queue``, ``wait_for_all_mots``,
+``ClientCache``) for managing concurrent model-output thunks; OpenAI-compatible
+message conversion helpers (``message_to_openai_message``, ``messages_to_docs``,
+``chat_completion_delta_merge``); and ``_ServerType`` detection for adapting
+structured-output support to the target server. Most user code will not import from
+this package directly — it is consumed internally by the backend layer.
+"""
 
 from .async_helpers import (
     ClientCache,

@@ -305,6 +305,8 @@ No version tags on individual features yet — incomplete tagging misleads reade
 
 Mellea uses **Google-style docstrings**. These feed the auto-generated API reference.
 
+**Functions** — `Args:` and `Returns:` on the function docstring:
+
 ```python
 def my_function(arg: str) -> bool:
     """One-line summary.
@@ -319,6 +321,30 @@ def my_function(arg: str) -> bool:
         ValueError: When and why this is raised.
     """
 ```
+
+**Classes** — `Args:` on the *class* docstring only; `__init__` gets a single summary sentence.
+The docs pipeline skips `__init__`, so `Args:` must live on the class to appear in the API reference:
+
+```python
+class MyComponent(Component[str]):
+    """A component that does something useful.
+
+    Args:
+        name (str): Human-readable label for this component.
+        max_tokens (int): Upper bound on generated tokens.
+    """
+
+    def __init__(self, name: str, max_tokens: int = 256) -> None:
+        """Initialize MyComponent with a name and token budget."""
+        self.name = name
+        self.max_tokens = max_tokens
+```
+
+Add `Attributes:` only when a stored value differs in type or behaviour from the constructor
+input (e.g. a `str` wrapped into a `CBlock`, or a class-level constant).
+Pure-echo entries that repeat `Args:` verbatim should be omitted.
+
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) for the full validation workflow.
 
 ---
 

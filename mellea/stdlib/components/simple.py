@@ -1,4 +1,10 @@
-"""SimpleComponent."""
+"""``SimpleComponent``: a lightweight named-span component.
+
+``SimpleComponent`` accepts arbitrary keyword arguments (strings, ``CBlock``s, or
+``Component``s) and renders them as a JSON object keyed by the argument names. It is
+the go-to component type for ad-hoc prompts that do not require a dedicated
+``Component`` subclass or a Jinja2 template.
+"""
 
 from typing import Any
 
@@ -31,14 +37,34 @@ class SimpleComponent(Component[str]):
 
     @staticmethod
     def make_simple_string(kwargs: dict[str, Any]) -> str:
-        """Uses <|key|>value</|key|> to represent a simple component."""
+        """Render keyword arguments as ``<|key|>value</|key|>`` tagged strings.
+
+        Args:
+            kwargs (dict[str, Any]): Mapping of span names to their ``CBlock`` or
+                ``Component`` values.
+
+        Returns:
+            str: Newline-joined tagged representation of all keyword arguments.
+        """
         return "\n".join(
             [f"<|{key}|>{value}</|{key}|>" for (key, value) in kwargs.items()]
         )
 
     @staticmethod
     def make_json_string(kwargs: dict[str, Any]) -> str:
-        """Uses json."""
+        """Serialize keyword arguments to a JSON string.
+
+        Each value is converted to its string representation: ``CBlock`` and
+        ``ModelOutputThunk`` values use their ``.value`` attribute, while
+        ``Component`` values use ``format_for_llm()``.
+
+        Args:
+            kwargs (dict[str, Any]): Mapping of span names to ``CBlock``, ``Component``,
+                or ``ModelOutputThunk`` values.
+
+        Returns:
+            str: JSON-encoded representation of the keyword arguments.
+        """
         str_args = dict()
         for key in kwargs.keys():
             match kwargs[key]:
@@ -51,7 +77,13 @@ class SimpleComponent(Component[str]):
         return json.dumps(str_args)
 
     def format_for_llm(self) -> str:
-        """Uses a string rep."""
+        """Format this component as a JSON string representation for the language model.
+
+        Delegates to ``make_json_string`` using the stored keyword arguments.
+
+        Returns:
+            str: JSON-encoded string of all named spans in this component.
+        """
         return SimpleComponent.make_json_string(self._kwargs)
 
     def _parse(self, computed: ModelOutputThunk) -> str:

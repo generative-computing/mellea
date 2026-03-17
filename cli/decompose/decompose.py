@@ -1,4 +1,3 @@
-# decompose/decompose.py
 import json
 import keyword
 import re
@@ -15,6 +14,16 @@ from .pipeline import DecompBackend, DecompPipelineResult, DecompSubtasksResult
 
 
 class DecompVersion(StrEnum):
+    """Available versions of the decomposition pipeline template.
+
+    Newer versions must be declared last to ensure ``latest`` always resolves to
+    the most recent template.
+
+    Attributes:
+        latest (str): Sentinel value that resolves to the last declared version.
+        v1 (str): Version 1 of the decomposition pipeline template.
+    """
+
     latest = "latest"
     v1 = "v1"
     v2 = "v2"
@@ -178,6 +187,7 @@ def run(
         ),
     ] = LogMode.demo,
 ) -> None:
+    """Runs the decomposition pipeline."""
     configure_logging(log_mode)
     logger = get_logger("m_decompose.cli")
 

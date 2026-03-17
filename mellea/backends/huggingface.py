@@ -78,7 +78,28 @@ format: None = None  # typing this variable in order to shadow the global format
 
 @dataclasses.dataclass
 class HFAloraCacheInfo:
-    """A dataclass for holding some KV cache and associated information."""
+    """A dataclass for holding a KV cache and associated generation metadata.
+
+    Used by ``LocalHFBackend`` to store intermediate model state that can be
+    reused across generation requests via an LRU cache.
+
+    Args:
+        kv_cache (DynamicCache | None): The HuggingFace ``DynamicCache`` holding
+            precomputed key/value tensors, or ``None`` if not available.
+        merged_token_ids (Any): Token IDs corresponding to the cached prefix.
+        merged_attention (Any): Attention mask for the cached prefix tokens.
+        q_end (int): Index of the last prompt token in the merged token sequence;
+            defaults to ``-1``.
+        scores (Any): Optional logit scores from the generation step; defaults to
+            ``None``.
+
+    Attributes:
+        kv_cache (DynamicCache | None): The cached key/value tensors.
+        merged_token_ids (Any): Token IDs for the cached prefix.
+        merged_attention (Any): Attention mask for the cached prefix.
+        q_end (int): End index of the prompt portion in merged token IDs.
+        scores (Any): Logit scores from generation, or ``None``.
+    """
 
     kv_cache: DynamicCache | None
     merged_token_ids: Any
@@ -196,6 +217,27 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     This backend is designed for running an HF model for small-scale inference locally on your machine.
 
     This backend is NOT designed for inference scaling on CUDA-enabled hardware.
+
+    Args:
+        model_id (str | ModelIdentifier): Used to load the model and tokenizer via
+            HuggingFace ``Auto*`` classes.
+        formatter (ChatFormatter | None): Formatter for rendering components into
+            prompts. Defaults to ``TemplateFormatter``.
+        use_caches (bool): If ``False``, KV caching is disabled even if a ``Cache``
+            is provided.
+        cache (Cache | None): Caching strategy; defaults to
+            ``SimpleLRUCache(0, on_evict=_cleanup_kv_cache)``.
+        custom_config (TransformersTorchConfig | None): Override for
+            tokenizer/model/device; if provided, ``model_id`` is not used for loading.
+        default_to_constraint_checking_alora (bool): If ``False``, aLoRA constraint
+            checking is deactivated; mainly for benchmarking and debugging.
+        model_options (dict | None): Default model options for generation requests.
+
+    Attributes:
+        to_mellea_model_opts_map (dict): Mapping from HF-specific option names to
+            Mellea ``ModelOption`` sentinel keys.
+        from_mellea_model_opts_map (dict): Mapping from Mellea sentinel keys to
+            HF-specific option names.
     """
 
     _cached_blocks: dict[str, DynamicCache] = dict()
@@ -211,19 +253,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         default_to_constraint_checking_alora: bool = True,
         model_options: dict | None = None,
     ):
-        """Attempt to load model weights using the model_id by default, or using `custom_config` if provided.
-
-        WARNING: initializing a `LocalHFBackend` will download and load the model on your *local* machine.
-
-        Args:
-            model_id (str | ModelIdentifier): Used to load the model *and tokenizer* via transformers Auto* classes, and then moves the model to the best available device (cuda > mps > cpu). If loading the model and/or tokenizer from a string will not work, or if you want to use a different device string, then you can use custom_config.
-            formatter (Formatter): A mechanism for turning `stdlib` stuff into strings. Experimental Span-based models should use `mellea.backends.span.*` backends.
-            use_caches (bool): If set to False, then caching will not be used even if a Cache is provided.
-            cache (Optional[Cache]): The caching strategy to use. If None, `LRUCache(3)` will be used.
-            custom_config (Optional[TransformersTorchConfig]): Overrides loading from the `model_id`. If set, then the specified tokenizer/model/device will be used instead of auto-loading from the model_id.
-            default_to_constraint_checking_alora: If set to False then aloras will be deactivated. This is primarily for performance benchmarking and debugging.
-            model_options (Optional[dict]): Default model options.
-        """
+        """Load model weights from the given model ID, or from a custom config if provided."""
         formatter = (
             formatter if formatter is not None else TemplateFormatter(model_id=model_id)
         )
@@ -320,7 +350,26 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generate using the huggingface model."""
+        """Generate a completion for ``action`` given ``ctx`` using the HuggingFace model.
+
+        Automatically routes ``Requirement`` and ``Intrinsic`` actions to their
+        corresponding aLoRA adapters when available.
+
+        Args:
+            action (Component[C] | CBlock): The component or content block to generate
+                a completion for.
+            ctx (Context): The current generation context (must be a chat context).
+            format (type[BaseModelSubclass] | None): Optional Pydantic model class for
+                structured/constrained output decoding via llguidance.
+            model_options (dict | None): Per-call model options that override the
+                backend's defaults.
+            tool_calls (bool): If ``True``, expose available tools to the model and
+                parse tool-call responses.
+
+        Returns:
+            tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
+                and an updated context that includes ``action`` and the new output.
+        """
         span = start_generate_span(
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         )
@@ -981,7 +1030,19 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     async def processing(
         self, mot: ModelOutputThunk, chunk: str | GenerateDecoderOnlyOutput, input_ids
     ):
-        """Process the returned chunks or the complete response."""
+        """Accumulate decoded text from a streaming chunk or full generation output.
+
+        For streaming responses the chunk is an already-decoded string from
+        ``AsyncTextIteratorStreamer``; for non-streaming it is a
+        ``GenerateDecoderOnlyOutput`` that is decoded here.
+
+        Args:
+            mot (ModelOutputThunk): The output thunk being populated.
+            chunk (str | GenerateDecoderOnlyOutput): A decoded text chunk (streaming)
+                or a full HuggingFace generation output object (non-streaming).
+            input_ids: The prompt token IDs used for decoding; required to slice off
+                the prompt portion from the generated sequences.
+        """
         if mot._underlying_value is None:
             mot._underlying_value = ""
 
@@ -1006,7 +1067,23 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         seed,
         input_ids,
     ):
-        """Called when generation is done."""
+        """Finalize the output thunk after HuggingFace generation completes.
+
+        Stores the KV cache for future reuse, parses tool calls if applicable,
+        records token usage metrics, emits telemetry, and attaches the generate log.
+
+        Args:
+            mot (ModelOutputThunk): The output thunk to finalize.
+            conversation (list[dict]): The chat conversation sent to the model,
+                used for logging.
+            _format (type[BaseModelSubclass] | None): The structured output format
+                class used during generation, if any.
+            tool_calls (bool): Whether tool calling was enabled for this request.
+            tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
+            seed: The random seed used during generation, or ``None``.
+            input_ids: The prompt token IDs; used to compute token counts and for
+                KV cache bookkeeping.
+        """
         if mot._meta.get("hf_output", None) is None:
             if mot._generate_extra is not None:
                 full_output = await mot._generate_extra
@@ -1179,7 +1256,22 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
-        """Generate using the completions api. Gives the input provided to the model without templating."""
+        """Generate completions for multiple actions without chat templating.
+
+        Passes formatted prompt strings directly to the HuggingFace model's
+        ``generate`` method as a batch. Tool calling is not supported.
+
+        Args:
+            actions (Sequence[Component[C] | CBlock]): Actions to generate completions for.
+            ctx (Context): The current generation context.
+            format (type[BaseModelSubclass] | None): Optional Pydantic model for
+                structured output decoding via llguidance.
+            model_options (dict | None): Per-call model options.
+            tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
+
+        Returns:
+            list[ModelOutputThunk]: A list of model output thunks, one per action.
+        """
         with instrument_generate_from_raw(
             backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
         ):
@@ -1280,13 +1372,26 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
     # region cache management
     def cache_get(self, id: str | int) -> HFAloraCacheInfo | None:
-        """Retrieve from cache."""
+        """Retrieve a cached ``HFAloraCacheInfo`` entry by its key.
+
+        Args:
+            id (str | int): The cache key to look up.
+
+        Returns:
+            HFAloraCacheInfo | None: The cached entry, or ``None`` if not found.
+        """
         v = self._cache.get(id)
         assert v is None or type(v) is HFAloraCacheInfo
         return v
 
     def cache_put(self, id: str | int, v: HFAloraCacheInfo):
-        """Put into cache."""
+        """Store an ``HFAloraCacheInfo`` entry in the cache under the given key.
+
+        Args:
+            id (str | int): The cache key to store the entry under.
+            v (HFAloraCacheInfo): The cache entry containing KV cache state
+                and associated generation metadata.
+        """
         self._cache.put(id, v)
 
     # endregion
@@ -1368,7 +1473,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         return self._hf_model_id.split("/")[1]
 
     def add_adapter(self, adapter: LocalHFAdapter):
-        """Adds the given adapter to the backend. Must not have been added to a different backend."""
+        """Register a LoRA/aLoRA adapter with this backend so it can be loaded later.
+
+        Downloads the adapter weights (via ``adapter.get_local_hf_path``) and records
+        the adapter in the backend's registry. The adapter must not already be
+        registered with a different backend.
+
+        Args:
+            adapter (LocalHFAdapter): The adapter to register with this backend.
+
+        Raises:
+            Exception: If ``adapter`` has already been added to a different backend.
+        """
         if adapter.backend is not None:
             if adapter.backend is self:
                 FancyLogger.get_logger().warning(
@@ -1391,7 +1507,19 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._added_adapters[adapter.qualified_name] = adapter
 
     def load_adapter(self, adapter_qualified_name: str):
-        """Loads the given adapter for the backend. Must have previously been added. Do not call when generation requests are happening."""
+        """Load a previously registered adapter into the underlying HuggingFace model.
+
+        The adapter must have been registered via ``add_adapter`` first. Do not call
+        this method while generation requests are in progress.
+
+        Args:
+            adapter_qualified_name (str): The ``adapter.qualified_name`` of the adapter
+                to load (i.e. ``"<name>_<adapter_type>"``)
+
+        Raises:
+            ValueError: If no adapter with the given qualified name has been added to
+                this backend.
+        """
         adapter = self._added_adapters.get(adapter_qualified_name, None)
         if adapter is None:
             raise ValueError(
@@ -1423,7 +1551,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._loaded_adapters[adapter.qualified_name] = adapter
 
     def unload_adapter(self, adapter_qualified_name: str):
-        """Unloads the given adapter from the backend."""
+        """Unload a previously loaded adapter from the underlying HuggingFace model.
+
+        If the adapter is not currently loaded, a log message is emitted and the
+        method returns without error.
+
+        Args:
+            adapter_qualified_name (str): The ``adapter.qualified_name`` of the adapter
+                to unload.
+        """
         # Check if the backend knows about this adapter.
         adapter = self._loaded_adapters.get(adapter_qualified_name, None)
         if adapter is None:
@@ -1438,9 +1574,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         del self._loaded_adapters[adapter.qualified_name]
 
     def list_adapters(self) -> list[str]:
-        """Lists the adapters added via add_adapter().
+        """List the qualified names of all adapters currently loaded in this backend.
 
-        :returns: list of adapter names that are currently registered with this backend
+        Returns:
+            list[str]: Qualified adapter names (i.e. ``adapter.qualified_name``) for
+                all adapters that have been loaded via ``load_adapter``.
         """
         return list(self._loaded_adapters.keys())
 

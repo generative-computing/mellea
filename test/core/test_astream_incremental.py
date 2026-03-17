@@ -14,6 +14,7 @@ from mellea.stdlib.session import start_session
 
 @pytest.mark.ollama
 @pytest.mark.llm
+@pytest.mark.qualitative
 async def test_astream_returns_incremental_chunks():
     """Test that astream() returns only new content, not accumulated content.
 
@@ -68,6 +69,7 @@ async def test_astream_returns_incremental_chunks():
 
 @pytest.mark.ollama
 @pytest.mark.llm
+@pytest.mark.qualitative
 async def test_astream_multiple_calls_accumulate_correctly():
     """Test that multiple astream() calls accumulate to the final value.
 
@@ -111,6 +113,7 @@ async def test_astream_multiple_calls_accumulate_correctly():
 
 @pytest.mark.ollama
 @pytest.mark.llm
+@pytest.mark.qualitative
 async def test_astream_beginning_length_tracking():
     """Test that beginning_length is correctly tracked across astream calls.
 
@@ -141,6 +144,7 @@ async def test_astream_beginning_length_tracking():
 
 @pytest.mark.ollama
 @pytest.mark.llm
+@pytest.mark.qualitative
 async def test_astream_empty_beginning():
     """Test astream when _underlying_value starts as None."""
     session = start_session()
@@ -167,7 +171,6 @@ async def test_astream_empty_beginning():
 @pytest.mark.llm
 async def test_computed_mot_raises_error_for_astream():
     """Test that computed mot raises an error for astream() calls."""
-
     # Create a pre-computed thunk
     mot = ModelOutputThunk(value="Hello, world!")
     mot._computed = True
