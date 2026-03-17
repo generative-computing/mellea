@@ -323,6 +323,90 @@ def validate_stale_files(docs_root: Path) -> tuple[int, list[str]]:
     return len(errors), errors
 
 
+def validate_doc_imports(docs_dir: Path) -> tuple[int, list[str]]:
+    """Verify that mellea imports in documentation code blocks still resolve.
+
+    Parses fenced Python code blocks in static docs for ``from mellea.X import Y``
+    and ``import mellea.X`` statements, then checks whether each module and symbol
+    exists at import time.  Optional-dependency failures (``ImportError`` whose
+    message mentions a third-party package) are silently skipped.
+
+    Args:
+        docs_dir: The ``docs/docs/`` directory containing static documentation.
+
+    Returns:
+        Tuple of (error_count, error_messages).
+    """
+    import importlib
+
+    errors: list[str] = []
+    seen: set[tuple[str, str]] = set()
+
+    for doc_file in sorted(
+        list(docs_dir.rglob("*.md")) + list(docs_dir.rglob("*.mdx"))
+    ):
+        content = doc_file.read_text()
+        rel = doc_file.relative_to(docs_dir)
+        in_python = False
+
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("```python"):
+                in_python = True
+                continue
+            if stripped.startswith("```") and in_python:
+                in_python = False
+                continue
+            if not in_python:
+                continue
+
+            # from mellea.X import Y, Z
+            m = re.match(r"\s*from\s+(mellea[\w.]*)\s+import\s+(.+)", line)
+            if m:
+                module = m.group(1)
+                names = [
+                    n.strip().split(" as ")[0].strip().rstrip(",")
+                    for n in m.group(2).split(",")
+                ]
+                for name in names:
+                    if not name or not name.isidentifier():
+                        continue
+                    key = (module, name)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    try:
+                        mod = importlib.import_module(module)
+                    except ImportError:
+                        # Optional dependency not installed — skip
+                        continue
+                    if not hasattr(mod, name):
+                        # Could be a submodule (e.g. from pkg import submod)
+                        try:
+                            importlib.import_module(f"{module}.{name}")
+                        except ImportError:
+                            errors.append(
+                                f"{rel}: from {module} import {name}"
+                                f" — symbol not found in module"
+                            )
+                continue
+
+            # import mellea.X
+            m2 = re.match(r"\s*import\s+(mellea[\w.]+)", line)
+            if m2:
+                module = m2.group(1)
+                key = (module, "")
+                if key in seen:
+                    continue
+                seen.add(key)
+                try:
+                    importlib.import_module(module)
+                except ImportError:
+                    continue
+
+    return len(errors), errors
+
+
 def generate_report(
     source_link_errors: list[str],
     coverage_passed: bool,
@@ -332,6 +416,7 @@ def generate_report(
     anchor_errors: list[str],
     rst_docstring_errors: list[str] | None = None,
     stale_errors: list[str] | None = None,
+    import_errors: list[str] | None = None,
 ) -> dict:
     """Generate validation report.
 
@@ -340,6 +425,8 @@ def generate_report(
     """
     if stale_errors is None:
         stale_errors = []
+    if import_errors is None:
+        import_errors = []
 
     return {
         "source_links": {
@@ -379,6 +466,11 @@ def generate_report(
             "error_count": len(stale_errors),
             "errors": stale_errors,
         },
+        "doc_imports": {
+            "passed": len(import_errors) == 0,
+            "error_count": len(import_errors),
+            "errors": import_errors,
+        },
         "overall_passed": (
             len(source_link_errors) == 0
             and coverage_passed
@@ -386,6 +478,7 @@ def generate_report(
             and len(link_errors) == 0
             and len(anchor_errors) == 0
             and len(stale_errors) == 0
+            and len(import_errors) == 0
             # rst_docstrings is a warning only — does not fail the build
         ),
     }
@@ -462,6 +555,10 @@ def main():
     docs_root = Path(args.docs_root) if args.docs_root else docs_dir.parent
     _, stale_errors = validate_stale_files(docs_root)
 
+    print("Checking doc imports...")
+    static_docs_dir = docs_root / "docs" if docs_root else docs_dir.parent
+    _, import_errors = validate_doc_imports(static_docs_dir)
+
     # Generate report
     report = generate_report(
         source_link_errors,
@@ -472,6 +569,7 @@ def main():
         anchor_errors,
         rst_docstring_errors,
         stale_errors,
+        import_errors,
     )
 
     # Print results
@@ -517,6 +615,10 @@ def main():
     if not report["stale_files"]["passed"]:
         print(f"   {report['stale_files']['error_count']} errors found")
 
+    print(f"✅ Doc imports: {'PASS' if report['doc_imports']['passed'] else 'FAIL'}")
+    if not report["doc_imports"]["passed"]:
+        print(f"   {report['doc_imports']['error_count']} errors found")
+
     print("\n" + "=" * 60)
     print(f"Overall: {'✅ PASS' if report['overall_passed'] else '❌ FAIL'}")
     print("=" * 60)
@@ -531,6 +633,7 @@ def main():
             + anchor_errors
             + rst_docstring_errors
             + stale_errors
+            + import_errors
         )
         for error in all_errors:
             print(f"  • {error}")

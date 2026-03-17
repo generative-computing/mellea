@@ -174,11 +174,11 @@ print(result)
 ## Direct intrinsic usage
 
 > **Advanced:** For custom adapter tasks, use the `Intrinsic` component and
-> `GraniteCommonAdapter` directly.
+> `CustomIntrinsicAdapter` directly.
 
 ```python
 import mellea.stdlib.functional as mfuncs
-from mellea.backends.adapters.adapter import GraniteCommonAdapter
+from mellea.backends.adapters.adapter import CustomIntrinsicAdapter
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Intrinsic, Message
 from mellea.stdlib.context import ChatContext
@@ -186,7 +186,7 @@ from mellea.stdlib.context import ChatContext
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
 # Register an adapter by task name
-req_adapter = GraniteCommonAdapter(
+req_adapter = CustomIntrinsicAdapter(
     "requirement_check",
     base_model_name=backend.base_model_name,
 )

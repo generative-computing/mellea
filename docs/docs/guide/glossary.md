@@ -75,7 +75,7 @@ conversation history and passes it to the backend on each call. Create one at th
 start of a session and pass it through all calls to maintain state:
 
 ```python
-from mellea.stdlib import ChatContext
+from mellea.stdlib.context import ChatContext
 ctx = ChatContext()
 ```
 
@@ -646,7 +646,7 @@ accumulated or sent to the backend. Use it for single-shot tasks where prior tur
 are irrelevant.
 
 ```python
-from mellea.stdlib import SimpleContext
+from mellea.stdlib.context import SimpleContext
 ctx = SimpleContext()
 ```
 
