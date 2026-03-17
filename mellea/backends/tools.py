@@ -358,9 +358,8 @@ def json_extraction(text: str) -> Generator[dict, None, None]:
     Args:
         text: Input string potentially containing one or more JSON objects.
 
-    Returns:
-        A generator that yields each valid JSON object found in ``text``,
-        in order of appearance.
+    Yields:
+        Each valid JSON object found in ``text``, in order of appearance.
     """
     index = 0
     decoder = json.JSONDecoder()
