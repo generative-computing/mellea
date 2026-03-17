@@ -190,7 +190,7 @@ def run(
     """Runs the decomposition pipeline."""
     configure_logging(log_mode)
     logger = get_logger("m_decompose.cli")
-    
+
     try:
         from jinja2 import Environment, FileSystemLoader
 
