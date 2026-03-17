@@ -44,6 +44,24 @@ class Backend(abc.ABC):
     used to pre-compute any unresolved ``ModelOutputThunk`` leaves before rendering.
     """
 
+    @final
+    async def generate_from_context(
+        self,
+        action: Component[C] | CBlock,
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> tuple[ModelOutputThunk[C], Context]:
+        """Generates a model output from a context. May not mutate the context. This must be called from a running event loop as it creates a task to run the generation request.
+
+    All concrete backends must implement ``generate_from_context`` (context-aware
+    single-action generation) and ``generate_from_raw`` (context-free batch
+    generation). The ``do_generate_walk`` / ``do_generate_walks`` helpers can be
+    used to pre-compute any unresolved ``ModelOutputThunk`` leaves before rendering.
+    """
+
     @abc.abstractmethod
     async def generate_from_context(
         self,

@@ -257,12 +257,7 @@ class MelleaSession:
     ctx: Context
 
     def __init__(self, backend: Backend, ctx: Context | None = None):
-        """Initialize MelleaSession with a backend and optional conversation context.
-
-        Args:
-            backend (Backend): This is always required.
-            ctx (Context): The way in which the model's context will be used. By default, we use SimpleContext as the default.
-        """
+        """Initialize MelleaSession with a backend and optional conversation context."""
         import uuid
 
         self.id = str(uuid.uuid4())
@@ -360,9 +355,6 @@ class MelleaSession:
             from ..plugins.manager import deregister_session_plugins
 
             deregister_session_plugins(self.id)
-
-        if hasattr(self.backend, "close"):
-            self.backend.close()  # type: ignore
 
     @overload
     def act(
