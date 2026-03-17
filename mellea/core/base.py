@@ -282,14 +282,15 @@ class ModelOutputThunk(CBlock, Generic[S]):
         # Additional fields that should be standardized across apis.
         self.tool_calls = tool_calls
         self._thinking: str | None = None
-        self.usage: dict[str, int] | None = None
+        self.usage: dict[str, Any] | None = None
         """Usage information following OpenAI API standard.
 
         Core fields: 'prompt_tokens', 'completion_tokens', 'total_tokens'.
         Populated by backends during post_processing. None if unavailable.
 
-        Future: May include optional breakdown fields like 'completion_tokens_details'
-        and 'prompt_tokens_details' for advanced features (reasoning, audio, caching).
+        May include optional breakdown fields like 'completion_tokens_details'
+        and 'prompt_tokens_details' (nested dicts with per-category token counts
+        for reasoning, audio, caching, etc.).
         """
 
         self.model: str | None = None
