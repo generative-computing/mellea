@@ -323,6 +323,55 @@ def validate_stale_files(docs_root: Path) -> tuple[int, list[str]]:
     return len(errors), errors
 
 
+def validate_examples_catalogue(docs_root: Path) -> tuple[int, list[str]]:
+    """Check that every example directory is listed in the examples index page.
+
+    Scans ``docs/examples/`` for subdirectories that contain at least one
+    ``.py`` file and verifies each directory name appears in the catalogue
+    table in ``docs/docs/examples/index.md``.
+
+    Args:
+        docs_root: The ``docs/`` directory (parent of ``docs/docs/``).
+
+    Returns:
+        Tuple of (error_count, error_messages).
+    """
+    errors: list[str] = []
+    examples_dir = docs_root / "examples"
+    index_file = docs_root / "docs" / "examples" / "index.md"
+
+    if not examples_dir.is_dir():
+        return 0, []
+    if not index_file.exists():
+        errors.append("Examples index page not found: docs/docs/examples/index.md")
+        return len(errors), errors
+
+    index_content = index_file.read_text()
+
+    # Directories to skip: not standalone example categories
+    skip = {"__pycache__", "helper"}
+
+    for child in sorted(examples_dir.iterdir()):
+        if not child.is_dir():
+            continue
+        if child.name in skip or child.name.startswith("."):
+            continue
+        # Only check directories that contain at least one .py file
+        if not any(child.rglob("*.py")):
+            continue
+        # Check the directory name appears in the index (as a table entry or heading)
+        if (
+            f"`{child.name}/" not in index_content
+            and f"`{child.name}`" not in index_content
+        ):
+            errors.append(
+                f"Example directory '{child.name}/' is not listed in "
+                f"docs/docs/examples/index.md"
+            )
+
+    return len(errors), errors
+
+
 def validate_doc_imports(docs_dir: Path) -> tuple[int, list[str]]:
     """Verify that mellea imports in documentation code blocks still resolve.
 
@@ -417,6 +466,7 @@ def generate_report(
     rst_docstring_errors: list[str] | None = None,
     stale_errors: list[str] | None = None,
     import_errors: list[str] | None = None,
+    examples_catalogue_errors: list[str] | None = None,
 ) -> dict:
     """Generate validation report.
 
@@ -427,6 +477,8 @@ def generate_report(
         stale_errors = []
     if import_errors is None:
         import_errors = []
+    if examples_catalogue_errors is None:
+        examples_catalogue_errors = []
 
     return {
         "source_links": {
@@ -471,6 +523,11 @@ def generate_report(
             "error_count": len(import_errors),
             "errors": import_errors,
         },
+        "examples_catalogue": {
+            "passed": len(examples_catalogue_errors) == 0,
+            "error_count": len(examples_catalogue_errors),
+            "errors": examples_catalogue_errors,
+        },
         "overall_passed": (
             len(source_link_errors) == 0
             and coverage_passed
@@ -479,6 +536,7 @@ def generate_report(
             and len(anchor_errors) == 0
             and len(stale_errors) == 0
             and len(import_errors) == 0
+            and len(examples_catalogue_errors) == 0
             # rst_docstrings is a warning only — does not fail the build
         ),
     }
@@ -559,6 +617,9 @@ def main():
     static_docs_dir = docs_root / "docs" if docs_root else docs_dir.parent
     _, import_errors = validate_doc_imports(static_docs_dir)
 
+    print("Checking examples catalogue...")
+    _, examples_catalogue_errors = validate_examples_catalogue(docs_root)
+
     # Generate report
     report = generate_report(
         source_link_errors,
@@ -570,6 +631,7 @@ def main():
         rst_docstring_errors,
         stale_errors,
         import_errors,
+        examples_catalogue_errors,
     )
 
     # Print results
@@ -619,6 +681,12 @@ def main():
     if not report["doc_imports"]["passed"]:
         print(f"   {report['doc_imports']['error_count']} errors found")
 
+    print(
+        f"✅ Examples catalogue: {'PASS' if report['examples_catalogue']['passed'] else 'FAIL'}"
+    )
+    if not report["examples_catalogue"]["passed"]:
+        print(f"   {report['examples_catalogue']['error_count']} errors found")
+
     print("\n" + "=" * 60)
     print(f"Overall: {'✅ PASS' if report['overall_passed'] else '❌ FAIL'}")
     print("=" * 60)
@@ -634,6 +702,7 @@ def main():
             + rst_docstring_errors
             + stale_errors
             + import_errors
+            + examples_catalogue_errors
         )
         for error in all_errors:
             print(f"  • {error}")
