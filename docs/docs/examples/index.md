@@ -49,6 +49,12 @@ to run.
 | `tools/` | `@tool` definition, code interpreter integration, tool argument validation, safe `eval` patterns |
 | `mini_researcher/` | Complete research assistant: multi-model architecture, document retrieval, safety checks, custom validation pipeline |
 
+### Extensibility
+
+| Category | What it shows |
+| -------- | ------------- |
+| `plugins/` | Plugin system end-to-end: function hooks, class-based plugins, payload modification, scoped and session-scoped plugins, `PluginSet` composition, execution modes, tool hooks, and testing patterns |
+
 ### Safety and validation
 
 | Category | What it shows |
@@ -60,6 +66,7 @@ to run.
 | Category | What it shows |
 | -------- | ------------- |
 | `m_serve/` | Deploying Mellea programs as REST APIs with production deployment patterns |
+| `m_decompose/` | Decomposing complex prompts into sub-tasks via the CLI and Python API |
 | `library_interop/` | LangChain message conversion, OpenAI format compatibility, cross-library workflows |
 | `mcp/` | MCP tool creation, Claude Desktop integration, Langflow integration |
 | `bedrock/` | Amazon Bedrock backend configuration and usage |
@@ -89,6 +96,14 @@ to run.
 | Category | What it shows |
 | -------- | ------------- |
 | `melp/` | ⚠️ Experimental lazy evaluation — thunks, deferred execution, advanced control flow |
+
+### Getting started and tutorials
+
+| Category | What it shows |
+| -------- | ------------- |
+| `hello_world.py` | Minimal single-file starting point |
+| `tutorial/` | Python script versions of the tutorials: email generation, IVR, generative slots, contexts, MObjects, model options, and more |
+| `notebooks/` | Jupyter notebook versions of the same tutorials for interactive, cell-by-cell exploration |
 
 ---
 
