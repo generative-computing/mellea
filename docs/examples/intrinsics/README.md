@@ -34,6 +34,9 @@ Rewrites queries for better retrieval or understanding.
 ### uncertainty.py
 Estimates the model's certainty about answering a question.
 
+### requirement_check.py
+Detect if text adheres to provided requirements.
+
 ## Concepts Demonstrated
 
 - **Intrinsic Functions**: Specialized model capabilities beyond text generation
@@ -51,7 +54,7 @@ from mellea.stdlib.components import Intrinsic
 import mellea.stdlib.functional as mfuncs
 
 # Create backend and adapter
-backend = LocalHFBackend(model_id="ibm-granite/granite-3.3-8b-instruct")
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 adapter = IntrinsicAdapter("requirement_check", 
                                base_model_name=backend.base_model_name)
 backend.add_adapter(adapter)

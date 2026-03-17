@@ -51,25 +51,42 @@ def _backend():
 
 
 def _read_input_json(file_name: str):
-    """Read test data from JSON and convert to a ChatContext."""
+    """Read test data from JSON and convert to a ChatContext.
+
+    Returns the context and the raw JSON data (for accessing extra fields
+    like ``requirement``).
+    """
     with open(DATA_ROOT / "input_json" / file_name, encoding="utf-8") as f:
         json_data = json.load(f)
 
     context = ChatContext()
     for m in json_data["messages"]:
         context = context.add(Message(m["role"], m["content"]))
-    return context
+    return context, json_data
 
 
 @pytest.mark.qualitative
 def test_certainty(backend):
     """Verify that the uncertainty/certainty intrinsic functions properly."""
-    context = _read_input_json("uncertainty.json")
+    context, _ = _read_input_json("uncertainty.json")
 
     result = core.check_certainty(context, backend)
     assert 0.0 <= result <= 1.0
 
     result2 = core.check_certainty(context, backend)
+    assert 0.0 <= result2 <= 1.0
+
+
+@pytest.mark.qualitative
+def test_requirement_check(backend):
+    """Verify that the requirement check intrinsic functions properly."""
+    context, json_data = _read_input_json("requirement_check.json")
+    requirement = json_data["requirement"]
+
+    result = core.requirement_check(context, backend, requirement)
+    assert 0.0 <= result <= 1.0
+
+    result2 = core.requirement_check(context, backend, requirement)
     assert 0.0 <= result2 <= 1.0
 
 
