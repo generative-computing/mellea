@@ -38,15 +38,17 @@ def check_answerability(
     Intrinsic function that checks whether the question in the last user turn of a
     chat can be answered by a provided set of RAG documents.
 
-    :param context: Chat context containing the conversation thus far
-    :param question: Question that the user has posed in response to the last turn in
-        ``context``.
-    :param documents: Document snippets retrieved that may or may not answer the
-        indicated question.
-    :param backend: Backend instance that supports adding the LoRA or aLoRA adapters
-        for answerability checks
+    Args:
+        question: Question that the user has posed in response to the last turn in
+            ``context``.
+        documents: Document snippets retrieved that may or may not answer the
+            indicated question.
+        context: Chat context containing the conversation thus far.
+        backend: Backend instance that supports adding the LoRA or aLoRA adapters
+            for answerability checks.
 
-    :return: Answerability score as a floating-point value from 0 to 1.
+    Returns:
+        Answerability score as a floating-point value from 0 to 1.
     """
     result_json = call_intrinsic(
         "answerability",
@@ -64,12 +66,14 @@ def rewrite_question(
     Intrinsic function that rewrites the question in the next user turn into a
     self-contained query that can be passed to the retriever.
 
-    :param context: Chat context containing the conversation thus far
-    :param question: Question that the user has posed in response to the last turn in
-        ``context``.
-    :param backend: Backend instance that supports adding the LoRA or aLoRA adapters
+    Args:
+        question: Question that the user has posed in response to the last turn in
+            ``context``.
+        context: Chat context containing the conversation thus far.
+        backend: Backend instance that supports adding the LoRA or aLoRA adapters.
 
-    :return: Rewritten version of ``question``.
+    Returns:
+        Rewritten version of ``question``.
     """
     result_json = call_intrinsic(
         "query_rewrite", context.add(Message("user", question)), backend
@@ -89,14 +93,16 @@ def clarify_query(
     based on the retrieved documents and conversation context, and generates an
     appropriate clarification question if needed.
 
-    :param context: Chat context containing the conversation thus far
-    :param question: Question that the user has posed
-    :param documents: Document snippets retrieved for the question
-    :param backend: Backend instance that supports the adapters that implement
-        this intrinsic
+    Args:
+        question: Question that the user has posed.
+        documents: Document snippets retrieved for the question.
+        context: Chat context containing the conversation thus far.
+        backend: Backend instance that supports the adapters that implement
+            this intrinsic.
 
-    :return: Clarification question string (e.g., "Do you mean A or B?"), or
-        the string "CLEAR" if no clarification is needed
+    Returns:
+        Clarification question string (e.g., "Do you mean A or B?"), or
+        the string "CLEAR" if no clarification is needed.
     """
     result_json = call_intrinsic(
         "query_clarification",
@@ -117,23 +123,21 @@ def find_citations(
     Intrinsic function that finds sentences in RAG documents that support sentences
     in a potential assistant response to a user question.
 
-    :param context: Context of the dialog between user and assistant at the point where
-        the user has just asked a question that will be answered with RAG documents
-    :param response: Potential assistant response
-    :param documents: Documents at were used to generate ``response``. These documents
-        should set the ``doc_id`` field; otherwise the intrinsic will be unable to
-        specify which document was the source of a given citation.
-    :param backend: Backend that supports one of the adapters that implements this
-        intrinsic.
-    :return: List of records with the following fields:
-        * ``response_begin``
-        * ``response_end``
-        * ``response_text``
-        * ``citation_doc_id``
-        * ``citation_begin``
-        * ``citation_end``
-        * ``citation_text``
-    Begin and end offsets are character offsets into their respective UTF-8 strings.
+    Args:
+        response: Potential assistant response.
+        documents: Documents that were used to generate ``response``. These documents
+            should set the ``doc_id`` field; otherwise the intrinsic will be unable to
+            specify which document was the source of a given citation.
+        context: Context of the dialog between user and assistant at the point where
+            the user has just asked a question that will be answered with RAG documents.
+        backend: Backend that supports one of the adapters that implements this
+            intrinsic.
+
+    Returns:
+        List of records with the following fields: ``response_begin``,
+        ``response_end``, ``response_text``, ``citation_doc_id``, ``citation_begin``,
+        ``citation_end``, ``citation_text``. Begin and end offsets are character
+        offsets into their respective UTF-8 strings.
     """
     result_json = call_intrinsic(
         "citations",
@@ -152,13 +156,15 @@ def check_context_relevance(
     the answer to a user's question. Does not consider the context in which the
     question was asked.
 
-    :param context: The chat up to the point where the user asked a question.
-    :param question: Question that the user has posed.
-    :param document: A retrieved document snippet
-    :param backend: Backend instance that supports the adapters that implement this
-        intrinsic
+    Args:
+        question: Question that the user has posed.
+        document: A retrieved document snippet.
+        context: The chat up to the point where the user asked a question.
+        backend: Backend instance that supports the adapters that implement this
+            intrinsic.
 
-    :return: Context relevance score as a floating-point value from 0 to 1.
+    Returns:
+        Context relevance score as a floating-point value from 0 to 1.
     """
     result_json = call_intrinsic(
         "context_relevance",
@@ -182,19 +188,18 @@ def flag_hallucinated_content(
     user question are faithful to the retrieved document snippets. Sentences that do not
     align with the retrieved snippets are flagged as potential hallucinations.
 
-    :param context: A chat log that ends with a user asking a question
-    :param response: The assistant's response to the user's question in the last turn
-        of ``context``
-    :param documents: Document snippets that were used to generate ``response``
-    :param backend: Backend instance that supports the adapters that implement this
-        intrinsic
+    Args:
+        response: The assistant's response to the user's question in the last turn
+            of ``context``.
+        documents: Document snippets that were used to generate ``response``.
+        context: A chat log that ends with a user asking a question.
+        backend: Backend instance that supports the adapters that implement this
+            intrinsic.
 
-    :return: List of records with the following fields:
-        * response_begin
-        * response_end
-        * response_text
-        * faithfulness_likelihood
-        * explanation
+    Returns:
+        List of records with the following fields: ``response_begin``,
+        ``response_end``, ``response_text``, ``faithfulness_likelihood``,
+        ``explanation``.
     """
     result_json = call_intrinsic(
         "hallucination_detection",
@@ -214,18 +219,19 @@ def rewrite_answer_for_relevance(
 ) -> str:
     """Rewrite an assistant answer to improve relevance to the user's question.
 
-    :param context: A chat log that ends with a user asking a question
-    :param response: The assistant's response to the user's question in the last turn
-        of ``context``
-    :param documents: Document snippets that were used to generate ``response``
-    :param backend: Backend instance that supports the adapters that implement this
-        intrinsic
-    :param rewrite_threshold: Number between 0.0 and 1.0 that determines how eagerly
-        to skip rewriting the assistant's answer for relevance. 0.0 means never rewrite
-        and 1.0 means always rewrite.
+    Args:
+        response: The assistant's response to the user's question in the last turn
+            of ``context``.
+        documents: Document snippets that were used to generate ``response``.
+        context: A chat log that ends with a user asking a question.
+        backend: Backend instance that supports the adapters that implement this
+            intrinsic.
+        rewrite_threshold: Number between 0.0 and 1.0 that determines how eagerly
+            to skip rewriting the assistant's answer for relevance. 0.0 means never
+            rewrite and 1.0 means always rewrite.
 
-    :returns: Either the original response, or a rewritten version of the original
-        response.
+    Returns:
+        Either the original response, or a rewritten version of the original response.
     """
     # First run the classifier to determine the likelihood of a relevant answer
     # Output will have three fields:

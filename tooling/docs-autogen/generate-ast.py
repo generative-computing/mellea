@@ -1,31 +1,22 @@
 #!/usr/bin/env python3
-"""generate-ast.py (INSTALL mode, then mdxify + postprocess)
+"""generate-ast.py — mdxify + postprocess docs pipeline.
 
-Key fix vs your prior script:
-  - mdxify is executed with cwd set to a clean temp directory OUTSIDE the repo root,
-    so Python imports the INSTALLED distribution (site-packages) and does not get
-    shadowed by repo-local ./mellea or ./cli packages.
+Runs mdxify against the project's mellea and cli packages then postprocesses
+the generated MDX files into the Mintlify docs tree.
+
+Requires mdxify to be installed in the current Python environment.  Run via::
+
+    uv run python tooling/docs-autogen/generate-ast.py
 
 Pipeline:
-  1) Use current Python environment (assumes mdxify is installed)
-  2) Run mdxify --all for root modules: mellea, cli into STAGING: <repo-root>/docs/api/<pkg>
-  4) Reorganize flat mdxify output into nested folders
-  5) Rename __init__.mdx -> <foldername>.mdx (dedupe if identical)
-  6) Update frontmatter (title/sidebarTitle/description) from H1 + first paragraph
-  7) Remove truly-empty MDX files
-  8) Move generated docs to <docs-root>/api (replace existing)
-  9) Build Mintlify API Reference nav (NO .mdx suffix)
- 10) Merge by replacing ONLY: { "tab": "API Reference", ... } in docs.json
-
-Usage:
-  python3 tooling/docs-autogen/generate-ast.py \
-    --docs-json docs/docs/docs.json \
-    --docs-root docs/docs \
-    --pypi-name mellea \
-    --pypi-version 0.3.0
-
-Notes:
-  - --pypi-version may be "v0.3.0" or "0.3.0". If omitted, installs latest.
+  1) Run mdxify --all for root modules: mellea, cli into STAGING: <repo-root>/docs/api/<pkg>
+  2) Reorganize flat mdxify output into nested folders
+  3) Rename __init__.mdx -> <foldername>.mdx (dedupe if identical)
+  4) Update frontmatter (title/sidebarTitle/description) from H1 + first paragraph
+  5) Remove truly-empty MDX files
+  6) Move generated docs to <docs-root>/api (replace existing)
+  7) Build Mintlify API Reference nav (NO .mdx suffix)
+  8) Merge by replacing ONLY: { "tab": "API Reference", ... } in docs.json
 """
 
 import argparse
@@ -49,9 +40,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 STAGING_DOCS_ROOT = REPO_ROOT / "docs"
 STAGING_API_DIR = STAGING_DOCS_ROOT / "api"
 
-# Venv + clean run dir (outside import shadowing)
-VENV_DIR = REPO_ROOT / ".venv-docs-autogen"
-MDXIFY_CWD = REPO_ROOT / ".mdxify-run-cwd"  # must NOT contain mellea/ or cli/ packages
+# Clean run dir for mdxify (outside the repo root so repo-local packages
+# cannot shadow site-packages via directory-level import precedence)
+MDXIFY_CWD = REPO_ROOT / ".mdxify-run-cwd"
 
 # If you want explicit link backing, keep repo-url. If you want mdxify auto-detection, omit.
 REPO_URL = "https://github.com/generative-computing/mellea"
@@ -60,14 +51,6 @@ REPO_URL = "https://github.com/generative-computing/mellea"
 # -----------------------------
 # Helpers
 # -----------------------------
-def normalize_version(v: str | None) -> str | None:
-    if not v:
-        return None
-    v = v[1:] if v.startswith("v") else v
-    # Return None for branch names or non-version strings (must start with digit)
-    if not v or not v[0].isdigit():
-        return None
-    return v
 
 
 def yaml_quote(value: str | None) -> str:
@@ -159,51 +142,14 @@ def merge_api_reference_into_docs_json(
 
 
 # -----------------------------
-# Venv + installs
-# -----------------------------
-def ensure_venv() -> Path:
-    if not VENV_DIR.exists():
-        print(f"🧪 Creating venv: {VENV_DIR}", flush=True)
-        subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
-
-    py = VENV_DIR / ("Scripts" if os.name == "nt" else "bin") / "python"
-    if not py.exists():
-        raise RuntimeError(f"Venv python not found at: {py}")
-    return py
-
-
-def pip_install(venv_python: Path, pypi_name: str, pypi_version: str | None) -> None:
-    ver = normalize_version(pypi_version)
-    # If no version specified, install from local source (for development)
-    # Otherwise install from PyPI with specified version
-    if not ver:
-        spec = "."  # Install from current directory
-        print(
-            f"📦 Installing into venv: mdxify + {pypi_name} (from local source)",
-            flush=True,
-        )
-    else:
-        spec = f"{pypi_name}=={ver}"
-        print(f"📦 Installing into venv: mdxify + {spec}", flush=True)
-
-    subprocess.run([str(venv_python), "-m", "pip", "install", "-U", "pip"], check=True)
-    subprocess.run(
-        [str(venv_python), "-m", "pip", "install", "-U", "mdxify", spec],
-        check=True,
-        cwd=str(REPO_ROOT) if not ver else None,
-    )
-
-
-# -----------------------------
 # mdxify generation
 # -----------------------------
-def run_mdxify_generation(
-    venv_python: Path, root_module: str, source_root: Path | None = None
-) -> None:
+def run_mdxify_generation(root_module: str, source_root: Path | None = None) -> None:
     output_dir = STAGING_API_DIR / root_module
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Critical: run mdxify from a clean cwd so repo-local packages don't shadow site-packages
+    # Run mdxify from a clean cwd so repo-local source directories don't take
+    # precedence over site-packages via directory-level import shadowing.
     if MDXIFY_CWD.exists():
         shutil.rmtree(MDXIFY_CWD)
     MDXIFY_CWD.mkdir(parents=True, exist_ok=True)
@@ -214,7 +160,7 @@ def run_mdxify_generation(
     )
 
     cmd = [
-        str(venv_python),
+        sys.executable,
         "-m",
         "mdxify",
         "--all",
@@ -230,12 +176,14 @@ def run_mdxify_generation(
 
     env = os.environ.copy()
     if source_root is not None:
-        # Point mdxify at the external source tree so it imports the right package.
-        # We set PYTHONPATH rather than clearing it so the venv site-packages
-        # (mdxify itself) remain importable.
-        env["PYTHONPATH"] = str(source_root)
+        # Point mdxify at an external source tree (--source-dir).
+        # Prepend it to PYTHONPATH so it takes precedence over any installed copy.
+        existing = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = (
+            f"{source_root}:{existing}" if existing else str(source_root)
+        )
     else:
-        # Default: clear PYTHONPATH so the repo-local packages don't shadow site-packages
+        # Default: drop PYTHONPATH so no repo-local directory shadows site-packages.
         env.pop("PYTHONPATH", None)
 
     subprocess.run(cmd, check=True, text=True, cwd=str(MDXIFY_CWD), env=env)
@@ -751,7 +699,7 @@ def build_and_merge_navigation(
 # -----------------------------
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Install mellea + mdxify in a venv, generate MDX API docs, postprocess, move to docs root, merge nav."
+        description="Generate MDX API docs with mdxify, postprocess, and merge into the Mintlify docs tree."
     )
     parser.add_argument(
         "--docs-json", required=False, help="Path to docs.json to update."
@@ -760,21 +708,6 @@ def main() -> None:
         "--docs-root",
         required=False,
         help="Mintlify docs root (defaults to parent of docs.json).",
-    )
-    parser.add_argument(
-        "--pypi-name",
-        default="mellea",
-        help="PyPI project name to install (default: mellea).",
-    )
-    parser.add_argument(
-        "--pypi-version",
-        required=False,
-        help="Version like v0.3.0 or 0.3.0. Omit for latest.",
-    )
-    parser.add_argument(
-        "--no-venv",
-        action="store_true",
-        help="Skip virtual environment creation (use when called via 'uv run --with').",
     )
     parser.add_argument(
         "--nav-only",
@@ -828,18 +761,9 @@ def main() -> None:
         shutil.rmtree(STAGING_API_DIR)
     STAGING_API_DIR.mkdir(parents=True, exist_ok=True)
 
-    if args.no_venv:
-        print("⚠️ Skipping venv creation (--no-venv flag set)", flush=True)
-        venv_python = Path(sys.executable)
-    else:
-        venv_python = ensure_venv()
-        pip_install(venv_python, args.pypi_name, args.pypi_version)
-
-    # Generate MDX into staging (critical cwd fix inside run_mdxify_generation)
+    # Generate MDX into staging (clean cwd inside run_mdxify_generation)
     for pkg in PACKAGES:
-        run_mdxify_generation(
-            venv_python, pkg, source_root if source_root != REPO_ROOT else None
-        )
+        run_mdxify_generation(pkg, source_root if source_root != REPO_ROOT else None)
 
     # Restructure + cleanup in staging
     reorganize_to_nested_structure()

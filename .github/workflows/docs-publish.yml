@@ -1,0 +1,335 @@
+name: Docs
+
+# Builds, validates, and deploys documentation to orphan deployment branches.
+# Mintlify reads from these branches — main stays clean of generated artifacts.
+#
+# See docs/PUBLISHING.md for the full architecture and strategy.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mellea/**"
+      - "cli/**"
+      - "tooling/docs-autogen/**"
+      - ".github/workflows/docs-publish.yml"
+
+  release:
+    types: [published]
+
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - "docs/**"
+      - "mellea/**"
+      - "cli/**"
+      - "tooling/docs-autogen/**"
+      - ".github/workflows/docs-publish.yml"
+
+  workflow_dispatch:
+    inputs:
+      force_publish:
+        description: "Deploy even from a non-main context (for testing)"
+        type: boolean
+        default: false
+      target_branch:
+        description: "Override deploy target branch (default: docs/preview)"
+        type: string
+        default: "docs/preview"
+      strict_validation:
+        description: "Fail the build if validation checks fail"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: docs-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_FROZEN: "1"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build & Validate
+  # ---------------------------------------------------------------------------
+  build-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras --group dev
+
+      # -- Generate API documentation ------------------------------------------
+
+      - name: Generate API documentation
+        run: uv run python tooling/docs-autogen/build.py
+
+      # -- Validate static docs ------------------------------------------------
+
+      - name: Lint static docs (markdownlint)
+        id: markdownlint
+        run: |
+          set -o pipefail
+          npx --yes markdownlint-cli "docs/docs/**/*.md" --config docs/docs/.markdownlint.json 2>&1 \
+            | tee /tmp/markdownlint.log
+        continue-on-error: ${{ inputs.strict_validation != true }}
+
+      # -- Validate generated API docs -----------------------------------------
+
+      - name: Validate MDX syntax and links
+        id: validate_mdx
+        run: |
+          set -o pipefail
+          uv run python tooling/docs-autogen/validate.py docs/docs/api --skip-coverage --docs-root docs 2>&1 \
+            | tee /tmp/validate_mdx.log
+        continue-on-error: ${{ inputs.strict_validation != true }}
+
+      - name: Audit API coverage
+        id: audit_coverage
+        run: |
+          set -o pipefail
+          uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --threshold 80 --quality 2>&1 \
+            | tee /tmp/audit_coverage.log
+        continue-on-error: ${{ inputs.strict_validation != true }}
+
+      # -- Upload artifact for deploy job --------------------------------------
+
+      - name: Upload docs artifact
+        if: success() || (inputs.strict_validation != true)
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs-site
+          path: docs/docs/
+          retention-days: 7
+
+      # -- Write job summary ---------------------------------------------------
+
+      - name: Write job summary
+        if: always()
+        run: |
+          python3 - <<'PYEOF'
+          import os, re
+
+          def icon(outcome):
+              return "✅" if outcome == "success" else ("❌" if outcome == "failure" else "⏭️")
+
+          def read_log(path):
+              try:
+                  raw = open(path).read().strip()
+                  # Strip ANSI escape codes (colour output from uv/pytest etc.)
+                  return re.sub(r'\x1b\[[0-9;]*[mK]', '', raw)
+              except FileNotFoundError:
+                  return ""
+
+          markdownlint_outcome = "${{ steps.markdownlint.outcome }}"
+          validate_outcome = "${{ steps.validate_mdx.outcome }}"
+          coverage_outcome = "${{ steps.audit_coverage.outcome }}"
+          strict = "${{ inputs.strict_validation }}" == "true"
+          mode = "" if strict else " *(soft-fail)*"
+
+          lint_log = read_log("/tmp/markdownlint.log")
+          validate_log = read_log("/tmp/validate_mdx.log")
+          coverage_log = read_log("/tmp/audit_coverage.log")
+
+          # Count markdownlint issues (lines matching file:line:col format)
+          lint_issues = len([l for l in lint_log.splitlines() if re.match(r'.+:\d+:\d+ ', l)])
+          lint_detail = f"{lint_issues} issue(s)" if lint_issues else "no issues"
+
+          # Extract coverage stats from audit_coverage output
+          cov_pct = re.search(r"Coverage:\s+(\S+%)", coverage_log)
+          cov_sym = re.search(r"Documented:\s+(\d+)", coverage_log)
+          cov_tot = re.search(r"Total classes \+ functions:\s+(\d+)", coverage_log)
+          cov_detail = (
+              f"{cov_pct.group(1)} ({cov_sym.group(1)}/{cov_tot.group(1)} symbols)"
+              if cov_pct and cov_sym and cov_tot else ""
+          )
+
+          # Parse per-check error counts from validate output.
+          # Each check prints "N errors found" on the next line when it fails.
+          def parse_validate_detail(log):
+              counts = {}
+              for label, key in [
+                  ("Source links", "source"), ("MDX syntax", "syntax"),
+                  ("Internal links", "links"), ("Anchor collisions", "anchors"),
+                  ("Stale files", "stale"),
+              ]:
+                  m = re.search(rf"{label}: (?:PASS|FAIL)(?:\s+(\d+) errors found)?", log, re.DOTALL)
+                  if m:
+                      counts[key] = int(m.group(1)) if m.group(1) else 0
+              total = sum(counts.values())
+              if not total:
+                  return "no issues"
+              parts = []
+              if counts.get("syntax"):  parts.append(f"{counts['syntax']} syntax error(s)")
+              if counts.get("links"):   parts.append(f"{counts['links']} broken link(s)")
+              if counts.get("anchors"): parts.append(f"{counts['anchors']} anchor collision(s)")
+              if counts.get("source"):  parts.append(f"{counts['source']} source link error(s)")
+              if counts.get("stale"):   parts.append(f"{counts['stale']} stale file(s)")
+              return ", ".join(parts)
+
+          mdx_detail = parse_validate_detail(validate_log)
+
+          # Docstring quality annotation emitted by audit_coverage.py into the log
+          # Format: ::notice title=Docstring quality::message
+          #      or ::warning title=Docstring quality::message
+          quality_match = re.search(r"::(notice|warning|error) title=Docstring quality::(.+)", coverage_log)
+          if quality_match:
+              quality_level, quality_msg = quality_match.group(1), quality_match.group(2)
+              quality_icon = "✅" if quality_level == "notice" else "⚠️"
+              quality_status = "pass" if quality_level == "notice" else "warning"
+              quality_detail = re.sub(r"\s*—\s*see job summary.*$", "", quality_msg)
+              quality_row = f"| Docstring Quality | {quality_icon} {quality_status}{mode} | {quality_detail} |"
+          else:
+              quality_row = None
+
+          # Split coverage log at quality section to avoid duplicate output in collapsibles
+          quality_start = coverage_log.find("🔬 Running docstring quality")
+          if quality_start != -1:
+              quality_log = coverage_log[quality_start:]
+              coverage_display_log = coverage_log[:quality_start].strip()
+          else:
+              quality_log = ""
+              coverage_display_log = coverage_log
+
+          lines = [
+              "## Docs Build — Validation Summary\n",
+              "| Check | Result | Details |",
+              "|-------|--------|---------|",
+              f"| Markdownlint | {icon(markdownlint_outcome)} {markdownlint_outcome}{mode} | {lint_detail} |",
+              f"| MDX Validation | {icon(validate_outcome)} {validate_outcome}{mode} | {mdx_detail} |",
+              f"| API Coverage | {icon(coverage_outcome)} {coverage_outcome}{mode} | {cov_detail} |",
+          ]
+          if quality_row:
+              lines.append(quality_row)
+          lines.append("")
+
+          for title, log, limit in [
+              ("Markdownlint output", lint_log, 5_000),
+              ("MDX validation output", validate_log, 5_000),
+              ("API coverage output", coverage_display_log, 5_000),
+              ("Docstring quality details", quality_log, 1_000_000),
+          ]:
+              if log:
+                  lines += [
+                      f"<details><summary>{title}</summary>\n",
+                      "```text",
+                      log[:limit] + (" [truncated]" if len(log) > limit else ""),
+                      "```",
+                      "</details>\n",
+                  ]
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("\n".join(lines))
+          PYEOF
+
+  # ---------------------------------------------------------------------------
+  # Deploy to orphan branch
+  # ---------------------------------------------------------------------------
+  deploy:
+    needs: build-and-validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # Deploy on: push to main, release, force_publish via dispatch,
+    # or PRs labelled "docs-preview" (→ docs/preview branch).
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'release' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'docs-preview')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.force_publish)
+
+    steps:
+      - name: Download docs artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: docs-site
+          path: docs-site/
+
+      - name: Determine target branch
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "branch=docs/production" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "branch=docs/preview" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.target_branch }}" ]; then
+            echo "branch=${{ inputs.target_branch }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=docs/staging" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Add DO NOT EDIT warning
+        run: |
+          cat > docs-site/_DO_NOT_EDIT.md << 'EOF'
+          # DO NOT EDIT THIS BRANCH
+
+          This branch is **fully automated**. Every file here is generated by
+          the `docs-publish` GitHub Actions workflow and force-pushed on each run.
+
+          **Any manual edits will be overwritten without warning.**
+
+          To change documentation:
+          - Static guides: edit files under `docs/docs/` on `main`
+          - API reference: improve docstrings in Python source (`mellea/`, `cli/`)
+          - Pipeline config: see `tooling/docs-autogen/` on `main`
+
+          For details, see `docs/PUBLISHING.md` on `main`.
+          EOF
+
+      - name: Deploy to ${{ steps.target.outputs.branch }}
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: ${{ steps.target.outputs.branch }}
+          publish_dir: docs-site/
+          force_orphan: true
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_message: |
+            docs: publish from ${{ github.sha }}
+
+            Branch:  ${{ github.ref_name }}
+            Trigger: ${{ github.event_name }}${{ github.event.pull_request.number && format(' (PR #{0})', github.event.pull_request.number) || '' }}
+            Run:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Write deploy summary
+        if: always()
+        run: |
+          TARGET="${{ steps.target.outputs.branch }}"
+          REPO="${{ github.repository }}"
+          SHA="${{ github.sha }}"
+          if [ "${{ job.status }}" = "success" ]; then
+            STATUS="✅ Deployed"
+            DETAIL="Published to [\`${TARGET}\`](https://github.com/${REPO}/tree/${TARGET})"
+          else
+            STATUS="❌ Failed"
+            DETAIL="Attempted deploy to \`${TARGET}\`"
+          fi
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ## Docs Deploy — ${STATUS}
+
+          | | |
+          |-|-|
+          | Branch | \`${TARGET}\` |
+          | Source | \`${SHA:0:7}\` |
+          | Trigger | ${{ github.event_name }}${{ github.event.pull_request.number && format(' (PR #{0})', github.event.pull_request.number) || '' }} |
+
+          ${DETAIL}
+          EOF

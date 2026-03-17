@@ -40,6 +40,7 @@ Detect if text adheres to provided requirements.
 ### context_attribution.py
 Identifies sentences in conversation history and documents that most influenced the response.
 
+
 ## Concepts Demonstrated
 
 - **Intrinsic Functions**: Specialized model capabilities beyond text generation

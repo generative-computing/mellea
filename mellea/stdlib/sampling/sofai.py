@@ -34,14 +34,29 @@ from ..context import ChatContext
 
 
 class SOFAISamplingStrategy(SamplingStrategy):
-    """SOFAI sampling strategy.
+    """SOFAI (Slow and Fast AI) two-solver sampling strategy.
 
-    Uses S1 Solver (fast model) in a loop with targeted feedback from validation results.
-    If S1 Solver fails after exhausting the budget or shows no improvement,
-    escalates to a single attempt with S2 Solver (slow model).
+    Uses S1 Solver (fast model) in a loop with targeted feedback from validation
+    results. If S1 Solver fails after exhausting the budget or shows no
+    improvement, escalates to a single attempt with S2 Solver (slow model).
 
-    The strategy leverages ValidationResult.reason fields to provide targeted
+    The strategy leverages ``ValidationResult.reason`` fields to provide targeted
     feedback for repair, enabling more effective iterative improvement.
+
+    Args:
+        s1_solver_backend (Backend): Backend for the fast S1 solver used in the
+            iterative repair loop.
+        s2_solver_backend (Backend): Backend for the slow S2 solver used as a
+            final escalation step.
+        s2_solver_mode (Literal["fresh_start", "continue_chat", "best_attempt"]):
+            How to invoke the S2 solver when S1 fails.
+        loop_budget (int): Maximum number of S1 repair attempts before escalating
+            to S2. Must be greater than 0. Defaults to ``3``.
+        judge_backend (Backend | None): Optional backend for LLM-as-Judge
+            validation. If ``None``, falls back to the session backend.
+        feedback_strategy (Literal["simple", "first_error", "all_errors"]):
+            Detail level of repair feedback provided to the S1 solver.
+
     """
 
     def __init__(
@@ -56,24 +71,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         judge_backend: Backend | None = None,
         feedback_strategy: Literal["simple", "first_error", "all_errors"] = "simple",
     ):
-        """Initialize SOFAI sampling strategy with two solvers.
-
-        Args:
-            s1_solver_backend: Backend for S1 Solver (fast model for iterative solving).
-            s2_solver_backend: Backend for S2 Solver (slow model for escalation).
-            s2_solver_mode: How to invoke S2 Solver:
-                - "fresh_start": Same prompt as S1 solver (clean slate)
-                - "continue_chat": Fresh start input + S1 iteration/feedback history
-                - "best_attempt": Fresh start input + best S1 attempt + its feedback
-            loop_budget: Maximum attempts for S1 Solver before falling back to S2 Solver.
-            judge_backend: Optional third backend for LLM-as-Judge validation.
-                If provided, this backend will be used for validation when no custom
-                validation_fn is provided. Priority: validation_fn > judge_backend > session backend.
-            feedback_strategy: Control detail level of LLM-as-Judge feedback:
-                - "simple": Binary yes/no validation, no detailed feedback (default)
-                - "first_error": Provide only the first mistake found with detailed feedback
-                - "all_errors": Provide comprehensive feedback about all mistakes
-                Note: Only used when judge_backend is provided and requirement has no validation_fn.
+        """Initialize SOFAISamplingStrategy with S1/S2 solver backends, loop budget, and feedback settings.
 
         Raises:
             TypeError: If backends are not Backend instances.

@@ -2,9 +2,10 @@
 title: "Plugins & Hooks"
 description: "Intercept and customize Mellea's execution pipeline with plugins — enforce policies, add observability, and transform payloads at well-defined hook points."
 sidebarTitle: "Plugins & Hooks"
+# diataxis: explanation
 ---
 
-## Overview — What Are Plugins?
+## Overview — what are plugins?
 
 Plugins let you intercept and modify Mellea's execution at well-defined points without changing library code. Whether you need to enforce token budgets, redact PII, log every generation call, or block unsafe tool invocations, plugins give you fine-grained control over the entire pipeline.
 
@@ -17,9 +18,9 @@ When an event fires during Mellea's execution (e.g., "about to call the LLM" or 
 Plugins are organized into six hook categories:
 
 - **Session Lifecycle** — session init, reset, and cleanup (`session_pre_init`, `session_post_init`, `session_reset`, `session_cleanup`)
-- **Component Lifecycle** — before and after component execution (`component_pre_execute`, `component_post_success`, `component_post_error`)
+- **[Component](../guide/glossary#component) Lifecycle** — before and after component execution (`component_pre_execute`, `component_post_success`, `component_post_error`)
 - **Generation Pipeline** — before and after LLM calls (`generation_pre_call`, `generation_post_call`)
-- **Validation** — before and after requirement checks (`validation_pre_check`, `validation_post_check`)
+- **Validation** — before and after [requirement](../guide/glossary#requirement) checks (`validation_pre_check`, `validation_post_check`)
 - **Sampling Pipeline** — sampling loop events (`sampling_loop_start`, `sampling_iteration`, `sampling_repair`, `sampling_loop_end`)
 - **Tool Execution** — before and after tool invocations (`tool_pre_invoke`, `tool_post_invoke`)
 
@@ -29,7 +30,7 @@ Plugins require the hooks extra: `pip install 'mellea[hooks]'`
 
 ---
 
-## Quick Start — Your First Plugin in 5 Minutes
+## Quick start — your first plugin in 5 minutes
 
 Here is a complete, working plugin in under 20 lines of user code. It logs a one-line summary before every LLM call.
 
@@ -66,11 +67,11 @@ See the [full example](https://github.com/generative-computing/mellea/blob/main/
 
 ---
 
-## Standalone Function Hooks
+## Standalone function hooks
 
 The `@hook` decorator turns any async function into a plugin. This is the simplest and most common way to extend Mellea.
 
-### Anatomy of a Hook Function
+### Anatomy of a hook function
 
 ```python
 from mellea.plugins import HookType, PluginMode, hook
@@ -87,17 +88,17 @@ async def my_hook(payload, ctx):
 - **`mode`** — How the hook executes. Default: `PluginMode.SEQUENTIAL`. See [Execution Modes Deep Dive](#execution-modes-deep-dive).
 - **`priority`** — Lower numbers run first. Default: `50`.
 
-### Execution Modes at a Glance
+### Execution modes at a glance
 
 | Mode | Serial/Parallel | Can Block | Can Modify | Errors Propagated |
-|------|:-:|:-:|:-:|:-:|
+| ------ | :-: | :-: | :-: | :-: |
 | `SEQUENTIAL` | Serial | Yes | Yes | Yes |
 | `TRANSFORM` | Serial | No | Yes | Yes |
 | `AUDIT` | Serial | No | No | Yes |
 | `CONCURRENT` | Parallel | Yes | No | Yes |
 | `FIRE_AND_FORGET` | Background | No | No | No |
 
-### Blocking Execution
+### Blocking execution
 
 Use `block()` to reject an operation. The caller receives a `PluginViolationError`.
 
@@ -118,13 +119,14 @@ async def enforce_token_budget(payload, ctx):
 ```
 
 `block()` accepts:
+
 - **`reason`** (required) — Human-readable explanation.
 - **`code`** — Machine-readable error code for programmatic handling.
 - **`details`** — A dict with additional structured data.
 
 The caller catches the violation as a `PluginViolationError` with `.reason`, `.code`, `.hook_type`, and `.plugin_name` attributes.
 
-### Modifying Payloads
+### Modifying payloads
 
 Payloads are frozen Pydantic models. Direct mutation raises `FrozenModelError`. Instead, use the `modify()` helper:
 
@@ -148,7 +150,7 @@ modified = payload.model_copy(update={"model_options": {**payload.model_options,
 return PluginResult(continue_processing=True, modified_payload=modified)
 ```
 
-### Payload Policies
+### Payload policies
 
 Each hook type declares which fields are writable. Changes to non-writable fields are **silently discarded** by the framework. For example, `generation_pre_call` allows modifying `model_options`, `format`, and `tool_calls`, but not `action` or `context`. This ensures plugins cannot make changes the framework hasn't sanctioned.
 
@@ -158,16 +160,16 @@ See the [standalone hooks example](https://github.com/generative-computing/melle
 
 ---
 
-## Class-Based Plugins
+## Class-based plugins
 
 When you need shared state across multiple hooks (e.g., a redaction counter, a rate limiter's token bucket), group them in a `Plugin` subclass.
 
-### When to Use a Class vs. Standalone Functions
+### When to use a class vs. standalone functions
 
 - **Standalone functions** — Best for single-concern hooks that don't share state.
 - **Class-based plugins** — Best when multiple hooks operate on a shared concern and need access to the same instance state.
 
-### Defining a Plugin
+### Defining a plugin
 
 ```python
 from mellea.plugins import Plugin, hook, modify, HookType
@@ -190,11 +192,12 @@ class PIIRedactor(Plugin, name="pii-redactor", priority=5):
 ```
 
 Key syntax:
+
 - Inherit from `Plugin` and set `name` and `priority` as class keyword arguments.
 - Decorate methods with `@hook(HookType.XXX)`. The `self` parameter gives access to shared state.
 - The class `priority` is the default for all methods. Override per-method with `@hook(HookType.XXX, priority=M)`.
 
-### Priority Resolution
+### Priority resolution
 
 Priority is resolved in this order (highest precedence first):
 
@@ -203,7 +206,7 @@ Priority is resolved in this order (highest precedence first):
 3. **`Plugin(priority=N)`** class keyword — default for all methods
 4. **`50`** — the global default if nothing else is set
 
-### Registering a Plugin
+### Registering a plugin
 
 ```python
 from mellea.plugins import register
@@ -216,11 +219,11 @@ See the [full PII redaction example](https://github.com/generative-computing/mel
 
 ---
 
-## Registration & Scoping
+## Registration and scoping
 
 Plugins can be activated at three levels. Each level determines when hooks fire and when they are cleaned up.
 
-### Global Scope
+### Global scope
 
 Register at module level, fires for every session and every functional API call.
 
@@ -241,9 +244,9 @@ from mellea.plugins import unregister
 unregister(log_generation)
 ```
 
-### Session Scope
+### Session scope
 
-Pass plugins to `start_session()`, fires only within that session.
+Pass plugins to [`start_session()`](../guide/glossary#melleasession), fires only within that session.
 
 ```python
 from mellea import start_session
@@ -253,7 +256,7 @@ with start_session(plugins=[enforce_content_policy, log_component]) as m:
 # plugins deregistered when session exits
 ```
 
-### With-Block Scope
+### With-block scope
 
 Activate plugins for a specific block of code with guaranteed cleanup.
 
@@ -303,11 +306,11 @@ with plugin_scope(log_request):               # outer scope
 # no plugins active
 ```
 
-### Cleanup Guarantee
+### Cleanup guarantee
 
 Plugins are always deregistered on scope exit, even if the block raises an exception. There is no resource leak on error.
 
-### Re-Entrant Restriction
+### Re-entrant restriction
 
 The same instance cannot be active in two overlapping scopes. Create separate instances if you need parallel or nested activation:
 
@@ -324,11 +327,11 @@ See the [scoped plugins example](https://github.com/generative-computing/mellea/
 
 ---
 
-## PluginSets — Composing Plugins
+## PluginSets — composing plugins
 
 A `PluginSet` groups related hooks and plugins into a reusable, named bundle. Use it to organize plugins by concern (security, observability, compliance) and register or scope them as a unit.
 
-### Creating a PluginSet
+### Creating a pluginset
 
 ```python
 from mellea.plugins import PluginSet
@@ -354,7 +357,7 @@ with security:
     ...
 ```
 
-### Priority Override
+### Priority override
 
 `PluginSet(priority=N)` overrides the priority of all contained items, including nested sets:
 
@@ -363,7 +366,7 @@ with security:
 critical = PluginSet("critical", [hook_a, hook_b, nested_set], priority=1)
 ```
 
-### Real-World Pattern
+### Real-world pattern
 
 Register observability globally (fires everywhere) and security per-session (fires only where needed):
 
@@ -383,11 +386,11 @@ See the [full PluginSet composition example](https://github.com/generative-compu
 
 ---
 
-## Hook Types Reference
+## Hook types reference
 
 This section is a comprehensive reference for every implemented hook type. For each hook, you'll find when it fires, what payload fields are available, which fields are writable, and typical use cases.
 
-### Session Lifecycle
+### Session lifecycle
 
 #### `session_pre_init`
 
@@ -398,6 +401,7 @@ This section is a comprehensive reference for every implemented hook type. For e
 **Writable fields:** `model_id`, `model_options`
 
 **Use cases:**
+
 - Enforcing model usage restrictions
 - Injecting default model options
 
@@ -417,6 +421,7 @@ async def enforce_model_policy(payload, ctx):
 **Writable fields:** *(observe-only)*
 
 **Use cases:**
+
 - Initializing telemetry for the session
 - Logging session configuration
 
@@ -429,6 +434,7 @@ async def enforce_model_policy(payload, ctx):
 **Writable fields:** *(observe-only)*
 
 **Use cases:**
+
 - Preserving audit trails before reset
 - Resetting plugin-specific state
 
@@ -441,12 +447,13 @@ async def enforce_model_policy(payload, ctx):
 **Writable fields:** *(observe-only)*
 
 **Use cases:**
+
 - Flushing telemetry buffers
 - Aggregating session metrics
 
 ---
 
-### Component Lifecycle
+### Component lifecycle
 
 #### `component_pre_execute`
 
@@ -457,6 +464,7 @@ async def enforce_model_policy(payload, ctx):
 **Writable fields:** `requirements`, `model_options`, `format`, `strategy`, `tool_calls_enabled`
 
 **Use cases:**
+
 - Policy enforcement on generation requests
 - Injecting or modifying model options
 - Content filtering and authorization checks
@@ -479,6 +487,7 @@ async def enforce_content_policy(payload, ctx):
 **Writable fields:** *(observe-only)*
 
 **Use cases:**
+
 - Latency and metrics collection
 - Audit logging
 
@@ -497,12 +506,13 @@ async def log_latency(payload, ctx):
 **Writable fields:** *(observe-only)*
 
 **Use cases:**
+
 - Error logging and alerting
 - Failure analysis
 
 ---
 
-### Generation Pipeline
+### Generation pipeline
 
 #### `generation_pre_call`
 
@@ -513,6 +523,7 @@ async def log_latency(payload, ctx):
 **Writable fields:** `model_options`, `format`, `tool_calls`
 
 **Use cases:**
+
 - Token budget enforcement
 - Prompt injection detection
 - Last-mile model option adjustments
@@ -534,6 +545,7 @@ async def cap_tokens(payload, ctx):
 **Writable fields:** *(observe-only)*
 
 **Use cases:**
+
 - Output logging and inspection
 - Response caching
 - Quality metrics and hallucination detection
@@ -551,6 +563,7 @@ async def cap_tokens(payload, ctx):
 **Writable fields:** `requirements`, `model_options`
 
 **Use cases:**
+
 - Injecting additional requirements
 - Overriding validation model options
 
@@ -563,13 +576,14 @@ async def cap_tokens(payload, ctx):
 **Writable fields:** `results`, `all_validations_passed`
 
 **Use cases:**
+
 - Logging validation outcomes
 - Overriding validation results
 - Triggering alerts on failures
 
 ---
 
-### Sampling Pipeline
+### Sampling pipeline
 
 #### `sampling_loop_start`
 
@@ -580,6 +594,7 @@ async def cap_tokens(payload, ctx):
 **Writable fields:** `loop_budget`
 
 **Use cases:**
+
 - Dynamically adjusting the iteration budget
 - Logging sampling configuration
 
@@ -592,6 +607,7 @@ async def cap_tokens(payload, ctx):
 **Writable fields:** *(observe-only)*
 
 **Use cases:**
+
 - Iteration-level metrics
 - Debugging sampling behavior
 
@@ -604,6 +620,7 @@ async def cap_tokens(payload, ctx):
 **Writable fields:** *(observe-only)*
 
 **Use cases:**
+
 - Analyzing failure patterns
 - Logging repair events
 
@@ -616,12 +633,13 @@ async def cap_tokens(payload, ctx):
 **Writable fields:** *(observe-only)*
 
 **Use cases:**
+
 - Sampling effectiveness metrics
 - Cost tracking
 
 ---
 
-### Tool Execution
+### Tool execution
 
 #### `tool_pre_invoke`
 
@@ -632,6 +650,7 @@ async def cap_tokens(payload, ctx):
 **Writable fields:** `model_tool_call`
 
 **Use cases:**
+
 - Tool authorization (allow-listing)
 - Argument validation and sanitization
 
@@ -651,18 +670,19 @@ async def enforce_tool_allowlist(payload, ctx):
 **Writable fields:** `tool_output`
 
 **Use cases:**
+
 - Audit logging of tool calls
 - Output transformation
 - Error handling
 
 ---
 
-### Hook Payload Policy Table
+### Hook payload policy table
 
 This table summarizes which fields are writable for each hook type. Changes to non-writable fields are silently discarded.
 
 | Hook Point | Writable Fields |
-|---|---|
+| --- | --- |
 | `session_pre_init` | `model_id`, `model_options` |
 | `session_post_init` | *(observe-only)* |
 | `session_reset` | *(observe-only)* |
@@ -687,11 +707,9 @@ Only `SEQUENTIAL` and `TRANSFORM` modes can modify payloads. `AUDIT`, `CONCURREN
 
 ---
 
-## Execution Modes Deep Dive
+## Execution modes deep dive
 
-All hooks for a given hook type are sorted by priority, then dispatched in groups by execution mode. The execution order is always:
-
-**SEQUENTIAL → TRANSFORM → AUDIT → CONCURRENT → FIRE_AND_FORGET**
+All hooks for a given hook type are sorted by priority, then dispatched in groups by execution mode. The execution order is always: SEQUENTIAL → TRANSFORM → AUDIT → CONCURRENT → FIRE_AND_FORGET.
 
 ### SEQUENTIAL (default)
 
@@ -763,7 +781,7 @@ In `SEQUENTIAL` and `TRANSFORM` modes, when multiple plugins modify the same pay
 2. Plugin B (seeing the capped value) adds a `temperature` default
 3. The final payload has both modifications applied
 
-### Error Handling
+### Error handling
 
 - **`SEQUENTIAL`, `TRANSFORM`, `AUDIT`, `CONCURRENT`, `FIRE_AND_FORGET`** —  exceptions are logged and swallowed. They never affect the pipeline.
 - **`block()`** — this is intentional control flow, not an error. It raises a `PluginViolationError` to the caller.
@@ -772,11 +790,11 @@ See the [execution modes example](https://github.com/generative-computing/mellea
 
 ---
 
-## Tool Hooks — Securing Tool Calls
+## Tool hooks — securing tool calls
 
-The `tool_pre_invoke` and `tool_post_invoke` hooks give you fine-grained control over tool-call governance. See [Chapter 11 of the tutorial](/core-concept/interoperability) for tool calling basics.
+The `tool_pre_invoke` and `tool_post_invoke` hooks give you fine-grained control over tool-call governance. See the [MCP integration guide](/integrations/mcp) for tool calling basics.
 
-### Tool Allow-Listing
+### Tool allow-listing
 
 Block any tool not on an explicit approved list:
 
@@ -790,7 +808,7 @@ async def enforce_tool_allowlist(payload, ctx):
         return block(f"Tool '{tool_name}' is not permitted", code="TOOL_NOT_ALLOWED")
 ```
 
-### Argument Validation
+### Argument validation
 
 Inspect and reject unsafe arguments before invocation:
 
@@ -803,7 +821,7 @@ async def validate_calculator_args(payload, ctx):
             return block("Unsafe calculator expression", code="UNSAFE_EXPRESSION")
 ```
 
-### Argument Sanitization
+### Argument sanitization
 
 Auto-fix arguments instead of blocking (a repair pattern):
 
@@ -822,7 +840,7 @@ async def sanitize_args(payload, ctx):
             return PluginResult(continue_processing=True, modified_payload=modified)
 ```
 
-### Audit Logging
+### Audit logging
 
 Fire-and-forget logging of every tool call for audit trails:
 
@@ -833,7 +851,7 @@ async def audit_tool_calls(payload, ctx):
     log.info("tool=%r status=%s latency=%dms", payload.model_tool_call.name, status, payload.execution_time_ms)
 ```
 
-### Composing Tool Hooks
+### Composing tool hooks
 
 Group tool security hooks into a `PluginSet` for clean per-session registration:
 
@@ -848,9 +866,9 @@ See the [full tool hooks example](https://github.com/generative-computing/mellea
 
 ---
 
-## Patterns & Best Practices
+## Patterns and best practices
 
-### Observability Stack
+### Observability stack
 
 Combine session tracing, component latency, and generation logging, all using `FIRE_AND_FORGET` or `AUDIT` mode so they never slow down the pipeline:
 
@@ -863,7 +881,7 @@ observability = PluginSet("observability", [
 register(observability)  # global — fires for all sessions
 ```
 
-### Layered Security
+### Layered security
 
 Stack enforcement across scopes:
 
@@ -879,7 +897,7 @@ with start_session(plugins=[content_policy]) as m:
         result = m.instruct("...")
 ```
 
-### Input/Output Guardrails
+### Input/output guardrails
 
 Block PII on input (`component_pre_execute`) and redact PII from output (`generation_post_call`) using a class-based plugin with shared state:
 
@@ -892,7 +910,7 @@ class PIIRedactor(Plugin, name="pii-redactor", priority=5):
     async def redact_output(self, payload, ctx): ...
 ```
 
-### Graceful Degradation with AUDIT Mode
+### Graceful degradation with AUDIT mode
 
 Deploy a new policy in `AUDIT` mode first, where violations are logged but do not block. Monitor the logs. When you're confident, promote to `SEQUENTIAL`:
 
@@ -906,7 +924,7 @@ async def new_content_policy(payload, ctx):
 # Phase 2: enforce — change mode to SEQUENTIAL when ready
 ```
 
-### Testing Plugins
+### Testing plugins
 
 You can unit-test hook functions without running a full Mellea session. Construct a payload mock, call the function directly, and assert the result:
 
@@ -927,13 +945,13 @@ async def test_blocks_long_description():
 
 See the [full testing example](https://github.com/generative-computing/mellea/blob/main/docs/examples/plugins/testing_plugins.py).
 
-### Idempotent Lifecycle Hooks
+### Idempotent lifecycle hooks
 
 If you use the advanced `MelleaPlugin` base class (which provides `initialize()` and `shutdown()` callbacks), make them idempotent, as they may be called once per `@hook` method on your plugin.
 
 ---
 
-## API Reference
+## API reference
 
 All public symbols are available from a single import:
 
@@ -955,7 +973,7 @@ from mellea.plugins import (
 ```
 
 | Symbol | Description |
-|---|---|
+| --- | --- |
 | `@hook(hook_type, *, mode, priority)` | Decorator that marks an async function as a hook handler |
 | `Plugin` | Base class for multi-hook plugins with shared state. Set `name` and `priority` via class keywords |
 | `PluginSet(name, items, *, priority)` | Groups hooks, plugins, and nested sets into a reusable bundle |
@@ -968,3 +986,7 @@ from mellea.plugins import (
 | `PluginMode` | Enum: `SEQUENTIAL`, `TRANSFORM`, `AUDIT`, `CONCURRENT`, `FIRE_AND_FORGET` |
 | `PluginResult` | Typed result with `continue_processing`, `modified_payload`, and `violation` |
 | `PluginViolationError` | Exception with `.reason`, `.code`, `.hook_type`, `.plugin_name` |
+
+---
+
+**See also:** [Glossary](../guide/glossary), [Tools and Agents](../guide/tools-and-agents), [Security and Taint Tracking](../advanced/security-and-taint-tracking), [OpenTelemetry Tracing](../evaluation-and-observability/opentelemetry-tracing)

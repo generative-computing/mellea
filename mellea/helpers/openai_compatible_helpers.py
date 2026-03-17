@@ -13,7 +13,17 @@ from ..stdlib.components import Document, Message
 def extract_model_tool_requests(
     tools: dict[str, AbstractMelleaTool], response: dict[str, Any]
 ) -> dict[str, ModelToolCall] | None:
-    """Extracts tool calls from the dict representation of an OpenAI-like chat response object."""
+    """Extract tool calls from the dict representation of an OpenAI-like chat response object.
+
+    Args:
+        tools: Mapping of tool name to ``AbstractMelleaTool`` for lookup.
+        response: Dict representation of an OpenAI-compatible chat completion message
+            (must contain a ``"message"`` key).
+
+    Returns:
+        Mapping of tool name to ``ModelToolCall`` for each requested tool call, or
+        ``None`` if no tool calls were found.
+    """
     model_tool_calls: dict[str, ModelToolCall] = {}
     calls = response["message"].get("tool_calls", None)
     if calls:
@@ -45,11 +55,19 @@ def extract_model_tool_requests(
 def chat_completion_delta_merge(
     chunks: list[dict], force_all_tool_calls_separate: bool = False
 ) -> dict:
-    """Takes a list of deltas from `ChatCompletionChunk`s and merges them into a single dict representing the `ChatCompletion` choice.
+    """Merge a list of deltas from ``ChatCompletionChunk``s into a single dict representing the ``ChatCompletion`` choice.
 
     Args:
-        chunks: the list of dicts that represent the message deltas
-        force_all_tool_calls_separate: if `True`, tool calls in separate message deltas will not be merged (even if their index values are the same); use when providers do not return the correct index value for tool calls. If using this option, all tool calls must be fully populated in a single delta since they won't be merged.
+        chunks: The list of dicts that represent the message deltas.
+        force_all_tool_calls_separate: If ``True``, tool calls in separate message
+            deltas will not be merged even if their index values are the same. Use
+            when providers do not return the correct index value for tool calls; all
+            tool calls must then be fully populated in a single delta.
+
+    Returns:
+        A single merged dict representing the assembled ``ChatCompletion`` choice,
+        with ``finish_reason``, ``index``, and a ``message`` sub-dict containing
+        ``content``, ``role``, and ``tool_calls``.
     """
     merged: dict[str, Any] = dict()
 
@@ -123,7 +141,16 @@ def chat_completion_delta_merge(
 
 
 def message_to_openai_message(msg: Message):
-    """Serializes a mellea Message object to the message format required by OpenAI compatible api providers."""
+    """Serialise a Mellea ``Message`` to the format required by OpenAI-compatible API providers.
+
+    Args:
+        msg: The ``Message`` object to serialise.
+
+    Returns:
+        A dict with ``"role"`` and ``"content"`` fields. When the message carries
+        images, ``"content"`` is a list of text and image-URL dicts; otherwise it
+        is a plain string.
+    """
     if msg.images is not None:
         img_list = [
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}}
@@ -155,7 +182,15 @@ def message_to_openai_message(msg: Message):
 
 
 def messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]:
-    """Extracts the docs from a list of messages."""
+    """Extract all ``Document`` objects from a list of ``Message`` objects.
+
+    Args:
+        msgs: List of ``Message`` objects whose ``_docs`` attributes are inspected.
+
+    Returns:
+        A list of dicts, each with a ``"text"`` key and optional ``"title"`` and
+        ``"doc_id"`` keys, suitable for passing to an OpenAI-compatible RAG API.
+    """
     docs: list[Document] = []
     for message in msgs:
         if message._docs is not None:

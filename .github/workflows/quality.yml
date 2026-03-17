@@ -36,6 +36,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --all-extras --group dev
       - name: Check style and run tests
+        id: precommit
         run: pre-commit run --all-files
       - name: Send failure message pre-commit
         if: failure() # This step will only run if a previous step failed
@@ -49,7 +50,59 @@ jobs:
           ollama pull granite4:micro
           ollama pull granite4:micro-h
       - name: Run Tests
-        run: uv run -m pytest -v test
+        id: tests
+        run: uv run -m pytest -v --junit-xml=/tmp/pytest-results.xml test
       - name: Send failure message tests
         if: failure() # This step will only run if a previous step failed
         run: echo "Tests failed. Please verify that tests are working locally."
+      - name: Write job summary
+        if: always()
+        run: |
+          python3 - <<'PYEOF'
+          import os, xml.etree.ElementTree as ET
+
+          python_version = "${{ matrix.python-version }}"
+          precommit_outcome = "${{ steps.precommit.outcome }}"
+          test_outcome = "${{ steps.tests.outcome }}"
+
+          def icon(outcome):
+              return "✅" if outcome == "success" else ("❌" if outcome == "failure" else "⏭️")
+
+          lines = [
+              f"## Code Quality — Python {python_version}\n",
+              "| Check | Result |",
+              "|-------|--------|",
+              f"| Pre-commit (ruff, mypy, uv-lock, codespell, markdownlint) | {icon(precommit_outcome)} {precommit_outcome} |",
+              f"| Tests | {icon(test_outcome)} {test_outcome} |",
+              "",
+          ]
+
+          try:
+              tree = ET.parse("/tmp/pytest-results.xml")
+              root = tree.getroot()
+              # JUnit XML may be a <testsuites> wrapper or a bare <testsuite>
+              suite = root if root.tag == "testsuite" else root.find("testsuite") or root
+              attrs = suite.attrib
+              total = int(attrs.get("tests", 0))
+              failures = int(attrs.get("failures", 0))
+              errors = int(attrs.get("errors", 0))
+              skipped = int(attrs.get("skipped", 0))
+              passed = total - failures - errors - skipped
+              lines.append(
+                  f"**Tests:** {passed} passed, {failures} failed, {errors} errors, "
+                  f"{skipped} skipped ({total} total)\n"
+              )
+              if failures + errors > 0:
+                  lines.append("**Failed tests:**\n")
+                  for tc in root.iter("testcase"):
+                      fail = tc.find("failure") or tc.find("error")
+                      if fail is not None:
+                          name = f"{tc.get('classname', '')}.{tc.get('name', '')}"
+                          lines.append(f"- `{name}`")
+                  lines.append("")
+          except Exception:
+              pass  # pytest didn't run or XML unavailable
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("\n".join(lines))
+          PYEOF

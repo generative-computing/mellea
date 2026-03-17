@@ -50,7 +50,7 @@ def requirement_check(
     """
     eval_message = f"<requirements>: {requirement}\n{_EVALUATION_PROMPT}"
     context = context.add(Message("user", eval_message))
-    result_json = call_intrinsic("requirement_check", context, backend)
+    result_json = call_intrinsic("requirement-check", context, backend)
     return result_json["requirement_check"]["score"]
 
 
