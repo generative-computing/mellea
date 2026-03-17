@@ -52,7 +52,8 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
         description="Adapter types that are known to be available for this intrinsic.",
     )
 
-
+# Mellea will update which repositories are linked as new ones come online. The original repos
+# are on an older layout that will be changed.
 _RAG_REPO = "ibm-granite/granite-lib-rag-r1.0"
 _CORE_REPO = "ibm-granite/rag-intrinsics-lib"
 _CORE_R1_REPO = "ibm-granite/granitelib-core-r1.0"
