@@ -213,6 +213,29 @@ See: [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-wit
 
 ---
 
+## Hook / HookType
+
+A **hook** is an async function that intercepts a specific event in Mellea's
+execution pipeline. The `@hook` decorator marks a function as a hook handler,
+binding it to a `HookType` — one of 17 named events spanning session lifecycle,
+component execution, generation, validation, sampling, and tool invocation.
+
+Hooks receive a frozen payload and read-only context, and return `None` (pass
+through), a `modify()` result (alter the payload), or a `block()` result (reject
+the operation).
+
+```python
+from mellea.plugins import HookType, hook
+
+@hook(HookType.GENERATION_PRE_CALL)
+async def my_hook(payload, ctx):
+    ...
+```
+
+See: [Plugins & Hooks](../concepts/plugins)
+
+---
+
 ## grounding_context
 
 The `grounding_context` parameter of `m.instruct()` accepts a dictionary of
@@ -456,6 +479,46 @@ You can also call `str(thunk)` to get the raw string output directly.
 
 Use `thunk.is_computed()` to check whether the value has already been filled
 without triggering evaluation.
+
+---
+
+## Plugin
+
+A **Plugin** is a class-based extension point in Mellea that groups multiple
+hooks sharing instance state. Inherit from `Plugin` and set `name` and `priority`
+as class keyword arguments. Decorate methods with `@hook(HookType.XXX)` to
+subscribe to pipeline events.
+
+Use standalone `@hook` functions for single-concern hooks. Use `Plugin` subclasses
+when multiple hooks need shared state (e.g., a redaction counter or rate limiter).
+
+```python
+from mellea.plugins import Plugin, hook, HookType
+
+class MyPlugin(Plugin, name="my-plugin", priority=10):
+    @hook(HookType.GENERATION_PRE_CALL)
+    async def before_llm(self, payload, ctx):
+        ...
+```
+
+See: [Plugins & Hooks](../concepts/plugins)
+
+---
+
+## PluginSet
+
+A **PluginSet** groups related hooks and `Plugin` instances into a reusable,
+named bundle. Use it to organize plugins by concern (security, observability,
+compliance) and register or scope them as a unit. A `PluginSet` accepts any mix
+of standalone `@hook` functions, `Plugin` instances, or nested `PluginSet`s.
+
+```python
+from mellea.plugins import PluginSet
+
+security = PluginSet("security", [hook_a, hook_b, plugin_instance])
+```
+
+See: [Plugins & Hooks](../concepts/plugins)
 
 ---
 
