@@ -537,7 +537,7 @@ except PreconditionException as e:
     print(e.validation)  # list of ValidationResult
 ```
 
-See: [Handling Exceptions and Failures](../evaluation-and-observability/handling-exceptions)
+See: [Handling Exceptions and Failures](../how-to/handling-exceptions)
 
 ---
 

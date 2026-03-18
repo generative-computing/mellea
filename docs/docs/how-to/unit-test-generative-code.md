@@ -383,5 +383,5 @@ pytest -m qualitative
 
 - [The Requirements System](../concepts/requirements-system) — understand how
   `Requirement`, `simple_validate`, and `check` interact with the IVR loop
-- [Handling Exceptions](../evaluation-and-observability/handling-exceptions) —
+- [Handling Exceptions](../how-to/handling-exceptions) —
   catch and diagnose errors that occur during generation

@@ -328,6 +328,14 @@ async def test_async_avalue(session) -> None:
     assert m1_final_val is not None
     assert m1_final_val == mot1.value
 
+    # Verify telemetry fields are populated
+    assert mot1.usage is not None
+    assert mot1.usage["prompt_tokens"] >= 0
+    assert mot1.usage["completion_tokens"] > 0
+    assert mot1.usage["total_tokens"] > 0
+    assert isinstance(mot1.model, str)
+    assert mot1.provider == "huggingface"
+
 
 @pytest.mark.qualitative
 async def test_generate_with_lock(backend) -> None:

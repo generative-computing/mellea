@@ -46,6 +46,10 @@ Detects if the the model's output is factually incorrect relative to context.
 ### factuality_correction.py
 Corrects a factually incorrect response relative to context.
 
+### context_attribution.py
+Identifies sentences in conversation history and documents that most influenced the response.
+
+
 ## Concepts Demonstrated
 
 - **Intrinsic Functions**: Specialized model capabilities beyond text generation
@@ -64,7 +68,7 @@ import mellea.stdlib.functional as mfuncs
 
 # Create backend and adapter
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-adapter = IntrinsicAdapter("requirement_check", 
+adapter = IntrinsicAdapter("requirement_check",
                                base_model_name=backend.base_model_name)
 backend.add_adapter(adapter)
 
@@ -90,6 +94,7 @@ out, new_ctx = mfuncs.act(
 - **guardian-core**: Safety risk detection (harm, bias, groundedness, custom criteria)
 - **factuality_detection**: Detect factually incorrect responses
 - **factuality_correction**: Correct factually incorrect responses
+- **context-attribution**: Identify context sentences that most influenced response
 
 ## Related Documentation
 
