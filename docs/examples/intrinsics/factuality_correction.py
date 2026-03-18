@@ -55,7 +55,7 @@ document = Document(
     "designed to have a single leap day every fourth year.\\n\\nThe month of "
     "February was named after the purification rituals of ancient Rome, not the "
     "Roman god of war, Mars. The name February comes from the Latin februare, "
-    "meaning \\"to purify.\\"\\n\\nThe ancient Romans believed that even "
+    'meaning \\"to purify.\\"\\n\\nThe ancient Romans believed that even '
     "numbers were unlucky, which is why February has 28 days instead of 30. They "
     "preferred to have more 31-day months.\\n\\nFebruary has 28 days due to "
     "Roman superstition. The Roman calendar originally divided the year into "
