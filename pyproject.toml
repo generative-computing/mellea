@@ -286,7 +286,11 @@ install_types = true
 non_interactive = true
 disable_error_code = ["empty-body", "import-untyped"]
 python_version = "3.11"
-
+exclude = [
+    'scratchpad/',
+    'tmp/',
+    'tooling/docs-autogen/',
+]
 [[tool.mypy.overrides]]
 # Keep import-not-found suppressed for optional dependencies
 module = "docs.*"
