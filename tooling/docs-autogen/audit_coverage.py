@@ -281,8 +281,7 @@ def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
         # section exists, every entry must match an actual declared field and every
         # declared field must appear — stale or missing entries are always a bug.
         is_typeddict = any(
-            _TYPEDDICT_BASES.search(str(base))
-            for base in getattr(member, "bases", [])
+            _TYPEDDICT_BASES.search(str(base)) for base in getattr(member, "bases", [])
         )
         if is_typeddict and _ATTRIBUTES_RE.search(doc_text):
             attrs_block = re.search(
