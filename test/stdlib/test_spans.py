@@ -25,6 +25,10 @@ def m_session(gh_run):
         model_options={ModelOption.MAX_NEW_TOKENS: 64},
     )
     yield m
+
+    from test.conftest import cleanup_gpu_backend
+
+    cleanup_gpu_backend(m.backend, "spans")
     del m
 
 

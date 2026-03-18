@@ -39,13 +39,9 @@ def _backend():
     backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name)  # type: ignore
     yield backend_
 
-    # Code after yield is cleanup code.
-    # Free GPU memory with extreme prejudice.
-    del backend_
-    gc.collect()  # Force a collection of the newest generation
-    gc.collect()
-    gc.collect()  # Hopefully force a collection of the oldest generation
-    torch.cuda.empty_cache()
+    from test.conftest import cleanup_gpu_backend
+
+    cleanup_gpu_backend(backend_, "rag")
 
 
 def _read_input_json(file_name: str):
