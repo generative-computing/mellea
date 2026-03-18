@@ -287,7 +287,6 @@ def task_execute(
     logger = get_logger("m_decompose.task_execute")
     log_section(logger, "task_execute")
 
-    logger.info("generating prompt templates for subtasks")
     subtask_prompts: list[SubtaskPromptItem] = subtask_prompt_generator.generate(
         m_session,
         task_prompt,
@@ -295,7 +294,6 @@ def task_execute(
         subtasks_and_tags=subtasks,
     ).parse()
 
-    logger.info("subtask prompt templates generated: %d", len(subtask_prompts))
     for i, item in enumerate(subtask_prompts, start=1):
         logger.info("  [%02d] tag=%s", i, item.tag)
         logger.debug("       prompt_template=%s", item.prompt_template)
@@ -307,19 +305,19 @@ def task_execute(
         for item in subtask_prompts
     ]
 
-    logger.info("  total subtasks   : %d", len(subtasks_tags_and_prompts))
+    logger.info("assigning constraints to subtasks")
+
+    logger.info("  total subtasks   : %d", len(subtask_prompts))
     logger.info("  total constraints: %d", len(task_constraints))
 
     if logger.isEnabledFor(logging.DEBUG):
-        for i, (subtask, tag, prompt_template) in enumerate(
-            subtasks_tags_and_prompts, start=1
-        ):
+        for i, item in enumerate(subtask_prompts, start=1):
             logger.debug(
                 "  subtask_input[%02d]: subtask=%s | tag=%s | prompt=%s",
                 i,
-                subtask,
-                tag,
-                prompt_template,
+                item.subtask,
+                item.tag,
+                item.prompt_template,
             )
         for i, cons in enumerate(task_constraints, start=1):
             logger.debug("  constraint[%02d]: %s", i, cons)
@@ -340,7 +338,7 @@ def task_execute(
 
             raw_assign_result = subtask_constraint_assign.generate(
                 m_session,
-                subtasks_tags_and_prompts=subtasks_tags_and_prompts,
+                subtasks_tags_and_prompts=subtask_prompts,
                 constraint_list=task_constraints,
                 max_new_tokens=8192,
             )
