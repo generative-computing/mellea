@@ -1,6 +1,6 @@
 import re
 from collections.abc import Callable
-from typing import Any, TypeVar, final, cast
+from typing import Any, TypeVar, cast, final
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
