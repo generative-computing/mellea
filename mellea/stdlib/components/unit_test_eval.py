@@ -10,14 +10,26 @@ from ...core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 
 
 class Message(BaseModel):
-    """Schema for a message in the test data."""
+    """Schema for a message in the test data.
+
+    Attributes:
+        role (str): The role of the message sender (e.g. ``"user"`` or
+            ``"assistant"``).
+        content (str): The text content of the message.
+    """
 
     role: str
     content: str
 
 
 class Example(BaseModel):
-    """Schema for an example in the test data."""
+    """Schema for an example in the test data.
+
+    Attributes:
+        input (list[Message]): The input messages for this example.
+        targets (list[Message]): The expected target messages for scoring.
+        input_id (str): An optional identifier for this input example.
+    """
 
     input: list[Message]
     targets: list[Message] = Field(default_factory=list)
@@ -25,7 +37,15 @@ class Example(BaseModel):
 
 
 class TestData(BaseModel):
-    """Schema for test data loaded from json."""
+    """Schema for test data loaded from json.
+
+    Attributes:
+        source (str): Origin identifier for this test dataset.
+        name (str): Human-readable name for this test dataset.
+        instructions (str): Evaluation guidelines used by the judge model.
+        examples (list[Example]): The individual input/target example pairs.
+        id (str): Unique identifier for this test dataset.
+    """
 
     source: str
     name: str
@@ -35,15 +55,38 @@ class TestData(BaseModel):
 
     @field_validator("examples")
     @classmethod
-    def validate_examples(cls, v):
-        """Ensure examples list is not empty."""
+    def validate_examples(cls, v: list[Example]) -> list[Example]:
+        """Validate that the examples list is not empty.
+
+        Args:
+            v (list[Example]): The value of the ``examples`` field being
+                validated.
+
+        Returns:
+            list[Example]: The validated examples list, unchanged.
+
+        Raises:
+            ValueError: If the examples list is empty.
+        """
         if not v:
             raise ValueError("examples list cannot be empty")
         return v
 
 
 class TestBasedEval(Component[str]):
-    """Each TestBasedEval represents a single unit test."""
+    """Each TestBasedEval represents a single unit test.
+
+    Args:
+        source (str): Origin identifier for this test dataset.
+        name (str): Human-readable name for this test.
+        instructions (str): Evaluation guidelines used by the judge model.
+        inputs (list[str]): The input texts for each example.
+        targets (list[list[str]] | None): Expected target strings for each
+            input. ``None`` is treated as an empty list.
+        test_id (str | None): Optional unique identifier for this test.
+        input_ids (list[str] | None): Optional identifiers for each input.
+
+    """
 
     def __init__(
         self,
@@ -55,7 +98,7 @@ class TestBasedEval(Component[str]):
         test_id: str | None = None,
         input_ids: list[str] | None = None,
     ):
-        """Initialize TestBasedEval (for a single unit test)."""
+        """Initialize TestBasedEval with source, name, instructions, inputs, and optional targets."""
         self.source = source
         self.name = name
         self.instructions = instructions
@@ -65,11 +108,23 @@ class TestBasedEval(Component[str]):
         self.input_ids = input_ids or []
 
     def parts(self) -> list[Component | CBlock]:
-        """The set of constituent parts of the Component."""
+        """Return the constituent parts of this component.
+
+        Returns:
+            list[Component | CBlock]: Always an empty list; the component
+            renders entirely via ``format_for_llm``.
+        """
         return []
 
     def format_for_llm(self) -> TemplateRepresentation:
-        """Formats the test for judge evaluation."""
+        """Format this test for judge evaluation.
+
+        Returns:
+            TemplateRepresentation: A template representation containing the
+            judge context (input, prediction, target, guidelines) set by
+            ``set_judge_context``, or an empty args dict if no context has
+            been set yet.
+        """
         return TemplateRepresentation(
             obj=self,
             args=self._judge_context if hasattr(self, "_judge_context") else {},
@@ -82,8 +137,15 @@ class TestBasedEval(Component[str]):
 
     def set_judge_context(
         self, input_text: str, prediction: str, targets_for_input: list[str]
-    ):
-        """Set context for judge evaluation."""
+    ) -> None:
+        """Set the context dictionary used when formatting this test for judge evaluation.
+
+        Args:
+            input_text (str): The original input text shown to the model.
+            prediction (str): The model's generated output to evaluate.
+            targets_for_input (list[str]): Reference target strings for this
+                input. An empty list results in ``"N/A"`` as the target text.
+        """
         if len(targets_for_input) == 0:  # no reference
             target_text = "N/A"
         elif len(targets_for_input) == 1:
@@ -102,7 +164,20 @@ class TestBasedEval(Component[str]):
 
     @classmethod
     def from_json_file(cls, filepath: str) -> list["TestBasedEval"]:
-        """Load test evaluations from json/jsonl file, return list of TestBasedEval instances, one per 'unit test'."""
+        """Load test evaluations from a JSON file, returning one ``TestBasedEval`` per unit test.
+
+        Args:
+            filepath (str): Path to a JSON file containing one test-data object
+                or a JSON array of test-data objects.
+
+        Returns:
+            list[TestBasedEval]: A list of ``TestBasedEval`` instances, one for
+            each object found in the file.
+
+        Raises:
+            ValueError: If any test-data object in the file does not conform to
+                the ``TestData`` schema.
+        """
         path = Path(filepath)
 
         with path.open("r") as f:

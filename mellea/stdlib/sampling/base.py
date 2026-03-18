@@ -1,4 +1,18 @@
-"""Base Sampling Strategies."""
+"""Base Sampling Strategies.
+
+Sampling strategies control how Mellea handles validation failures during generation:
+
+- **RejectionSamplingStrategy**: Simple retry with the same prompt. Best for non-deterministic
+  failures where the same instruction might succeed on retry.
+
+- **RepairTemplateStrategy**: Single-turn repair by modifying the instruction with validation
+  feedback. Adds failure reasons to the instruction and retries. Best for simple tasks where
+  feedback can be incorporated into the instruction.
+
+- **MultiTurnStrategy**: Multi-turn conversational repair (requires ChatContext). Adds validation
+  failure reasons as new user messages in the conversation, allowing iterative improvement through
+  dialogue. Best for complex tasks and agentic workflows.
+"""
 
 import abc
 from copy import deepcopy
@@ -26,20 +40,22 @@ from ..context import ChatContext
 
 
 class BaseSamplingStrategy(SamplingStrategy):
-    """Base class for multiple strategies that rejects samples based on given instructions."""
+    """Base class for multiple strategies that reject samples based on given instructions.
+
+    Args:
+        loop_budget (int): Maximum number of generate/validate cycles. Must be
+            greater than 0. Defaults to ``1``.
+        requirements (list[Requirement] | None): Global requirements evaluated
+            on every sample. When set, overrides per-call requirements.
+
+    """
 
     loop_budget: int
 
     def __init__(
         self, *, loop_budget: int = 1, requirements: list[Requirement] | None = None
     ):
-        """Initialize a new instance of the class with default parameters.
-
-        Args:
-            loop_budget: Number of times to iterate through the process. Must be greater than 0.
-            validate: Function to validate the results against requirements. If None, validation is provided later through setter.
-            generate: Function to generate new model output thunks. If None, generate is provided later through setter.
-            requirements: List of requirements to test against. If None, test all requirements attached to the given instruction.
+        """Initialize BaseSamplingStrategy with a loop budget and optional global requirements.
 
         Raises:
             AssertionError: If loop_budget is not greater than 0.
@@ -496,7 +512,7 @@ class MultiTurnStrategy(BaseSamplingStrategy):
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
-        """Returns a Message with a description of the failed requirements.
+        """Returns a Message with a description (and validation reasons) of the failed requirements.
 
         Args:
             old_ctx: The context WITHOUT the last action + output.
@@ -512,15 +528,25 @@ class MultiTurnStrategy(BaseSamplingStrategy):
             " Need chat context to run agentic sampling."
         )
 
-        last_failed_reqs: list[Requirement] = [s[0] for s in past_val[-1] if not s[1]]
-        last_failed_reqs_str = "* " + "\n* ".join(
-            [str(r.description) for r in last_failed_reqs]
-        )
-        # TODO: what to do with checks ??
+        # Get failed requirements and their detailed validation reasons
+        failed_items = [(req, val) for req, val in past_val[-1] if not val.as_bool()]
 
+        # Build repair feedback using ValidationResult.reason when available
+        repair_lines = []
+        for req, validation in failed_items:
+            if validation.reason:
+                repair_lines.append(f"* {validation.reason}")
+            else:
+                # Fallback to requirement description if no reason
+                repair_lines.append(f"* {req.description}")
+
+        feedback = "\n".join(repair_lines)
         next_action = Message(
             role="user",
-            content=f"The following requirements have not been met: \n{last_failed_reqs_str}\n Please try again to fulfill the requirements.",
+            content=(
+                f"The following requirements have not been met:\n{feedback}\n"
+                f"Please try again to fulfill the requirements."
+            ),
         )
 
         return next_action, new_ctx

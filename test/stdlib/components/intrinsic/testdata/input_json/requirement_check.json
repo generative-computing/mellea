@@ -1,0 +1,13 @@
+{
+    "messages": [
+        {
+            "role": "user",
+            "content": "Invite for an IBM office party."
+        },
+        {
+            "role": "assistant",
+            "content": "\nDear Team,\n\nTo celebrate our recent successes and take a well-deserved moment to recharge,\nyou are cordially invited to a team social. Please join us for an evening of\nlive music, appetizers, and drinks as we recognize our collective wins.\n\nEvent Details\n* **Date:** Saturday, April 25, 2026\n* **Time:** 6:00 PM\n* **Location:** Ryan's Bar, Chelsea, NY\n* **Highlights:** Live entertainment and refreshments\n\nRSVP\nTo ensure we have an accurate headcount for catering, please confirm your\nattendance by **Friday, April 10, 2026**.\n\nWe look forward to seeing everyone there and celebrating our hard work together.\n\n**Best regards,**\n[Your Name/Management Team]\n"
+        }
+    ],
+    "requirement": "Use a professional tone."
+}

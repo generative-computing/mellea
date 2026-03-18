@@ -69,6 +69,20 @@ class LocalVLLMBackend(FormatterBackend):
 
     Note: vLLM defaults to ~16 tokens. Always set ModelOption.MAX_NEW_TOKENS explicitly (100-1000+).
     Structured output needs 200-500+ tokens.
+
+    Args:
+        model_id (str | ModelIdentifier): HuggingFace model ID used to load model weights via vLLM.
+        formatter (ChatFormatter | None): Formatter for rendering components into prompts.
+            Defaults to a ``TemplateFormatter`` for the given ``model_id``.
+        model_options (dict | None): Default model options for generation requests.
+
+    Attributes:
+        to_mellea_model_opts_map (dict): Mapping from backend-specific option names to
+            Mellea ``ModelOption`` sentinel keys.
+        from_mellea_model_opts_map (dict): Mapping from Mellea ``ModelOption`` sentinel
+            keys to backend-specific option names.
+        engine_args (dict): vLLM engine arguments used at instantiation; retained so the
+            engine can be restarted when the event loop changes.
     """
 
     def __init__(
@@ -78,15 +92,7 @@ class LocalVLLMBackend(FormatterBackend):
         *,
         model_options: dict | None = None,
     ):
-        """Attempt to load model weights using the model_id by default, or using `custom_config` if provided.
-
-        WARNING: initializing a `LocalHFBackend` will download and load the model on your *local* machine.
-
-        Args:
-            model_id (str | ModelIdentifier): Used to load the model *and tokenizer* via transformers Auto* classes, and then moves the model to the best available device (cuda > mps > cpu). If loading the model and/or tokenizer from a string will not work, or if you want to use a different device string, then you can use custom_config.
-            formatter (Formatter): A mechanism for turning `stdlib` stuff into strings. Experimental Span-based models should use `mellea.backends.span.*` backends.
-            model_options (Optional[dict]): Default model options.
-        """
+        """Load model weights via vLLM and initialize the async inference engine."""
         formatter = (
             formatter if formatter is not None else TemplateFormatter(model_id=model_id)
         )
@@ -254,7 +260,25 @@ class LocalVLLMBackend(FormatterBackend):
         generate_logs: list[GenerateLog] | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generate using the huggingface model."""
+        """Generate a completion for ``action`` given the current ``ctx`` using the vLLM engine.
+
+        Args:
+            action (Component[C] | CBlock): The component or content block to generate a
+                completion for.
+            ctx (Context): The current generation context (must be a chat context).
+            format (type[BaseModelSubclass] | None): Optional Pydantic model class for
+                structured/constrained output decoding.
+            model_options (dict | None): Per-call model options that override the
+                backend's defaults.
+            generate_logs (list[GenerateLog] | None): Optional list to which a
+                ``GenerateLog`` entry will be appended.
+            tool_calls (bool): If ``True``, expose available tools to the model and
+                parse tool-call responses.
+
+        Returns:
+            tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
+                and an updated context that includes ``action`` and the new output.
+        """
         await self.do_generate_walk(action)
 
         # Upsert model options.
@@ -376,7 +400,15 @@ class LocalVLLMBackend(FormatterBackend):
             raise Exception("Does not yet support non-chat contexts.")
 
     async def processing(self, mot: ModelOutputThunk, chunk: vllm.RequestOutput):
-        """Process the returned chunks or the complete response."""
+        """Accumulate text from a single vLLM output chunk into the model output thunk.
+
+        Called during streaming or final generation to add each incremental result to
+        ``mot._underlying_value``.
+
+        Args:
+            mot (ModelOutputThunk): The output thunk being populated.
+            chunk (vllm.RequestOutput): A single output from the vLLM generate stream.
+        """
         if mot._underlying_value is None:
             mot._underlying_value = ""
         mot._underlying_value += chunk.outputs[0].text
@@ -390,7 +422,21 @@ class LocalVLLMBackend(FormatterBackend):
         tools: dict[str, AbstractMelleaTool],
         seed,
     ):
-        """Called when generation is done."""
+        """Finalize the model output thunk after generation completes.
+
+        Parses any tool calls from the raw output, attaches the generate log, and
+        records metadata needed for telemetry.
+
+        Args:
+            mot (ModelOutputThunk): The output thunk to finalize.
+            conversation (list[dict]): The chat conversation sent to the model,
+                used for logging.
+            _format (type[BaseModelSubclass] | None): The structured output format
+                class used during generation, if any.
+            tool_calls (bool): Whether tool calling was enabled for this request.
+            tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
+            seed: The random seed used during generation, or ``None``.
+        """
         # The ModelOutputThunk must be computed by this point.
         assert mot.value is not None
 
@@ -454,7 +500,22 @@ class LocalVLLMBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
-        """Generate using the completions api. Gives the input provided to the model without templating."""
+        """Generate completions for multiple actions without chat templating.
+
+        Passes the formatted prompt strings directly to vLLM's completion endpoint.
+        Tool calling is not supported by this method.
+
+        Args:
+            actions (Sequence[Component[C] | CBlock]): Actions to generate completions for.
+            ctx (Context): The current generation context.
+            format (type[BaseModelSubclass] | None): Optional Pydantic model for
+                structured output decoding.
+            model_options (dict | None): Per-call model options.
+            tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
+
+        Returns:
+            list[ModelOutputThunk]: A list of model output thunks, one per action.
+        """
         from ..telemetry.backend_instrumentation import instrument_generate_from_raw
 
         with instrument_generate_from_raw(

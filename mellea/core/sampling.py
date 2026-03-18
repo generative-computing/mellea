@@ -1,4 +1,12 @@
-"""Interfaces for Sampling Strategies."""
+"""Abstract interfaces for sampling strategies and their results.
+
+``SamplingStrategy`` defines the contract for all sampling algorithms: an async
+``sample`` method that takes an action, context, backend, and requirements, and
+returns a ``SamplingResult``. ``SamplingResult`` records the chosen generation
+alongside the full history of intermediate samples, their validation outcomes,
+and associated contexts — enabling detailed post-hoc inspection of the sampling
+process.
+"""
 
 import abc
 from typing import Generic
@@ -9,7 +17,29 @@ from .requirement import Requirement, ValidationResult
 
 
 class SamplingResult(CBlock, Generic[S]):
-    """Stores the results from a sampling operation. This includes successful and failed samplings."""
+    """Stores the results from a sampling operation. This includes successful and failed samplings.
+
+    Args:
+        result_index (int): Index into ``sample_generations`` identifying the chosen final output.
+        success (bool): Whether the sampling operation produced a passing result.
+        sample_generations (list[ModelOutputThunk[S]] | None): All output thunks generated during sampling.
+        sample_validations (list[list[tuple[Requirement, ValidationResult]]] | None): Per-generation validation
+            results; each inner list contains one tuple per requirement evaluated.
+        sample_actions (list[Component] | None): The actions used to produce each generation.
+        sample_contexts (list[Context] | None): The contexts associated with each generation.
+
+    Attributes:
+        result_index (int): Index into ``sample_generations`` identifying the chosen final output.
+        success (bool): Whether the sampling operation produced a passing result.
+        sample_generations (list[ModelOutputThunk[S]]): All output thunks generated during
+            sampling; always a list (``None`` input is normalised to ``[]``).
+        sample_validations (list[list[tuple[Requirement, ValidationResult]]]): Per-generation
+            validation results; always a list (``None`` input is normalised to ``[]``).
+        sample_actions (list[Component]): The actions used to produce each generation;
+            always a list (``None`` input is normalised to ``[]``).
+        sample_contexts (list[Context]): The contexts associated with each generation;
+            always a list (``None`` input is normalised to ``[]``).
+    """
 
     def __init__(
         self,
@@ -22,16 +52,7 @@ class SamplingResult(CBlock, Generic[S]):
         sample_actions: list[Component] | None = None,
         sample_contexts: list[Context] | None = None,
     ):
-        """Initialize a new instance of sampling results.
-
-        Args:
-            result_index: The index of the final output or result from applying the sampling strategy.
-            success: A boolean indicating whether the operation was successful.
-            sample_generations: A list containing intermediate generations produced during the process.
-            sample_validations: For each generation a list of tuples of a requirement and a validation result.
-            sample_actions: A list of intermediate actions used to produce sampling results.
-            sample_contexts: A list of contexts produced by the generation results.
-        """
+        """Initialize SamplingResult with the chosen output index, success flag, and generation history."""
         if sample_generations is None:
             sample_generations = []
         if sample_validations is None:

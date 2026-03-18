@@ -28,7 +28,11 @@ class PluginMode(str, Enum):
 
 
 class HookType(str, Enum):
-    """All Mellea hook types."""
+    """All Mellea hook types.
+
+    Hook types are organized by lifecycle stage: session, component,
+    generation pipeline, validation, sampling pipeline, and tool execution.
+    """
 
     # Session Lifecycle
     SESSION_PRE_INIT = "session_pre_init"

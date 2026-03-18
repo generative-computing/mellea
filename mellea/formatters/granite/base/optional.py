@@ -1,6 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
-"""Utilities for optional dependencies."""
+"""Context-manager helpers for gracefully handling optional import dependencies.
+
+Provides ``import_optional``, a context manager that catches ``ImportError`` and
+re-raises it with a human-readable install hint (e.g. ``pip install <package>[extra]``),
+and ``nltk_check``, a variant tailored to NLTK data-download errors. Used by Granite
+formatter modules that have optional third-party dependencies.
+"""
 
 # Standard
 import logging
@@ -17,7 +23,12 @@ instructions."""
 
 @contextmanager
 def import_optional(extra_name: str):
-    """Handle optional imports."""
+    """Handle optional imports.
+
+    Args:
+        extra_name: Package extra to suggest in the install hint
+            (e.g. ``pip install granite_io[extra_name]``).
+    """
     try:
         yield
     except ImportError as err:
@@ -34,7 +45,12 @@ def import_optional(extra_name: str):
 def nltk_check(feature_name: str):
     """Variation on import_optional for nltk.
 
-    :param feature_name: Name of feature that requires NLTK
+    Args:
+        feature_name: Name of the feature that requires NLTK, used in the error message.
+
+    Raises:
+        ImportError: If the ``nltk`` package is not installed, re-raised with
+            a descriptive message and installation instructions.
     """
     try:
         yield

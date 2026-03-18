@@ -6,7 +6,7 @@
       "index": 0,
       "logprobs": null,
       "message": {
-        "content": " [{\"r\": 0, \"c\": [8, 11, 13]}, {\"r\": 1, \"c\": []}]",
+        "content": " [{\"r\": 0, \"c\": [8, 8, 11, 13]}, {\"r\": 0, \"c\": [8, 8, 11, 13]}, {\"r\": 1, \"c\": []}]",
         "refusal": null,
         "role": "assistant",
         "annotations": null,

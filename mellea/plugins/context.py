@@ -23,7 +23,12 @@ def build_global_context(*, backend: Backend | None = None, **extra_fields: Any)
     Hook-specific data (context, session, action, etc.) belongs on the typed
     payload, not here.
 
-    Returns ``None`` if ContextForge is not installed.
+    Args:
+        backend: Optional backend whose ``model_id`` is added to the context.
+        **extra_fields: Additional key-value pairs merged into the context state.
+
+    Returns:
+        A ``GlobalContext`` instance, or ``None`` if ContextForge is not installed.
     """
     if not _HAS_PLUGIN_FRAMEWORK:
         return None

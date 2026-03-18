@@ -89,9 +89,8 @@ Tests/examples automatically skip if system lacks required resources. Heavy exam
 ## 4. Coding Standards
 - **Types required** on all core functions
 - **Docstrings are prompts** — be specific, the LLM reads them
-- **Google-style docstrings**
+- **Google-style docstrings** — `Args:` on the **class docstring only**; `__init__` gets a single summary sentence. Add `Attributes:` only when a stored value differs in type/behaviour from its constructor input (type transforms, computed values, class constants). See CONTRIBUTING.md for a full example.
 - **Ruff** for linting/formatting
-- Use `...` in `@generative` function bodies
 - Use `...` in `@generative` function bodies
 - Prefer primitives over classes
 - **Friendly Dependency Errors**: Wraps optional backend imports in `try/except ImportError` with a helpful message (e.g., "Please pip install mellea[hf]"). See `mellea/stdlib/session.py` for examples.
@@ -126,8 +125,28 @@ Pre-commit runs: ruff, mypy, uv-lock, codespell
 - Mark tests checking LLM output quality with `@pytest.mark.qualitative`
 - If a test fails, fix the **code**, not the test (unless the test was wrong)
 
-## 10. Feedback Loop
+## 10. Writing Docs
+
+If you are modifying or creating pages under `docs/docs/`, follow the writing
+conventions in [`docs/docs/guide/CONTRIBUTING.md`](docs/docs/guide/CONTRIBUTING.md).
+Key rules that differ from typical Markdown habits:
+
+- **No H1 in the body** — Mintlify renders the frontmatter `title` automatically;
+  a body `# Heading` produces a duplicate title in the published site
+- **No `.md` extensions in internal links** — use `../concepts/requirements-system`,
+  not `../concepts/requirements-system.md`
+- **Frontmatter required** — every page needs `title` and `description`; add
+  `sidebarTitle` if the title is long
+- **markdownlint gate** — run `npx markdownlint-cli2 "docs/docs/**/*.md"` and fix
+  all warnings before committing a doc page
+- **Verified code only** — every code example must be checked against the current
+  mellea source; mark forward-looking content with `> **Coming soon:**`
+- **No visible TODOs** — if content is missing, open a GitHub issue instead
+
+## 11. Feedback Loop
+
 Found a bug, workaround, or pattern? Update the docs:
+
 - **Issue/workaround?** → Add to Section 7 (Common Issues) in this file
 - **Usage pattern?** → Add to [`docs/AGENTS_TEMPLATE.md`](docs/AGENTS_TEMPLATE.md)
 - **New pitfall?** → Add warning near relevant section

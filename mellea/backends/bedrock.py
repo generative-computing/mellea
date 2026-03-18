@@ -22,7 +22,15 @@ def _make_mantle_uri(region: str | None = None):
 
 
 def list_mantle_models(region: str | None = None) -> list:
-    """Helper function get getting all models available at a bedrock-mantle endpoint."""
+    """Return all models available at a bedrock-mantle endpoint.
+
+    Args:
+        region: AWS region name (e.g. ``"us-east-1"``), or ``None`` to use the
+            default region.
+
+    Returns:
+        List of model objects returned by the Bedrock Mantle models API.
+    """
     uri = _make_mantle_uri(region)
     client = OpenAI(base_url=uri, api_key=os.environ["AWS_BEARER_TOKEN_BEDROCK"])
     ms = client.models.list()
@@ -32,7 +40,14 @@ def list_mantle_models(region: str | None = None) -> list:
 
 
 def stringify_mantle_model_ids(region: str | None = None) -> str:
-    """Helper function for getting a human-readable list of all models available at the mantle endpoint for an AWS region."""
+    """Return a human-readable list of all models available at the mantle endpoint for an AWS region.
+
+    Args:
+        region: AWS region name, or ``None`` to use the default region.
+
+    Returns:
+        Newline-separated string of model IDs prefixed with ``" * "``.
+    """
     models = list_mantle_models()
     model_names = "\n * ".join([str(m.id) for m in models])
     return f" * {model_names}"
@@ -41,7 +56,26 @@ def stringify_mantle_model_ids(region: str | None = None) -> str:
 def create_bedrock_mantle_backend(
     model_id: ModelIdentifier | str, region: str | None = None
 ) -> OpenAIBackend:
-    """Returns an OpenAI backend that points to Bedrock mantle for model `model_id`."""
+    """Return an OpenAI backend that points to Bedrock mantle for the given model.
+
+    Args:
+        model_id (ModelIdentifier | str): The model to use, either as a
+            ``ModelIdentifier`` (which must have a ``bedrock_name``) or a raw
+            Bedrock model ID string.
+        region (str | None): AWS region name, or ``None`` to use the default
+            region (``"us-east-1"``).
+
+    Returns:
+        OpenAIBackend: An ``OpenAIBackend`` configured to call the specified model
+            via AWS Bedrock Mantle.
+
+    Raises:
+        Exception: If ``model_id`` is a ``ModelIdentifier`` with no ``bedrock_name``
+            set.
+        AssertionError: If the ``AWS_BEARER_TOKEN_BEDROCK`` environment variable is
+            not set.
+        Exception: If the specified model is not available in the target region.
+    """
     model_name = ""
     match model_id:
         case ModelIdentifier() if model_id.bedrock_name is None:

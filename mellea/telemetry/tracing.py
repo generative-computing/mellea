@@ -15,6 +15,7 @@ Configuration via environment variables:
 """
 
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
 from importlib.metadata import version
 from typing import Any
@@ -50,7 +51,7 @@ _CONSOLE_EXPORT = os.getenv("MELLEA_TRACE_CONSOLE", "false").lower() in (
 )
 
 
-def _setup_tracer_provider():
+def _setup_tracer_provider() -> Any:
     """Set up the global tracer provider with OTLP exporter if configured."""
     if not _OTEL_AVAILABLE:
         return None
@@ -91,25 +92,35 @@ if _OTEL_AVAILABLE and (_TRACE_APPLICATION_ENABLED or _TRACE_BACKEND_ENABLED):
 
 
 def is_application_tracing_enabled() -> bool:
-    """Check if application tracing is enabled."""
+    """Check if application tracing is enabled.
+
+    Returns:
+        True if application tracing has been enabled via the
+        ``MELLEA_TRACE_APPLICATION`` environment variable.
+    """
     return _TRACE_APPLICATION_ENABLED
 
 
 def is_backend_tracing_enabled() -> bool:
-    """Check if backend tracing is enabled."""
+    """Check if backend tracing is enabled.
+
+    Returns:
+        True if backend tracing has been enabled via the
+        ``MELLEA_TRACE_BACKEND`` environment variable.
+    """
     return _TRACE_BACKEND_ENABLED
 
 
 @contextmanager
-def trace_application(name: str, **attributes: Any):
+def trace_application(name: str, **attributes: Any) -> Generator[Any, None, None]:
     """Create an application trace span if application tracing is enabled.
 
     Args:
-        name: Name of the span
-        **attributes: Additional attributes to add to the span
+        name: Name of the span.
+        **attributes: Additional attributes to add to the span.
 
     Yields:
-        The span object if tracing is enabled, otherwise a no-op context manager
+        The span object if tracing is enabled, otherwise ``None``.
     """
     if _TRACE_APPLICATION_ENABLED and _application_tracer is not None:
         with _application_tracer.start_as_current_span(name) as span:  # type: ignore
@@ -122,17 +133,17 @@ def trace_application(name: str, **attributes: Any):
 
 
 @contextmanager
-def trace_backend(name: str, **attributes: Any):
+def trace_backend(name: str, **attributes: Any) -> Generator[Any, None, None]:
     """Create a backend trace span if backend tracing is enabled.
 
     Follows Gen-AI semantic conventions for LLM operations.
 
     Args:
-        name: Name of the span
-        **attributes: Additional attributes to add to the span
+        name: Name of the span.
+        **attributes: Additional attributes to add to the span.
 
     Yields:
-        The span object if tracing is enabled, otherwise a no-op context manager
+        The span object if tracing is enabled, otherwise ``None``.
     """
     if _TRACE_BACKEND_ENABLED and _backend_tracer is not None:
         with _backend_tracer.start_as_current_span(name) as span:  # type: ignore
@@ -147,7 +158,7 @@ def trace_backend(name: str, **attributes: Any):
         yield None
 
 
-def start_backend_span(name: str, **attributes: Any):
+def start_backend_span(name: str, **attributes: Any) -> Any:
     """Start a backend trace span without auto-closing (for async operations).
 
     Use this when you need to manually control span lifecycle, such as for

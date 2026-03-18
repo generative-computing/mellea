@@ -1,3 +1,12 @@
+"""Typer sub-application for the ``m alora`` command group.
+
+Provides three commands: ``train`` (fine-tune a base causal language model on a JSONL
+dataset to produce a LoRA or aLoRA adapter), ``upload`` (push adapter weights to
+Hugging Face Hub, optionally packaging the adapter as an intrinsic with an
+``io.yaml`` configuration), and ``add-readme`` (use an LLM to auto-generate and
+upload an ``INTRINSIC_README.md`` for the trained adapter).
+"""
+
 import json
 import os
 import tempfile
@@ -22,7 +31,21 @@ def alora_train(
     max_length: int = typer.Option(1024, help="Max sequence length"),
     grad_accum: int = typer.Option(4, help="Gradient accumulation steps"),
 ):
-    """Train an aLoRA or LoRA model on your dataset."""
+    """Train an aLoRA or LoRA model on your dataset.
+
+    Args:
+        datafile: JSONL file with item/label pairs for training.
+        basemodel: Base model ID or path.
+        outfile: Path to save adapter weights.
+        promptfile: Path to load the prompt format file.
+        adapter: Adapter type; ``"alora"`` or ``"lora"``.
+        device: Device to train on: ``"auto"``, ``"cpu"``, ``"cuda"``, or ``"mps"``.
+        epochs: Number of training epochs.
+        learning_rate: Learning rate for the optimizer.
+        batch_size: Per-device training batch size.
+        max_length: Maximum sequence length.
+        grad_accum: Number of gradient accumulation steps.
+    """
     from cli.alora.train import train_model
 
     train_model(
@@ -56,7 +79,17 @@ def alora_upload(
         "processing if the model is invoked as an intrinsic.",
     ),
 ):
-    """Upload trained adapter to remote model registry."""
+    """Upload trained adapter to remote model registry.
+
+    Args:
+        weight_path: Path to saved adapter weights directory.
+        name: Destination model name on Hugging Face Hub
+            (e.g. ``"acme/carbchecker-alora"``).
+        intrinsic: If ``True``, the adapter implements an intrinsic and an
+            ``io.yaml`` file must also be provided.
+        io_yaml: Path to the ``io.yaml`` file configuring input/output processing
+            when the model is invoked as an intrinsic.
+    """
     from cli.alora.intrinsic_uploader import upload_intrinsic
     from cli.alora.upload import upload_model
 
@@ -105,7 +138,20 @@ def alora_add_readme(
         "processing if the model is invoked as an intrinsic.",
     ),
 ):
-    """Generate and upload an INTRINSIC_README.md for a trained adapter."""
+    """Generate and upload an INTRINSIC_README.md for a trained adapter.
+
+    Args:
+        datafile: JSONL file with item/label pairs used to train the adapter.
+        basemodel: Base model ID or path.
+        promptfile: Path to the prompt format file, or ``None``.
+        name: Destination model name on Hugging Face Hub.
+        hints: Path to a file containing additional domain hints, or ``None``.
+        io_yaml: Path to the ``io.yaml`` intrinsic configuration file, or ``None``.
+
+    Raises:
+        OSError: If no Hugging Face authentication token is found.
+        SystemExit: If the user declines to upload the generated README.
+    """
     from huggingface_hub import HfFolder, create_repo, upload_file
 
     from cli.alora.readme_generator import generate_readme
