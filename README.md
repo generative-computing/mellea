@@ -17,7 +17,6 @@ with structured, testable AI workflows built around type-annotated outputs, veri
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![GitHub License](https://img.shields.io/github/license/generative-computing/mellea)](https://github.com/generative-computing/mellea/blob/main/LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-3.0-4baaaa.svg)](CODE_OF_CONDUCT.md)
-[![Discord](https://img.shields.io/discord/1448407063813165219?logo=discord&logoColor=white&label=Discord&color=7289DA)](https://ibm.biz/mellea-discord)
 
 ## Install
 
