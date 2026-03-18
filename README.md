@@ -67,7 +67,7 @@ We welcome contributions of all kinds — bug fixes, new backends, standard libr
 - **[Building Extensions](https://docs.mellea.ai/community/building-extensions)** — create reusable components in your own repo
 - **[mellea-contribs](https://github.com/generative-computing/mellea-contribs)** — community library for shared components
 
-Questions? Join our [Discord](https://ibm.biz/mellea-discord).
+Questions? Open a [GitHub Discussion](https://github.com/generative-computing/mellea/discussions).
 
 ### IBM ❤️ Open Source AI
 
