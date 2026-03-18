@@ -336,7 +336,7 @@ def task_execute(
                 preview = raw_text[:800] + (" ..." if len(raw_text) > 800 else "")
                 logger.info("raw subtask_constraint_assign preview:\n%s", preview)
 
-            subtask_prompts_with_constraints = raw_assign_result.parse()
+            subtask_prompts_with_constraints = raw_assign_result
 
             logger.info(
                 "constraint assignment completed: %d",
