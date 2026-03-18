@@ -55,7 +55,7 @@ print(user.age)   # 31 — always an int, guaranteed by the schema
 - **Requirements & repair** — attach natural-language requirements to any call; Mellea validates and retries automatically
 - **Sampling strategies** — rejection sampling, majority voting, inference-time scaling with one parameter change
 - **Multiple backends** — Ollama, OpenAI, vLLM, HuggingFace, WatsonX, LiteLLM, Bedrock
-- **Legacy integration** — drop Mellea into existing codebases with `mify`
+- **Legacy integration** — easily drop Mellea into existing codebases with `mify`
 - **MCP compatible** — expose any generative program as an MCP tool
 
 ## Learn More
