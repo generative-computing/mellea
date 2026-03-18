@@ -273,9 +273,6 @@ def constraint_validate(
 # -------------------------------------------------------------------
 # task_execute
 # -------------------------------------------------------------------
-import logging
-
-
 def task_execute(
     m_session: MelleaSession,
     task_prompt: str,
@@ -299,14 +296,6 @@ def task_execute(
         logger.debug("       prompt_template=%s", item.prompt_template)
 
     logger.info("assigning constraints to subtasks")
-
-    subtasks_tags_and_prompts: list[tuple[str, str, str]] = [
-        (item.subtask, item.tag, item.prompt_template)
-        for item in subtask_prompts
-    ]
-
-    logger.info("assigning constraints to subtasks")
-
     logger.info("  total subtasks   : %d", len(subtask_prompts))
     logger.info("  total constraints: %d", len(task_constraints))
 
