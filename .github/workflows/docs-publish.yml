@@ -149,9 +149,6 @@ jobs:
           validate_outcome = "${{ steps.validate_mdx.outcome }}"
           coverage_outcome = "${{ steps.audit_coverage.outcome }}"
           quality_gate_outcome = "${{ steps.quality_gate.outcome }}"
-          strict = "${{ inputs.strict_validation }}" == "true"
-          mode = "" if strict else " *(soft-fail)*"
-
           lint_log = read_log("/tmp/markdownlint.log")
           validate_log = read_log("/tmp/validate_mdx.log")
           coverage_log = read_log("/tmp/audit_coverage.log")
@@ -205,9 +202,9 @@ jobs:
               "## Docs Build — Validation Summary\n",
               "| Check | Result | Details |",
               "|-------|--------|---------|",
-              f"| Markdownlint | {icon(markdownlint_outcome)} {markdownlint_outcome}{mode} | {lint_detail} |",
-              f"| MDX Validation | {icon(validate_outcome)} {validate_outcome}{mode} | {mdx_detail} |",
-              f"| API Coverage | {icon(coverage_outcome)} {coverage_outcome}{mode} | {cov_detail} |",
+              f"| Markdownlint | {icon(markdownlint_outcome)} {markdownlint_outcome} | {lint_detail} |",
+              f"| MDX Validation | {icon(validate_outcome)} {validate_outcome} | {mdx_detail} |",
+              f"| API Coverage | {icon(coverage_outcome)} {coverage_outcome} | {cov_detail} |",
               f"| Docstring Quality | {icon(quality_gate_outcome)} {quality_gate_outcome} | {quality_gate_detail} |",
           ]
           lines.append("")
