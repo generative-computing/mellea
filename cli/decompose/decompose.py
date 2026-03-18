@@ -1,3 +1,4 @@
+# decompose/decompose.py
 """Implementation of the ``m decompose run`` CLI command.
 
 Accepts a task prompt (from a text file or interactive input), calls the multi-step
@@ -17,9 +18,12 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from jinja2 import Environment, FileSystemLoader
 
+from . import pipeline
 from .logging import LogMode, configure_logging, get_logger, log_section
 from .pipeline import DecompBackend, DecompPipelineResult, DecompSubtasksResult
+from .utils import validate_filename
 
 
 class DecompVersion(StrEnum):
@@ -135,7 +139,7 @@ def run(
     ] = "m_decomp_result",
     prompt_file: Annotated[
         typer.FileText | None,
-        typer.Option(help="Path to a raw text file containing a task prompt."),
+        typer.Option(help="Path to a text file containing user queries."),
     ] = None,
     model_id: Annotated[
         str,
@@ -196,50 +200,50 @@ def run(
         ),
     ] = LogMode.demo,
 ) -> None:
-    """Runs the decomposition pipeline."""
-    configure_logging(log_mode)
-    logger = get_logger("m_decompose.cli")
+    """Decompose one or more user queries into subtasks with constraints and dependency metadata.
 
-    """Decompose a task prompt into subtasks with constraints and dependency metadata.
-
-    Reads the task prompt either from a file or interactively, runs the LLM
+    Reads user queries either from a file or interactively, runs the LLM
     decomposition pipeline to produce subtask descriptions, Jinja2 prompt templates,
-    constraint lists, and dependency metadata, validates variable ordering, then
-    writes a ``{out_name}.json`` result file and a rendered ``{out_name}.py``
-    Python script to the output directory.
+    constraint lists, and dependency metadata, and writes one ``.json`` result file
+    plus one rendered ``.py`` script per task job to the output directory.
+
+    If ``prompt_file`` contains multiple non-empty lines, each line is treated as a
+    separate task job.
 
     Args:
         out_dir: Path to an existing directory where output files are saved.
         out_name: Base name (no extension) for the output files. Defaults to
             ``"m_decomp_result"``.
-        prompt_file: Optional path to a raw-text file containing the task prompt.
-            If omitted, the prompt is collected interactively.
+        prompt_file: Optional path to a text file containing one or more user
+            queries. If the file contains multiple non-empty lines, each line is
+            treated as a separate task job. If omitted, the query is collected
+            interactively.
         model_id: Model name or ID used for all decomposition pipeline steps.
-        backend: Inference backend -- ``"ollama"`` or ``"openai"``.
+        backend: Inference backend -- ``"ollama"``, ``"openai"``, or ``"rits"``.
         backend_req_timeout: Request timeout in seconds for model inference calls.
-        backend_endpoint: Base URL of the OpenAI-compatible endpoint. Required
-            when ``backend="openai"``.
+        backend_endpoint: Base URL of the configured endpoint. Required when
+            ``backend="openai"`` or ``backend="rits"``.
         backend_api_key: API key for the configured endpoint. Required when
-            ``backend="openai"``.
+            ``backend="openai"`` or ``backend="rits"``.
         version: Version of the decomposition pipeline template to use.
         input_var: Optional list of user-input variable names (e.g. ``"DOC"``).
             Each name must be a valid Python identifier. Pass this option
             multiple times to define multiple variables.
+        log_mode: Logging detail mode for CLI and pipeline output.
 
     Raises:
         AssertionError: If ``out_name`` contains invalid characters, if
             ``out_dir`` does not exist or is not a directory, or if any
             ``input_var`` name is not a valid Python identifier.
-        ValueError: If a required input variable is missing from ``input_var``
-            or if circular dependencies are detected among subtasks.
+        ValueError: If the prompt file contains no non-empty task lines.
         Exception: Re-raised from the decomposition pipeline after cleaning up
-            any partially written output files.
+            any partially written output directories.
     """
-    try:
-        from jinja2 import Environment, FileSystemLoader
+    created_dirs: list[Path] = []
 
-        from . import pipeline
-        from .utils import validate_filename
+    try:
+        configure_logging(log_mode)
+        logger = get_logger("m_decompose.cli")
 
         log_section(logger, "m_decompose cli")
         logger.info("out_dir        : %s", out_dir)
@@ -283,10 +287,15 @@ def run(
         log_section(logger, "load task prompt")
 
         if prompt_file:
-            task_prompt = prompt_file.read()
+            raw_lines = prompt_file.read().splitlines()
+            task_jobs = [line.strip() for line in raw_lines if line.strip()]
             user_input_variable = input_var
+
             logger.info("prompt source  : file")
-            logger.info("prompt length  : %d", len(task_prompt))
+            logger.info("task jobs      : %d", len(task_jobs))
+
+            if not task_jobs:
+                raise ValueError("Prompt file contains no non-empty task lines.")
         else:
             task_prompt = typer.prompt(
                 (
@@ -297,64 +306,75 @@ def run(
                 type=str,
             )
             task_prompt = task_prompt.replace("\\n", "\n")
+            task_jobs = [task_prompt]
             user_input_variable = None
+
             logger.info("prompt source  : interactive")
+            logger.info("task jobs      : 1")
+
+        for job_idx, task_prompt in enumerate(task_jobs, start=1):
+            job_out_name = out_name if len(task_jobs) == 1 else f"{out_name}_{job_idx}"
+
+            log_section(logger, f"run pipeline job {job_idx}/{len(task_jobs)}")
+            logger.info("job out_name   : %s", job_out_name)
             logger.info("prompt length  : %d", len(task_prompt))
+            logger.info("task prompt    : %s", task_prompt)
 
-        log_section(logger, "run pipeline")
-
-        decomp_data = pipeline.decompose(
-            task_prompt=task_prompt,
-            user_input_variable=user_input_variable,
-            model_id=model_id,
-            backend=backend,
-            backend_req_timeout=backend_req_timeout,
-            backend_endpoint=backend_endpoint,
-            backend_api_key=backend_api_key,
-            log_mode=log_mode,
-        )
-
-        logger.info("verify_user_variables: skipped")
-
-        log_section(logger, "write outputs")
-
-        decomp_dir = out_dir / out_name
-        val_fn_dir = decomp_dir / "validations"
-
-        logger.info("creating output dir: %s", decomp_dir)
-        decomp_dir.mkdir(parents=True, exist_ok=False)
-        val_fn_dir.mkdir(exist_ok=True)
-
-        (val_fn_dir / "__init__.py").touch()
-
-        val_fn_count = 0
-        for constraint in decomp_data["identified_constraints"]:
-            if constraint["val_fn"] is not None:
-                val_fn_count += 1
-                with open(val_fn_dir / f"{constraint['val_fn_name']}.py", "w") as f:
-                    f.write(constraint["val_fn"] + "\n")
-
-        with open(decomp_dir / f"{out_name}.json", "w") as f:
-            json.dump(decomp_data, f, indent=2)
-
-        with open(decomp_dir / f"{out_name}.py", "w") as f:
-            f.write(
-                m_template.render(
-                    subtasks=decomp_data["subtasks"],
-                    user_inputs=input_var,
-                    identified_constraints=decomp_data["identified_constraints"],
-                )
-                + "\n"
+            decomp_data = pipeline.decompose(
+                task_prompt=task_prompt,
+                user_input_variable=user_input_variable,
+                model_id=model_id,
+                backend=backend,
+                backend_req_timeout=backend_req_timeout,
+                backend_endpoint=backend_endpoint,
+                backend_api_key=backend_api_key,
+                log_mode=log_mode,
             )
 
-        logger.info("json written    : %s", decomp_dir / f"{out_name}.json")
-        logger.info("program written : %s", decomp_dir / f"{out_name}.py")
-        logger.info("validation files: %d", val_fn_count)
+            # TODO: verify_user_variables
+            # logger.info("verify_user_variables: skipped")
+
+            log_section(logger, f"write outputs job {job_idx}/{len(task_jobs)}")
+
+            decomp_dir = out_dir / job_out_name
+            val_fn_dir = decomp_dir / "validations"
+
+            logger.info("creating output dir: %s", decomp_dir)
+            decomp_dir.mkdir(parents=True, exist_ok=False)
+            created_dirs.append(decomp_dir)
+
+            val_fn_dir.mkdir(exist_ok=True)
+            (val_fn_dir / "__init__.py").touch()
+
+            val_fn_count = 0
+            for constraint in decomp_data["identified_constraints"]:
+                if constraint["val_fn"] is not None:
+                    val_fn_count += 1
+                    with open(val_fn_dir / f"{constraint['val_fn_name']}.py", "w") as f:
+                        f.write(constraint["val_fn"] + "\n")
+
+            with open(decomp_dir / f"{job_out_name}.json", "w") as f:
+                json.dump(decomp_data, f, indent=2)
+
+            with open(decomp_dir / f"{job_out_name}.py", "w") as f:
+                f.write(
+                    m_template.render(
+                        subtasks=decomp_data["subtasks"],
+                        user_inputs=input_var,
+                        identified_constraints=decomp_data["identified_constraints"],
+                    )
+                    + "\n"
+                )
+
+            logger.info("json written    : %s", decomp_dir / f"{job_out_name}.json")
+            logger.info("program written : %s", decomp_dir / f"{job_out_name}.py")
+            logger.info("validation files: %d", val_fn_count)
+
         logger.info("")
         logger.info("m_decompose CLI completed successfully")
 
     except Exception:
-        decomp_dir = out_dir / out_name
-        if decomp_dir.exists() and decomp_dir.is_dir():
-            shutil.rmtree(decomp_dir)
+        for decomp_dir in reversed(created_dirs):
+            if decomp_dir.exists() and decomp_dir.is_dir():
+                shutil.rmtree(decomp_dir)
         raise
