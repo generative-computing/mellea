@@ -3,5 +3,5 @@
 
 MODEL_ID=qwen2.5:7b
 
-m decompose run --model-id $MODEL_ID  --out-dir ./ --prompt-file example.txt
+m decompose run --model-id $MODEL_ID  --out-dir ./ --input-file example.txt
 

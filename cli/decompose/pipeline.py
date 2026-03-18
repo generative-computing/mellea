@@ -299,8 +299,7 @@ def task_execute(
             logger.debug("       prompt_template=%s", item.prompt_template)
 
     subtasks_tags_and_prompts: list[tuple[str, str, str]] = [
-        (item.subtask, item.tag, item.prompt_template)
-        for item in subtask_prompts
+        (item.subtask, item.tag, item.prompt_template) for item in subtask_prompts
     ]
 
     logger.info("assigning constraints to subtasks")
@@ -329,9 +328,7 @@ def task_execute(
 
         try:
             logger.info(
-                "subtask_constraint_assign attempt: %d/%d",
-                attempt,
-                retry_count,
+                "subtask_constraint_assign attempt: %d/%d", attempt, retry_count
             )
 
             raw_assign_result = subtask_constraint_assign.generate(
@@ -384,8 +381,10 @@ def task_execute(
                     logger.info("failed raw output preview:\n%s", preview)
 
     logger.error("subtask_constraint_assign failed after %d attempts", retry_count)
-    raise last_exc if last_exc is not None else RuntimeError(
-        "subtask_constraint_assign failed with unknown error"
+    raise (
+        last_exc
+        if last_exc is not None
+        else RuntimeError("subtask_constraint_assign failed with unknown error")
     )
 
 

@@ -19,7 +19,7 @@ Write your task description to a text file, then run:
 
 ```bash
 mkdir -p ./output
-m decompose run --prompt-file task.txt --out-dir ./output/
+m decompose run --input-file task.txt --out-dir ./output/
 ```
 
 > **Note:** The output directory must already exist — the command will error if it
@@ -48,7 +48,7 @@ their morning exercise routine.
 Run:
 
 ```bash
-m decompose run --prompt-file task.txt --out-dir ./output/
+m decompose run --input-file task.txt --out-dir ./output/
 ```
 
 Then execute the generated script:
@@ -64,7 +64,7 @@ python output/m_decomp_result.py
 
 ```bash
 m decompose run \
-  --prompt-file task.txt \
+  --input-file task.txt \
   --out-dir ./output/ \
   --backend openai \
   --model-id gpt-4o-mini
