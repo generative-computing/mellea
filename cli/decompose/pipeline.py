@@ -273,6 +273,9 @@ def constraint_validate(
 # -------------------------------------------------------------------
 # task_execute
 # -------------------------------------------------------------------
+import logging
+
+
 def task_execute(
     m_session: MelleaSession,
     task_prompt: str,
@@ -300,33 +303,93 @@ def task_execute(
     logger.info("assigning constraints to subtasks")
 
     subtasks_tags_and_prompts: list[tuple[str, str, str]] = [
-        (item.subtask, item.tag, item.prompt_template) for item in subtask_prompts
+        (item.subtask, item.tag, item.prompt_template)
+        for item in subtask_prompts
     ]
 
-    subtask_prompts_with_constraints: list[SubtaskPromptConstraintsItem] = (
-        subtask_constraint_assign.generate(
-            m_session,
-            subtasks_tags_and_prompts=subtasks_tags_and_prompts,
-            constraint_list=task_constraints,
-        ).parse()
-    )
+    logger.info("  total subtasks   : %d", len(subtasks_tags_and_prompts))
+    logger.info("  total constraints: %d", len(task_constraints))
 
-    logger.info(
-        "constraint assignment completed: %d", len(subtask_prompts_with_constraints)
-    )
-    for i, prompt_item_with_constraints in (
-        enumerate(subtask_prompts_with_constraints, start=1) or []
-    ):
-        logger.info(
-            "  [%02d] tag=%s | assigned_constraints=%d",
-            i,
-            prompt_item_with_constraints.tag,
-            len(prompt_item_with_constraints.constraints),
-        )
-        for cons in prompt_item_with_constraints.constraints or []:
-            logger.debug("       - %s", cons)
+    if logger.isEnabledFor(logging.DEBUG):
+        for i, (subtask, tag, prompt_template) in enumerate(
+            subtasks_tags_and_prompts, start=1
+        ):
+            logger.debug(
+                "  subtask_input[%02d]: subtask=%s | tag=%s | prompt=%s",
+                i,
+                subtask,
+                tag,
+                prompt_template,
+            )
+        for i, cons in enumerate(task_constraints, start=1):
+            logger.debug("  constraint[%02d]: %s", i, cons)
 
-    return subtask_prompts_with_constraints
+    retry_count = 2
+    last_exc: Exception | None = None
+
+    for attempt in range(1, retry_count + 1):
+        raw_assign_result = None
+        raw_text = ""
+
+        try:
+            logger.info(
+                "subtask_constraint_assign attempt: %d/%d",
+                attempt,
+                retry_count,
+            )
+
+            raw_assign_result = subtask_constraint_assign.generate(
+                m_session,
+                subtasks_tags_and_prompts=subtasks_tags_and_prompts,
+                constraint_list=task_constraints,
+                max_new_tokens=8192,
+            )
+            raw_text = str(raw_assign_result)
+
+            if log_mode == LogMode.debug:
+                logger.debug("raw subtask_constraint_assign output:\n%s", raw_text)
+            else:
+                preview = raw_text[:800] + (" ..." if len(raw_text) > 800 else "")
+                logger.info("raw subtask_constraint_assign preview:\n%s", preview)
+
+            subtask_prompts_with_constraints = raw_assign_result.parse()
+
+            logger.info(
+                "constraint assignment completed: %d",
+                len(subtask_prompts_with_constraints),
+            )
+            for i, item in enumerate(subtask_prompts_with_constraints, start=1):
+                logger.info(
+                    "  [%02d] tag=%s | assigned_constraints=%d",
+                    i,
+                    item.tag,
+                    len(item.constraints),
+                )
+                for cons in item.constraints:
+                    logger.debug("       - %s", cons)
+
+            return subtask_prompts_with_constraints
+
+        except Exception as exc:
+            last_exc = exc
+            logger.warning(
+                "subtask_constraint_assign failed on attempt %d/%d: %s",
+                attempt,
+                retry_count,
+                exc,
+            )
+
+            if raw_assign_result is not None:
+                if log_mode == LogMode.debug:
+                    logger.debug("failed raw output:\n%s", raw_text)
+                else:
+                    preview = raw_text[:800] + (" ..." if len(raw_text) > 800 else "")
+                    logger.info("failed raw output preview:\n%s", preview)
+
+    logger.error("subtask_constraint_assign failed after %d attempts", retry_count)
+    raise last_exc if last_exc is not None else RuntimeError(
+        "subtask_constraint_assign failed with unknown error"
+    )
 
 
 # -------------------------------------------------------------------
