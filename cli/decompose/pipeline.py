@@ -212,9 +212,7 @@ def build_backend_session(
 # task_decompose
 # -------------------------------------------------------------------
 def task_decompose(
-    m_session: MelleaSession,
-    task_prompt: str,
-    log_mode: LogMode = LogMode.demo,
+    m_session: MelleaSession, task_prompt: str, log_mode: LogMode = LogMode.demo
 ) -> tuple[list[SubtaskItem], list[str]]:
     logger = get_logger("m_decompose.task_decompose")
     log_section(logger, "task_decompose")
@@ -254,7 +252,7 @@ def constraint_validate(
     for idx, cons_key in enumerate(task_constraints, start=1):
         logger.info("constraint [%02d]: %s", idx, cons_key)
 
-        val_strategy = (
+        val_strategy: str = (
             validation_decision.generate(m_session, cons_key).parse() or "llm"
         )
         logger.info("  strategy: %s", val_strategy)
