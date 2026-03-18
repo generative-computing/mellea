@@ -51,7 +51,7 @@ print(user.age)   # 31 — always an int, guaranteed by the schema
 
 ## Learn More
 
-| Resource | |
+| Resource | Description |
 |---|---|
 | [mellea.ai](https://mellea.ai) | Vision, features, and live demos |
 | [docs.mellea.ai](https://docs.mellea.ai) | Full docs — tutorials, API reference, how-to guides |
@@ -66,7 +66,7 @@ We welcome contributions of all kinds — bug fixes, new backends, standard libr
 - **[Building Extensions](https://docs.mellea.ai/community/building-extensions)** — create reusable components in your own repo
 - **[mellea-contribs](https://github.com/generative-computing/mellea-contribs)** — community library for shared components
 
-Questions? Open a [GitHub Discussion](https://github.com/generative-computing/mellea/discussions).
+Questions? See [GitHub Discussions](https://github.com/generative-computing/mellea/discussions).
 
 ### IBM ❤️ Open Source AI
 
