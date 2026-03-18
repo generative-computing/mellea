@@ -2,7 +2,7 @@ from typing import Any
 
 
 class ValidationCodeGeneratorError(Exception):
-    def __init__(self, error_message: str, **kwargs: dict[str, Any]):
+    def __init__(self, error_message: str, **kwargs: Any):
         self.error_message = error_message
         self.__dict__.update(kwargs)
         super().__init__(
@@ -13,12 +13,12 @@ class ValidationCodeGeneratorError(Exception):
 class BackendGenerationError(ValidationCodeGeneratorError):
     """Raised when LLM generation fails in the "validation_code_generator" prompt module."""
 
-    def __init__(self, error_message: str, **kwargs: dict[str, Any]):
+    def __init__(self, error_message: str, **kwargs: Any):
         super().__init__(error_message, **kwargs)
 
 
 class TagExtractionError(ValidationCodeGeneratorError):
     """Raised when tag extraction fails in the "validation_code_generator" prompt module."""
 
-    def __init__(self, error_message: str, **kwargs: dict[str, Any]):
+    def __init__(self, error_message: str, **kwargs: Any):
         super().__init__(error_message, **kwargs)

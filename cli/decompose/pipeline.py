@@ -40,7 +40,7 @@ class ConstraintValData(TypedDict):
 class ConstraintResult(TypedDict):
     """A single constraint paired with its assigned validation strategy.
 
-    Attributes:
+    Args:
         constraint (str): Natural-language description of the constraint.
         validation_strategy (str): Strategy assigned to validate the constraint;
             either ``"code"`` or ``"llm"``.
@@ -55,7 +55,7 @@ class ConstraintResult(TypedDict):
 class DecompSubtasksResult(TypedDict):
     """The full structured result for one decomposed subtask.
 
-    Attributes:
+    Args:
         subtask (str): Natural-language description of the subtask.
         tag (str): Short identifier for the subtask, used as a variable name
             in Jinja2 templates and dependency references.
@@ -107,7 +107,7 @@ class DecompPipelineResult(TypedDict):
 class DecompBackend(StrEnum):
     """Inference backends supported by the decomposition pipeline.
 
-    Attributes:
+    Args:
         ollama (str): Local Ollama inference server backend.
         openai (str): Any OpenAI-compatible HTTP endpoint backend.
         rits (str): IBM RITS (Remote Inference and Training Service) backend.
@@ -145,7 +145,7 @@ def build_backend_session(
     backend_req_timeout: int = 300,
     backend_endpoint: str | None = None,
     backend_api_key: str | None = None,
-    log_mode: LogMode = LogMode.demo,  # kept for signature compatibility
+    log_mode: LogMode = LogMode.demo,
 ) -> MelleaSession:
     logger = get_logger("m_decompose.backend")
     log_section(logger, "backend")
@@ -214,7 +214,7 @@ def build_backend_session(
 def task_decompose(
     m_session: MelleaSession,
     task_prompt: str,
-    log_mode: LogMode = LogMode.demo,  # kept for compatibility
+    log_mode: LogMode = LogMode.demo,
 ) -> tuple[list[SubtaskItem], list[str]]:
     logger = get_logger("m_decompose.task_decompose")
     log_section(logger, "task_decompose")
@@ -244,7 +244,7 @@ def task_decompose(
 def constraint_validate(
     m_session: MelleaSession,
     task_constraints: list[str],
-    log_mode: LogMode = LogMode.demo,  # kept for compatibility
+    log_mode: LogMode = LogMode.demo,
 ) -> dict[str, ConstraintValData]:
     logger = get_logger("m_decompose.constraint_validate")
     log_section(logger, "constraint_validate")
@@ -281,7 +281,7 @@ def task_execute(
     user_input_variable: list[str],
     subtasks: list[SubtaskItem],
     task_constraints: list[str],
-    log_mode: LogMode = LogMode.demo,  # kept for compatibility
+    log_mode: LogMode = LogMode.demo,
 ) -> list[SubtaskPromptConstraintsItem]:
     logger = get_logger("m_decompose.task_execute")
     log_section(logger, "task_execute")
@@ -335,7 +335,7 @@ def finalize_result(
     task_constraints: list[str],
     constraint_val_data: dict[str, ConstraintValData],
     subtask_prompts_with_constraints: list[SubtaskPromptConstraintsItem],
-    log_mode: LogMode = LogMode.demo,  # kept for compatibility
+    log_mode: LogMode = LogMode.demo,
 ) -> DecompPipelineResult:
     logger = get_logger("m_decompose.finalize_result")
     log_section(logger, "finalize_result")

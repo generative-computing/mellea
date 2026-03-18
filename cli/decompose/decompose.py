@@ -28,7 +28,7 @@ class DecompVersion(StrEnum):
     Newer versions must be declared last to ensure ``latest`` always resolves to
     the most recent template.
 
-    Attributes:
+    Args:
         latest (str): Sentinel value that resolves to the last declared version.
         v1 (str): Version 1 of the decomposition pipeline template.
     """

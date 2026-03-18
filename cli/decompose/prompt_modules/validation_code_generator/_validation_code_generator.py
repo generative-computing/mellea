@@ -56,10 +56,9 @@ class _ValidationCodeGenerator(PromptModule):
     def generate(
         self,
         mellea_session: MelleaSession,
-        input_str: str | None,
+        input_str: str,
         max_new_tokens: int = 4096,
-        parser: Callable[[str], T] = _default_parser,  # type: ignore[assignment]
-        # About the mypy ignore above: https://github.com/python/mypy/issues/3737
+        parser: Callable[[str], T] = _default_parser,
         **kwargs: dict[str, Any],
     ) -> PromptModuleString[T]:
         """Generates a Python validation function based on a provided constraint/requirement.
