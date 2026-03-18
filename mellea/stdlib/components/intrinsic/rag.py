@@ -8,24 +8,6 @@ from ...context import ChatContext
 from ..chat import Message
 from ._util import call_intrinsic
 
-_ANSWER_RELEVANCE_CORRECTION_METHODS = {
-    "Excessive unnecessary information": "removing the excessive information from the "
-    "draft response",
-    "Unduly restrictive": "providing answer without the unwarranted restriction, or "
-    "indicating that the desired answer is not available",
-    "Too vague or generic": "providing more crisp and to-the-point answer, or "
-    "indicating that the desired answer is not available",
-    "Contextual misalignment": "providing a response that answers the last user "
-    "inquiry, taking into account the context of the conversation",
-    "Misinterpreted inquiry": "providing answer only to the correct interpretation of "
-    "the inquiry, or attempting clarification if the inquiry is ambiguous or otherwise "
-    "confusing, or indicating that the desired answer is not available",
-    "No attempt": "providing a relevant response if an inquiry should be answered, or "
-    "providing a short response if the last user utterance contains no inquiry",
-}
-"""Prompting strings for the answer relevance rewriter. This model is a (a)LoRA adapter,
-so it's important to stick to in-domain prompts."""
-
 
 def check_answerability(
     question: str,
@@ -207,62 +189,3 @@ def flag_hallucinated_content(
         backend,
     )
     return result_json
-
-
-def rewrite_answer_for_relevance(
-    response: str,
-    documents: collections.abc.Iterable[Document],
-    context: ChatContext,
-    backend: AdapterMixin,
-    /,
-    rewrite_threshold: float = 0.5,
-) -> str:
-    """Rewrite an assistant answer to improve relevance to the user's question.
-
-    Args:
-        response: The assistant's response to the user's question in the last turn
-            of ``context``.
-        documents: Document snippets that were used to generate ``response``.
-        context: A chat log that ends with a user asking a question.
-        backend: Backend instance that supports the adapters that implement this
-            intrinsic.
-        rewrite_threshold: Number between 0.0 and 1.0 that determines how eagerly
-            to skip rewriting the assistant's answer for relevance. 0.0 means never
-            rewrite and 1.0 means always rewrite.
-
-    Returns:
-        Either the original response, or a rewritten version of the original response.
-    """
-    # First run the classifier to determine the likelihood of a relevant answer
-    # Output will have three fields:
-    # * answer_relevance_analysis
-    # * answer_relevance_category
-    # * answer_relevance_likelihood
-    result_json = call_intrinsic(
-        "answer_relevance_classifier",
-        context.add(Message("assistant", response, documents=list(documents))),
-        backend,
-    )
-    if result_json["answer_relevance_likelihood"] >= rewrite_threshold:
-        return response
-
-    # If we get here, the classifier indicated a likely irrelevant response. Trigger
-    # rewrite.
-    # Rewrite needs a prompt string that is an expanded version of the classifier's
-    # short output.
-    correction_method = _ANSWER_RELEVANCE_CORRECTION_METHODS[
-        result_json["answer_relevance_category"]
-    ]
-
-    result_json = call_intrinsic(
-        "answer_relevance_rewriter",
-        context.add(Message("assistant", response, documents=list(documents))),
-        backend,
-        kwargs={
-            "answer_relevance_category": result_json["answer_relevance_category"],
-            "answer_relevance_analysis": result_json["answer_relevance_analysis"],
-            "correction_method": correction_method,
-        },
-    )
-    # Unpack boxed string
-    return result_json["answer_relevance_rewrite"]

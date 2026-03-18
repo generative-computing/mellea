@@ -58,11 +58,7 @@ def test_record_token_metrics_basic(clean_metrics_env):
 
     # Record some token usage
     record_token_usage_metrics(
-        input_tokens=150,
-        output_tokens=50,
-        model="llama2:7b",
-        backend="OllamaBackend",
-        system="ollama",
+        input_tokens=150, output_tokens=50, model="llama2:7b", provider="ollama"
     )
 
     # Force metrics collection
@@ -86,9 +82,8 @@ def test_record_token_metrics_basic(clean_metrics_env):
                     # Verify attributes
                     for data_point in metric.data.data_points:
                         attrs = dict(data_point.attributes)
-                        assert attrs["gen_ai.system"] == "ollama"
+                        assert attrs["gen_ai.provider.name"] == "ollama"
                         assert attrs["gen_ai.request.model"] == "llama2:7b"
-                        assert attrs["mellea.backend"] == "OllamaBackend"
                         assert data_point.value == 150
 
                 if metric.name == "mellea.llm.tokens.output":
@@ -96,9 +91,8 @@ def test_record_token_metrics_basic(clean_metrics_env):
                     # Verify attributes
                     for data_point in metric.data.data_points:
                         attrs = dict(data_point.attributes)
-                        assert attrs["gen_ai.system"] == "ollama"
+                        assert attrs["gen_ai.provider.name"] == "ollama"
                         assert attrs["gen_ai.request.model"] == "llama2:7b"
-                        assert attrs["mellea.backend"] == "OllamaBackend"
                         assert data_point.value == 50
 
     assert found_input, "Input token metric not found"
@@ -120,18 +114,10 @@ def test_record_token_metrics_accumulation(clean_metrics_env):
 
     # Record multiple token usages with same attributes
     record_token_usage_metrics(
-        input_tokens=100,
-        output_tokens=30,
-        model="gpt-4",
-        backend="OpenAIBackend",
-        system="openai",
+        input_tokens=100, output_tokens=30, model="gpt-4", provider="openai"
     )
     record_token_usage_metrics(
-        input_tokens=200,
-        output_tokens=70,
-        model="gpt-4",
-        backend="OpenAIBackend",
-        system="openai",
+        input_tokens=200, output_tokens=70, model="gpt-4", provider="openai"
     )
 
     # Force metrics collection
@@ -166,11 +152,7 @@ def test_record_token_metrics_none_handling(clean_metrics_env):
 
     # Record with None values (should not crash)
     record_token_usage_metrics(
-        input_tokens=None,
-        output_tokens=None,
-        model="llama2:7b",
-        backend="OllamaBackend",
-        system="ollama",
+        input_tokens=None, output_tokens=None, model="llama2:7b", provider="ollama"
     )
 
     # Should not raise, and no metrics should be recorded for None values
@@ -203,25 +185,13 @@ def test_record_token_metrics_multiple_backends(clean_metrics_env):
 
     # Record from different backends
     record_token_usage_metrics(
-        input_tokens=100,
-        output_tokens=50,
-        model="llama2:7b",
-        backend="OllamaBackend",
-        system="ollama",
+        input_tokens=100, output_tokens=50, model="llama2:7b", provider="ollama"
     )
     record_token_usage_metrics(
-        input_tokens=200,
-        output_tokens=80,
-        model="gpt-4",
-        backend="OpenAIBackend",
-        system="openai",
+        input_tokens=200, output_tokens=80, model="gpt-4", provider="openai"
     )
     record_token_usage_metrics(
-        input_tokens=150,
-        output_tokens=60,
-        model="granite-3-8b",
-        backend="WatsonxBackend",
-        system="watsonx",
+        input_tokens=150, output_tokens=60, model="granite-3-8b", provider="watsonx"
     )
 
     # Force metrics collection
@@ -240,18 +210,16 @@ def test_record_token_metrics_multiple_backends(clean_metrics_env):
                     for dp in metric.data.data_points:
                         attrs = dict(dp.attributes)
                         key = (
-                            attrs["gen_ai.system"],
+                            attrs["gen_ai.provider.name"],
                             attrs["gen_ai.request.model"],
-                            attrs["mellea.backend"],
                         )
                         input_attrs.add(key)
                 if metric.name == "mellea.llm.tokens.output":
                     for dp in metric.data.data_points:
                         attrs = dict(dp.attributes)
                         key = (
-                            attrs["gen_ai.system"],
+                            attrs["gen_ai.provider.name"],
                             attrs["gen_ai.request.model"],
-                            attrs["mellea.backend"],
                         )
                         output_attrs.add(key)
 
