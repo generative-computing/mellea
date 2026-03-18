@@ -13,9 +13,6 @@ Core example showing how to directly use intrinsics with adapters.
 - Working with Granite Common adapters (aLoRA-based)
 - Understanding adapter output formats
 
-### answer_relevance.py
-Evaluates whether an answer is relevant to a question.
-
 ### answerability.py
 Checks if a question can be answered given the context.
 
@@ -75,7 +72,6 @@ out, new_ctx = mfuncs.act(
 ## Available Intrinsics
 
 - **requirement_check**: Validate requirements (used by ALoraRequirement)
-- **answer_relevance**: Check answer-question relevance
 - **answerability**: Determine if question is answerable
 - **citations**: Extract and validate citations
 - **context_relevance**: Assess context-query relevance

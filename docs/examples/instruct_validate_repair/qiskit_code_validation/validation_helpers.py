@@ -1,3 +1,4 @@
+# pytest: skip
 """Helper functions for Qiskit code validation.
 
 This module provides utilities for extracting code from markdown and validating

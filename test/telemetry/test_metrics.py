@@ -569,11 +569,7 @@ def test_token_counters_lazy_initialization(enable_metrics):
     from mellea.telemetry.metrics import record_token_usage_metrics
 
     record_token_usage_metrics(
-        input_tokens=100,
-        output_tokens=50,
-        model="llama2:7b",
-        backend="OllamaBackend",
-        system="ollama",
+        input_tokens=100, output_tokens=50, model="llama2:7b", provider="ollama"
     )
 
     # Now should be initialized
@@ -589,11 +585,7 @@ def test_record_token_usage_metrics_with_valid_tokens(enable_metrics):
 
     # Should not raise
     record_token_usage_metrics(
-        input_tokens=150,
-        output_tokens=50,
-        model="gpt-4",
-        backend="OpenAIBackend",
-        system="openai",
+        input_tokens=150, output_tokens=50, model="gpt-4", provider="openai"
     )
 
 
@@ -603,11 +595,7 @@ def test_record_token_usage_metrics_with_none_tokens(enable_metrics):
 
     # Should not raise
     record_token_usage_metrics(
-        input_tokens=None,
-        output_tokens=None,
-        model="llama2:7b",
-        backend="OllamaBackend",
-        system="ollama",
+        input_tokens=None, output_tokens=None, model="llama2:7b", provider="ollama"
     )
 
 
@@ -617,11 +605,7 @@ def test_record_token_usage_metrics_with_zero_tokens(enable_metrics):
 
     # Should not raise, but won't record zeros
     record_token_usage_metrics(
-        input_tokens=0,
-        output_tokens=0,
-        model="llama2:7b",
-        backend="OllamaBackend",
-        system="ollama",
+        input_tokens=0, output_tokens=0, model="llama2:7b", provider="ollama"
     )
 
 
@@ -631,11 +615,7 @@ def test_record_token_usage_metrics_noop_when_disabled(clean_metrics_env):
 
     # Should not raise and should be no-op
     record_token_usage_metrics(
-        input_tokens=100,
-        output_tokens=50,
-        model="llama2:7b",
-        backend="OllamaBackend",
-        system="ollama",
+        input_tokens=100, output_tokens=50, model="llama2:7b", provider="ollama"
     )
 
     # Counters should still be None (not initialized)
