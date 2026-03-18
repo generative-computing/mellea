@@ -51,7 +51,7 @@ print(user.age)   # 31 — always an int, guaranteed by the schema
 
 ## Learn More
 
-| Resource | |
+| Resource | Description |
 |---|---|
 | [mellea.ai](https://mellea.ai) | Vision, features, and live demos |
 | [docs.mellea.ai](https://docs.mellea.ai) | Full docs — tutorials, API reference, how-to guides |
