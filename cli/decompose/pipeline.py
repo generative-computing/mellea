@@ -299,7 +299,7 @@ def task_execute(
     logger.info("  total subtasks   : %d", len(subtask_prompts))
     logger.info("  total constraints: %d", len(task_constraints))
 
-    if logger.isEnabledFor(logging.DEBUG):
+    if log_mode == LogMode.debug:
         for i, item in enumerate(subtask_prompts, start=1):
             logger.debug(
                 "  subtask_input[%02d]: subtask=%s | tag=%s | prompt=%s",
