@@ -353,6 +353,11 @@ Add `Attributes:` only when a stored value differs in type or behaviour from the
 input (e.g. a `str` wrapped into a `CBlock`, or a class-level constant).
 Pure-echo entries that repeat `Args:` verbatim should be omitted.
 
+**`TypedDict` classes** are a special case — their fields are the entire public contract,
+so when an `Attributes:` section is present it must exactly match the declared fields.
+The CI audit will fail on phantom fields (documented but not declared) and undocumented
+fields (declared but missing from `Attributes:`).
+
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for the full validation workflow.
 
 ---

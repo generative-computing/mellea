@@ -105,9 +105,16 @@ jobs:
         id: audit_coverage
         run: |
           set -o pipefail
-          uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --threshold 80 --quality 2>&1 \
+          uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --threshold 80 2>&1 \
             | tee /tmp/audit_coverage.log
         continue-on-error: ${{ inputs.strict_validation != true }}
+
+      - name: Docstring quality gate
+        id: quality_gate
+        run: |
+          set -o pipefail
+          uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --quality --fail-on-quality --threshold 100 2>&1 \
+            | tee /tmp/quality_gate.log
 
       # -- Upload artifact for deploy job --------------------------------------
 
@@ -141,12 +148,14 @@ jobs:
           markdownlint_outcome = "${{ steps.markdownlint.outcome }}"
           validate_outcome = "${{ steps.validate_mdx.outcome }}"
           coverage_outcome = "${{ steps.audit_coverage.outcome }}"
+          quality_gate_outcome = "${{ steps.quality_gate.outcome }}"
           strict = "${{ inputs.strict_validation }}" == "true"
           mode = "" if strict else " *(soft-fail)*"
 
           lint_log = read_log("/tmp/markdownlint.log")
           validate_log = read_log("/tmp/validate_mdx.log")
           coverage_log = read_log("/tmp/audit_coverage.log")
+          quality_gate_log = read_log("/tmp/quality_gate.log")
 
           # Count markdownlint issues (lines matching file:line:col format)
           lint_issues = len([l for l in lint_log.splitlines() if re.match(r'.+:\d+:\d+ ', l)])
@@ -186,27 +195,11 @@ jobs:
 
           mdx_detail = parse_validate_detail(validate_log)
 
-          # Docstring quality annotation emitted by audit_coverage.py into the log
+          # Parse docstring quality annotation from quality gate log
           # Format: ::notice title=Docstring quality::message
-          #      or ::warning title=Docstring quality::message
-          quality_match = re.search(r"::(notice|warning|error) title=Docstring quality::(.+)", coverage_log)
-          if quality_match:
-              quality_level, quality_msg = quality_match.group(1), quality_match.group(2)
-              quality_icon = "✅" if quality_level == "notice" else "⚠️"
-              quality_status = "pass" if quality_level == "notice" else "warning"
-              quality_detail = re.sub(r"\s*—\s*see job summary.*$", "", quality_msg)
-              quality_row = f"| Docstring Quality | {quality_icon} {quality_status}{mode} | {quality_detail} |"
-          else:
-              quality_row = None
-
-          # Split coverage log at quality section to avoid duplicate output in collapsibles
-          quality_start = coverage_log.find("🔬 Running docstring quality")
-          if quality_start != -1:
-              quality_log = coverage_log[quality_start:]
-              coverage_display_log = coverage_log[:quality_start].strip()
-          else:
-              quality_log = ""
-              coverage_display_log = coverage_log
+          #      or ::error title=Docstring quality::message
+          quality_gate_match = re.search(r"::(notice|warning|error) title=Docstring quality::(.+)", quality_gate_log)
+          quality_gate_detail = re.sub(r"\s*—\s*see job summary.*$", "", quality_gate_match.group(2)) if quality_gate_match else ""
 
           lines = [
               "## Docs Build — Validation Summary\n",
@@ -215,16 +208,15 @@ jobs:
               f"| Markdownlint | {icon(markdownlint_outcome)} {markdownlint_outcome}{mode} | {lint_detail} |",
               f"| MDX Validation | {icon(validate_outcome)} {validate_outcome}{mode} | {mdx_detail} |",
               f"| API Coverage | {icon(coverage_outcome)} {coverage_outcome}{mode} | {cov_detail} |",
+              f"| Docstring Quality | {icon(quality_gate_outcome)} {quality_gate_outcome} | {quality_gate_detail} |",
           ]
-          if quality_row:
-              lines.append(quality_row)
           lines.append("")
 
           for title, log, limit in [
               ("Markdownlint output", lint_log, 5_000),
               ("MDX validation output", validate_log, 5_000),
-              ("API coverage output", coverage_display_log, 5_000),
-              ("Docstring quality details", quality_log, 1_000_000),
+              ("API coverage output", coverage_log, 5_000),
+              ("Docstring quality details", quality_gate_log, 1_000_000),
           ]:
               if log:
                   lines += [
