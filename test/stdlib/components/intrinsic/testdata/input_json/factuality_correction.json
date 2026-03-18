@@ -1,0 +1,20 @@
+{
+    "messages": [
+        {
+            "role": "user",
+            "content": "Is Ozzy Osbourne still alive?"
+        },
+        {
+            "role": "assistant",
+            "content": "Yes, Ozzy Osbourne is alive in 2025 and preparing for another world tour, continuing to amaze fans with his energy and resilience."
+        }
+    ],
+    "extra_body": {
+        "documents": [
+            {
+                "doc_id": "1",
+                "text": "Ozzy Osbourne passed away on July 22, 2025, at the age of 76 from a heart attack. He died at his home in Buckinghamshire, England, with contributing conditions including coronary artery disease and Parkinson's disease. His final performance took place earlier that month in Birmingham."
+            }
+        ]
+    }
+}
