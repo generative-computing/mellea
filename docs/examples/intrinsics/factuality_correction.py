@@ -13,7 +13,7 @@ from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.context import ChatContext
 
-user_text = "Why does Febuary have 28 days?"
+user_text = "Why does February have 28 days?"
 response_text = "February has 28 days because it was named after the Roman god of war, Mars, and the Romans believed that the month should have an even number of days to symbolize balance and fairness in war."
 document = Document(
     "The Gregorian calendar's oldest ancestor, the first Roman calendar, had "
