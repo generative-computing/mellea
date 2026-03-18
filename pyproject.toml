@@ -79,6 +79,7 @@ telemetry = [
 
 docling = [
     "docling>=2.45.0",
+    "opencv-python-headless",  # workaround: docling-ibm-models uses cv2 but omits it from its declared dependencies; headless variant required on Apple Silicon
 ]
 
 granite_retriever = [
