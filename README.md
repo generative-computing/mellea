@@ -2,7 +2,7 @@
 
 # Mellea — build predictable AI without guesswork
 
-Inside every AI-powered pipeline, the unreliable part is the same: the LLM call itself.
+Inside every AI-powered pipeline, the unreliable part is the same: the LLM calls itself.
 Silent failures, untestable outputs, no guarantees.
 Mellea is a Python library for writing *generative programs* — replacing brittle prompts and flaky agents
 with structured, testable AI workflows built around type-annotated outputs, verifiable requirements, and automatic retries.
