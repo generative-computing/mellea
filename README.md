@@ -63,7 +63,7 @@ print(user.age)   # 31 — always an int, guaranteed by the schema
 
 We welcome contributions of all kinds — bug fixes, new backends, standard library components, examples, and docs.
 
-- **[Contributing Guide](https://docs.mellea.ai/community/contributing-guide)** — development setup, workflow, and coding standards
+- **[Contributing Guide](CONTRIBUTING.md)** — development setup, workflow, and coding standards
 - **[Building Extensions](https://docs.mellea.ai/community/building-extensions)** — create reusable components in your own repo
 - **[mellea-contribs](https://github.com/generative-computing/mellea-contribs)** — community library for shared components
 
