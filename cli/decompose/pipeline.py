@@ -320,16 +320,13 @@ def task_execute(
 
         try:
             logger.info(
-                "subtask_constraint_assign attempt: %d/%d",
-                attempt,
-                retry_count,
+                "subtask_constraint_assign attempt: %d/%d", attempt, retry_count
             )
 
             raw_assign_result = subtask_constraint_assign.generate(
                 m_session,
                 subtasks_tags_and_prompts=subtask_prompts,
                 constraint_list=task_constraints,
-                max_new_tokens=8192,
             ).parse()
             raw_text = str(raw_assign_result)
 
@@ -374,8 +371,10 @@ def task_execute(
                     logger.info("failed raw output preview:\n%s", preview)
 
     logger.error("subtask_constraint_assign failed after %d attempts", retry_count)
-    raise last_exc if last_exc is not None else RuntimeError(
-        "subtask_constraint_assign failed with unknown error"
+    raise (
+        last_exc
+        if last_exc is not None
+        else RuntimeError("subtask_constraint_assign failed with unknown error")
     )
 
 
