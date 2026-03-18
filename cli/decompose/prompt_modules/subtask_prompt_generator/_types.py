@@ -21,3 +21,4 @@ class SubtaskPromptItem(NamedTuple):
     subtask: str
     tag: str
     prompt_template: str
+    constraints: list[str] | None = None
