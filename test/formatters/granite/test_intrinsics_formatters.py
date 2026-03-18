@@ -194,32 +194,6 @@ _YAML_JSON_COMBOS_LIST = [
         is_alora=True,
     ),
     YamlJsonCombo(
-        short_name="answer_relevance_classifier",
-        inputs_file=_INPUT_JSON_DIR / "answer_relevance_classifier.json",
-        task="answer_relevance_classifier",
-    ),
-    # aLoRA adapter for this intrinsic not currently available
-    # YamlJsonCombo(
-    #     short_name="answer_relevance_classifier_alora",
-    #     inputs_file=_INPUT_JSON_DIR / "answer_relevance_classifier.json",
-    #     task="answer_relevance_classifier",
-    #     is_alora=True,
-    # ),
-    YamlJsonCombo(
-        short_name="answer_relevance_rewriter",
-        inputs_file=_INPUT_JSON_DIR / "answer_relevance_rewriter.json",
-        arguments_file=_INPUT_ARGS_DIR / "answer_relevance_rewriter.json",
-        task="answer_relevance_rewriter",
-    ),
-    # aLoRA adapter for this intrinsic not currently available
-    # YamlJsonCombo(
-    #     short_name="answer_relevance_rewriter_alora",
-    #     inputs_file=_INPUT_JSON_DIR / "answer_relevance_rewriter.json",
-    #     arguments_file=_INPUT_ARGS_DIR / "answer_relevance_rewriter.json",
-    #     task="answer_relevance_rewriter",
-    #     is_alora=True,
-    # ),
-    YamlJsonCombo(
         short_name="citations",
         inputs_file=_INPUT_JSON_DIR / "citations.json",
         task="citations",

@@ -182,11 +182,6 @@ if __name__ == "__main__":
 ```
 
 
-
-## Tutorial
-
-See the [tutorial](docs/tutorial.md)
-
 ## Contributing
 
 We welcome contributions to Mellea! There are several ways to contribute:

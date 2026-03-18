@@ -251,6 +251,15 @@ Where a CI-tested example exists in `docs/examples/`, link it:
 
 Only link examples that are current and in CI.
 
+### Keeping the examples catalogue up to date
+
+Check that every example directory under `docs/examples/` has a corresponding
+row in the catalogue table in `docs/docs/examples/index.md`. When adding a new
+example directory, add a row with a short description of what the examples
+demonstrate. This ensures users browsing the published docs can discover all
+available examples, not only the ones linked from individual guide or concept
+pages.
+
 ---
 
 ## Missing content
