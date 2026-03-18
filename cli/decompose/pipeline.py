@@ -330,7 +330,7 @@ def task_execute(
                 subtasks_tags_and_prompts=subtask_prompts,
                 constraint_list=task_constraints,
                 max_new_tokens=8192,
-            )
+            ).parse()
             raw_text = str(raw_assign_result)
 
             if log_mode == LogMode.debug:
