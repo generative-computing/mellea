@@ -1,10 +1,10 @@
 ---
-title: "OpenTelemetry Tracing"
+title: "Tracing"
 description: "Export distributed traces from Mellea using OpenTelemetry semantic conventions."
 # diataxis: how-to
 ---
 
-**Prerequisites:** [Metrics and Telemetry](../evaluation-and-observability/metrics-and-telemetry)
+**Prerequisites:** [Telemetry](../evaluation-and-observability/telemetry)
 introduces the environment variables and trace scopes. This page focuses on
 exporting traces to external backends and interpreting the span data they contain.
 
@@ -131,8 +131,21 @@ Backend spans cover individual LLM API calls. They follow the
 | `gen_ai.usage.input_tokens` | Input tokens consumed |
 | `gen_ai.usage.output_tokens` | Output tokens generated |
 | `gen_ai.usage.total_tokens` | Total tokens (input + output) |
+| `gen_ai.response.model` | Actual model used in the response (may differ from request) |
 | `gen_ai.response.finish_reasons` | List of finish reasons (e.g., `["stop"]`) |
 | `gen_ai.response.id` | Response identifier from the backend |
+
+Mellea also adds context-specific attributes to backend spans:
+
+| Attribute | Description |
+| --------- | ----------- |
+| `mellea.backend` | Backend class name (e.g., `OpenAIBackend`) |
+| `mellea.action_type` | Component type being executed |
+| `mellea.context_size` | Number of items in context |
+| `mellea.has_format` | Whether structured output format is specified |
+| `mellea.format_type` | Response format class name |
+| `mellea.tool_calls_enabled` | Whether tool calling is enabled |
+| `mellea.num_actions` | Number of actions in batch (for `generate_from_raw`) |
 
 ### Span hierarchy
 
@@ -225,11 +238,13 @@ import mellea  # noqa: E402
 
 ---
 
-## Next steps
+**See also:**
 
-- [Metrics and Telemetry](../evaluation-and-observability/metrics-and-telemetry) —
-  enable metrics collection alongside tracing, and learn how to instrument your
-  own code with counters and histograms.
+- [Telemetry](../evaluation-and-observability/telemetry) — overview of all
+  telemetry features and configuration.
+- [Metrics](../evaluation-and-observability/metrics) — token usage metrics,
+  exporters, and custom instruments.
+- [Logging](../evaluation-and-observability/logging) — console logging and OTLP
+  log export.
 - [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge) —
-  add automated quality evaluation to your pipeline and correlate evaluation
-  results with trace data.
+  automated quality evaluation correlated with trace data.

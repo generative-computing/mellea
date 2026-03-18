@@ -269,7 +269,7 @@ with start_session() as m:
 ```
 
 For the full telemetry setup, see
-[OpenTelemetry Tracing](../evaluation-and-observability/opentelemetry-tracing).
+[Tracing](../evaluation-and-observability/tracing).
 
 ## Does Mellea support async?
 

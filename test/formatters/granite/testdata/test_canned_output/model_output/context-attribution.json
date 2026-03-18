@@ -1,12 +1,12 @@
 {
-  "id": "chatcmpl-21756f2d642a47cca5c7628287e267b6",
+  "id": "chatcmpl-a7d7170784e84757b5bc365cb25c57c9",
   "choices": [
     {
       "finish_reason": "stop",
       "index": 0,
       "logprobs": null,
       "message": {
-        "content": "{\"answer_relevance_rewrite\": \"The meeting attendees were Alice, Bob, and Carol.\"}",
+        "content": "[{\"r\": 0, \"c\": [0, 2]}, {\"r\": 1, \"c\": [2, 0, 1]}]",
         "refusal": null,
         "role": "assistant",
         "annotations": null,
@@ -18,15 +18,15 @@
       "stop_reason": null
     }
   ],
-  "created": 1758664103,
-  "model": "answer_relevance_rewriter",
+  "created": 1757963100,
+  "model": "context_attribution_all",
   "object": "chat.completion",
   "service_tier": null,
   "system_fingerprint": null,
   "usage": {
-    "completion_tokens": 24,
-    "prompt_tokens": 467,
-    "total_tokens": 491,
+    "completion_tokens": 32,
+    "prompt_tokens": 1124,
+    "total_tokens": 1156,
     "completion_tokens_details": null,
     "prompt_tokens_details": null
   },

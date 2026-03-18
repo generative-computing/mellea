@@ -13,9 +13,6 @@ Core example showing how to directly use intrinsics with adapters.
 - Working with Granite Common adapters (aLoRA-based)
 - Understanding adapter output formats
 
-### answer_relevance.py
-Evaluates whether an answer is relevant to a question.
-
 ### answerability.py
 Checks if a question can be answered given the context.
 
@@ -37,6 +34,10 @@ Estimates the model's certainty about answering a question.
 ### requirement_check.py
 Detect if text adheres to provided requirements.
 
+### context_attribution.py
+Identifies sentences in conversation history and documents that most influenced the response.
+
+
 ## Concepts Demonstrated
 
 - **Intrinsic Functions**: Specialized model capabilities beyond text generation
@@ -55,7 +56,7 @@ import mellea.stdlib.functional as mfuncs
 
 # Create backend and adapter
 backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-adapter = IntrinsicAdapter("requirement_check", 
+adapter = IntrinsicAdapter("requirement_check",
                                base_model_name=backend.base_model_name)
 backend.add_adapter(adapter)
 
@@ -71,13 +72,13 @@ out, new_ctx = mfuncs.act(
 ## Available Intrinsics
 
 - **requirement_check**: Validate requirements (used by ALoraRequirement)
-- **answer_relevance**: Check answer-question relevance
 - **answerability**: Determine if question is answerable
 - **citations**: Extract and validate citations
 - **context_relevance**: Assess context-query relevance
 - **hallucination_detection**: Detect hallucinated content
 - **query_rewrite**: Improve query formulation
 - **uncertainty**: Estimate certainty about answering a question
+- **context-attribution**: Identify context sentences that most influenced response
 
 ## Related Documentation
 
