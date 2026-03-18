@@ -53,7 +53,7 @@ print(user.age)   # 31 — always an int, guaranteed by the schema
 
 | Resource | Description |
 |---|---|
-| [mellea.ai](https://mellea.ai) | Vision, features, and live demos |
+| [mellea.ai](https://mellea.ai) | Vision and features |
 | [docs.mellea.ai](https://docs.mellea.ai) | Full docs — tutorials, API reference, how-to guides |
 | [Colab notebooks](docs/examples/notebooks/) | Interactive examples you can run immediately |
 | [Code examples](docs/examples/) | Runnable examples: RAG, agents, Instruct-Validate-Repair (IVR), MObjects, and more |
