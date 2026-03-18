@@ -1,6 +1,6 @@
 import re
 from collections.abc import Callable
-from typing import Any, TypeVar, final
+from typing import Any, TypeVar, final, cast
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
@@ -56,9 +56,9 @@ class _ValidationCodeGenerator(PromptModule):
     def generate(
         self,
         mellea_session: MelleaSession,
-        input_str: str,
+        input_str: str | None,
         max_new_tokens: int = 4096,
-        parser: Callable[[str], T] = _default_parser,
+        parser: Callable[[str], T] | None = None,
         **kwargs: dict[str, Any],
     ) -> PromptModuleString[T]:
         """Generates a Python validation function based on a provided constraint/requirement.
@@ -83,6 +83,9 @@ class _ValidationCodeGenerator(PromptModule):
             BackendGenerationError: Some error occurred during the LLM generation call.
         """
         assert input_str is not None, 'This module requires the "input_str" argument'
+
+        if parser is None:
+            parser = cast(Callable[[str], T], self._default_parser)
 
         system_prompt = get_system_prompt()
         user_prompt = get_user_prompt(constraint_requirement=input_str)

@@ -252,7 +252,7 @@ def constraint_validate(
     for idx, cons_key in enumerate(task_constraints, start=1):
         logger.info("constraint [%02d]: %s", idx, cons_key)
 
-        val_strategy: str = (
+        val_strategy: Literal["code", "llm"] = (
             validation_decision.generate(m_session, cons_key).parse() or "llm"
         )
         logger.info("  strategy: %s", val_strategy)
@@ -298,10 +298,15 @@ def task_execute(
         logger.debug("       prompt_template=%s", item.prompt_template)
 
     logger.info("assigning constraints to subtasks")
+
+    subtasks_tags_and_prompts: list[tuple[str, str, str]] = [
+        (item.subtask, item.tag, item.prompt_template) for item in subtask_prompts
+    ]
+
     subtask_prompts_with_constraints: list[SubtaskPromptConstraintsItem] = (
         subtask_constraint_assign.generate(
             m_session,
-            subtasks_tags_and_prompts=subtask_prompts,
+            subtasks_tags_and_prompts=subtasks_tags_and_prompts,
             constraint_list=task_constraints,
         ).parse()
     )
@@ -309,14 +314,16 @@ def task_execute(
     logger.info(
         "constraint assignment completed: %d", len(subtask_prompts_with_constraints)
     )
-    for i, item in enumerate(subtask_prompts_with_constraints, start=1):
+    for i, prompt_item_with_constraints in (
+        enumerate(subtask_prompts_with_constraints, start=1) or []
+    ):
         logger.info(
             "  [%02d] tag=%s | assigned_constraints=%d",
             i,
-            item.tag,
-            len(item.constraints),
+            prompt_item_with_constraints.tag,
+            len(prompt_item_with_constraints.constraints),
         )
-        for cons in item.constraints:
+        for cons in prompt_item_with_constraints.constraints or []:
             logger.debug("       - %s", cons)
 
     return subtask_prompts_with_constraints
@@ -361,7 +368,7 @@ def finalize_result(
                 "val_fn_name": f"val_fn_{task_constraints.index(cons_str) + 1}",
                 "val_fn": constraint_val_data[cons_str]["val_fn"],
             }
-            for cons_str in subtask_data.constraints
+            for cons_str in subtask_data.constraints or []
         ]
 
         subtask_result: DecompSubtasksResult = DecompSubtasksResult(
