@@ -149,23 +149,99 @@ Session methods: `ainstruct`, `achat`, `aact`, `avalidate`, `aquery`, `atransfor
 - **Ollama**: `start_session()` (no setup)
 - **OpenAI**: `export OPENAI_API_KEY="..."`
 - **Watsonx**: `export WATSONX_API_KEY="..."`, `WATSONX_URL`, `WATSONX_PROJECT_ID`
+- **Bedrock**: `export AWS_BEARER_TOKEN_BEDROCK="..."`
 
 **Never hardcode API keys.**
 
-#### 11. Anti-Patterns
+#### 11. Tool Calling
+Define tools with `@tool` and pass them via `ModelOption.TOOLS`:
+```python
+from mellea.backends import tool
+from mellea.backends.model_options import ModelOption
+
+@tool
+def get_weather(location: str, days: int = 1) -> dict:
+    """Get weather forecast for a location.
+
+    Args:
+        location: City name
+        days: Number of days to forecast
+    """
+    return {"location": location, "forecast": "sunny"}
+
+response = m.instruct(
+    description="What's the weather in Boston?",
+    model_options={ModelOption.TOOLS: [get_weather]},
+)
+```
+
+#### 12. Multi-Turn Chat
+Use `ChatContext` for conversation history:
+```python
+from mellea import start_session
+from mellea.stdlib.context import ChatContext
+
+m = start_session(ctx=ChatContext())
+m.chat("Make up a math problem.")
+m.chat("Now solve it.")
+print(m.ctx.last_output())
+```
+`ChatContext(window_size=10)` limits history to the last N turns.
+
+#### 13. ReACT Agent
+Agentic reasoning loop with tool use:
+```python
+import asyncio
+from mellea import start_session
+from mellea.backends import tool
+from mellea.stdlib.frameworks.react import react
+from mellea.stdlib.context import ChatContext
+
+@tool
+def search(query: str) -> str:
+    """Search for information."""
+    return f"Results for {query}"
+
+async def main():
+    m = start_session()
+    output, context = await react(
+        goal="What is the Mellea library?",
+        context=ChatContext(),
+        backend=m.backend,
+        tools=[search],
+    )
+    print(output)
+
+asyncio.run(main())
+```
+
+#### 14. Plugins
+Hook into the generation lifecycle for logging, policy enforcement, or observability:
+```python
+from mellea.plugins import hook, register, HookType
+
+@hook(HookType.GENERATION_PRE_CALL)
+async def log_generation(payload, ctx):
+    print(f"Calling LLM with: {payload.action}")
+
+register(log_generation)
+```
+Hook types: `GENERATION_PRE_CALL`, `GENERATION_POST_CALL`, `SESSION_PRE_INIT`, `SESSION_POST_INIT`
+
+#### 15. Anti-Patterns
 - **Don't** retry `@generative` calls — Mellea handles retries internally
 - **Don't** use `json.loads()` — use typed returns
 - **Don't** wrap single functions in classes
 - **Do** use `try/except` at app boundaries for network errors
 
-#### 12. Debugging
+#### 16. Debugging
 ```python
 from mellea.core import FancyLogger
 FancyLogger.get_logger().setLevel("DEBUG")
 ```
 - `m.last_prompt()` — see exact prompt sent
 
-#### 13. Common Errors
+#### 17. Common Errors
 | Error | Fix |
 |-------|-----|
 | `ComponentParseError` | LLM output didn't match type—add docstring examples |
@@ -173,11 +249,11 @@ FancyLogger.get_logger().setLevel("DEBUG")
 | `ConnectionRefusedError` | Run `ollama serve` |
 | Output wrong/None | Model too small—try larger or add `reasoning` field |
 
-#### 14. Testing
+#### 18. Testing
 ```bash
 uv run pytest test/ -m "not qualitative"  # Fast: tests only, skip quality checks
 uv run pytest                              # Full: tests + examples + quality checks
 ```
 
-#### 15. Feedback
-Found a workaround or pattern? Add it to Section 13 (Common Errors) above, or update this file with new guidance.
+#### 19. Feedback
+Found a workaround or pattern? Add it to Section 17 (Common Errors) above, or update this file with new guidance.

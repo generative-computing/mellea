@@ -37,10 +37,12 @@ uv run mypy .                         # Type check
 |------|----------|
 | `mellea/core/` | Core abstractions: Backend, Base, Formatter, Requirement, Sampling |
 | `mellea/stdlib/` | Standard library: Sessions, Components, Context |
-| `mellea/backends/` | Providers: HF, OpenAI, Ollama, Watsonx, LiteLLM |
+| `mellea/backends/` | Providers: Ollama, OpenAI, HF, Watsonx, LiteLLM, vLLM, Bedrock |
 | `mellea/formatters/` | Output formatters for different types |
 | `mellea/templates/` | Jinja2 templates |
-| `mellea/helpers/` | Utilities, logging, model ID tables |
+| `mellea/helpers/` | Utilities: async helpers, event loop, message conversion |
+| `mellea/plugins/` | Plugin registry, hooks, base classes, manager |
+| `mellea/telemetry/` | Logging, metrics, tracing, backend instrumentation |
 | `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`) |
 | `test/` | All tests (run from repo root) |
 | `docs/examples/` | Example code (run as tests via pytest) |
@@ -65,8 +67,9 @@ All tests and examples use markers to indicate requirements. The test infrastruc
 - `@pytest.mark.llm` — Makes LLM calls (needs at least Ollama)
 - `@pytest.mark.slow` — Tests taking >5 minutes (skipped via `SKIP_SLOW=1`)
 
-**Execution Strategy Markers:**
+**Other Markers:**
 - `@pytest.mark.requires_gpu_isolation` — Requires OS-level process isolation to clear CUDA memory (use with `--isolate-heavy` or `CICD=1`)
+- `@pytest.mark.plugins` — Tests for the plugin system
 
 **Examples in `docs/examples/`** use comment-based markers for clean code:
 ```python
