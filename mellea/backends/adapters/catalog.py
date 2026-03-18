@@ -65,6 +65,7 @@ _INTRINSICS_CATALOG_ENTRIES = [
     # Core Intrinsics
     ############################################
     IntriniscsCatalogEntry(name="requirement-check", repo_id=_CORE_R1_REPO),
+    IntriniscsCatalogEntry(name="requirement_check", repo_id=_CORE_REPO),  # Necessary to support granite 3.2 and 3.3.
     IntriniscsCatalogEntry(name="uncertainty", repo_id=_CORE_R1_REPO),
     ############################################
     # RAG Intrinsics
