@@ -444,12 +444,8 @@ def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
 def cleanup_gpu_backend(backend, backend_name="unknown"):
     """Release GPU memory held by a model backend.
 
-    Moves model weights to CPU via .cpu() to free VRAM even when indirect
-    references (caches, adapters, torch.compile artifacts) prevent
-    gc.collect() from reclaiming the model.
-
-    Replaces the previous cleanup_vllm_backend() and aggressive_gpu_cleanup()
-    functions which relied on gc.collect() + empty_cache() alone.
+    Cleans up ALL GPU-resident state: model weights, KV caches, adapter
+    weights, class-level caches, and accelerate dispatch hooks.
 
     Args:
         backend: The backend instance to clean up.
@@ -470,18 +466,68 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
                 f"/ {total / 1024**3:.1f}GB total"
             )
 
-        # HuggingFace backends: move model to CPU to free VRAM
+        # 1. Clear the LRU cache (holds DynamicCache KV tensors on GPU)
+        if hasattr(backend, "_cache") and hasattr(backend._cache, "cache"):
+            for key in list(backend._cache.cache.keys()):
+                value = backend._cache.cache.pop(key)
+                if backend._cache.on_evict is not None:
+                    try:
+                        backend._cache.on_evict(value)
+                    except Exception:
+                        pass
+            logger.info("  Cleared LRU cache")
+
+        # 2. Clear class-level _cached_blocks (DynamicCache on GPU, shared
+        #    across all instances of LocalHFBackend)
+        try:
+            from mellea.backends.huggingface import LocalHFBackend
+
+            if LocalHFBackend._cached_blocks:
+                for key in list(LocalHFBackend._cached_blocks.keys()):
+                    dc = LocalHFBackend._cached_blocks.pop(key)
+                    if hasattr(dc, "key_cache"):
+                        dc.key_cache.clear()
+                    if hasattr(dc, "value_cache"):
+                        dc.value_cache.clear()
+                    del dc
+                logger.info("  Cleared class-level _cached_blocks")
+        except ImportError:
+            pass
+
+        # 3. Unload PEFT adapters (hold GPU weights)
+        if hasattr(backend, "_loaded_adapters"):
+            backend._loaded_adapters.clear()
+        if hasattr(backend, "_added_adapters"):
+            backend._added_adapters.clear()
+
+        # 4. Delete llguidance tokenizer
+        if hasattr(backend, "_llguidance_tokenizer"):
+            del backend._llguidance_tokenizer
+
+        # 5. Remove accelerate dispatch hooks before moving model to CPU.
+        #    Models loaded with device_map="cuda" have hooks that can
+        #    prevent .cpu() from fully releasing VRAM.
         if hasattr(backend, "_model"):
+            try:
+                from accelerate.hooks import remove_hook_from_module
+
+                remove_hook_from_module(backend._model, recurse=True)
+                logger.info("  Removed accelerate dispatch hooks")
+            except (ImportError, Exception):
+                pass
+
+            # Move model to CPU to free VRAM
             try:
                 backend._model.cpu()
             except Exception:
                 pass
             del backend._model
 
+        # 6. Delete tokenizer
         if hasattr(backend, "_tokenizer"):
             del backend._tokenizer
 
-        # vLLM backends
+        # 7. vLLM backends
         if hasattr(backend, "_underlying_model"):
             try:
                 backend._underlying_model.shutdown()
@@ -489,6 +535,7 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
                 pass
             del backend._underlying_model
 
+        # 8. Force garbage collection and flush CUDA cache
         gc.collect()
         gc.collect()
 
