@@ -137,9 +137,8 @@ def run(
         str,
         typer.Option(help='Name for the output files. Defaults to "m_decomp_result".'),
     ] = "m_decomp_result",
-    prompt_file: Annotated[
-        typer.FileText | None,
-        typer.Option(help="Path to a text file containing user queries."),
+    input_file: Annotated[
+        str | None, typer.Option(help="Path to a text file containing user queries.")
     ] = None,
     model_id: Annotated[
         str,
@@ -207,14 +206,14 @@ def run(
     constraint lists, and dependency metadata, and writes one ``.json`` result file
     plus one rendered ``.py`` script per task job to the output directory.
 
-    If ``prompt_file`` contains multiple non-empty lines, each line is treated as a
+    If ``input_file`` contains multiple non-empty lines, each line is treated as a
     separate task job.
 
     Args:
         out_dir: Path to an existing directory where output files are saved.
         out_name: Base name (no extension) for the output files. Defaults to
             ``"m_decomp_result"``.
-        prompt_file: Optional path to a text file containing one or more user
+        input_file: Optional path to a text file containing one or more user
             queries. If the file contains multiple non-empty lines, each line is
             treated as a separate task job. If omitted, the query is collected
             interactively.
@@ -235,7 +234,7 @@ def run(
         AssertionError: If ``out_name`` contains invalid characters, if
             ``out_dir`` does not exist or is not a directory, or if any
             ``input_var`` name is not a valid Python identifier.
-        ValueError: If the prompt file contains no non-empty task lines.
+        ValueError: If the input file contains no non-empty task lines.
         Exception: Re-raised from the decomposition pipeline after cleaning up
             any partially written output directories.
     """
@@ -286,16 +285,22 @@ def run(
 
         log_section(logger, "load task prompt")
 
-        if prompt_file:
-            raw_lines = prompt_file.read().splitlines()
+        if input_file:
+            input_path = Path(input_file)
+            assert input_path.exists() and input_path.is_file(), (
+                f'Path passed in "input-file" is not a file: {input_path.as_posix()}'
+            )
+
+            raw_lines = input_path.read_text(encoding="utf-8").splitlines()
             task_jobs = [line.strip() for line in raw_lines if line.strip()]
             user_input_variable = input_var
 
             logger.info("prompt source  : file")
+            logger.info("input_file     : %s", input_path)
             logger.info("task jobs      : %d", len(task_jobs))
 
             if not task_jobs:
-                raise ValueError("Prompt file contains no non-empty task lines.")
+                raise ValueError("Input file contains no non-empty task lines.")
         else:
             task_prompt = typer.prompt(
                 (
