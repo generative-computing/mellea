@@ -174,6 +174,25 @@ differs in type or behaviour from the constructor input — for example, when a 
 argument is wrapped into a `CBlock`, or when a class-level constant is relevant to
 callers. Pure-echo entries that repeat `Args:` verbatim should be omitted.
 
+**`TypedDict` classes are a special case.** Their fields *are* the entire public
+contract, so when an `Attributes:` section is present it must exactly match the
+declared fields. The audit will flag:
+
+- `typeddict_phantom` — `Attributes:` documents a field that is not declared in the `TypedDict`
+- `typeddict_undocumented` — a declared field is absent from the `Attributes:` section
+
+```python
+class ConstraintResult(TypedDict):
+    """Result of a constraint check.
+
+    Attributes:
+        passed: Whether the constraint was satisfied.
+        reason: Human-readable explanation.
+    """
+    passed: bool
+    reason: str
+```
+
 #### Validating docstrings
 
 Run the coverage and quality audit to check your changes before committing:
@@ -194,6 +213,8 @@ Key checks the audit enforces:
 | `no_args` | Standalone function has params but no `Args:` section |
 | `no_returns` | Function has a non-trivial return annotation but no `Returns:` section |
 | `param_mismatch` | `Args:` documents names not present in the actual signature |
+| `typeddict_phantom` | `TypedDict` `Attributes:` documents a field not declared in the class |
+| `typeddict_undocumented` | `TypedDict` has a declared field absent from its `Attributes:` section |
 
 **IDE hover verification** — open any of these existing classes in VS Code and hover
 over the class name or a constructor call to confirm the hover card shows `Args:` once

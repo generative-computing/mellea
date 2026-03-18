@@ -102,6 +102,7 @@ def discover_public_symbols(
 # ---------------------------------------------------------------------------
 
 _ARGS_RE = re.compile(r"^\s*(Args|Arguments|Parameters)\s*:", re.MULTILINE)
+_TYPEDDICT_BASES = re.compile(r"\bTypedDict\b")
 _RETURNS_RE = re.compile(r"^\s*Returns\s*:", re.MULTILINE)
 _YIELDS_RE = re.compile(r"^\s*Yields\s*:", re.MULTILINE)
 _RAISES_RE = re.compile(r"^\s*Raises\s*:", re.MULTILINE)
@@ -274,6 +275,45 @@ def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
                     }
                 )
 
+        # TypedDict field mismatch check.
+        # Unlike regular classes (where Attributes: is optional under Option C),
+        # TypedDict fields *are* the entire public contract. When an Attributes:
+        # section exists, every entry must match an actual declared field and every
+        # declared field must appear — stale or missing entries are always a bug.
+        is_typeddict = any(
+            _TYPEDDICT_BASES.search(str(base))
+            for base in getattr(member, "bases", [])
+        )
+        if is_typeddict and _ATTRIBUTES_RE.search(doc_text):
+            attrs_block = re.search(
+                r"Attributes\s*:(.*?)(?:\n\s*\n|\Z)", doc_text, re.DOTALL
+            )
+            if attrs_block:
+                doc_field_names = set(_ARGS_ENTRY_RE.findall(attrs_block.group(1)))
+                actual_fields = {
+                    name
+                    for name, m in member.members.items()
+                    if not name.startswith("_") and getattr(m, "is_attribute", False)
+                }
+                phantom = doc_field_names - actual_fields
+                if phantom:
+                    issues.append(
+                        {
+                            "path": full_path,
+                            "kind": "typeddict_phantom",
+                            "detail": f"Attributes: documents {sorted(phantom)} not declared in TypedDict",
+                        }
+                    )
+                undocumented = actual_fields - doc_field_names
+                if undocumented:
+                    issues.append(
+                        {
+                            "path": full_path,
+                            "kind": "typeddict_undocumented",
+                            "detail": f"TypedDict fields {sorted(undocumented)} missing from Attributes: section",
+                        }
+                    )
+
     return issues
 
 
@@ -296,11 +336,15 @@ def audit_docstring_quality(
     - no_class_args: class whose __init__ has typed params but no Args section on the class
     - duplicate_init_args: Args: present in both class docstring and __init__ (Option C violation)
     - param_mismatch: Args section documents names absent from the real signature
+    - typeddict_phantom: TypedDict Attributes: section documents fields not declared in the class
+    - typeddict_undocumented: TypedDict has declared fields absent from its Attributes: section
 
-    Note: Attributes: sections are intentionally not enforced. Under the Option C
-    convention, Attributes: is only used when stored values differ in type or
-    behaviour from the constructor inputs (e.g. type transforms, computed values,
-    class constants). Pure-echo entries that repeat Args: verbatim are omitted.
+    Note: Attributes: sections are intentionally not enforced for regular classes. Under
+    the Option C convention, Attributes: is only used when stored values differ in type or
+    behaviour from the constructor inputs (e.g. type transforms, computed values, class
+    constants). Pure-echo entries that repeat Args: verbatim are omitted. TypedDicts are
+    a carve-out: their fields are the entire public contract, so when an Attributes:
+    section is present it must exactly match the declared fields.
 
     Only symbols (and methods whose parent class) present in `documented` are
     checked when that set is provided — ensuring the audit is scoped to what is
@@ -401,6 +445,8 @@ def _print_quality_report(issues: list[dict]) -> None:
         "no_class_args": "Missing class Args section",
         "duplicate_init_args": "Duplicate Args: in class + __init__ (Option C violation)",
         "param_mismatch": "Param name mismatches (documented but not in signature)",
+        "typeddict_phantom": "TypedDict phantom fields (documented but not declared)",
+        "typeddict_undocumented": "TypedDict undocumented fields (declared but missing from Attributes:)",
     }
 
     total = len(issues)
@@ -419,6 +465,8 @@ def _print_quality_report(issues: list[dict]) -> None:
         "no_class_args",
         "duplicate_init_args",
         "param_mismatch",
+        "typeddict_phantom",
+        "typeddict_undocumented",
     ):
         items = by_kind.get(kind, [])
         if not items:
