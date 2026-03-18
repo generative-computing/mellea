@@ -1,25 +1,49 @@
-"""Tests for cli/decompose/decompose.py functions.
+"""Tests for cli/decompose/decompose.py inference flow.
 
-This module tests the reorder_subtasks and verify_user_variables functions
-which handle dependency ordering and validation of decomposition results.
+This module tests the run function's inference-related behavior, focusing on
+local Ollama backend execution, prompt handling, argument forwarding, version
+resolution, and failure cleanup.
 """
+
+from pathlib import Path
+from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
-from cli.decompose.decompose import reorder_subtasks, verify_user_variables
-from cli.decompose.pipeline import DecompPipelineResult, DecompSubtasksResult
+from cli.decompose.decompose import DecompVersion, run
+from cli.decompose.logging import LogMode
+from cli.decompose.pipeline import DecompBackend, DecompPipelineResult
 
 # ============================================================================
-# Tests for reorder_subtasks
+# Helpers
 # ============================================================================
 
 
-class TestReorderSubtasksHappyPath:
-    """Happy path tests for reorder_subtasks function."""
+class DummyTemplate:
+    """Minimal Jinja template stub used by tests."""
 
-    def test_no_dependencies(self) -> None:
-        """Test subtasks with no dependencies remain in original order."""
-        subtasks: list[DecompSubtasksResult] = [
+    def render(self, **kwargs: Any) -> str:
+        return "# generated test program"
+
+
+class DummyEnvironment:
+    """Minimal Jinja environment stub used by tests."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def get_template(self, template_name: str) -> DummyTemplate:
+        return DummyTemplate()
+
+
+def make_decomp_result() -> DecompPipelineResult:
+    """Create a minimal valid decomposition result for CLI tests."""
+    return {
+        "original_task_prompt": "Test task prompt",
+        "subtask_list": ["Task A"],
+        "identified_constraints": [],
+        "subtasks": [
             {
                 "subtask": "Task A",
                 "tag": "TASK_A",
@@ -28,783 +52,314 @@ class TestReorderSubtasksHappyPath:
                 "prompt_template": "Do A",
                 "input_vars_required": [],
                 "depends_on": [],
-            },
-            {
-                "subtask": "Task B",
-                "tag": "TASK_B",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do B",
-                "input_vars_required": [],
-                "depends_on": [],
-            },
-            {
-                "subtask": "Task C",
-                "tag": "TASK_C",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do C",
-                "input_vars_required": [],
-                "depends_on": [],
-            },
-        ]
-
-        result = reorder_subtasks(subtasks)
-
-        # Should maintain alphabetical order (topological sort is stable)
-        assert len(result) == 3
-        assert result[0]["tag"] == "TASK_A"
-        assert result[1]["tag"] == "TASK_B"
-        assert result[2]["tag"] == "TASK_C"
-
-    def test_simple_linear_dependency(self) -> None:
-        """Test simple linear dependency chain: C -> B -> A."""
-        subtasks: list[DecompSubtasksResult] = [
-            {
-                "subtask": "Task C",
-                "tag": "TASK_C",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do C",
-                "input_vars_required": [],
-                "depends_on": ["TASK_B"],
-            },
-            {
-                "subtask": "Task B",
-                "tag": "TASK_B",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do B",
-                "input_vars_required": [],
-                "depends_on": ["TASK_A"],
-            },
-            {
-                "subtask": "Task A",
-                "tag": "TASK_A",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do A",
-                "input_vars_required": [],
-                "depends_on": [],
-            },
-        ]
-
-        result = reorder_subtasks(subtasks)
-
-        # Should reorder to A, B, C
-        assert len(result) == 3
-        assert result[0]["tag"] == "TASK_A"
-        assert result[1]["tag"] == "TASK_B"
-        assert result[2]["tag"] == "TASK_C"
-
-    def test_diamond_dependency(self) -> None:
-        """Test diamond dependency: D depends on B and C, both depend on A."""
-        subtasks: list[DecompSubtasksResult] = [
-            {
-                "subtask": "Task D",
-                "tag": "TASK_D",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do D",
-                "input_vars_required": [],
-                "depends_on": ["TASK_B", "TASK_C"],
-            },
-            {
-                "subtask": "Task C",
-                "tag": "TASK_C",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do C",
-                "input_vars_required": [],
-                "depends_on": ["TASK_A"],
-            },
-            {
-                "subtask": "Task B",
-                "tag": "TASK_B",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do B",
-                "input_vars_required": [],
-                "depends_on": ["TASK_A"],
-            },
-            {
-                "subtask": "Task A",
-                "tag": "TASK_A",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do A",
-                "input_vars_required": [],
-                "depends_on": [],
-            },
-        ]
-
-        result = reorder_subtasks(subtasks)
-
-        # A must be first, D must be last, B and C can be in either order
-        assert len(result) == 4
-        assert result[0]["tag"] == "TASK_A"
-        assert result[3]["tag"] == "TASK_D"
-        assert {result[1]["tag"], result[2]["tag"]} == {"TASK_B", "TASK_C"}
-
-    def test_case_insensitive_dependencies(self) -> None:
-        """Test that dependencies are case-insensitive."""
-        subtasks: list[DecompSubtasksResult] = [
-            {
-                "subtask": "Task B",
-                "tag": "task_b",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do B",
-                "input_vars_required": [],
-                "depends_on": ["TASK_A"],  # Uppercase reference
-            },
-            {
-                "subtask": "Task A",
-                "tag": "TASK_A",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do A",
-                "input_vars_required": [],
-                "depends_on": [],
-            },
-        ]
-
-        result = reorder_subtasks(subtasks)
-
-        assert len(result) == 2
-        assert result[0]["tag"] == "TASK_A"
-        assert result[1]["tag"] == "task_b"
-
-    def test_multiple_independent_chains(self) -> None:
-        """Test multiple independent dependency chains."""
-        subtasks: list[DecompSubtasksResult] = [
-            # Chain 1: B -> A
-            {
-                "subtask": "Task B",
-                "tag": "TASK_B",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do B",
-                "input_vars_required": [],
-                "depends_on": ["TASK_A"],
-            },
-            {
-                "subtask": "Task A",
-                "tag": "TASK_A",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do A",
-                "input_vars_required": [],
-                "depends_on": [],
-            },
-            # Chain 2: D -> C
-            {
-                "subtask": "Task D",
-                "tag": "TASK_D",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do D",
-                "input_vars_required": [],
-                "depends_on": ["TASK_C"],
-            },
-            {
-                "subtask": "Task C",
-                "tag": "TASK_C",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do C",
-                "input_vars_required": [],
-                "depends_on": [],
-            },
-        ]
-
-        result = reorder_subtasks(subtasks)
-
-        # A before B, C before D
-        assert len(result) == 4
-        a_idx = next(i for i, t in enumerate(result) if t["tag"] == "TASK_A")
-        b_idx = next(i for i, t in enumerate(result) if t["tag"] == "TASK_B")
-        c_idx = next(i for i, t in enumerate(result) if t["tag"] == "TASK_C")
-        d_idx = next(i for i, t in enumerate(result) if t["tag"] == "TASK_D")
-        assert a_idx < b_idx
-        assert c_idx < d_idx
-
-    def test_nonexistent_dependency_ignored(self) -> None:
-        """Test that dependencies referencing non-existent tasks are ignored."""
-        subtasks: list[DecompSubtasksResult] = [
-            {
-                "subtask": "Task B",
-                "tag": "TASK_B",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do B",
-                "input_vars_required": [],
-                "depends_on": [
-                    "TASK_A",
-                    "NONEXISTENT",
-                ],  # NONEXISTENT should be ignored
-            },
-            {
-                "subtask": "Task A",
-                "tag": "TASK_A",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do A",
-                "input_vars_required": [],
-                "depends_on": [],
-            },
-        ]
-
-        result = reorder_subtasks(subtasks)
-
-        # Should still work, ignoring the nonexistent dependency
-        assert len(result) == 2
-        assert result[0]["tag"] == "TASK_A"
-        assert result[1]["tag"] == "TASK_B"
-
-    def test_renumbers_subtask_descriptions(self) -> None:
-        """Test that subtask descriptions with numbers are renumbered after reordering."""
-        subtasks: list[DecompSubtasksResult] = [
-            {
-                "subtask": "3. Do task C",
-                "tag": "TASK_C",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do C",
-                "input_vars_required": [],
-                "depends_on": ["TASK_B"],
-            },
-            {
-                "subtask": "2. Do task B",
-                "tag": "TASK_B",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do B",
-                "input_vars_required": [],
-                "depends_on": ["TASK_A"],
-            },
-            {
-                "subtask": "1. Do task A",
-                "tag": "TASK_A",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do A",
-                "input_vars_required": [],
-                "depends_on": [],
-            },
-        ]
-
-        result = reorder_subtasks(subtasks)
-
-        # Should reorder and renumber
-        assert len(result) == 3
-        assert result[0]["subtask"] == "1. Do task A"
-        assert result[1]["subtask"] == "2. Do task B"
-        assert result[2]["subtask"] == "3. Do task C"
-
-    def test_renumbers_only_numbered_subtasks(self) -> None:
-        """Test that only subtasks starting with numbers are renumbered."""
-        subtasks: list[DecompSubtasksResult] = [
-            {
-                "subtask": "2. Numbered task B",
-                "tag": "TASK_B",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do B",
-                "input_vars_required": [],
-                "depends_on": ["TASK_A"],
-            },
-            {
-                "subtask": "Unnumbered task A",
-                "tag": "TASK_A",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do A",
-                "input_vars_required": [],
-                "depends_on": [],
-            },
-        ]
-
-        result = reorder_subtasks(subtasks)
-
-        # A should stay unnumbered, B should be renumbered to 2
-        assert len(result) == 2
-        assert result[0]["subtask"] == "Unnumbered task A"
-        assert result[1]["subtask"] == "2. Numbered task B"
-
-    def test_renumbers_with_complex_reordering(self) -> None:
-        """Test renumbering with reordering."""
-        subtasks: list[DecompSubtasksResult] = [
-            {
-                "subtask": "4. Final task",
-                "tag": "TASK_D",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do D",
-                "input_vars_required": [],
-                "depends_on": ["TASK_B", "TASK_C"],
-            },
-            {
-                "subtask": "3. Third task",
-                "tag": "TASK_C",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do C",
-                "input_vars_required": [],
-                "depends_on": ["TASK_A"],
-            },
-            {
-                "subtask": "2. Second task",
-                "tag": "TASK_B",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do B",
-                "input_vars_required": [],
-                "depends_on": ["TASK_A"],
-            },
-            {
-                "subtask": "1. First task",
-                "tag": "TASK_A",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do A",
-                "input_vars_required": [],
-                "depends_on": [],
-            },
-        ]
-
-        result = reorder_subtasks(subtasks)
-
-        # Should maintain correct numbering after reorder
-        assert len(result) == 4
-        assert result[0]["subtask"] == "1. First task"
-        assert result[3]["subtask"] == "4. Final task"
-        # B and C can be in either order but should be numbered 2 and 3
-        middle_numbers = {result[1]["subtask"][:2], result[2]["subtask"][:2]}
-        assert middle_numbers == {"2.", "3."}
-
-
-class TestReorderSubtasksUnhappyPath:
-    """Negative tests for reorder_subtasks function."""
-
-    def test_circular_dependency_two_nodes(self) -> None:
-        """Test circular dependency between two nodes."""
-        subtasks: list[DecompSubtasksResult] = [
-            {
-                "subtask": "Task A",
-                "tag": "TASK_A",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do A",
-                "input_vars_required": [],
-                "depends_on": ["TASK_B"],
-            },
-            {
-                "subtask": "Task B",
-                "tag": "TASK_B",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do B",
-                "input_vars_required": [],
-                "depends_on": ["TASK_A"],
-            },
-        ]
-
-        with pytest.raises(ValueError, match="Circular dependency detected"):
-            reorder_subtasks(subtasks)
-
-    def test_circular_dependency_three_nodes(self) -> None:
-        """Test circular dependency in a chain of three nodes."""
-        subtasks: list[DecompSubtasksResult] = [
-            {
-                "subtask": "Task A",
-                "tag": "TASK_A",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do A",
-                "input_vars_required": [],
-                "depends_on": ["TASK_C"],
-            },
-            {
-                "subtask": "Task B",
-                "tag": "TASK_B",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do B",
-                "input_vars_required": [],
-                "depends_on": ["TASK_A"],
-            },
-            {
-                "subtask": "Task C",
-                "tag": "TASK_C",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do C",
-                "input_vars_required": [],
-                "depends_on": ["TASK_B"],
-            },
-        ]
-
-        with pytest.raises(ValueError, match="Circular dependency detected"):
-            reorder_subtasks(subtasks)
-
-    def test_self_dependency(self) -> None:
-        """Test task depending on itself."""
-        subtasks: list[DecompSubtasksResult] = [
-            {
-                "subtask": "Task A",
-                "tag": "TASK_A",
-                "general_instructions": "",
-                "constraints": [],
-                "prompt_template": "Do A",
-                "input_vars_required": [],
-                "depends_on": ["TASK_A"],
             }
-        ]
+        ],
+    }
 
-        with pytest.raises(ValueError, match="Circular dependency detected"):
-            reorder_subtasks(subtasks)
 
-    def test_empty_subtasks_list(self) -> None:
-        """Test with empty subtasks list."""
-        subtasks: list[DecompSubtasksResult] = []
+@pytest.fixture
+def patch_jinja(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Patch Jinja imports used inside run()."""
+    monkeypatch.setattr("jinja2.Environment", DummyEnvironment)
+    monkeypatch.setattr("jinja2.FileSystemLoader", lambda *args, **kwargs: None)
 
-        result = reorder_subtasks(subtasks)
 
-        assert result == []
+@pytest.fixture
+def patch_validate_filename(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Patch filename validation."""
+    monkeypatch.setattr("cli.decompose.utils.validate_filename", lambda _: True)
+
+
+@pytest.fixture
+def patch_logging(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    """Patch logger setup."""
+    logger = Mock()
+    monkeypatch.setattr("cli.decompose.decompose.configure_logging", lambda _: None)
+    monkeypatch.setattr("cli.decompose.decompose.get_logger", lambda _: logger)
+    monkeypatch.setattr(
+        "cli.decompose.decompose.log_section", lambda *args, **kwargs: None
+    )
+    return logger
 
 
 # ============================================================================
-# Tests for verify_user_variables
+# Tests for run inference success cases
 # ============================================================================
 
 
-class TestVerifyUserVariablesHappyPath:
-    """Happy path tests for verify_user_variables function."""
+class TestRunInferenceSuccess:
+    """Tests for successful inference using local Ollama backend."""
 
-    def test_no_input_vars_no_dependencies(self) -> None:
-        """Test with no input variables and no dependencies."""
-        decomp_data: DecompPipelineResult = {
-            "original_task_prompt": "Test task",
-            "subtask_list": ["Task A"],
-            "identified_constraints": [],
-            "subtasks": [
-                {
-                    "subtask": "Task A",
-                    "tag": "TASK_A",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do A",
-                    "input_vars_required": [],
-                    "depends_on": [],
-                }
-            ],
-        }
+    def test_default_ollama_backend_and_model(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        patch_jinja: None,
+        patch_validate_filename: None,
+        patch_logging: Mock,
+    ) -> None:
+        """Test default backend is ollama with 8b model."""
+        prompt_path = tmp_path / "prompt.txt"
+        prompt_path.write_text("Test prompt")
 
-        result = verify_user_variables(decomp_data, None)
+        captured: dict[str, Any] = {}
 
-        assert result == decomp_data
-        assert len(result["subtasks"]) == 1
+        def fake_decompose(**kwargs: Any) -> DecompPipelineResult:
+            captured.update(kwargs)
+            return make_decomp_result()
 
-    def test_valid_input_vars(self) -> None:
-        """Test with valid input variables."""
-        decomp_data: DecompPipelineResult = {
-            "original_task_prompt": "Test task",
-            "subtask_list": ["Task A"],
-            "identified_constraints": [],
-            "subtasks": [
-                {
-                    "subtask": "Task A",
-                    "tag": "TASK_A",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do A with {{ USER_INPUT }}",
-                    "input_vars_required": ["USER_INPUT"],
-                    "depends_on": [],
-                }
-            ],
-        }
+        monkeypatch.setattr("cli.decompose.pipeline.decompose", fake_decompose)
 
-        result = verify_user_variables(decomp_data, ["USER_INPUT"])
+        with prompt_path.open("r") as prompt_file:
+            run(
+                out_dir=tmp_path,
+                out_name="default_case",
+                prompt_file=prompt_file,
+            )
 
-        assert result == decomp_data
+        assert captured["backend"] == DecompBackend.ollama
+        assert captured["model_id"] == "llama3:8b"
 
-    def test_case_insensitive_input_vars(self) -> None:
-        """Test that input variable matching is case-insensitive."""
-        decomp_data: DecompPipelineResult = {
-            "original_task_prompt": "Test task",
-            "subtask_list": ["Task A"],
-            "identified_constraints": [],
-            "subtasks": [
-                {
-                    "subtask": "Task A",
-                    "tag": "TASK_A",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do A",
-                    "input_vars_required": ["user_input"],  # lowercase
-                    "depends_on": [],
-                }
-            ],
-        }
+    def test_prompt_file_mode_forwards_inference_args(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        patch_jinja: None,
+        patch_validate_filename: None,
+        patch_logging: Mock,
+    ) -> None:
+        """Test prompt_file mode forwards inference arguments correctly."""
+        prompt_path = tmp_path / "prompt.txt"
+        prompt_path.write_text("Summarize document.")
 
-        # Should work with uppercase input
-        result = verify_user_variables(decomp_data, ["USER_INPUT"])
+        captured: dict[str, Any] = {}
 
-        assert result == decomp_data
+        def fake_decompose(**kwargs: Any) -> DecompPipelineResult:
+            captured.update(kwargs)
+            return make_decomp_result()
 
-    def test_valid_dependencies_in_order(self) -> None:
-        """Test with valid dependencies already in correct order."""
-        decomp_data: DecompPipelineResult = {
-            "original_task_prompt": "Test task",
-            "subtask_list": ["Task A", "Task B"],
-            "identified_constraints": [],
-            "subtasks": [
-                {
-                    "subtask": "Task A",
-                    "tag": "TASK_A",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do A",
-                    "input_vars_required": [],
-                    "depends_on": [],
-                },
-                {
-                    "subtask": "Task B",
-                    "tag": "TASK_B",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do B",
-                    "input_vars_required": [],
-                    "depends_on": ["TASK_A"],
-                },
-            ],
-        }
+        monkeypatch.setattr("cli.decompose.pipeline.decompose", fake_decompose)
 
-        result = verify_user_variables(decomp_data, None)
+        with prompt_path.open("r") as prompt_file:
+            run(
+                out_dir=tmp_path,
+                out_name="case_forward",
+                prompt_file=prompt_file,
+                model_id="llama3:8b",
+                backend=DecompBackend.ollama,
+                backend_req_timeout=111,
+                input_var=["DOC"],
+                log_mode=LogMode.debug,
+            )
 
-        # Should not reorder since already correct
-        assert result["subtasks"][0]["tag"] == "TASK_A"
-        assert result["subtasks"][1]["tag"] == "TASK_B"
+        assert captured["task_prompt"] == "Summarize document."
+        assert captured["backend"] == DecompBackend.ollama
+        assert captured["model_id"] == "llama3:8b"
+        assert captured["backend_req_timeout"] == 111
+        assert captured["user_input_variable"] == ["DOC"]
+        assert captured["log_mode"] == LogMode.debug
 
-    def test_dependencies_out_of_order_triggers_reorder(self) -> None:
-        """Test that out-of-order dependencies trigger automatic reordering."""
-        decomp_data: DecompPipelineResult = {
-            "original_task_prompt": "Test task",
-            "subtask_list": ["Task B", "Task A"],
-            "identified_constraints": [],
-            "subtasks": [
-                {
-                    "subtask": "Task B",
-                    "tag": "TASK_B",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do B",
-                    "input_vars_required": [],
-                    "depends_on": ["TASK_A"],
-                },
-                {
-                    "subtask": "Task A",
-                    "tag": "TASK_A",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do A",
-                    "input_vars_required": [],
-                    "depends_on": [],
-                },
-            ],
-        }
+    def test_interactive_mode_reads_prompt_and_clears_input_vars(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        patch_jinja: None,
+        patch_validate_filename: None,
+        patch_logging: Mock,
+    ) -> None:
+        """Test interactive mode reads typer.prompt and clears input vars."""
+        captured: dict[str, Any] = {}
 
-        result = verify_user_variables(decomp_data, None)
+        def fake_decompose(**kwargs: Any) -> DecompPipelineResult:
+            captured.update(kwargs)
+            return make_decomp_result()
 
-        # Should reorder to A, B
-        assert result["subtasks"][0]["tag"] == "TASK_A"
-        assert result["subtasks"][1]["tag"] == "TASK_B"
+        monkeypatch.setattr("cli.decompose.pipeline.decompose", fake_decompose)
+        monkeypatch.setattr("typer.prompt", lambda *args, **kwargs: "A\\nB")
 
-    def test_complex_reordering(self) -> None:
-        """Test complex dependency reordering."""
-        decomp_data: DecompPipelineResult = {
-            "original_task_prompt": "Test task",
-            "subtask_list": ["Task D", "Task C", "Task B", "Task A"],
-            "identified_constraints": [],
-            "subtasks": [
-                {
-                    "subtask": "Task D",
-                    "tag": "TASK_D",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do D",
-                    "input_vars_required": [],
-                    "depends_on": ["TASK_B", "TASK_C"],
-                },
-                {
-                    "subtask": "Task C",
-                    "tag": "TASK_C",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do C",
-                    "input_vars_required": [],
-                    "depends_on": ["TASK_A"],
-                },
-                {
-                    "subtask": "Task B",
-                    "tag": "TASK_B",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do B",
-                    "input_vars_required": [],
-                    "depends_on": ["TASK_A"],
-                },
-                {
-                    "subtask": "Task A",
-                    "tag": "TASK_A",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do A",
-                    "input_vars_required": [],
-                    "depends_on": [],
-                },
-            ],
-        }
+        run(
+            out_dir=tmp_path,
+            out_name="interactive_case",
+            prompt_file=None,
+            input_var=["SHOULD_BE_IGNORED"],
+        )
 
-        result = verify_user_variables(decomp_data, None)
+        assert captured["task_prompt"] == "A\nB"
+        assert captured["user_input_variable"] is None
 
-        # A must be first, D must be last
-        assert result["subtasks"][0]["tag"] == "TASK_A"
-        assert result["subtasks"][3]["tag"] == "TASK_D"
+    def test_latest_version_resolves_to_last_declared_version(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        patch_validate_filename: None,
+        patch_logging: Mock,
+    ) -> None:
+        """Test latest version resolves to the last declared version."""
+        prompt_path = tmp_path / "prompt.txt"
+        prompt_path.write_text("Test")
+
+        requested_templates: list[str] = []
+
+        class TrackingEnvironment:
+            """Tracking Jinja environment for template resolution assertions."""
+
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                pass
+
+            def get_template(self, template_name: str) -> DummyTemplate:
+                requested_templates.append(template_name)
+                return DummyTemplate()
+
+        monkeypatch.setattr("jinja2.Environment", TrackingEnvironment)
+        monkeypatch.setattr("jinja2.FileSystemLoader", lambda *args, **kwargs: None)
+        monkeypatch.setattr(
+            "cli.decompose.pipeline.decompose",
+            lambda **kwargs: make_decomp_result(),
+        )
+
+        with prompt_path.open("r") as prompt_file:
+            run(
+                out_dir=tmp_path,
+                out_name="version_case",
+                prompt_file=prompt_file,
+                version=DecompVersion.latest,
+            )
+
+        assert requested_templates == ["m_decomp_result_v2.py.jinja2"]
+
+    def test_successful_inference_writes_outputs(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        patch_jinja: None,
+        patch_validate_filename: None,
+        patch_logging: Mock,
+    ) -> None:
+        """Test successful inference writes expected output files."""
+        prompt_path = tmp_path / "prompt.txt"
+        prompt_path.write_text("Generate subtasks.")
+
+        monkeypatch.setattr(
+            "cli.decompose.pipeline.decompose",
+            lambda **kwargs: make_decomp_result(),
+        )
+
+        with prompt_path.open("r") as prompt_file:
+            run(
+                out_dir=tmp_path,
+                out_name="ok_case",
+                prompt_file=prompt_file,
+            )
+
+        out_dir = tmp_path / "ok_case"
+        assert out_dir.exists()
+        assert out_dir.is_dir()
+        assert (out_dir / "ok_case.json").exists()
+        assert (out_dir / "ok_case.py").exists()
+        assert (out_dir / "validations").exists()
+        assert (out_dir / "validations" / "__init__.py").exists()
 
 
-class TestVerifyUserVariablesUnHappyPath:
-    """Negative tests for verify_user_variables function."""
+# ============================================================================
+# Tests for run inference failure cases
+# ============================================================================
 
-    def test_missing_required_input_var(self) -> None:
-        """Test error when required input variable is not provided."""
-        decomp_data: DecompPipelineResult = {
-            "original_task_prompt": "Test task",
-            "subtask_list": ["Task A"],
-            "identified_constraints": [],
-            "subtasks": [
-                {
-                    "subtask": "Task A",
-                    "tag": "TASK_A",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do A",
-                    "input_vars_required": ["MISSING_VAR"],
-                    "depends_on": [],
-                }
-            ],
-        }
 
-        with pytest.raises(
-            ValueError,
-            match='Subtask "task_a" requires input variable "MISSING_VAR" which was not provided',
-        ):
-            verify_user_variables(decomp_data, None)
+class TestRunInferenceFailures:
+    """Tests for failure scenarios during inference."""
 
-    def test_missing_required_input_var_with_some_provided(self) -> None:
-        """Test error when one of multiple required variables is missing."""
-        decomp_data: DecompPipelineResult = {
-            "original_task_prompt": "Test task",
-            "subtask_list": ["Task A"],
-            "identified_constraints": [],
-            "subtasks": [
-                {
-                    "subtask": "Task A",
-                    "tag": "TASK_A",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do A",
-                    "input_vars_required": ["VAR1", "VAR2"],
-                    "depends_on": [],
-                }
-            ],
-        }
+    def test_pipeline_exception_after_output_dir_creation_cleans_up(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        patch_jinja: None,
+        patch_validate_filename: None,
+        patch_logging: Mock,
+    ) -> None:
+        """Test partial output directory is removed when later steps fail."""
+        prompt_path = tmp_path / "prompt.txt"
+        prompt_path.write_text("fail")
 
-        with pytest.raises(
-            ValueError,
-            match='Subtask "task_a" requires input variable "VAR2" which was not provided',
-        ):
-            verify_user_variables(decomp_data, ["VAR1"])
+        monkeypatch.setattr(
+            "cli.decompose.pipeline.decompose",
+            lambda **kwargs: make_decomp_result(),
+        )
 
-    def test_dependency_on_nonexistent_subtask(self) -> None:
-        """Test error when subtask depends on non-existent subtask."""
-        decomp_data: DecompPipelineResult = {
-            "original_task_prompt": "Test task",
-            "subtask_list": ["Task A"],
-            "identified_constraints": [],
-            "subtasks": [
-                {
-                    "subtask": "Task A",
-                    "tag": "TASK_A",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do A",
-                    "input_vars_required": [],
-                    "depends_on": ["NONEXISTENT_TASK"],
-                }
-            ],
-        }
+        original_mkdir = Path.mkdir
 
-        with pytest.raises(
-            ValueError,
-            match='Subtask "task_a" depends on variable "NONEXISTENT_TASK" which does not exist',
-        ):
-            verify_user_variables(decomp_data, None)
+        def fail_after_create(self: Path, *args: Any, **kwargs: Any) -> None:
+            original_mkdir(self, *args, **kwargs)
+            if self.name == "fail_case":
+                raise RuntimeError("fail")
 
-    def test_circular_dependency_detected(self) -> None:
-        """Test that circular dependencies are caught during reordering."""
-        decomp_data: DecompPipelineResult = {
-            "original_task_prompt": "Test task",
-            "subtask_list": ["Task A", "Task B"],
-            "identified_constraints": [],
-            "subtasks": [
-                {
-                    "subtask": "Task B",
-                    "tag": "TASK_B",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do B",
-                    "input_vars_required": [],
-                    "depends_on": ["TASK_A"],
-                },
-                {
-                    "subtask": "Task A",
-                    "tag": "TASK_A",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do A",
-                    "input_vars_required": [],
-                    "depends_on": ["TASK_B"],
-                },
-            ],
-        }
+        monkeypatch.setattr(Path, "mkdir", fail_after_create)
 
-        with pytest.raises(ValueError, match="Circular dependency detected"):
-            verify_user_variables(decomp_data, None)
+        with prompt_path.open("r") as prompt_file:
+            with pytest.raises(RuntimeError, match="fail"):
+                run(
+                    out_dir=tmp_path,
+                    out_name="fail_case",
+                    prompt_file=prompt_file,
+                )
 
-    def test_empty_input_var_list_treated_as_none(self) -> None:
-        """Test that empty input_var list is treated same as None."""
-        decomp_data: DecompPipelineResult = {
-            "original_task_prompt": "Test task",
-            "subtask_list": ["Task A"],
-            "identified_constraints": [],
-            "subtasks": [
-                {
-                    "subtask": "Task A",
-                    "tag": "TASK_A",
-                    "general_instructions": "",
-                    "constraints": [],
-                    "prompt_template": "Do A",
-                    "input_vars_required": ["REQUIRED_VAR"],
-                    "depends_on": [],
-                }
-            ],
-        }
+        assert not (tmp_path / "fail_case").exists()
 
-        # Both should raise the same error
-        with pytest.raises(ValueError, match="requires input variable"):
-            verify_user_variables(decomp_data, [])
+    def test_pipeline_decompose_exception_is_reraised(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        patch_jinja: None,
+        patch_validate_filename: None,
+        patch_logging: Mock,
+    ) -> None:
+        """Test pipeline inference exception is re-raised."""
+        prompt_path = tmp_path / "prompt.txt"
+        prompt_path.write_text("fail")
 
-        with pytest.raises(ValueError, match="requires input variable"):
-            verify_user_variables(decomp_data, None)
+        def raise_inference_error(**kwargs: Any) -> DecompPipelineResult:
+            raise RuntimeError("inference error")
+
+        monkeypatch.setattr(
+            "cli.decompose.pipeline.decompose",
+            raise_inference_error,
+        )
+
+        with prompt_path.open("r") as prompt_file:
+            with pytest.raises(RuntimeError, match="inference error"):
+                run(
+                    out_dir=tmp_path,
+                    out_name="err_case",
+                    prompt_file=prompt_file,
+                )
+
+        assert not (tmp_path / "err_case").exists()
+
+    def test_invalid_output_dir_fails_before_inference(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        patch_jinja: None,
+        patch_validate_filename: None,
+        patch_logging: Mock,
+    ) -> None:
+        """Test invalid out_dir prevents inference from running."""
+        prompt_path = tmp_path / "prompt.txt"
+        prompt_path.write_text("Test prompt")
+
+        decompose_mock = Mock(return_value=make_decomp_result())
+        monkeypatch.setattr("cli.decompose.pipeline.decompose", decompose_mock)
+
+        missing_dir = tmp_path / "does_not_exist"
+
+        with prompt_path.open("r") as prompt_file:
+            with pytest.raises(
+                AssertionError,
+                match='Path passed in the "out-dir" is not a directory',
+            ):
+                run(
+                    out_dir=missing_dir,
+                    out_name="m_decomp_result",
+                    prompt_file=prompt_file,
+                )
+
+        decompose_mock.assert_not_called()
