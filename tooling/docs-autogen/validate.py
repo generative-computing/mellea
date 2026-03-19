@@ -100,7 +100,9 @@ def _line_of(content: str, match_start: int) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _gha_annotation(level: str, title: str, message: str, file: str = "", line: int = 0) -> None:
+def _gha_annotation(
+    level: str, title: str, message: str, file: str = "", line: int = 0
+) -> None:
     """Emit a GitHub Actions workflow command annotation.
 
     When *file* and *line* are provided the annotation is anchored to that
@@ -109,8 +111,8 @@ def _gha_annotation(level: str, title: str, message: str, file: str = "", line: 
     for attr in ("message", "title", "file"):
         locals()[attr]  # reference to avoid lint unused-var
     message = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-    title   = title  .replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-    file    = file   .replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    title = title.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    file = file.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
     if file and line:
         print(f"::{level} file={file},line={line},title={title}::{message}")
     else:
@@ -145,10 +147,13 @@ def validate_source_links(docs_dir: Path, version: str) -> tuple[int, list[dict]
             for match in link_re.finditer(line):
                 link = match.group(1)
                 if not link.startswith(expected_pattern):
-                    errors.append(_err(
-                        rel, line_num,
-                        f"Invalid source link: {link}  (expected prefix: {expected_pattern})",
-                    ))
+                    errors.append(
+                        _err(
+                            rel,
+                            line_num,
+                            f"Invalid source link: {link}  (expected prefix: {expected_pattern})",
+                        )
+                    )
 
     return len(errors), errors
 
@@ -158,7 +163,7 @@ def validate_coverage(docs_dir: Path, threshold: float) -> tuple[bool, dict]:
 
     Args:
         docs_dir: Directory containing MDX files.
-        threshold: Minimum coverage percentage (0–100).
+        threshold: Minimum coverage percentage (0-100).
 
     Returns:
         Tuple of (passed, coverage_report).
@@ -222,17 +227,22 @@ def validate_mdx_syntax(docs_dir: Path) -> tuple[int, list[dict]]:
                 for match in re.finditer(pattern, line):
                     seq = match.group()
                     if len(seq) % 2 != 0:
-                        errors.append(_err(
-                            rel, line_num,
-                            f"Unescaped '{brace}' in code block: "
-                            f"{len(seq)} consecutive '{brace}' (must be even) — "
-                            f"line: {line.strip()[:80]}",
-                        ))
+                        errors.append(
+                            _err(
+                                rel,
+                                line_num,
+                                f"Unescaped '{brace}' in code block: "
+                                f"{len(seq)} consecutive '{brace}' (must be even) — "
+                                f"line: {line.strip()[:80]}",
+                            )
+                        )
                         break
 
         # Frontmatter presence and structure
         if not content.startswith("---\n"):
-            errors.append(_err(rel, 1, "Missing frontmatter (file must start with ---)"))
+            errors.append(
+                _err(rel, 1, "Missing frontmatter (file must start with ---)")
+            )
         else:
             end = content.find("\n---\n", 4)
             if end == -1:
@@ -272,10 +282,13 @@ def validate_internal_links(docs_dir: Path) -> tuple[int, list[dict]]:
 
             target = (mdx_file.parent / file_part).resolve()
             if not target.exists():
-                errors.append(_err(
-                    rel, _line_of(content, match.start()),
-                    f"Broken link to '{link_url}' (text: '{link_text}')",
-                ))
+                errors.append(
+                    _err(
+                        rel,
+                        _line_of(content, match.start()),
+                        f"Broken link to '{link_url}' (text: '{link_text}')",
+                    )
+                )
 
     return len(errors), errors
 
@@ -295,6 +308,7 @@ def validate_anchor_collisions(docs_dir: Path) -> tuple[int, list[dict]]:
     try:
         from test_mintlify_anchors import mintlify_anchor
     except ImportError:
+
         def mintlify_anchor(heading: str) -> str:  # type: ignore[misc]
             anchor = heading.lower().replace(" ", "-")
             anchor = re.sub(r"[^a-z0-9-]", "", anchor)
@@ -314,12 +328,15 @@ def validate_anchor_collisions(docs_dir: Path) -> tuple[int, list[dict]]:
             anchor = mintlify_anchor(heading)
             if anchor in seen:
                 prev_heading, prev_line = seen[anchor]
-                errors.append(_err(
-                    rel, line_num,
-                    f"Anchor collision '{anchor}': "
-                    f"'{prev_heading}' (line {prev_line}) and "
-                    f"'{heading}' (line {line_num}) produce the same anchor",
-                ))
+                errors.append(
+                    _err(
+                        rel,
+                        line_num,
+                        f"Anchor collision '{anchor}': "
+                        f"'{prev_heading}' (line {prev_line}) and "
+                        f"'{heading}' (line {line_num}) produce the same anchor",
+                    )
+                )
             else:
                 seen[anchor] = (heading, line_num)
 
@@ -352,11 +369,14 @@ def validate_rst_docstrings(source_dir: Path) -> tuple[int, list[dict]]:
         rel = str(py_file.relative_to(source_dir.parent))
         for line_num, line in enumerate(content.splitlines(), 1):
             if pattern.search(line):
-                errors.append(_err(
-                    rel, line_num,
-                    f"RST double-backtick notation — use single backticks for "
-                    f"Markdown/MDX compatibility: {line.strip()[:100]}",
-                ))
+                errors.append(
+                    _err(
+                        rel,
+                        line_num,
+                        f"RST double-backtick notation — use single backticks for "
+                        f"Markdown/MDX compatibility: {line.strip()[:100]}",
+                    )
+                )
 
     return len(errors), errors
 
@@ -386,7 +406,9 @@ def validate_stale_files(docs_root: Path) -> tuple[int, list[dict]]:
     old_tutorial = docs_root / "tutorial.md"
     tutorials_dir = docs_root / "docs" / "tutorials"
     if old_tutorial.exists() and tutorials_dir.is_dir():
-        errors.append(_err("tutorial.md", 0, "Stale file — superseded by docs/tutorials/"))
+        errors.append(
+            _err("tutorial.md", 0, "Stale file — superseded by docs/tutorials/")
+        )
 
     return len(errors), errors
 
@@ -411,7 +433,9 @@ def validate_examples_catalogue(docs_root: Path) -> tuple[int, list[dict]]:
     if not examples_dir.is_dir():
         return 0, []
     if not index_file.exists():
-        errors.append(_err("docs/docs/examples/index.md", 0, "Examples index page not found"))
+        errors.append(
+            _err("docs/docs/examples/index.md", 0, "Examples index page not found")
+        )
         return len(errors), errors
 
     index_content = index_file.read_text()
@@ -422,12 +446,18 @@ def validate_examples_catalogue(docs_root: Path) -> tuple[int, list[dict]]:
             continue
         if not any(child.rglob("*.py")):
             continue
-        if f"`{child.name}/" not in index_content and f"`{child.name}`" not in index_content:
-            errors.append(_err(
-                f"docs/examples/{child.name}/", 0,
-                f"Example directory '{child.name}/' is not listed in "
-                f"docs/docs/examples/index.md",
-            ))
+        if (
+            f"`{child.name}/" not in index_content
+            and f"`{child.name}`" not in index_content
+        ):
+            errors.append(
+                _err(
+                    f"docs/examples/{child.name}/",
+                    0,
+                    f"Example directory '{child.name}/' is not listed in "
+                    f"docs/docs/examples/index.md",
+                )
+            )
 
     return len(errors), errors
 
@@ -451,7 +481,9 @@ def validate_doc_imports(docs_dir: Path) -> tuple[int, list[dict]]:
     errors: list[dict] = []
     seen: set[tuple[str, str]] = set()
 
-    for doc_file in sorted(list(docs_dir.rglob("*.md")) + list(docs_dir.rglob("*.mdx"))):
+    for doc_file in sorted(
+        list(docs_dir.rglob("*.md")) + list(docs_dir.rglob("*.mdx"))
+    ):
         content = doc_file.read_text()
         rel = str(doc_file.relative_to(docs_dir))
         in_python = False
@@ -490,10 +522,13 @@ def validate_doc_imports(docs_dir: Path) -> tuple[int, list[dict]]:
                         try:
                             importlib.import_module(f"{module}.{name}")
                         except ImportError:
-                            errors.append(_err(
-                                rel, line_num,
-                                f"from {module} import {name} — symbol not found in module",
-                            ))
+                            errors.append(
+                                _err(
+                                    rel,
+                                    line_num,
+                                    f"from {module} import {name} — symbol not found in module",
+                                )
+                            )
                 continue
 
             # import mellea.X
@@ -622,9 +657,7 @@ def _icon(passed: bool) -> str:
     return "✅" if passed else "❌"
 
 
-def _print_check_errors(
-    label: str, errors: list[dict], gha_budget: list[int]
-) -> None:
+def _print_check_errors(label: str, errors: list[dict], gha_budget: list[int]) -> None:
     """Print a grouped error block for one check to stdout and emit GHA annotations.
 
     GHA annotations are emitted until the shared *gha_budget* counter (a
@@ -679,7 +712,9 @@ def _print_check_errors(
 def main():
     parser = argparse.ArgumentParser(description="Validate API documentation")
     parser.add_argument("docs_dir", help="Directory containing generated MDX files")
-    parser.add_argument("--version", help="Expected version in GitHub links (e.g., 0.5.0)")
+    parser.add_argument(
+        "--version", help="Expected version in GitHub links (e.g., 0.5.0)"
+    )
     parser.add_argument(
         "--coverage-threshold",
         type=float,
@@ -687,7 +722,9 @@ def main():
         help="Minimum API coverage percentage (default: 80)",
     )
     parser.add_argument("--output", help="Output JSON report file")
-    parser.add_argument("--skip-coverage", action="store_true", help="Skip coverage validation")
+    parser.add_argument(
+        "--skip-coverage", action="store_true", help="Skip coverage validation"
+    )
     parser.add_argument(
         "--source-dir",
         type=Path,
@@ -769,14 +806,14 @@ def main():
     print("Validation Results")
     print("=" * 60)
     checks = [
-        ("Source links",        report["source_links"]["passed"]),
-        ("Coverage",            report["coverage"]["passed"]),
-        ("MDX syntax",          report["mdx_syntax"]["passed"]),
-        ("Internal links",      report["internal_links"]["passed"]),
-        ("Anchor collisions",   report["anchor_collisions"]["passed"]),
-        ("Stale files",         report["stale_files"]["passed"]),
-        ("Doc imports",         report["doc_imports"]["passed"]),
-        ("Examples catalogue",  report["examples_catalogue"]["passed"]),
+        ("Source links", report["source_links"]["passed"]),
+        ("Coverage", report["coverage"]["passed"]),
+        ("MDX syntax", report["mdx_syntax"]["passed"]),
+        ("Internal links", report["internal_links"]["passed"]),
+        ("Anchor collisions", report["anchor_collisions"]["passed"]),
+        ("Stale files", report["stale_files"]["passed"]),
+        ("Doc imports", report["doc_imports"]["passed"]),
+        ("Examples catalogue", report["examples_catalogue"]["passed"]),
     ]
     if args.source_dir:
         checks.append(("RST docstrings (warning)", report["rst_docstrings"]["passed"]))
@@ -792,19 +829,21 @@ def main():
         )
 
     print("\n" + "=" * 60)
-    print(f"Overall: {_icon(report['overall_passed'])} {'PASS' if report['overall_passed'] else 'FAIL'}")
+    print(
+        f"Overall: {_icon(report['overall_passed'])} {'PASS' if report['overall_passed'] else 'FAIL'}"
+    )
     print("=" * 60)
 
     # Detailed errors — grouped by check
     error_sections = [
-        ("Source links",        source_link_errors),
-        ("MDX syntax",          mdx_errors),
-        ("Internal links",      link_errors),
-        ("Anchor collisions",   anchor_errors),
-        ("RST docstrings",      rst_docstring_errors),
-        ("Stale files",         stale_errors),
-        ("Doc imports",         import_errors),
-        ("Examples catalogue",  examples_catalogue_errors),
+        ("Source links", source_link_errors),
+        ("MDX syntax", mdx_errors),
+        ("Internal links", link_errors),
+        ("Anchor collisions", anchor_errors),
+        ("RST docstrings", rst_docstring_errors),
+        ("Stale files", stale_errors),
+        ("Doc imports", import_errors),
+        ("Examples catalogue", examples_catalogue_errors),
     ]
     any_errors = any(errs for _, errs in error_sections)
     if any_errors:
