@@ -735,6 +735,11 @@ def main():
         "--docs-root",
         help="Root docs/ directory for stale-file checks (default: parent of docs_dir)",
     )
+    parser.add_argument(
+        "--warn-only",
+        action="store_true",
+        help="Print issues but always exit 0 (pre-commit informational mode)",
+    )
     args = parser.parse_args()
 
     docs_dir = Path(args.docs_dir)
@@ -871,7 +876,7 @@ def main():
         output_path.write_text(json.dumps(report, indent=2))
         print(f"\n📄 Report saved to {output_path}")
 
-    sys.exit(0 if report["overall_passed"] else 1)
+    sys.exit(0 if (report["overall_passed"] or args.warn_only) else 1)
 
 
 if __name__ == "__main__":

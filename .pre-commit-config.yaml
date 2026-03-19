@@ -49,7 +49,7 @@ repos:
     hooks:
       - id: docs-mdx-validate
         name: Validate generated MDX docs
-        entry: bash -c 'test -d docs/docs/api && uv run --no-sync python tooling/docs-autogen/validate.py docs/docs/api --skip-coverage || true'
+        entry: bash -c 'test -d docs/docs/api && uv run --no-sync python tooling/docs-autogen/validate.py docs/docs/api --skip-coverage --warn-only || true'
         language: system
         pass_filenames: false
         files: (docs/docs/.*\.mdx$|tooling/docs-autogen/)
