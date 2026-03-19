@@ -1,16 +1,18 @@
 exclude: ^(scratchpad/)
 
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14
+  - repo: local
     hooks:
+      # Moving ruff hooks to the local version allows for different behavior locally and in ci/cd pipelines.
       - id: ruff-format
         name: "Ruff formatter"
-        args: [--config=pyproject.toml]
+        entry: bash -c 'if [ "$CICD" = "1" ]; then ruff format --check --diff --quiet --config=pyproject.toml "$@"; else ruff format --quiet --config=pyproject.toml "$@"; fi' --
+        language: system
         types_or: [python, jupyter]
       - id: ruff
         name: "Ruff linter"
-        args: [--exit-non-zero-on-fix, --fix, --config=pyproject.toml]
+        entry: bash -c 'if [ "$CICD" = "1" ]; then ruff check --no-fix --show-fixes --quiet --config=pyproject.toml "$@"; else ruff check --exit-non-zero-on-fix --fix --quiet --config=pyproject.toml "$@"; fi' --
+        language: system
         types_or: [python, jupyter]
 
   - repo: local

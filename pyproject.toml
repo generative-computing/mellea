@@ -113,7 +113,7 @@ all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever
 
 # Code quality
 lint = [
-    "ruff>=0.11.6",
+    "ruff>=0.15.5",
     "isort>=6.0.0",
     "pre-commit>=4.2.0",
     "pylint>=3.3.4",
