@@ -412,15 +412,18 @@ def finalize_result(
         jinja_vars = _extract_jinja_vars(subtask_data.prompt_template)
 
         input_vars_required = _dedupe_keep_order(
-            [item for item in jinja_vars if item in user_input_variable]
+            [var_name for var_name in jinja_vars if var_name in user_input_variable]
         )
         depends_on = _dedupe_keep_order(
-            [item for item in jinja_vars if item not in user_input_variable]
+            [var_name for var_name in jinja_vars if var_name not in user_input_variable]
         )
 
         logger.info("finalizing subtask [%02d] tag=%s", subtask_i, subtask_data.tag)
         logger.info("  input_vars_required: %s", input_vars_required or "[]")
         logger.info("  depends_on         : %s", depends_on or "[]")
+
+        if log_mode == LogMode.debug:
+            logger.debug("  prompt_template=%s", subtask_data.prompt_template)
 
         subtask_constraints: list[ConstraintResult] = [
             {
@@ -432,28 +435,29 @@ def finalize_result(
             for cons_str in subtask_data.constraints
         ]
 
+        parsed_general_instructions: str = general_instructions.generate(
+            m_session,
+            input_str=subtask_data.prompt_template,
+        ).parse()
+
+        if log_mode == LogMode.debug:
+            logger.debug("  general_instructions=%s", parsed_general_instructions)
+
         subtask_result: DecompSubtasksResult = DecompSubtasksResult(
             subtask=subtask_data.subtask,
             tag=subtask_data.tag,
             constraints=subtask_constraints,
             prompt_template=subtask_data.prompt_template,
-            general_instructions=general_instructions.generate(
-                m_session, input_str=subtask_data.prompt_template
-            ).parse(),
+            general_instructions=parsed_general_instructions,
             input_vars_required=input_vars_required,
             depends_on=depends_on,
-        )
-
-        logger.debug("  prompt_template=%s", subtask_result["prompt_template"])
-        logger.debug(
-            "  general_instructions=%s", subtask_result["general_instructions"]
         )
 
         decomp_subtask_result.append(subtask_result)
 
     result = DecompPipelineResult(
         original_task_prompt=task_prompt,
-        subtask_list=[item.subtask for item in subtasks],
+        subtask_list=[subtask_item.subtask for subtask_item in subtasks],
         identified_constraints=[
             {
                 "constraint": cons_str,
@@ -523,11 +527,6 @@ def decompose(
 
     logger.info("log_mode       : %s", log_mode.value)
     logger.info("user_input_vars: %s", user_input_variable or "[]")
-
-    if log_mode == LogMode.debug:
-        logger.info("user_query     : %s", task_prompt)
-    else:
-        logger.info("user_query     : %s", _preview_text(task_prompt))
 
     m_session = build_backend_session(
         model_id=model_id,
