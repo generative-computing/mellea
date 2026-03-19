@@ -566,6 +566,14 @@ def _round_floats(json_data, num_digits: int = 2):
     return result
 
 
+@pytest.mark.huggingface
+@pytest.mark.llm
+@pytest.mark.requires_gpu
+@pytest.mark.requires_heavy_ram
+@pytest.mark.requires_gpu_isolation  # Activate GPU memory isolation
+@pytest.mark.skipif(
+    int(os.environ.get("CICD", 0)) == 1, reason="Skipping HuggingFace tests in CI"
+)
 def test_run_transformers(yaml_json_combo_with_model, gh_run):
     """
     Run the target model end-to-end on transformers.
@@ -677,6 +685,8 @@ def test_run_transformers(yaml_json_combo_with_model, gh_run):
         raise e
 
 
+@pytest.mark.ollama
+@pytest.mark.llm
 def test_run_ollama(yaml_json_combo_for_ollama):
     """
     Run the target model end-to-end with a mock Ollama backend.
