@@ -65,27 +65,10 @@ def get_system_capabilities():
         capabilities["has_gpu"] = has_cuda or has_mps
 
         if has_cuda:
-            # NOTE: Do NOT call torch.cuda.get_device_properties() here.
-            # It creates a CUDA context, which blocks vLLM's EngineCore
-            # subprocess on exclusive_process GPU clusters.
-            # Use nvidia-smi instead (no CUDA context needed).
             try:
-                import subprocess
-
-                result = subprocess.run(
-                    [
-                        "nvidia-smi",
-                        "--query-gpu=memory.total",
-                        "--format=csv,noheader,nounits",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                if result.returncode == 0:
-                    capabilities["gpu_memory_gb"] = (
-                        float(result.stdout.strip().split("\n")[0]) / 1024
-                    )
+                capabilities["gpu_memory_gb"] = torch.cuda.get_device_properties(
+                    0
+                ).total_memory / (1024**3)
             except Exception:
                 pass
         # Note: MPS doesn't provide easy memory query, leave at 0
@@ -230,8 +213,7 @@ BACKEND_GROUPS = {
 }
 
 # Execution order when --group-by-backend is used
-# Note: vLLM must run before parent creates a CUDA context (exclusive_process clusters)
-BACKEND_GROUP_ORDER = ["vllm", "openai_vllm", "huggingface", "ollama", "api"]
+BACKEND_GROUP_ORDER = ["huggingface", "openai_vllm", "vllm", "ollama", "api"]
 
 
 # ============================================================================
@@ -476,7 +458,7 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
     try:
         import torch
 
-        if torch.cuda.is_available() and torch.cuda.is_initialized():
+        if torch.cuda.is_available():
             free_before, total = torch.cuda.mem_get_info()
             logger.info(
                 f"  GPU before cleanup: {free_before / 1024**3:.1f}GB free "
@@ -558,7 +540,7 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
         gc.collect()
         gc.collect()
 
-        if torch.cuda.is_available() and torch.cuda.is_initialized():
+        if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
 
@@ -823,10 +805,7 @@ def memory_cleaner():
     try:
         import torch
 
-        # Only touch CUDA if a context already exists in this process.
-        # Creating a context would block vLLM's EngineCore subprocess
-        # on exclusive_process GPU clusters.
-        if torch.cuda.is_available() and torch.cuda.is_initialized():
+        if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
     except ImportError:

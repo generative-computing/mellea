@@ -42,7 +42,8 @@ def _backend():
     gc.collect()
     gc.collect()
     gc.collect()
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 def _read_guardian_input(file_name: str) -> ChatContext:

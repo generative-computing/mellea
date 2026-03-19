@@ -294,7 +294,8 @@ def test_alora_training_integration():
         import gc
 
         gc.collect()
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
 def test_lora_training_integration():
