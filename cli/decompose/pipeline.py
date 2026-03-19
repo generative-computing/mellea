@@ -432,14 +432,59 @@ def finalize_result(
             for cons_str in subtask_data.constraints
         ]
 
+        prompt_preview = (
+            subtask_data.prompt_template
+            if log_mode == LogMode.debug or len(subtask_data.prompt_template) <= 240
+            else subtask_data.prompt_template[:240] + " ..."
+        )
+        logger.info("  prompt_template   : %s", prompt_preview)
+        logger.info("  generating general_instructions for tag=%s", subtask_data.tag)
+
+        gi_result = general_instructions.generate(
+            m_session,
+            input_str=subtask_data.prompt_template,
+        )
+        gi_raw = str(gi_result)
+
+        if log_mode == LogMode.debug:
+            logger.debug(
+                "  raw general_instructions output for tag=%s:\n%s",
+                subtask_data.tag,
+                gi_raw,
+            )
+        else:
+            gi_preview = gi_raw[:800] + (" ..." if len(gi_raw) > 800 else "")
+            logger.info(
+                "  raw general_instructions preview for tag=%s:\n%s",
+                subtask_data.tag,
+                gi_preview,
+            )
+
+        try:
+            parsed_general_instructions = gi_result.parse()
+        except Exception:
+            logger.error(
+                "  failed to parse general_instructions for tag=%s",
+                subtask_data.tag,
+            )
+            logger.error(
+                "  full prompt_template for tag=%s:\n%s",
+                subtask_data.tag,
+                subtask_data.prompt_template,
+            )
+            logger.error(
+                "  full raw general_instructions output for tag=%s:\n%s",
+                subtask_data.tag,
+                gi_raw,
+            )
+            raise
+
         subtask_result: DecompSubtasksResult = DecompSubtasksResult(
             subtask=subtask_data.subtask,
             tag=subtask_data.tag,
             constraints=subtask_constraints,
             prompt_template=subtask_data.prompt_template,
-            general_instructions=general_instructions.generate(
-                m_session, input_str=subtask_data.prompt_template
-            ).parse(),
+            general_instructions=parsed_general_instructions,
             input_vars_required=input_vars_required,
             depends_on=depends_on,
         )
