@@ -436,8 +436,7 @@ def finalize_result(
         ]
 
         parsed_general_instructions: str = general_instructions.generate(
-            m_session,
-            input_str=subtask_data.prompt_template,
+            m_session, input_str=subtask_data.prompt_template
         ).parse()
 
         if log_mode == LogMode.debug:
