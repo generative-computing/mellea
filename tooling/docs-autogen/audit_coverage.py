@@ -160,8 +160,105 @@ _ATTRIBUTES_RE = re.compile(r"^\s*Attributes\s*:", re.MULTILINE)
 # The colon must be followed by whitespace to avoid matching Sphinx cross-reference
 # continuation lines like "        through :func:`...`".
 _ARGS_ENTRY_RE = re.compile(r"^\s{4,}(\w+)\s*(?:\([^)]*\))?\s*:\s", re.MULTILINE)
+# Matches an indented param entry with an EXPLICIT type: "    param_name (SomeType):"
+_ARGS_ENTRY_WITH_TYPE_RE = re.compile(r"^\s{4,}(\w+)\s*\(([^)]+)\)\s*:\s", re.MULTILINE)
+# Matches the type prefix on the first content line of a Returns: or Yields: section.
+# Format: "    SomeType: description" — only matches unambiguous type-like prefixes
+# (word chars, brackets, pipes, commas, dots; no sentence-starting punctuation).
+_SECTION_TYPE_LINE_RE = re.compile(
+    r"^\s{4,}([\w][\w\[\] |,.*]*(?:\[[\w\[\] |,.*]+\])?):\s", re.MULTILINE
+)
 # Return annotations that need no Returns section
 _TRIVIAL_RETURNS = {"None", "NoReturn", "Never", "never", ""}
+
+# Typing-module aliases → modern builtin equivalents for normalization.
+_TYPING_ALIAS_RE = re.compile(
+    r"\b(List|Dict|Tuple|Set|FrozenSet|Type|Sequence|Mapping|Iterable|Iterator"
+    r"|Generator|AsyncGenerator|AsyncIterator|Awaitable|Callable)\b"
+)
+_TYPING_ALIAS_MAP = {
+    "List": "list",
+    "Dict": "dict",
+    "Tuple": "tuple",
+    "Set": "set",
+    "FrozenSet": "frozenset",
+    "Type": "type",
+}
+
+
+def _normalize_type(t: str) -> str:
+    """Normalize a type string for loose equality comparison.
+
+    Handles the most common differences between docstring-stated types and
+    Python annotations:
+    - typing-module aliases: List → list, Dict → dict, etc.
+    - Optional[X] → X | None
+    - Union[A, B] → A | B
+    - Union/pipe ordering: components are sorted so str|None == None|str
+    - incidental whitespace
+
+    Known simplifications (will NOT flag as mismatch):
+    - Deeply nested Union/Optional combinations may not fully flatten
+    - typing.X (qualified) vs X (unqualified) are NOT normalised
+    - Callable[[A], B] argument ordering is not normalised
+    """
+    t = t.strip()
+    # Strip typing. prefix
+    t = re.sub(r"\btyping\.", "", t)
+    # typing → builtin aliases
+    t = _TYPING_ALIAS_RE.sub(lambda m: _TYPING_ALIAS_MAP.get(m.group(0), m.group(0)), t)
+    # Optional[X] → X | None (non-nested only — avoids false positives on complex nesting)
+    t = re.sub(r"\bOptional\[([^\[\]]*)\]", r"\1 | None", t)
+    # Union[A, B, ...] → A | B | ... (non-nested)
+    t = re.sub(
+        r"\bUnion\[([^\[\]]+)\]",
+        lambda m: " | ".join(x.strip() for x in m.group(1).split(",")),
+        t,
+    )
+    # normalise whitespace around type operators
+    t = re.sub(r"\s*\|\s*", " | ", t)
+    t = re.sub(r"\s*,\s*", ", ", t)
+    t = re.sub(r"\s*\[\s*", "[", t)
+    t = re.sub(r"\s*\]\s*", "]", t)
+    t = t.strip()
+    # Sort pipe-union components so str|None == None|str.
+    # Only apply at the top level (not inside brackets) to avoid reordering
+    # tuple/generic args, which would cause false positives.
+    if " | " in t and "[" not in t:
+        t = " | ".join(sorted(t.split(" | ")))
+    return t
+
+
+def _types_match(a: str, b: str) -> bool:
+    """Return True if two type strings are equivalent after normalisation.
+
+    Returns True (no mismatch reported) when normalisation is uncertain:
+    if either side still contains unexpanded Optional[...] or Union[...] after
+    normalisation (indicating a nested generic we couldn't fully expand), we
+    suppress the comparison to avoid false positives.
+    """
+    na, nb = _normalize_type(a), _normalize_type(b)
+    # If either side has unexpanded Optional/Union (e.g. Optional[list[str]]),
+    # skip — we can't reliably compare and must not emit a false positive.
+    if re.search(r"\b(Optional|Union)\[", na) or re.search(r"\b(Optional|Union)\[", nb):
+        return True
+    return na == nb
+
+
+def _extract_section_type(doc_text: str, section_re: re.Pattern[str]) -> str | None:
+    """Extract the type prefix from the first content line of a docstring section.
+
+    Returns the raw type string if found, or None if the section is absent or
+    the first content line has no recognisable type prefix.
+    """
+    m = section_re.search(doc_text)
+    if not m:
+        return None
+    # Grab text after the section heading up to the next blank line.
+    after = doc_text[m.end() :]
+    type_match = _SECTION_TYPE_LINE_RE.search(after.split("\n\n")[0])
+    return type_match.group(1).strip() if type_match else None
+
 
 # Return annotations that indicate a generator (should use Yields, not Returns)
 _GENERATOR_RETURN_PATTERNS = re.compile(
@@ -279,6 +376,42 @@ def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
                     }
                 )
 
+            # Param type consistency: docstring states a type but it differs from
+            # the signature annotation.  Only fires when BOTH sides have an explicit
+            # type — absence is already handled by missing_param_type / no_args.
+            # Uses _types_match() which normalises aliases, Optional/Union, and pipe
+            # ordering.  Comparisons involving nested generics (e.g. Optional[list[X]])
+            # that cannot be fully expanded are silently skipped to avoid false positives.
+            if args_block:
+                for p in params or []:
+                    if p.name in ("self", "cls"):
+                        continue
+                    if getattr(p, "kind", None) in _variadic_kinds:
+                        continue
+                    if p.annotation is None:
+                        continue  # missing_param_type already handles this
+                    # Find the docstring type for this param
+                    param_type_match = re.search(
+                        rf"^\s{{4,}}{re.escape(p.name)}\s*\(([^)]+)\)\s*:\s",
+                        args_block.group(1),
+                        re.MULTILINE,
+                    )
+                    if param_type_match:
+                        if not _types_match(
+                            param_type_match.group(1), str(p.annotation)
+                        ):
+                            issues.append(
+                                {
+                                    "path": full_path,
+                                    "kind": "param_type_mismatch",
+                                    "detail": (
+                                        f"param '{p.name}': docstring says"
+                                        f" '{param_type_match.group(1).strip()}'"
+                                        f" but annotation is '{p.annotation}'"
+                                    ),
+                                }
+                            )
+
         # Returns/Yields section check: only flag when there is an explicit non-trivial annotation.
         # Generator return types (Generator, Iterator, etc.) require Yields:, not Returns:.
         returns = getattr(member, "returns", None)
@@ -301,6 +434,26 @@ def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
                         "detail": f"return type {ret_str!r} has no Returns section",
                     }
                 )
+            elif not is_generator:
+                # Return type consistency: docstring Returns: states a type prefix but
+                # it differs from the signature annotation.
+                # Only fires when BOTH sides have an explicit type — missing_return_type
+                # and no_returns already handle one-sided absence.
+                # See _normalize_type() docstring for known simplifications that may
+                # suppress edge cases (e.g. deeply nested Union, qualified typing.X).
+                doc_ret_type = _extract_section_type(doc_text, _RETURNS_RE)
+                if doc_ret_type:
+                    if not _types_match(doc_ret_type, ret_str):
+                        issues.append(
+                            {
+                                "path": full_path,
+                                "kind": "return_type_mismatch",
+                                "detail": (
+                                    f"Returns: says '{doc_ret_type}'"
+                                    f" but annotation is '{ret_str}'"
+                                ),
+                            }
+                        )
 
         # Missing return annotation: Returns: section documented but no Python annotation.
         # Naturally non-overlapping with no_returns (which fires when annotation exists
@@ -593,6 +746,14 @@ _KIND_FIX_HINTS: dict[str, tuple[str, str]] = {
         "Add a return type annotation (-> SomeType) to the function signature.",
         f"{_CONTRIB_DOCS_URL}#args-returns-yields-and-raises",
     ),
+    "param_type_mismatch": (
+        "Align the type in the Args: entry with the signature annotation (or vice versa).",
+        f"{_CONTRIB_DOCS_URL}#args-returns-yields-and-raises",
+    ),
+    "return_type_mismatch": (
+        "Align the type prefix in Returns: with the signature annotation (or vice versa).",
+        f"{_CONTRIB_DOCS_URL}#args-returns-yields-and-raises",
+    ),
 }
 
 
@@ -673,6 +834,8 @@ def _print_quality_report(issues: list[dict], *, fail_on_quality: bool = False) 
         "typeddict_undocumented": "TypedDict undocumented fields (declared but missing from Attributes:)",
         "missing_param_type": "Missing parameter type annotations (type absent from API docs)",
         "missing_return_type": "Missing return type annotations (type absent from API docs)",
+        "param_type_mismatch": "Param type mismatch (docstring vs annotation)",
+        "return_type_mismatch": "Return type mismatch (docstring vs annotation)",
     }
 
     annotation_level = "error" if fail_on_quality else "warning"
@@ -697,6 +860,8 @@ def _print_quality_report(issues: list[dict], *, fail_on_quality: bool = False) 
         "typeddict_undocumented",
         "missing_param_type",
         "missing_return_type",
+        "param_type_mismatch",
+        "return_type_mismatch",
     ):
         items = by_kind.get(kind, [])
         if not items:

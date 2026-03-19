@@ -224,6 +224,8 @@ jobs:
               "TypedDict undocumented fields (declared but missing from Attributes:)": "td_undoc",
               "Missing parameter type annotations (type absent from API docs)": "missing_param_type",
               "Missing return type annotations (type absent from API docs)": "missing_return_type",
+              "Param type mismatch (docstring vs annotation)": "param_type_mismatch",
+              "Return type mismatch (docstring vs annotation)": "return_type_mismatch",
           }
           section_re = re.compile(r"^\s{2}(.+?)\s+\((\d+)\)\s*$", re.MULTILINE)
           kind_counts = {}
