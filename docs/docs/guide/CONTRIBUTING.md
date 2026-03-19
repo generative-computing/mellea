@@ -360,6 +360,51 @@ fields (declared but missing from `Attributes:`).
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for the full validation workflow.
 
+### CI docstring checks reference
+
+The `audit_coverage.py --quality` gate (run in CI on every PR) reports the
+following check kinds. If your PR is blocked by this gate, find the check kind
+in the table below, follow the fix instructions, and re-push.
+
+> **Note on PR diff annotations:** GitHub Actions shows inline annotations
+> directly on the changed lines in your PR diff. These are capped at **10 per
+> check category** to ensure every category gets at least one visible marker.
+> If there are more issues than the cap, a `"... and N more"` notice appears in
+> the job log. The **complete list** of issues is always in the full job log
+> (expand the "Docstring quality gate" step) and in the
+> `docstring-quality-report` artifact (JSON) attached to the workflow run.
+
+#### Missing or short docstrings
+
+| Check kind | What it means | How to fix |
+| ---------- | ------------- | ---------- |
+| `missing` | No docstring present on the symbol | Add a Google-style one-line summary sentence |
+| `short` | Docstring has fewer than 5 words | Expand the summary — describe what the function/class does and why |
+
+#### Args, Returns, Yields, and Raises
+
+| Check kind | What it means | How to fix |
+| ---------- | ------------- | ---------- |
+| `no_args` | Function has named parameters but the docstring has no `Args:` section | Add an `Args:` section listing each parameter name and a short description |
+| `no_returns` | Function has a non-`None` return annotation but the docstring has no `Returns:` section | Add a `Returns:` section describing what is returned and when |
+| `no_yields` | Function returns `Generator` / `Iterator` but the docstring has no `Yields:` section | Add a `Yields:` section — generator functions use `Yields:`, not `Returns:` |
+| `no_raises` | Function source contains `raise` but the docstring has no `Raises:` section | Add a `Raises:` section listing each exception type and the condition that triggers it |
+
+#### Class docstrings (Option C)
+
+| Check kind | What it means | How to fix |
+| ---------- | ------------- | ---------- |
+| `no_class_args` | Class `__init__` has typed parameters but the **class** docstring has no `Args:` section | Add `Args:` to the class docstring (not `__init__`) — see Option C convention above |
+| `duplicate_init_args` | `Args:` appears in **both** the class docstring and the `__init__` docstring | Remove `Args:` from the `__init__` docstring; keep it on the class docstring only |
+| `param_mismatch` | `Args:` section documents parameter names that do not exist in the actual signature | Remove or rename the phantom entries so they exactly match the real parameter names |
+
+#### TypedDict classes
+
+| Check kind | What it means | How to fix |
+| ---------- | ------------- | ---------- |
+| `typeddict_phantom` | `Attributes:` section documents field names not declared in the `TypedDict` | Remove the extra entries — every `Attributes:` entry must match a declared field |
+| `typeddict_undocumented` | `TypedDict` has declared fields that are absent from the `Attributes:` section | Add the missing fields — every declared field must appear in `Attributes:` |
+
 ---
 
 ## Local preview

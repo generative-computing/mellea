@@ -274,7 +274,10 @@ split-on-trailing-comma = false
 "docs/**/*.py" = ["E402", "D"]
 "docs/**/*.ipynb" = ["D"]
 "test/**/*.py" = ["E402", "D"]
-"cli/**/*.py" = ["D"]
+# cli/: suppress style rules (D2xx, D3xx, D4xx) but enforce D1xx (missing docstrings)
+# so ruff catches missing public-symbol docstrings at lint time, complementing the
+# audit_coverage.py quality gate which only checks documented API symbols.
+"cli/**/*.py" = ["D2", "D3", "D4"]
 "tooling/**/*.py" = ["D"]
 
 # -----------------------------

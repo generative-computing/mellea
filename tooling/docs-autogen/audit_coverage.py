@@ -121,8 +121,21 @@ _GENERATOR_RETURN_PATTERNS = re.compile(
 
 
 def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
-    """Return quality issues for a single class or function member."""
+    """Return quality issues for a single class or function member.
+
+    Each returned dict has keys: ``path``, ``kind``, ``detail``, ``file``, ``line``.
+    ``file`` is the absolute source path; ``line`` is the 1-based line number of the
+    symbol definition (the ``def`` / ``class`` keyword line).
+    """
     issues: list[dict] = []
+    _raw_file = getattr(member, "filepath", None)
+    _abs_file = str(_raw_file) if _raw_file is not None else ""
+    # Convert to a repo-relative path for readability and GHA annotations.
+    try:
+        _rel_file = str(Path(_abs_file).relative_to(Path.cwd())) if _abs_file else ""
+    except ValueError:
+        _rel_file = _abs_file
+    _line = getattr(member, "lineno", None) or 0
 
     doc = getattr(member, "docstring", None)
     doc_text = doc.value.strip() if (doc and doc.value) else ""
@@ -313,6 +326,11 @@ def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
                         }
                     )
 
+    # Inject file location into every issue so callers can display and annotate.
+    for issue in issues:
+        issue["file"] = _rel_file
+        issue["line"] = _line
+
     return issues
 
 
@@ -419,6 +437,61 @@ def audit_docstring_quality(
 
 _IN_GHA = os.environ.get("GITHUB_ACTIONS") == "true"
 
+# GitHub URL for the contributing guide docstring checks reference section.
+# Each issue kind links to the relevant anchor so developers can navigate directly.
+_CONTRIB_DOCS_URL = (
+    "https://github.com/generative-computing/mellea/blob/main"
+    "/docs/docs/guide/CONTRIBUTING.md"
+)
+
+# Per-kind fix hints: (one-line fix text, CONTRIBUTING.md anchor)
+_KIND_FIX_HINTS: dict[str, tuple[str, str]] = {
+    "missing": (
+        "Add a Google-style summary sentence.",
+        f"{_CONTRIB_DOCS_URL}#missing-or-short-docstrings",
+    ),
+    "short": (
+        "Expand the summary — aim for at least 5 meaningful words.",
+        f"{_CONTRIB_DOCS_URL}#missing-or-short-docstrings",
+    ),
+    "no_args": (
+        "Add an Args: section listing each parameter with a description.",
+        f"{_CONTRIB_DOCS_URL}#args-returns-yields-and-raises",
+    ),
+    "no_returns": (
+        "Add a Returns: section describing the return value.",
+        f"{_CONTRIB_DOCS_URL}#args-returns-yields-and-raises",
+    ),
+    "no_yields": (
+        "Add a Yields: section (generator functions use Yields:, not Returns:).",
+        f"{_CONTRIB_DOCS_URL}#args-returns-yields-and-raises",
+    ),
+    "no_raises": (
+        "Add a Raises: section listing each exception and the condition that triggers it.",
+        f"{_CONTRIB_DOCS_URL}#args-returns-yields-and-raises",
+    ),
+    "no_class_args": (
+        "Add Args: to the class docstring (not __init__) — Option C convention.",
+        f"{_CONTRIB_DOCS_URL}#class-docstrings-option-c",
+    ),
+    "duplicate_init_args": (
+        "Remove Args: from __init__ docstring; place it on the class docstring only (Option C).",
+        f"{_CONTRIB_DOCS_URL}#class-docstrings-option-c",
+    ),
+    "param_mismatch": (
+        "Remove or rename phantom entries to match the actual parameter names.",
+        f"{_CONTRIB_DOCS_URL}#class-docstrings-option-c",
+    ),
+    "typeddict_phantom": (
+        "Remove documented fields that are not declared in the TypedDict.",
+        f"{_CONTRIB_DOCS_URL}#typeddict-classes",
+    ),
+    "typeddict_undocumented": (
+        "Add the missing fields to the Attributes: section.",
+        f"{_CONTRIB_DOCS_URL}#typeddict-classes",
+    ),
+}
+
 
 def _gha_cmd(level: str, title: str, message: str) -> None:
     """Emit a GitHub Actions workflow command annotation."""
@@ -428,8 +501,59 @@ def _gha_cmd(level: str, title: str, message: str) -> None:
     print(f"::{level} title={title}::{message}")
 
 
-def _print_quality_report(issues: list[dict]) -> None:
-    """Print a grouped quality report to stdout."""
+def _gha_file_annotation(
+    level: str, title: str, message: str, file: str, line: int
+) -> None:
+    """Emit a GitHub Actions annotation anchored to a specific file and line.
+
+    When ``file`` and ``line`` are provided the annotation appears inline in the
+    PR diff view, making it immediately obvious which symbol needs fixing.
+
+    Args:
+        level: Annotation level — ``"error"``, ``"warning"``, or ``"notice"``.
+        title: Short label shown in bold in the annotation.
+        message: Body text for the annotation.
+        file: Repo-relative file path (e.g. ``mellea/core/base.py``).
+        line: 1-based line number of the symbol definition.
+    """
+    for s in (message, title, file):
+        s = s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    if file and line:
+        print(f"::{level} file={file},line={line},title={title}::{message}")
+    else:
+        print(f"::{level} title={title}::{message}")
+
+
+# GitHub Actions silently drops inline diff annotations beyond ~10 per step.
+# This per-kind cap ensures every category gets at least one visible annotation
+# rather than early kinds consuming the entire budget.
+_GHA_ANNOTATIONS_PER_KIND = 10
+
+
+def _print_quality_report(
+    issues: list[dict], *, fail_on_quality: bool = False
+) -> None:
+    """Print a grouped quality report to stdout and emit GHA annotations.
+
+    When running in GitHub Actions (``GITHUB_ACTIONS=true``), each issue is
+    also emitted as a file-level annotation (``::error`` or ``::warning``)
+    anchored to the source line, so they appear inline in the PR diff.
+
+    GitHub Actions caps inline diff annotations at roughly 10 per step; issues
+    beyond that cap are silently dropped from the diff view (they still appear
+    in the full job log and in the JSON artifact).  To ensure every check
+    category gets at least one visible annotation, this function emits at most
+    :data:`_GHA_ANNOTATIONS_PER_KIND` annotations per kind and prints a
+    ``"... and N more"`` notice for the remainder.  The complete list is always
+    written to the job log regardless of the GHA cap.
+
+    Args:
+        issues: List of issue dicts from :func:`audit_docstring_quality`.
+            Each dict must have keys: ``path``, ``kind``, ``detail``,
+            ``file``, ``line``.
+        fail_on_quality: When ``True`` annotations are emitted as ``error``
+            (red); otherwise as ``warning`` (yellow).
+    """
     by_kind: dict[str, list[dict]] = {}
     for issue in issues:
         by_kind.setdefault(issue["kind"], []).append(issue)
@@ -447,6 +571,8 @@ def _print_quality_report(issues: list[dict]) -> None:
         "typeddict_phantom": "TypedDict phantom fields (documented but not declared)",
         "typeddict_undocumented": "TypedDict undocumented fields (declared but missing from Attributes:)",
     }
+
+    annotation_level = "error" if fail_on_quality else "warning"
 
     total = len(issues)
     print(f"\n{'=' * 60}")
@@ -471,12 +597,37 @@ def _print_quality_report(issues: list[dict]) -> None:
         if not items:
             continue
         label = kind_labels.get(kind, kind)
+        fix_hint, ref_url = _KIND_FIX_HINTS.get(kind, ("", ""))
         print(f"\n{'─' * 50}")
         print(f"  {label} ({len(items)})")
+        if fix_hint:
+            print(f"  Fix: {fix_hint}")
+        if ref_url:
+            print(f"  Ref: {ref_url}")
         print(f"{'─' * 50}")
-        for item in sorted(items, key=lambda x: x["path"]):
-            print(f"  {item['path']}")
+        sorted_items = sorted(items, key=lambda x: x["path"])
+        gha_emitted = 0
+        for item in sorted_items:
+            file_ref = item.get("file", "")
+            line_num = item.get("line", 0)
+            loc = f"  [{file_ref}:{line_num}]" if file_ref and line_num else ""
+            print(f"  {item['path']}{loc}")
             print(f"    {item['detail']}")
+            if _IN_GHA and file_ref and gha_emitted < _GHA_ANNOTATIONS_PER_KIND:
+                _gha_file_annotation(
+                    annotation_level,
+                    f"[{kind}] {item['path']}",
+                    item["detail"],
+                    file_ref,
+                    line_num,
+                )
+                gha_emitted += 1
+        if _IN_GHA and len(sorted_items) > _GHA_ANNOTATIONS_PER_KIND:
+            remainder = len(sorted_items) - _GHA_ANNOTATIONS_PER_KIND
+            print(
+                f"  (GHA annotations capped at {_GHA_ANNOTATIONS_PER_KIND} per kind — "
+                f"{remainder} more {kind!r} issue(s) in job log and JSON artifact)"
+            )
 
 
 def audit_nav_orphans(docs_dir: Path, source_dir: Path) -> list[str]:
@@ -724,7 +875,7 @@ def main():
                         documented=documented,
                     )
                 )
-        _print_quality_report(quality_issues)
+        _print_quality_report(quality_issues, fail_on_quality=args.fail_on_quality)
 
     # Nav orphan check — MDX files not referenced in mint.json navigation
     orphans: list[str] = []
