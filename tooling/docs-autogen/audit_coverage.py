@@ -58,9 +58,13 @@ def _is_public_submodule(submodule_name: str, submodule_filepath: Path | None) -
         return False
     if submodule_filepath is None:
         return True  # conservative: keep if we can't determine
-    # The submodule filepath is either a .py file or a package __init__.py.
-    # The parent __init__.py to check is one level up.
-    parent_init = submodule_filepath.parent.parent / "__init__.py"
+    # Griffe gives filepath as:
+    #   - module file:  .../pkg/submodule.py  → parent init is  .../pkg/__init__.py
+    #   - package:      .../pkg/subpkg/__init__.py → parent init is .../pkg/__init__.py
+    if submodule_filepath.name == "__init__.py":
+        parent_init = submodule_filepath.parent.parent / "__init__.py"
+    else:
+        parent_init = submodule_filepath.parent / "__init__.py"
     if not parent_init.exists():
         return True  # conservative
     subs = _imported_submodule_names(parent_init)
