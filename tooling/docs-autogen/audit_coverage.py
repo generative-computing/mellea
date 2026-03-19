@@ -207,6 +207,29 @@ def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
                         }
                     )
 
+            # Missing type annotation: Args: section exists but parameters lack Python
+            # annotations — the type column will be absent from the generated API docs.
+            # Only checked here (when Args: exists) to avoid duplicating no_args reports.
+            # Variadic *args/**kwargs are excluded via ParameterKind (same filter as concrete).
+            unannotated = [
+                p.name
+                for p in (params or [])
+                if p.name not in ("self", "cls")
+                and getattr(p, "kind", None) not in _variadic_kinds
+                and p.annotation is None
+            ]
+            if unannotated:
+                sample = ", ".join(unannotated[:3]) + (
+                    "..." if len(unannotated) > 3 else ""
+                )
+                issues.append(
+                    {
+                        "path": full_path,
+                        "kind": "missing_param_type",
+                        "detail": f"params [{sample}] have no Python type annotation — type absent from API docs",
+                    }
+                )
+
         # Returns/Yields section check: only flag when there is an explicit non-trivial annotation.
         # Generator return types (Generator, Iterator, etc.) require Yields:, not Returns:.
         returns = getattr(member, "returns", None)
@@ -229,6 +252,18 @@ def _check_member(member, full_path: str, short_threshold: int) -> list[dict]:
                         "detail": f"return type {ret_str!r} has no Returns section",
                     }
                 )
+
+        # Missing return annotation: Returns: section documented but no Python annotation.
+        # Naturally non-overlapping with no_returns (which fires when annotation exists
+        # but Returns: section is absent). When both are missing, no_returns fires first.
+        if not ret_str and _RETURNS_RE.search(doc_text):
+            issues.append(
+                {
+                    "path": full_path,
+                    "kind": "missing_return_type",
+                    "detail": "Returns: section documented but no return type annotation — type absent from API docs",
+                }
+            )
 
         # Raises section check: only flag when the source contains explicit raise statements
         source = getattr(member, "source", None) or ""
@@ -355,6 +390,12 @@ def audit_docstring_quality(
     - param_mismatch: Args section documents names absent from the real signature
     - typeddict_phantom: TypedDict Attributes: section documents fields not declared in the class
     - typeddict_undocumented: TypedDict has declared fields absent from its Attributes: section
+    - missing_param_type: Args: section exists but one or more parameters lack Python type
+      annotations — the type column will be absent from the generated API docs. Only checked
+      when no no_args issue exists (avoids duplicate reports).
+    - missing_return_type: Returns: section exists but the function has no return type
+      annotation — the return type will be absent from the generated API docs. Only checked
+      when no no_returns issue exists (avoids duplicate reports).
 
     Note: Attributes: sections are intentionally not enforced for regular classes. Under
     the Option C convention, Attributes: is only used when stored values differ in type or
@@ -495,6 +536,14 @@ _KIND_FIX_HINTS: dict[str, tuple[str, str]] = {
         "Add the missing fields to the Attributes: section.",
         f"{_CONTRIB_DOCS_URL}#typeddict-classes",
     ),
+    "missing_param_type": (
+        "Add a Python type annotation to each listed parameter in the function signature.",
+        f"{_CONTRIB_DOCS_URL}#args-returns-yields-and-raises",
+    ),
+    "missing_return_type": (
+        "Add a return type annotation (-> SomeType) to the function signature.",
+        f"{_CONTRIB_DOCS_URL}#args-returns-yields-and-raises",
+    ),
 }
 
 
@@ -573,6 +622,8 @@ def _print_quality_report(issues: list[dict], *, fail_on_quality: bool = False) 
         "param_mismatch": "Param name mismatches (documented but not in signature)",
         "typeddict_phantom": "TypedDict phantom fields (documented but not declared)",
         "typeddict_undocumented": "TypedDict undocumented fields (declared but missing from Attributes:)",
+        "missing_param_type": "Missing parameter type annotations (type absent from API docs)",
+        "missing_return_type": "Missing return type annotations (type absent from API docs)",
     }
 
     annotation_level = "error" if fail_on_quality else "warning"
@@ -595,6 +646,8 @@ def _print_quality_report(issues: list[dict], *, fail_on_quality: bool = False) 
         "param_mismatch",
         "typeddict_phantom",
         "typeddict_undocumented",
+        "missing_param_type",
+        "missing_return_type",
     ):
         items = by_kind.get(kind, [])
         if not items:
@@ -889,7 +942,9 @@ def main():
                 print(f"    {sym}")
         if _IN_GHA:
             _gha_cmd(
-                "error" if report["coverage_percentage"] < args.threshold else "warning",
+                "error"
+                if report["coverage_percentage"] < args.threshold
+                else "warning",
                 "API Coverage",
                 f"{total_missing} symbol(s) undocumented in "
                 f"{len(report['missing_symbols'])} module(s) — "

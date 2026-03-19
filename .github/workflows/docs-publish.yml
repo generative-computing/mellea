@@ -222,6 +222,8 @@ jobs:
               "Param name mismatches (documented but not in signature)": "param_mismatch",
               "TypedDict phantom fields (documented but not declared)": "td_phantom",
               "TypedDict undocumented fields (declared but missing from Attributes:)": "td_undoc",
+              "Missing parameter type annotations (type absent from API docs)": "missing_param_type",
+              "Missing return type annotations (type absent from API docs)": "missing_return_type",
           }
           section_re = re.compile(r"^\s{2}(.+?)\s+\((\d+)\)\s*$", re.MULTILINE)
           kind_counts = {}
@@ -273,6 +275,7 @@ jobs:
                   ("no_args / no_returns / no_yields / no_raises", "args-returns-yields-and-raises"),
                   ("no_class_args / duplicate_init_args / param_mismatch", "class-docstrings-option-c"),
                   ("typeddict_phantom / typeddict_undocumented", "typeddict-classes"),
+                  ("missing_param_type / missing_return_type", "args-returns-yields-and-raises"),
               ]
               for kind_label, anchor in kind_anchors:
                   lines.append(f"| `{kind_label}` | [{anchor.replace('-', ' ').title()}]({CONTRIB_URL}#{anchor}) |")

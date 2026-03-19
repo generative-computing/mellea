@@ -389,6 +389,8 @@ in the table below, follow the fix instructions, and re-push.
 | `no_returns` | Function has a non-`None` return annotation but the docstring has no `Returns:` section | Add a `Returns:` section describing what is returned and when |
 | `no_yields` | Function returns `Generator` / `Iterator` but the docstring has no `Yields:` section | Add a `Yields:` section — generator functions use `Yields:`, not `Returns:` |
 | `no_raises` | Function source contains `raise` but the docstring has no `Raises:` section | Add a `Raises:` section listing each exception type and the condition that triggers it |
+| `missing_param_type` | `Args:` section exists but one or more parameters have no Python type annotation — the type column is absent from the generated API docs | Add a type annotation to each listed parameter in the function signature (e.g. `def f(x: int)`). Only fires when `no_args` is already satisfied; `*args`/`**kwargs` are excluded. |
+| `missing_return_type` | `Returns:` section is documented but the function has no return type annotation — the return type is absent from the generated API docs | Add a return annotation to the function signature (e.g. `-> str`). Only fires when `no_returns` is already satisfied. |
 
 #### Class docstrings (Option C)
 
