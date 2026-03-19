@@ -524,11 +524,6 @@ def decompose(
     logger.info("log_mode       : %s", log_mode.value)
     logger.info("user_input_vars: %s", user_input_variable or "[]")
 
-    if log_mode == LogMode.debug:
-        logger.info("user_query     : %s", task_prompt)
-    else:
-        logger.info("user_query     : %s", _preview_text(task_prompt))
-
     m_session = build_backend_session(
         model_id=model_id,
         backend=backend,

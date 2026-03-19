@@ -1,7 +1,7 @@
 # decompose/decompose.py
 """Implementation of the ``m decompose run`` CLI command.
 
-Accepts a task prompt (from a text file or interactive input), calls the multi-step
+Accepts a user input (from a text file or interactive input), calls the multi-step
 LLM decomposition pipeline to produce a structured list of subtasks each with
 constraints and inter-subtask dependencies, then validates and topologically reorders
 the subtasks before writing a JSON result file and a rendered Python script to the
@@ -283,7 +283,7 @@ def run(
                 "Each input variable name must be a valid Python identifier."
             )
 
-        log_section(logger, "load task prompt")
+        log_section(logger, "load user input")
 
         if input_file:
             input_path = Path(input_file)
@@ -302,31 +302,31 @@ def run(
             if not task_jobs:
                 raise ValueError("Input file contains no non-empty task lines.")
         else:
-            task_prompt = typer.prompt(
+            user_input = typer.prompt(
                 (
                     "\nThis mode doesn't support tasks that need input data."
                     + '\nInput must be provided in a single line. Use "\\n" for new lines.'
-                    + "\n\nInsert the task prompt to decompose"
+                    + "\n\nInsert the user input to decompose"
                 ),
                 type=str,
             )
-            task_prompt = task_prompt.replace("\\n", "\n")
-            task_jobs = [task_prompt]
+            user_input = user_input.replace("\\n", "\n")
+            task_jobs = [user_input]
             user_input_variable = None
 
             logger.info("prompt source  : interactive")
             logger.info("task jobs      : 1")
 
-        for job_idx, task_prompt in enumerate(task_jobs, start=1):
+        for job_idx, user_input in enumerate(task_jobs, start=1):
             job_out_name = out_name if len(task_jobs) == 1 else f"{out_name}_{job_idx}"
 
             log_section(logger, f"run pipeline job {job_idx}/{len(task_jobs)}")
             logger.info("job out_name   : %s", job_out_name)
-            logger.info("prompt length  : %d", len(task_prompt))
-            logger.info("task prompt    : %s", task_prompt)
+            logger.info("prompt length  : %d", len(user_input))
+            logger.info("user input    : %s", user_input)
 
             decomp_data = pipeline.decompose(
-                task_prompt=task_prompt,
+                user_input=user_input,
                 user_input_variable=user_input_variable,
                 model_id=model_id,
                 backend=backend,
