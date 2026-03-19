@@ -66,9 +66,21 @@ def get_system_capabilities():
 
         if has_cuda:
             try:
-                capabilities["gpu_memory_gb"] = torch.cuda.get_device_properties(
-                    0
-                ).total_memory / (1024**3)
+                # Use nvidia-smi to avoid initializing CUDA in parent process.
+                # torch.cuda.get_device_properties(0) creates a CUDA context,
+                # which causes "Cannot re-initialize CUDA in forked subprocess"
+                # when vLLM's EngineCore forks (vLLM v1 uses multiprocessing).
+                result = subprocess.run(
+                    [
+                        "nvidia-smi",
+                        "--query-gpu=memory.total",
+                        "--format=csv,noheader,nounits",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                capabilities["gpu_memory_gb"] = float(result.stdout.strip()) / 1024
             except Exception:
                 pass
         # Note: MPS doesn't provide easy memory query, leave at 0
@@ -702,34 +714,50 @@ def pytest_runtest_setup(item):
 
     # Track backend group transitions when --group-by-backend is used
     if config.getoption("--group-by-backend", default=False):
-        # Determine current group
         current_group = None
         for group_name, group_info in BACKEND_GROUPS.items():
             if item.get_closest_marker(group_info["marker"]):
                 current_group = group_name
                 break
 
-        # Check if we transitioned from vllm to another group
         prev_group = getattr(pytest_runtest_setup, "_last_backend_group", None)
-        if prev_group == "vllm" and current_group != "vllm":
-            # Shut down EngineCore before HF tests need a CUDA context
+
+        if prev_group is not None and current_group != prev_group:
             logger = FancyLogger.get_logger()
             logger.info(
                 f"Backend transition: {prev_group} → {current_group}. "
-                "Shutting down vLLM EngineCore to allow parent CUDA context."
+                "Running GPU cleanup."
             )
-            try:
-                shared_backend_defs = item.session._fixturemanager._arg2fixturedefs.get(
-                    "shared_vllm_backend"
-                )
-                if shared_backend_defs:
-                    backend_instance = shared_backend_defs[-1].cached_result[0]
-                    if backend_instance is not None:
-                        cleanup_gpu_backend(backend_instance, "shared-vllm-transition")
-            except Exception as e:
-                logger.warning(f"Failed to cleanup vLLM backend on transition: {e}")
 
-        # Store current group for next iteration
+            # Clean up shared vLLM backend if leaving vLLM group
+            if prev_group in ("vllm", "openai_vllm"):
+                try:
+                    shared_backend_defs = (
+                        item.session._fixturemanager._arg2fixturedefs.get(
+                            "shared_vllm_backend"
+                        )
+                    )
+                    if shared_backend_defs:
+                        backend_instance = shared_backend_defs[-1].cached_result[0]
+                        if backend_instance is not None:
+                            cleanup_gpu_backend(
+                                backend_instance, "shared-vllm-transition"
+                            )
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup vLLM backend on transition: {e}")
+
+            # General GPU flush for any transition
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    gc.collect()
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+            except ImportError:
+                pass
+
         pytest_runtest_setup._last_backend_group = current_group
 
     # Check for override flags from CLI

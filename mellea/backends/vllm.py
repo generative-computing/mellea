@@ -184,22 +184,15 @@ class LocalVLLMBackend(FormatterBackend):
                     or engine_args["gpu_memory_utilization"] < 0.1
                 ):
                     raise RuntimeError(
-                        "CUDA out of memory during vLLM initialization!\n"
+                        f"Failed to initialize vLLM engine (last error: {e}).\n"
                         "\n"
                         "Exhausted all retry attempts:\n"
                         f"  • gpu_memory_utilization: {engine_args['gpu_memory_utilization']:.2f}\n"
                         f"  • max_model_len: {engine_args['max_model_len']}\n"
                         f"  • max_num_seqs: {engine_args['max_num_seqs']}\n"
                         "\n"
-                        "Common causes:\n"
-                        "  1. Multiple vLLM backends in same process\n"
-                        "  2. Other processes using GPU memory\n"
-                        "  3. Insufficient GPU VRAM\n"
-                        "\n"
-                        "Solutions:\n"
-                        "  • Use shared backend: Tests should use session-scoped fixture\n"
-                        "  • Use process isolation: pytest --isolate-heavy test/backends/\n"
-                        "  • Check GPU: nvidia-smi\n"
+                        "Please check the full stack trace above for details.\n"
+                        "Common issues: OOM, CUDA fork errors, GPU exclusive_process mode.\n"
                     )
                 logger.info(
                     f"Reducing vllm model parameters to make it fit in the GPU memory.\n"
