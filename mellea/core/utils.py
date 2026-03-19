@@ -167,7 +167,11 @@ class FancyLogger:
 
     @staticmethod
     def get_logger() -> logging.Logger:
-        """Returns a FancyLogger.logger and sets level based upon env vars."""
+        """Returns a FancyLogger.logger and sets level based upon env vars.
+
+        Returns:
+            Configured logger with REST, stream, and optional OTLP handlers.
+        """
         if FancyLogger.logger is None:
             logger = logging.getLogger("fancy_logger")
             # Only set default level if user hasn't already configured it

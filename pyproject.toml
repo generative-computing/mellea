@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "mellea"
-version = "0.3.2"
+version = "0.4.0"
 authors = [
     { name = "Mellea Contributors", email = "melleaadmin@ibm.com" },
 ]
@@ -75,10 +75,12 @@ telemetry = [
     "opentelemetry-exporter-otlp>=1.20.0",
     "opentelemetry-exporter-prometheus>=0.40b0",
     "opentelemetry-distro>=0.59b0",
+    "mellea[hooks]",
 ]
 
 docling = [
     "docling>=2.45.0",
+    "opencv-python-headless",  # workaround: docling-ibm-models uses cv2 but omits it from its declared dependencies; headless variant required on Apple Silicon
 ]
 
 granite_retriever = [

@@ -704,23 +704,21 @@ class OllamaModelBackend(FormatterBackend):
         )
         completion_tokens = getattr(response, "eval_count", None) if response else None
 
-        # Record metrics if enabled
-        from ..telemetry.metrics import is_metrics_enabled
+        # Populate standardized usage field (convert to OpenAI format)
+        if prompt_tokens is not None and completion_tokens is not None:
+            mot.usage = {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+            }
 
-        if is_metrics_enabled():
-            from ..telemetry.backend_instrumentation import (
-                get_model_id_str,
-                get_system_name,
-            )
-            from ..telemetry.metrics import record_token_usage_metrics
-
-            record_token_usage_metrics(
-                input_tokens=prompt_tokens,
-                output_tokens=completion_tokens,
-                model=get_model_id_str(self),
-                backend=self.__class__.__name__,
-                system=get_system_name(self),
-            )
+        # Populate model and provider metadata
+        mot.model = (
+            self.model_id.ollama_name
+            if isinstance(self.model_id, ModelIdentifier)
+            else str(self.model_id)
+        )
+        mot.provider = "ollama"
 
         # Record telemetry and close span now that response is available
         span = mot._meta.get("_telemetry_span")
@@ -732,14 +730,8 @@ class OllamaModelBackend(FormatterBackend):
             )
 
             if response:
-                # Ollama responses may have usage information
-                if prompt_tokens is not None or completion_tokens is not None:
-                    usage = {
-                        "prompt_tokens": prompt_tokens,
-                        "completion_tokens": completion_tokens,
-                        "total_tokens": (prompt_tokens or 0) + (completion_tokens or 0),
-                    }
-                    record_token_usage(span, usage)
+                if mot.usage:
+                    record_token_usage(span, mot.usage)
                 record_response_metadata(span, response)
 
             # Close the span now that telemetry is recorded

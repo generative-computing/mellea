@@ -1133,18 +1133,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         span = mot._meta.get("_telemetry_span")
-        from ..telemetry.metrics import is_metrics_enabled
 
-        metrics_enabled = is_metrics_enabled()
-
-        # Extract token counts only if needed
+        # Derive token counts from the output sequences (HF models have no usage object).
         hf_output = mot._meta.get("hf_output")
         n_prompt, n_completion = None, None
-        if (span is not None or metrics_enabled) and isinstance(
-            hf_output, GenerateDecoderOnlyOutput
-        ):
-            # HuggingFace local models don't provide usage objects, but we can
-            # calculate token counts from sequences
+        if isinstance(hf_output, GenerateDecoderOnlyOutput):
             try:
                 if input_ids is not None and hf_output.sequences is not None:
                     n_prompt = input_ids.shape[1]
@@ -1152,21 +1145,19 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             except Exception:
                 pass
 
-        # Record metrics if enabled
-        if metrics_enabled and n_prompt is not None:
-            from ..telemetry.backend_instrumentation import (
-                get_model_id_str,
-                get_system_name,
-            )
-            from ..telemetry.metrics import record_token_usage_metrics
+        if n_prompt is not None and n_completion is not None:
+            mot.usage = {
+                "prompt_tokens": n_prompt,
+                "completion_tokens": n_completion,
+                "total_tokens": n_prompt + n_completion,
+            }
 
-            record_token_usage_metrics(
-                input_tokens=n_prompt,
-                output_tokens=n_completion,
-                model=get_model_id_str(self),
-                backend=self.__class__.__name__,
-                system=get_system_name(self),
-            )
+        # Populate model and provider metadata
+        if hasattr(self.model_id, "hf_model_name"):
+            mot.model = str(self.model_id.hf_model_name)  # type: ignore
+        else:
+            mot.model = str(self.model_id)
+        mot.provider = "huggingface"
 
         # Record tracing if span exists
         if span is not None:
@@ -1178,13 +1169,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             if isinstance(hf_output, GenerateDecoderOnlyOutput):
                 record_response_metadata(span, hf_output)
-                if n_prompt is not None:
-                    usage = {
-                        "prompt_tokens": n_prompt,
-                        "completion_tokens": n_completion,
-                        "total_tokens": n_prompt + n_completion,
-                    }
-                    record_token_usage(span, usage)
+                if mot.usage:
+                    record_token_usage(span, mot.usage)
 
             # Close the span now that async operation is complete
             end_backend_span(span)

@@ -53,25 +53,27 @@ class IntriniscsCatalogEntry(pydantic.BaseModel):
     )
 
 
+# Mellea will update which repositories are linked as new ones come online. The original repos
+# are on an older layout that will be changed.
 _RAG_REPO = "ibm-granite/granite-lib-rag-r1.0"
 _CORE_REPO = "ibm-granite/rag-intrinsics-lib"
+_CORE_R1_REPO = "ibm-granite/granitelib-core-r1.0"
+_GUARDIAN_REPO = "ibm-granite/granitelib-guardian-r1.0"
 
 
 _INTRINSICS_CATALOG_ENTRIES = [
     ############################################
     # Core Intrinsics
     ############################################
-    IntriniscsCatalogEntry(name="requirement_check", repo_id=_CORE_REPO),
-    IntriniscsCatalogEntry(name="uncertainty", repo_id=_CORE_REPO),
+    IntriniscsCatalogEntry(name="context-attribution", repo_id=_CORE_R1_REPO),
+    IntriniscsCatalogEntry(name="requirement-check", repo_id=_CORE_R1_REPO),
+    IntriniscsCatalogEntry(
+        name="requirement_check", repo_id=_CORE_REPO
+    ),  # Necessary to support granite 3.2 and 3.3.
+    IntriniscsCatalogEntry(name="uncertainty", repo_id=_CORE_R1_REPO),
     ############################################
     # RAG Intrinsics
     ############################################
-    IntriniscsCatalogEntry(
-        name="answer_relevance_classifier",
-        repo_id=_RAG_REPO,
-        adapter_types=(AdapterType.LORA,),
-    ),
-    IntriniscsCatalogEntry(name="answer_relevance_rewriter", repo_id=_RAG_REPO),
     IntriniscsCatalogEntry(name="answerability", repo_id=_RAG_REPO),
     IntriniscsCatalogEntry(name="citations", repo_id=_RAG_REPO),
     IntriniscsCatalogEntry(name="context_relevance", repo_id=_RAG_REPO),
@@ -80,6 +82,27 @@ _INTRINSICS_CATALOG_ENTRIES = [
         name="query_clarification", repo_id=_RAG_REPO, adapter_types=(AdapterType.LORA,)
     ),
     IntriniscsCatalogEntry(name="query_rewrite", repo_id=_RAG_REPO),
+    ############################################
+    # Guardian Intrinsics
+    ############################################
+    IntriniscsCatalogEntry(
+        name="policy-guardrails",
+        repo_id=_GUARDIAN_REPO,
+        adapter_types=(AdapterType.LORA,),
+    ),
+    IntriniscsCatalogEntry(
+        name="guardian-core", repo_id=_GUARDIAN_REPO, adapter_types=(AdapterType.LORA,)
+    ),
+    IntriniscsCatalogEntry(
+        name="factuality-detection",
+        repo_id=_GUARDIAN_REPO,
+        adapter_types=(AdapterType.LORA,),
+    ),
+    IntriniscsCatalogEntry(
+        name="factuality-correction",
+        repo_id=_GUARDIAN_REPO,
+        adapter_types=(AdapterType.LORA,),
+    ),
 ]
 
 _INTRINSICS_CATALOG = {e.name: e for e in _INTRINSICS_CATALOG_ENTRIES}

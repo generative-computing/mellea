@@ -253,6 +253,209 @@ def validate_anchor_collisions(docs_dir: Path) -> tuple[int, list[str]]:
     return len(errors), errors
 
 
+def validate_rst_docstrings(source_dir: Path) -> tuple[int, list[str]]:
+    """Scan Python source files for RST double-backtick notation in docstrings.
+
+    RST-style ``Symbol`` double-backtick markup interacts badly with the
+    add_cross_references step: the regex matches the inner single-backtick
+    boundary and generates a broken link wrapped in an extra code span, e.g.
+    ``Backend`` → `[`Backend`](url)` which Mintlify renders as raw text
+    rather than a clickable link.
+
+    Args:
+        source_dir: Root of the Python source tree to scan (e.g. repo/mellea)
+
+    Returns:
+        Tuple of (error_count, error_messages)
+    """
+    errors = []
+    # Match ``Word`` where Word starts with a letter (RST inline literal)
+    pattern = re.compile(r"``([A-Za-z][^`]*)``")
+
+    for py_file in source_dir.rglob("*.py"):
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except Exception:
+            continue
+
+        for line_num, line in enumerate(content.splitlines(), 1):
+            if pattern.search(line):
+                rel = py_file.relative_to(source_dir.parent)
+                errors.append(
+                    f"{rel}:{line_num}: RST double-backtick notation — "
+                    f"use single backticks for Markdown/MDX compatibility\n"
+                    f"  {line.strip()[:100]}"
+                )
+
+    return len(errors), errors
+
+
+def validate_stale_files(docs_root: Path) -> tuple[int, list[str]]:
+    """Check for stale files that should have been cleaned up.
+
+    Detects review artifacts, superseded files, and other content that
+    accumulates during doc rewrites and should not ship in a release.
+
+    Args:
+        docs_root: The ``docs/`` directory (parent of ``docs/docs/``).
+
+    Returns:
+        Tuple of (error_count, error_messages).
+    """
+    errors = []
+
+    # Review tracker artifacts (e.g. PR601-REVIEW.md)
+    for f in docs_root.glob("*REVIEW*"):
+        errors.append(f"Stale review artifact: {f.relative_to(docs_root)}")
+
+    # Superseded landing page: docs/index.md replaced by docs/docs/index.mdx
+    old_index = docs_root / "index.md"
+    new_index = docs_root / "docs" / "index.mdx"
+    if old_index.exists() and new_index.exists():
+        errors.append("Stale file: index.md — superseded by docs/index.mdx")
+
+    # Legacy tutorial: docs/tutorial.md replaced by docs/docs/tutorials/
+    old_tutorial = docs_root / "tutorial.md"
+    tutorials_dir = docs_root / "docs" / "tutorials"
+    if old_tutorial.exists() and tutorials_dir.is_dir():
+        errors.append("Stale file: tutorial.md — superseded by docs/tutorials/")
+
+    return len(errors), errors
+
+
+def validate_examples_catalogue(docs_root: Path) -> tuple[int, list[str]]:
+    """Check that every example directory is listed in the examples index page.
+
+    Scans ``docs/examples/`` for subdirectories that contain at least one
+    ``.py`` file and verifies each directory name appears in the catalogue
+    table in ``docs/docs/examples/index.md``.
+
+    Args:
+        docs_root: The ``docs/`` directory (parent of ``docs/docs/``).
+
+    Returns:
+        Tuple of (error_count, error_messages).
+    """
+    errors: list[str] = []
+    examples_dir = docs_root / "examples"
+    index_file = docs_root / "docs" / "examples" / "index.md"
+
+    if not examples_dir.is_dir():
+        return 0, []
+    if not index_file.exists():
+        errors.append("Examples index page not found: docs/docs/examples/index.md")
+        return len(errors), errors
+
+    index_content = index_file.read_text()
+
+    # Directories to skip: not standalone example categories
+    skip = {"__pycache__", "helper"}
+
+    for child in sorted(examples_dir.iterdir()):
+        if not child.is_dir():
+            continue
+        if child.name in skip or child.name.startswith("."):
+            continue
+        # Only check directories that contain at least one .py file
+        if not any(child.rglob("*.py")):
+            continue
+        # Check the directory name appears in the index (as a table entry or heading)
+        if (
+            f"`{child.name}/" not in index_content
+            and f"`{child.name}`" not in index_content
+        ):
+            errors.append(
+                f"Example directory '{child.name}/' is not listed in "
+                f"docs/docs/examples/index.md"
+            )
+
+    return len(errors), errors
+
+
+def validate_doc_imports(docs_dir: Path) -> tuple[int, list[str]]:
+    """Verify that mellea imports in documentation code blocks still resolve.
+
+    Parses fenced Python code blocks in static docs for ``from mellea.X import Y``
+    and ``import mellea.X`` statements, then checks whether each module and symbol
+    exists at import time.  Optional-dependency failures (``ImportError`` whose
+    message mentions a third-party package) are silently skipped.
+
+    Args:
+        docs_dir: The ``docs/docs/`` directory containing static documentation.
+
+    Returns:
+        Tuple of (error_count, error_messages).
+    """
+    import importlib
+
+    errors: list[str] = []
+    seen: set[tuple[str, str]] = set()
+
+    for doc_file in sorted(
+        list(docs_dir.rglob("*.md")) + list(docs_dir.rglob("*.mdx"))
+    ):
+        content = doc_file.read_text()
+        rel = doc_file.relative_to(docs_dir)
+        in_python = False
+
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("```python"):
+                in_python = True
+                continue
+            if stripped.startswith("```") and in_python:
+                in_python = False
+                continue
+            if not in_python:
+                continue
+
+            # from mellea.X import Y, Z
+            m = re.match(r"\s*from\s+(mellea[\w.]*)\s+import\s+(.+)", line)
+            if m:
+                module = m.group(1)
+                names = [
+                    n.strip().split(" as ")[0].strip().rstrip(",")
+                    for n in m.group(2).split(",")
+                ]
+                for name in names:
+                    if not name or not name.isidentifier():
+                        continue
+                    key = (module, name)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    try:
+                        mod = importlib.import_module(module)
+                    except ImportError:
+                        # Optional dependency not installed — skip
+                        continue
+                    if not hasattr(mod, name):
+                        # Could be a submodule (e.g. from pkg import submod)
+                        try:
+                            importlib.import_module(f"{module}.{name}")
+                        except ImportError:
+                            errors.append(
+                                f"{rel}: from {module} import {name}"
+                                f" — symbol not found in module"
+                            )
+                continue
+
+            # import mellea.X
+            m2 = re.match(r"\s*import\s+(mellea[\w.]+)", line)
+            if m2:
+                module = m2.group(1)
+                key = (module, "")
+                if key in seen:
+                    continue
+                seen.add(key)
+                try:
+                    importlib.import_module(module)
+                except ImportError:
+                    continue
+
+    return len(errors), errors
+
+
 def generate_report(
     source_link_errors: list[str],
     coverage_passed: bool,
@@ -260,12 +463,23 @@ def generate_report(
     mdx_errors: list[str],
     link_errors: list[str],
     anchor_errors: list[str],
+    rst_docstring_errors: list[str] | None = None,
+    stale_errors: list[str] | None = None,
+    import_errors: list[str] | None = None,
+    examples_catalogue_errors: list[str] | None = None,
 ) -> dict:
     """Generate validation report.
 
     Returns:
-        Report dictionary with all validation results
+        Report dictionary with all validation results.
     """
+    if stale_errors is None:
+        stale_errors = []
+    if import_errors is None:
+        import_errors = []
+    if examples_catalogue_errors is None:
+        examples_catalogue_errors = []
+
     return {
         "source_links": {
             "passed": len(source_link_errors) == 0,
@@ -294,12 +508,36 @@ def generate_report(
             "error_count": len(anchor_errors),
             "errors": anchor_errors,
         },
+        "rst_docstrings": {
+            "passed": len(rst_docstring_errors or []) == 0,
+            "error_count": len(rst_docstring_errors or []),
+            "errors": rst_docstring_errors or [],
+        },
+        "stale_files": {
+            "passed": len(stale_errors) == 0,
+            "error_count": len(stale_errors),
+            "errors": stale_errors,
+        },
+        "doc_imports": {
+            "passed": len(import_errors) == 0,
+            "error_count": len(import_errors),
+            "errors": import_errors,
+        },
+        "examples_catalogue": {
+            "passed": len(examples_catalogue_errors) == 0,
+            "error_count": len(examples_catalogue_errors),
+            "errors": examples_catalogue_errors,
+        },
         "overall_passed": (
             len(source_link_errors) == 0
             and coverage_passed
             and len(mdx_errors) == 0
             and len(link_errors) == 0
             and len(anchor_errors) == 0
+            and len(stale_errors) == 0
+            and len(import_errors) == 0
+            and len(examples_catalogue_errors) == 0
+            # rst_docstrings is a warning only — does not fail the build
         ),
     }
 
@@ -319,6 +557,16 @@ def main():
     parser.add_argument("--output", help="Output JSON report file")
     parser.add_argument(
         "--skip-coverage", action="store_true", help="Skip coverage validation"
+    )
+    parser.add_argument(
+        "--source-dir",
+        type=Path,
+        default=None,
+        help="Python source root to scan for RST double-backtick notation (e.g. mellea/)",
+    )
+    parser.add_argument(
+        "--docs-root",
+        help="Root docs/ directory for stale-file checks (default: parent of docs_dir)",
     )
     args = parser.parse_args()
 
@@ -356,6 +604,22 @@ def main():
     print("Checking anchor collisions...")
     _, anchor_errors = validate_anchor_collisions(docs_dir)
 
+    rst_docstring_errors: list[str] = []
+    if args.source_dir:
+        print("Checking source docstrings for RST double-backtick notation...")
+        _, rst_docstring_errors = validate_rst_docstrings(args.source_dir)
+
+    print("Checking for stale files...")
+    docs_root = Path(args.docs_root) if args.docs_root else docs_dir.parent
+    _, stale_errors = validate_stale_files(docs_root)
+
+    print("Checking doc imports...")
+    static_docs_dir = docs_root / "docs" if docs_root else docs_dir.parent
+    _, import_errors = validate_doc_imports(static_docs_dir)
+
+    print("Checking examples catalogue...")
+    _, examples_catalogue_errors = validate_examples_catalogue(docs_root)
+
     # Generate report
     report = generate_report(
         source_link_errors,
@@ -364,6 +628,10 @@ def main():
         mdx_errors,
         link_errors,
         anchor_errors,
+        rst_docstring_errors,
+        stale_errors,
+        import_errors,
+        examples_catalogue_errors,
     )
 
     # Print results
@@ -398,6 +666,27 @@ def main():
     if not report["anchor_collisions"]["passed"]:
         print(f"   {report['anchor_collisions']['error_count']} errors found")
 
+    if args.source_dir:
+        print(
+            f"✅ RST docstrings: {'PASS' if report['rst_docstrings']['passed'] else 'FAIL'}"
+        )
+        if not report["rst_docstrings"]["passed"]:
+            print(f"   {report['rst_docstrings']['error_count']} occurrences found")
+
+    print(f"✅ Stale files: {'PASS' if report['stale_files']['passed'] else 'FAIL'}")
+    if not report["stale_files"]["passed"]:
+        print(f"   {report['stale_files']['error_count']} errors found")
+
+    print(f"✅ Doc imports: {'PASS' if report['doc_imports']['passed'] else 'FAIL'}")
+    if not report["doc_imports"]["passed"]:
+        print(f"   {report['doc_imports']['error_count']} errors found")
+
+    print(
+        f"✅ Examples catalogue: {'PASS' if report['examples_catalogue']['passed'] else 'FAIL'}"
+    )
+    if not report["examples_catalogue"]["passed"]:
+        print(f"   {report['examples_catalogue']['error_count']} errors found")
+
     print("\n" + "=" * 60)
     print(f"Overall: {'✅ PASS' if report['overall_passed'] else '❌ FAIL'}")
     print("=" * 60)
@@ -405,7 +694,17 @@ def main():
     # Print detailed errors
     if not report["overall_passed"]:
         print("\nDetailed Errors:")
-        for error in source_link_errors + mdx_errors + link_errors + anchor_errors:
+        all_errors = (
+            source_link_errors
+            + mdx_errors
+            + link_errors
+            + anchor_errors
+            + rst_docstring_errors
+            + stale_errors
+            + import_errors
+            + examples_catalogue_errors
+        )
+        for error in all_errors:
             print(f"  • {error}")
 
     # Save report

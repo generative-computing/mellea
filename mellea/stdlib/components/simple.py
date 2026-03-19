@@ -23,7 +23,11 @@ class SimpleComponent(Component[str]):
         self._kwargs = kwargs
 
     def parts(self) -> list[Component | CBlock]:
-        """Returns the values of the kwargs."""
+        """Returns the values of the kwargs.
+
+        Returns:
+            List of component values passed as keyword arguments.
+        """
         return list(self._kwargs.values())
 
     def _kwargs_type_check(self, kwargs: dict[str, Any]) -> bool:

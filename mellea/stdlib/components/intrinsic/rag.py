@@ -1,81 +1,12 @@
 """Intrinsic functions related to retrieval-augmented generation."""
 
 import collections.abc
-import json
 
-from ....backends import ModelOption
-from ....backends.adapters import AdapterMixin, AdapterType, IntrinsicAdapter
-from ....stdlib import functional as mfuncs
+from ....backends.adapters import AdapterMixin
 from ...components import Document
 from ...context import ChatContext
 from ..chat import Message
-from .intrinsic import Intrinsic
-
-_ANSWER_RELEVANCE_CORRECTION_METHODS = {
-    "Excessive unnecessary information": "removing the excessive information from the "
-    "draft response",
-    "Unduly restrictive": "providing answer without the unwarranted restriction, or "
-    "indicating that the desired answer is not available",
-    "Too vague or generic": "providing more crisp and to-the-point answer, or "
-    "indicating that the desired answer is not available",
-    "Contextual misalignment": "providing a response that answers the last user "
-    "inquiry, taking into account the context of the conversation",
-    "Misinterpreted inquiry": "providing answer only to the correct interpretation of "
-    "the inquiry, or attempting clarification if the inquiry is ambiguous or otherwise "
-    "confusing, or indicating that the desired answer is not available",
-    "No attempt": "providing a relevant response if an inquiry should be answered, or "
-    "providing a short response if the last user utterance contains no inquiry",
-}
-"""Prompting strings for the answer relevance rewriter. This model is a (a)LoRA adapter,
-so it's important to stick to in-domain prompts."""
-
-
-def _call_intrinsic(
-    intrinsic_name: str,
-    context: ChatContext,
-    backend: AdapterMixin,
-    /,
-    kwargs: dict | None = None,
-):
-    """Shared code for invoking intrinsics.
-
-    :returns: Result of the call in JSON format.
-    """
-    # Adapter needs to be present in the backend before it can be invoked.
-    # We must create the Adapter object in order to determine whether we need to create
-    # the Adapter object.
-    base_model_name = backend.base_model_name
-    if base_model_name is None:
-        raise ValueError("Backend has no model ID")
-    adapter = IntrinsicAdapter(
-        intrinsic_name, adapter_type=AdapterType.LORA, base_model_name=base_model_name
-    )
-    if adapter.qualified_name not in backend.list_adapters():
-        backend.add_adapter(adapter)
-
-    # Create the AST node for the action we wish to perform.
-    intrinsic = Intrinsic(intrinsic_name, intrinsic_kwargs=kwargs)
-
-    # Execute the AST node.
-    model_output_thunk, _ = mfuncs.act(
-        intrinsic,
-        context,
-        backend,
-        model_options={ModelOption.TEMPERATURE: 0.0},
-        # No rejection sampling, please
-        strategy=None,
-    )
-
-    # act() can return a future. Don't know how to handle one from non-async code.
-    assert model_output_thunk.is_computed()
-
-    # Output of an Intrinsic action is the string representation of the output of the
-    # intrinsic. Parse the string.
-    result_str = model_output_thunk.value
-    if result_str is None:
-        raise ValueError("Model output is None.")
-    result_json = json.loads(result_str)
-    return result_json
+from ._util import call_intrinsic
 
 
 def check_answerability(
@@ -101,7 +32,7 @@ def check_answerability(
     Returns:
         Answerability score as a floating-point value from 0 to 1.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "answerability",
         context.add(Message("user", question, documents=list(documents))),
         backend,
@@ -126,7 +57,7 @@ def rewrite_question(
     Returns:
         Rewritten version of ``question``.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "query_rewrite", context.add(Message("user", question)), backend
     )
     return result_json["rewritten_question"]
@@ -155,7 +86,7 @@ def clarify_query(
         Clarification question string (e.g., "Do you mean A or B?"), or
         the string "CLEAR" if no clarification is needed.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "query_clarification",
         context.add(Message("user", question, documents=list(documents))),
         backend,
@@ -190,7 +121,7 @@ def find_citations(
         ``citation_end``, ``citation_text``. Begin and end offsets are character
         offsets into their respective UTF-8 strings.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "citations",
         context.add(Message("assistant", response, documents=list(documents))),
         backend,
@@ -217,7 +148,7 @@ def check_context_relevance(
     Returns:
         Context relevance score as a floating-point value from 0 to 1.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "context_relevance",
         context.add(Message("user", question)),
         backend,
@@ -252,68 +183,9 @@ def flag_hallucinated_content(
         ``response_end``, ``response_text``, ``faithfulness_likelihood``,
         ``explanation``.
     """
-    result_json = _call_intrinsic(
+    result_json = call_intrinsic(
         "hallucination_detection",
         context.add(Message("assistant", response, documents=list(documents))),
         backend,
     )
     return result_json
-
-
-def rewrite_answer_for_relevance(
-    response: str,
-    documents: collections.abc.Iterable[Document],
-    context: ChatContext,
-    backend: AdapterMixin,
-    /,
-    rewrite_threshold: float = 0.5,
-) -> str:
-    """Rewrite an assistant answer to improve relevance to the user's question.
-
-    Args:
-        response: The assistant's response to the user's question in the last turn
-            of ``context``.
-        documents: Document snippets that were used to generate ``response``.
-        context: A chat log that ends with a user asking a question.
-        backend: Backend instance that supports the adapters that implement this
-            intrinsic.
-        rewrite_threshold: Number between 0.0 and 1.0 that determines how eagerly
-            to skip rewriting the assistant's answer for relevance. 0.0 means never
-            rewrite and 1.0 means always rewrite.
-
-    Returns:
-        Either the original response, or a rewritten version of the original response.
-    """
-    # First run the classifier to determine the likelihood of a relevant answer
-    # Output will have three fields:
-    # * answer_relevance_analysis
-    # * answer_relevance_category
-    # * answer_relevance_likelihood
-    result_json = _call_intrinsic(
-        "answer_relevance_classifier",
-        context.add(Message("assistant", response, documents=list(documents))),
-        backend,
-    )
-    if result_json["answer_relevance_likelihood"] >= rewrite_threshold:
-        return response
-
-    # If we get here, the classifier indicated a likely irrelevant response. Trigger
-    # rewrite.
-    # Rewrite needs a prompt string that is an expanded version of the classifier's
-    # short output.
-    correction_method = _ANSWER_RELEVANCE_CORRECTION_METHODS[
-        result_json["answer_relevance_category"]
-    ]
-
-    result_json = _call_intrinsic(
-        "answer_relevance_rewriter",
-        context.add(Message("assistant", response, documents=list(documents))),
-        backend,
-        kwargs={
-            "answer_relevance_category": result_json["answer_relevance_category"],
-            "answer_relevance_analysis": result_json["answer_relevance_analysis"],
-            "correction_method": correction_method,
-        },
-    )
-    # Unpack boxed string
-    return result_json["answer_relevance_rewrite"]
