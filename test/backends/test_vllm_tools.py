@@ -44,7 +44,8 @@ def backend(shared_vllm_backend):
     With --isolate-heavy: Creates module-scoped backend (process isolation)
     """
     if shared_vllm_backend is not None:
-        return shared_vllm_backend
+        yield shared_vllm_backend
+        return
 
     # Isolation mode - create module-scoped backend
     backend = LocalVLLMBackend(

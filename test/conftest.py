@@ -65,10 +65,27 @@ def get_system_capabilities():
         capabilities["has_gpu"] = has_cuda or has_mps
 
         if has_cuda:
+            # NOTE: Do NOT call torch.cuda.get_device_properties() here.
+            # It creates a CUDA context, which blocks vLLM's EngineCore
+            # subprocess on exclusive_process GPU clusters.
+            # Use nvidia-smi instead (no CUDA context needed).
             try:
-                capabilities["gpu_memory_gb"] = torch.cuda.get_device_properties(
-                    0
-                ).total_memory / (1024**3)
+                import subprocess
+
+                result = subprocess.run(
+                    [
+                        "nvidia-smi",
+                        "--query-gpu=memory.total",
+                        "--format=csv,noheader,nounits",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    capabilities["gpu_memory_gb"] = (
+                        float(result.stdout.strip().split("\n")[0]) / 1024
+                    )
             except Exception:
                 pass
         # Note: MPS doesn't provide easy memory query, leave at 0
@@ -213,8 +230,8 @@ BACKEND_GROUPS = {
 }
 
 # Execution order when --group-by-backend is used
-# Note: openai_vllm runs before vllm to allow subprocess cleanup before in-process backend
-BACKEND_GROUP_ORDER = ["huggingface", "openai_vllm", "vllm", "ollama", "api"]
+# Note: vLLM must run before parent creates a CUDA context (exclusive_process clusters)
+BACKEND_GROUP_ORDER = ["vllm", "openai_vllm", "huggingface", "ollama", "api"]
 
 
 # ============================================================================
@@ -459,12 +476,14 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
     try:
         import torch
 
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() and torch.cuda.is_initialized():
             free_before, total = torch.cuda.mem_get_info()
             logger.info(
                 f"  GPU before cleanup: {free_before / 1024**3:.1f}GB free "
                 f"/ {total / 1024**3:.1f}GB total"
             )
+        else:
+            free_before = 0
 
         # 1. Clear the LRU cache (holds DynamicCache KV tensors on GPU)
         if hasattr(backend, "_cache") and hasattr(backend._cache, "cache"):
@@ -539,7 +558,7 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
         gc.collect()
         gc.collect()
 
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() and torch.cuda.is_initialized():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
 
@@ -699,6 +718,38 @@ def pytest_runtest_setup(item):
     gh_run = int(os.environ.get("CICD", 0))
     config = item.config
 
+    # Track backend group transitions when --group-by-backend is used
+    if config.getoption("--group-by-backend", default=False):
+        # Determine current group
+        current_group = None
+        for group_name, group_info in BACKEND_GROUPS.items():
+            if item.get_closest_marker(group_info["marker"]):
+                current_group = group_name
+                break
+
+        # Check if we transitioned from vllm to another group
+        prev_group = getattr(pytest_runtest_setup, "_last_backend_group", None)
+        if prev_group == "vllm" and current_group != "vllm":
+            # Shut down EngineCore before HF tests need a CUDA context
+            logger = FancyLogger.get_logger()
+            logger.info(
+                f"Backend transition: {prev_group} → {current_group}. "
+                "Shutting down vLLM EngineCore to allow parent CUDA context."
+            )
+            try:
+                shared_backend_defs = item.session._fixturemanager._arg2fixturedefs.get(
+                    "shared_vllm_backend"
+                )
+                if shared_backend_defs:
+                    backend_instance = shared_backend_defs[-1].cached_result[0]
+                    if backend_instance is not None:
+                        cleanup_gpu_backend(backend_instance, "shared-vllm-transition")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup vLLM backend on transition: {e}")
+
+        # Store current group for next iteration
+        pytest_runtest_setup._last_backend_group = current_group
+
     # Check for override flags from CLI
     ignore_all = config.getoption("--ignore-all-checks", default=False)
     ignore_gpu = config.getoption("--ignore-gpu-check", default=False) or ignore_all
@@ -763,22 +814,19 @@ def pytest_runtest_setup(item):
 
 
 def memory_cleaner():
-    """Aggressive memory cleanup function."""
+    """Lightweight memory cleanup — safety net for per-test GPU leaks."""
     yield
-    # Only run aggressive cleanup in CI where memory is constrained
-    if int(os.environ.get("CICD", 0)) != 1:
-        return
 
-    # Cleanup after module
-    gc.collect()
     gc.collect()
     gc.collect()
 
-    # If torch is available, clear CUDA cache
     try:
         import torch
 
-        if torch.cuda.is_available():
+        # Only touch CUDA if a context already exists in this process.
+        # Creating a context would block vLLM's EngineCore subprocess
+        # on exclusive_process GPU clusters.
+        if torch.cuda.is_available() and torch.cuda.is_initialized():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
     except ImportError:
