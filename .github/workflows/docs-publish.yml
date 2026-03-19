@@ -247,6 +247,9 @@ jobs:
               "https://github.com/generative-computing/mellea/blob/main"
               "/docs/docs/guide/CONTRIBUTING.md"
           )
+          REPO = "${{ github.repository }}"
+          RUN_ID = "${{ github.run_id }}"
+          ARTIFACT_URL = f"https://github.com/{REPO}/actions/runs/{RUN_ID}#artifacts"
 
           lines = [
               "## Docs Build — Validation Summary\n",
@@ -266,7 +269,8 @@ jobs:
               lines += [
                   "> ❌ **Docstring quality gate failed.**  "
                   f"See the [CI docstring checks reference]({CONTRIB_URL}#ci-docstring-checks-reference) "
-                  "for per-kind fix instructions, or expand **Docstring quality details** below for the full list.",
+                  "for per-kind fix instructions, or expand **Docstring quality details** below for the full list.  \n"
+                  f"> The full machine-readable report is available as the [`docstring-quality-report` artifact]({ARTIFACT_URL}).",
                   "",
               ]
 
