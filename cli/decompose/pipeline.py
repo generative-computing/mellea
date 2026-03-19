@@ -412,15 +412,18 @@ def finalize_result(
         jinja_vars = _extract_jinja_vars(subtask_data.prompt_template)
 
         input_vars_required = _dedupe_keep_order(
-            [item for item in jinja_vars if item in user_input_variable]
+            [var_name for var_name in jinja_vars if var_name in user_input_variable]
         )
         depends_on = _dedupe_keep_order(
-            [item for item in jinja_vars if item not in user_input_variable]
+            [var_name for var_name in jinja_vars if var_name not in user_input_variable]
         )
 
         logger.info("finalizing subtask [%02d] tag=%s", subtask_i, subtask_data.tag)
         logger.info("  input_vars_required: %s", input_vars_required or "[]")
         logger.info("  depends_on         : %s", depends_on or "[]")
+
+        if log_mode == LogMode.debug:
+            logger.debug("  prompt_template=%s", subtask_data.prompt_template)
 
         subtask_constraints: list[ConstraintResult] = [
             {
@@ -432,52 +435,13 @@ def finalize_result(
             for cons_str in subtask_data.constraints
         ]
 
-        prompt_preview = (
-            subtask_data.prompt_template
-            if log_mode == LogMode.debug or len(subtask_data.prompt_template) <= 240
-            else subtask_data.prompt_template[:240] + " ..."
-        )
-        logger.info("  prompt_template   : %s", prompt_preview)
-        logger.info("  generating general_instructions for tag=%s", subtask_data.tag)
-
-        gi_result = general_instructions.generate(
+        parsed_general_instructions: str = general_instructions.generate(
             m_session,
             input_str=subtask_data.prompt_template,
-        )
-        gi_raw = str(gi_result)
+        ).parse()
 
         if log_mode == LogMode.debug:
-            logger.debug(
-                "  raw general_instructions output for tag=%s:\n%s",
-                subtask_data.tag,
-                gi_raw,
-            )
-        else:
-            gi_preview = gi_raw[:800] + (" ..." if len(gi_raw) > 800 else "")
-            logger.info(
-                "  raw general_instructions preview for tag=%s:\n%s",
-                subtask_data.tag,
-                gi_preview,
-            )
-
-        try:
-            parsed_general_instructions = gi_result.parse()
-        except Exception:
-            logger.error(
-                "  failed to parse general_instructions for tag=%s",
-                subtask_data.tag,
-            )
-            logger.error(
-                "  full prompt_template for tag=%s:\n%s",
-                subtask_data.tag,
-                subtask_data.prompt_template,
-            )
-            logger.error(
-                "  full raw general_instructions output for tag=%s:\n%s",
-                subtask_data.tag,
-                gi_raw,
-            )
-            raise
+            logger.debug("  general_instructions=%s", parsed_general_instructions)
 
         subtask_result: DecompSubtasksResult = DecompSubtasksResult(
             subtask=subtask_data.subtask,
@@ -489,16 +453,11 @@ def finalize_result(
             depends_on=depends_on,
         )
 
-        logger.debug("  prompt_template=%s", subtask_result["prompt_template"])
-        logger.debug(
-            "  general_instructions=%s", subtask_result["general_instructions"]
-        )
-
         decomp_subtask_result.append(subtask_result)
 
     result = DecompPipelineResult(
         original_task_prompt=task_prompt,
-        subtask_list=[item.subtask for item in subtasks],
+        subtask_list=[subtask_item.subtask for subtask_item in subtasks],
         identified_constraints=[
             {
                 "constraint": cons_str,
