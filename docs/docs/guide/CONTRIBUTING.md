@@ -391,6 +391,8 @@ in the table below, follow the fix instructions, and re-push.
 | `no_raises` | Function source contains `raise` but the docstring has no `Raises:` section | Add a `Raises:` section listing each exception type and the condition that triggers it |
 | `missing_param_type` | `Args:` section exists but one or more parameters have no Python type annotation — the type column is absent from the generated API docs | Add a type annotation to each listed parameter in the function signature (e.g. `def f(x: int)`). Only fires when `no_args` is already satisfied; `*args`/`**kwargs` are excluded. |
 | `missing_return_type` | `Returns:` section is documented but the function has no return type annotation — the return type is absent from the generated API docs | Add a return annotation to the function signature (e.g. `-> str`). Only fires when `no_returns` is already satisfied. |
+| `param_type_mismatch` | A parameter's `Args:` entry states an explicit type (e.g. `x (int): …`) that does not match the Python annotation in the function signature | Align the docstring type with the annotation, or vice versa. The check normalises common equivalents (`Optional[X]` ↔ `X \| None`, `List` ↔ `list`, union ordering) before comparing, so only genuine disagreements are flagged. Only fires when both the docstring and the signature have an explicit type. |
+| `return_type_mismatch` | The `Returns:` section has a type prefix (e.g. `Returns: \n    str: …`) that does not match the Python return annotation | Align the docstring return type with the annotation, or vice versa. Same normalisation rules as `param_type_mismatch`. Only fires when both sides have an explicit type. |
 
 #### Class docstrings (Option C)
 
