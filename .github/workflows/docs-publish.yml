@@ -257,29 +257,16 @@ jobs:
           ]
           lines.append("")
 
-          # When the quality gate fails, surface a direct link to the fix reference
-          # so developers can navigate straight to the per-kind fix tables without
-          # digging through the raw log.  The per-kind Ref: URLs in the log output
-          # are inside a ```text``` block and don't render as links there.
+          # When the quality gate fails, surface a direct link to the fix reference.
+          # Per-kind Ref: URLs in the log output are inside a ```text``` block and
+          # don't render as links there.
           if quality_gate_outcome == "failure":
               lines += [
                   "> ❌ **Docstring quality gate failed.**  "
                   f"See the [CI docstring checks reference]({CONTRIB_URL}#ci-docstring-checks-reference) "
                   "for per-kind fix instructions, or expand **Docstring quality details** below for the full list.",
                   "",
-                  "| Check kind | Fix reference |",
-                  "|------------|---------------|",
               ]
-              kind_anchors = [
-                  ("missing / short",         "missing-or-short-docstrings"),
-                  ("no_args / no_returns / no_yields / no_raises", "args-returns-yields-and-raises"),
-                  ("no_class_args / duplicate_init_args / param_mismatch", "class-docstrings-option-c"),
-                  ("typeddict_phantom / typeddict_undocumented", "typeddict-classes"),
-                  ("missing_param_type / missing_return_type", "args-returns-yields-and-raises"),
-              ]
-              for kind_label, anchor in kind_anchors:
-                  lines.append(f"| `{kind_label}` | [{anchor.replace('-', ' ').title()}]({CONTRIB_URL}#{anchor}) |")
-              lines.append("")
 
           for title, log, limit in [
               ("Markdownlint output", lint_log, 5_000),

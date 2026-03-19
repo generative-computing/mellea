@@ -11,6 +11,7 @@ very short docstrings, and functions whose Args/Returns sections are absent.
 """
 
 import argparse
+import ast
 import json
 import os
 import re
@@ -22,6 +23,50 @@ try:
 except ImportError:
     print("ERROR: griffe not installed. Run: uv pip install griffe", file=sys.stderr)
     sys.exit(1)
+
+
+# Modules that are confirmed internal but whose parent __init__.py imports nothing
+# (making the import-based check indeterminate).  Must stay in sync with generate-ast.py.
+_CONFIRMED_INTERNAL_MODULES: frozenset[str] = frozenset(
+    {"json_util", "backend_instrumentation"}
+)
+
+
+def _imported_submodule_names(init_path: Path) -> set[str] | None:
+    """Return submodule names imported via relative imports in init_path.
+
+    Returns None if the file cannot be parsed (treat as indeterminate).
+    Returns an empty set if the file is readable but has no relative imports.
+    """
+    try:
+        tree = ast.parse(init_path.read_text())
+    except Exception:
+        return None
+    result: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.level > 0 and node.module:
+            result.add(node.module.split(".")[0])
+    return result
+
+
+def _is_public_submodule(submodule_name: str, submodule_filepath: Path | None) -> bool:
+    """Return True if a submodule should be treated as part of the public API.
+
+    Mirrors the filter in generate-ast.py's remove_internal_modules().
+    """
+    if submodule_name in _CONFIRMED_INTERNAL_MODULES:
+        return False
+    if submodule_filepath is None:
+        return True  # conservative: keep if we can't determine
+    # The submodule filepath is either a .py file or a package __init__.py.
+    # The parent __init__.py to check is one level up.
+    parent_init = submodule_filepath.parent.parent / "__init__.py"
+    if not parent_init.exists():
+        return True  # conservative
+    subs = _imported_submodule_names(parent_init)
+    if subs is None or not subs:
+        return True  # conservative: can't determine, keep
+    return submodule_name in subs
 
 
 def _load_package(source_dir: Path, package_name: str):
@@ -84,9 +129,13 @@ def discover_public_symbols(
         # Recursively walk submodules (but skip internal ones)
         if hasattr(module, "modules"):
             for submodule_name, submodule in module.modules.items():
-                if not submodule_name.startswith("_"):
-                    submodule_path = f"{module_path}.{submodule_name}"
-                    walk_module(submodule, submodule_path)
+                if submodule_name.startswith("_"):
+                    continue
+                fp = getattr(submodule, "filepath", None)
+                if not _is_public_submodule(submodule_name, fp):
+                    continue
+                submodule_path = f"{module_path}.{submodule_name}"
+                walk_module(submodule, submodule_path)
 
     # Walk through all top-level modules
     for module_name, module in package.modules.items():
