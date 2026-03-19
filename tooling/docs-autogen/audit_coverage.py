@@ -935,9 +935,7 @@ def main():
 
     if _IN_GHA:
         if not args.quality:
-            _gha_cmd(
-                "notice", "Docstring quality", "skipped (pass --quality to enable)"
-            )
+            pass  # quality step is a separate CI job; no annotation needed here
         elif quality_issues:
             _gha_cmd(
                 "error" if args.fail_on_quality else "warning",

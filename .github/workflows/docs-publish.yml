@@ -204,11 +204,40 @@ jobs:
 
           mdx_detail = parse_validate_detail(validate_log)
 
-          # Parse docstring quality annotation from quality gate log
-          # Format: ::notice title=Docstring quality::message
-          #      or ::error title=Docstring quality::message
-          quality_gate_match = re.search(r"::(notice|warning|error) title=Docstring quality::(.+)", quality_gate_log)
-          quality_gate_detail = re.sub(r"\s*—\s*see job summary.*$", "", quality_gate_match.group(2)) if quality_gate_match else ""
+          # Parse per-kind counts from the quality gate log.
+          # _print_quality_report emits section headers like:
+          #   "  Missing docstrings (12)"
+          #   "  Missing Args section (5)"
+          # Capture label -> count from those lines, then build a compact
+          # per-kind breakdown for the summary table cell.
+          kind_short = {
+              "Missing docstrings":       "missing",
+              "Short docstrings":         "short",
+              "Missing Args section":     "no_args",
+              "Missing Returns section":  "no_returns",
+              "Missing Yields section (generator)": "no_yields",
+              "Missing Raises section":   "no_raises",
+              "Missing class Args section": "no_class_args",
+              "Duplicate Args: in class + __init__ (Option C violation)": "dup_init_args",
+              "Param name mismatches (documented but not in signature)": "param_mismatch",
+              "TypedDict phantom fields (documented but not declared)": "td_phantom",
+              "TypedDict undocumented fields (declared but missing from Attributes:)": "td_undoc",
+          }
+          section_re = re.compile(r"^\s{2}(.+?)\s+\((\d+)\)\s*$", re.MULTILINE)
+          kind_counts = {}
+          for m in section_re.finditer(quality_gate_log):
+              label, count = m.group(1), int(m.group(2))
+              short = kind_short.get(label)
+              if short:
+                  kind_counts[short] = count
+
+          if kind_counts:
+              parts = [f"{v} {k}" for k, v in kind_counts.items()]
+              quality_gate_detail = ", ".join(parts)
+          else:
+              # Fall back to the summary annotation message
+              qm = re.search(r"::(notice|warning|error) title=Docstring quality::(.+)", quality_gate_log)
+              quality_gate_detail = re.sub(r"\s*—\s*see job summary.*$", "", qm.group(2)) if qm else ""
 
           CONTRIB_URL = (
               "https://github.com/generative-computing/mellea/blob/main"
