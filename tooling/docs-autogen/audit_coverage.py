@@ -530,9 +530,7 @@ def _gha_file_annotation(
 _GHA_ANNOTATIONS_PER_KIND = 10
 
 
-def _print_quality_report(
-    issues: list[dict], *, fail_on_quality: bool = False
-) -> None:
+def _print_quality_report(issues: list[dict], *, fail_on_quality: bool = False) -> None:
     """Print a grouped quality report to stdout and emit GHA annotations.
 
     When running in GitHub Actions (``GITHUB_ACTIONS=true``), each issue is
@@ -643,18 +641,33 @@ def audit_nav_orphans(docs_dir: Path, source_dir: Path) -> list[str]:
     Returns:
         Sorted list of orphaned module paths relative to docs_dir (no extension)
     """
-    mint_json = source_dir / "docs" / "mint.json"
+    # Support both Mintlify v1 (mint.json at docs/mint.json) and
+    # v2 (docs.json at docs/docs/docs.json).  docs.json uses plain string
+    # entries in "pages" arrays; mint.json uses {"page": "..."} dicts.
+    nav_config: Path | None = None
+    for candidate in (
+        source_dir / "docs" / "docs" / "docs.json",
+        source_dir / "docs" / "mint.json",
+    ):
+        if candidate.exists():
+            nav_config = candidate
+            break
 
     mdx_files: set[str] = set()
     for mdx_file in docs_dir.rglob("*.mdx"):
         mdx_files.add(str(mdx_file.relative_to(docs_dir).with_suffix("")))
 
     nav_refs: set[str] = set()
-    if mint_json.exists():
-        config = json.loads(mint_json.read_text())
+    if nav_config is not None:
+        config = json.loads(nav_config.read_text())
 
         def _extract(obj: object) -> None:
-            if isinstance(obj, dict):
+            if isinstance(obj, str):
+                # docs.json / mint.json plain string page entry
+                if obj.startswith("api/"):
+                    nav_refs.add(obj[len("api/") :])
+            elif isinstance(obj, dict):
+                # mint.json {"page": "api/..."} dict entry
                 if "page" in obj:
                     page = obj["page"]
                     if isinstance(page, str) and page.startswith("api/"):
