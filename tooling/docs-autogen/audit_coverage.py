@@ -437,11 +437,16 @@ def audit_docstring_quality(
 
 _IN_GHA = os.environ.get("GITHUB_ACTIONS") == "true"
 
-# GitHub URL for the contributing guide docstring checks reference section.
-# Each issue kind links to the relevant anchor so developers can navigate directly.
+# Base URLs for documentation references emitted in fix hints.
+# These point to upstream main; anchors for the CI checks reference section
+# will resolve once the PR introducing them is merged.
 _CONTRIB_DOCS_URL = (
     "https://github.com/generative-computing/mellea/blob/main"
     "/docs/docs/guide/CONTRIBUTING.md"
+)
+_COVERAGE_DOCS_URL = (
+    "https://github.com/generative-computing/mellea/blob/main"
+    "/CONTRIBUTING.md#validating-docstrings"
 )
 
 # Per-kind fix hints: (one-line fix text, CONTRIBUTING.md anchor)
@@ -865,11 +870,32 @@ def main():
     print(f"CLI commands: {len(report['cli_commands'])}")
 
     if report["missing_symbols"]:
+        total_missing = sum(len(s) for s in report["missing_symbols"].values())
+        print(f"\n{'─' * 60}")
         print(
-            f"\n⚠️  Missing documentation for {len(report['missing_symbols'])} modules:"
+            f"  Missing API docs — {total_missing} symbol(s) across "
+            f"{len(report['missing_symbols'])} module(s)"
         )
+        print(
+            "  Fix: Run the doc generation pipeline to produce MDX for new symbols,\n"
+            "       then add entries to docs/docs/docs.json navigation.\n"
+            "       uv run python tooling/docs-autogen/generate-ast.py"
+        )
+        print(f"  Ref: {_COVERAGE_DOCS_URL}")
+        print(f"{'─' * 60}")
         for module, symbols in sorted(report["missing_symbols"].items()):
-            print(f"  {module}: {', '.join(symbols)}")
+            print(f"  {module}")
+            for sym in sorted(symbols):
+                print(f"    {sym}")
+        if _IN_GHA:
+            _gha_cmd(
+                "error" if report["coverage_percentage"] < args.threshold else "warning",
+                "API Coverage",
+                f"{total_missing} symbol(s) undocumented in "
+                f"{len(report['missing_symbols'])} module(s) — "
+                f"coverage {report['coverage_percentage']}% "
+                f"(threshold {args.threshold}%)",
+            )
 
     # Quality audit — scoped to documented (API reference) symbols only
     quality_issues: list[dict] = []

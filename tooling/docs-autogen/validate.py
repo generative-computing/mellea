@@ -18,6 +18,57 @@ from pathlib import Path
 
 _IN_GHA = os.environ.get("GITHUB_ACTIONS") == "true"
 
+_ROOT_CONTRIB = (
+    "https://github.com/generative-computing/mellea/blob/main/CONTRIBUTING.md"
+)
+_GUIDE_CONTRIB = (
+    "https://github.com/generative-computing/mellea/blob/main"
+    "/docs/docs/guide/CONTRIBUTING.md"
+)
+
+# Per-check fix hints: label (as passed to _print_check_errors) -> (fix text, ref URL)
+_CHECK_FIX_HINTS: dict[str, tuple[str, str]] = {
+    "Source links": (
+        "Regenerate API docs to update version tags in source links: "
+        "uv run python tooling/docs-autogen/generate-ast.py",
+        f"{_ROOT_CONTRIB}#validating-docstrings",
+    ),
+    "MDX syntax": (
+        "Check for unclosed ``` fences, missing frontmatter, or unescaped {{ }} "
+        "in code blocks. Each error includes the file and line number.",
+        f"{_GUIDE_CONTRIB}#frontmatter-required-on-every-page",
+    ),
+    "Internal links": (
+        "Verify the relative link path resolves to an existing .mdx file. "
+        "Each error shows the file, line, and broken link target.",
+        f"{_GUIDE_CONTRIB}#links",
+    ),
+    "Anchor collisions": (
+        "Rename one of the conflicting headings so they produce unique anchors. "
+        "Each error shows both heading texts and their line numbers.",
+        f"{_GUIDE_CONTRIB}#headings",
+    ),
+    "RST docstrings": (
+        "Replace RST double-backtick notation (``Symbol``) with single backticks "
+        "(`Symbol`) in the Python source docstring.",
+        f"{_ROOT_CONTRIB}#docstrings",
+    ),
+    "Stale files": (
+        "Delete the listed files — they are review artifacts or superseded content "
+        "that should not ship.",
+        f"{_GUIDE_CONTRIB}#missing-content",
+    ),
+    "Doc imports": (
+        "Update the import path in the documentation code block to match the "
+        "current module/symbol location.",
+        f"{_GUIDE_CONTRIB}#code-and-fragment-consistency",
+    ),
+    "Examples catalogue": (
+        "Add a row for the new example directory to docs/docs/examples/index.md.",
+        f"{_GUIDE_CONTRIB}#keeping-the-examples-catalogue-up-to-date",
+    ),
+}
+
 # GitHub Actions silently drops inline diff annotations beyond ~10 per step.
 # We cap at 20 total across all validate.py checks so the most important issues
 # from each category remain visible in the PR diff.  The complete list is always
@@ -590,8 +641,13 @@ def _print_check_errors(
     """
     if not errors:
         return
+    fix_hint, ref_url = _CHECK_FIX_HINTS.get(label, ("", ""))
     print(f"\n{'─' * 50}")
     print(f"  {label} ({len(errors)} error(s))")
+    if fix_hint:
+        print(f"  Fix: {fix_hint}")
+    if ref_url:
+        print(f"  Ref: {ref_url}")
     print(f"{'─' * 50}")
     capped = 0
     for e in errors:
