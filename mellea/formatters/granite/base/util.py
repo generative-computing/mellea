@@ -3,6 +3,8 @@
 """Common utility functions for the library and tests."""
 
 # Standard
+from __future__ import annotations
+
 import contextlib
 import itertools
 import json
@@ -10,9 +12,13 @@ import logging
 import os
 import re
 import uuid
+from typing import TYPE_CHECKING
 
 # Third Party
 import pydantic
+
+if TYPE_CHECKING:
+    from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 # First Party
 from .types import ChatCompletionResponse, ChatCompletionResponseChoice
@@ -98,7 +104,7 @@ def random_uuid() -> str:
     return str(uuid.uuid4())
 
 
-def load_transformers_lora(local_or_remote_path):
+def load_transformers_lora(local_or_remote_path: str) -> tuple:
     """Load transformers LoRA model.
 
     AutoModelForCausalLM.from_pretrained() is supposed to auto-load base models if you
@@ -136,7 +142,10 @@ def load_transformers_lora(local_or_remote_path):
 
 
 def chat_completion_request_to_transformers_inputs(
-    request, tokenizer=None, model=None, constrained_decoding_prefix=None
+    request: dict,
+    tokenizer: PreTrainedTokenizerBase | None = None,
+    model: PreTrainedModel | None = None,
+    constrained_decoding_prefix: str | None = None,
 ) -> tuple[dict, dict]:
     """Translate an OpenAI-style chat completion request.
 
@@ -191,7 +200,7 @@ def chat_completion_request_to_transformers_inputs(
     ):
         tokenizer_input["documents"] = request["extra_body"]["documents"]
 
-    input_tokens = tokenizer.apply_chat_template(**tokenizer_input, return_tensors="pt")
+    input_tokens = tokenizer.apply_chat_template(**tokenizer_input, return_tensors="pt")  # type: ignore[union-attr]
 
     # Transformers 5 switched the return type of apply_chat_template() from Tensor to
     # BatchEncoding. Adjust our behavior depending on which direction the currently
@@ -208,7 +217,7 @@ def chat_completion_request_to_transformers_inputs(
 
     # generate() will fail with many different creative error messages if tokens aren't
     # on the right device.
-    input_tokens = input_tokens.to(model.device)
+    input_tokens = input_tokens.to(model.device)  # type: ignore[union-attr]
     generate_input["input_tokens"] = input_tokens
 
     # The generate() method sometimes needs to know what is the integer ID
@@ -216,9 +225,9 @@ def chat_completion_request_to_transformers_inputs(
     # isn't included in the serialized model. We get it from the tokenizer.
     # And of course some tokenizers don't set this parameter, in which case
     # we use the end of string token and hope for the best.
-    pad_token_id = tokenizer.pad_token_id
+    pad_token_id = tokenizer.pad_token_id  # type: ignore[union-attr]
     if pad_token_id is None:
-        pad_token_id = tokenizer.eos_token_id
+        pad_token_id = tokenizer.eos_token_id  # type: ignore[union-attr]
     if pad_token_id is None:
         # Raise an error here because the some branches of the generate
         # method won't complain about an invalid value of this parameter,
@@ -229,7 +238,7 @@ def chat_completion_request_to_transformers_inputs(
 
     # Make sure you specify this parameter explicitly, or you will have
     # a bad time.
-    generate_input["eos_token_id"] = tokenizer.eos_token_id
+    generate_input["eos_token_id"] = tokenizer.eos_token_id  # type: ignore[union-attr]
 
     other_input = {}
 
@@ -316,7 +325,10 @@ def chat_completion_request_to_transformers_inputs(
 
 
 def generate_with_transformers(
-    tokenizer, model, generate_input: dict, other_input: dict
+    tokenizer: PreTrainedTokenizerBase,
+    model: PreTrainedModel,
+    generate_input: dict,
+    other_input: dict,
 ) -> ChatCompletionResponse:
     """Call Transformers generate and get usable results.
 

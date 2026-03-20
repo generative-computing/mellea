@@ -13,6 +13,7 @@ from ...granite3.constants import (
     NO_TOOLS_NO_DOCS_NO_THINKING_SYSTEM_MESSAGE_PART,
 )
 from ...granite3.input import Granite3InputProcessor
+from ...granite3.types import Granite3ChatCompletion
 
 # Local
 from .constants import (
@@ -221,12 +222,14 @@ class Granite32InputProcessor(Granite3InputProcessor):
         return new_text
 
     @classmethod
-    def sanitize(cls, chat_completion, parts="all"):
+    def sanitize(
+        cls, chat_completion: Granite3ChatCompletion, parts: list[str] | str = "all"
+    ) -> Granite3ChatCompletion:
         """Sanitize the chat completion by removing Granite 3.2 special tokens.
 
         Args:
             chat_completion: The chat completion request to sanitize.
-            parts (str): Which parts of the chat completion to sanitize;
+            parts (list[str] | str): Which parts of the chat completion to sanitize;
                 defaults to ``"all"``.
 
         Returns:

@@ -40,7 +40,7 @@ def upload_intrinsic(
         base_model (str): Base model ID or path (e.g.
             ``"ibm-granite/granite-3.3-2b-instruct"``). Must contain at most
             one ``"/"`` separator.
-        type (Literal["lora", "alora"]): Adapter type, used as the leaf
+        type (Literal['lora', 'alora']): Adapter type, used as the leaf
             directory name in the repository layout.
         io_yaml (str): Path to the ``io.yaml`` configuration file for
             intrinsic input/output processing.

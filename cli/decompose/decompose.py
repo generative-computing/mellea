@@ -49,6 +49,19 @@ this_file_dir = Path(__file__).resolve().parent
 def reorder_subtasks(
     subtasks: list[DecompSubtasksResult],
 ) -> list[DecompSubtasksResult]:
+    """Topologically sort subtasks by their ``depends_on`` relationships.
+
+    Args:
+        subtasks: List of subtask dicts, each with a ``"tag"`` and optional
+            ``"depends_on"`` field.
+
+    Returns:
+        list[DecompSubtasksResult]: The subtasks reordered so that dependencies
+        come before dependents, with numbering prefixes updated.
+
+    Raises:
+        ValueError: If a circular dependency is detected.
+    """
     subtask_map = {subtask["tag"].lower(): subtask for subtask in subtasks}
 
     graph = {}
@@ -78,6 +91,19 @@ def reorder_subtasks(
 def verify_user_variables(
     decomp_data: DecompPipelineResult, input_var: list[str] | None
 ) -> DecompPipelineResult:
+    """Validate that all required input variables and dependencies exist.
+
+    Args:
+        decomp_data: The decomposition pipeline result containing subtasks.
+        input_var: User-provided input variable names, or ``None`` for none.
+
+    Returns:
+        DecompPipelineResult: The (possibly reordered) decomposition data.
+
+    Raises:
+        ValueError: If a subtask requires an input variable that was not
+            provided, or depends on a subtask tag that does not exist.
+    """
     if input_var is None:
         input_var = []
 
