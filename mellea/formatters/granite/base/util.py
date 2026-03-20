@@ -3,6 +3,8 @@
 """Common utility functions for the library and tests."""
 
 # Standard
+from __future__ import annotations
+
 import contextlib
 import itertools
 import json
@@ -10,9 +12,13 @@ import logging
 import os
 import re
 import uuid
+from typing import TYPE_CHECKING
 
 # Third Party
 import pydantic
+
+if TYPE_CHECKING:
+    from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 # First Party
 from .types import ChatCompletionResponse, ChatCompletionResponseChoice
@@ -28,7 +34,12 @@ instructions."""
 
 @contextlib.contextmanager
 def import_optional(extra_name: str):
-    """Handle optional imports."""
+    """Handle optional imports.
+
+    Args:
+        extra_name: Package extra to suggest in the install hint
+            (e.g. ``pip install granite_io[extra_name]``).
+    """
     try:
         yield
     except ImportError as err:
@@ -45,7 +56,12 @@ def import_optional(extra_name: str):
 def nltk_check(feature_name: str):
     """Variation on import_optional for nltk.
 
-    :param feature_name: Name of feature that requires NLTK
+    Args:
+        feature_name: Name of the feature that requires NLTK, used in the error message.
+
+    Raises:
+        ImportError: If the ``nltk`` package is not installed, re-raised with
+            a descriptive message and installation instructions.
     """
     try:
         yield
@@ -62,6 +78,13 @@ def find_substring_in_text(substring: str, text: str) -> list[dict]:
 
     Given two strings - substring and text - find and return all
     matches of substring within text. For each match return its begin and end index.
+
+    Args:
+        substring: The string to search for.
+        text: The string to search within.
+
+    Returns:
+        List of dicts with ``begin_idx`` and ``end_idx`` for each match found.
     """
     span_matches = []
 
@@ -73,20 +96,34 @@ def find_substring_in_text(substring: str, text: str) -> list[dict]:
 
 
 def random_uuid() -> str:
-    """:returns: hexadecimal data suitable to use as a unique identifier"""
+    """Generate a random UUID string.
+
+    Returns:
+        Hexadecimal UUID string suitable for use as a unique identifier.
+    """
     return str(uuid.uuid4())
 
 
-def load_transformers_lora(local_or_remote_path):
+def load_transformers_lora(local_or_remote_path: str) -> tuple:
     """Load transformers LoRA model.
 
     AutoModelForCausalLM.from_pretrained() is supposed to auto-load base models if you
     pass it a LoRA adapter's config, but that auto-loading is very broken as of 8/2025.
     Workaround powers activate!
 
-    Only works if ``transformers`` and ``peft`` are installed
+    Only works if ``transformers`` and ``peft`` are installed.
 
-    :returns: Tuple of LoRA model and tokenizer
+    Args:
+        local_or_remote_path: Local directory path of the LoRA adapter.
+
+    Returns:
+        Tuple of ``(model, tokenizer)`` where ``model`` is the loaded LoRA model and
+        ``tokenizer`` is the corresponding HuggingFace tokenizer.
+
+    Raises:
+        ImportError: If ``peft`` or ``transformers`` packages are not installed.
+        NotImplementedError: If ``local_or_remote_path`` does not exist locally
+            (remote loading from the Hugging Face Hub is not yet implemented).
     """
     with import_optional("peft"):
         # Third Party
@@ -105,24 +142,36 @@ def load_transformers_lora(local_or_remote_path):
 
 
 def chat_completion_request_to_transformers_inputs(
-    request, tokenizer=None, model=None, constrained_decoding_prefix=None
+    request: dict,
+    tokenizer: PreTrainedTokenizerBase | None = None,
+    model: PreTrainedModel | None = None,
+    constrained_decoding_prefix: str | None = None,
 ) -> tuple[dict, dict]:
     """Translate an OpenAI-style chat completion request.
 
     Translate an OpenAI-style chat completion request into an input for a Transformers
     ``generate()`` call.
 
-    :param request: Request as parsed JSON or equivalent dataclass
-    :param tokenizer: Pointer to the HuggingFace tokenizer that will be used to handle
-        this request. Only required if the request uses constrained decoding.
-    :param model: Pointer to the HuggingFace model that will be used to handle
-        this request. Only required if the request uses constrained decoding.
-    :param constrained_decoding_prefix: Optional generation prefix to append to the
-        prompt
+    Args:
+        request: Request as parsed JSON or equivalent dataclass.
+        tokenizer: HuggingFace tokenizer for the model. Only required if the request
+            uses constrained decoding.
+        model: HuggingFace model object. Only required if the request uses constrained
+            decoding.
+        constrained_decoding_prefix: Optional generation prefix to append to the prompt.
 
-    :returns: Tuple of:
-        * kwargs to pass to generation
-        * Additional stuff to pass to generate_with_transformers
+    Returns:
+        Tuple of ``(generate_input, other_input)`` where ``generate_input`` contains
+        kwargs to pass directly to ``generate()`` and ``other_input`` contains
+        additional parameters for ``generate_with_transformers``.
+
+    Raises:
+        ImportError: If ``torch``, ``transformers``, or ``xgrammar`` packages
+            are not installed (the latter only when constrained decoding is used).
+        TypeError: If ``tokenizer.apply_chat_template()`` returns an unexpected type.
+        ValueError: If padding or end-of-sequence token IDs cannot be determined
+            from the tokenizer, or if a constrained-decoding request is made
+            without passing a ``tokenizer`` or ``model`` argument.
     """
     with import_optional("torch"):
         # Third Party
@@ -151,7 +200,7 @@ def chat_completion_request_to_transformers_inputs(
     ):
         tokenizer_input["documents"] = request["extra_body"]["documents"]
 
-    input_tokens = tokenizer.apply_chat_template(**tokenizer_input, return_tensors="pt")
+    input_tokens = tokenizer.apply_chat_template(**tokenizer_input, return_tensors="pt")  # type: ignore[union-attr]
 
     # Transformers 5 switched the return type of apply_chat_template() from Tensor to
     # BatchEncoding. Adjust our behavior depending on which direction the currently
@@ -168,7 +217,7 @@ def chat_completion_request_to_transformers_inputs(
 
     # generate() will fail with many different creative error messages if tokens aren't
     # on the right device.
-    input_tokens = input_tokens.to(model.device)
+    input_tokens = input_tokens.to(model.device)  # type: ignore[union-attr]
     generate_input["input_tokens"] = input_tokens
 
     # The generate() method sometimes needs to know what is the integer ID
@@ -176,9 +225,9 @@ def chat_completion_request_to_transformers_inputs(
     # isn't included in the serialized model. We get it from the tokenizer.
     # And of course some tokenizers don't set this parameter, in which case
     # we use the end of string token and hope for the best.
-    pad_token_id = tokenizer.pad_token_id
+    pad_token_id = tokenizer.pad_token_id  # type: ignore[union-attr]
     if pad_token_id is None:
-        pad_token_id = tokenizer.eos_token_id
+        pad_token_id = tokenizer.eos_token_id  # type: ignore[union-attr]
     if pad_token_id is None:
         # Raise an error here because the some branches of the generate
         # method won't complain about an invalid value of this parameter,
@@ -189,7 +238,7 @@ def chat_completion_request_to_transformers_inputs(
 
     # Make sure you specify this parameter explicitly, or you will have
     # a bad time.
-    generate_input["eos_token_id"] = tokenizer.eos_token_id
+    generate_input["eos_token_id"] = tokenizer.eos_token_id  # type: ignore[union-attr]
 
     other_input = {}
 
@@ -276,7 +325,10 @@ def chat_completion_request_to_transformers_inputs(
 
 
 def generate_with_transformers(
-    tokenizer, model, generate_input: dict, other_input: dict
+    tokenizer: PreTrainedTokenizerBase,
+    model: PreTrainedModel,
+    generate_input: dict,
+    other_input: dict,
 ) -> ChatCompletionResponse:
     """Call Transformers generate and get usable results.
 
@@ -285,15 +337,18 @@ def generate_with_transformers(
 
     There are quite a few extra steps.
 
-    :param tokenizer: Tokenizer for the model, required at several stages of generation
-    :param model: Initialized model object.
-    :param generate_input: Parameters to pass to the generate() method, usually
-        generated by :func:`chat_completion_request_to_transformers_inputs()`
-    :param other_input: Additional kwargs that
-        :func:`chat_completion_request_to_transformers_inputs()` added to encompass
-        aspects of the original request that Transformers APIs don't handle natively.
+    Args:
+        tokenizer: HuggingFace tokenizer for the model, required at several stages
+            of generation.
+        model: Initialized HuggingFace model object.
+        generate_input: Parameters to pass to the ``generate()`` method, usually
+            produced by ``chat_completion_request_to_transformers_inputs()``.
+        other_input: Additional kwargs produced by
+            ``chat_completion_request_to_transformers_inputs()`` for aspects of the
+            original request that Transformers APIs don't handle natively.
 
-    :returns: A chat completion response in OpenAI format
+    Returns:
+        A chat completion response in OpenAI format.
     """
     with import_optional("torch"):
         # Third Party
@@ -305,7 +360,7 @@ def generate_with_transformers(
     generate_input = generate_input.copy()
     del generate_input["input_tokens"]
 
-    generate_result = model.generate(input_tokens, **generate_input)
+    generate_result = model.generate(input_tokens, **generate_input)  # type: ignore[operator]
 
     # Result is a a 2D tensor of shape (num responses, prompt + max generated tokens)
     # containing tokens, plus a tuple of <max generated tokens> tensors of shape

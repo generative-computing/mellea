@@ -1,0 +1,14 @@
+{
+  "messages": [
+    {
+      "role": "assistant",
+      "content": "Welcome to fish detector."
+    },
+    {
+      "content": "I have a pet named George.",
+      "role": "user"
+    }
+  ],
+  "model": "dummy-model-1b",
+  "max_completion_tokens": 42
+}

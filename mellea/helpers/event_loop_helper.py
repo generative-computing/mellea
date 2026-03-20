@@ -52,7 +52,7 @@ class _EventLoopHandler:
                 for task in tasks:
                     task.cancel()
 
-                async def finalize_tasks():
+                async def finalize_tasks() -> None:
                     # TODO: We can log errors here if needed.
                     await asyncio.gather(*tasks, return_exceptions=True)
 

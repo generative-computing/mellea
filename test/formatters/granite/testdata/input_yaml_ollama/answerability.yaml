@@ -1,0 +1,25 @@
+model: null
+response_format: null
+transformations:
+- type: likelihood
+  categories_to_values:
+    answerable: 1.0
+    unanswerable: 0.0
+  input_path: []
+- type: nest
+  input_path: []
+  field_name: answerability_likelihood
+instruction: null
+parameters:
+  response_format:
+    type: json_schema
+    json_schema:
+      schema:
+        type: string
+        enum:
+        - answerable
+        - unanswerable
+      strict: true
+  max_tokens: 6
+sentence_boundaries: null
+docs_as_message: roles

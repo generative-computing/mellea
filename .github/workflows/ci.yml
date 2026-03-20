@@ -8,3 +8,4 @@ on:
 jobs:
   code-checks:
     uses: ./.github/workflows/quality.yml
+

@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 try:
-    from cpex.framework.hooks.policies import HookPayloadPolicy
+    from cpex.framework.hooks.policies import (
+        HookPayloadPolicy,  # type: ignore[import-not-found]
+    )
 
     _HAS_PLUGIN_FRAMEWORK = True
 except ImportError:

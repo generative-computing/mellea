@@ -7,6 +7,7 @@ from mellea.plugins.base import MelleaBasePayload
 from mellea.plugins.hooks.component import ComponentPreExecutePayload
 from mellea.plugins.hooks.generation import GenerationPreCallPayload
 from mellea.plugins.hooks.session import SessionPreInitPayload
+from mellea.plugins.registry import _HAS_PLUGIN_FRAMEWORK
 
 
 class TestMelleaBasePayload:
@@ -94,6 +95,7 @@ class TestPayloadFieldsAreStrongRefs:
         assert modified.action.name == "replaced"
         assert payload.action.name == "original"
 
+    @pytest.mark.skipif(not _HAS_PLUGIN_FRAMEWORK, reason="cpex not installed")
     def test_writable_fields_in_policies(self):
         """Writable fields should be listed in their hook policies."""
         from mellea.plugins.policies import MELLEA_HOOK_PAYLOAD_POLICIES

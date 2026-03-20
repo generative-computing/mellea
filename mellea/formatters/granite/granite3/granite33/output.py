@@ -523,7 +523,24 @@ class Granite33OutputProcessor(OutputProcessor):
     def transform(
         self, model_output: str, chat_completion: ChatCompletion | None = None
     ) -> AssistantMessage:
-        """Transform model output into an AssistantMessage."""
+        """Parse Granite 3.3 model output into a structured assistant message.
+
+        Args:
+            model_output (str): Raw text output from the Granite 3.3 model.
+            chat_completion (ChatCompletion | None): The original chat completion
+                request that produced ``model_output``. Used to determine which
+                output features (thinking, tools, citations, hallucinations) to
+                parse. Defaults to ``None``.
+
+        Returns:
+            AssistantMessage: A :class:`Granite3AssistantMessage` containing the
+                parsed response text, optional tool calls, chain-of-thought
+                reasoning, citations, documents, and hallucination annotations.
+
+        Raises:
+            ValueError: If parsing citations, documents, or hallucinations from
+                the model output fails.
+        """
         # Downcast to a Granite-specific request type with possible additional fields.
         # This operation also performs additional validation.
         if chat_completion is None:

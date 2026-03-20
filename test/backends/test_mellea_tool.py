@@ -129,7 +129,7 @@ def test_from_smolagents_basic():
     4. The tool can be executed with arguments
     """
     try:
-        from smolagents import Tool
+        from smolagents import Tool  # type: ignore[import-not-found]
     except ImportError:
         pytest.skip(
             "smolagents not installed - install with: uv pip install 'mellea[smolagents]'"

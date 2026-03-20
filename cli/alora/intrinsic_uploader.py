@@ -1,3 +1,12 @@
+"""Upload a trained adapter to Hugging Face Hub in the intrinsic directory layout.
+
+Creates or updates a private Hugging Face repository and uploads adapter weights
+into a ``<intrinsic_name>/<base_model>/<adapter_type>`` sub-directory, together with
+the required ``io.yaml`` configuration file. If an ``INTRINSIC_README.md`` exists in
+the weight directory it is also uploaded as the repository's root ``README.md``.
+Requires an authenticated Hugging Face token obtained via ``huggingface-cli login``.
+"""
+
 import os
 import shutil
 import tempfile
@@ -15,6 +24,36 @@ def upload_intrinsic(
     io_yaml: str,
     private: bool = True,
 ):
+    """Upload an adapter to Hugging Face Hub using the intrinsic directory layout.
+
+    Creates or updates a private Hugging Face repository and uploads adapter
+    weights into a ``<intrinsic_name>/<base_model>/<adapter_type>`` sub-directory,
+    together with the ``io.yaml`` configuration file. If an
+    ``INTRINSIC_README.md`` exists in the weight directory it is also uploaded
+    as the repository root ``README.md``.
+
+    Args:
+        weight_path (str): Local directory containing the adapter weights
+            (output of ``save_pretrained``).
+        model_name (str): Target Hugging Face repository name in
+            ``"<userid>/<intrinsic_name>"`` format (e.g. ``"acme/carbchecker-alora"``).
+        base_model (str): Base model ID or path (e.g.
+            ``"ibm-granite/granite-3.3-2b-instruct"``). Must contain at most
+            one ``"/"`` separator.
+        type (Literal['lora', 'alora']): Adapter type, used as the leaf
+            directory name in the repository layout.
+        io_yaml (str): Path to the ``io.yaml`` configuration file for
+            intrinsic input/output processing.
+        private (bool): Whether the repository should be private. Currently
+            only ``True`` is supported.
+
+    Raises:
+        AssertionError: If ``weight_path`` or ``io_yaml`` do not exist, if
+            ``private`` is ``False``, if ``base_model`` contains more than one
+            ``"/"`` separator, or if ``model_name`` does not contain exactly
+            one ``"/"`` separator.
+        OSError: If no Hugging Face authentication token is found.
+    """
     try:
         assert os.path.exists(weight_path)
         assert os.path.exists(io_yaml)

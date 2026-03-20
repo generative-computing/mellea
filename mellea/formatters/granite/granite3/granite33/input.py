@@ -13,6 +13,7 @@ from ...granite3.constants import (
     NO_TOOLS_NO_DOCS_NO_THINKING_SYSTEM_MESSAGE_PART,
 )
 from ...granite3.input import Granite3InputProcessor
+from ...granite3.types import Granite3ChatCompletion
 
 # Local
 from .constants import (
@@ -141,8 +142,20 @@ class Granite33InputProcessor(Granite3InputProcessor):
         return new_text
 
     @classmethod
-    def sanitize(cls, chat_completion, parts="all"):
-        """Sanitize the chat completion by removing special tokens."""
+    def sanitize(
+        cls, chat_completion: Granite3ChatCompletion, parts: list[str] | str = "all"
+    ) -> Granite3ChatCompletion:
+        """Sanitize the chat completion by removing Granite 3.3 special tokens.
+
+        Args:
+            chat_completion: The chat completion request to sanitize.
+            parts (list[str] | str): Which parts of the chat completion to sanitize;
+                defaults to ``"all"``.
+
+        Returns:
+            The sanitized chat completion with all Granite 3.3 special tokens
+            removed from the specified parts.
+        """
         # Call the parent sanitize function with the specific remove special
         # tokens function for this Granite version.
         return super()._sanitize(chat_completion, cls._remove_special_tokens, parts)
@@ -150,7 +163,24 @@ class Granite33InputProcessor(Granite3InputProcessor):
     def transform(
         self, chat_completion: ChatCompletion, add_generation_prompt: bool = True
     ) -> str:
-        """Transform the chat completion into a prompt string."""
+        """Transform the chat completion request into a Granite 3.3 prompt string.
+
+        Args:
+            chat_completion (ChatCompletion): The structured chat completion request
+                to convert into a tokenizer-ready prompt string.
+            add_generation_prompt (bool): When ``True``, appends the assistant role
+                header to the end of the prompt to trigger generation. Defaults to
+                ``True``.
+
+        Returns:
+            str: The prompt string formatted for the Granite 3.3 model tokenizer.
+
+        Raises:
+            ValueError: If conflicting options are specified, such as enabling
+                ``thinking`` mode together with documents, tools, or a custom
+                system message; or enabling ``citations`` or ``hallucinations``
+                with a custom system message.
+        """
         # Downcast to a Granite-specific request type with possible additional fields.
         # This operation also performs additional validation.
         chat_completion = Granite33ChatCompletion.model_validate(

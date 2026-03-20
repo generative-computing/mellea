@@ -1,1 +1,7 @@
-m decompose run --out-dir ./ --prompt-file ./docs/examples/m_decomposeexample_decompose_prompt.txt
+#MODEL_ID=granite3.3
+#MODEL_ID=granite4
+
+MODEL_ID=qwen2.5:7b
+
+m decompose run --model-id $MODEL_ID  --out-dir ./ --input-file example.txt
+

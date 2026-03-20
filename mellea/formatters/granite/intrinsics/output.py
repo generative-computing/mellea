@@ -39,19 +39,25 @@ class _MappingType(enum.Enum):
 
 
 class TransformationRule(abc.ABC):
-    """Base class for transformation rules to apply to JSON outputs of intrinsics."""
+    """Base class for transformation rules to apply to JSON outputs of intrinsics.
+
+    Args:
+        config (dict): Configuration of the parent output processor, as parsed YAML.
+        input_path_expr (list[str | int | None]): Path expression matching all
+            instances of the field that this rule transforms. Elements can be
+            strings for object fields, integers for list indices, or ``None``
+            for wildcard matches.
+
+    Attributes:
+        YAML_NAME (str | None): The name used to identify this rule in YAML
+            configuration files. Subclasses must set this to a non-``None`` string.
+    """
 
     YAML_NAME: str | None = None
     """Subclasses should set this to the name of the rule in YAML config files."""
 
     def __init__(self, config: dict, input_path_expr: list[str | int | None]):
-        """Initialize the TransformationRule.
-
-        :param config: Configuration of the parent output processor, as parsed YAML.
-        :param input_path_expr: Path expression that matches all instances of the field
-            that this rule transforms. Elements can be strings for object fields,
-            ints for list indices, or ``None`` for wildcard matches.
-        """
+        """Initialize TransformationRule with a config dict and a path expression."""
         self.config = config
         self.input_path_expr = input_path_expr
 
@@ -92,7 +98,14 @@ class TransformationRule(abc.ABC):
         return [p for p in json_util.all_paths(parsed_json) if self._is_input_path(p)]
 
     def rule_name(self) -> str:
-        """Get the rule name."""
+        """Return the YAML name that identifies this transformation rule.
+
+        Returns:
+            str: The value of ``YAML_NAME`` for this rule subclass.
+
+        Raises:
+            ValueError: If ``YAML_NAME`` has not been set by the subclass.
+        """
         if self.YAML_NAME is None:
             raise ValueError(f"Attempted to fetch missing rule name for {type(self)}")
         return self.YAML_NAME
@@ -121,16 +134,23 @@ class TransformationRule(abc.ABC):
         logprobs: ChatCompletionLogProbs | None,
         chat_completion: ChatCompletion | None,
     ) -> Any:
-        """Main entry point.
+        """Apply this transformation rule to the parsed model output.
 
-        :param parsed_json: Output of running model results through
-            :func:`json.loads()`, plus applying zero or more transformation rules.
-        :param reparsed_json: Output of running the same model results through
-            :func:`json_util.reparse_json_with_offsets()`.
-        :param logprobs: Optional logprobs result associated with the original model
-            output string, or ``None`` of no logprobs were present.
-        :param chat_completion: The chat completion request that produced this output.
-        :returns: Transformed copy of ``parsed_json`` after applying this rule.
+        Args:
+            parsed_json (Any): Output of running model results through
+                :func:`json.loads()`, plus applying zero or more prior
+                transformation rules.
+            reparsed_json (Any): Output of running the same model results
+                through :func:`json_util.reparse_json_with_offsets()`,
+                preserving position information on literal values.
+            logprobs (ChatCompletionLogProbs | None): Optional logprobs result
+                associated with the original model output string, or ``None``
+                if no logprobs were present.
+            chat_completion (ChatCompletion | None): The chat completion request
+                that produced this output. Required by some rules.
+
+        Returns:
+            Any: Transformed copy of ``parsed_json`` after applying this rule.
         """
         paths = self._matching_paths(parsed_json)
         prepare_output = self._prepare(
@@ -260,6 +280,18 @@ class TokenToFloat(InPlaceTransformation):
     """Transformation rule that decodes token logprobs to a floating point number.
 
     The floating point number replaces the original categorical value in the JSON.
+
+    Args:
+        config (dict): Configuration of the parent output processor, as parsed YAML.
+        input_path_expr (list[str | int | None]): Path expression matching all
+            instances of the field that this rule transforms.
+        categories_to_values (dict[str | int | bool, float] | None): Mapping
+            from categorical labels to floating-point values. Defaults to
+            ``None``.
+
+    Attributes:
+        YAML_NAME (str): YAML configuration key for this rule; always
+            ``"likelihood"``.
     """
 
     YAML_NAME = "likelihood"
@@ -271,12 +303,7 @@ class TokenToFloat(InPlaceTransformation):
         /,
         categories_to_values: dict[str | int | bool, float] | None = None,
     ):
-        """Initialize TokenToFloat transformation rule.
-
-        :param categories_to_values: Mapping from categorical labels to floating-point
-            values.
-        :type categories_to_values: dict[str | int | bool, float]
-        """
+        """Initialize TokenToFloat with an optional mapping from categorical labels to float values."""
         super().__init__(config, input_path_expr)
         self.categories_to_values = categories_to_values
 
@@ -452,7 +479,34 @@ def _desplit_sentences(
 
 
 class DecodeSentences(AddFieldsTransformation):
-    """Transformation rule that decodes sentence refs into begin, end, text tuples."""
+    """Transformation rule that decodes sentence refs into begin, end, text tuples.
+
+    Args:
+        config (dict): Configuration of the parent output processor, as parsed YAML.
+        input_path_expr (list[str | int | None]): Path expression matching all
+            instances of the field that this rule transforms.
+        source (str): Name of the location to look for sentences; must be
+            ``"last_message"`` or ``"documents"``.
+        output_names (dict): Mapping from output role name (``"begin"``,
+            ``"end"``, ``"text"``, ``"document_id"``) to the name of the new
+            field to add in the result JSON.
+
+    Attributes:
+        YAML_NAME (str): YAML configuration key for this rule; always
+            ``"decode_sentences"``.
+        begin_name (str | None): Name of the output field that receives the
+            sentence begin offset; extracted from ``output_names``, or ``None``
+            if not configured.
+        end_name (str | None): Name of the output field that receives the
+            sentence end offset; extracted from ``output_names``, or ``None``
+            if not configured.
+        text_name (str | None): Name of the output field that receives the
+            sentence text; extracted from ``output_names``, or ``None`` if not
+            configured.
+        document_id_name (str | None): Name of the output field that receives
+            the document ID (only used when ``source="documents"``); extracted
+            from ``output_names``, or ``None`` if not configured.
+    """
 
     YAML_NAME = "decode_sentences"
 
@@ -461,23 +515,32 @@ class DecodeSentences(AddFieldsTransformation):
         config: dict,
         input_path_expr: list[str | int | None],
         /,
-        source: str,
+        source: str | list[str],
         output_names: dict,
     ):
-        """Initialize DecodeSentences transformation rule.
+        """Initialize DecodeSentences with a source location and output field name mapping.
 
-        :param source: Name of the location to look for sentences; can be "last_message"
-             or "documents".
+        :param source: Name (or list of names) of the location(s) to look for
+            sentences; each name can be "last_message", "documents", or
+            "all_but_last_message".
         :param output_names: Names of new result fields to add
+
+        Raises:
+            ValueError: If ``source`` is not one of the allowed values, or if
+                an unexpected key is found in ``output_names``.
+            TypeError: If ``output_names`` is not a dict.
         """
         super().__init__(config, input_path_expr)
 
-        allowed_sources = ("last_message", "documents")
-        if source not in allowed_sources:
-            raise ValueError(
-                f"'source' argument must be one of {allowed_sources}. "
-                f"Received '{source}'"
-            )
+        if isinstance(source, str):
+            source = [source]
+        allowed_sources = ("last_message", "documents", "all_but_last_message")
+        for s in source:
+            if s not in allowed_sources:
+                raise ValueError(
+                    f"'source' argument must be one of {allowed_sources}. "
+                    f"Received '{s}'"
+                )
         self.source = source
 
         if not isinstance(output_names, dict):
@@ -485,7 +548,9 @@ class DecodeSentences(AddFieldsTransformation):
                 f"Expected mapping for output_names, but received {output_names}"
             )
         for k in output_names:
-            if source == "documents" and k == "document_id":
+            if "documents" in source and k == "document_id":
+                continue
+            if "all_but_last_message" in source and k == "message_index":
                 continue
             if k not in ("begin", "end", "text"):
                 raise ValueError(f"Unexpected key '{k}' in output_names")
@@ -495,6 +560,7 @@ class DecodeSentences(AddFieldsTransformation):
         self.end_name = output_names.get("end")
         self.text_name = output_names.get("text")
         self.document_id_name = output_names.get("document_id")
+        self.message_index_name = output_names.get("message_index")
 
         if config["docs_as_message"] and config["docs_as_message"] not in [
             "json",
@@ -519,77 +585,114 @@ class DecodeSentences(AddFieldsTransformation):
                 f"'{self.rule_name()}' rule requires this object."
             )
 
-        if self.source == "documents":
-            tag = self.config["sentence_boundaries"]["documents"]
-            if tag is None:
-                raise ValueError(
-                    f"'{self.rule_name()}' attempting to decode document sentences, "
-                    f"but 'sentence_boundaries' section of config file is missing "
-                    f"the entry that tells how to tag document sentence boundaries."
-                )
+        begins: list[int] = []
+        ends: list[int] = []
+        texts: list[str] = []
+        document_ids: list[str | None] = []
+        message_indices: list[int | None] = []
+        next_sentence_num = 0
 
-            documents: list[Document] = []
-            if not self.config["docs_as_message"]:
-                # Most common path: Documents from extra_body
-                if chat_completion.extra_body is not None:
-                    documents = chat_completion.extra_body.documents or []
-            else:
-                # Model requires documents in a user message. Decode the message.
-                if self.config["docs_as_message"] == "json":
-                    documents_json = json.loads(chat_completion.messages[0].content)
-                    documents = [Document.model_validate(d) for d in documents_json]
-                elif self.config["docs_as_message"] == "roles":
-                    for message in chat_completion.messages:
-                        if message.role.startswith("document "):
-                            document = Document(
-                                doc_id=message.role[len("document ") :],
-                                text=message.content,
-                            )
-                            documents.append(document)
-                else:
+        for src in self.source:
+            if src == "documents":
+                tag = self.config["sentence_boundaries"]["documents"]
+                if tag is None:
                     raise ValueError(
-                        f"Unsupported doc type {self.config['docs_as_message']}"
+                        f"'{self.rule_name()}' attempting to decode document sentences, "
+                        f"but 'sentence_boundaries' section of config file is missing "
+                        f"the entry that tells how to tag document sentence boundaries."
                     )
 
-            # De-split the sentences in each document in turn. Sentence numbers
-            # start at zero on the first document and continue in subsequent documents.
-            begins = []
-            ends = []
-            texts = []
-            document_ids = []
+                documents: list[Document] = []
+                if not self.config["docs_as_message"]:
+                    # Most common path: Documents from extra_body
+                    if chat_completion.extra_body is not None:
+                        documents = chat_completion.extra_body.documents or []
+                else:
+                    # Model requires documents in a user message. Decode the message.
+                    if self.config["docs_as_message"] == "json":
+                        documents_json = json.loads(chat_completion.messages[0].content)
+                        documents = [Document.model_validate(d) for d in documents_json]
+                    elif self.config["docs_as_message"] == "roles":
+                        for message in chat_completion.messages:
+                            if message.role.startswith("document "):
+                                document = Document(
+                                    doc_id=message.role[len("document ") :],
+                                    text=message.content,
+                                )
+                                documents.append(document)
+                    else:
+                        raise ValueError(
+                            f"Unsupported doc type {self.config['docs_as_message']}"
+                        )
 
-            next_sentence_num = 0
-            for d in documents:
-                local_results = _desplit_sentences(d.text, tag, next_sentence_num)
+                # De-split sentences; numbers start at next_sentence_num and continue
+                # across documents.
+                for d in documents:
+                    local_results = _desplit_sentences(d.text, tag, next_sentence_num)
+                    num_local_sentences = len(local_results["begins"])
+                    begins.extend(local_results["begins"])
+                    ends.extend(local_results["ends"])
+                    texts.extend(local_results["texts"])
+                    document_ids.extend([d.doc_id] * num_local_sentences)
+                    message_indices.extend([None] * num_local_sentences)
+                    next_sentence_num += num_local_sentences
+
+            elif src == "last_message":
+                tag = self.config["sentence_boundaries"]["last_message"]
+                if tag is None:
+                    raise ValueError(
+                        f"'{self.rule_name()}' attempting to decode the last message, "
+                        f"but 'sentence_boundaries' section of config file is missing "
+                        f"the entry that tells how to tag message sentence boundaries."
+                    )
+
+                # Use second-to-last turn if the input processing added an instruction turn
+                message_ix = -2 if self.config["instruction"] else -1
+                target_text = chat_completion.messages[message_ix].content
+                local_results = _desplit_sentences(target_text, tag, next_sentence_num)
                 num_local_sentences = len(local_results["begins"])
                 begins.extend(local_results["begins"])
                 ends.extend(local_results["ends"])
                 texts.extend(local_results["texts"])
-                document_ids.extend([d.doc_id] * num_local_sentences)
+                document_ids.extend([None] * num_local_sentences)
+                message_indices.extend([None] * num_local_sentences)
                 next_sentence_num += num_local_sentences
 
-            return {
-                "begins": begins,
-                "ends": ends,
-                "texts": texts,
-                "document_ids": document_ids,
-            }
-        if self.source == "last_message":
-            tag = self.config["sentence_boundaries"]["last_message"]
-            if tag is None:
-                raise ValueError(
-                    f"'{self.rule_name()}' attempting to decode the last message, "
-                    f"but 'sentence_boundaries' section of config file is missing "
-                    f"the entry that tells how to tag message sentence boundaries."
-                )
+            elif src == "all_but_last_message":
+                tag = self.config["sentence_boundaries"]["all_but_last_message"]
+                if tag is None:
+                    raise ValueError(
+                        f"'{self.rule_name()}' attempting to decode conversation "
+                        f"history sentences, but 'sentence_boundaries' section of "
+                        f"config file is missing the entry that tells how to tag "
+                        f"all_but_last_message sentence boundaries."
+                    )
 
-            # Use second-to-last turn if the input processing added an instruction turn
-            message_ix = -2 if self.config["instruction"] else -1
-            target_text = chat_completion.messages[message_ix].content
+                # Use second-to-last as the boundary if an instruction turn was added
+                last_ix = -2 if self.config["instruction"] else -1
+                history_messages = chat_completion.messages[:last_ix]
+                for i, message in enumerate(history_messages):
+                    local_results = _desplit_sentences(
+                        message.content, tag, next_sentence_num
+                    )
+                    num_local_sentences = len(local_results["begins"])
+                    begins.extend(local_results["begins"])
+                    ends.extend(local_results["ends"])
+                    texts.extend(local_results["texts"])
+                    document_ids.extend([None] * num_local_sentences)
+                    message_indices.extend([i] * num_local_sentences)
+                    next_sentence_num += num_local_sentences
 
-            return _desplit_sentences(target_text, tag, 0)
+            else:
+                raise ValueError(f"Unexpected source string '{src}'")
 
-        raise ValueError(f"Unexpected source string '{self.source}'")
+        return {
+            "begins": begins,
+            "ends": ends,
+            "texts": texts,
+            "document_ids": document_ids,
+            "message_indices": message_indices,
+        }
 
     def _transform(self, value: Any, path: tuple, prepare_output: dict) -> dict:
         # Unpack global values we set aside during the prepare phase
@@ -597,6 +700,7 @@ class DecodeSentences(AddFieldsTransformation):
         ends = prepare_output["ends"]
         texts = prepare_output["texts"]
         document_ids = prepare_output.get("document_ids")
+        message_indices = prepare_output.get("message_indices")
 
         if not isinstance(value, int):
             raise TypeError(
@@ -614,6 +718,8 @@ class DecodeSentences(AddFieldsTransformation):
             result[self.text_name] = texts[sentence_num]
         if self.document_id_name is not None:
             result[self.document_id_name] = document_ids[sentence_num]  # type: ignore[index]
+        if self.message_index_name is not None:
+            result[self.message_index_name] = message_indices[sentence_num]  # type: ignore[index]
         return result
 
 
@@ -622,6 +728,12 @@ class Explode(InPlaceTransformation):
 
     Turn each row in a list of records into zero or more rows by expanding
     the elements of a list-valued attribute.
+
+    Attributes:
+        YAML_NAME (str): YAML configuration key for this rule; always
+            ``"explode"``.
+        target_field (str): Name of the list-valued field within each record
+            to expand.
     """
 
     YAML_NAME = "explode"
@@ -683,7 +795,14 @@ class Explode(InPlaceTransformation):
 
 
 class DropDuplicates(InPlaceTransformation):
-    """Remove duplicate records from a list of records."""
+    """Remove duplicate records from a list of records.
+
+    Attributes:
+        YAML_NAME (str): YAML configuration key for this rule; always
+            ``"drop_duplicates"``.
+        target_fields (list): Names of fields used to determine whether two
+            records are considered duplicates.
+    """
 
     YAML_NAME = "drop_duplicates"
 
@@ -724,7 +843,7 @@ class DropDuplicates(InPlaceTransformation):
                         f"deduplication be present in all rows. "
                         f"Element is: {element}"
                     )
-            key = (element[t] for t in self.target_fields)
+            key = tuple(element[t] for t in self.target_fields)
             key_to_record[key] = element
         return list(key_to_record.values())
 
@@ -734,6 +853,13 @@ class Project(InPlaceTransformation):
 
     Project records down to a specified set of fields.  Can also rename the
     retained fields.
+
+    Attributes:
+        YAML_NAME (str): YAML configuration key for this rule; always
+            ``"project"``.
+        retained_fields (dict): Mapping from original field name to the
+            (possibly renamed) output field name. Initialized from either a
+            list of field names (identity mapping) or an explicit mapping.
     """
 
     YAML_NAME = "project"
@@ -777,7 +903,14 @@ class Project(InPlaceTransformation):
 
 
 class Nest(InPlaceTransformation):
-    """Convert a value within a JSON structure into a record with a single field."""
+    """Convert a value within a JSON structure into a record with a single field.
+
+    Attributes:
+        YAML_NAME (str): YAML configuration key for this rule; always
+            ``"nest"``.
+        field_name (str): Name of the single field in the output JSON object
+            that wraps each matching value.
+    """
 
     YAML_NAME = "nest"
 
@@ -801,7 +934,24 @@ class Nest(InPlaceTransformation):
 
 
 class MergeSpans(InPlaceTransformation):
-    """Merge adjacent spans into larger spans."""
+    """Merge adjacent spans into larger spans.
+
+    Args:
+        config: Parsed YAML config for IO processing.
+        input_path_expr: Path expression for the list of records to merge.
+        group_fields (list): List of fields used for grouping prior to merging
+            spans.
+        begin_field (str): Name of the field that holds the begin offset of
+            spans.
+        end_field (str): Name of the field that holds the end offset of spans.
+        text_field (str | None): Optional field containing covered text strings
+            that should be concatenated when spans are merged. Defaults to
+            ``None``.
+
+    Attributes:
+        YAML_NAME (str): YAML configuration key for this rule; always
+            ``"merge_spans"``.
+    """
 
     YAML_NAME = "merge_spans"
 
@@ -815,17 +965,7 @@ class MergeSpans(InPlaceTransformation):
         end_field: str,
         text_field: str | None = None,
     ):
-        """Initialize MergeSpans transformation rule.
-
-        :param config: Parsed YAML config for IO processing
-        :param input_path_expr: Path expression for the list of records to explode
-        :param group_fields: List of fields that are used for grouping prior to merge
-            spans.
-        :param begin_field: Name of field that holds the begin offset of spans
-        :param end_field: Name of field that holds the end offset of spans
-        :param text_field: Optional field containing covered text strings that should
-            be concatenated when spans are merged.
-        """
+        """Initialize MergeSpans with span field names and optional grouping fields."""
         super().__init__(config, input_path_expr)
         self._type_check("group_fields", group_fields, list)
         self._type_check("begin_field", begin_field, str)
@@ -1065,6 +1205,20 @@ class IntrinsicsResultProcessor(ChatCompletionResultProcessor):
     General-purpose chat completion result processor for use with the models that
     implement intrinsics. Reads parameters of the model's input and output formats
     from a YAML configuration file and edits the input chat completion appropriately.
+
+    Attributes:
+        config (dict): Parsed YAML configuration file for the target intrinsic.
+        rules (list[TransformationRule]): Ordered list of transformation rules
+            that this processor applies to each choice in a chat completion
+            response.
+
+    Args:
+        config_file (str | pathlib.Path | None): Optional path to a YAML
+            configuration file. Exactly one of ``config_file`` and
+            ``config_dict`` must be provided.
+        config_dict (dict | None): Optional pre-parsed YAML configuration dict.
+            Exactly one of ``config_file`` and ``config_dict`` must be
+            provided.
     """
 
     config: dict
@@ -1079,11 +1233,7 @@ class IntrinsicsResultProcessor(ChatCompletionResultProcessor):
         config_file: str | pathlib.Path | None = None,
         config_dict: dict | None = None,
     ):
-        """Initialize IntrinsicsResultProcessor.
-
-        :param config_file: (optional) Location of YAML configuration file
-        :param config_dict: (optional) Parsed contents of YAML configuration file
-        """
+        """Initialize IntrinsicsResultProcessor from a YAML config file or dict."""
         config = make_config_dict(config_file, config_dict)
         if config is None:
             raise ValueError("config cannot be None")

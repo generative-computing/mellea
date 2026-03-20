@@ -1,0 +1,32 @@
+{
+  "messages": [
+    {
+      "content": "Hello there, how can I help you?",
+      "role": "assistant"
+    },
+    {
+      "content": "What is the square root of 4?",
+      "role": "user"
+    }
+  ],
+  "extra_body": {
+    "documents": [
+      {
+        "text": "The square root of 4 is 2.",
+        "doc_id": "1"
+      }
+    ],
+    "structured_outputs": {
+      "json": {
+        "type": "string",
+        "enum": [
+          "answerable",
+          "unanswerable"
+        ]
+      }
+    }
+  },
+  "max_completion_tokens": 6,
+  "logprobs": true,
+  "top_logprobs": 10
+}

@@ -32,14 +32,17 @@ class InputProcessor(abc.ABC):
         the string representation of the tokens that should be sent to the model to
         implement said request.
 
-        :param chat_completion: Structured representation of the inputs
-        :param add_generation_prompt: If ``True``, the returned prompt string will
-            contain a prefix of the next assistant response for use as a prompt to a
-            generation request. Otherwise, the prompt will only contain the messages and
-            documents in ``input``.
+        Args:
+            chat_completion (ChatCompletion): Structured representation of the inputs
+                to the chat completion request.
+            add_generation_prompt (bool): If ``True``, the returned prompt string will
+                contain a prefix of the next assistant response for use as a prompt to a
+                generation request. Otherwise, the prompt will only contain the messages
+                and documents in ``chat_completion``. Defaults to ``True``.
 
-        :returns: String that can be passed to the model's tokenizer to create a prompt
-            for generation.
+        Returns:
+            str: String that can be passed to the model's tokenizer to create a prompt
+                for generation.
         """
 
 
@@ -61,14 +64,16 @@ class OutputProcessor(abc.ABC):
         Convert the model output generated into a structured representation of the
         information.
 
-        :param model_output: String output of the a generation request, potentially
-            incomplete if it was a streaming request
-        :param chat_completion: The chat completion request that produced
-            ``model_output``. Parameters of the request can determine how the output
-            should be decoded.
+        Args:
+            model_output (str): String output of the generation request, potentially
+                incomplete if it was a streaming request.
+            chat_completion (ChatCompletion | None): The chat completion request that
+                produced ``model_output``. Parameters of the request can determine how
+                the output should be decoded. Defaults to ``None``.
 
-        :returns: The parsed output so far, as an instance of :class:`AssistantMessage`
-            possibly with model-specific extension fields.
+        Returns:
+            AssistantMessage: The parsed output so far, as an instance of
+                :class:`AssistantMessage` possibly with model-specific extension fields.
         """
 
 
@@ -87,10 +92,19 @@ class ChatCompletionRewriter(abc.ABC):
         Rewrite a chat completion request into another chat completion request.
         Does not modify the original :class:`ChatCompletion` object.
 
-        :param chat_completion: Original chat completion request, either as a dataclass
-            or as the JSON representation of one.
+        Args:
+            chat_completion (ChatCompletion | str | dict): Original chat completion
+                request, either as a :class:`ChatCompletion` dataclass, the JSON string
+                representation, or a plain dictionary.
+            **kwargs: Additional keyword arguments forwarded to the underlying
+                :meth:`_transform` implementation.
 
-        :returns: Rewritten copy of ``chat_completion``.
+        Returns:
+            ChatCompletion: Rewritten copy of the original chat completion request.
+
+        Raises:
+            TypeError: If ``chat_completion`` is not a :class:`ChatCompletion` object,
+                a JSON string, or a dictionary.
         """
         if isinstance(chat_completion, str):
             chat_completion = ChatCompletion.model_validate_json(chat_completion)
@@ -131,15 +145,24 @@ class ChatCompletionResultProcessor(abc.ABC):
         chat_completion_response: ChatCompletionResponse | dict | pydantic.BaseModel,
         chat_completion: ChatCompletion | None = None,
     ) -> ChatCompletionResponse:
-        """Parse the result of a chat completion.
+        """Parse and post-process the result of a chat completion request.
 
-        :param chat_completion_response: Response to a chat completion request as
-            a parsed dataclass, parsed JSON value, or OpenAI dataclass
-        :param chat_completion: The chat completion request that produced
-            ``chat_completion_response``. Required by some implementations in order
-            to decode references to part of the original request.
+        Args:
+            chat_completion_response (ChatCompletionResponse | dict | pydantic.BaseModel):
+                Response to a chat completion request, provided as a parsed
+                :class:`ChatCompletionResponse` dataclass, a raw dictionary, or
+                another Pydantic model.
+            chat_completion (ChatCompletion | None): The original chat completion
+                request that produced ``chat_completion_response``. Required by
+                some implementations to decode references back to the original
+                request. Defaults to ``None``.
 
-        :returns: Rewritten copy of ``chat_completion``.
+        Returns:
+            ChatCompletionResponse: Post-processed copy of the chat completion
+                response with model-specific transformations applied.
+
+        Raises:
+            TypeError: If ``chat_completion_response`` is not a supported type.
         """
         # Convert from over-the-wire format if necessary
         if isinstance(chat_completion_response, dict):
@@ -179,11 +202,13 @@ class Retriever(abc.ABC):
 
     @abc.abstractmethod
     def retrieve(self, query: str, top_k: int = 10) -> list[Document]:
-        """Retrieve the top k matches of a query from the corpus.
+        """Retrieve the top-k matching documents for a query from the corpus.
 
-        :param query: Query string to use for lookup
-        :param top_k: Number of top-k results to return
+        Args:
+            query (str): Query string to use for lookup.
+            top_k (int): Maximum number of results to return. Defaults to ``10``.
 
-        :returns: Pyarrow table with fields: "id", "title", "url", "begin", "end",
-            "text", "score"
+        Returns:
+            list[Document]: List of the top-k matching :class:`Document` objects,
+                each with fields such as ``text``, ``title``, and ``doc_id``.
         """

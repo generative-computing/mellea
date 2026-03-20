@@ -52,7 +52,7 @@ def modify(payload: Any, **field_updates: Any) -> Any:
     listed in the hook's ``HookPayloadPolicy.writable_fields`` will be accepted
     by the framework; changes to read-only fields are silently discarded.
 
-    Mirrors :func:`block` for the modification case::
+    Mirrors ``block()`` for the modification case::
 
         # instead of:
         modified = payload.model_copy(update={"model_output": new_mot})
@@ -64,11 +64,17 @@ def modify(payload: Any, **field_updates: Any) -> Any:
     Args:
         payload: The original (frozen) payload received by the hook.
         **field_updates: Fields to update on the payload copy.
+
+    Returns:
+        A ``PluginResult`` with ``continue_processing=True`` and the modified payload.
+
+    Raises:
+        ImportError: If the ContextForge plugin framework is not installed.
     """
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
             "modify() requires the ContextForge plugin framework. "
-            "Install it with: pip install 'mellea[contextforge]'"
+            "Install it with: pip install 'mellea[hooks]'"
         )
     return PluginResult(
         continue_processing=True,
@@ -90,11 +96,17 @@ def block(
         code: Machine-readable violation code.
         description: Longer description (defaults to ``reason``).
         details: Additional structured details.
+
+    Returns:
+        A ``PluginResult`` with ``continue_processing=False`` and a violation.
+
+    Raises:
+        ImportError: If the ContextForge plugin framework is not installed.
     """
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
             "block() requires the ContextForge plugin framework. "
-            "Install it with: pip install 'mellea[contextforge]'"
+            "Install it with: pip install 'mellea[hooks]'"
         )
     return PluginResult(
         continue_processing=False,
@@ -119,11 +131,21 @@ def register(
 
     Accepts standalone ``@hook`` functions, ``@plugin``-decorated class instances,
     ``MelleaPlugin`` instances, ``PluginSet`` instances, or lists thereof.
+
+    Args:
+        items: One or more plugins to register — standalone ``@hook`` functions,
+            ``@plugin``-decorated class instances, ``MelleaPlugin`` instances,
+            ``PluginSet`` instances, or a list of any combination.
+        session_id: Optional session identifier. When provided, the plugins are
+            scoped to that session and automatically deregistered on session cleanup.
+
+    Raises:
+        ImportError: If the ContextForge plugin framework is not installed.
     """
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
             "register() requires the ContextForge plugin framework. "
-            "Install it with: pip install 'mellea[contextforge]'"
+            "Install it with: pip install 'mellea[hooks]'"
         )
 
     from mellea.plugins.manager import ensure_plugin_manager
@@ -232,119 +254,141 @@ def _register_single(
         )
 
 
-class _FunctionHookAdapter(Plugin):
-    """Adapts a standalone ``@hook``-decorated function into a ContextForge Plugin."""
+if _HAS_PLUGIN_FRAMEWORK:
 
-    def __init__(
-        self,
-        fn: Callable,
-        session_id: str | None = None,
-        priority_override: int | None = None,
-    ):
-        meta: HookMeta = fn._mellea_hook_meta  # type: ignore[attr-defined]
-        priority = (
-            priority_override
-            if priority_override is not None
-            else (meta.priority if meta.priority is not None else 50)
-        )
-        config = PluginConfig(
-            name=f"{fn.__module__}.{fn.__qualname__}",
-            kind=f"{fn.__module__}.{fn.__qualname__}",
-            hooks=[meta.hook_type],
-            mode=_map_mode(meta.mode),
-            priority=priority,
-            on_error=_CFOnError.IGNORE,
-        )
-        super().__init__(config)
-        self._fn = fn
-        self._session_id = session_id
+    class _FunctionHookAdapter(Plugin):
+        """Adapts a standalone ``@hook``-decorated function into a ContextForge Plugin."""
 
-    async def initialize(self) -> None:
-        pass
+        def __init__(
+            self,
+            fn: Callable,
+            session_id: str | None = None,
+            priority_override: int | None = None,
+        ):
+            meta: HookMeta = fn._mellea_hook_meta  # type: ignore[attr-defined]
+            priority = (
+                priority_override
+                if priority_override is not None
+                else (meta.priority if meta.priority is not None else 50)
+            )
+            config = PluginConfig(
+                name=f"{fn.__module__}.{fn.__qualname__}",
+                kind=f"{fn.__module__}.{fn.__qualname__}",
+                hooks=[meta.hook_type],
+                mode=_map_mode(meta.mode),
+                priority=priority,
+                on_error=_CFOnError.IGNORE,
+            )
+            super().__init__(config)
+            self._fn = fn
+            self._session_id = session_id
 
-    async def shutdown(self) -> None:
-        pass
+        async def initialize(self) -> None:
+            pass
 
-    # The hook method is discovered by convention: method name == hook_type.
-    # We dynamically add it so ContextForge's HookRef can find it.
-    def __getattr__(self, name: str) -> Any:
-        meta: HookMeta | None = getattr(self._fn, "_mellea_hook_meta", None)
-        if meta and name == meta.hook_type:
-            return self._invoke
-        raise AttributeError(
-            f"'{type(self).__name__}' object has no attribute '{name}'"
-        )
+        async def shutdown(self) -> None:
+            pass
 
-    async def _invoke(self, payload: Any, context: Any) -> Any:
-        result = await self._fn(payload, context)
-        if result is None:
-            return PluginResult(continue_processing=True)
-        return result
+        # The hook method is discovered by convention: method name == hook_type.
+        # We dynamically add it so ContextForge's HookRef can find it.
+        def __getattr__(self, name: str) -> Any:
+            meta: HookMeta | None = getattr(self._fn, "_mellea_hook_meta", None)
+            if meta and name == meta.hook_type:
+                return self._invoke
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            )
 
+        async def _invoke(self, payload: Any, context: Any) -> Any:
+            result = await self._fn(payload, context)
+            if result is None:
+                return PluginResult(continue_processing=True)
+            return result
 
-class _MethodHookAdapter(Plugin):
-    """Adapts a single ``@hook``-decorated bound method from a ``Plugin`` class.
+    class _MethodHookAdapter(Plugin):
+        """Adapts a single ``@hook``-decorated bound method from a ``Plugin`` class.
 
-    Each ``@hook`` method on a ``@plugin``-decorated class gets its own adapter
-    so that per-method execution modes (``SEQUENTIAL``, ``FIRE_AND_FORGET``, etc.)
-    are respected.  The adapter name is ``"<plugin_name>.<hook_type>"``.
+        Each ``@hook`` method on a ``@plugin``-decorated class gets its own adapter
+        so that per-method execution modes (``SEQUENTIAL``, ``FIRE_AND_FORGET``, etc.)
+        are respected.  The adapter name is ``"<plugin_name>.<hook_type>"``.
 
-    Note: ``initialize()`` and ``shutdown()`` delegate to the underlying class
-    instance and may be called once per registered hook method.  Make them
-    idempotent when using the ``Plugin`` base class with multiple hook methods.
-    """
+        Note: ``initialize()`` and ``shutdown()`` delegate to the underlying class
+        instance and may be called once per registered hook method.  Make them
+        idempotent when using the ``Plugin`` base class with multiple hook methods.
+        """
 
-    def __init__(
-        self,
-        instance: Any,
-        bound_method: Callable,
-        hook_meta: HookMeta,
-        plugin_name: str,
-        plugin_module: str,
-        priority: int,
-        session_id: str | None = None,
-    ):
-        hook_val = getattr(hook_meta.hook_type, "value", hook_meta.hook_type)
-        adapter_name = f"{plugin_name}.{hook_val}"
-        config = PluginConfig(
-            name=adapter_name,
-            kind=f"{plugin_module}.{hook_val}",
-            hooks=[hook_meta.hook_type],
-            mode=_map_mode(hook_meta.mode),
-            priority=priority,
-            on_error=_CFOnError.IGNORE,
-        )
-        super().__init__(config)
-        self._instance = instance
-        self._bound_method = bound_method
-        self._session_id = session_id
+        def __init__(
+            self,
+            instance: Any,
+            bound_method: Callable,
+            hook_meta: HookMeta,
+            plugin_name: str,
+            plugin_module: str,
+            priority: int,
+            session_id: str | None = None,
+        ):
+            hook_val = getattr(hook_meta.hook_type, "value", hook_meta.hook_type)
+            adapter_name = f"{plugin_name}.{hook_val}"
+            config = PluginConfig(
+                name=adapter_name,
+                kind=f"{plugin_module}.{hook_val}",
+                hooks=[hook_meta.hook_type],
+                mode=_map_mode(hook_meta.mode),
+                priority=priority,
+                on_error=_CFOnError.IGNORE,
+            )
+            super().__init__(config)
+            self._instance = instance
+            self._bound_method = bound_method
+            self._session_id = session_id
 
-    async def initialize(self) -> None:
-        init = getattr(self._instance, "initialize", None)
-        if init and callable(init):
-            await init()
+        async def initialize(self) -> None:
+            init = getattr(self._instance, "initialize", None)
+            if init and callable(init):
+                await init()
 
-    async def shutdown(self) -> None:
-        shut = getattr(self._instance, "shutdown", None)
-        if shut and callable(shut):
-            await shut()
+        async def shutdown(self) -> None:
+            shut = getattr(self._instance, "shutdown", None)
+            if shut and callable(shut):
+                await shut()
 
-    def __getattr__(self, name: str) -> Any:
-        if self._config.hooks and name == self._config.hooks[0]:
-            return self._invoke
-        raise AttributeError(
-            f"'{type(self).__name__}' object has no attribute '{name}'"
-        )
+        def __getattr__(self, name: str) -> Any:
+            if self._config.hooks and name == self._config.hooks[0]:
+                return self._invoke
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            )
 
-    async def _invoke(self, payload: Any, context: Any) -> Any:
-        result = await self._bound_method(payload, context)
-        if result is None:
-            return PluginResult(continue_processing=True)
-        return result
+        async def _invoke(self, payload: Any, context: Any) -> Any:
+            result = await self._bound_method(payload, context)
+            if result is None:
+                return PluginResult(continue_processing=True)
+            return result
+
+else:
+    # Provide a stub when the plugin framework is not installed.
+    class _FunctionHookAdapter:  # type: ignore[no-redef]
+        """Stub — install ``"mellea[hooks]"`` for full plugin support."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            raise ImportError(
+                "MelleaPlugin requires the ContextForge plugin framework. "
+                "Install it with: pip install 'mellea[hooks]'"
+            )
+
+    # Provide a stub when the plugin framework is not installed.
+    class _MethodHookAdapter:  # type: ignore[no-redef]
+        """Stub — install ``"mellea[hooks]"`` for full plugin support."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            raise ImportError(
+                "MelleaPlugin requires the ContextForge plugin framework. "
+                "Install it with: pip install 'mellea[hooks]'"
+            )
 
 
 class _PluginScope:
-    """Context manager returned by :func:`plugin_scope`.
+    """Context manager returned by ``plugin_scope()``.
 
     Supports both synchronous and asynchronous ``with`` statements.
     """
@@ -431,16 +475,23 @@ def unregister(
 ) -> None:
     """Unregister globally-registered plugins.
 
-    Accepts the same items as :func:`register`: standalone ``@hook``-decorated
+    Accepts the same items as ``register()``: standalone ``@hook``-decorated
     functions, ``Plugin`` subclass instances, ``MelleaPlugin`` instances,
     ``PluginSet`` instances, or lists thereof.
 
     Silently ignores items that are not currently registered.
+
+    Args:
+        items: One or more plugins to unregister — same types accepted by
+            ``register()``.
+
+    Raises:
+        ImportError: If the ContextForge plugin framework is not installed.
     """
     if not _HAS_PLUGIN_FRAMEWORK:
         raise ImportError(
             "unregister() requires the ContextForge plugin framework. "
-            "Install it with: pip install 'mellea[contextforge]'"
+            "Install it with: pip install 'mellea[hooks]'"
         )
 
     from mellea.plugins.manager import get_plugin_manager
@@ -463,9 +514,9 @@ def unregister(
 def plugin_scope(*items: Callable | Any | PluginSet) -> _PluginScope:
     """Return a context manager that temporarily registers plugins for a block of code.
 
-    Accepts the same items as :func:`register`: standalone ``@hook``-decorated
+    Accepts the same items as ``register()``: standalone ``@hook``-decorated
     functions, ``@plugin``-decorated class instances, ``MelleaPlugin`` instances,
-    and :class:`~mellea.plugins.PluginSet` instances — or any mix thereof.
+    and ``PluginSet`` instances — or any mix thereof.
 
     Supports both synchronous and asynchronous ``with`` statements::
 

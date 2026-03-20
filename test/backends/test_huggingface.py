@@ -19,6 +19,7 @@ pytestmark = [
     pytest.mark.llm,
     pytest.mark.requires_gpu,
     pytest.mark.requires_heavy_ram,
+    pytest.mark.requires_gpu_isolation,  # Activate GPU memory isolation
     # Skip entire module in CI since 17/18 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -326,6 +327,14 @@ async def test_async_avalue(session) -> None:
     m1_final_val = await mot1.avalue()
     assert m1_final_val is not None
     assert m1_final_val == mot1.value
+
+    # Verify telemetry fields are populated
+    assert mot1.usage is not None
+    assert mot1.usage["prompt_tokens"] >= 0
+    assert mot1.usage["completion_tokens"] > 0
+    assert mot1.usage["total_tokens"] > 0
+    assert isinstance(mot1.model, str)
+    assert mot1.provider == "huggingface"
 
 
 @pytest.mark.qualitative

@@ -4,6 +4,14 @@ import os
 import textwrap
 
 import mellea
+{%- if "code" in identified_constraints | map(attribute="val_strategy") %}
+from mellea.stdlib.requirement import req
+{% for c in identified_constraints %}
+{%- if c.val_fn %}
+from validations.{{ c.val_fn_name }} import validate_input as {{ c.val_fn_name }}
+{%- endif %}
+{%- endfor %}
+{%- endif %}
 
 m = mellea.start_session()
 {%- if user_inputs %}
@@ -30,7 +38,14 @@ except KeyError as e:
     {%- if item.constraints %}
     requirements=[
         {%- for c in item.constraints %}
+        {%- if c.val_fn %}
+        req(
+            {{ c.constraint | tojson}},
+            validation_fn={{ c.val_fn_name }},
+        ),
+        {%- else %}
         {{ c.constraint | tojson}},
+        {%- endif %}
         {%- endfor %}
     ],
     {%- else %}

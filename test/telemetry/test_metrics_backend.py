@@ -3,6 +3,7 @@
 Tests that backends correctly record token metrics through the telemetry system.
 """
 
+import asyncio
 import os
 
 import pytest
@@ -49,6 +50,33 @@ def enable_metrics(monkeypatch):
     # Reset after test
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "false")
     importlib.reload(mellea.telemetry.metrics)
+
+
+@pytest.fixture(scope="module")
+def hf_metrics_backend(gh_run):
+    """Shared HuggingFace backend for telemetry metrics tests.
+
+    Uses module scope to load the model once and reuse it across all tests,
+    preventing memory exhaustion from loading multiple model instances.
+    """
+    if gh_run:
+        pytest.skip("Skipping HuggingFace backend creation in CI")
+
+    from mellea.backends.cache import SimpleLRUCache
+    from mellea.backends.huggingface import LocalHFBackend
+
+    backend = LocalHFBackend(
+        model_id=IBM_GRANITE_4_HYBRID_MICRO.hf_model_name,  # type: ignore
+        cache=SimpleLRUCache(5),
+    )
+
+    yield backend
+
+    # Cleanup
+    import gc
+
+    del backend
+    gc.collect()
 
 
 def get_metric_value(metrics_data, metric_name, attributes=None):
@@ -110,17 +138,19 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, s
     await mot.avalue()
 
     # Force metrics export and collection
+    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
+    await asyncio.sleep(0.05)
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
     # Verify input token counter
     input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "ollama"}
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "ollama"}
     )
 
     # Verify output token counter
     output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "ollama"}
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.provider.name": "ollama"}
     )
 
     # Ollama should always return token counts
@@ -166,16 +196,18 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
         await mot.astream()
     await mot.avalue()
 
+    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
+    await asyncio.sleep(0.05)
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
     # OpenAI always provides token counts
     input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "openai"}
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "openai"}
     )
 
     output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "openai"}
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.provider.name": "openai"}
     )
 
     assert input_tokens is not None, "Input tokens should be recorded"
@@ -215,15 +247,17 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
     )
     await mot.avalue()
 
+    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
+    await asyncio.sleep(0.05)
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
     input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "watsonx"}
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "watsonx"}
     )
 
     output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "watsonx"}
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.provider.name": "watsonx"}
     )
 
     assert input_tokens is not None, "Input tokens should be recorded"
@@ -275,15 +309,17 @@ async def test_litellm_token_metrics_integration(
         await mot.astream()
     await mot.avalue()
 
+    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
+    await asyncio.sleep(0.05)
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
     input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "litellm"}
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "litellm"}
     )
 
     output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "litellm"}
+        metrics_data, "mellea.llm.tokens.output", {"gen_ai.provider.name": "litellm"}
     )
 
     # LiteLLM with Ollama backend should always provide token counts
@@ -297,15 +333,12 @@ async def test_litellm_token_metrics_integration(
 @pytest.mark.asyncio
 @pytest.mark.llm
 @pytest.mark.huggingface
+@pytest.mark.requires_heavy_ram
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_huggingface_token_metrics_integration(
-    enable_metrics, metric_reader, stream, gh_run
+    enable_metrics, metric_reader, stream, hf_metrics_backend
 ):
     """Test that HuggingFace backend records token metrics correctly."""
-    if gh_run:
-        pytest.skip("Skipping in CI - requires model download")
-
-    from mellea.backends.huggingface import LocalHFBackend
     from mellea.backends.model_options import ModelOption
     from mellea.telemetry import metrics as metrics_module
 
@@ -315,17 +348,11 @@ async def test_huggingface_token_metrics_integration(
     metrics_module._input_token_counter = None
     metrics_module._output_token_counter = None
 
-    from mellea.backends.cache import SimpleLRUCache
-
-    backend = LocalHFBackend(
-        model_id=IBM_GRANITE_4_HYBRID_MICRO.hf_model_name,  # type: ignore
-        cache=SimpleLRUCache(5),
-    )
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
 
     model_options = {ModelOption.STREAM: True} if stream else {}
-    mot, _ = await backend.generate_from_context(
+    mot, _ = await hf_metrics_backend.generate_from_context(
         Message(role="assistant", content=""), ctx, model_options=model_options
     )
 
@@ -334,16 +361,20 @@ async def test_huggingface_token_metrics_integration(
         await mot.astream()
     await mot.avalue()
 
+    # Yield to event loop so FIRE_AND_FORGET plugin tasks complete
+    await asyncio.sleep(0.05)
     provider.force_flush()
     metrics_data = metric_reader.get_metrics_data()
 
     # HuggingFace computes token counts locally
     input_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.input", {"gen_ai.system": "huggingface"}
+        metrics_data, "mellea.llm.tokens.input", {"gen_ai.provider.name": "huggingface"}
     )
 
     output_tokens = get_metric_value(
-        metrics_data, "mellea.llm.tokens.output", {"gen_ai.system": "huggingface"}
+        metrics_data,
+        "mellea.llm.tokens.output",
+        {"gen_ai.provider.name": "huggingface"},
     )
 
     assert input_tokens is not None, "Input tokens should be recorded"

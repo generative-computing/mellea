@@ -1,0 +1,11 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "{\"answerability_likelihood\": 1.3925180028111327e-07}",
+                "role": "assistant"
+            }
+        }
+    ]
+}
