@@ -61,11 +61,15 @@ if [[ ! -x "$OLLAMA_BIN" ]]; then
     log "Latest ollama version: $OLLAMA_VERSION"
 
     DOWNLOAD_URL="https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64.tar.zst"
-    log "Downloading from $DOWNLOAD_URL"
+    log "Downloading from $DOWNLOAD_URL (includes CUDA libs, ~1.9GB)..."
 
-    curl -fsSL "$DOWNLOAD_URL" | tar --use-compress-program=unzstd -x -C "$OLLAMA_INSTALL_DIR" --strip-components=1 bin/ollama
+    # Extract everything (bin/ollama + lib/ollama/cuda_v*/) into OLLAMA_INSTALL_DIR's parent
+    # Archive structure: bin/ollama, lib/ollama/cuda_v12/*, lib/ollama/cuda_v13/*
+    # Install into ~/.local/ so we get ~/.local/bin/ollama and ~/.local/lib/ollama/
+    OLLAMA_PREFIX="$(dirname "$OLLAMA_INSTALL_DIR")"
+    curl -fsSL "$DOWNLOAD_URL" | tar --use-compress-program=unzstd -x -C "$OLLAMA_PREFIX"
     chmod +x "$OLLAMA_BIN"
-    log "Installed ollama $OLLAMA_VERSION to $OLLAMA_BIN"
+    log "Installed ollama $OLLAMA_VERSION to $OLLAMA_PREFIX (bin + CUDA libs)"
 fi
 
 # --- Check if ollama is already running ---
@@ -85,6 +89,12 @@ else
     export OLLAMA_HOST="${OLLAMA_HOST}:${OLLAMA_PORT}"
     export OLLAMA_MODELS_DIR="${OLLAMA_DIR}/models"
     mkdir -p "$OLLAMA_MODELS_DIR"
+
+    # Ensure ollama can find system CUDA libraries
+    if [[ -d "/usr/local/cuda" ]]; then
+        export LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/local/cuda/targets/x86_64-linux/lib:${LD_LIBRARY_PATH:-}"
+        log "Added system CUDA to LD_LIBRARY_PATH"
+    fi
 
     "$OLLAMA_BIN" serve > "$LOGDIR/ollama.log" 2>&1 &
     OLLAMA_PID=$!
