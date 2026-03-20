@@ -186,7 +186,6 @@ def flag_hallucinated_content(
         ``response_end``, ``response_text``, ``faithfulness_likelihood``,
         ``explanation``.
     """
-
     logger = FancyLogger.get_logger()
 
     # Log input
