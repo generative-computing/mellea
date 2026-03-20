@@ -9,7 +9,7 @@
 #   ./run_tests_with_ollama.sh --group-by-backend -v -s     # custom pytest args
 #
 # LSF example:
-#   bsub -n 1 -G grp_preemptable -q preemptable \ # codespell:ignore
+#   bsub -n 1 -G grp_preemptable -q preemptable \
 #     -gpu "num=1/task:mode=shared:j_exclusive=yes" \
 #     "./run_tests_with_ollama.sh --group-by-backend -v -s"
 
@@ -120,6 +120,16 @@ for model in "${OLLAMA_MODELS[@]}"; do
 done
 
 log "All models ready."
+
+# --- Warm up models (first load into memory is slow) ---
+log "Warming up models..."
+for model in "${OLLAMA_MODELS[@]}"; do
+    log "  Warming $model ..."
+    curl -sf "http://127.0.0.1:${OLLAMA_PORT}/api/generate" \
+        -d "{\"model\": \"$model\", \"prompt\": \"hi\", \"stream\": false}" \
+        -o /dev/null --max-time 120 || log "  Warning: warmup for $model timed out (will load on first test)"
+done
+log "Warmup complete."
 
 # --- Run tests ---
 log "Starting pytest..."
