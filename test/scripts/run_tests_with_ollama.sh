@@ -15,6 +15,10 @@
 
 set -euo pipefail
 
+# --- Helper functions ---
+log() { echo "[$(date +%H:%M:%S)] $*"; }
+die() { log "ERROR: $*" >&2; exit 1; }
+
 # --- Configuration ---
 OLLAMA_HOST="${OLLAMA_HOST:-127.0.0.1}"
 OLLAMA_PORT="${OLLAMA_PORT:-11434}"
@@ -34,10 +38,6 @@ OLLAMA_MODELS=(
 # Log directory
 LOGDIR="logs/$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$LOGDIR"
-
-# --- Helper functions ---
-log() { echo "[$(date +%H:%M:%S)] $*"; }
-die() { log "ERROR: $*" >&2; exit 1; }
 
 cleanup() {
     log "Shutting down ollama server..."
@@ -63,6 +63,13 @@ if curl -sf "http://${OLLAMA_HOST}:${OLLAMA_PORT}/api/tags" >/dev/null 2>&1; the
     log "Ollama already running on ${OLLAMA_HOST}:${OLLAMA_PORT} — using existing server"
     OLLAMA_PID=""
 else
+    # Find a free port starting from OLLAMA_PORT
+    while ss -tln 2>/dev/null | grep -q ":${OLLAMA_PORT} " || \
+          netstat -tln 2>/dev/null | grep -q ":${OLLAMA_PORT} "; do
+        log "Port $OLLAMA_PORT in use, trying $((OLLAMA_PORT + 1))..."
+        OLLAMA_PORT=$((OLLAMA_PORT + 1))
+    done
+
     # --- Start ollama server ---
     log "Starting ollama server on ${OLLAMA_HOST}:${OLLAMA_PORT}..."
     export OLLAMA_HOST="${OLLAMA_HOST}:${OLLAMA_PORT}"
