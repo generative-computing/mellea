@@ -534,7 +534,10 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
                 backend._model.cpu()
             except Exception:
                 pass
-            del backend._model
+            try:
+                del backend._model
+            except AttributeError:
+                pass  # _model is a @property on vLLM backends (no deleter)
 
         # 6. Delete tokenizer
         if hasattr(backend, "_tokenizer"):

@@ -57,6 +57,9 @@ def vllm_process():
             # the process will have a new session id, so
             # entire process tree is killable at once
             start_new_session=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # merge stderr into stdout
+            text=True,
         )
         url = "http://127.0.0.1:8000/ping"
         timeout = 600  # vllm initialization takes quite a while
@@ -65,7 +68,11 @@ def vllm_process():
         # Wait for readiness message
         while True:
             if process.poll() is not None:
-                raise RuntimeError("vLLM server exited before startup.")
+                output = process.stdout.read() if process.stdout else ""
+                raise RuntimeError(
+                    f"vLLM server exited before startup (code {process.returncode}).\n"
+                    f"--- vLLM output ---\n{output}\n--- end ---"
+                )
 
             try:
                 response = requests.get(url, timeout=2)
@@ -75,17 +82,36 @@ def vllm_process():
                 pass
 
             if time.time() - start_time > timeout:
+                output = ""
+                if process.stdout:
+                    try:
+                        # Read whatever is available without blocking
+                        import select
+
+                        if select.select([process.stdout], [], [], 0)[0]:
+                            output = process.stdout.read()
+                    except Exception:
+                        pass
                 raise TimeoutError(
-                    f"Timed out waiting for server health check at {url}"
+                    f"Timed out waiting for server health check at {url}\n"
+                    f"--- vLLM output (last lines) ---\n{output[-2000:]}\n--- end ---"
                 )
 
         yield process
 
     except Exception as e:
-        pytest.skip(
-            f"vLLM process not available: {e}. May need to install with: pip install mellea[vllm]",
-            allow_module_level=True,
+        output = ""
+        if process is not None and process.stdout:
+            try:
+                output = process.stdout.read()
+            except Exception:
+                pass
+        skip_msg = (
+            f"vLLM process not available: {e}\n"
+            f"--- vLLM output ---\n{output}\n--- end ---"
         )
+        print(skip_msg)  # visible with -s flag
+        pytest.skip(skip_msg, allow_module_level=True)
 
     # --- Teardown (always runs) ---
     finally:
