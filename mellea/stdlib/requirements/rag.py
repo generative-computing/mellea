@@ -1,8 +1,10 @@
 """Requirements for RAG (Retrieval-Augmented Generation) workflows."""
 
+from collections.abc import Iterable
+
 from ...backends.adapters import AdapterMixin
 from ...core import Backend, Context, Requirement, ValidationResult
-from ..components import Message
+from ..components import Document, Message
 from ..components.intrinsic import rag
 
 
@@ -19,13 +21,25 @@ class HallucinationRequirement(Requirement):
     - Retrieved documents
     - An assistant response to validate
 
+    Documents can be provided either:
+    1. In the constructor (for reusable requirements with fixed documents)
+    2. Attached to the assistant message in the context (for dynamic documents)
+
     Example:
         ```python
         from mellea.stdlib.requirements.rag import HallucinationRequirement
 
+        # Option 1: Documents in constructor
         req = HallucinationRequirement(
-            threshold=0.5,  # Flag sentences with faithfulness < 0.5
-            max_hallucinated_ratio=0.2  # Fail if >20% of response is hallucinated
+            documents=doc_objects,
+            threshold=0.5,
+            max_hallucinated_ratio=0.2
+        )
+
+        # Option 2: Documents in context (original pattern)
+        req = HallucinationRequirement(threshold=0.5)
+        ctx = ChatContext().add(
+            Message("assistant", response, documents=doc_objects)
         )
         ```
     """
@@ -34,6 +48,7 @@ class HallucinationRequirement(Requirement):
         self,
         threshold: float = 0.5,
         max_hallucinated_ratio: float = 0.0,
+        documents: Iterable[Document] | Iterable[str] | None = None,
         description: str | None = None,
     ):
         """Initialize hallucination detection requirement.
@@ -46,6 +61,10 @@ class HallucinationRequirement(Requirement):
                 content (0.0-1.0). If the ratio of hallucinated characters
                 to total response length exceeds this, validation fails.
                 Default: 0.0 (any hallucination fails validation)
+            documents: Optional documents to validate against. Can be Document
+                objects or strings (will be converted to Documents). If provided,
+                these documents will be used instead of documents attached to
+                messages in the context. Default: None (use context documents)
             description: Custom description for the requirement. If None,
                 generates a description based on threshold and ratio.
         """
@@ -58,6 +77,17 @@ class HallucinationRequirement(Requirement):
 
         self.threshold = threshold
         self.max_hallucinated_ratio = max_hallucinated_ratio
+
+        # Convert documents to Document objects if provided
+        if documents is not None:
+            self.documents: list[Document] | None = [
+                doc
+                if isinstance(doc, Document)
+                else Document(doc_id=str(i), text=str(doc))
+                for i, doc in enumerate(documents)
+            ]
+        else:
+            self.documents = None
 
         # Generate description if not provided
         if description is None:
@@ -116,13 +146,20 @@ class HallucinationRequirement(Requirement):
             )
 
         response = last_message.content
-        # Access private _docs attribute since documents property returns formatted strings
-        documents = last_message._docs or []
+
+        # Use constructor documents if provided, otherwise get from message
+        if self.documents is not None:
+            documents = self.documents
+        else:
+            # Access private _docs attribute since documents property returns formatted strings
+            documents = last_message._docs or []
 
         if not documents:
             return ValidationResult(
                 False,
-                reason="No documents provided in assistant message for hallucination validation",
+                reason="No documents provided for hallucination validation. "
+                "Either pass documents to HallucinationRequirement constructor "
+                "or attach them to the assistant message.",
             )
 
         # Backend is passed as parameter to validate(), not from context
@@ -237,3 +274,57 @@ class HallucinationRequirement(Requirement):
                 )
 
         return reason
+
+
+def hallucination_check(
+    documents: Iterable[Document] | Iterable[str],
+    threshold: float = 0.5,
+    max_hallucinated_ratio: float = 0.0,
+    description: str | None = None,
+) -> HallucinationRequirement:
+    """Create a hallucination detection requirement with pre-attached documents.
+
+    This is a convenience factory function that creates a HallucinationRequirement
+    with documents already attached. This is useful when you have a fixed set of
+    documents to validate against and want a cleaner API.
+
+    Args:
+        documents: Documents to check against for hallucination detection.
+            Can be Document objects or strings (will be converted to Documents).
+        threshold: Faithfulness likelihood threshold (0.0-1.0). Sentences
+            with faithfulness_likelihood below this value are considered
+            hallucinated. Default: 0.5
+        max_hallucinated_ratio: Maximum allowed ratio of hallucinated
+            content (0.0-1.0). Default: 0.0 (any hallucination fails)
+        description: Custom description for the requirement. If None,
+            generates a description based on threshold and ratio.
+
+    Returns:
+        A HallucinationRequirement with documents attached
+
+    Example:
+        ```python
+        from mellea.stdlib.requirements.rag import hallucination_check
+        from mellea.stdlib.components import Document
+
+        docs = [
+            Document(doc_id="1", text="The sky is blue."),
+            Document(doc_id="2", text="Grass is green.")
+        ]
+        req = hallucination_check(docs, threshold=0.5)
+
+        # Use with instruct() - no need to attach documents to messages
+        result = m.instruct(
+            "Answer: {{query}}",
+            grounding_context={"query": "What color is the sky?"},
+            requirements=[req],
+            strategy=RejectionSamplingStrategy()
+        )
+        ```
+    """
+    return HallucinationRequirement(
+        threshold=threshold,
+        max_hallucinated_ratio=max_hallucinated_ratio,
+        documents=documents,
+        description=description,
+    )

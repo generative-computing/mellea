@@ -25,6 +25,8 @@ Assesses if retrieved context is relevant to a query.
 ### hallucination_detection.py
 Detects when model outputs contain hallucinated information.
 
+**Note:** For RAG workflows, consider using `HallucinationRequirement` from `mellea.stdlib.requirements` which wraps this intrinsic with automatic thresholding and validation logic. See `docs/examples/requirements/hallucination_requirement.py` for details.
+
 ### query_rewrite.py
 Rewrites queries for better retrieval or understanding.
 

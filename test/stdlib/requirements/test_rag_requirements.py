@@ -68,6 +68,132 @@ def test_hallucination_requirement_invalid_ratio():
         HallucinationRequirement(max_hallucinated_ratio=1.5)
 
 
+# Tests for factory function and constructor documents
+def test_hallucination_requirement_with_constructor_documents():
+    """Test that HallucinationRequirement can be initialized with documents."""
+    documents = [
+        Document(doc_id="1", text="The sky is blue."),
+        Document(doc_id="2", text="Grass is green."),
+    ]
+
+    req = HallucinationRequirement(documents=documents, threshold=0.5)
+    assert req.documents is not None
+    assert len(req.documents) == 2
+    assert req.documents[0].text == "The sky is blue."
+
+
+def test_hallucination_requirement_with_string_documents():
+    """Test that HallucinationRequirement converts string documents to Document objects."""
+    string_docs = ["The sky is blue.", "Grass is green."]
+
+    req = HallucinationRequirement(documents=string_docs, threshold=0.5)
+    assert req.documents is not None
+    assert len(req.documents) == 2
+    assert all(isinstance(doc, Document) for doc in req.documents)
+    assert req.documents[0].text == "The sky is blue."
+
+
+def test_hallucination_check_factory():
+    """Test the hallucination_check factory function."""
+    from mellea.stdlib.requirements import hallucination_check
+
+    documents = [
+        Document(doc_id="1", text="The sky is blue."),
+        Document(doc_id="2", text="Grass is green."),
+    ]
+
+    req = hallucination_check(
+        documents=documents, threshold=0.7, max_hallucinated_ratio=0.1
+    )
+    assert isinstance(req, HallucinationRequirement)
+    assert req.threshold == 0.7
+    assert req.max_hallucinated_ratio == 0.1
+    assert req.documents is not None
+    assert len(req.documents) == 2
+
+
+def test_hallucination_check_factory_with_strings():
+    """Test the hallucination_check factory function with string documents."""
+    from mellea.stdlib.requirements import hallucination_check
+
+    string_docs = ["The sky is blue.", "Grass is green."]
+
+    req = hallucination_check(documents=string_docs, threshold=0.5)
+    assert isinstance(req, HallucinationRequirement)
+    assert req.documents is not None
+    assert len(req.documents) == 2
+    assert all(isinstance(doc, Document) for doc in req.documents)
+
+
+@pytest.mark.huggingface
+@pytest.mark.requires_heavy_ram
+@pytest.mark.llm
+@pytest.mark.qualitative
+async def test_hallucination_requirement_constructor_docs_override_message_docs(
+    backend,
+):
+    """Test that constructor documents override message documents."""
+    # Documents in constructor (correct info)
+    constructor_docs = [
+        Document(
+            doc_id="1",
+            text="The only type of fish that is yellow is the purple bumble fish.",
+        )
+    ]
+
+    # Different documents in message (incorrect info)
+    message_docs = [Document(doc_id="2", text="All fish are red.")]
+
+    # Create context with message documents
+    context = (
+        ChatContext()
+        .add(Message("user", "What color are purple bumble fish?"))
+        .add(
+            Message(
+                "assistant", "Purple bumble fish are yellow.", documents=message_docs
+            )
+        )
+    )
+
+    # Requirement with constructor documents should use those instead
+    req = HallucinationRequirement(documents=constructor_docs, threshold=0.5)
+    result = await req.validate(backend, context)
+
+    # Should pass because constructor docs support the response
+    assert result.as_bool() is True
+
+
+@pytest.mark.huggingface
+@pytest.mark.requires_heavy_ram
+@pytest.mark.llm
+@pytest.mark.qualitative
+async def test_hallucination_check_factory_validation(backend):
+    """Test that hallucination_check factory creates working requirements."""
+    from mellea.stdlib.requirements import hallucination_check
+
+    documents = [
+        Document(
+            doc_id="1",
+            text="The only type of fish that is yellow is the purple bumble fish.",
+        )
+    ]
+
+    req = hallucination_check(documents=documents, threshold=0.5)
+
+    # Create context without documents in message (factory provides them)
+    context = (
+        ChatContext()
+        .add(Message("user", "What color are purple bumble fish?"))
+        .add(Message("assistant", "Purple bumble fish are yellow."))
+    )
+
+    result = await req.validate(backend, context)
+
+    # Should pass because factory-provided docs support the response
+    assert result.as_bool() is True
+    assert result.score is not None
+
+
 # Tests that require backend and LLM calls
 @pytest.mark.huggingface
 @pytest.mark.requires_heavy_ram

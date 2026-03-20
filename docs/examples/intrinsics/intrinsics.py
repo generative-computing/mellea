@@ -1,5 +1,8 @@
 # pytest: huggingface, requires_heavy_ram, llm
 
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 import mellea.stdlib.functional as mfuncs
 from mellea.backends.adapters.adapter import AdapterType, IntrinsicAdapter
 from mellea.backends.huggingface import LocalHFBackend
@@ -9,7 +12,14 @@ from mellea.stdlib.context import ChatContext
 # This is an example for how you would directly use intrinsics. See `mellea/stdlib/intrinsics/rag.py`
 # for helper functions.
 
-backend = LocalHFBackend(model_id="ibm-granite/granite-3.3-8b-instruct")
+# Force CPU usage by creating custom config
+model_id = "ibm-granite/granite-3.3-8b-instruct"
+device = torch.device("cpu")
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu")
+
+custom_config = (tokenizer, model, device)
+backend = LocalHFBackend(model_id=model_id, custom_config=custom_config)
 
 # Create the Adapter. IntrinsicAdapter's default to ALORAs.
 req_adapter = IntrinsicAdapter(
