@@ -51,11 +51,21 @@ trap cleanup EXIT
 
 # --- Install ollama binary if missing ---
 if [[ ! -x "$OLLAMA_BIN" ]]; then
-    log "Ollama binary not found at $OLLAMA_BIN — downloading..."
-    mkdir -p "$(dirname "$OLLAMA_BIN")"
-    curl -fsSL https://ollama.com/download/ollama-linux-amd64 -o "$OLLAMA_BIN"
+    log "Ollama binary not found at $OLLAMA_BIN — downloading latest release..."
+    OLLAMA_INSTALL_DIR="$(dirname "$OLLAMA_BIN")"
+    mkdir -p "$OLLAMA_INSTALL_DIR"
+
+    # Get latest release tag from GitHub API
+    OLLAMA_VERSION=$(curl -fsSL https://api.github.com/repos/ollama/ollama/releases/latest \
+        | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+    log "Latest ollama version: $OLLAMA_VERSION"
+
+    DOWNLOAD_URL="https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64.tar.zst"
+    log "Downloading from $DOWNLOAD_URL"
+
+    curl -fsSL "$DOWNLOAD_URL" | tar --use-compress-program=unzstd -x -C "$OLLAMA_INSTALL_DIR" --strip-components=1 bin/ollama
     chmod +x "$OLLAMA_BIN"
-    log "Installed ollama to $OLLAMA_BIN"
+    log "Installed ollama $OLLAMA_VERSION to $OLLAMA_BIN"
 fi
 
 # --- Check if ollama is already running ---
