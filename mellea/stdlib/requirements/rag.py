@@ -25,6 +25,21 @@ class HallucinationRequirement(Requirement):
     1. In the constructor (for reusable requirements with fixed documents)
     2. Attached to the assistant message in the context (for dynamic documents)
 
+    Args:
+        threshold: Faithfulness likelihood threshold (0.0-1.0). Sentences
+            with faithfulness_likelihood below this value are considered
+            hallucinated. Default: 0.5
+        max_hallucinated_ratio: Maximum allowed ratio of hallucinated
+            content (0.0-1.0). If the ratio of hallucinated characters
+            to total response length exceeds this, validation fails.
+            Default: 0.0 (any hallucination fails validation)
+        documents: Optional documents to validate against. Can be Document
+            objects or strings (will be converted to Documents). If provided,
+            these documents will be used instead of documents attached to
+            messages in the context. Default: None (use context documents)
+        description: Custom description for the requirement. If None,
+            generates a description based on threshold and ratio.
+
     Example:
         ```python
         from mellea.stdlib.requirements.rag import HallucinationRequirement
@@ -51,23 +66,7 @@ class HallucinationRequirement(Requirement):
         documents: Iterable[Document] | Iterable[str] | None = None,
         description: str | None = None,
     ):
-        """Initialize hallucination detection requirement.
-
-        Args:
-            threshold: Faithfulness likelihood threshold (0.0-1.0). Sentences
-                with faithfulness_likelihood below this value are considered
-                hallucinated. Default: 0.5
-            max_hallucinated_ratio: Maximum allowed ratio of hallucinated
-                content (0.0-1.0). If the ratio of hallucinated characters
-                to total response length exceeds this, validation fails.
-                Default: 0.0 (any hallucination fails validation)
-            documents: Optional documents to validate against. Can be Document
-                objects or strings (will be converted to Documents). If provided,
-                these documents will be used instead of documents attached to
-                messages in the context. Default: None (use context documents)
-            description: Custom description for the requirement. If None,
-                generates a description based on threshold and ratio.
-        """
+        """Initialize hallucination detection requirement."""
         if not 0.0 <= threshold <= 1.0:
             raise ValueError(f"threshold must be between 0.0 and 1.0, got {threshold}")
         if not 0.0 <= max_hallucinated_ratio <= 1.0:
