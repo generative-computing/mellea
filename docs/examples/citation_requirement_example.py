@@ -5,7 +5,7 @@ This example shows how to use CitationRequirement to validate that
 assistant responses properly cite their sources in RAG workflows.
 
 Note: This example requires HuggingFace backend and access to the
-meta-llama/Llama-3.2-1B-Instruct model.
+ibm-granite/granite-4.0-micro model.
 """
 
 import asyncio
@@ -24,7 +24,7 @@ async def main():
 
     # Initialize HuggingFace backend
     print("\nInitializing HuggingFace backend...")
-    backend = LocalHFBackend(model_id="meta-llama/Llama-3.2-1B-Instruct")
+    backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
     # Create documents
     docs = [
