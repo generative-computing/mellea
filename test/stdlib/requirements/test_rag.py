@@ -14,7 +14,7 @@ from mellea.stdlib.requirements.rag import CitationRequirement, citation_check
 @pytest.mark.requires_heavy_ram
 async def test_citation_requirement_basic():
     """Test basic citation requirement functionality."""
-    backend = LocalHFBackend(model_id="meta-llama/Llama-3.2-1B-Instruct")
+    backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
     # Create documents
     docs = [
@@ -46,7 +46,7 @@ async def test_citation_requirement_basic():
 @pytest.mark.requires_heavy_ram
 async def test_citation_requirement_with_constructor_documents():
     """Test citation requirement with documents in constructor."""
-    backend = LocalHFBackend(model_id="meta-llama/Llama-3.2-1B-Instruct")
+    backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
     # Create documents
     docs = [
@@ -77,7 +77,7 @@ async def test_citation_requirement_with_constructor_documents():
 @pytest.mark.requires_heavy_ram
 async def test_citation_check_factory():
     """Test citation_check factory function."""
-    backend = LocalHFBackend(model_id="meta-llama/Llama-3.2-1B-Instruct")
+    backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
     # Create documents
     docs = [Document(doc_id="doc1", text="The sky is blue during the day.")]
@@ -241,7 +241,7 @@ def test_citation_requirement_default_description():
 @pytest.mark.requires_heavy_ram
 async def test_citation_requirement_empty_response():
     """Test citation requirement with empty response."""
-    backend = LocalHFBackend(model_id="meta-llama/Llama-3.2-1B-Instruct")
+    backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
     # Create documents
     docs = [Document(doc_id="doc1", text="The sky is blue.")]
@@ -266,7 +266,7 @@ async def test_citation_requirement_empty_response():
 @pytest.mark.requires_heavy_ram
 async def test_citation_requirement_threshold_boundary():
     """Test citation requirement at exact threshold boundary."""
-    backend = LocalHFBackend(model_id="meta-llama/Llama-3.2-1B-Instruct")
+    backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
     # Create documents
     docs = [Document(doc_id="doc1", text="The sky is blue during the day.")]
@@ -293,6 +293,3 @@ async def test_citation_requirement_threshold_boundary():
         assert result.as_bool()
     else:
         assert not result.as_bool()
-
-
-# Made with Bob

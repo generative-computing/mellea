@@ -192,6 +192,13 @@ class CitationRequirement(Requirement):
 
             context_before_response = ChatContext()
 
+        # Handle empty response before calling intrinsic
+        total_chars = len(response)
+        if total_chars == 0:
+            return ValidationResult(
+                True, reason="Empty response has 100% citation coverage", score=1.0
+            )
+
         # Call find_citations intrinsic
         try:
             # Import here to avoid circular dependency
@@ -206,11 +213,6 @@ class CitationRequirement(Requirement):
             )
 
         # Calculate citation coverage
-        total_chars = len(response)
-        if total_chars == 0:
-            return ValidationResult(
-                True, reason="Empty response has 100% citation coverage", score=1.0
-            )
 
         cited_chars = sum(
             citation["response_end"] - citation["response_begin"]
@@ -336,6 +338,3 @@ def citation_check(
         documents=documents,
         description=description,
     )
-
-
-# Made with Bob
