@@ -447,7 +447,7 @@ print(m.last_prompt())
 
 - Check this guide and [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md)
 - Search [existing issues](https://github.com/generative-computing/mellea/issues)
-- Join our [Discord](https://ibm.biz/mellea-discord)
+- Check out [Github Discussions](https://github.com/generative-computing/mellea/discussions)
 - Open a new issue with the appropriate label
 
 ## Additional Resources
@@ -461,7 +461,6 @@ print(m.last_prompt())
 - **[AGENTS_TEMPLATE.md](docs/AGENTS_TEMPLATE.md)** - Template for projects using Mellea
 
 ### Community
-- **[Discord](https://ibm.biz/mellea-discord)** - Join our community
 - **[GitHub Issues](https://github.com/generative-computing/mellea/issues)** - Report bugs or request features
 - **[GitHub Discussions](https://github.com/generative-computing/mellea/discussions)** - Ask questions and share ideas
 
