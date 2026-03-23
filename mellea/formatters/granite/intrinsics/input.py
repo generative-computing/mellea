@@ -33,7 +33,7 @@ def _needs_logprobs(transformations: list | None) -> bool:
     return any(t["type"] == "likelihood" for t in transformations)
 
 
-def sentence_delimiter(tag, sentence_num) -> str:
+def sentence_delimiter(tag: str, sentence_num: int) -> str:
     """Return a tag string that identifies the beginning of the indicated sentence.
 
     Args:
@@ -56,14 +56,16 @@ def mark_sentence_boundaries(
     ``<[prefix][number]>``
     at the location of each sentence boundary.
 
-    :param split_strings: Input string(s), pre-split into sentences
-    :param tag_prefix: String to place before the number part of each tagged
-        sentence boundary.
-    :param index: Starting index for sentence numbering. Defaults to 0. Pass a
-        non-zero value to continue numbering from a prior call.
+    Args:
+        split_strings: Input string(s), pre-split into sentences.
+        tag_prefix: String to place before the number part of each tagged
+            sentence boundary.
+        index: Starting index for sentence numbering. Defaults to 0. Pass a
+            non-zero value to continue numbering from a prior call.
 
-    :returns: Tuple of (list of input strings with all sentence boundaries marked,
-        next available index after the last sentence).
+    Returns:
+        tuple[list[str], int]: Tuple of (list of input strings with all sentence
+        boundaries marked, next available index after the last sentence).
     """
     result: list[str] = []
     for sentences in split_strings:

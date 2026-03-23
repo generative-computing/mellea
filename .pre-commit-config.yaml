@@ -1,16 +1,18 @@
 exclude: ^(scratchpad/)
 
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14
+  - repo: local
     hooks:
+      # Moving ruff hooks to the local version allows for different behavior locally and in ci/cd pipelines.
       - id: ruff-format
         name: "Ruff formatter"
-        args: [--config=pyproject.toml]
+        entry: bash -c 'if [ "$CICD" = "1" ]; then ruff format --check --diff --quiet --config=pyproject.toml "$@"; else ruff format --quiet --config=pyproject.toml "$@"; fi' --
+        language: system
         types_or: [python, jupyter]
       - id: ruff
         name: "Ruff linter"
-        args: [--exit-non-zero-on-fix, --fix, --config=pyproject.toml]
+        entry: bash -c 'if [ "$CICD" = "1" ]; then ruff check --no-fix --show-fixes --quiet --config=pyproject.toml "$@"; else ruff check --exit-non-zero-on-fix --fix --quiet --config=pyproject.toml "$@"; fi' --
+        language: system
         types_or: [python, jupyter]
 
   - repo: local
@@ -47,17 +49,16 @@ repos:
     hooks:
       - id: docs-mdx-validate
         name: Validate generated MDX docs
-        entry: bash -c 'test -d docs/docs/api && uv run --no-sync python tooling/docs-autogen/validate.py docs/docs/api --skip-coverage || true'
+        entry: bash -c 'test -d docs/docs/api && uv run --no-sync python tooling/docs-autogen/validate.py docs/docs/api --skip-coverage --warn-only || true'
         language: system
         pass_filenames: false
         files: (docs/docs/.*\.mdx$|tooling/docs-autogen/)
-      # TODO(#616): Move to normal commit flow once docstring quality issues reach 0.
-      # Griffe loads the full package (~10s), so this is manual-only for now to avoid
-      # slowing down every Python commit. Re-enable (remove stages: [manual]) and add
-      # --fail-on-quality once quality issues are resolved.
+      # Docstring quality gate — manual only (CI is the hard gate via docs-publish.yml).
+      # Run locally with: pre-commit run docs-docstring-quality --hook-stage manual
+      # Requires generated API docs (run `uv run python tooling/docs-autogen/build.py` first).
       - id: docs-docstring-quality
-        name: Audit docstring quality (informational)
-        entry: bash -c 'test -d docs/docs/api && uv run --no-sync python tooling/docs-autogen/audit_coverage.py --quality --docs-dir docs/docs/api || true'
+        name: Audit docstring quality
+        entry: uv run --no-sync python tooling/docs-autogen/audit_coverage.py --quality --fail-on-quality --threshold 0 --docs-dir docs/docs/api
         language: system
         pass_filenames: false
         files: (mellea/.*\.py$|cli/.*\.py$)

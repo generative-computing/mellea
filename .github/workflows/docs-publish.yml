@@ -105,11 +105,30 @@ jobs:
         id: audit_coverage
         run: |
           set -o pipefail
-          uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --threshold 80 --quality 2>&1 \
+          uv run python tooling/docs-autogen/audit_coverage.py --docs-dir docs/docs/api --threshold 80 2>&1 \
             | tee /tmp/audit_coverage.log
         continue-on-error: ${{ inputs.strict_validation != true }}
 
+      - name: Docstring quality gate
+        id: quality_gate
+        run: |
+          set -o pipefail
+          uv run python tooling/docs-autogen/audit_coverage.py \
+            --docs-dir docs/docs/api \
+            --quality --fail-on-quality --threshold 100 \
+            --orphans \
+            --output /tmp/quality_report.json 2>&1 \
+            | tee /tmp/quality_gate.log
+
       # -- Upload artifact for deploy job --------------------------------------
+
+      - name: Upload quality report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: docstring-quality-report
+          path: /tmp/quality_report.json
+          retention-days: 30
 
       - name: Upload docs artifact
         if: success() || (inputs.strict_validation != true)
@@ -141,12 +160,11 @@ jobs:
           markdownlint_outcome = "${{ steps.markdownlint.outcome }}"
           validate_outcome = "${{ steps.validate_mdx.outcome }}"
           coverage_outcome = "${{ steps.audit_coverage.outcome }}"
-          strict = "${{ inputs.strict_validation }}" == "true"
-          mode = "" if strict else " *(soft-fail)*"
-
+          quality_gate_outcome = "${{ steps.quality_gate.outcome }}"
           lint_log = read_log("/tmp/markdownlint.log")
           validate_log = read_log("/tmp/validate_mdx.log")
           coverage_log = read_log("/tmp/audit_coverage.log")
+          quality_gate_log = read_log("/tmp/quality_gate.log")
 
           # Count markdownlint issues (lines matching file:line:col format)
           lint_issues = len([l for l in lint_log.splitlines() if re.match(r'.+:\d+:\d+ ', l)])
@@ -186,45 +204,81 @@ jobs:
 
           mdx_detail = parse_validate_detail(validate_log)
 
-          # Docstring quality annotation emitted by audit_coverage.py into the log
-          # Format: ::notice title=Docstring quality::message
-          #      or ::warning title=Docstring quality::message
-          quality_match = re.search(r"::(notice|warning|error) title=Docstring quality::(.+)", coverage_log)
-          if quality_match:
-              quality_level, quality_msg = quality_match.group(1), quality_match.group(2)
-              quality_icon = "✅" if quality_level == "notice" else "⚠️"
-              quality_status = "pass" if quality_level == "notice" else "warning"
-              quality_detail = re.sub(r"\s*—\s*see job summary.*$", "", quality_msg)
-              quality_row = f"| Docstring Quality | {quality_icon} {quality_status}{mode} | {quality_detail} |"
-          else:
-              quality_row = None
+          # Parse per-kind counts from the quality gate log.
+          # _print_quality_report emits section headers like:
+          #   "  Missing docstrings (12)"
+          #   "  Missing Args section (5)"
+          # Capture label -> count from those lines, then build a compact
+          # per-kind breakdown for the summary table cell.
+          kind_short = {
+              "Missing docstrings":       "missing",
+              "Short docstrings":         "short",
+              "Missing Args section":     "no_args",
+              "Missing Returns section":  "no_returns",
+              "Missing Yields section (generator)": "no_yields",
+              "Missing Raises section":   "no_raises",
+              "Missing class Args section": "no_class_args",
+              "Duplicate Args: in class + __init__ (Option C violation)": "dup_init_args",
+              "Param name mismatches (documented but not in signature)": "param_mismatch",
+              "TypedDict phantom fields (documented but not declared)": "td_phantom",
+              "TypedDict undocumented fields (declared but missing from Attributes:)": "td_undoc",
+              "Missing parameter type annotations (type absent from API docs)": "missing_param_type",
+              "Missing return type annotations (type absent from API docs)": "missing_return_type",
+              "Param type mismatch (docstring vs annotation)": "param_type_mismatch",
+              "Return type mismatch (docstring vs annotation)": "return_type_mismatch",
+          }
+          section_re = re.compile(r"^\s{2}(.+?)\s+\((\d+)\)\s*$", re.MULTILINE)
+          kind_counts = {}
+          for m in section_re.finditer(quality_gate_log):
+              label, count = m.group(1), int(m.group(2))
+              short = kind_short.get(label)
+              if short:
+                  kind_counts[short] = count
 
-          # Split coverage log at quality section to avoid duplicate output in collapsibles
-          quality_start = coverage_log.find("🔬 Running docstring quality")
-          if quality_start != -1:
-              quality_log = coverage_log[quality_start:]
-              coverage_display_log = coverage_log[:quality_start].strip()
+          if kind_counts:
+              parts = [f"{v} {k}" for k, v in kind_counts.items()]
+              quality_gate_detail = ", ".join(parts)
           else:
-              quality_log = ""
-              coverage_display_log = coverage_log
+              # Fall back to the summary annotation message
+              qm = re.search(r"::(notice|warning|error) title=Docstring quality::(.+)", quality_gate_log)
+              quality_gate_detail = re.sub(r"\s*—\s*see job summary.*$", "", qm.group(2)) if qm else ""
+
+          CONTRIB_URL = (
+              "https://github.com/generative-computing/mellea/blob/main"
+              "/docs/docs/guide/CONTRIBUTING.md"
+          )
+          REPO = "${{ github.repository }}"
+          RUN_ID = "${{ github.run_id }}"
+          ARTIFACT_URL = f"https://github.com/{REPO}/actions/runs/{RUN_ID}#artifacts"
 
           lines = [
               "## Docs Build — Validation Summary\n",
               "| Check | Result | Details |",
               "|-------|--------|---------|",
-              f"| Markdownlint | {icon(markdownlint_outcome)} {markdownlint_outcome}{mode} | {lint_detail} |",
-              f"| MDX Validation | {icon(validate_outcome)} {validate_outcome}{mode} | {mdx_detail} |",
-              f"| API Coverage | {icon(coverage_outcome)} {coverage_outcome}{mode} | {cov_detail} |",
+              f"| Markdownlint | {icon(markdownlint_outcome)} {markdownlint_outcome} | {lint_detail} |",
+              f"| MDX Validation | {icon(validate_outcome)} {validate_outcome} | {mdx_detail} |",
+              f"| API Coverage | {icon(coverage_outcome)} {coverage_outcome} | {cov_detail} |",
+              f"| Docstring Quality | {icon(quality_gate_outcome)} {quality_gate_outcome} | {quality_gate_detail} |",
           ]
-          if quality_row:
-              lines.append(quality_row)
           lines.append("")
+
+          # When the quality gate fails, surface a direct link to the fix reference.
+          # Per-kind Ref: URLs in the log output are inside a ```text``` block and
+          # don't render as links there.
+          if quality_gate_outcome == "failure":
+              lines += [
+                  "> ❌ **Docstring quality gate failed.**  "
+                  f"See the [CI docstring checks reference]({CONTRIB_URL}#ci-docstring-checks-reference) "
+                  "for per-kind fix instructions, or expand **Docstring quality details** below for the full list.  \n"
+                  f"> The full machine-readable report is available as the [`docstring-quality-report` artifact]({ARTIFACT_URL}).",
+                  "",
+              ]
 
           for title, log, limit in [
               ("Markdownlint output", lint_log, 5_000),
               ("MDX validation output", validate_log, 5_000),
-              ("API coverage output", coverage_display_log, 5_000),
-              ("Docstring quality details", quality_log, 1_000_000),
+              ("API coverage output", coverage_log, 5_000),
+              ("Docstring quality details", quality_gate_log, 1_000_000),
           ]:
               if log:
                   lines += [

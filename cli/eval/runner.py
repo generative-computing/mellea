@@ -49,7 +49,7 @@ class InputEvalResult:
         self.score = score
         self.validation_reason = validation_reason
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         """Serialise the input evaluation result to a plain dictionary.
 
         Returns:
@@ -84,7 +84,7 @@ class TestEvalResult:
         self.test_eval = test_eval
         self.input_results = input_results
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         """Serialise the test evaluation result to a plain dictionary.
 
         Returns:
@@ -366,7 +366,7 @@ def execute_test_eval(
     return test_result
 
 
-def parse_judge_output(judge_output: str):
+def parse_judge_output(judge_output: str) -> tuple[int | None, str]:
     """Parse score and justification from a judge model's output string.
 
     Args:

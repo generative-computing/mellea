@@ -57,7 +57,6 @@ offline event.
 This Code of Conduct applies to all Mellea project spaces, including:
 
 - GitHub repository (issues, pull requests, discussions, code reviews)
-- Discord server
 - Project mailing lists and email communications
 - Official social media accounts
 - In-person and virtual events, meetups, and conferences
@@ -91,8 +90,8 @@ reviewed and investigated promptly and fairly.
 When reporting a violation, include:
 
 - **What happened** — a clear description of the incident
-- **When and where** — date, time, and location (e.g., GitHub issue #123, Discord channel)
-- **Who was involved** — GitHub usernames, Discord handles, or other identifiers
+- **When and where** — date, time, and location (e.g., GitHub issue #123, Github Discussions)
+- **Who was involved** — GitHub usernames or other identifiers
 - **Evidence** — links to relevant conversations or screenshots (if available)
 - **Impact** — how the incident affected you or others
 

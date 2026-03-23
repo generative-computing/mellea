@@ -42,7 +42,7 @@ to melleaadmin@ibm.com.
 
 - Python 3.10 or higher (3.13+ requires [Rust compiler](https://www.rust-lang.org/tools/install) for outlines)
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended) or conda/mamba
-- [Ollama](https://ollama.com/download) (for local testing)
+- [Ollama](https://ollama.com/download) with [required models](#required-models) (for local testing) 
 
 ### Installation with `uv` (Recommended)
 
@@ -174,6 +174,25 @@ differs in type or behaviour from the constructor input — for example, when a 
 argument is wrapped into a `CBlock`, or when a class-level constant is relevant to
 callers. Pure-echo entries that repeat `Args:` verbatim should be omitted.
 
+**`TypedDict` classes are a special case.** Their fields *are* the entire public
+contract, so when an `Attributes:` section is present it must exactly match the
+declared fields. The audit will flag:
+
+- `typeddict_phantom` — `Attributes:` documents a field that is not declared in the `TypedDict`
+- `typeddict_undocumented` — a declared field is absent from the `Attributes:` section
+
+```python
+class ConstraintResult(TypedDict):
+    """Result of a constraint check.
+
+    Attributes:
+        passed: Whether the constraint was satisfied.
+        reason: Human-readable explanation.
+    """
+    passed: bool
+    reason: str
+```
+
 #### Validating docstrings
 
 Run the coverage and quality audit to check your changes before committing:
@@ -194,6 +213,8 @@ Key checks the audit enforces:
 | `no_args` | Standalone function has params but no `Args:` section |
 | `no_returns` | Function has a non-trivial return annotation but no `Returns:` section |
 | `param_mismatch` | `Args:` documents names not present in the actual signature |
+| `typeddict_phantom` | `TypedDict` `Attributes:` documents a field not declared in the class |
+| `typeddict_undocumented` | `TypedDict` has a declared field absent from its `Attributes:` section |
 
 **IDE hover verification** — open any of these existing classes in VS Code and hover
 over the class name or a constructor call to confirm the hover card shows `Args:` once
@@ -329,6 +350,16 @@ uv run ruff format .
 uv run ruff check .
 ```
 
+### Required Models
+
+#### Ollama
+- `granite4:micro-h`
+- `granite3.2-vision`
+- `granite4:micro`
+- `qwen2.5vl:7b`
+
+_Note: ollama models can be obtained by running `ollama pull <model>`_
+
 ### Test Markers
 
 Tests are categorized using pytest markers:
@@ -416,7 +447,7 @@ print(m.last_prompt())
 
 - Check this guide and [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md)
 - Search [existing issues](https://github.com/generative-computing/mellea/issues)
-- Join our [Discord](https://ibm.biz/mellea-discord)
+- Check out [Github Discussions](https://github.com/generative-computing/mellea/discussions)
 - Open a new issue with the appropriate label
 
 ## Additional Resources
@@ -430,7 +461,6 @@ print(m.last_prompt())
 - **[AGENTS_TEMPLATE.md](docs/AGENTS_TEMPLATE.md)** - Template for projects using Mellea
 
 ### Community
-- **[Discord](https://ibm.biz/mellea-discord)** - Join our community
 - **[GitHub Issues](https://github.com/generative-computing/mellea/issues)** - Report bugs or request features
 - **[GitHub Discussions](https://github.com/generative-computing/mellea/discussions)** - Ask questions and share ideas
 

@@ -13,7 +13,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout code # Checks out the base branch, not PR branch.
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Detect PR type from checkboxes
         id: detect-type

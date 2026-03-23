@@ -140,7 +140,7 @@ def chat_completion_delta_merge(
     return merged
 
 
-def message_to_openai_message(msg: Message):
+def message_to_openai_message(msg: Message) -> dict:
     """Serialise a Mellea ``Message`` to the format required by OpenAI-compatible API providers.
 
     Args:

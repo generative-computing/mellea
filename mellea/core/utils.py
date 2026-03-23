@@ -67,7 +67,7 @@ class JsonFormatter(logging.Formatter):
     process ID, thread ID, and (if present) exception information.
     """
 
-    def format(self, record):  # type: ignore
+    def format(self, record: logging.LogRecord) -> dict:  # type: ignore[override]
         """Formats a log record as a JSON-serialisable dictionary.
 
         Includes timestamp, level, message, module, function name, line number,
@@ -75,6 +75,10 @@ class JsonFormatter(logging.Formatter):
 
         Args:
             record (logging.LogRecord): The log record to format.
+
+        Returns:
+            dict: A dictionary containing timestamp, level, message, module, function,
+            line number, process/thread IDs, and optional exception info.
         """
         log_record = {
             "timestamp": self.formatTime(record, self.datefmt),

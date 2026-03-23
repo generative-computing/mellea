@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "mellea"
-version = "0.4.0"
+version = "0.4.1"
 authors = [
     { name = "Mellea Contributors", email = "melleaadmin@ibm.com" },
 ]
@@ -29,6 +29,8 @@ dependencies = [
     "pillow", # Needed for Intrinsics (HF and OpenAI Backends).
     "math_verify", # Needed for Majority Voting Sampling Strategies.
     "rouge_score", # Needed for Majority Voting Sampling Strategies.
+    "PyYAML", # Needed for backends/adapters and granite formatters.
+    "packaging", # Needed for server type helpers.
 ]
 
 [project.scripts]
@@ -113,7 +115,7 @@ all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever
 
 # Code quality
 lint = [
-    "ruff>=0.11.6",
+    "ruff>=0.15.5",
     "isort>=6.0.0",
     "pre-commit>=4.2.0",
     "pylint>=3.3.4",

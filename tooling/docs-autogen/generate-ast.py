@@ -20,6 +20,7 @@ Pipeline:
 """
 
 import argparse
+import ast
 import glob
 import json
 import os
@@ -388,6 +389,141 @@ def remove_empty_mdx_files() -> None:
             removed += 1
 
     print(f"✅ Removed {removed} empty files.", flush=True)
+
+
+# -----------------------------
+# Public API filter
+# -----------------------------
+
+
+def _imported_submodules(init_path: Path) -> set[str] | None:
+    """Return submodule names explicitly imported via relative imports in ``__init__.py``.
+
+    Uses AST parsing (no import) so it is safe to call during doc generation.
+
+    A ``__init__.py`` that does ``from .ollama import OllamaModelBackend`` imports
+    from the ``ollama`` submodule, making it part of the package's public surface
+    even if the module name does not appear in ``__all__``.
+
+    Args:
+        init_path: Path to the ``__init__.py`` file to parse.
+
+    Returns:
+        Set of submodule names imported via ``from .name import ...``, or ``None``
+        when the file cannot be parsed.  An empty set means the ``__init__.py``
+        exists but contains no relative imports — caller should treat the module
+        as indeterminate and keep it.
+    """
+    try:
+        tree = ast.parse(init_path.read_text(encoding="utf-8"))
+    except (SyntaxError, OSError):
+        return None
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.level > 0 and node.module:
+            # from .submodule import X  →  record "submodule"
+            imported.add(node.module.split(".")[0])
+    return imported
+
+
+# Modules that are confirmed internal implementation details and must never
+# appear in the public API reference.  These are a fallback for cases where
+# the parent __init__.py does not import from any submodule (so the
+# import-based filter cannot determine intent automatically).
+#
+# Long-term fix: rename these files with a leading ``_`` (e.g. ``_json_util.py``)
+# so the doc generator skips them automatically per Python convention.
+# Tracked in: TODO open issue
+_CONFIRMED_INTERNAL_MODULES: frozenset[str] = frozenset(
+    {
+        # Granite intrinsics internal JSON parser — not part of the public API
+        "mellea/formatters/granite/intrinsics/json_util",
+        # Backend telemetry wiring — internal instrumentation helpers
+        "mellea/telemetry/backend_instrumentation",
+    }
+)
+
+
+def remove_internal_modules(source_root: Path) -> None:
+    """Remove MDX files for submodules that are not part of the package's public API.
+
+    ``mdxify --all`` generates documentation for every reachable submodule,
+    regardless of whether the package author intends it to be public.  This step
+    enforces the Python convention: a submodule is public when its parent
+    ``__init__.py`` explicitly imports from it (``from .name import ...``).
+    Submodules that are never imported in the parent ``__init__.py`` are internal
+    implementation details and are removed from the staging output.
+
+    **Conservative rules:**
+
+    * If the parent ``__init__.py`` cannot be parsed → keep (safe default).
+    * If the parent ``__init__.py`` contains *no* relative imports → keep
+      (cannot determine intent; typical for packages where submodules are
+      accessed via their full dotted path rather than re-exported).
+    * Package index files (``__init__.mdx`` renamed to ``<pkg>.mdx``) are
+      identified by ``stem == parent_dir_name`` and are never filtered.
+
+    A hardcoded ``_CONFIRMED_INTERNAL_MODULES`` set catches known internals in
+    packages where the parent ``__init__.py`` imports nothing (indeterminate
+    case).  These should eventually be renamed with a ``_`` prefix in source.
+
+    Args:
+        source_root: Root of the source repo (contains ``mellea/`` and ``cli/``).
+    """
+    print("-" * 30, flush=True)
+    print(
+        "🔒 Filtering internal modules (not imported by parent __init__)...", flush=True
+    )
+
+    mdx_files = list(STAGING_API_DIR.rglob("*.mdx"))
+    removed = 0
+
+    for mdx_path in sorted(mdx_files):
+        rel = mdx_path.relative_to(STAGING_API_DIR)
+        parts = list(rel.with_suffix("").parts)
+
+        # Need at least pkg/parent/module to have a meaningful parent check.
+        if len(parts) < 3:
+            continue
+
+        module_name = parts[-1]
+
+        # Package index files: __init__.mdx was renamed to <foldername>.mdx.
+        # Identified by stem == containing directory name.  Never filter these.
+        if module_name == parts[-2]:
+            continue
+
+        # Hardcoded confirmed-internal override (indeterminate parent cases).
+        rel_no_ext = str(rel.with_suffix(""))
+        if rel_no_ext in _CONFIRMED_INTERNAL_MODULES:
+            print(
+                f"   🔒 {rel}  (confirmed internal — hardcoded exclusion)", flush=True
+            )
+            mdx_path.unlink(missing_ok=True)
+            removed += 1
+            continue
+
+        # Import-based check: parent __init__.py must import from this submodule.
+        parent_src = source_root / Path(*parts[:-1]) / "__init__.py"
+        if not parent_src.exists():
+            continue  # no __init__.py — cannot determine, keep
+
+        parent_imports = _imported_submodules(parent_src)
+        if parent_imports is None:
+            continue  # parse failure — keep (safe default)
+        if not parent_imports:
+            continue  # parent imports nothing from submodules — indeterminate, keep
+
+        if module_name not in parent_imports:
+            print(
+                f"   🔒 {rel}  ('{module_name}' not imported by "
+                f"{Path(*parts[:-1])}/__init__.py)",
+                flush=True,
+            )
+            mdx_path.unlink(missing_ok=True)
+            removed += 1
+
+    print(f"✅ Removed {removed} internal module file(s).", flush=True)
 
 
 # -----------------------------
@@ -770,6 +906,7 @@ def main() -> None:
     rename_init_files_to_parent()
     update_frontmatter_metadata()
     remove_empty_mdx_files()
+    remove_internal_modules(source_root)
 
     # Move staging api -> final docs root/api
     final_api_dir = move_api_to_docs_root(docs_root)
