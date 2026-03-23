@@ -28,6 +28,17 @@ class CitationRequirement(Requirement):
     1. In the constructor (for reusable requirements with fixed documents)
     2. Attached to the assistant message in the context (for dynamic documents)
 
+    Args:
+        min_citation_coverage: Minimum ratio of cited content (0.0-1.0).
+            The ratio of characters with citations to total response length
+            must meet or exceed this threshold. Default is 0.8 (80% coverage).
+        documents: Optional documents to validate against. Can be Document
+            objects or strings (will be converted to Documents). If provided,
+            these documents will be used instead of documents attached to
+            messages in the context. Default is None (use context documents).
+        description: Custom description for the requirement. If None,
+            generates a description based on coverage threshold.
+
     Example:
         ```python
         from mellea.backends.huggingface import LocalHFBackend
@@ -55,19 +66,7 @@ class CitationRequirement(Requirement):
         documents: Iterable[Document] | Iterable[str] | None = None,
         description: str | None = None,
     ):
-        """Initialize citation coverage requirement.
-
-        Args:
-            min_citation_coverage: Minimum ratio of cited content (0.0-1.0).
-                The ratio of characters with citations to total response length
-                must meet or exceed this threshold. Default: 0.8 (80% coverage)
-            documents: Optional documents to validate against. Can be Document
-                objects or strings (will be converted to Documents). If provided,
-                these documents will be used instead of documents attached to
-                messages in the context. Default: None (use context documents)
-            description: Custom description for the requirement. If None,
-                generates a description based on coverage threshold.
-        """
+        """Initialize citation coverage requirement."""
         if not 0.0 <= min_citation_coverage <= 1.0:
             raise ValueError(
                 f"min_citation_coverage must be between 0.0 and 1.0, got {min_citation_coverage}"
@@ -302,8 +301,8 @@ def citation_check(
     Args:
         documents: Documents to check for citations. Can be Document objects
             or strings (will be converted to Documents).
-        min_citation_coverage: Minimum ratio of cited content (0.0-1.0).
-            Default: 0.8 (80% coverage)
+        min_citation_coverage: Minimum ratio of cited content (0.0-1.0),
+            defaults to 0.8 (80% coverage).
         description: Custom description for the requirement. If None,
             generates a description based on coverage threshold.
 
