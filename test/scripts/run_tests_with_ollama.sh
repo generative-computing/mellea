@@ -144,10 +144,10 @@ log "Warmup complete."
 # --- Run tests ---
 log "Starting pytest..."
 log "Log directory: $LOGDIR"
-log "Pytest args: ${*:---group-by-backend -v}"
+log "Pytest args: ${*---group-by-backend}"
 
 uv run --quiet --frozen --all-groups --all-extras \
-    pytest test/ "${@:---group-by-backend -v}" \
+    pytest test/ ${@---group-by-backend} \
     2>&1 | tee "$LOGDIR/pytest_full.log"
 
 EXIT_CODE=${PIPESTATUS[0]}
