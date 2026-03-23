@@ -196,7 +196,7 @@ Please see our **[Contributing Guide](CONTRIBUTING.md)** for detailed informatio
 - Testing guidelines
 - How to contribute specific types of components
 
-Questions? Join our [Discord](https://ibm.biz/mellea-discord)!
+Questions? Create a [discussion](https://github.com/generative-computing/mellea/discussions)!
 
 ### IBM ❤️ Open Source AI
 
