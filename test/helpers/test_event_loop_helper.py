@@ -1,3 +1,5 @@
+import multiprocessing
+
 import pytest
 
 import mellea.helpers.event_loop_helper as elh
@@ -30,6 +32,36 @@ def test_event_loop_handler_init_and_del():
 
     # Make sure this didn't delete the actual singleton.
     assert elh.__event_loop_handler is not None
+
+
+def test_event_loop_handler_with_forking():
+    """Importing mellea before fork must not crash the child process."""
+
+    ctx = multiprocessing.get_context("fork")
+
+    def child():
+        import mellea.helpers.event_loop_helper as elh
+
+        async def hello():
+            return 42
+
+        result = elh._run_async_in_thread(hello())
+        assert result == 42
+
+    p = ctx.Process(target=child)
+
+    try:
+        p.start()
+        p.join(timeout=15)
+        assert p.exitcode == 0, (
+            f"Child process failed after fork (exit code: {p.exitcode if p.exitcode is not None else 'timed out'})"
+        )
+
+    finally:
+        # Make sure we always clean up the process.
+        if p.is_alive():
+            p.kill()
+            p.join(timeout=15)
 
 
 if __name__ == "__main__":

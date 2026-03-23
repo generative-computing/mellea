@@ -339,7 +339,7 @@ class MelleaSession:
 
         return new
 
-    def clone(self):
+    def clone(self) -> MelleaSession:
         """Useful for running multiple generation requests while keeping the context at a given point in time.
 
         Returns:

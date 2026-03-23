@@ -349,7 +349,7 @@ def query(
         tool_calls: If true, the model may make tool calls. Defaults to False.
 
     Returns:
-        ModelOutputThunk: The result of the query as processed by the backend.
+        tuple[ModelOutputThunk, Context]: The result of the query and updated context.
     """
     if not isinstance(obj, MObjectProtocol):
         obj = mify(obj)
@@ -983,7 +983,7 @@ async def aquery(
         tool_calls: If true, the model may make tool calls. Defaults to False.
 
     Returns:
-        ModelOutputThunk: The result of the query as processed by the backend.
+        tuple[ModelOutputThunk, Context]: The result of the query and updated context.
     """
     if not isinstance(obj, MObjectProtocol):
         obj = mify(obj)
@@ -1024,9 +1024,9 @@ async def atransform(
         model_options: Model options to pass to the backend.
 
     Returns:
-        ModelOutputThunk|Any: The result of the transformation as processed by the backend. If no tools were called,
-        the return type will be always be ModelOutputThunk. If a tool was called, the return type will be the return type
-        of the function called, usually the type of the object passed in.
+        tuple[ModelOutputThunk | Any, Context]: The result of the transformation and updated context.
+        If no tools were called, the first element will always be ModelOutputThunk. If a tool was called,
+        the first element will be the return type of the function called, usually the type of the object passed in.
     """
     if not isinstance(obj, MObjectProtocol):
         obj = mify(obj)

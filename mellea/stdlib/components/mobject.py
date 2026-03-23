@@ -306,7 +306,7 @@ class MObject(Component[str]):
         return TemplateRepresentation(
             args={"content": self.content_as_string()},
             obj=self,
-            tools=tools,
+            tools=tools,  # type: ignore[arg-type]
             fields=[],
             template_order=["*", "MObject"],
         )

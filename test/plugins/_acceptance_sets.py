@@ -7,6 +7,8 @@ Each set contains one hook per call site in a single execution mode:
   4. fandf_plugin_set — FIRE_AND_FORGET (background, observe-only)
 """
 
+import logging
+
 from mellea.plugins import HookType, PluginMode, PluginSet, hook
 
 # ---------------------------------------------------------------------------
@@ -14,6 +16,9 @@ from mellea.plugins import HookType, PluginMode, PluginSet, hook
 # ---------------------------------------------------------------------------
 
 _ALL_HOOK_TYPES = list(HookType)
+
+logger = logging.getLogger("hook-testing")
+logger.setLevel(100)  # Don't log anything by default.
 
 
 def _make_hooks(prefix: str, mode: PluginMode):
@@ -23,7 +28,8 @@ def _make_hooks(prefix: str, mode: PluginMode):
 
         @hook(ht, mode=mode)
         async def _hook(payload, ctx, _ht=ht, _prefix=prefix):
-            print(f"[{_prefix}] {_ht.value}:", payload)
+            # We still want to do something with these values, but we don't care about the output for now.
+            logger.debug(f"[{_prefix}] {_ht.value}:", payload)
 
         # Give each closure a unique qualname so the adapter names don't clash.
         _hook.__qualname__ = f"{prefix}_{ht.value}"

@@ -16,7 +16,14 @@ import torch
 import typer
 from datasets import Dataset
 from peft import LoraConfig, get_peft_model
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    TrainerCallback,
+    TrainerControl,
+    TrainerState,
+    TrainingArguments,
+)
 from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer
 
 # Handle MPS with old PyTorch versions on macOS only
@@ -39,7 +46,9 @@ if sys.platform == "darwin" and hasattr(torch.backends, "mps"):
             )
 
 
-def load_dataset_from_json(json_path, tokenizer, invocation_prompt):
+def load_dataset_from_json(
+    json_path: str, tokenizer: AutoTokenizer, invocation_prompt: str
+) -> Dataset:
     """Load a JSONL dataset and format it for SFT training.
 
     Reads ``item``/``label`` pairs from a JSONL file and builds a HuggingFace
@@ -73,7 +82,7 @@ def load_dataset_from_json(json_path, tokenizer, invocation_prompt):
     return Dataset.from_dict({"input": inputs, "target": targets})
 
 
-def formatting_prompts_func(example):
+def formatting_prompts_func(example: dict) -> list[str]:
     """Concatenate input and target columns for SFT prompt formatting.
 
     Args:
@@ -101,7 +110,13 @@ class SaveBestModelCallback(TrainerCallback):
     def __init__(self):
         self.best_eval_loss = float("inf")
 
-    def on_evaluate(self, args, state, control, **kwargs):
+    def on_evaluate(
+        self,
+        args: TrainingArguments,
+        state: TrainerState,
+        control: TrainerControl,
+        **kwargs,
+    ):
         """Save the adapter weights if the current evaluation loss is a new best.
 
         Called automatically by the HuggingFace Trainer after each evaluation

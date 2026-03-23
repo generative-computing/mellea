@@ -70,7 +70,7 @@ class MelleaTool(AbstractMelleaTool):
         return self._as_json_tool.copy()
 
     @classmethod
-    def from_langchain(cls, tool: Any):
+    def from_langchain(cls, tool: Any) -> "MelleaTool":
         """Create a MelleaTool from a LangChain tool object.
 
         Args:
@@ -117,7 +117,7 @@ class MelleaTool(AbstractMelleaTool):
             ) from e
 
     @classmethod
-    def from_smolagents(cls, tool: Any):
+    def from_smolagents(cls, tool: Any) -> "MelleaTool":
         """Create a Tool from a HuggingFace smolagents tool object.
 
         Args:
@@ -172,7 +172,7 @@ class MelleaTool(AbstractMelleaTool):
             ) from e
 
     @classmethod
-    def from_callable(cls, func: Callable, name: str | None = None):
+    def from_callable(cls, func: Callable, name: str | None = None) -> "MelleaTool":
         """Create a MelleaTool from a plain Python callable.
 
         Introspects the callable's signature and docstring to build an
@@ -379,7 +379,7 @@ def json_extraction(text: str) -> Generator[dict, None, None]:
         index = text.find("{", index)
 
 
-def find_func(d) -> tuple[str | None, Mapping | None]:
+def find_func(d: object) -> tuple[str | None, Mapping | None]:
     """Find the first function in a json-like dictionary.
 
     Most llms output tool requests in the form ``...{"name": string, "arguments": {}}...``

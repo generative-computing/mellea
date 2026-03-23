@@ -133,5 +133,5 @@ class SamplingStrategy(abc.ABC):
             tool_calls: True if tool calls should be used during this sampling strategy.
 
         Returns:
-            SamplingResult: A result object indicating the success or failure of the sampling process.
+            SamplingResult[S]: A result object indicating the success or failure of the sampling process.
         """

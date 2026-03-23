@@ -1,3 +1,21 @@
+## [v0.4.1](https://github.com/generative-computing/mellea/releases/tag/v0.4.1) - 2026-03-23
+
+### Feature
+
+* Move ruff hooks locally; add output for ci/cd autofixes; update ([#709](https://github.com/generative-computing/mellea/issues/709)) ([`f0e778e`](https://github.com/generative-computing/mellea/commit/f0e778efcf7e0602393e9db929e5cfc998fbf18c))
+* **m-decomp:** Upgraded pipeline and added README, examples, and fixed module issues ([#676](https://github.com/generative-computing/mellea/issues/676)) ([`cf63d92`](https://github.com/generative-computing/mellea/commit/cf63d92f47c4bf2b126d518c08d830b830112317))
+
+### Fix
+
+* Add missing dependencies ([#715](https://github.com/generative-computing/mellea/issues/715)) ([`4bb16c8`](https://github.com/generative-computing/mellea/commit/4bb16c88be07b291c840cad57e55eea2b06ba950))
+* Add special handling for mellea global event loop when forked ([#624](https://github.com/generative-computing/mellea/issues/624)) ([`a620440`](https://github.com/generative-computing/mellea/commit/a6204405ab09244e51309c9f80abc0b6e22eca92))
+* Update github action versions to Node24 compatible ([#713](https://github.com/generative-computing/mellea/issues/713)) ([`4c0bb1b`](https://github.com/generative-computing/mellea/commit/4c0bb1b6e5cd8fc851629c28c05c1d25b7aae6f8))
+* Increase test timeout and remove unnecessary hook debugging ([#706](https://github.com/generative-computing/mellea/issues/706)) ([`871a4bf`](https://github.com/generative-computing/mellea/commit/871a4bff423abff745fab23769f8c6a8e263cbba))
+
+### Documentation
+
+* Add documentation listing required models for non qualitative tests to run ([#674](https://github.com/generative-computing/mellea/issues/674)) ([`7501093`](https://github.com/generative-computing/mellea/commit/75010933d3e1db865f94b81fb992678d4811eb46))
+
 ## [v0.4.0](https://github.com/generative-computing/mellea/releases/tag/v0.4.0) - 2026-03-18
 
 ### Feature
