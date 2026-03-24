@@ -4,7 +4,7 @@
 from ...core import Requirement, ValidationResult, default_output_to_bool
 from .md import as_markdown_list, is_markdown_list, is_markdown_table
 from .python_reqs import PythonExecutionReq
-from .rag import CitationRequirement, citation_check
+from .rag import CitationRequirement
 from .requirement import (
     ALoraRequirement,
     LLMaJRequirement,
@@ -25,7 +25,6 @@ __all__ = [
     "ValidationResult",
     "as_markdown_list",
     "check",
-    "citation_check",
     "default_output_to_bool",
     "is_markdown_list",
     "is_markdown_table",

@@ -159,27 +159,11 @@ class CitationRequirement(Requirement):
                 reason=f"Backend {backend.__class__.__name__} does not support adapters required for citation detection",
             )
 
-        # More specific check for HuggingFace backend
-        try:
-            from ...backends.huggingface import LocalHFBackend
-
-            if not isinstance(backend, LocalHFBackend):
-                return ValidationResult(
-                    False,
-                    reason=f"Citation detection requires LocalHFBackend (HuggingFace), "
-                    f"but got {backend.__class__.__name__}. The find_citations intrinsic "
-                    f"only works with HuggingFace models.",
-                )
-        except ImportError:
-            return ValidationResult(
-                False,
-                reason="HuggingFace backend not available. Please install mellea[hf] to use citation detection.",
-            )
-
         # Create context before the response by getting all but the last message
         all_messages = ctx.as_list()
         if len(all_messages) > 1:
             # Rebuild context without last message
+            # Import here to avoid circular dependency
             from ..context import ChatContext
 
             context_before_response = ChatContext()
@@ -187,6 +171,7 @@ class CitationRequirement(Requirement):
                 context_before_response = context_before_response.add(msg)
         else:
             # If only one message, use empty context
+            # Import here to avoid circular dependency
             from ..context import ChatContext
 
             context_before_response = ChatContext()
@@ -195,7 +180,9 @@ class CitationRequirement(Requirement):
         total_chars = len(response)
         if total_chars == 0:
             return ValidationResult(
-                True, reason="Empty response has 100% citation coverage", score=1.0
+                True,
+                reason="Empty response is considered to have adequate citation coverage",
+                score=1.0,
             )
 
         # Call find_citations intrinsic
@@ -283,57 +270,3 @@ class CitationRequirement(Requirement):
             )
 
         return reason
-
-
-def citation_check(
-    documents: Iterable[Document] | Iterable[str],
-    min_citation_coverage: float = 0.8,
-    description: str | None = None,
-) -> CitationRequirement:
-    """Create a citation coverage requirement with pre-attached documents.
-
-    This is a convenience factory function that creates a CitationRequirement
-    with documents already attached. This is useful when you have a fixed set of
-    documents to validate against and want a cleaner API.
-
-    **Important**: This requirement requires a HuggingFace backend (LocalHFBackend).
-
-    Args:
-        documents: Documents to check for citations. Can be Document objects
-            or strings (will be converted to Documents).
-        min_citation_coverage: Minimum ratio of cited content (0.0-1.0),
-            defaults to 0.8 (80% coverage).
-        description: Custom description for the requirement. If None,
-            generates a description based on coverage threshold.
-
-    Returns:
-        A CitationRequirement with documents attached
-
-    Example:
-        ```python
-        from mellea.backends.huggingface import LocalHFBackend
-        from mellea.stdlib.requirements.rag import citation_check
-        from mellea.stdlib.components import Document
-
-        backend = LocalHFBackend(model_id="meta-llama/Llama-3.2-1B-Instruct")
-        docs = [
-            Document(doc_id="1", text="The sky is blue."),
-            Document(doc_id="2", text="Grass is green.")
-        ]
-        req = citation_check(docs, min_citation_coverage=0.8)
-
-        # Use with instruct() - no need to attach documents to messages
-        result = m.instruct(
-            "Answer: {{query}}",
-            grounding_context={"query": "What color is the sky?"},
-            requirements=[req],
-            backend=backend,
-            strategy=RejectionSamplingStrategy()
-        )
-        ```
-    """
-    return CitationRequirement(
-        min_citation_coverage=min_citation_coverage,
-        documents=documents,
-        description=description,
-    )
