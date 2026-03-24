@@ -13,7 +13,7 @@ import asyncio
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.requirements.rag import CitationRequirement, citation_check
+from mellea.stdlib.requirements.rag import CitationRequirement
 
 
 async def main():
@@ -51,8 +51,8 @@ async def main():
     ctx = ChatContext().add(Message("user", "What colors are the sky and grass?"))
     ctx = ctx.add(Message("assistant", response, documents=docs))
 
-    # Example 1: Using CitationRequirement directly
-    print("\n--- Example 1: CitationRequirement with 70% coverage ---")
+    # Example 1: Documents in constructor
+    print("\n--- Example 1: CitationRequirement with documents in constructor ---")
     req = CitationRequirement(min_citation_coverage=0.7, documents=docs)
     result = await req.validate(backend, ctx)
 
@@ -64,9 +64,9 @@ async def main():
         )
         print(f"Reason: {reason_preview}")
 
-    # Example 2: Using citation_check factory
-    print("\n--- Example 2: Using citation_check factory ---")
-    req2 = citation_check(docs, min_citation_coverage=0.8)
+    # Example 2: Higher coverage threshold
+    print("\n--- Example 2: Higher coverage threshold (80%) ---")
+    req2 = CitationRequirement(min_citation_coverage=0.8, documents=docs)
     result2 = await req2.validate(backend, ctx)
 
     print(f"Validation passed: {result2.as_bool()}")

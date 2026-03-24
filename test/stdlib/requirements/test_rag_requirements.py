@@ -6,7 +6,7 @@ import pytest
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.requirements.rag import CitationRequirement, citation_check
+from mellea.stdlib.requirements.rag import CitationRequirement
 
 
 @pytest.mark.huggingface
@@ -68,34 +68,6 @@ async def test_citation_requirement_with_constructor_documents():
     result = await req.validate(backend, ctx)
 
     # Should use constructor documents
-    assert isinstance(result.score, float)
-    assert result.reason is not None
-
-
-@pytest.mark.huggingface
-@pytest.mark.llm
-@pytest.mark.requires_heavy_ram
-async def test_citation_check_factory():
-    """Test citation_check factory function."""
-    backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
-
-    # Create documents
-    docs = [Document(doc_id="doc1", text="The sky is blue during the day.")]
-
-    # Create a response
-    response = "The sky is blue."
-
-    # Create context
-    ctx = ChatContext().add(Message("user", "What color is the sky?"))
-    ctx = ctx.add(Message("assistant", response))
-
-    # Use factory function
-    req = citation_check(docs, min_citation_coverage=0.5)
-
-    # Validate
-    result = await req.validate(backend, ctx)
-
-    # Should work the same as CitationRequirement
     assert isinstance(result.score, float)
     assert result.reason is not None
 
@@ -169,13 +141,12 @@ async def test_citation_requirement_no_documents():
 
 
 async def test_citation_requirement_wrong_backend():
-    """Test citation requirement with non-HuggingFace backend."""
-    try:
-        from mellea.backends.ollama import OllamaBackend  # type: ignore
-    except ImportError:
-        pytest.skip("Ollama backend not available")
+    """Test citation requirement with non-adapter backend."""
+    from unittest.mock import Mock
 
-    backend = OllamaBackend(model_id="llama3.2")  # type: ignore
+    # Create a mock backend that doesn't support adapters
+    backend = Mock()
+    backend.__class__.__name__ = "MockBackend"
 
     # Create documents
     docs = [Document(doc_id="doc1", text="The sky is blue.")]
@@ -190,10 +161,10 @@ async def test_citation_requirement_wrong_backend():
     # Validate
     result = await req.validate(backend, ctx)
 
-    # Should fail with clear error about backend requirement
+    # Should fail with clear error about adapter requirement
     assert not result.as_bool()
     assert result.reason is not None
-    assert "LocalHFBackend" in result.reason or "HuggingFace" in result.reason
+    assert "adapter" in result.reason.lower()
 
 
 def test_citation_requirement_invalid_coverage():
@@ -256,40 +227,60 @@ async def test_citation_requirement_empty_response():
     # Validate
     result = await req.validate(backend, ctx)
 
-    # Empty response should pass (100% coverage of nothing)
+    # Empty response should pass (considered to have adequate coverage)
     assert result.as_bool()
     assert result.score == 1.0
+    assert result.reason is not None
+    assert "adequate citation coverage" in result.reason.lower()
 
 
-@pytest.mark.huggingface
-@pytest.mark.llm
-@pytest.mark.requires_heavy_ram
 async def test_citation_requirement_threshold_boundary():
-    """Test citation requirement at exact threshold boundary."""
-    backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+    """Test citation requirement at exact threshold boundary.
+
+    This test mocks the find_citations intrinsic to return a controlled
+    result that produces exactly the threshold coverage (80%).
+    """
+    from unittest.mock import Mock, patch
+
+    backend = Mock(spec=LocalHFBackend)
 
     # Create documents
     docs = [Document(doc_id="doc1", text="The sky is blue during the day.")]
 
-    # Create a response
-    response = "The sky is blue."
+    # Create a response with 10 characters
+    response = "1234567890"
 
     # Create context
     ctx = ChatContext().add(Message("user", "What color is the sky?"))
     ctx = ctx.add(Message("assistant", response, documents=docs))
 
-    # Create requirement with specific threshold
-    req = CitationRequirement(min_citation_coverage=0.8)
+    # Mock find_citations to return exactly 8 characters cited (80% of 10)
+    mock_citations = [
+        {
+            "response_begin": 0,
+            "response_end": 8,  # 8 characters cited
+            "response_text": "12345678",
+            "citation_doc_id": "doc1",
+            "citation_text": "The sky is blue",
+        }
+    ]
 
-    # Validate
-    result = await req.validate(backend, ctx)
+    with patch(
+        "mellea.stdlib.components.intrinsic.rag.find_citations",
+        return_value=mock_citations,
+    ):
+        # Test at exact threshold (0.8)
+        req = CitationRequirement(min_citation_coverage=0.8)
+        result = await req.validate(backend, ctx)
 
-    # Check that score is calculated
-    assert isinstance(result.score, float)
-    assert 0.0 <= result.score <= 1.0
-
-    # Result should match threshold comparison
-    if result.score >= 0.8:
+        # At exact threshold, should pass (>= comparison)
         assert result.as_bool()
-    else:
-        assert not result.as_bool()
+        assert result.score == 0.8
+
+        # Test just below threshold (0.81)
+        req_above = CitationRequirement(min_citation_coverage=0.81)
+        result_above = await req_above.validate(backend, ctx)
+
+        # Just below threshold, should fail
+        assert not result_above.as_bool()
+        assert result_above.score == 0.8
