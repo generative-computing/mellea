@@ -1,10 +1,25 @@
 """Requirements for RAG (Retrieval-Augmented Generation) workflows."""
 
 from collections.abc import Iterable
+from enum import Enum
 
 from ...backends.adapters import AdapterMixin
 from ...core import Backend, Context, Requirement, ValidationResult
 from ..components import Document, Message
+
+
+class CitationMode(Enum):
+    """Mode for calculating citation coverage.
+
+    Attributes:
+        CLAIMS: Count the fraction of factual claims that have citations.
+            Each citation record from find_citations represents one claim.
+        CHARACTERS: Calculate the ratio of cited characters to total characters.
+            Sums character ranges covered by citations.
+    """
+
+    CLAIMS = "claims"
+    CHARACTERS = "characters"
 
 
 class CitationRequirement(Requirement):
@@ -30,14 +45,19 @@ class CitationRequirement(Requirement):
 
     Args:
         min_citation_coverage: Minimum ratio of cited content (0.0-1.0).
-            The ratio of characters with citations to total response length
-            must meet or exceed this threshold. Default is 0.8 (80% coverage).
+            Interpretation depends on mode:
+            - CLAIMS mode: fraction of factual claims with citations
+            - CHARACTERS mode: ratio of cited characters to total characters
+            Default is 0.8 (80% coverage).
         documents: Optional documents to validate against. Can be Document
             objects or strings (will be converted to Documents). If provided,
             these documents will be used instead of documents attached to
             messages in the context. Default is None (use context documents).
+        mode: Citation coverage calculation mode. Default is CitationMode.CLAIMS
+            (count fraction of claims with citations). Use CitationMode.CHARACTERS
+            to calculate character-based coverage ratio instead.
         description: Custom description for the requirement. If None,
-            generates a description based on coverage threshold.
+            generates a description based on coverage threshold and mode.
 
     Example:
         ```python
@@ -64,6 +84,7 @@ class CitationRequirement(Requirement):
         self,
         min_citation_coverage: float = 0.8,
         documents: Iterable[Document] | Iterable[str] | None = None,
+        mode: CitationMode = CitationMode.CLAIMS,
         description: str | None = None,
     ):
         """Initialize citation coverage requirement."""
@@ -73,6 +94,7 @@ class CitationRequirement(Requirement):
             )
 
         self.min_citation_coverage = min_citation_coverage
+        self.mode = mode
 
         # Convert documents to Document objects if provided
         if documents is not None:
@@ -87,10 +109,16 @@ class CitationRequirement(Requirement):
 
         # Generate description if not provided
         if description is None:
-            description = (
-                f"Response must have adequate citation coverage "
-                f"(minimum {min_citation_coverage * 100:.0f}% of content cited)"
-            )
+            if mode == CitationMode.CLAIMS:
+                description = (
+                    f"Response must have adequate citation coverage "
+                    f"(minimum {min_citation_coverage * 100:.0f}% of factual claims cited)"
+                )
+            else:  # CitationMode.CHARACTERS
+                description = (
+                    f"Response must have adequate citation coverage "
+                    f"(minimum {min_citation_coverage * 100:.0f}% of characters cited)"
+                )
 
         # Initialize parent without validation function - we override validate() instead
         super().__init__(description=description, validation_fn=None)
@@ -198,13 +226,34 @@ class CitationRequirement(Requirement):
                 False, reason=f"Citation detection intrinsic failed: {e!s}"
             )
 
-        # Calculate citation coverage
+        # Calculate citation coverage based on mode
+        if self.mode == CitationMode.CLAIMS:
+            # Count fraction of claims (citation records) that exist
+            # Each citation record represents a factual claim that has a citation
+            # We need to estimate total claims in the response
+            # For now, use a simple heuristic: split by sentence-ending punctuation
+            import re
 
-        cited_chars = sum(
-            citation["response_end"] - citation["response_begin"]
-            for citation in citations
-        )
-        coverage_ratio = cited_chars / total_chars
+            # Split response into sentences (simple heuristic)
+            sentences = re.split(r"[.!?]+", response)
+            # Filter out empty strings and whitespace-only strings
+            sentences = [s.strip() for s in sentences if s.strip()]
+            total_claims = len(sentences)
+
+            if total_claims == 0:
+                # Edge case: no sentences detected
+                coverage_ratio = 1.0 if len(citations) == 0 else 0.0
+            else:
+                # Number of claims with citations = number of citation records
+                cited_claims = len(citations)
+                coverage_ratio = cited_claims / total_claims
+        else:  # CitationMode.CHARACTERS
+            # Calculate character-based coverage
+            cited_chars = sum(
+                citation["response_end"] - citation["response_begin"]
+                for citation in citations
+            )
+            coverage_ratio = cited_chars / total_chars
 
         # Check against min_citation_coverage
         passed = coverage_ratio >= self.min_citation_coverage
@@ -231,15 +280,20 @@ class CitationRequirement(Requirement):
         coverage_pct = coverage_ratio * 100
         threshold_pct = self.min_citation_coverage * 100
 
+        if self.mode == CitationMode.CLAIMS:
+            metric_name = "claims"
+        else:
+            metric_name = "characters"
+
         if passed:
             reason = (
                 f"Response has adequate citation coverage "
-                f"({coverage_pct:.1f}% cited, threshold: {threshold_pct:.1f}%)"
+                f"({coverage_pct:.1f}% of {metric_name} cited, threshold: {threshold_pct:.1f}%)"
             )
         else:
             reason = (
                 f"Response has insufficient citation coverage "
-                f"({coverage_pct:.1f}% cited, threshold: {threshold_pct:.1f}%)"
+                f"({coverage_pct:.1f}% of {metric_name} cited, threshold: {threshold_pct:.1f}%)"
             )
 
         # Add details about citations
