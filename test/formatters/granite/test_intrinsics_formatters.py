@@ -38,7 +38,8 @@ def _read_file(name):
 _TEST_DATA_DIR = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 
 # Location from which our tests download adapters and YAML files
-_RAG_INTRINSICS_REPO_NAME = "ibm-granite/granite-lib-rag-r1.0"
+_RAG_INTRINSICS_REPO_NAME = "ibm-granite/granitelib-rag-r1.0"
+_CORE_R1_REPO_NAME = "ibm-granite/granitelib-core-r1.0"
 
 
 _INPUT_JSON_DIR = _TEST_DATA_DIR / "input_json"
@@ -144,6 +145,9 @@ _YAML_JSON_COMBOS_LIST = [
         inputs_file=_INPUT_JSON_DIR / "query_rewrite.json",
         task="query_rewrite",
     ),
+    # NOTE for the following two entries:
+    # The "requirement_check" intrinsic has not yet been ported to the latest format
+    # or to Granite 4.0.
     YamlJsonCombo(
         short_name="requirement_check",
         inputs_file=_INPUT_JSON_DIR / "requirement_check.json",
@@ -168,8 +172,7 @@ _YAML_JSON_COMBOS_LIST = [
         inputs_file=_INPUT_JSON_DIR / "uncertainty.json",
         task="uncertainty",
         # Granite 4.0 adapters not currently available
-        repo_id="ibm-granite/rag-intrinsics-lib",
-        base_model_id="ibm-granite/granite-3.3-2b-instruct",
+        repo_id="ibm-granite/granitelib-core-r1.0",
     ),
     YamlJsonCombo(
         short_name="uncertainty_alora",
@@ -177,8 +180,7 @@ _YAML_JSON_COMBOS_LIST = [
         task="uncertainty",
         is_alora=True,
         # Granite 4.0 adapters not currently available
-        repo_id="ibm-granite/rag-intrinsics-lib",
-        base_model_id="ibm-granite/granite-3.3-2b-instruct",
+        repo_id="ibm-granite/granitelib-core-r1.0",
     ),
     YamlJsonCombo(
         short_name="context_relevance",
@@ -216,28 +218,28 @@ _YAML_JSON_COMBOS_LIST = [
         short_name="gpt_oss_answerability",
         inputs_file=_INPUT_JSON_DIR / "answerable.json",
         task="answerability",
-        repo_id="ibm-granite/granite-lib-rag-gpt-oss-r1.0",
+        repo_id="ibm-granite/granitelib-rag-gpt-oss-r1.0",
         base_model_id="openai/gpt-oss-20b",
     ),
     YamlJsonCombo(
         short_name="gpt_oss_citations",
         inputs_file=_INPUT_JSON_DIR / "citations.json",
         task="citations",
-        repo_id="ibm-granite/granite-lib-rag-gpt-oss-r1.0",
+        repo_id="ibm-granite/granitelib-rag-gpt-oss-r1.0",
         base_model_id="openai/gpt-oss-20b",
     ),
     YamlJsonCombo(
         short_name="gpt_oss_hallucination_detection",
         inputs_file=_INPUT_JSON_DIR / "hallucination_detection.json",
         task="hallucination_detection",
-        repo_id="ibm-granite/granite-lib-rag-gpt-oss-r1.0",
+        repo_id="ibm-granite/granitelib-rag-gpt-oss-r1.0",
         base_model_id="openai/gpt-oss-20b",
     ),
     YamlJsonCombo(
         short_name="gpt_oss_query_rewrite",
         inputs_file=_INPUT_JSON_DIR / "query_rewrite.json",
         task="query_rewrite",
-        repo_id="ibm-granite/granite-lib-rag-gpt-oss-r1.0",
+        repo_id="ibm-granite/granitelib-rag-gpt-oss-r1.0",
         base_model_id="openai/gpt-oss-20b",
     ),
 ]

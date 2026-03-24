@@ -50,8 +50,9 @@ def backend():
     """Shared HuggingFace backend for all tests in this module.
 
     Uses Granite 3.3-8b for aLoRA adapter compatibility.
-    The ibm-granite/rag-intrinsics-lib repository only has adapters for
-    Granite 3.3 models. Granite 4 adapters are not yet available.
+    The "requirement_check" intrinsic only has adapters for Granite 3.3 models.
+    Granite 4 adapters are not yet available.
+    Other intrinsics are not affected by this issue.
     """
     backend = LocalHFBackend(
         model_id="ibm-granite/granite-3.3-8b-instruct",
