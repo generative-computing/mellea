@@ -11,7 +11,6 @@ from mellea.stdlib.session import MelleaSession, start_session
 pytestmark = [
     pytest.mark.huggingface,
     pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
     pytest.mark.llm,
 ]
 
