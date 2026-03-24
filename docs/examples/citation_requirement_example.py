@@ -13,7 +13,7 @@ import asyncio
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.context import ChatContext
-from mellea.stdlib.requirements.rag import CitationRequirement
+from mellea.stdlib.requirements.rag import CitationMode, CitationRequirement
 
 
 async def main():
@@ -64,16 +64,42 @@ async def main():
         )
         print(f"Reason: {reason_preview}")
 
-    # Example 2: Higher coverage threshold
-    print("\n--- Example 2: Higher coverage threshold (80%) ---")
-    req2 = CitationRequirement(min_citation_coverage=0.8, documents=docs)
+    # Example 2: CLAIMS mode (default) - counts fraction of claims with citations
+    print("\n--- Example 2: CLAIMS mode (default) - fraction of claims cited ---")
+    req2 = CitationRequirement(
+        min_citation_coverage=0.7, documents=docs, mode=CitationMode.CLAIMS
+    )
     result2 = await req2.validate(backend, ctx)
 
     print(f"Validation passed: {result2.as_bool()}")
     print(f"Citation coverage score: {result2.score:.2%}")
+    if result2.reason:
+        reason_preview = (
+            result2.reason[:200] + "..."
+            if len(result2.reason) > 200
+            else result2.reason
+        )
+        print(f"Reason: {reason_preview}")
 
-    # Example 3: Documents attached to message
-    print("\n--- Example 3: Documents in message (not constructor) ---")
+    # Example 3: CHARACTERS mode - calculates character-based coverage
+    print("\n--- Example 3: CHARACTERS mode - character-based coverage ---")
+    req3 = CitationRequirement(
+        min_citation_coverage=0.7, documents=docs, mode=CitationMode.CHARACTERS
+    )
+    result3 = await req3.validate(backend, ctx)
+
+    print(f"Validation passed: {result3.as_bool()}")
+    print(f"Citation coverage score: {result3.score:.2%}")
+    if result3.reason:
+        reason_preview = (
+            result3.reason[:200] + "..."
+            if len(result3.reason) > 200
+            else result3.reason
+        )
+        print(f"Reason: {reason_preview}")
+
+    # Example 4: Documents attached to message
+    print("\n--- Example 4: Documents in message (not constructor) ---")
     ctx2 = ChatContext().add(Message("user", "Tell me about Mars."))
     ctx2 = ctx2.add(
         Message(
@@ -85,11 +111,11 @@ async def main():
         )
     )
 
-    req3 = CitationRequirement(min_citation_coverage=0.7)  # No documents in constructor
-    result3 = await req3.validate(backend, ctx2)
+    req4 = CitationRequirement(min_citation_coverage=0.7)  # No documents in constructor
+    result4 = await req4.validate(backend, ctx2)
 
-    print(f"Validation passed: {result3.as_bool()}")
-    print(f"Citation coverage score: {result3.score:.2%}")
+    print(f"Validation passed: {result4.as_bool()}")
+    print(f"Citation coverage score: {result4.score:.2%}")
 
     print("\n" + "=" * 70)
     print("Example completed successfully!")
