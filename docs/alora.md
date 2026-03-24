@@ -48,9 +48,10 @@ m alora train path/to/data.jsonl \
   --grad-accum 4
 ```
 
-> **Note on Model Selection**: Use non-hybrid models (e.g., `granite-4.0-micro`) for aLoRA training.
-> Hybrid models (`granite-4.0-h-micro`) are recommended for general inference but adapters should be
-> trained on non-hybrid base models for compatibility with the `ibm-granite/rag-intrinsics-lib` repository.
+> **Note on Model Selection**: Only non-hybrid models (e.g., `granite-4.0-micro`) are 
+> currently supported for LoRA or aLoRA training.
+> Mamba/Transformers hybrid models like `granite-4.0-h-micro` will produce low-quality 
+> results with Mellea's current hard-coded settings for parameter-efficient fine tuning.
 
 ### 📌 Parameters
 
@@ -87,7 +88,7 @@ This will:
 
 ## 🛠 Requirements
 
-- Python 3.8+
+- Python 3.11+
 - Install the following dependencies manually or via `pip install mellea[hf]`:
   - `transformers`
   - `trl`
