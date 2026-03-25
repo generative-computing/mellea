@@ -47,51 +47,18 @@ uv run mypy .                         # Type check
 | `scratchpad/` | Experiments (git-ignored) |
 
 ## 3. Test Markers
-All tests and examples use markers to indicate requirements. The test infrastructure automatically skips tests based on system capabilities. See `test/MARKERS_GUIDE.md` for the full reference.
+Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. The `unit` marker is auto-applied by conftest — never write it explicitly. The `llm` marker is deprecated; use `e2e` instead.
 
-**Granularity Tiers** (every test belongs to exactly one):
+See **[test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md)** for the full marker reference (tier definitions, backend markers, resource gates, auto-skip logic, common patterns).
 
-- `unit` — Self-contained, no services, no I/O. **Auto-applied by conftest** — never write explicitly.
-- `@pytest.mark.integration` — Multiple components wired together, may need fixture-managed services.
-- `@pytest.mark.e2e` — Real backends (cloud APIs, local servers, GPU models). Always paired with backend markers.
-- `@pytest.mark.qualitative` — Subset of e2e with non-deterministic assertions. Per-function only.
-- `@pytest.mark.llm` — **Deprecated**, synonym for `e2e`. Use `e2e` in new tests.
-
-**Backend Markers** (e2e/qualitative only):
-
-- `@pytest.mark.ollama` — Requires Ollama running (local, lightweight)
-- `@pytest.mark.huggingface` — Requires HuggingFace backend (local, heavy)
-- `@pytest.mark.vllm` — Requires vLLM backend (local, GPU required)
-- `@pytest.mark.openai` — Requires OpenAI API (requires API key)
-- `@pytest.mark.watsonx` — Requires Watsonx API (requires API key)
-- `@pytest.mark.litellm` — Requires LiteLLM backend
-
-**Resource/Capability Markers** (e2e/qualitative only):
-
-- `@pytest.mark.requires_gpu` — Requires GPU
-- `@pytest.mark.requires_heavy_ram` — Requires 48GB+ RAM
-- `@pytest.mark.requires_api_key` — Requires external API keys
-- `@pytest.mark.requires_gpu_isolation` — Requires OS-level process isolation to clear CUDA memory (use with `--isolate-heavy` or `CICD=1`)
-- `@pytest.mark.slow` — Tests taking >1 minute (skipped by default)
-
-**Examples in `docs/examples/`** use comment-based markers for clean code:
+**Examples in `docs/examples/`** use comment-based markers:
 ```python
 # pytest: e2e, ollama, qualitative
 """Example description..."""
-
-# Your clean example code here
 ```
 
-Tests/examples automatically skip if system lacks required resources. Heavy examples (e.g., HuggingFace) are skipped during collection to prevent memory issues.
-
-**Default behavior:**
-- `uv run pytest` skips slow tests (>1 min) but runs qualitative tests
-- Use `pytest -m "not qualitative"` for fast tests only (~2 min)
-- Use `pytest -m unit` for self-contained tests only (fastest)
-- Use `pytest -m slow` to include slow tests
-
-⚠️ Don't add `qualitative` to trivial tests—keep the fast loop fast.
-⚠️ Mark tests taking >1 minute with `slow` (e.g., dataset loading, extensive evaluations).
+⚠️ Don't add `qualitative` to trivial tests — keep the fast loop fast.
+⚠️ Mark tests taking >1 minute with `slow`.
 
 ## 4. Coding Standards
 - **Types required** on all core functions
