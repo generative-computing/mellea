@@ -415,13 +415,13 @@ the explicit size.
 |---------|--------------------|--------------------|
 | `LocalHFBackend` | Yes | `require_gpu(min_vram_gb=N)` |
 | `LocalVLLMBackend` | Yes | `require_gpu(min_vram_gb=N)` |
-| `OllamaModelBackend` | Managed by Ollama | `require_ollama()` only |
+| `OllamaModelBackend` | Managed by Ollama | None — `ollama` backend marker + conftest auto-skip handles availability |
 | `OpenAIBackend` (real API) | No | No GPU gate |
-| `OpenAIBackend` → Ollama `/v1` | Managed by Ollama | `require_ollama()` only |
+| `OpenAIBackend` → Ollama `/v1` | Managed by Ollama | None — `ollama` backend marker handles it |
 | `WatsonxAIBackend` / `LiteLLMBackend` / Cloud | No | No GPU gate |
 
 **Key rule:** Ollama manages its own GPU memory. Tests using Ollama backends
-should use `require_ollama()`, NOT `require_gpu()`.
+should use the `ollama` backend marker only, NOT `require_gpu()`.
 
 #### Compute VRAM estimate
 
@@ -497,7 +497,6 @@ Read `test/predicates.py` for the available predicates. Expected patterns:
 | `require_api_key("OPENAI_API_KEY")` | Specific API credentials |
 | `require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")` | Multiple credentials |
 | `require_package("cpex.framework")` | Optional dependency |
-| `require_ollama()` | Running Ollama server |
 | `require_python((3, 11))` | Minimum Python version |
 
 Typical combinations for backends:
@@ -725,4 +724,4 @@ flag as a blocker, don't silently re-add:
   `pyproject.toml` and `test/MARKERS_GUIDE.md` must stay in sync manually.
 - **Resource predicates:** `test/predicates.py` provides `require_gpu`,
   `require_ram`, `require_api_key`, `require_package`,
-  `require_ollama`, `require_python`.
+  `require_python`.

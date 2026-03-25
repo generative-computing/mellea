@@ -155,7 +155,6 @@ from test.predicates import require_gpu, require_api_key
 | `require_ram(min_gb=N)` | N GB+ system RAM (genuinely RAM-bound tests only) |
 | `require_api_key("ENV_VAR")` | Specific API credentials |
 | `require_package("pkg")` | Optional dependency |
-| `require_ollama()` | Running Ollama server |
 | `require_python((3, 11))` | Minimum Python version |
 
 ### Typical combinations

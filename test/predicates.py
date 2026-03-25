@@ -180,29 +180,6 @@ def require_package(package: str):
 
 
 # ---------------------------------------------------------------------------
-# Service reachability
-# ---------------------------------------------------------------------------
-
-
-def require_ollama(*, host: str = "localhost", port: int = 11434):
-    """Skip unless Ollama is reachable on the given host/port."""
-    import socket
-
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1)
-        result = sock.connect_ex((host, port))
-        sock.close()
-        reachable = result == 0
-    except Exception:
-        reachable = False
-
-    return pytest.mark.skipif(
-        not reachable, reason=f"Ollama not available at {host}:{port}"
-    )
-
-
-# ---------------------------------------------------------------------------
 # Python version
 # ---------------------------------------------------------------------------
 
