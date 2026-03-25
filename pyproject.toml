@@ -327,6 +327,11 @@ skip = 'requirements.txt,uv.lock,CHANGELOG.md,test/formatters/granite/testdata/t
 [tool.pytest.ini_options]
 testpaths = ["test", "docs"]  # Run test/ first (fail fast), then docs/
 markers = [
+    # Granularity markers
+    "unit: Self-contained tests — no services, no I/O (auto-applied when no other granularity marker present)",
+    "integration: Tests needing additional services or multi-component wiring (may use fixture-managed dependencies)",
+    "e2e: Tests against real backends — cloud APIs, local servers, or GPU-loaded models",
+
     # Backend markers
     "ollama: Tests requiring Ollama backend (local, light)",
     "openai: Tests requiring OpenAI API (requires API key)",
@@ -342,8 +347,8 @@ markers = [
     "qualitative: Non-deterministic quality tests",
     "slow: Tests taking >1 minute (e.g., multi-step pipelines like researcher)",
 
-    # Composite markers
-    "llm: Tests that make LLM calls (needs at least Ollama)",
+    # Composite markers (llm is deprecated — use e2e instead)
+    "llm: Tests that make LLM calls (deprecated — use e2e instead)",
 ]
 asyncio_mode = "auto"  # Don't require explicitly marking async tests.
 addopts = [

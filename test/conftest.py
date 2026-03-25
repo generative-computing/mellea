@@ -336,14 +336,23 @@ def pytest_configure(config):
     )
     config.addinivalue_line("markers", "qualitative: Non-deterministic quality tests")
 
-    # Composite markers
+    # Granularity markers
     config.addinivalue_line(
-        "markers", "llm: Tests that make LLM calls (needs at least Ollama)"
+        "markers",
+        "unit: Self-contained tests — no services, no I/O (auto-applied when no other granularity marker present)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "integration: Tests needing additional services or multi-component wiring (may use fixture-managed dependencies)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "e2e: Tests against real backends — cloud APIs, local servers, or GPU-loaded models",
     )
 
-    # Plugin acceptance markers
+    # Composite markers (llm is deprecated — use e2e instead)
     config.addinivalue_line(
-        "markers", "plugins: Acceptance tests that register all built-in plugin sets"
+        "markers", "llm: Tests that make LLM calls (deprecated — use e2e instead)"
     )
 
     # Store vLLM isolation flag in config
@@ -661,11 +670,19 @@ def pytest_collection_modifyitems(config, items):
         reason="Ollama not available (port 11434 not listening)"
     )
 
+    # Auto-apply 'unit' marker to tests without explicit granularity markers.
+    # This enables `pytest -m unit` without per-file maintenance burden.
+    _NON_UNIT = {"integration", "e2e", "qualitative", "llm"}
+
     for item in items:
         # Skip ollama tests if ollama not available
         if item.get_closest_marker("ollama") and not ignore_ollama:
             if not capabilities["has_ollama"]:
                 item.add_marker(skip_ollama)
+
+        # Auto-apply unit marker
+        if not any(item.get_closest_marker(m) for m in _NON_UNIT):
+            item.add_marker(pytest.mark.unit)
 
     # Reorder tests by backend if requested
     if config.getoption("--group-by-backend", default=False):
