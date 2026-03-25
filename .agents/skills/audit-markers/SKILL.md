@@ -547,6 +547,9 @@ applying, but one line per file is sufficient when the fix is identical.
 
 ## Step 4 — Apply fixes (unless `--dry-run`)
 
+**If `--dry-run` is active, do NOT execute any file writes or bash commands that
+modify code. Output the report only.**
+
 Surgical edits only — change specific marker lines, do not reformat surrounding code.
 
 When replacing `llm` with `e2e` in `pytestmark` lists, keep the same list structure.

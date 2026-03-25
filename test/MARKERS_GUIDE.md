@@ -68,8 +68,8 @@ def test_session_chains_components(mock_backend):
 GPU-loaded models (huggingface, vllm). No mocks on the critical path.
 
 - Add `@pytest.mark.e2e` explicitly, always combined with backend marker(s)
-- Resource/capability markers (`requires_gpu`, `requires_heavy_ram`, etc.)
-  only apply to e2e and qualitative tests
+- Resource predicates (`require_gpu()`, `require_ram()`, etc.) only apply to
+  e2e and qualitative tests — see "Resource Gating" section below
 - Assertions are **deterministic** — structural, type-based, or functional
 
 ```python
@@ -131,33 +131,55 @@ tests don't need real backends.
 ### OpenAI-via-Ollama pattern
 
 Some tests use the OpenAI client pointed at Ollama's `/v1` endpoint. Mark
-these with **both** `openai` and `ollama`, but **not** `requires_api_key`:
+these with **both** `openai` and `ollama`, but do **not** add `require_api_key`:
 
 ```python
 pytestmark = [pytest.mark.e2e, pytest.mark.openai, pytest.mark.ollama]
 ```
 
-## Resource / Capability Markers
+## Resource Gating (Predicates)
 
-These markers gate tests on hardware or credentials. They only apply to
-e2e and qualitative tests — unit and integration tests should never need them.
-Use sparingly.
+E2E and qualitative tests need gating so they skip cleanly when required
+infrastructure is absent. Use **predicate decorators** from `test/predicates.py`
+— they give test authors precise control over skip conditions.
 
-| Marker                   | Gate                                  | Auto-skip when                                    |
-| ------------------------ | ------------------------------------- | ------------------------------------------------- |
-| `requires_gpu`           | CUDA or MPS                           | `torch.cuda.is_available()` is False              |
-| `requires_heavy_ram`     | 48GB+ system RAM                      | `psutil` reports < 48GB                           |
-| `requires_gpu_isolation` | Subprocess isolation for CUDA memory  | `--isolate-heavy` not set and `CICD != 1`         |
-| `requires_api_key`       | External API credentials              | Env vars missing (checked per backend)            |
-| `slow`                   | Tests taking >1 minute                | Excluded by default via `pyproject.toml` addopts  |
-| `qualitative`            | Non-deterministic output              | Skipped when `CICD=1`                             |
+```python
+from test.predicates import require_gpu, require_ram, require_api_key
+```
+
+| Predicate | Use when test needs |
+| --------- | ------------------- |
+| `require_gpu()` | Any GPU (CUDA or MPS) |
+| `require_gpu(min_vram_gb=N)` | GPU with at least N GB VRAM |
+| `require_ram(min_gb=N)` | N GB+ system RAM |
+| `require_gpu_isolation()` | Subprocess isolation for CUDA memory |
+| `require_api_key("ENV_VAR")` | Specific API credentials |
+| `require_package("pkg")` | Optional dependency |
+| `require_ollama()` | Running Ollama server |
+| `require_python((3, 11))` | Minimum Python version |
 
 ### Typical combinations
 
-- `huggingface` → `requires_gpu` + `requires_heavy_ram` + `requires_gpu_isolation`
-- `vllm` → `requires_gpu` + `requires_heavy_ram` + `requires_gpu_isolation`
-- `watsonx` → `requires_api_key`
-- `openai` → `requires_api_key` only when using real OpenAI API (not Ollama-compatible)
+- `huggingface` → `require_gpu()` + `require_ram(min_gb=48)` (adjust per model)
+- `vllm` → `require_gpu(min_vram_gb=24)` + `require_ram(min_gb=48)`
+- `watsonx` → `require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")`
+- `openai` → `require_api_key("OPENAI_API_KEY")` only for real OpenAI (not Ollama-compat)
+
+### Other gating markers
+
+These are not resource predicates but still control test selection:
+
+| Marker         | Gate                             | Auto-skip when                                   |
+| -------------- | -------------------------------- | ------------------------------------------------ |
+| `slow`         | Tests taking >1 minute           | Excluded by default via `pyproject.toml` addopts |
+| `qualitative`  | Non-deterministic output         | Skipped when `CICD=1`                            |
+
+### Legacy resource markers (deprecated)
+
+The markers `requires_gpu`, `requires_heavy_ram`, `requires_api_key`, and
+`requires_gpu_isolation` are deprecated. Existing tests using them still work
+(conftest auto-skip logic handles them) but new tests should use predicates.
+Migrate legacy markers to predicates when touching those files.
 
 ## Auto-Detection
 
@@ -204,14 +226,11 @@ def test_greeting_content(session):
     result = session.instruct("Write a greeting")
     assert "hello" in result.value.lower()
 
-# Heavy GPU e2e
-pytestmark = [
-    pytest.mark.e2e,
-    pytest.mark.huggingface,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.requires_gpu_isolation,
-]
+# Heavy GPU e2e (predicates for resource gating)
+from test.predicates import require_gpu, require_ram, require_gpu_isolation
+
+pytestmark = [pytest.mark.e2e, pytest.mark.huggingface,
+              require_gpu(), require_ram(min_gb=48), require_gpu_isolation()]
 ```
 
 ## Example Files (`docs/examples/`)
@@ -232,7 +251,7 @@ lines before non-comment code. Parser: `docs/examples/conftest.py`
 1. **Classify the test** — unit, integration, e2e, or qualitative?
 2. **Add granularity marker** — integration and e2e are explicit; unit is auto-applied
 3. **Add backend marker(s)** — only for e2e/qualitative
-4. **Add resource markers** — only for e2e/qualitative, only when needed
+4. **Add resource predicates** — only for e2e/qualitative, use `test/predicates.py`
 5. **Verify** — `pytest --collect-only -m "your_marker"` to check
 
 Use the `/audit-markers` skill to validate markers on existing or new test files.
@@ -259,6 +278,7 @@ jobs:
 ## Related Files
 
 - `test/conftest.py` — marker registration, auto-detection, skip logic, unit auto-apply hook
+- `test/predicates.py` — resource gating predicates (`require_gpu`, `require_ram`, etc.)
 - `docs/examples/conftest.py` — example marker parser (`_extract_markers_from_file`)
 - `pyproject.toml` — marker definitions and pytest configuration
 - `.agents/skills/audit-markers/SKILL.md` — skill for auditing and fixing markers
