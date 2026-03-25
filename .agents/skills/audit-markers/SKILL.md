@@ -3,8 +3,9 @@ name: audit-markers
 description: >
   Audit and fix pytest markers on test files and examples. Classifies tests as
   unit/integration/e2e/qualitative using general heuristics and project-specific
-  marker rules. Use when reviewing markers, auditing test files, or checking
-  before commit. References test/MARKERS_GUIDE.md for project conventions.
+  marker rules. Estimates GPU VRAM and RAM requirements by tracing model
+  identifiers and looking up parameter counts. Use when reviewing markers,
+  auditing test files, or checking before commit.
 argument-hint: "[file-or-directory] [--dry-run | --apply]"
 compatibility: "Claude Code, IBM Bob"
 metadata:
@@ -349,8 +350,102 @@ resource markers scattered across files.
 ### Determining `min_vram_gb` and `min_gb` values
 
 When migrating legacy `requires_gpu` or `requires_heavy_ram` markers to predicates,
-use the `/estimate-vram` skill to determine the correct `min_vram_gb` and `min_gb`
-values based on the model each test loads. Do not guess or use blanket thresholds.
+do not guess or use blanket thresholds. Determine the correct values by tracing the
+model each test loads and computing VRAM requirements from parameter counts.
+
+#### Trace the model identifier
+
+For each file needing GPU/RAM gating, determine which model(s) it loads. Check in order:
+
+1. **Module-level constants** — e.g. `BASE_MODEL = "ibm-granite/..."` or
+   `MODEL_ID = model_ids.QWEN3_0_6B`.
+2. **Fixture definitions** — trace `@pytest.fixture` functions for:
+   - `LocalHFBackend(model_id=...)` — extract the `model_id` argument
+   - `LocalVLLMBackend(model_id=...)` — extract the `model_id` argument
+   - `start_session("hf", model_id=...)` — extract `model_id`
+3. **ModelIdentifier resolution** — if the model_id is a constant like
+   `model_ids.QWEN3_0_6B`, read `mellea/backends/model_ids.py` and extract
+   the `hf_model_name` field.
+4. **Conftest fixtures** — check `conftest.py` files up the directory tree for
+   fixture definitions that provide model/backend instances.
+5. **Per-function overrides** — some files have different models per test function.
+   Track per-function when this occurs.
+
+#### Look up parameter count
+
+Use these strategies in priority order. Stop at the first that succeeds.
+
+**Strategy A: HuggingFace Hub API** (preferred, requires network)
+
+```python
+from huggingface_hub.utils._safetensors import get_safetensors_metadata
+meta = get_safetensors_metadata("ibm-granite/granite-3.3-8b-instruct")
+total_params = sum(meta.parameter_count.values())
+```
+
+Run via `uv run python -c "..."` — only needs `huggingface_hub` (in the `[hf]` extra).
+
+**Strategy B: Ollama model info** (for Ollama-tagged models)
+
+```bash
+ollama show <model_name> --modelfile 2>/dev/null | grep -i 'parameter'
+```
+
+**Strategy C: Model name parsing** (offline fallback)
+
+| Pattern | Extract | Example match |
+|---------|---------|---------------|
+| `(\d+\.?\d*)b[-_.]` or `-(\d+\.?\d*)b` | N billion | `granite-3.3-8b` → 8B |
+| `(\d+\.?\d*)B` (capital B in HF names) | N billion | `Qwen3-0.6B` → 0.6B |
+| `-(\d+)m[-_.]` or `(\d+)m-` | N million ÷ 1000 | `granite-4.0-h-350m` → 0.35B |
+| `micro` without explicit size | 0.35B–3B | Check ModelIdentifier catalog |
+
+When the name is ambiguous (e.g. `granite4:micro-h`), resolve via the
+`ModelIdentifier` constant in `model_ids.py` — the HF name usually contains
+the explicit size.
+
+**Strategy D: Conservative default** (last resort)
+- Assume **8B parameters** (16 GB at fp16)
+- Flag as **"model unidentified — manual review needed"**
+
+#### Backend determines GPU gating need
+
+| Backend | GPU loaded locally? | Predicate needed |
+|---------|--------------------|--------------------|
+| `LocalHFBackend` | Yes | `require_gpu(min_vram_gb=N)` |
+| `LocalVLLMBackend` | Yes | `require_gpu(min_vram_gb=N)` |
+| `OllamaModelBackend` | Managed by Ollama | `require_ollama()` only. Exception: models >8B through Ollama may need `require_ram(min_gb=N)` for the server process. |
+| `OpenAIBackend` (real API) | No | No GPU gate |
+| `OpenAIBackend` → Ollama `/v1` | Managed by Ollama | `require_ollama()` only |
+| `WatsonxAIBackend` / `LiteLLMBackend` / Cloud | No | No GPU gate |
+
+**Key rule:** Ollama manages its own GPU memory. Tests using Ollama backends
+should use `require_ollama()`, NOT `require_gpu()`.
+
+#### Compute VRAM and RAM estimates
+
+**VRAM formula:**
+```
+vram_gb = params_B × bytes_per_param × 1.2
+```
+
+Where `bytes_per_param` depends on precision: fp32=4.0, fp16/bf16=2.0 (default),
+int8=1.0, int4=0.5. The 1.2 multiplier covers KV cache, activations, and framework
+buffers. Round `min_vram_gb` **up** to the next even integer.
+
+**RAM formula** (local GPU backends — HF, vLLM):
+```
+min_ram_gb = max(16, vram_gb + 8)
+```
+
+For Ollama backends with large models (>8B):
+```
+min_ram_gb = max(16, vram_gb + 12)
+```
+
+**GPU isolation:** If a test uses `LocalHFBackend` or `LocalVLLMBackend`, recommend
+`require_gpu_isolation()` in addition to `require_gpu()`. These backends hold GPU
+memory at the process level and need subprocess isolation for multi-module test runs.
 
 ### What to audit
 
