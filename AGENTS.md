@@ -44,6 +44,7 @@ uv run mypy .                         # Type check
 | `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`) |
 | `test/` | All tests (run from repo root) |
 | `docs/examples/` | Example code (run as tests via pytest) |
+| `.agents/skills/` | Agent skills ([agentskills.io](https://agentskills.io) standard) |
 | `scratchpad/` | Experiments (git-ignored) |
 
 ## 3. Test Markers
@@ -60,7 +61,27 @@ See **[test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md)** for the full marker refer
 ⚠️ Don't add `qualitative` to trivial tests — keep the fast loop fast.
 ⚠️ Mark tests taking >1 minute with `slow`.
 
-## 4. Coding Standards
+## 4. Agent Skills
+
+Skills live in `.agents/skills/` following the [agentskills.io](https://agentskills.io) open standard. Each skill is a directory with a `SKILL.md` file (YAML frontmatter + markdown instructions).
+
+**Tool discovery:**
+
+| Tool              | Project skills    | Global skills       | Config needed                                                      |
+| ----------------- | ----------------- | ------------------- | ------------------------------------------------------------------ |
+| Claude Code       | `.agents/skills/` | `~/.claude/skills/` | `"skillLocations": [".agents/skills"]` in `.claude/settings.json`  |
+| IBM Bob           | `.bob/skills/`    | `~/.bob/skills/`    | Symlink: `.bob/skills` → `.agents/skills`                          |
+| VS Code / Copilot | `.agents/skills/` | —                   | None (auto-discovered)                                             |
+
+**Bob users:** create the symlink once per clone:
+
+```bash
+mkdir -p .bob && ln -s ../.agents/skills .bob/skills
+```
+
+**Available skills:** `/audit-markers`, `/skill-author`
+
+## 5. Coding Standards
 - **Types required** on all core functions
 - **Docstrings are prompts** — be specific, the LLM reads them
 - **Google-style docstrings** — `Args:` on the **class docstring only**; `__init__` gets a single summary sentence. Add `Attributes:` only when a stored value differs in type/behaviour from its constructor input (type transforms, computed values, class constants). See CONTRIBUTING.md for a full example.
@@ -70,15 +91,15 @@ See **[test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md)** for the full marker refer
 - **Friendly Dependency Errors**: Wraps optional backend imports in `try/except ImportError` with a helpful message (e.g., "Please pip install mellea[hf]"). See `mellea/stdlib/session.py` for examples.
 - **Backend telemetry fields**: All backends must populate `mot.usage` (dict with `prompt_tokens`, `completion_tokens`, `total_tokens`), `mot.model` (str), and `mot.provider` (str) in their `post_processing()` method. Metrics are automatically recorded by `TokenMetricsPlugin` — don't add manual `record_token_usage_metrics()` calls.
 
-## 5. Commits & Hooks
+## 6. Commits & Hooks
 [Angular format](https://github.com/angular/angular/blob/main/CONTRIBUTING.md#commit): `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `release:`
 
 Pre-commit runs: ruff, mypy, uv-lock, codespell
 
-## 6. Timing
+## 7. Timing
 > **Don't cancel**: `pytest` (full) and `pre-commit --all-files` may take minutes. Canceling mid-run can corrupt state.
 
-## 7. Common Issues
+## 8. Common Issues
 | Problem | Fix |
 |---------|-----|
 | `ComponentParseError` | Add examples to docstring |
@@ -86,21 +107,22 @@ Pre-commit runs: ruff, mypy, uv-lock, codespell
 | Ollama refused | Run `ollama serve` |
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
 
-## 8. Self-Review (before notifying user)
+## 9. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?
 2. `ruff format` and `ruff check` clean?
 3. New functions typed with concise docstrings?
 4. Unit tests added for new functionality?
 5. Avoided over-engineering?
 
-## 9. Writing Tests
+## 10. Writing Tests
+
 - Place tests in `test/` mirroring source structure
 - Name files `test_*.py` (required for pydocstyle)
 - Use `gh_run` fixture for CI-aware tests (see `test/conftest.py`)
 - Mark tests checking LLM output quality with `@pytest.mark.qualitative`
 - If a test fails, fix the **code**, not the test (unless the test was wrong)
 
-## 10. Writing Docs
+## 11. Writing Docs
 
 If you are modifying or creating pages under `docs/docs/`, follow the writing
 conventions in [`docs/docs/guide/CONTRIBUTING.md`](docs/docs/guide/CONTRIBUTING.md).
@@ -118,7 +140,7 @@ Key rules that differ from typical Markdown habits:
   mellea source; mark forward-looking content with `> **Coming soon:**`
 - **No visible TODOs** — if content is missing, open a GitHub issue instead
 
-## 11. Feedback Loop
+## 12. Feedback Loop
 
 Found a bug, workaround, or pattern? Update the docs:
 
