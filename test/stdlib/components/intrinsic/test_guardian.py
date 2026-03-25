@@ -24,7 +24,7 @@ pytestmark = [
     pytest.mark.huggingface,
     pytest.mark.requires_gpu,
     pytest.mark.requires_heavy_ram,
-    pytest.mark.llm,
+    pytest.mark.e2e,
 ]
 
 DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"

@@ -16,7 +16,7 @@ from transformers import AutoTokenizer
 
 pytestmark = [
     pytest.mark.huggingface,
-    pytest.mark.llm,
+    pytest.mark.e2e,
     pytest.mark.requires_gpu,
     pytest.mark.requires_heavy_ram,
     # Skip entire module in CI since 17/18 tests are qualitative

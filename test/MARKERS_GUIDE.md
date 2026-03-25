@@ -127,6 +127,7 @@ tests don't need real backends.
 | `huggingface`  | HuggingFace transformers      | Local, GPU, 48GB+ RAM                 |
 | `vllm`         | vLLM                          | Local, GPU required, 48GB+ RAM        |
 | `litellm`      | LiteLLM (wraps other backends)| Depends on underlying backend         |
+| `bedrock`      | AWS Bedrock                   | API calls, requires credentials       |
 
 ### OpenAI-via-Ollama pattern
 

@@ -106,7 +106,7 @@ def get_metric_value(metrics_data, metric_name, attributes=None):
 
 
 @pytest.mark.asyncio
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, stream):
@@ -160,7 +160,7 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, s
 
 
 @pytest.mark.asyncio
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_openai_token_metrics_integration(enable_metrics, metric_reader, stream):
@@ -216,7 +216,7 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
 
 
 @pytest.mark.asyncio
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.watsonx
 @pytest.mark.requires_api_key
 async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
@@ -266,7 +266,7 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
 
 
 @pytest.mark.asyncio
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.litellm
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
@@ -329,7 +329,7 @@ async def test_litellm_token_metrics_integration(
 
 
 @pytest.mark.asyncio
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.huggingface
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_huggingface_token_metrics_integration(

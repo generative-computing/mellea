@@ -1,4 +1,4 @@
-# pytest: ollama, qualitative, llm, requires_heavy_ram
+# pytest: ollama, qualitative, e2e, requires_heavy_ram
 
 """SOFAI Sampling Strategy Example: Graph Coloring Problem.
 

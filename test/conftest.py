@@ -304,25 +304,27 @@ def pytest_addoption(parser):
     )
 
 
+BACKEND_MARKERS: dict[str, str] = {
+    "ollama": "Tests requiring Ollama backend (local, light)",
+    "openai": "Tests requiring OpenAI API (requires API key)",
+    "watsonx": "Tests requiring Watsonx API (requires API key)",
+    "huggingface": "Tests requiring HuggingFace backend (local, heavy)",
+    "vllm": "Tests requiring vLLM backend (local, GPU required)",
+    "litellm": "Tests requiring LiteLLM backend",
+    "bedrock": "Tests requiring AWS Bedrock backend (requires credentials)",
+}
+"""Single source of truth for backend marker names and descriptions.
+
+Add new backends here — ``pytest_configure`` registers them automatically.
+Keep ``pyproject.toml`` ``[tool.pytest.ini_options].markers`` in sync.
+"""
+
+
 def pytest_configure(config):
     """Register custom markers."""
-    # Backend markers
-    config.addinivalue_line(
-        "markers", "ollama: Tests requiring Ollama backend (local, light)"
-    )
-    config.addinivalue_line(
-        "markers", "openai: Tests requiring OpenAI API (requires API key)"
-    )
-    config.addinivalue_line(
-        "markers", "watsonx: Tests requiring Watsonx API (requires API key)"
-    )
-    config.addinivalue_line(
-        "markers", "huggingface: Tests requiring HuggingFace backend (local, heavy)"
-    )
-    config.addinivalue_line(
-        "markers", "vllm: Tests requiring vLLM backend (local, GPU required)"
-    )
-    config.addinivalue_line("markers", "litellm: Tests requiring LiteLLM backend")
+    # Backend markers (driven by BACKEND_MARKERS registry)
+    for name, desc in BACKEND_MARKERS.items():
+        config.addinivalue_line("markers", f"{name}: {desc}")
 
     # Capability markers
     config.addinivalue_line(

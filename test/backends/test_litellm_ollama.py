@@ -4,7 +4,7 @@ import os
 import pytest
 
 # Mark all tests in this module as requiring Ollama via LiteLLM
-pytestmark = [pytest.mark.litellm, pytest.mark.ollama, pytest.mark.llm]
+pytestmark = [pytest.mark.litellm, pytest.mark.ollama, pytest.mark.e2e]
 
 from mellea import MelleaSession, generative
 from mellea.backends import ModelOption, model_ids

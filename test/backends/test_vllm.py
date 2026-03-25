@@ -8,7 +8,7 @@ import pytest
 # Mark all tests in this module with backend and resource requirements
 pytestmark = [
     pytest.mark.vllm,
-    pytest.mark.llm,
+    pytest.mark.e2e,
     pytest.mark.requires_gpu,
     pytest.mark.requires_heavy_ram,
     pytest.mark.requires_gpu_isolation,  # Activate GPU memory isolation

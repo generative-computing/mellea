@@ -1,4 +1,4 @@
-# pytest: huggingface, requires_heavy_ram, llm
+# pytest: huggingface, requires_heavy_ram, e2e
 
 """Example usage of the factuality detection intrinsic.
 

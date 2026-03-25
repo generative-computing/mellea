@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 #
 # PluginSet composition — group hooks by concern and register them together.
 #

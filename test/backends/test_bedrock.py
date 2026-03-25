@@ -12,7 +12,8 @@ from mellea.stdlib.context import ChatContext
 
 # Skip entire module in CI since the single test is qualitative
 pytestmark = [
-    pytest.mark.llm,
+    pytest.mark.e2e,
+    pytest.mark.bedrock,
     pytest.mark.skipif(
         "AWS_BEARER_TOKEN_BEDROCK" not in os.environ.keys(),
         reason="Skipping Bedrock backend tests if $AWS_BEARER_TOKEN_BEDROCK is not set.",

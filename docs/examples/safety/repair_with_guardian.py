@@ -1,4 +1,4 @@
-# pytest: ollama, huggingface, requires_heavy_ram, llm
+# pytest: ollama, huggingface, requires_heavy_ram, e2e
 
 """RepairTemplateStrategy Example with Actual Function Call Validation
 Demonstrates how RepairTemplateStrategy repairs responses using actual function calls.

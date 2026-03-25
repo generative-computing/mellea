@@ -8,7 +8,7 @@ import pytest
 # Mark all tests in this module with backend and auth requirements
 pytestmark = [
     pytest.mark.watsonx,
-    pytest.mark.llm,
+    pytest.mark.e2e,
     pytest.mark.requires_api_key,
     # Skip entire module in CI since 8/9 tests are qualitative
     pytest.mark.skipif(

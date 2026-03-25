@@ -10,7 +10,7 @@ from mellea.stdlib.context import ChatContext
 from mellea.stdlib.session import MelleaSession, start_session
 
 # Mark all tests as requiring Ollama (start_session defaults to Ollama)
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 
 # We edit the context type in the async tests below. Don't change the scope here.

@@ -1,4 +1,4 @@
-# pytest: litellm, llm, ollama
+# pytest: litellm, e2e, ollama
 
 """Examples of using vision models with LiteLLM backend."""
 

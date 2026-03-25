@@ -1,5 +1,5 @@
 # type: ignore
-# pytest: skip, huggingface, requires_heavy_ram, llm
+# pytest: skip, huggingface, requires_heavy_ram, e2e
 # SKIP REASON: needs to update.
 
 import mellea.stdlib.functional as mfuncs

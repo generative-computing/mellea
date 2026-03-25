@@ -5,10 +5,10 @@ description: >
   unit/integration/e2e/qualitative using general heuristics and project-specific
   marker rules. Use when reviewing markers, auditing test files, or checking
   before commit. References test/MARKERS_GUIDE.md for project conventions.
-argument-hint: "[file-or-directory] [--dry-run]"
+argument-hint: "[file-or-directory] [--dry-run | --apply]"
 compatibility: "Claude Code, IBM Bob"
 metadata:
-  version: "2026-03-25"
+  version: "2026-03-26"
   capabilities: [read_file, write_file, bash, grep, glob]
 ---
 
@@ -21,7 +21,9 @@ marker rules for **mellea**.
 ## Inputs
 
 - `$ARGUMENTS` — file path, directory, or glob. If empty, audit `test/` and `docs/examples/`.
-- `--dry-run` — report only, do not edit files.
+- **No flags (default)** — produce report, then ask user to confirm before applying.
+- `--apply` — produce report and apply fixes without asking.
+- `--dry-run` — report only, do not offer to apply.
 
 ## Project References
 
@@ -352,15 +354,19 @@ predicates, then apply the following checks to every e2e/qualitative file:
 1. **Legacy resource markers → migrate to predicates.** If a test uses
    `@pytest.mark.requires_gpu`, `@pytest.mark.requires_heavy_ram`,
    `@pytest.mark.requires_api_key`, or `@pytest.mark.requires_gpu_isolation`,
-   recommend replacing with the equivalent predicate from the project's
-   predicate module. Resource markers are deprecated in favour of predicates.
+   replace with the equivalent predicate from the project's predicate module.
+   Resource markers are deprecated in favour of predicates. This is a **fix**
+   (same priority as `llm` → `e2e`), not just a recommendation — apply it in
+   Step 4 like any other marker fix. The replacement requires adding an import
+   for the predicate and swapping the marker in the `pytestmark` list or
+   decorator.
 2. **Ad-hoc `skipif` → migrate to predicate.** If a predicate exists for
    the same check (e.g., `require_gpu()` exists but the test has a raw
-   `skipif(not torch.cuda.is_available())`), recommend the predicate.
+   `skipif(not torch.cuda.is_available())`), replace with the predicate.
 3. **Missing gating.** A test that uses a GPU backend but has no GPU
-   predicate and no `skipif` — recommend adding the appropriate predicate.
+   predicate and no `skipif` — add the appropriate predicate.
 4. **Imprecise gating.** A predicate that's too broad (e.g., `require_ram(48)`
-   on a test that only needs 16 GB) — suggest tightening the threshold.
+   on a test that only needs 16 GB) — tighten the threshold.
 5. **Redundant CICD `skipif`.** `skipif(CICD == 1)` is usually redundant
    when conftest auto-skip or predicates already handle the condition.
    Flag as removable.
@@ -545,21 +551,46 @@ test/backends/test_watsonx.py
 The agent should list all files (not truncate) so the user can review before
 applying, but one line per file is sufficient when the fix is identical.
 
-## Step 4 — Apply fixes (unless `--dry-run`)
+## Step 4 — Apply fixes
 
-**If `--dry-run` is active, do NOT execute any file writes or bash commands that
-modify code. Output the report only.**
+The apply behaviour depends on the flags passed:
+
+| Flag | Behaviour |
+|------|-----------|
+| *(none)* | Output the full report (Steps 1–3 + Output Summary), then **ask the user** "Apply these N changes?" before writing any files. |
+| `--apply` | Output the full report, then apply all fixes **without asking**. |
+| `--dry-run` | Output the full report. Do NOT write any files or offer to apply. |
+
+**When applying fixes:**
 
 Surgical edits only — change specific marker lines, do not reformat surrounding code.
-
 When replacing `llm` with `e2e` in `pytestmark` lists, keep the same list structure.
+When replacing legacy resource markers with predicates, add the necessary import
+(`from test.predicates import ...`) at the top of the file and swap the marker
+in the `pytestmark` list or decorator.
 
-## Step 5 — Flag infrastructure notes
+## Step 5 — Backend registry audit
+
+Check that every backend used in test files has a registered marker.
+The project's backend registry is `BACKEND_MARKERS` in `test/conftest.py`
+(single source of truth). Markers must also appear in `pyproject.toml`
+`[tool.pytest.ini_options].markers` and in `test/MARKERS_GUIDE.md`.
+
+For each backend constructor or `start_session(backend_name=...)` call
+found during classification, verify:
+
+1. A marker exists in `BACKEND_MARKERS` for that backend.
+2. The marker appears in `pyproject.toml`.
+3. The marker appears in the MARKERS_GUIDE.md backend table.
+
+If a backend is used in tests but has no registered marker, flag it as
+a **missing backend marker** issue and add it to the registry, pyproject.toml,
+and MARKERS_GUIDE.md (same apply/confirm rules as other fixes in Step 4).
+
+## Step 6 — Flag infrastructure notes
 
 Report issues outside marker-edit scope as **notes**. Do NOT fix these:
 - Missing conftest skip logic for a backend
-- Unregistered markers in pyproject.toml
-- MARKERS_GUIDE.md gaps
 - Tests with no assertions
 - Files mixing unit and e2e tests that could be split
 
@@ -569,10 +600,13 @@ The output is the Tier 1 summary table (always printed first) followed by
 Tier 2 issues-only detail and Tier 3 batch groups as described in Step 3.
 End the report with:
 
+The summary table should include a row for `Missing backend marker` when
+backends are used in tests but not registered in `BACKEND_MARKERS`.
+
 ```
 ---
 Files audited: N | Correct: N | With issues: N
-Changes: N applied / N dry-run
+Changes: N applied / N pending confirmation / N dry-run
 Infrastructure notes: N (see notes section)
 ```
 
@@ -584,8 +618,10 @@ flag as a blocker, don't silently re-add:
 
 - **Auto-unit hook:** `test/conftest.py` `pytest_collection_modifyitems` adds
   `pytest.mark.unit` to any test without `integration`, `e2e`, or `qualitative`.
-- **Marker registration:** all tier, backend, and resource markers registered in
-  `pytest_configure` and `pyproject.toml`.
+- **Backend marker registry:** `BACKEND_MARKERS` dict in `test/conftest.py` is
+  the single source of truth for backend markers. `pytest_configure` iterates
+  over it. New backends are added by inserting one entry into the dict.
+  `pyproject.toml` and `test/MARKERS_GUIDE.md` must stay in sync manually.
 - **Resource predicates:** `test/predicates.py` provides `require_gpu`,
   `require_ram`, `require_gpu_isolation`, `require_api_key`, `require_package`,
   `require_ollama`, `require_python`.

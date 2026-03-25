@@ -12,7 +12,7 @@ import requests
 # Mark all tests in this module with backend and resource requirements
 pytestmark = [
     pytest.mark.openai,
-    pytest.mark.llm,
+    pytest.mark.e2e,
     pytest.mark.vllm,
     pytest.mark.requires_gpu,
     pytest.mark.requires_heavy_ram,

@@ -54,7 +54,7 @@ def test_from_callable():
 
 @pytest.mark.qualitative
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 def test_from_callable_generation(session: MelleaSession):
     t = MelleaTool.from_callable(callable, "mellea_tool")
 
@@ -101,7 +101,7 @@ def test_from_langchain():
 
 @pytest.mark.qualitative
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 def test_from_langchain_generation(session: MelleaSession):
     t = MelleaTool.from_langchain(langchain_tool)
 

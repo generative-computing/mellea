@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 #
 # Scoped plugins — activate plugins for a specific block of code.
 #

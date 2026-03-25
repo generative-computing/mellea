@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 
 from mellea.core import Requirement
 from mellea.stdlib.requirements import check, req, simple_validate

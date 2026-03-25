@@ -15,7 +15,7 @@ pytestmark = [
     pytest.mark.ollama,
     pytest.mark.requires_gpu,
     pytest.mark.requires_heavy_ram,
-    pytest.mark.llm,
+    pytest.mark.e2e,
     pytest.mark.qualitative,
 ]
 

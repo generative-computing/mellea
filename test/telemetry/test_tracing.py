@@ -109,6 +109,7 @@ def test_set_span_error_with_none_span():
     set_span_error(None, exception)
 
 
+@pytest.mark.e2e
 @pytest.mark.ollama
 def test_session_with_tracing_disabled():
     """Test that session works normally when tracing is disabled."""
@@ -119,6 +120,7 @@ def test_session_with_tracing_disabled():
         assert result is not None
 
 
+@pytest.mark.e2e
 @pytest.mark.ollama
 def test_session_with_application_tracing(enable_app_tracing):
     """Test that session works with application tracing enabled."""
@@ -130,6 +132,7 @@ def test_session_with_application_tracing(enable_app_tracing):
         assert result is not None
 
 
+@pytest.mark.e2e
 @pytest.mark.ollama
 def test_session_with_backend_tracing(enable_backend_tracing):
     """Test that session works with backend tracing enabled."""
@@ -141,6 +144,7 @@ def test_session_with_backend_tracing(enable_backend_tracing):
         assert result is not None
 
 
+@pytest.mark.e2e
 @pytest.mark.ollama
 def test_generative_function_with_tracing(enable_app_tracing):
     """Test that @generative functions work with tracing enabled."""

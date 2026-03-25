@@ -13,7 +13,7 @@ from mellea.stdlib.components.docs.richdocument import Table
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.session import MelleaSession
 
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 
 @pytest.fixture(scope="module")

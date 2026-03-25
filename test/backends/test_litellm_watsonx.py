@@ -6,7 +6,7 @@ import pytest
 pytestmark = [
     pytest.mark.litellm,
     pytest.mark.watsonx,
-    pytest.mark.llm,
+    pytest.mark.e2e,
     pytest.mark.requires_api_key,
 ]
 

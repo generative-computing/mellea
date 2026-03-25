@@ -339,6 +339,7 @@ markers = [
     "huggingface: Tests requiring HuggingFace backend (local, heavy)",
     "vllm: Tests requiring vLLM backend (local, GPU required)",
     "litellm: Tests requiring LiteLLM backend",
+    "bedrock: Tests requiring AWS Bedrock backend (requires credentials)",
 
     # Capability markers
     "requires_api_key: Tests requiring external API keys",

@@ -7,7 +7,7 @@ from mellea.backends.tools import MelleaTool
 # Skip entire module in CI since the single test is qualitative
 pytestmark = [
     pytest.mark.huggingface,
-    pytest.mark.llm,
+    pytest.mark.e2e,
     pytest.mark.requires_gpu,
     pytest.mark.requires_heavy_ram,
     pytest.mark.requires_gpu_isolation,

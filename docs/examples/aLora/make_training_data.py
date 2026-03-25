@@ -1,4 +1,4 @@
-# pytest: skip, huggingface, requires_heavy_ram, llm
+# pytest: skip, huggingface, requires_heavy_ram, e2e
 # SKIP REASON: documentation only.import argparse
 import argparse
 import json
