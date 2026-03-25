@@ -29,6 +29,7 @@ Read these before auditing — they are the authoritative source for marker conv
 
 - **Marker guide:** `test/MARKERS_GUIDE.md`
 - **Marker registration:** `test/conftest.py` (`pytest_configure`) and `pyproject.toml` (`[tool.pytest.ini_options]`)
+- **Resource predicates:** `test/predicates.py` (predicate functions for resource gating)
 - **Example marker format:** `docs/examples/conftest.py` (`_extract_markers_from_file`)
 - **Epic context:** GitHub issues #726 (epic), #727 (granularity), #728 (backend/resource)
 
@@ -77,11 +78,30 @@ stood up by test fixtures.
 - May need additional services, but the test controls or provides its dependencies
 - Slower than unit (fixture setup, service lifecycle) and may consume more memory
 
-**Key distinction from unit:** Unit is entirely self-contained with no services.
-Integration wires up components and may need services (even fixture-managed ones).
+**Key distinction from unit:** Count the real (non-mock) project components
+being exercised. Unit isolates **one** class or function — all collaborators
+are faked. Integration wires up **multiple** real components and mocks only
+at the external perimeter (network, backend, database).
 
 **Key distinction from e2e:** Integration controls its dependencies (mocks, stubs,
 fixture-managed services). E2E uses real backends that exist independently.
+
+**Borderline: unit vs integration (the "scope of mocks" rule)**
+
+When a test uses mocks, look at *what* is mocked to decide:
+
+- **Mock replaces external I/O only, multiple real internal components wired
+  together** → **integration**. Example: a test that registers a real `Plugin`,
+  calls real `invoke_hook()` and `register()`, but passes `MagicMock()` for
+  the backend. The plugin-manager wiring executes for real; only the LLM call
+  is faked.
+- **Mock replaces internal collaborators too, only one real component under
+  test** → **unit**. Example: a test that instantiates one `Plugin` but
+  passes `MagicMock()` for the session, the backend, and the hook dispatcher.
+  Only the plugin's own logic executes.
+
+When in doubt, ask: "if I broke the *wiring* between two components, would
+this test catch it?" If yes → integration. If no → unit.
 
 ### E2E (End-to-End)
 
@@ -127,6 +147,52 @@ assert "error" not in result.value.lower()      # absence of bad content
 despite the system working correctly → `qualitative`. If the assertion checks
 structure, types, or functional correctness → `e2e`.
 
+## Behavioural Signal Detection
+
+Before deep-reading a file, grep-able signals reveal whether it is likely unit
+or non-unit. Use these to triage at scale (see Audit Procedure, Step 0).
+
+### Live-backend signals (test is likely NOT unit)
+
+| Category | Grep patterns | Notes |
+|---|---|---|
+| Network literals | `localhost`, `127.0.0.1`, `0.0.0.0`, port numbers (`:11434`, `:8000`) | Direct infra dependency |
+| HTTP clients | `requests.get(`, `httpx.`, `aiohttp.ClientSession`, `urllib.request.urlopen` | Real network unless mocked |
+| Raw networking | `socket.socket(`, `socket.connect(` | Low-level network |
+| Subprocess | `subprocess.Popen(`, `subprocess.run(`, `subprocess.call(`, `os.system(` | Spawns external process |
+| API credentials | `_API_KEY`, `_TOKEN`, `_SECRET` in `os.environ`/`os.getenv` calls | Credential dependency |
+| GPU / model loading | `import torch`, `.to("cuda")`, `.from_pretrained(` | Hardware dependency |
+| External downloads | URL literals (`http://`, `https://`), `urlopen`, `requests.get` with URLs | Network fetch |
+
+### Mock signals (test is likely unit)
+
+| Category | Grep patterns |
+|---|---|
+| Mock objects | `MagicMock`, `Mock(`, `AsyncMock`, `create_autospec` |
+| Patching | `@patch(`, `@mock.patch`, `monkeypatch`, `mocker` fixture |
+| HTTP mocks | `responses`, `respx`, `httpx_mock`, `aioresponses`, `vcr` |
+
+### Fixture signals (need chain tracing to resolve)
+
+| Signal | Likely tier |
+|---|---|
+| `tmp_path`, `capsys`, `monkeypatch`, `caplog` only | Unit |
+| Custom fixtures named `session`, `backend`, `m_session` | Could be real or mock — trace the chain |
+| Session/module-scoped fixtures (`scope="session"`) | Usually infra setup → e2e |
+| Fixture name starts with `mock_`, `fake_`, `stub_` | Unit |
+
+### Cross-referencing signals
+
+A single file may contain both live and mock signals. Cross-reference to
+determine the correct bucket:
+
+| Live signals? | Mock signals? | Classification |
+|---|---|---|
+| Yes | No | Almost certainly e2e — deep-read to confirm |
+| Yes | Yes | Needs inspection — partial mock = integration, or mixed file |
+| No | Yes | Likely unit — skip deep read |
+| No | No | Likely unit — skip deep read |
+
 ## When to Ask the User
 
 Some classifications are ambiguous. **Ask for confirmation** when:
@@ -150,9 +216,12 @@ that require reading the test source code rather than looking up a table.
 ## Key project rules
 
 - `unit` is auto-applied by conftest — **never write it explicitly**
-- `llm` is deprecated (synonym for `e2e`) — **flag and recommend replacing**
+- `llm` is deprecated (synonym for `e2e`) — **flag and recommend replacing**.
+  This applies to both `pytestmark` lists and `# pytest:` comments in examples.
 - Backend/resource markers only go on `e2e`/`qualitative` tests
-- `qualitative` is always per-function; module carries `e2e` + backend markers
+- `qualitative` is per-function; module carries `e2e` + backend markers.
+  **Exception:** if every test function in the file is qualitative, module-level
+  `qualitative` is acceptable to avoid repetitive per-function decorators.
 - If a file mixes unit and non-unit tests, apply markers per-function, not module-level
 
 ## Backend detection heuristics
@@ -165,6 +234,18 @@ backend(s) it uses:
 - **Backend constructors:** `OllamaModelBackend(...)` → `ollama`; `OpenAIBackend(...)` → `openai`
 - **Environment variables checked:** `OPENAI_API_KEY` → `openai`; `WATSONX_API_KEY` → `watsonx`
 - **Dual backends:** `OpenAIBackend` pointed at Ollama's `/v1` endpoint → both `openai` AND `ollama` (but NOT `requires_api_key`)
+
+### Project-specific triage signals
+
+These supplement the general behavioural signals (Part 1) with mellea patterns:
+
+| Signal | Grep pattern | Implies |
+|---|---|---|
+| Backend import | `from mellea.backends.` | e2e (which backend depends on module) |
+| Session creation | `start_session(` | e2e, default ollama |
+| Backend constructor | `OllamaModelBackend(\|OpenAIBackend(\|LocalHFBackend(\|LocalVLLMBackend(\|WatsonxAIBackend(\|LiteLLMBackend(` | e2e |
+| Example marker comment | `# pytest:` | Already classified — validate |
+| Ollama port | `11434` | e2e, ollama |
 
 ## Fixture chain tracing
 
@@ -250,14 +331,82 @@ Only uses pytest built-in fixtures. Tier: **unit**.
   some tests) and have other tests that don't use any fixture. Classify
   per-function, not per-file.
 
-## Resource marker inference
+## Resource gating
 
-These are not automatic — verify by reading the code:
+E2e and qualitative tests need gating so they skip cleanly when the required
+infrastructure is absent. The preferred mechanism is **predicate functions**
+— reusable decorators that encapsulate availability checks. Test authors
+apply the predicate that matches their test's actual requirements.
 
-- `huggingface` usually → `requires_gpu` + `requires_heavy_ram` + `requires_gpu_isolation`
-- `vllm` usually → `requires_gpu` + `requires_heavy_ram` + `requires_gpu_isolation`
-- `watsonx` usually → `requires_api_key`
-- `openai` → `requires_api_key` ONLY when using the real OpenAI API (not Ollama-compatible)
+### The predicate factory pattern (general)
+
+Projects should provide a shared module of predicate functions that return
+`pytest.mark.skipif(...)` decorators. This gives test authors precision
+(exact thresholds, specific env vars) without ad-hoc `skipif` or blunt
+resource markers scattered across files.
+
+### What to audit
+
+Check the project's predicate module (see Project References) for available
+predicates, then apply the following checks to every e2e/qualitative file:
+
+1. **Legacy resource markers → migrate to predicates.** If a test uses
+   `@pytest.mark.requires_gpu`, `@pytest.mark.requires_heavy_ram`,
+   `@pytest.mark.requires_api_key`, or `@pytest.mark.requires_gpu_isolation`,
+   recommend replacing with the equivalent predicate from the project's
+   predicate module. Resource markers are deprecated in favour of predicates.
+2. **Ad-hoc `skipif` → migrate to predicate.** If a predicate exists for
+   the same check (e.g., `require_gpu()` exists but the test has a raw
+   `skipif(not torch.cuda.is_available())`), recommend the predicate.
+3. **Missing gating.** A test that uses a GPU backend but has no GPU
+   predicate and no `skipif` — recommend adding the appropriate predicate.
+4. **Imprecise gating.** A predicate that's too broad (e.g., `require_ram(48)`
+   on a test that only needs 16 GB) — suggest tightening the threshold.
+5. **Redundant CICD `skipif`.** `skipif(CICD == 1)` is usually redundant
+   when conftest auto-skip or predicates already handle the condition.
+   Flag as removable.
+
+### What NOT to flag
+
+Not every `skipif` needs migrating. Leave these alone:
+
+- **Python version gates** (`skipif(sys.version_info < (3, 11))`) — one-off,
+  or use `require_python()` predicate if available.
+- **`importorskip` for optional deps** — idiomatic pytest, or use
+  `require_package()` predicate if available and a decorator style is preferred.
+- **Truly one-off conditions** with no predicate equivalent and no pattern
+  of recurrence across files.
+
+For any inline `skipif` that IS NOT covered above, check whether a matching
+predicate exists. If it does → recommend migration. If it doesn't and the
+same condition appears in multiple files → flag as an infrastructure note
+("consider adding a predicate for this condition").
+
+Resource gating is orthogonal to tier classification — a test gated by
+`require_gpu()` is still e2e/qualitative based on what it exercises.
+
+### Project predicates (`test/predicates.py`)
+
+Read `test/predicates.py` for the available predicates. Expected patterns:
+
+| Predicate | Use when test needs |
+|---|---|
+| `require_gpu()` | Any GPU (CUDA or MPS) |
+| `require_gpu(min_vram_gb=N)` | GPU with at least N GB VRAM |
+| `require_ram(min_gb=N)` | N GB+ system RAM |
+| `require_gpu_isolation()` | Subprocess isolation for CUDA memory |
+| `require_api_key("OPENAI_API_KEY")` | Specific API credentials |
+| `require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")` | Multiple credentials |
+| `require_package("cpex.framework")` | Optional dependency |
+| `require_ollama()` | Running Ollama server |
+| `require_python((3, 11))` | Minimum Python version |
+
+Typical combinations for backends:
+
+- `huggingface` → `require_gpu()` + `require_ram(48)` (adjust RAM per model)
+- `vllm` → `require_gpu(min_vram_gb=24)` + `require_ram(48)`
+- `watsonx` → `require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")`
+- `openai` → `require_api_key("OPENAI_API_KEY")` only for real OpenAI (not Ollama-compat)
 
 ## Example files (`docs/examples/`)
 
@@ -273,6 +422,48 @@ Same classification rules apply. Parser: `docs/examples/conftest.py`
 ---
 
 # Audit Procedure
+
+## Step 0 — Triage (for scopes larger than ~5 files)
+
+When auditing a directory or the full repo, do NOT deep-read every file.
+Use behavioural signal detection (Part 1) to bucket files first, then
+deep-read only files that need inspection.
+
+### Phase 0: Fixture discovery
+
+Read `conftest.py` files in the target scope to catalog fixture names.
+Classify each fixture as **live** (returns a real backend/connection) or
+**mock** (returns a MagicMock, patch, or fake). Record these lists — they
+become additional grep patterns for the next phase.
+
+### Phase 1: Signal grep
+
+Run grep across all target files for:
+
+1. **Live-backend signals** — backend imports, constructors, `start_session(`,
+   network literals (`localhost`, `127.0.0.1`, port numbers), HTTP client
+   usage, subprocess calls, `_API_KEY`/`_TOKEN`/`_SECRET` in env var checks,
+   GPU/model loading (`torch`, `.from_pretrained(`), URL literals.
+2. **Mock signals** — `MagicMock`, `Mock(`, `AsyncMock`, `@patch(`,
+   `monkeypatch`, `mocker`, HTTP mock libraries.
+3. **Existing markers** — `pytestmark`, `@pytest.mark.`, `# pytest:`.
+4. **Live/mock fixture names** from Phase 0.
+
+### Phase 2: Bucket and prioritise
+
+Cross-reference the signal hits into four priority buckets:
+
+| Priority | Condition | Action |
+|---|---|---|
+| **P1 — Missing markers** | Live signals present, NO existing markers | Deep-read and classify. These are the most likely gaps. |
+| **P2 — Mixed signals** | Both live AND mock signals present | Deep-read to determine if integration, partial mock, or mixed file. |
+| **P3 — Validate existing** | Live signals present, markers already exist | Spot-check that markers match the actual backend. Replace deprecated `llm`. |
+| **P4 — Skip** | No live signals (mock-only or no signals at all) | Likely unit. Report as clean without deep-reading. Spot-check a sample if the count is large. |
+
+### Phase 3: Deep-read
+
+Process P1 → P2 → P3 files using Steps 1–5 below. For P4 files, list them
+in the summary as "N files — no live-backend signals, assumed unit."
 
 ## Step 1 — Read and identify
 
@@ -302,18 +493,58 @@ and ask the user to confirm.
 
 ## Step 3 — Compare and report
 
-Per-file report format:
+### Output tiers
+
+Scale the report detail to the scope of the audit:
+
+**Tier 1 — Summary table (always).**  Print first so the user sees the big
+picture before any detail:
+
+```
+| Category | Files | Functions |
+|----------|------:|----------:|
+| Correct (no changes) | 42 | — |
+| Deprecated `llm` → `e2e` (simple) | 27 | — |
+| Missing tier marker | 8 | 12 |
+| Wrong marker | 3 | 5 |
+| Over-marked | 2 | 4 |
+| Missing resource gating | 4 | 6 |
+| Legacy resource marker → predicate | 5 | 9 |
+| Infrastructure notes | 3 | — |
+```
+
+**Tier 2 — Issues-only detail.**  For each file with at least one issue,
+print the file header and **only the functions that need changes**.  Omit
+functions that are already correct — they are noise at scale:
 
 ```
 ## test/backends/test_ollama.py
 
 Module markers — Current: [llm, ollama] → Proposed: [e2e, ollama]
-  Note: replace deprecated `llm` with `e2e`
+  ↳ replace deprecated `llm` with `e2e`
 
-  test_simple_instruct   — qualitative ✓
-  test_structured_output — Current: qualitative → WRONG: asserts JSON schema, remove qualitative
-  test_chat              — qualitative ✓
+  test_structured_output — WRONG: asserts JSON schema, remove `qualitative`
 ```
+
+Functions without issues (`test_simple_instruct ✓`, `test_chat ✓`) are
+**not listed**.  Files where everything is correct appear only in the Tier 1
+count.
+
+**Tier 3 — Batch groups (for mechanical fixes).**  When many files share the
+same fix (e.g. `llm` → `e2e` in `pytestmark`), collapse them into a single
+block instead of repeating the per-file template:
+
+```
+### Deprecated `llm` → `e2e` (27 files, module-level pytestmark)
+
+test/backends/test_ollama.py
+test/backends/test_openai.py
+test/backends/test_watsonx.py
+... (24 more)
+```
+
+The agent should list all files (not truncate) so the user can review before
+applying, but one line per file is sufficient when the fix is identical.
 
 ## Step 4 — Apply fixes (unless `--dry-run`)
 
@@ -332,35 +563,27 @@ Report issues outside marker-edit scope as **notes**. Do NOT fix these:
 
 ## Output Summary
 
+The output is the Tier 1 summary table (always printed first) followed by
+Tier 2 issues-only detail and Tier 3 batch groups as described in Step 3.
+End the report with:
+
 ```
-## Audit Summary
-
-Files audited: N
-Files correct: N
-Files with issues: N
-
-Issues by type:
-  Missing markers:     N
-  Wrong markers:       N
-  Over-marked:         N
-  Deprecated (llm):    N
-
+---
+Files audited: N | Correct: N | With issues: N
 Changes: N applied / N dry-run
 Infrastructure notes: N (see notes section)
 ```
 
-## Infrastructure Note (not part of this skill's scope)
+## Infrastructure (already in place — do not re-add)
 
-For `pytest -m unit` to work, the project needs a conftest hook:
+The following infrastructure was set up in #727 and should NOT be recreated
+by this skill.  If an audit finds these missing, something has regressed —
+flag as a blocker, don't silently re-add:
 
-```python
-# In test/conftest.py pytest_collection_modifyitems:
-_NON_UNIT = ("integration", "e2e", "qualitative", "llm")
-for item in items:
-    if not any(item.get_closest_marker(m) for m in _NON_UNIT):
-        item.add_marker(pytest.mark.unit)
-```
-
-The `e2e` and `integration` markers also need registering in `pytest_configure`
-and `pyproject.toml`. These are one-time infrastructure changes tracked in
-issue #727, not performed by this skill.
+- **Auto-unit hook:** `test/conftest.py` `pytest_collection_modifyitems` adds
+  `pytest.mark.unit` to any test without `integration`, `e2e`, or `qualitative`.
+- **Marker registration:** all tier, backend, and resource markers registered in
+  `pytest_configure` and `pyproject.toml`.
+- **Resource predicates:** `test/predicates.py` provides `require_gpu`,
+  `require_ram`, `require_gpu_isolation`, `require_api_key`, `require_package`,
+  `require_ollama`, `require_python`.
