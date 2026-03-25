@@ -31,7 +31,6 @@ Read these before auditing — they are the authoritative source for marker conv
 - **Marker registration:** `test/conftest.py` (`pytest_configure`) and `pyproject.toml` (`[tool.pytest.ini_options]`)
 - **Resource predicates:** `test/predicates.py` (predicate functions for resource gating)
 - **Example marker format:** `docs/examples/conftest.py` (`_extract_markers_from_file`)
-- **Epic context:** GitHub issues #726 (epic), #727 (granularity), #728 (backend/resource)
 
 ---
 
