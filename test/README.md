@@ -32,7 +32,7 @@ Heavy GPU backends (HuggingFace, vLLM) hold GPU memory at the process level. Eve
 
 Process isolation is **opt-in** via the `--isolate-heavy` flag or `CICD=1` environment variable. When enabled, the collection hook in `test/conftest.py`:
 
-1. Detects modules marked with `@pytest.mark.requires_gpu_isolation`
+1. Detects modules gated with `require_gpu_isolation()` (or the deprecated `@pytest.mark.requires_gpu_isolation`)
 2. Runs each marked module in a separate subprocess
 3. Sets required environment variables (`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`)
 4. Ensures full GPU memory release between modules
@@ -145,10 +145,30 @@ See [`MARKERS_GUIDE.md`](MARKERS_GUIDE.md) for complete marker documentation.
 Key markers for GPU testing:
 - `@pytest.mark.vllm` - Requires vLLM backend (local, GPU required)
 - `@pytest.mark.huggingface` - Requires HuggingFace backend (local, GPU-heavy)
-- `@pytest.mark.requires_gpu` - Requires GPU hardware (capability check)
-- `@pytest.mark.requires_gpu_isolation` - Requires OS-level process isolation for GPU memory (execution strategy)
-- `@pytest.mark.requires_heavy_ram` - Requires 48GB+ RAM
 - `@pytest.mark.slow` - Tests taking >5 minutes
+
+### Resource gating (predicates)
+
+Use predicate functions from `test/predicates.py` for resource gating:
+
+```python
+from test.predicates import require_gpu, require_ram, require_gpu_isolation
+
+pytestmark = [pytest.mark.e2e, pytest.mark.huggingface, require_gpu(), require_ram(min_gb=48)]
+```
+
+| Predicate | Use when test needs |
+| --------- | ------------------- |
+| `require_gpu()` | Any GPU (CUDA or MPS) |
+| `require_gpu(min_vram_gb=N)` | GPU with at least N GB VRAM |
+| `require_ram(min_gb=N)` | N GB+ system RAM |
+| `require_gpu_isolation()` | Subprocess isolation for CUDA memory |
+| `require_api_key("ENV_VAR")` | Specific API credentials |
+
+> **Deprecated:** The markers `requires_gpu`, `requires_heavy_ram`, `requires_api_key`,
+> and `requires_gpu_isolation` are deprecated. Existing tests using them still work
+> (conftest auto-skip handles them) but new tests must use predicates. Migrate legacy
+> markers to predicates when touching those files.
 
 ## Coverage
 

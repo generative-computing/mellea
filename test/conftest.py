@@ -89,7 +89,13 @@ def get_system_capabilities():
                 capabilities["gpu_memory_gb"] = float(result.stdout.strip()) / 1024
             except Exception:
                 pass
-        # Note: MPS doesn't provide easy memory query, leave at 0
+        elif has_mps:
+            try:
+                capabilities["gpu_memory_gb"] = torch.mps.recommended_max_memory() / (
+                    1024**3
+                )
+            except (RuntimeError, AttributeError):
+                pass
 
     # Detect RAM
     if HAS_PSUTIL:

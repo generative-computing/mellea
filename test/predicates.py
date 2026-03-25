@@ -47,13 +47,21 @@ def _gpu_available() -> bool:
 
 
 def _gpu_vram_gb() -> float:
-    """Return VRAM in GB for the first CUDA device, or 0 if unavailable."""
+    """Return usable GPU VRAM in GB, or 0 if unavailable.
+
+    On CUDA: reports device 0 total memory.
+    On macOS MPS: reports ``recommendedMaxWorkingSetSize`` — the Metal
+    driver's own estimate of how much unified memory the GPU can use
+    without degrading system performance.
+    """
     try:
         import torch
 
         if torch.cuda.is_available():
             return torch.cuda.get_device_properties(0).total_memory / (1024**3)
-    except (ImportError, RuntimeError):
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return torch.mps.recommended_max_memory() / (1024**3)
+    except (ImportError, RuntimeError, AttributeError):
         pass
     return 0.0
 

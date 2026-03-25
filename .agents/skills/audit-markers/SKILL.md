@@ -346,6 +346,12 @@ Projects should provide a shared module of predicate functions that return
 (exact thresholds, specific env vars) without ad-hoc `skipif` or blunt
 resource markers scattered across files.
 
+### Determining `min_vram_gb` and `min_gb` values
+
+When migrating legacy `requires_gpu` or `requires_heavy_ram` markers to predicates,
+use the `/estimate-vram` skill to determine the correct `min_vram_gb` and `min_gb`
+values based on the model each test loads. Do not guess or use blanket thresholds.
+
 ### What to audit
 
 Check the project's predicate module (see Project References) for available
