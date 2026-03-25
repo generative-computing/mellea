@@ -349,9 +349,10 @@ resource markers scattered across files.
 
 ### Determining `min_vram_gb` and `min_gb` values
 
-When migrating legacy `requires_gpu` or `requires_heavy_ram` markers to predicates,
-do not guess or use blanket thresholds. Determine the correct values by tracing the
-model each test loads and computing VRAM requirements from parameter counts.
+When migrating legacy `requires_gpu` markers to predicates, do not guess or use
+blanket thresholds. Determine the correct `min_vram_gb` by tracing the model each
+test loads and computing VRAM requirements from parameter counts. Legacy
+`requires_heavy_ram` markers should simply be removed (see "What to audit" below).
 
 #### Trace the model identifier
 
@@ -414,7 +415,7 @@ the explicit size.
 |---------|--------------------|--------------------|
 | `LocalHFBackend` | Yes | `require_gpu(min_vram_gb=N)` |
 | `LocalVLLMBackend` | Yes | `require_gpu(min_vram_gb=N)` |
-| `OllamaModelBackend` | Managed by Ollama | `require_ollama()` only. Exception: models >8B through Ollama may need `require_ram(min_gb=N)` for the server process. |
+| `OllamaModelBackend` | Managed by Ollama | `require_ollama()` only |
 | `OpenAIBackend` (real API) | No | No GPU gate |
 | `OpenAIBackend` → Ollama `/v1` | Managed by Ollama | `require_ollama()` only |
 | `WatsonxAIBackend` / `LiteLLMBackend` / Cloud | No | No GPU gate |
@@ -422,7 +423,7 @@ the explicit size.
 **Key rule:** Ollama manages its own GPU memory. Tests using Ollama backends
 should use `require_ollama()`, NOT `require_gpu()`.
 
-#### Compute VRAM and RAM estimates
+#### Compute VRAM estimate
 
 **VRAM formula:**
 ```
@@ -433,19 +434,9 @@ Where `bytes_per_param` depends on precision: fp32=4.0, fp16/bf16=2.0 (default),
 int8=1.0, int4=0.5. The 1.2 multiplier covers KV cache, activations, and framework
 buffers. Round `min_vram_gb` **up** to the next even integer.
 
-**RAM formula** (local GPU backends — HF, vLLM):
-```
-min_ram_gb = max(16, vram_gb + 8)
-```
-
-For Ollama backends with large models (>8B):
-```
-min_ram_gb = max(16, vram_gb + 12)
-```
-
-**GPU isolation:** If a test uses `LocalHFBackend` or `LocalVLLMBackend`, recommend
-`require_gpu_isolation()` in addition to `require_gpu()`. These backends hold GPU
-memory at the process level and need subprocess isolation for multi-module test runs.
+Models load into GPU VRAM, not system RAM — do **not** add `require_ram()` to GPU
+tests. The `require_ram()` predicate exists for tests that are genuinely RAM-bound
+(large dataset processing, etc.), not as a companion to `require_gpu()`.
 
 ### What to audit
 
@@ -453,21 +444,24 @@ Check the project's predicate module (see Project References) for available
 predicates, then apply the following checks to every e2e/qualitative file:
 
 1. **Legacy resource markers → migrate to predicates.** If a test uses
-   `@pytest.mark.requires_gpu`, `@pytest.mark.requires_heavy_ram`,
-   `@pytest.mark.requires_api_key`, or `@pytest.mark.requires_gpu_isolation`,
+   `@pytest.mark.requires_gpu` or `@pytest.mark.requires_api_key`,
    replace with the equivalent predicate from the project's predicate module.
-   Resource markers are deprecated in favour of predicates. This is a **fix**
-   (same priority as `llm` → `e2e`), not just a recommendation — apply it in
-   Step 4 like any other marker fix. The replacement requires adding an import
-   for the predicate and swapping the marker in the `pytestmark` list or
-   decorator.
+   If a test uses `@pytest.mark.requires_heavy_ram` or
+   `@pytest.mark.requires_gpu_isolation`, **remove** them — these are
+   deprecated markers with no direct replacement (`requires_heavy_ram` was a
+   blanket 48 GB threshold that conflated VRAM with RAM; GPU isolation is now
+   automatic). Resource markers are deprecated in favour of predicates. This
+   is a **fix** (same priority as `llm` → `e2e`), not just a recommendation —
+   apply it in Step 4 like any other marker fix. The replacement requires
+   adding an import for the predicate and swapping the marker in the
+   `pytestmark` list or decorator.
 2. **Ad-hoc `skipif` → migrate to predicate.** If a predicate exists for
    the same check (e.g., `require_gpu()` exists but the test has a raw
    `skipif(not torch.cuda.is_available())`), replace with the predicate.
 3. **Missing gating.** A test that uses a GPU backend but has no GPU
    predicate and no `skipif` — add the appropriate predicate.
-4. **Imprecise gating.** A predicate that's too broad (e.g., `require_ram(48)`
-   on a test that only needs 16 GB) — tighten the threshold.
+4. **Imprecise gating.** A predicate that's too broad for the actual model
+   being loaded — tighten the `min_vram_gb` threshold.
 5. **Redundant CICD `skipif`.** `skipif(CICD == 1)` is usually redundant
    when conftest auto-skip or predicates already handle the condition.
    Flag as removable.
@@ -499,8 +493,7 @@ Read `test/predicates.py` for the available predicates. Expected patterns:
 |---|---|
 | `require_gpu()` | Any GPU (CUDA or MPS) |
 | `require_gpu(min_vram_gb=N)` | GPU with at least N GB VRAM |
-| `require_ram(min_gb=N)` | N GB+ system RAM |
-| `require_gpu_isolation()` | Subprocess isolation for CUDA memory |
+| `require_ram(min_gb=N)` | N GB+ system RAM (for genuinely RAM-bound tests, not GPU model loading) |
 | `require_api_key("OPENAI_API_KEY")` | Specific API credentials |
 | `require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")` | Multiple credentials |
 | `require_package("cpex.framework")` | Optional dependency |
@@ -509,8 +502,8 @@ Read `test/predicates.py` for the available predicates. Expected patterns:
 
 Typical combinations for backends:
 
-- `huggingface` → `require_gpu()` + `require_ram(48)` (adjust RAM per model)
-- `vllm` → `require_gpu(min_vram_gb=24)` + `require_ram(48)`
+- `huggingface` → `require_gpu(min_vram_gb=N)` (compute N from model params)
+- `vllm` → `require_gpu(min_vram_gb=N)` (compute N from model params)
 - `watsonx` → `require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")`
 - `openai` → `require_api_key("OPENAI_API_KEY")` only for real OpenAI (not Ollama-compat)
 
@@ -724,5 +717,5 @@ flag as a blocker, don't silently re-add:
   over it. New backends are added by inserting one entry into the dict.
   `pyproject.toml` and `test/MARKERS_GUIDE.md` must stay in sync manually.
 - **Resource predicates:** `test/predicates.py` provides `require_gpu`,
-  `require_ram`, `require_gpu_isolation`, `require_api_key`, `require_package`,
+  `require_ram`, `require_api_key`, `require_package`,
   `require_ollama`, `require_python`.

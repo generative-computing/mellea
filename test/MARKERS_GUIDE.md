@@ -124,8 +124,8 @@ tests don't need real backends.
 | `ollama`       | Ollama (port 11434)           | Local, light (~2-4GB RAM)             |
 | `openai`       | OpenAI API or compatible      | API calls (may use Ollama `/v1`)      |
 | `watsonx`      | Watsonx API                   | API calls, requires credentials       |
-| `huggingface`  | HuggingFace transformers      | Local, GPU, 48GB+ RAM                 |
-| `vllm`         | vLLM                          | Local, GPU required, 48GB+ RAM        |
+| `huggingface`  | HuggingFace transformers      | Local, GPU required                   |
+| `vllm`         | vLLM                          | Local, GPU required                   |
 | `litellm`      | LiteLLM (wraps other backends)| Depends on underlying backend         |
 | `bedrock`      | AWS Bedrock                   | API calls, requires credentials       |
 
@@ -145,15 +145,14 @@ infrastructure is absent. Use **predicate decorators** from `test/predicates.py`
 — they give test authors precise control over skip conditions.
 
 ```python
-from test.predicates import require_gpu, require_ram, require_api_key
+from test.predicates import require_gpu, require_api_key
 ```
 
 | Predicate | Use when test needs |
 | --------- | ------------------- |
 | `require_gpu()` | Any GPU (CUDA or MPS) |
 | `require_gpu(min_vram_gb=N)` | GPU with at least N GB VRAM |
-| `require_ram(min_gb=N)` | N GB+ system RAM |
-| `require_gpu_isolation()` | Subprocess isolation for CUDA memory |
+| `require_ram(min_gb=N)` | N GB+ system RAM (genuinely RAM-bound tests only) |
 | `require_api_key("ENV_VAR")` | Specific API credentials |
 | `require_package("pkg")` | Optional dependency |
 | `require_ollama()` | Running Ollama server |
@@ -161,8 +160,8 @@ from test.predicates import require_gpu, require_ram, require_api_key
 
 ### Typical combinations
 
-- `huggingface` → `require_gpu()` + `require_ram(min_gb=48)` (adjust per model)
-- `vllm` → `require_gpu(min_vram_gb=24)` + `require_ram(min_gb=48)`
+- `huggingface` → `require_gpu(min_vram_gb=N)` (compute N from model params)
+- `vllm` → `require_gpu(min_vram_gb=N)` (compute N from model params)
 - `watsonx` → `require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")`
 - `openai` → `require_api_key("OPENAI_API_KEY")` only for real OpenAI (not Ollama-compat)
 
@@ -180,7 +179,11 @@ These are not resource predicates but still control test selection:
 The markers `requires_gpu`, `requires_heavy_ram`, `requires_api_key`, and
 `requires_gpu_isolation` are deprecated. Existing tests using them still work
 (conftest auto-skip logic handles them) but new tests should use predicates.
-Migrate legacy markers to predicates when touching those files.
+When migrating: `requires_gpu` → `require_gpu(min_vram_gb=N)`;
+`requires_api_key` → `require_api_key(...)`;
+`requires_heavy_ram` and `requires_gpu_isolation` → **remove** (no replacement
+needed — `requires_heavy_ram` conflated VRAM with RAM, and GPU isolation is
+now automatic).
 
 ## Auto-Detection
 
@@ -228,10 +231,10 @@ def test_greeting_content(session):
     assert "hello" in result.value.lower()
 
 # Heavy GPU e2e (predicates for resource gating)
-from test.predicates import require_gpu, require_ram, require_gpu_isolation
+from test.predicates import require_gpu
 
 pytestmark = [pytest.mark.e2e, pytest.mark.huggingface,
-              require_gpu(), require_ram(min_gb=48), require_gpu_isolation()]
+              require_gpu(min_vram_gb=20)]
 ```
 
 ## Example Files (`docs/examples/`)
