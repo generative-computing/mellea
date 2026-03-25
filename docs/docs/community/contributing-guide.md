@@ -317,7 +317,7 @@ checklist, and the review process for documentation contributions. Key points:
 ## Getting help
 
 - Check [existing issues](https://github.com/generative-computing/mellea/issues)
-- Join the [Discord](https://ibm.biz/mellea-discord)
+- Join the [Github Discussions](https://github.com/generative-computing/mellea/discussions)
 - Open a new issue with the appropriate label
 
 ---

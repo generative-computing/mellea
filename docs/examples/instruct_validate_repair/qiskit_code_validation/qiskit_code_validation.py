@@ -27,18 +27,20 @@ Example:
 """
 
 import time
-from typing import Literal
 
 from validation_helpers import validate_input_code, validate_qiskit_migration
 
 import mellea
 from mellea.backends import ModelOption
+from mellea.stdlib.context import ChatContext, SimpleContext
 from mellea.stdlib.requirements import req, simple_validate
-from mellea.stdlib.sampling import RepairTemplateStrategy
+from mellea.stdlib.sampling import MultiTurnStrategy, RepairTemplateStrategy
 
 
 def generate_validated_qiskit_code(
-    m: mellea.MelleaSession, prompt: str, max_repair_attempts: int = 5
+    m: mellea.MelleaSession,
+    prompt: str,
+    strategy: MultiTurnStrategy | RepairTemplateStrategy,
 ) -> str:
     """Generate Qiskit code that passes Qiskit migration validation.
 
@@ -46,12 +48,12 @@ def generate_validated_qiskit_code(
     1. Pre-validates input code
     2. Instructs the LLM with structured requirements
     3. Validates output against QKT rules
-    4. Repairs code if validation fails (up to max_repair_attempts times)
+    4. Repairs code if validation fails (up to the strategy's loop_budget times)
 
     Args:
         m: Mellea session
         prompt: User prompt for code generation
-        max_repair_attempts: Maximum number of repair attempts for validation failures
+        strategy: Sampling strategy for handling validation failures
 
     Returns:
         Generated code that passes validation
@@ -86,7 +88,7 @@ def generate_validated_qiskit_code(
                 validation_fn=simple_validate(validate_qiskit_migration),
             )
         ],
-        strategy=RepairTemplateStrategy(loop_budget=max_repair_attempts),
+        strategy=strategy,
         return_sampling_results=True,
     )
 
@@ -115,6 +117,11 @@ def test_qiskit_code_validation() -> None:
     that uses old APIs (BasicAer, execute) and having the LLM fix it to use
     modern Qiskit APIs that pass QKT validation rules.
     """
+    # Strategy selection - True for MultiTurnStrategy, False for RepairTemplateStrategy
+    # MultiTurnStrategy: Adds validation failure reasons as a new user message in the conversation
+    # RepairTemplateStrategy: Adds validation failure reasons to the instruction and retries
+    use_multiturn_strategy = False
+
     # Model selection - uncomment one to try different models
     # model_id = "granite4:micro-h"
     # model_id = "granite4:small-h"
@@ -137,13 +144,25 @@ qc.measure_all()
     print(prompt)
     print("======================\n")
 
+    # Initialize the required context
+    ctx = ChatContext() if use_multiturn_strategy else SimpleContext()
+
     with mellea.start_session(
         model_id=model_id,
         backend_name="ollama",
+        ctx=ctx,
         model_options={ModelOption.TEMPERATURE: 0.8, ModelOption.MAX_NEW_TOKENS: 2048},
     ) as m:
         start_time = time.time()
-        code = generate_validated_qiskit_code(m, prompt, max_repair_attempts=5)
+
+        if use_multiturn_strategy:
+            strategy: MultiTurnStrategy | RepairTemplateStrategy = MultiTurnStrategy(
+                loop_budget=5
+            )
+        else:
+            strategy = RepairTemplateStrategy(loop_budget=5)
+
+        code = generate_validated_qiskit_code(m, prompt, strategy)
         elapsed = time.time() - start_time
 
     print(f"\n====== Result ({elapsed:.1f}s) ======")
