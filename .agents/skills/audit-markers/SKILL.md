@@ -518,6 +518,13 @@ Examples use a comment-based marker format (not `pytestmark`):
 Same classification rules apply. Parser: `docs/examples/conftest.py`
 (`_extract_markers_from_file`).
 
+**Legacy markers in examples:** The same deprecation rules apply to
+`# pytest:` comments. Remove `requires_heavy_ram`, `requires_gpu_isolation`,
+and `llm` when found. Replace `requires_gpu` with the appropriate predicate
+marker if the comment format supports it, or just remove it and rely on the
+backend marker (e.g., `huggingface` already triggers GPU checks in the
+examples conftest).
+
 ---
 
 # Audit Procedure
