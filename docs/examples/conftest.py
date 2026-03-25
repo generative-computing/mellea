@@ -123,17 +123,8 @@ def _should_skip_collection(markers):
     if "slow" in markers and int(os.environ.get("SKIP_SLOW", 0)) == 1:
         return True, "Skipping slow test (SKIP_SLOW=1)"
 
-    # Skip tests requiring heavy RAM if insufficient
-    if "requires_heavy_ram" in markers:
-        RAM_THRESHOLD_GB = 48
-        if capabilities["ram_gb"] > 0 and capabilities["ram_gb"] < RAM_THRESHOLD_GB:
-            return (
-                True,
-                f"Insufficient RAM ({capabilities['ram_gb']:.1f}GB < {RAM_THRESHOLD_GB}GB)",
-            )
-
     # Skip tests requiring GPU if not available
-    if "requires_gpu" in markers or "vllm" in markers:
+    if "requires_gpu" in markers or "huggingface" in markers or "vllm" in markers:
         if not capabilities["has_gpu"]:
             return True, "GPU not available"
 
@@ -588,7 +579,6 @@ def pytest_runtest_setup(item):
     config = item.config
     ignore_all = config.getoption("--ignore-all-checks", default=False)
     ignore_gpu = config.getoption("--ignore-gpu-check", default=False) or ignore_all
-    ignore_ram = config.getoption("--ignore-ram-check", default=False) or ignore_all
     ignore_ollama = (
         config.getoption("--ignore-ollama-check", default=False) or ignore_all
     )
@@ -612,17 +602,13 @@ def pytest_runtest_setup(item):
                     )
 
     # Skip tests requiring GPU if not available
-    if item.get_closest_marker("requires_gpu") and not ignore_gpu:
+    if (
+        item.get_closest_marker("requires_gpu")
+        or item.get_closest_marker("huggingface")
+        or item.get_closest_marker("vllm")
+    ) and not ignore_gpu:
         if not capabilities["has_gpu"]:
             pytest.skip("Skipping test: GPU not available")
-
-    # Skip tests requiring heavy RAM if insufficient
-    if item.get_closest_marker("requires_heavy_ram") and not ignore_ram:
-        RAM_THRESHOLD_GB = 48  # Based on real-world testing
-        if capabilities["ram_gb"] > 0 and capabilities["ram_gb"] < RAM_THRESHOLD_GB:
-            pytest.skip(
-                f"Skipping test: Insufficient RAM ({capabilities['ram_gb']:.1f}GB < {RAM_THRESHOLD_GB}GB)"
-            )
 
     # Backend-specific skipping
     if item.get_closest_marker("watsonx") and not ignore_api_key:
