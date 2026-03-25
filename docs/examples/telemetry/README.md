@@ -166,4 +166,4 @@ ollama serve  # Start Ollama server
 
 ## Learn More
 
-See [docs/dev/telemetry.md](../../dev/telemetry.md) for complete documentation.
+See the [Telemetry documentation](../../docs/evaluation-and-observability/telemetry.md) for complete details.

@@ -33,34 +33,40 @@ def _needs_logprobs(transformations: list | None) -> bool:
     return any(t["type"] == "likelihood" for t in transformations)
 
 
-def sentence_delimiter(tag, sentence_num) -> str:
+def sentence_delimiter(tag: str, sentence_num: int) -> str:
     """Return a tag string that identifies the beginning of the indicated sentence.
 
-    :param tag: tag string, i.e. "i" or "c"
-    :param sentence_num: index of sentence
-    :return: Tag string (including trailing space) that identifies the beginning of
+    Args:
+        tag: Tag string prefix, e.g. ``"i"`` or ``"c"``.
+        sentence_num: Zero-based index of the sentence.
+
+    Returns:
+        Tag string (including trailing space) that identifies the beginning of
         the indicated sentence in sentence-tagged text.
-    :rtype: str
     """
     return f"<{tag}{sentence_num}> "
 
 
 def mark_sentence_boundaries(
-    split_strings: list[list[str]], tag_prefix: str
-) -> list[str]:
+    split_strings: list[list[str]], tag_prefix: str, index: int = 0
+) -> tuple[list[str], int]:
     """Modify input strings by inserting sentence boundary markers.
 
     Modify one or more input strings by inserting a tag in the form
     ``<[prefix][number]>``
     at the location of each sentence boundary.
 
-    :param split_strings: Input string(s), pre-split into sentences
-    :param tag_prefix: String to place before the number part of each tagged
-        sentence boundary.
+    Args:
+        split_strings: Input string(s), pre-split into sentences.
+        tag_prefix: String to place before the number part of each tagged
+            sentence boundary.
+        index: Starting index for sentence numbering. Defaults to 0. Pass a
+            non-zero value to continue numbering from a prior call.
 
-    :returns: List of input strings with all sentence boundaries marked.
+    Returns:
+        tuple[list[str], int]: Tuple of (list of input strings with all sentence
+        boundaries marked, next available index after the last sentence).
     """
-    index = 0
     result: list[str] = []
     for sentences in split_strings:
         to_concat = []
@@ -68,7 +74,7 @@ def mark_sentence_boundaries(
             to_concat.append(f"{sentence_delimiter(tag_prefix, index)}{sentence}")
             index += 1
         result.append(" ".join(to_concat))
-    return result
+    return result, index
 
 
 def move_documents_to_message(
@@ -81,12 +87,21 @@ def move_documents_to_message(
     This function edits a request by putting the documents into the first turn of the
     messages.
 
-    :param chat_completion: A chat completion request as dataclass or parsed JSON
-    :param how: How to serialize the documents; supported values are "string" and "json"
+    Args:
+        chat_completion: A chat completion request as dataclass or parsed JSON.
+        how: How to serialize the documents; supported values are ``"string"``,
+            ``"json"``, and ``"roles"``.
 
-    :returns: A copy of ``chat_completion`` with any documents under ``extra_body``
+    Returns:
+        A copy of ``chat_completion`` with any documents under ``extra_body``
         moved to the first message. Returned type will be the same as the input type.
         May return original object if no edits are necessary.
+
+    Raises:
+        TypeError: If ``chat_completion`` is not a :class:`ChatCompletion` or
+            ``dict``.
+        ValueError: If ``how`` is not one of ``"string"``, ``"json"``, or
+            ``"roles"``.
     """
     if isinstance(chat_completion, ChatCompletion):
         should_return_dataclass = True
@@ -156,6 +171,33 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
     General-purpose chat completion rewriter for use with models that implement
     LLM intrinsics. Reads parameters of the model's input and output formats
     from a YAML configuration file and edits the input chat completion appropriately.
+
+    Args:
+        config_file (str | pathlib.Path | None): Path to the YAML configuration file for the
+            target intrinsic. Mutually exclusive with ``config_dict``.
+        config_dict (dict | None): Inline configuration dictionary. Mutually exclusive with
+            ``config_file``.
+        model_name (str | None): Optional model name used to locate model-specific overrides
+            within the configuration.
+
+    Attributes:
+        config (dict): Parsed YAML configuration file for the target intrinsic.
+        response_format (dict): JSON Schema of the expected response format.
+        parameters (dict): Additional parameters (key-value pairs) that this
+            rewriter adds to all chat completion requests.
+        extra_body_parameters (dict): Extended vLLM-specific parameters that go
+            under the ``extra_body`` element of each request. These are merged
+            with any existing ``extra_body`` content in incoming requests.
+        instruction (str | None): Optional instruction template. When present,
+            a new user message is appended with the formatted instruction.
+        sentence_boundaries (dict[str, str] | None): Optional sentence-boundary
+            marking specification, mapping location strings (``"last_message"``
+            or ``"documents"``) to marker prefixes (e.g. ``"c"`` produces
+            ``<c0>``, ``<c1>``, …).
+        docs_as_message (str | None): Optional specification for moving
+            documents from ``extra_body/documents`` to a user message at the
+            start of the messages list. Value must be ``"string"``, ``"json"``,
+            or ``"roles"``.
     """
 
     config: dict
@@ -198,14 +240,7 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
         config_dict: dict | None = None,
         model_name: str | None = None,
     ):
-        """Initialize the IntrinsicsRewriter.
-
-        :param config_file: (optional) Location of YAML configuration file
-        :param config_dict: (optional) Contents of YAML configuration file that the
-            caller has parsed by calling ``yaml.safe_load()``.
-        :param model_name: (optional) model name to put into chat completion requests,
-         or ``None`` to use default model name from the configuration
-        """
+        """Initialize IntrinsicsRewriter from a YAML config file or dict."""
         config = make_config_dict(config_file, config_dict)
         if config is None:
             raise ValueError("config cannot be None")
@@ -258,10 +293,11 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
                     f"Received {self.sentence_boundaries}."
                 )
             for k, v in self.sentence_boundaries.items():
-                if k not in ("last_message", "documents"):
+                if k not in ("last_message", "documents", "all_but_last_message"):
                     raise ValueError(
                         f"Unexpected location '{k}' in 'sentence_boundaries' field. "
-                        f"Value should be 'last_message' or 'documents'."
+                        f"Value should be 'last_message', 'documents', or "
+                        f"'all_but_last_message'."
                     )
                 if not isinstance(v, str):
                     raise TypeError(
@@ -291,6 +327,8 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
         :rtype: ChatCompletion
         """
         # Mark sentence boundaries in the last message.
+        # last_message uses its own numbering starting from 0, independent of
+        # the numbering used for documents and conversation history.
         if self.sentence_boundaries and "last_message" in self.sentence_boundaries:
             messages = chat_completion.messages.copy()  # Do not modify input!
             last_message_as_sentences = list(
@@ -298,13 +336,16 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
             )
             last_message_tag = self.sentence_boundaries["last_message"]
             if last_message_tag:
-                rewritten_last_message_text = mark_sentence_boundaries(
+                rewritten_texts, _ = mark_sentence_boundaries(
                     [last_message_as_sentences], last_message_tag
-                )[0]
-                messages[-1].content = rewritten_last_message_text
+                )
+                messages[-1].content = rewritten_texts[0]
                 chat_completion = chat_completion.model_copy(
                     update={"messages": messages}
                 )
+
+        # documents and all_but_last_message share a continuous numbering.
+        index = 0
 
         # Mark sentence boundaries in documents if present
         if (
@@ -322,11 +363,14 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
             # where `k` is the number of sentences in ALL documents.
             documents_tag = self.sentence_boundaries["documents"]
             if documents_tag:
+                rewritten_texts, index = mark_sentence_boundaries(
+                    docs_as_sentences, documents_tag, index
+                )
                 rewritten_docs = [
                     doc.model_copy(update={"text": text})
                     for doc, text in zip(
                         chat_completion.extra_body.documents,
-                        mark_sentence_boundaries(docs_as_sentences, documents_tag),
+                        rewritten_texts,
                         strict=True,
                     )
                 ]
@@ -337,6 +381,30 @@ class IntrinsicsRewriter(ChatCompletionRewriter):
                 chat_completion = chat_completion.model_copy(
                     update={"extra_body": extra_body}
                 )
+
+        # Mark sentence boundaries in conversation history if requested.
+        # Uses the same numbering as documents, continuing from where they left off.
+        if (
+            self.sentence_boundaries
+            and "all_but_last_message" in self.sentence_boundaries
+        ):
+            history_tag = self.sentence_boundaries["all_but_last_message"]
+            if history_tag:
+                messages = chat_completion.messages.copy()  # Do not modify input!
+                for i, message in enumerate(messages[:-1]):
+                    msg_as_sentences = list(
+                        self.sentence_splitter.tokenize(message.content)
+                    )
+                    rewritten_texts, index = mark_sentence_boundaries(
+                        [msg_as_sentences], history_tag, index
+                    )
+                    messages[i] = message.model_copy(
+                        update={"content": rewritten_texts[0]}
+                    )
+                chat_completion = chat_completion.model_copy(
+                    update={"messages": messages}
+                )
+
         return chat_completion
 
     def _transform(

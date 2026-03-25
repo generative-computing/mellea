@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "mellea"
-version = "0.3.2"
+version = "0.4.1"
 authors = [
     { name = "Mellea Contributors", email = "melleaadmin@ibm.com" },
 ]
@@ -29,6 +29,8 @@ dependencies = [
     "pillow", # Needed for Intrinsics (HF and OpenAI Backends).
     "math_verify", # Needed for Majority Voting Sampling Strategies.
     "rouge_score", # Needed for Majority Voting Sampling Strategies.
+    "PyYAML", # Needed for backends/adapters and granite formatters.
+    "packaging", # Needed for server type helpers.
 ]
 
 [project.scripts]
@@ -73,11 +75,14 @@ telemetry = [
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp>=1.20.0",
+    "opentelemetry-exporter-prometheus>=0.40b0",
     "opentelemetry-distro>=0.59b0",
+    "mellea[hooks]",
 ]
 
 docling = [
     "docling>=2.45.0",
+    "opencv-python-headless",  # workaround: docling-ibm-models uses cv2 but omits it from its declared dependencies; headless variant required on Apple Silicon
 ]
 
 granite_retriever = [
@@ -110,7 +115,7 @@ all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever
 
 # Code quality
 lint = [
-    "ruff>=0.11.6",
+    "ruff>=0.15.5",
     "isort>=6.0.0",
     "pre-commit>=4.2.0",
     "pylint>=3.3.4",
@@ -121,6 +126,7 @@ test = [
     "pytest-asyncio",
     "pytest-cov>=6.0.0",
     "pytest-timeout",  # For test suite timeout configuration
+    "pytest-recording",  # For blocking network access and using canned server responses
     "pytest-xdist>=3.8.0", # For concurrent test execution (uv run pytest -n auto test/)
     "psutil",  # For test infrastructure: RAM detection in conftest.py
     "nbmake>=1.5.5",  # Notebook testing
@@ -152,6 +158,9 @@ dev = [
     {include-group = "typecheck"},
     {include-group = "build"},
     {include-group = "release"},
+    "griffe>=2.0.0",
+    "mdxify>=0.2.37",
+    "poethepoet>=0.42.1",
 ]
 
 # Documentation and notebooks
@@ -166,6 +175,47 @@ docs = [
     "sphinx-autodoc-typehints",
     "sphinx_mdinclude",
 ]
+
+# -----------------------------
+# poethepoet - Task Runner
+# -----------------------------
+# Run tasks with: uv run poe <task>
+
+[tool.poe.tasks]
+
+[tool.poe.tasks.apidocs]
+cmd = "python tooling/docs-autogen/build.py"
+help = "Generate + decorate API docs (version auto-detected from pyproject.toml)"
+
+[tool.poe.tasks.apidocs-clean]
+shell = "rm -rf docs/docs/api docs/docs/api-reference.mdx .venv-docs-autogen"
+help = "Remove all generated API docs and build artefacts"
+
+[tool.poe.tasks.apidocs-validate]
+cmd = "python tooling/docs-autogen/validate.py docs/docs/api --coverage-threshold 80"
+help = "Validate generated API docs (coverage, MDX syntax, links)"
+
+[tool.poe.tasks.apidocs-test]
+cmd = "pytest tooling/docs-autogen/"
+help = "Run docs tooling unit tests"
+
+[tool.poe.tasks.apidocs-orphans]
+cmd = "python tooling/docs-autogen/audit_coverage.py --orphans"
+help = "Find MDX files not referenced in docs/mint.json navigation"
+
+[tool.poe.tasks.apidocs-quality]
+cmd = "python tooling/docs-autogen/audit_coverage.py --quality"
+help = "Audit docstring quality for documented public symbols including methods (use --no-methods to skip class methods)"
+
+[tool.poe.tasks.apidocs-preview]
+shell = """
+set -e
+PREVIEW_DIR=/tmp/mellea-preview
+python tooling/docs-autogen/build.py --output-dir "$PREVIEW_DIR/api"
+python tooling/docs-autogen/audit_coverage.py --quality \
+  --docs-dir "$PREVIEW_DIR/api"
+"""
+help = "Generate fresh API docs to /tmp/mellea-preview and audit quality."
 
 # -----------------------------
 # Ruff - Linting and Formatting
@@ -258,11 +308,11 @@ disable_error_code = [
 # -----------------------------
 
 [tool.codespell]
-ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,Wight'
+ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,Wight,Aer,aer'
 check-filenames = true
 check-hidden = false
 regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=[A-Z])|\\d+"
-skip = 'requirements.txt,uv.lock,CHANGELOG.md'
+skip = 'requirements.txt,uv.lock,CHANGELOG.md,test/formatters/granite/testdata/test_canned_output/model_output/*.json'
 
 # -----------------------------
 # Pytest - Testing Framework

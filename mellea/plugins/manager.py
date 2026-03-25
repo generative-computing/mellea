@@ -37,6 +37,13 @@ def has_plugins(hook_type: HookType | None = None) -> bool:
     When ``hook_type`` is provided, also checks whether any plugin has
     registered a handler for that specific hook, enabling callers to skip
     payload construction entirely when no plugin subscribes.
+
+    Args:
+        hook_type: Optional hook type to check for registered handlers.
+
+    Returns:
+        ``True`` if plugins are enabled and (when ``hook_type`` is given)
+        at least one plugin subscribes to that hook.
     """
     if not _plugins_enabled or _plugin_manager is None:
         return False
@@ -46,12 +53,23 @@ def has_plugins(hook_type: HookType | None = None) -> bool:
 
 
 def get_plugin_manager() -> Any | None:
-    """Returns the initialized PluginManager, or ``None`` if plugins are not configured."""
+    """Return the initialized PluginManager, or ``None`` if plugins are not configured.
+
+    Returns:
+        The singleton ``PluginManager`` instance, or ``None``.
+    """
     return _plugin_manager
 
 
 def ensure_plugin_manager() -> Any:
-    """Lazily initialize the PluginManager if not already created."""
+    """Lazily initialize the PluginManager if not already created.
+
+    Returns:
+        The singleton ``PluginManager`` instance.
+
+    Raises:
+        ImportError: If the ContextForge plugin framework is not installed.
+    """
     global _plugin_manager, _plugins_enabled
 
     if not _HAS_PLUGIN_FRAMEWORK:
@@ -87,6 +105,12 @@ async def initialize_plugins(
     Args:
         config_path: Optional path to a YAML plugin configuration file.
         timeout: Maximum execution time per plugin in seconds.
+
+    Returns:
+        The initialized ``PluginManager`` instance.
+
+    Raises:
+        ImportError: If the ContextForge plugin framework is not installed.
     """
     global _plugin_manager, _plugins_enabled
 
@@ -122,12 +146,21 @@ async def shutdown_plugins() -> None:
 
 
 def track_session_plugin(session_id: str, plugin_name: str) -> None:
-    """Track a plugin as belonging to a session for later deregistration."""
+    """Track a plugin as belonging to a session for later deregistration.
+
+    Args:
+        session_id: Identifier for the session that owns the plugin.
+        plugin_name: Registered name of the plugin.
+    """
     _session_tags.setdefault(session_id, set()).add(plugin_name)
 
 
 def deregister_session_plugins(session_id: str) -> None:
-    """Deregister all plugins scoped to the given session."""
+    """Deregister all plugins scoped to the given session.
+
+    Args:
+        session_id: Identifier for the session whose plugins should be removed.
+    """
     if not _plugins_enabled or _plugin_manager is None:
         return
 
@@ -158,6 +191,20 @@ async def invoke_hook(
     1. ``_plugins_enabled`` boolean — single pointer dereference
     2. ``has_hooks_for(hook_type)`` — skips when no plugin subscribes
     3. Returns immediately when either guard fails
+
+    Args:
+        hook_type: The hook point to invoke.
+        payload: The immutable payload to pass to plugin handlers.
+        backend: Optional backend for building the global context.
+        **context_fields: Additional fields passed to ``build_global_context``.
+
+    Returns:
+        A ``(result, payload)`` tuple where *result* is the ``PluginResult``
+        (or ``None`` when no plugins ran) and *payload* is the
+        possibly-modified payload.
+
+    Raises:
+        PluginViolationError: If a plugin blocks execution.
     """
     if not _plugins_enabled or _plugin_manager is None:
         return None, payload

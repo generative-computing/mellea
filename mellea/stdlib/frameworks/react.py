@@ -1,4 +1,11 @@
-"""ReACT Agentic Pattern."""
+"""ReACT (Reason + Act) agentic pattern implementation.
+
+Provides the ``react()`` async function, which drives a tool-use loop: the model
+reasons about a goal, selects a tool, receives the result as an observation, and
+repeats until it calls ``final_answer`` or the ``loop_budget`` is exhausted. Accepts
+any list of ``AbstractMelleaTool`` instances and a ``ChatContext`` for multi-turn
+history tracking. Raises ``RuntimeError`` if the loop ends without a final answer.
+"""
 
 # from PIL import Image as PILImage
 from mellea.backends.model_options import ModelOption

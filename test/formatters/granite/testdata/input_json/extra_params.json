@@ -1,0 +1,9 @@
+{
+    "model": "original-model-name",
+    "messages": [{
+        "role": "user",
+        "content": "This request contains some extra parameters. Does it still work?"
+    }],
+    "frequency_penalty": 0.1,
+    "n": 5
+}

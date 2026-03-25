@@ -4,6 +4,7 @@ import subprocess
 import sys
 
 import pytest
+import requests
 
 # Try to import optional dependencies for system detection
 try:
@@ -160,6 +161,12 @@ def pytest_addoption(parser):
         default=False,
         help="Register all acceptance plugin sets for every test",
     )
+    add_option_safe(
+        "--isolate-heavy",
+        action="store_true",
+        default=False,
+        help="Run heavy GPU tests in isolated subprocesses (slower, but guarantees CUDA memory release)",
+    )
 
 
 def pytest_configure(config):
@@ -188,6 +195,10 @@ def pytest_configure(config):
     )
     config.addinivalue_line("markers", "requires_gpu: Tests requiring GPU")
     config.addinivalue_line("markers", "requires_heavy_ram: Tests requiring 16GB+ RAM")
+    config.addinivalue_line(
+        "markers",
+        "requires_gpu_isolation: Explicitly tag tests/modules that require OS-level process isolation to clear CUDA memory.",
+    )
     config.addinivalue_line("markers", "qualitative: Non-deterministic quality tests")
 
     # Composite markers
@@ -207,23 +218,6 @@ def pytest_configure(config):
 # ============================================================================
 # Heavy GPU Test Process Isolation
 # ============================================================================
-
-
-def _collect_heavy_ram_modules(session) -> list[str]:
-    """Collect all test modules that have heavy RAM tests (HuggingFace, vLLM, etc.).
-
-    Returns list of module paths (e.g., 'test/backends/test_vllm.py').
-    """
-    heavy_modules = set()
-
-    for item in session.items:
-        # Check if test has requires_heavy_ram marker (covers HF, vLLM, etc.)
-        if item.get_closest_marker("requires_heavy_ram"):
-            # Get the module path
-            module_path = str(item.path)
-            heavy_modules.add(module_path)
-
-    return sorted(heavy_modules)
 
 
 def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
@@ -371,48 +365,65 @@ def cleanup_vllm_backend(backend):
 
 
 def pytest_collection_finish(session):
-    """After collection, check if we need heavy GPU test process isolation.
-
-    If heavy RAM tests (HuggingFace, vLLM, etc.) are collected and there are
-    multiple modules, run them in separate processes and exit.
-
-    Only activates on systems with CUDA GPUs where memory isolation is needed.
     """
-    # Only use process isolation on CUDA systems (not macOS/MPS)
-    config = session.config
-    ignore_gpu = config.getoption(
-        "--ignore-gpu-check", default=False
-    ) or config.getoption("--ignore-all-checks", default=False)
+    Opt-in process isolation for heavy GPU tests.
+    Prevents CUDA OOMs by forcing OS-level memory release between heavy modules.
+    """
+    # 1. Test Discovery Guard: Never isolate during discovery
+    if session.config.getoption("collectonly", default=False):
+        return
 
-    # Check if we have CUDA (not just any GPU - MPS doesn't need this)
-    has_cuda = False
-    if HAS_TORCH and not ignore_gpu:
+    # 2. Opt-in Guard: Only isolate if explicitly requested or in CI
+    use_isolation = (
+        session.config.getoption("--isolate-heavy", default=False)
+        or os.environ.get("CICD", "0") == "1"
+    )
+    if not use_isolation:
+        return
+
+    # 3. Hardware Guard: Only applies to CUDA environments
+    try:
         import torch
 
-        has_cuda = torch.cuda.is_available()
-
-    # Only use process isolation if we have CUDA GPU
-    if not has_cuda and not ignore_gpu:
+        if not torch.cuda.is_available():
+            return
+    except ImportError:
         return
 
-    # Collect heavy RAM modules
-    heavy_modules = _collect_heavy_ram_modules(session)
+    # Collect modules explicitly marked for GPU isolation
+    heavy_items = [
+        item
+        for item in session.items
+        if item.get_closest_marker("requires_gpu_isolation")
+    ]
 
-    # Only use process isolation if multiple modules
+    # Extract unique module paths
+    heavy_modules = list({str(item.path) for item in heavy_items})
+
     if len(heavy_modules) <= 1:
-        return
+        return  # No isolation needed for a single module
 
-    # Run modules in isolation
+    # Confirmation logging: Show which modules will be isolated
+    print(f"\n[INFO] GPU Isolation enabled for {len(heavy_modules)} modules:")
+    for module in heavy_modules:
+        print(f"  - {module}")
+
+    # Execute heavy modules in subprocesses
     exit_code = _run_heavy_modules_isolated(session, heavy_modules)
 
-    # Clear collected items so pytest doesn't run them again
-    session.items.clear()
+    # 4. Non-Destructive Execution: Remove heavy items, DO NOT exit.
+    session.items = [
+        item for item in session.items if str(item.path) not in heavy_modules
+    ]
 
-    # Set flag to indicate we handled heavy tests
-    session.config._heavy_process_isolation = True
-
-    # Exit with appropriate code
-    pytest.exit("Heavy GPU tests completed in isolated processes", returncode=exit_code)
+    # Propagate subprocess failures to the main pytest session
+    if exit_code != 0:
+        # Count actual test failures from the isolated modules
+        # Note: We increment testsfailed by the number of modules that failed,
+        # not the total number of modules. The _run_heavy_modules_isolated
+        # function already tracks which modules failed.
+        session.testsfailed += 1  # Mark that failures occurred
+        session.exitstatus = exit_code
 
 
 # ============================================================================

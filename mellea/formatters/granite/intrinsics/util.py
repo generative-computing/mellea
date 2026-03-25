@@ -29,8 +29,22 @@ def make_config_dict(
     This function is not a public API and is not intended for use outside this library.
 
     Common initialization code for reading YAML config files in factory classes.
-
     Also parses JSON fields.
+
+    Args:
+        config_file: Path to a YAML configuration file. Exactly one of ``config_file``
+            and ``config_dict`` must be provided.
+        config_dict: Pre-parsed configuration dict (from ``yaml.safe_load()``). Exactly
+            one of ``config_file`` and ``config_dict`` must be provided.
+
+    Returns:
+        Validated configuration dict with optional fields set to ``None`` and JSON
+        string fields parsed to Python objects.
+
+    Raises:
+        ValueError: If both or neither of ``config_file`` and ``config_dict`` are
+            provided, if a required field is missing, if an unexpected top-level
+            field is encountered, or if a JSON field cannot be parsed.
     """
     if (config_file is None and config_dict is None) or (
         config_file is not None and config_dict is not None
@@ -100,17 +114,24 @@ def obtain_lora(
     https://huggingface.co/ibm-granite/granite-lib-rag-r1.0). Caches the downloaded
     adapter files on local disk.
 
-    :param intrinsic_name: Short name of the intrinsic model, such as "certainty".
-    :param target_model_name: Name of the base model for the LoRA or aLoRA adapter.
-    :param repo_id: Optional name of Hugging Face Hub repository containing a collection
-        of LoRA and/or aLoRA adapters for intrinsics.
-    :param alora: If ``True``, load aLoRA version of intrinsic; otherwise use LoRA
-    :param cache_dir: Local directory to use as a cache (in Hugging Face Hub format),
-        or ``None`` to use the Hugging Face Hub default location.
-    :param file_glob: Only files that match this glob will be downloaded to the cache.
+    Args:
+        intrinsic_name: Short name of the intrinsic model, such as ``"certainty"``.
+        target_model_name: Name of the base model for the LoRA or aLoRA adapter.
+        repo_id: Hugging Face Hub repository containing a collection of LoRA and/or
+            aLoRA adapters for intrinsics.
+        revision: Git revision of the repository to download from.
+        alora: If ``True``, load the aLoRA version of the intrinsic; otherwise use LoRA.
+        cache_dir: Local directory to use as a cache (Hugging Face Hub format), or
+            ``None`` to use the default location.
+        file_glob: Only files matching this glob will be downloaded to the cache.
 
-    :returns: the full path to the local copy of the specified (a)LoRA adapter.
-    This path is suitable for passing to commands that will serve the adapter.
+    Returns:
+        Full path to the local copy of the specified (a)LoRA adapter, suitable for
+        passing to commands that serve the adapter.
+
+    Raises:
+        ValueError: If the specified intrinsic adapter cannot be found in the
+            Hugging Face Hub repository at the expected path.
     """
     # Third Party
     import huggingface_hub
@@ -168,17 +189,19 @@ def obtain_io_yaml(
     https://huggingface.co/ibm-granite/granite-lib-rag-r1.0) if one is not
     already in the local cache.
 
-    :param intrinsic_name: Short name of the intrinsic model, such as "certainty".
-    :param target_model_name: Name of the base model for the LoRA or aLoRA adapter.
-    :param repo_id: Optional name of Hugging Face Hub repository containing a collection
-        of LoRA and/or aLoRA adapters for intrinsics.
-        Default is to use rag-intrinsics-lib.
-    :param alora: If ``True``, load aLoRA version of intrinsic; otherwise use LoRA
-    :param cache_dir: Local directory to use as a cache (in Hugging Face Hub format),
-        or ``None`` to use the Hugging Face Hub default location.
+    Args:
+        intrinsic_name: Short name of the intrinsic model, such as ``"certainty"``.
+        target_model_name: Name of the base model for the LoRA or aLoRA adapter.
+        repo_id: Hugging Face Hub repository containing a collection of LoRA and/or
+            aLoRA adapters for intrinsics.
+        revision: Git revision of the repository to download from.
+        alora: If ``True``, load the aLoRA version of the intrinsic; otherwise use LoRA.
+        cache_dir: Local directory to use as a cache (Hugging Face Hub format), or
+            ``None`` to use the default location.
 
-    :returns: the full path to the local copy of the specified (a)LoRA adapter.
-    This path is suitable for passing to commands that will serve the adapter.
+    Returns:
+        Full path to the local copy of the ``io.yaml`` file, suitable for passing to
+        ``IntrinsicsRewriter``.
     """
     lora_dir = obtain_lora(
         intrinsic_name,

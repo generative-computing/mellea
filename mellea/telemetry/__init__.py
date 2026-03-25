@@ -1,7 +1,7 @@
 """OpenTelemetry instrumentation for Mellea.
 
 This package provides observability capabilities for Mellea through OpenTelemetry,
-enabling tracing and metrics collection for both application-level operations and
+enabling tracing, metrics, and logging for both application-level operations and
 backend LLM interactions.
 
 Package Structure:
@@ -9,6 +9,7 @@ Package Structure:
         * Application traces (mellea.application): User-facing operations
         * Backend traces (mellea.backend): LLM backend interactions
     - metrics: Metrics collection for counters, histograms, and up-down counters
+    - logging: Log export via OTLP
     - backend_instrumentation: Automatic instrumentation for backend operations
 
 Configuration:
@@ -23,15 +24,26 @@ Configuration:
     Metrics:
         - MELLEA_METRICS_ENABLED: Enable metrics collection (default: false)
         - MELLEA_METRICS_CONSOLE: Print metrics to console (default: false)
+        - MELLEA_METRICS_OTLP: Enable OTLP metrics exporter (default: false)
+        - MELLEA_METRICS_PROMETHEUS: Enable Prometheus metric reader (default: false)
         - OTEL_EXPORTER_OTLP_ENDPOINT: OTLP endpoint for metric export (optional)
+        - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: Metrics-specific OTLP endpoint (optional)
+        - OTEL_METRIC_EXPORT_INTERVAL: Export interval in milliseconds (default: 60000)
         - OTEL_SERVICE_NAME: Service name for metrics (default: mellea)
+
+    Logging:
+        - MELLEA_LOGS_OTLP: Enable OTLP log export (default: false)
+        - OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: Logs-specific endpoint (optional)
+        - OTEL_EXPORTER_OTLP_ENDPOINT: General OTLP endpoint (fallback)
+        - OTEL_SERVICE_NAME: Service name for logs (default: mellea)
 
 Dependencies:
     OpenTelemetry packages are optional. If not installed, telemetry features
     are gracefully disabled. Install with: pip install mellea[telemetry]
 
 Example:
-    from mellea.telemetry import trace_application, create_counter
+    from mellea.telemetry import trace_application, create_counter, get_otlp_log_handler
+    import logging
 
     # Trace application operations
     @trace_application("my_operation")
@@ -41,8 +53,15 @@ Example:
     # Collect metrics
     counter = create_counter("mellea.requests", unit="1")
     counter.add(1, {"backend": "ollama"})
+
+    # Export logs via OTLP
+    logger = logging.getLogger("my_app")
+    handler = get_otlp_log_handler()
+    if handler:
+        logger.addHandler(handler)
 """
 
+from .logging import get_otlp_log_handler
 from .metrics import (
     create_counter,
     create_histogram,
@@ -66,6 +85,7 @@ __all__ = [
     "create_histogram",
     "create_up_down_counter",
     "end_backend_span",
+    "get_otlp_log_handler",
     "is_application_tracing_enabled",
     "is_backend_tracing_enabled",
     "is_metrics_enabled",

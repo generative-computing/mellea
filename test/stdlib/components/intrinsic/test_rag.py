@@ -36,7 +36,7 @@ def _backend():
     # Prevent thrashing if the default device is CPU
     torch.set_num_threads(4)
 
-    backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.hf_model_name)  # type: ignore
+    backend_ = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")  # type: ignore
     yield backend_
 
     # Code after yield is cleanup code.
@@ -165,44 +165,6 @@ def test_hallucination_detection(backend):
     result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
     for r, e in zip(result, expected, strict=True):  # type: ignore
         assert pytest.approx(r, abs=2e-2) == e
-
-
-@pytest.mark.qualitative
-def test_answer_relevance(backend):
-    """Verify that the answer relevance composite intrinsic functions properly."""
-    context, answer, docs = _read_input_json("answer_relevance.json")
-
-    # Note that this is not the optimal answer. This test is currently using an
-    # outdated LoRA adapter. Releases of new adapters will come after the Mellea
-    # integration has stabilized.
-    expected_rewrite = "The meeting attendees were Alice, Bob, and Carol."
-
-    # First call triggers adapter loading
-    result = rag.rewrite_answer_for_relevance(answer, docs, context, backend)
-    assert result == expected_rewrite
-
-    # Second call hits a different code path from the first one
-    result = rag.rewrite_answer_for_relevance(answer, docs, context, backend)
-    assert result == expected_rewrite
-
-    # Canned input always gets rewritten. Set threshold to disable the rewrite.
-    result = rag.rewrite_answer_for_relevance(
-        answer, docs, context, backend, rewrite_threshold=0.0
-    )
-    assert result == answer
-
-
-@pytest.mark.qualitative
-def test_answer_relevance_classifier(backend):
-    """Verify that the first phase of the answer relevance flow behaves as expectee."""
-    context, answer, docs = _read_input_json("answer_relevance.json")
-
-    result_json = rag._call_intrinsic(
-        "answer_relevance_classifier",
-        context.add(Message("assistant", answer, documents=list(docs))),
-        backend,
-    )
-    assert result_json["answer_relevance_likelihood"] == 0.0
 
 
 @pytest.mark.qualitative

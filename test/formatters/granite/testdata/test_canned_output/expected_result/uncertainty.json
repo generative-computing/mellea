@@ -1,0 +1,29 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "{\"certainty\": 0.44682381241838287}",
+                "role": "assistant",
+                "tool_calls": [],
+                "reasoning_content": null
+            },
+            "finish_reason": "length"
+        }
+    ],
+    "prompt_logprobs": null,
+    "id": "chatcmpl-969dbb95e48c4cda9c398b059e449fe0",
+    "created": 1758246309,
+    "model": "uncertainty",
+    "object": "chat.completion",
+    "service_tier": null,
+    "system_fingerprint": null,
+    "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 166,
+        "total_tokens": 168,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": null
+    },
+    "kv_transfer_params": null
+}

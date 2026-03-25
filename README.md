@@ -8,7 +8,7 @@ with structured, maintainable, robust, and efficient AI workflows.
 
 
 [//]: # ([![arXiv]&#40;https://img.shields.io/badge/arXiv-2408.09869-b31b1b.svg&#41;]&#40;https://arxiv.org/abs/2408.09869&#41;)
-[![Docs](https://img.shields.io/badge/docs-live-brightgreen)](https://mellea.ai/)
+[![Docs](https://img.shields.io/badge/docs-live-brightgreen)](https://docs.mellea.ai/)
 [![PyPI version](https://img.shields.io/pypi/v/mellea)](https://pypi.org/project/mellea/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mellea)](https://pypi.org/project/mellea/)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
@@ -16,7 +16,6 @@ with structured, maintainable, robust, and efficient AI workflows.
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![GitHub License](https://img.shields.io/github/license/generative-computing/mellea)](https://img.shields.io/github/license/generative-computing/mellea)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-3.0-4baaaa.svg)](CODE_OF_CONDUCT.md)
-[![Discord](https://img.shields.io/discord/1448407063813165219?logo=discord&logoColor=white&label=Discord&color=7289DA)](https://ibm.biz/mellea-discord)
 
 
 ## Features
@@ -182,11 +181,6 @@ if __name__ == "__main__":
 ```
 
 
-
-## Tutorial
-
-See the [tutorial](docs/tutorial.md)
-
 ## Contributing
 
 We welcome contributions to Mellea! There are several ways to contribute:
@@ -201,7 +195,7 @@ Please see our **[Contributing Guide](CONTRIBUTING.md)** for detailed informatio
 - Testing guidelines
 - How to contribute specific types of components
 
-Questions? Join our [Discord](https://ibm.biz/mellea-discord)!
+Questions? Create a [discussion](https://github.com/generative-computing/mellea/discussions)!
 
 ### IBM ❤️ Open Source AI
 

@@ -1,4 +1,12 @@
-"""Chat primitives."""
+"""Chat primitives: the ``Message`` and ``ToolMessage`` components.
+
+Defines ``Message``, the ``Component`` subtype used to represent a single turn in a
+chat history with a ``role`` (``user``, ``assistant``, ``system``, or ``tool``),
+text ``content``, and optional ``images`` and ``documents`` attachments. Also provides
+``ToolMessage`` (a ``Message`` subclass that carries the tool name and arguments) and
+the ``as_chat_history`` utility for converting a ``Context`` into a flat list of
+``Message`` objects.
+"""
 
 from collections.abc import Mapping
 from typing import Any, Literal
@@ -21,6 +29,19 @@ class Message(Component["Message"]):
 
     TODO: we may want to deprecate this Component entirely.
     The fact that some Component gets rendered as a chat message is `Formatter` miscellania.
+
+    Args:
+        role (str): The role that this message came from (e.g., ``"user"``,
+            ``"assistant"``).
+        content (str): The content of the message.
+        images (list[ImageBlock] | None): Optional images associated with the
+            message.
+        documents (list[Document] | None): Optional documents associated with
+            the message.
+
+    Attributes:
+        Role (type): Type alias for the allowed role literals: ``"system"``,
+            ``"user"``, ``"assistant"``, or ``"tool"``.
     """
 
     Role = Literal["system", "user", "assistant", "tool"]
@@ -33,14 +54,7 @@ class Message(Component["Message"]):
         images: None | list[ImageBlock] = None,
         documents: None | list[Document] = None,
     ):
-        """Initializer for Chat messages.
-
-        Args:
-            role (str): The role that this message came from (e.g., user, assistant).
-            content (str): The content of the message.
-            images (list[ImageBlock]): The images associated with the message if any.
-            documents (list[Document]): documents associated with the message if any.
-        """
+        """Initialize a Message with a role, text content, and optional images and documents."""
         self.role = role
         self.content = content  # TODO this should be private.
         self._content_cblock = CBlock(self.content)
@@ -65,7 +79,12 @@ class Message(Component["Message"]):
         return self._sec_level
 
     def parts(self) -> list[Component | CBlock]:
-        """Returns all of the constituent parts of an Instruction."""
+        """Return the constituent parts of this message, including content, documents, and images.
+
+        Returns:
+            list[Component | CBlock]: A list beginning with the content block,
+            followed by any attached documents and image blocks.
+        """
         parts: list[Component | CBlock] = [self._content_cblock]
         if self._docs is not None:
             parts.extend(self._docs)
@@ -174,7 +193,21 @@ class Message(Component["Message"]):
 
 
 class ToolMessage(Message):
-    """Adds the name field for function name."""
+    """Adds the name field for function name.
+
+    Args:
+        role (str): The role of this message; most backends use ``"tool"``.
+        content (str): The content of the message; should be a stringified
+            version of ``tool_output``.
+        tool_output (Any): The output of the tool or function call.
+        name (str): The name of the tool or function that was called.
+        args (Mapping[str, Any]): The arguments passed to the tool.
+        tool (ModelToolCall): The ``ModelToolCall`` representation.
+
+    Attributes:
+        arguments (Mapping[str, Any]): The arguments that were passed to the
+            tool; stored from the ``args`` constructor parameter.
+    """
 
     def __init__(
         self,
@@ -185,16 +218,7 @@ class ToolMessage(Message):
         args: Mapping[str, Any],
         tool: ModelToolCall,
     ):
-        """Initializer for Chat messages.
-
-        Args:
-            role: the role of this message. Most backends/models use something like tool.
-            content: The content of the message; should be a stringified version of the tool_output.
-            name: The name of the tool/function.
-            args: The args required to call the function.
-            tool_output: the output of the tool/function call.
-            tool: the ModelToolCall representation.
-        """
+        """Initialize a ToolMessage with role, content, tool output, name, args, and tool call."""
         super().__init__(role, content)
         self.name = name
         self.arguments = args
@@ -202,7 +226,12 @@ class ToolMessage(Message):
         self._tool = tool
 
     def format_for_llm(self) -> TemplateRepresentation:
-        """The same representation as Message with a name field added to args."""
+        """Return the same representation as ``Message`` with a ``name`` field added to the args dict.
+
+        Returns:
+            TemplateRepresentation: Template representation including the tool
+            name alongside the standard message fields.
+        """
         message_repr = super().format_for_llm()
         args = message_repr.args
         args["name"] = self.name
@@ -217,7 +246,21 @@ class ToolMessage(Message):
 
 
 def as_chat_history(ctx: Context) -> list[Message]:
-    """Returns a list of Messages corresponding to a Context."""
+    """Returns a list of Messages corresponding to a Context.
+
+    Args:
+        ctx: A linear ``Context`` whose entries are ``Message`` or ``ModelOutputThunk``
+            objects with ``Message`` parsed representations.
+
+    Returns:
+        List of ``Message`` objects in conversation order.
+
+    Raises:
+        Exception: If the context history is non-linear and cannot be cast to a
+            flat list.
+        AssertionError: If any entry in the context cannot be converted to a
+            ``Message``.
+    """
 
     def _to_msg(c: CBlock | Component | ModelOutputThunk) -> Message | None:
         match c:

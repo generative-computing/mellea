@@ -19,6 +19,16 @@ class ModelOption:
         ModelOption.SYSTEM_PROMPT : "You are a helpful assistant"
     }
     ```
+
+    Attributes:
+        TOOLS (str): Sentinel key for a list or dict of tools to expose for tool calling.
+        MAX_NEW_TOKENS (str): Sentinel key for the maximum number of new tokens to generate.
+        SYSTEM_PROMPT (str): Sentinel key for the system prompt string.
+        TEMPERATURE (str): Key for the sampling temperature (passed through to the backend).
+        CONTEXT_WINDOW (str): Sentinel key for the context window size.
+        THINKING (str): Sentinel key for enabling/configuring reasoning/thinking mode.
+        SEED (str): Sentinel key for the random seed for reproducible generation.
+        STREAM (str): Sentinel key for enabling streaming responses.
     """
 
     TOOLS = "@@@tools@@@"
@@ -34,7 +44,9 @@ class ModelOption:
 
     @staticmethod
     def replace_keys(options: dict, from_to: dict[str, str]) -> dict[str, Any]:
-        """Returns a new dict with the keys in `options` replaced with the corresponding value for that key in `from_to`.
+        """Return a new dict with selected keys in ``options`` renamed according to ``from_to``.
+
+        Returns a new dict with the keys in `options` replaced with the corresponding value for that key in `from_to`.
 
         * Any key with value == None is treated the same as the key missing.
 
@@ -55,6 +67,13 @@ class ModelOption:
 
         * Notice that "M1" keeps the original value "m1", rather than "v1".
         * Notice that both "k1" and "k2" are absent in the output.
+
+        Args:
+            options (dict): The source dictionary whose keys may be renamed.
+            from_to (dict[str, str]): Mapping of old key names to new key names.
+
+        Returns:
+            dict[str, Any]: A new dictionary with the specified keys renamed.
         """
         new_options = {}
 
@@ -92,8 +111,18 @@ class ModelOption:
         return new_options
 
     @staticmethod
-    def remove_special_keys(model_options) -> dict[str, Any]:
-        """Removes all sentiel-valued keys (i.e., those that start with @@@)."""
+    def remove_special_keys(model_options: dict[str, Any]) -> dict[str, Any]:
+        """Return a copy of ``model_options`` with all sentinel-valued keys removed.
+
+        Sentinel keys are those whose names start with ``@@@`` (e.g. ``ModelOption.TOOLS``).
+        These are Mellea-internal keys that must not be forwarded to backend APIs.
+
+        Args:
+            model_options (dict[str, Any]): A model options dictionary that may contain sentinel keys.
+
+        Returns:
+            dict[str, Any]: A new dictionary with all ``@@@``-prefixed keys omitted.
+        """
         new_options = {}
         for k, v in model_options.items():
             if not k.startswith("@@@"):
@@ -104,7 +133,19 @@ class ModelOption:
     def merge_model_options(
         persistent_opts: dict[str, Any], overwrite_opts: dict[str, Any] | None
     ) -> dict[str, Any]:
-        """Creates a new dict that contains all keys and values from persistent opts and overwrite opts. If there are duplicate keys, overwrite opts key value pairs will be used."""
+        """Merge two model-options dicts, with ``overwrite_opts`` taking precedence on conflicts.
+
+        Creates a new dict that contains all keys and values from persistent opts and overwrite opts.
+        If there are duplicate keys, overwrite opts key value pairs will be used.
+
+        Args:
+            persistent_opts (dict[str, Any]): Base model options (lower precedence).
+            overwrite_opts (dict[str, Any] | None): Per-call model options that override
+                ``persistent_opts`` on key conflicts; ``None`` is treated as empty.
+
+        Returns:
+            dict[str, Any]: A new merged dictionary.
+        """
         new_options = {}
 
         for k, v in persistent_opts.items():

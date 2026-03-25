@@ -1,0 +1,36 @@
+{
+  "messages": [
+    {
+      "content": "Who is the CEO of Microsoft?",
+      "role": "user"
+    },
+    {
+      "content": "DOCUMENT: Microsoft Corporation is an American multinational corporation and technology conglomerate headquartered in Redmond, Washington.[2] Founded in 1975, the company became influential in the rise of personal computers through software like Windows, and the company has since expanded to Internet services, cloud computing, video gaming and other fields. Microsoft is the largest software maker, one of the most valuable public U.S. companies,[a] and one of the most valuable brands globally.\n",
+      "role": "user"
+    }
+  ],
+  "extra_body": {
+    "structured_outputs": {
+      "json": {
+        "title": "ContextRelevanceOutput",
+        "type": "object",
+        "properties": {
+          "context_relevance": {
+            "type": "string",
+            "description": "Context relevancy judgment.",
+            "enum": [
+              "relevant",
+              "irrelevant",
+              "partially relevant"
+            ]
+          }
+        },
+        "required": [
+          "context_relevance"
+        ]
+      }
+    }
+  },
+  "logprobs": true,
+  "top_logprobs": 10
+}

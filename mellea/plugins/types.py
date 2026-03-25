@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 try:
@@ -14,7 +14,7 @@ except ImportError:
     _HAS_PLUGIN_FRAMEWORK = False
 
 
-class PluginMode(str, Enum):
+class PluginMode(StrEnum):
     """Execution modes for Mellea plugins.
 
     Execution order: SEQUENTIAL → TRANSFORM → AUDIT → CONCURRENT → FIRE_AND_FORGET
@@ -27,8 +27,12 @@ class PluginMode(str, Enum):
     FIRE_AND_FORGET = "fire_and_forget"
 
 
-class HookType(str, Enum):
-    """All Mellea hook types."""
+class HookType(StrEnum):
+    """All Mellea hook types.
+
+    Hook types are organized by lifecycle stage: session, component,
+    generation pipeline, validation, sampling pipeline, and tool execution.
+    """
 
     # Session Lifecycle
     SESSION_PRE_INIT = "session_pre_init"
