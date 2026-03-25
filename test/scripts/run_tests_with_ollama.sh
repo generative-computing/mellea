@@ -35,8 +35,14 @@ OLLAMA_MODELS=(
     "granite3.2-vision"
 )
 
-# Log directory
-LOGDIR="logs/$(date +%Y%m%d_%H%M%S)"
+# Log directory - use MELLEA_LOGDIR if set (from nightly.py), otherwise create standalone
+if [[ -n "${MELLEA_LOGDIR:-}" ]]; then
+    LOGDIR="$MELLEA_LOGDIR"
+    log "Using provided log directory: $LOGDIR"
+else
+    LOGDIR="logs/$(date +%Y-%m-%d-%H:%M:%S)"
+    log "Using standalone log directory: $LOGDIR"
+fi
 mkdir -p "$LOGDIR"
 
 cleanup() {
