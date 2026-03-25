@@ -6,6 +6,7 @@ from enum import Enum
 from ...backends.adapters import AdapterMixin
 from ...core import Backend, Context, Requirement, ValidationResult
 from ..components import Document, Message
+from ..context import ChatContext
 
 
 class CitationMode(Enum):
@@ -191,17 +192,11 @@ class CitationRequirement(Requirement):
         all_messages = ctx.as_list()
         if len(all_messages) > 1:
             # Rebuild context without last message
-            # Import here to avoid circular dependency
-            from ..context import ChatContext
-
             context_before_response = ChatContext()
             for msg in all_messages[:-1]:
                 context_before_response = context_before_response.add(msg)
         else:
             # If only one message, use empty context
-            # Import here to avoid circular dependency
-            from ..context import ChatContext
-
             context_before_response = ChatContext()
 
         # Handle empty response before calling intrinsic
@@ -215,7 +210,7 @@ class CitationRequirement(Requirement):
 
         # Call find_citations intrinsic
         try:
-            # Import here to avoid circular dependency
+            # Import here to avoid circular dependency with backends
             from ..components.intrinsic import rag
 
             citations: list[dict] = rag.find_citations(
