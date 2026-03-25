@@ -145,8 +145,15 @@ log "Warmup complete."
 log "Starting pytest..."
 log "Log directory: $LOGDIR"
 log "Pytest args: ${*---group-by-backend}"
+${UV_PYTHON:+log "Python version: $UV_PYTHON"}
 
-uv run --quiet --frozen --all-groups --all-extras \
+# Use UV_PYTHON env var if set, otherwise use default Python
+UV_PYTHON_ARG=""
+if [[ -n "${UV_PYTHON:-}" ]]; then
+    UV_PYTHON_ARG="--python $UV_PYTHON"
+fi
+
+uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
     pytest test/ ${@---group-by-backend} \
     2>&1 | tee "$LOGDIR/pytest_full.log"
 

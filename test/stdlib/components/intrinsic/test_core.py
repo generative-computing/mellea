@@ -12,6 +12,7 @@ from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import core
 from mellea.stdlib.context import ChatContext
+from test.conftest import cleanup_gpu_backend
 from test.stdlib.components.intrinsic.test_rag import (
     _read_input_json as _read_rag_input_json,
     _read_output_json as _read_rag_output_json,
@@ -46,13 +47,7 @@ def _backend():
     yield backend_
 
     # Code after yield is cleanup code.
-    # Free GPU memory with extreme prejudice.
-    del backend_
-    gc.collect()
-    gc.collect()
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    cleanup_gpu_backend(backend_, "test_core")
 
 
 def _read_input_json(file_name: str):
