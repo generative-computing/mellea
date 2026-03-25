@@ -8,7 +8,7 @@ Takes a prompt containing deprecated Qiskit code and:
 1. Detects QKT violations in the input code
 2. Passes those violations to the LLM as context
 3. Generates corrected code that passes QKT validation
-4. Automatically repairs the code if validation fails (up to 5 attempts)
+4. Automatically repairs the code if validation fails (up to 10 attempts)
 
 ## Quick Start
 
@@ -22,7 +22,7 @@ Dependencies (`mellea`, `flake8-qiskit-migration`) are automatically installed.
 ## Requirements
 
 - **Ollama backend** running locally (`ollama serve`)
-- **Compatible model**: e.g., `hf.co/Qiskit/mistral-small-3.2-24b-qiskit-GGUF:latest` or `granite4:small-h`
+- **Compatible model**: `hf.co/Qiskit/mistral-small-3.2-24b-qiskit-GGUF:latest` (recommended — domain-specialized; see [Changing the Model](#changing-the-model))
 - **flake8-qiskit-migration**: Automatically installed when using `uv run`
 
 ## How It Works
@@ -32,7 +32,7 @@ Dependencies (`mellea`, `flake8-qiskit-migration`) are automatically installed.
 1. **Pre-condition validation**: Validates the input prompt and any code it contains
 2. **Instruction**: LLM generates code following structured requirements
 3. **Post-condition validation**: Validates generated code against QKT rules (see [Qiskit Migration Guide](https://docs.quantum.ibm.com/api/migration-guides))
-4. **Repair loop**: Automatically repairs code that fails validation (up to 5 attempts)
+4. **Repair loop**: Automatically repairs code that fails validation (up to 10 attempts)
 
 ### Sampling Strategies
 
@@ -183,22 +183,17 @@ qc.measure_all()
 Validation failed with 1 error(s):
 QKT101: QuantumCircuit.cnot() has been removed in Qiskit 1.0; use `.cx()` instead
 
-====== Result (83.5s) ======
+====== Result (23.1s, 2 attempt(s)) ======
 ```python
-from qiskit_aer import AerSimulator
-from qiskit import QuantumCircuit
+from qiskit_aer import AerSimulator, QuantumCircuit
 
 backend = AerSimulator()
 
 qc = QuantumCircuit(5, 5)
 qc.h(0)
-qc.cx(0, range(1, 5))  # Fixed: use .cx() instead of .cnot()
+qc.cx(0, range(1, 5))
 qc.measure_all()
-
-job = backend.run(qc)
-result = job.result()
 ```
-I fixed the code by replacing `QuantumCircuit.cnot()` with `QuantumCircuit.cx()` as required by Qiskit 1.0. I also replaced the deprecated `BasicAer.get_backend('qasm_simulator')` with `AerSimulator()`. This code should now pass Qiskit migration validation (QKT rules).
 ======================
 
 ✓ Code passes Qiskit migration validation
@@ -211,13 +206,12 @@ I fixed the code by replacing `QuantumCircuit.cnot()` with `QuantumCircuit.cx()`
 To try a different model, edit the `model_id` variable in the `test_qiskit_code_validation()` function:
 
 ```python
-# Uncomment one to try different models
-# model_id = "granite4:micro-h"
-# model_id = "granite4:small-h"
 model_id = "hf.co/Qiskit/mistral-small-3.2-24b-qiskit-GGUF:latest"
 ```
 
-**Note**: Smaller models (like `granite4:micro-h`) may not have enough Qiskit knowledge to pass validation consistently. The Qiskit-specific model or `granite4:small-h` work best.
+The default model is a Qiskit-specialized fine-tune of Mistral Small. It requires a large initial download (~15GB) but produces reliable results without a system prompt.
+
+General-purpose models (e.g. `granite4:micro-h`) can be used as a lighter alternative but have significantly lower correctness on Qiskit tasks. When using a non-specialized model, set `system_prompt = QISKIT_SYSTEM_PROMPT` to improve results.
 
 ## Troubleshooting
 
@@ -237,9 +231,9 @@ ollama pull hf.co/Qiskit/mistral-small-3.2-24b-qiskit-GGUF:latest
 ```
 
 ### Validation Always Fails
-If using smaller models (e.g., `granite4:micro-h`), they may not have enough Qiskit knowledge. Try:
-- Using a larger model (`granite4:small-h` or the Qiskit-specific model)
-- Reducing prompt complexity
+If using a general-purpose model, it may not have enough Qiskit knowledge to pass validation consistently. Try:
+- Switching to the Qiskit-specialized model (`hf.co/Qiskit/mistral-small-3.2-24b-qiskit-GGUF:latest`)
+- Setting `system_prompt = QISKIT_SYSTEM_PROMPT` to guide the model toward modern Qiskit APIs
 - Using simpler prompts
 
 ### Import Error: flake8-qiskit-migration
@@ -248,8 +242,3 @@ ModuleNotFoundError: No module named 'flake8_qiskit_migration'
 ```
 **Solution**: Use `uv run` which auto-installs dependencies
 
-## Future Work
-
-The following enhancements are planned for future iterations:
-
-1. **Enable Smaller Models** - Add system prompt or grounding context with Qiskit API documentation to help smaller models perform accurate migrations. This would allow removing the `pytest.mark.skip` marker and make the example run in standard test suites.
