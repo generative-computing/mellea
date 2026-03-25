@@ -47,7 +47,7 @@ class CBlock:
         self,
         value: str | None,
         meta: dict[str, Any] | None = None,
-        sec_level: Any = None,
+        sec_level: SecLevel | None = None,
         *,
         cache: bool = False,
     ):
@@ -299,11 +299,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
         meta: dict[str, Any] | None = None,
         parsed_repr: S | None = None,
         tool_calls: dict[str, ModelToolCall] | None = None,
-        sec_level: Any = None,
+        sec_level: SecLevel | None = None,
     ):
         """Initialize ModelOutputThunk with an optional pre-computed value and metadata."""
-        super().__init__(value, meta)
-        """Initializes as a cblock, optionally also with a parsed representation from an output formatter."""
         super().__init__(value, meta, sec_level=sec_level)
 
         self.parsed_repr: S | None = parsed_repr

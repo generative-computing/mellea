@@ -198,6 +198,7 @@ class Requirement(Component[str]):
             List of constituent components. Empty by default; subclasses override
             to expose their internal structure.
         """
+        return []
 
     @property
     def sec_level(self) -> SecLevel | None:
