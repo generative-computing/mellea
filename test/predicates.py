@@ -26,6 +26,8 @@ Usage::
 from __future__ import annotations
 
 import os
+import platform
+import subprocess
 import sys
 
 import pytest
@@ -34,14 +36,36 @@ import pytest
 # GPU
 # ---------------------------------------------------------------------------
 
+_IS_APPLE_SILICON = sys.platform == "darwin" and platform.machine() == "arm64"
+
+
+def _apple_silicon_vram_gb() -> float:
+    """Conservative usable GPU memory estimate for Apple Silicon.
+
+    Metal's ``recommendedMaxWorkingSetSize`` is a static device property
+    (~75% of total RAM) that does not account for current system load.
+    We use ``min(total * 0.75, total - 16)`` to leave headroom for the OS
+    and desktop applications, which typically consume 8–16 GB on a loaded
+    developer machine.
+    """
+    try:
+        out = subprocess.run(
+            ["sysctl", "-n", "hw.memsize"],
+            capture_output=True, text=True, timeout=2,
+        )
+        total_gb = int(out.stdout.strip()) / (1024**3)
+        return min(total_gb * 0.75, total_gb - 16)
+    except Exception:
+        return 0.0
+
 
 def _gpu_available() -> bool:
+    if _IS_APPLE_SILICON:
+        return True
     try:
         import torch
 
-        return torch.cuda.is_available() or (
-            hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
-        )
+        return torch.cuda.is_available()
     except ImportError:
         return False
 
@@ -49,18 +73,17 @@ def _gpu_available() -> bool:
 def _gpu_vram_gb() -> float:
     """Return usable GPU VRAM in GB, or 0 if unavailable.
 
-    On CUDA: reports device 0 total memory.
-    On macOS MPS: reports ``recommendedMaxWorkingSetSize`` — the Metal
-    driver's own estimate of how much unified memory the GPU can use
-    without degrading system performance.
+    On Apple Silicon: uses a conservative heuristic based on total unified
+    memory rather than Metal's static ``recommendedMaxWorkingSetSize``.
+    On CUDA: reports device 0 total memory via torch.
     """
+    if _IS_APPLE_SILICON:
+        return _apple_silicon_vram_gb()
     try:
         import torch
 
         if torch.cuda.is_available():
             return torch.cuda.get_device_properties(0).total_memory / (1024**3)
-        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            return torch.mps.recommended_max_memory() / (1024**3)
     except (ImportError, RuntimeError, AttributeError):
         pass
     return 0.0

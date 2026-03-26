@@ -65,12 +65,25 @@ def get_system_capabilities():
     }
 
     # Detect GPU (CUDA for NVIDIA, MPS for Apple Silicon)
-    if HAS_TORCH:
-        has_cuda = torch.cuda.is_available()
-        has_mps = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
-        capabilities["has_gpu"] = has_cuda or has_mps
+    import platform as _platform
+    import subprocess as _subprocess
 
-        if has_cuda:
+    _is_apple_silicon = sys.platform == "darwin" and _platform.machine() == "arm64"
+
+    if _is_apple_silicon:
+        capabilities["has_gpu"] = True
+        try:
+            out = _subprocess.run(
+                ["sysctl", "-n", "hw.memsize"],
+                capture_output=True, text=True, timeout=2,
+            )
+            total_gb = int(out.stdout.strip()) / (1024**3)
+            capabilities["gpu_memory_gb"] = min(total_gb * 0.75, total_gb - 16)
+        except Exception:
+            pass
+    elif HAS_TORCH:
+        if torch.cuda.is_available():
+            capabilities["has_gpu"] = True
             try:
                 # Use nvidia-smi to avoid initializing CUDA in parent process.
                 # torch.cuda.get_device_properties(0) creates a CUDA context,
@@ -88,13 +101,6 @@ def get_system_capabilities():
                 )
                 capabilities["gpu_memory_gb"] = float(result.stdout.strip()) / 1024
             except Exception:
-                pass
-        elif has_mps:
-            try:
-                capabilities["gpu_memory_gb"] = torch.mps.recommended_max_memory() / (
-                    1024**3
-                )
-            except (RuntimeError, AttributeError):
                 pass
 
     # Detect RAM
