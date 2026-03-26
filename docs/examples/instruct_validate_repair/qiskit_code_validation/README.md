@@ -47,20 +47,20 @@ To switch strategies, edit the `use_multiturn_strategy` variable in `test_qiskit
 
 #### Strategy Performance Comparison
 
-Benchmarks on `mistral-small-3.2-24b-qiskit` model (pass rates measure QKT validation only, not correctness):
+Benchmarks on `mistral-small-3.2-24b-qiskit` model, no system prompt:
 
-| Dataset | Strategy | First Pass | Post-Repair |
+| Dataset | Strategy | First Pass (QKT) | Post-Repair (QKT) |
 |---------|----------|------------|-------------|
-| **QHE** | RepairTemplate | 78.2% | **99.3%** |
-|         | MultiTurn | 77.5% | 96.7% |
-| **QKT** | RepairTemplate | 54.1% | **83.8%** |
-|         | MultiTurn | 37.8% | 70.3% |
+| **QHE** | RepairTemplate | 98.0% | **100%** |
+|         | MultiTurn | **100%** | **100%** |
+| **QKT** | RepairTemplate | 98.0% | **100%** |
+|         | MultiTurn | 93.3% | **100%** |
 
 **Datasets:**
-- **QHE** (QiskitHumanEval): Code generation tasks testing general Qiskit programming
-- **QKT**: Qiskit version migration tasks requiring fixes to deprecated APIs
+- **QHE** (QiskitHumanEval): 151 general Qiskit code generation tasks
+- **QKT**: 45 Qiskit version migration tasks requiring fixes to deprecated APIs
 
-**Note:** These benchmarks measure whether generated code passes QKT validation rules, not whether the code correctly solves the prompt. Both aspects are important for production use.
+**Note:** Pass rates measure whether generated code passes QKT validation rules, not whether the code correctly solves the prompt. On QHE, the model achieves ~32.5% correctness when running the QHE check() test suite against the generated code. Full benchmark data and analysis are available in @ajbozarth's [toolbox repo](https://github.com/ajbozarth/toolbox/tree/main/mellea/qiskit_code_validation/benchmarking).
 
 ### Code Structure
 
