@@ -172,6 +172,47 @@ def _check_optional_imports(file_path):
                         "langchain_community not installed (install with: uv pip install mellea[tools])",
                     )
 
+        # Check for docling imports (direct or via mellea.stdlib.components.docs)
+        if (
+            "import docling" in content
+            or "from docling" in content
+            or "from mellea.stdlib.components.docs.richdocument" in content
+        ):
+            try:
+                import docling
+            except ImportError:
+                return (
+                    True,
+                    "docling not installed (install with: uv pip install mellea[docling])",
+                )
+
+        # Check for pandas imports
+        if "import pandas" in content or "from pandas" in content:
+            try:
+                import pandas
+            except ImportError:
+                return True, "pandas not installed"
+
+        # Check for cpex (mellea[hooks]) — plugins that call register()/plugin_scope()
+        if "from mellea.plugins" in content or "import mellea.plugins" in content:
+            try:
+                import cpex
+            except ImportError:
+                return (
+                    True,
+                    "cpex not installed (install with: uv pip install mellea[hooks])",
+                )
+
+        # Check for litellm
+        if "import litellm" in content or "from litellm" in content:
+            try:
+                import litellm
+            except ImportError:
+                return (
+                    True,
+                    "litellm not installed (install with: uv pip install mellea[backends])",
+                )
+
     except Exception:
         pass
 
@@ -369,6 +410,12 @@ def pytest_pycollect_makemodule(module_path, parent):
 
     if should_skip:
         # Prevent import by returning custom collector
+        return SkippedFile.from_parent(parent, path=file_path)
+
+    # Also check optional imports here — this hook fires for directly-specified
+    # files too, whereas pytest_ignore_collect only fires during directory traversal.
+    should_skip, _reason = _check_optional_imports(file_path)
+    if should_skip:
         return SkippedFile.from_parent(parent, path=file_path)
 
     return None
