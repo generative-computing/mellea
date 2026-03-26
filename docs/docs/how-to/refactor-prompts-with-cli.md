@@ -60,15 +60,13 @@ Save this as `party_plan.txt`.
 ## Step 2: Run the decompose command
 
 ```bash
-m decompose run --prompt-file party_plan.txt --out-dir ./output/
+m decompose run --input-file party_plan.txt --out-dir ./output/
 ```
 
-This produces two files in `./output/`:
+This produces a subdirectory under `./output/`:
 
-- `m_decomp_result.py` — a runnable Python script with one `m.instruct()` call
-  per subtask, in dependency order
-- `m_decomp_result.json` — the full decomposition: subtask list, extracted
-  constraints, dependency graph, and Jinja2 prompt templates
+- `./output/m_decomp_result/m_decomp_result.py` — a runnable Python script with one `m.instruct()` call per subtask, in dependency order
+- `./output/m_decomp_result/m_decomp_result.json` — the full decomposition: subtask list, extracted constraints, dependency graph, and Jinja2 prompt templates
 
 > **Note:** The `--out-dir` directory must already exist. `m decompose` does not
 > create it.
@@ -90,13 +88,13 @@ This produces two files in `./output/`:
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--prompt-file` | (interactive) | Path to a text file containing the task prompt. Omit to enter the prompt interactively. |
+| `--input-file` | (interactive) | Path to a text file containing the task prompt. Omit to enter the prompt interactively. |
 | `--out-dir` | (required) | Path to the directory for output files. Must exist. |
 | `--out-name` | `m_decomp_result` | Base name for the output `.py` and `.json` files. |
 | `--model-id` | `mistral-small3.2:latest` | Model to use for the decomposition. |
-| `--backend` | `ollama` | Inference backend: `ollama` or `openai`. |
-| `--backend-endpoint` | — | URL endpoint. Required when `--backend openai`. |
-| `--backend-api-key` | — | API key. Required when `--backend openai`. |
+| `--backend` | `ollama` | Inference backend: `ollama`, `openai`, or `rits`. |
+| `--backend-endpoint` | — | URL endpoint. Required when `--backend openai` or `--backend rits`. |
+| `--backend-api-key` | — | API key. Required when `--backend openai` or `--backend rits`. |
 | `--backend-req-timeout` | `300` | Request timeout in seconds. |
 | `--input-var` | — | Repeatable. Declares a user input variable name (uppercase Python identifier). |
 
@@ -161,7 +159,7 @@ Each subtask is a separate `m.instruct()` call. Subtasks that depend on earlier
 outputs receive them through `user_variables`. The file runs as-is:
 
 ```bash
-python output/m_decomp_result.py
+python output/m_decomp_result/m_decomp_result.py
 ```
 
 > **Note:** Generated output varies — LLM responses depend on model and
@@ -250,7 +248,7 @@ and underscores:
 
 ```bash
 m decompose run \
-  --prompt-file party_plan.txt \
+  --input-file party_plan.txt \
   --out-dir ./output/ \
   --input-var CHILD_NAME \
   --input-var PARTY_DATE
@@ -274,7 +272,7 @@ boundaries:
 
 ```bash
 m decompose run \
-  --prompt-file party_plan.txt \
+  --input-file party_plan.txt \
   --out-dir ./output/ \
   --model-id mistral-large:latest
 ```
@@ -283,7 +281,7 @@ To use an OpenAI-compatible endpoint:
 
 ```bash
 m decompose run \
-  --prompt-file party_plan.txt \
+  --input-file party_plan.txt \
   --out-dir ./output/ \
   --backend openai \
   --model-id gpt-4o-mini \
@@ -305,11 +303,11 @@ process it programmatically:
 {
   "subtask_list": ["suggest_theme", "list_activities", "catering_menu", "invitation_message"],
   "identified_constraints": [
-    {"constraint": "All content must be age-appropriate", "validation_strategy": "llm"},
-    {"constraint": "Invitation must not exceed 30 words", "validation_strategy": "code"},
-    {"constraint": "Activity list must be ordered from most energetic to least energetic", "validation_strategy": "llm"},
-    {"constraint": "At least 5 activities", "validation_strategy": "code"},
-    {"constraint": "Menu must include a main dish, two sides, and a birthday cake option", "validation_strategy": "llm"}
+    {"constraint": "All content must be age-appropriate", "val_strategy": "llm"},
+    {"constraint": "Invitation must not exceed 30 words", "val_strategy": "code"},
+    {"constraint": "Activity list must be ordered from most energetic to least energetic", "val_strategy": "llm"},
+    {"constraint": "At least 5 activities", "val_strategy": "code"},
+    {"constraint": "Menu must include a main dish, two sides, and a birthday cake option", "val_strategy": "llm"}
   ],
   "subtasks": [
     {
@@ -319,17 +317,16 @@ process it programmatically:
       "prompt_template": "Suggest a birthday party theme for a 10-year-old...",
       "input_vars_required": [],
       "constraints": [
-        {"constraint": "All content must be age-appropriate", "validation_strategy": "llm"}
+        {"constraint": "All content must be age-appropriate", "val_strategy": "llm"}
       ]
     }
   ]
 }
-```
 
 Each subtask entry includes `depends_on` (a list of `tag` values), a ready-to-use
-`prompt_template`, and the `constraints` that apply to it. Each constraint carries
-a `validation_strategy` — `"code"` for deterministic checks (word count, length)
-and `"llm"` for quality checks that require LLM-as-a-judge evaluation.
+`prompt_template`, and the `constraints` that apply to it. Each constraint carries 
+a `val_strategy` — `"code"` for deterministic checks (word count, length) and `"llm"` 
+for quality checks that require LLM-as-a-judge evaluation.
 
 ---
 
