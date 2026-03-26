@@ -11,16 +11,16 @@ import sys
 
 import pytest
 
-# Lazy import of system capability detection to avoid circular imports
-_get_system_capabilities = None
+# Cached result of system capability detection (None = not yet computed)
+_capabilities_cache: dict | None = None
 
 
 def get_system_capabilities():
-    """Lazy load system capabilities from test/conftest.py."""
-    global _get_system_capabilities
+    """Lazy load system capabilities from test/conftest.py, cached after first call."""
+    global _capabilities_cache
 
-    if _get_system_capabilities is not None:
-        return _get_system_capabilities()
+    if _capabilities_cache is not None:
+        return _capabilities_cache
 
     # Add test directory to path to enable import
     _test_dir = pathlib.Path(__file__).parent.parent.parent / "test"
@@ -38,8 +38,8 @@ def get_system_capabilities():
         if spec and spec.loader:
             test_conftest = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(test_conftest)
-            _get_system_capabilities = test_conftest.get_system_capabilities
-            return _get_system_capabilities()
+            _capabilities_cache = test_conftest.get_system_capabilities()
+            return _capabilities_cache
         else:
             raise ImportError("Could not load test/conftest.py")
     except (ImportError, AttributeError) as e:
@@ -50,17 +50,14 @@ def get_system_capabilities():
             f"Could not import get_system_capabilities from test/conftest.py: {e}. Heavy RAM tests will NOT be skipped!"
         )
 
-        def fallback():
-            return {
-                "has_gpu": False,
-                "gpu_memory_gb": 0,
-                "ram_gb": 0,
-                "has_api_keys": {},
-                "has_ollama": False,
-            }
-
-        _get_system_capabilities = fallback
-        return fallback()
+        _capabilities_cache = {
+            "has_gpu": False,
+            "gpu_memory_gb": 0,
+            "ram_gb": 0,
+            "has_api_keys": {},
+            "has_ollama": False,
+        }
+        return _capabilities_cache
 
 
 examples_to_skip: dict[str, str] = {}
