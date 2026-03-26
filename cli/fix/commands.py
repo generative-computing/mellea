@@ -4,19 +4,27 @@ from pathlib import Path
 
 import typer
 
-from cli.fix import FixMode
+from cli.fix import _FixMode
 
 
 def fix_async(
     path: str = typer.Argument(..., help="File or directory to scan"),
-    mode: FixMode = typer.Option(
-        FixMode.ADD_AWAIT_RESULT, "--mode", "-m", help="Fix strategy to apply"
+    mode: _FixMode = typer.Option(
+        _FixMode.ADD_AWAIT_RESULT, "--mode", "-m", help="Fix strategy to apply"
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Report locations without modifying files"
     ),
 ):
     """Fix async calls (aact, ainstruct, aquery) for the await_result default change.
+
+    Args:
+        path: File or directory to scan.
+        mode: Fix strategy to apply.
+        dry_run: If ``True``, report locations without modifying files.
+
+    Raises:
+        typer.Exit: If *path* does not exist.
 
     \b
     Modes:

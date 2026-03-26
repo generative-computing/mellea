@@ -9,7 +9,7 @@ import ast
 from dataclasses import dataclass
 from pathlib import Path
 
-from cli.fix import FixMode
+from cli.fix import _FixMode
 
 # Functions that need fixing.
 TARGET_FUNCTIONS = {"aact", "ainstruct", "aquery"}
@@ -28,7 +28,18 @@ SKIP_DIRS = {"__pycache__", ".git", ".venv", "node_modules"}
 
 @dataclass
 class FixLocation:
-    """Location of the fix along with some additional details."""
+    """Location of a single fix along with source position and call metadata.
+
+    Args:
+        filepath: Path to the source file containing the call.
+        line: One-based line number of the call expression.
+        col_offset: Column offset of the call expression.
+        function_name: Mellea function that was called ("aact", "ainstruct", or "aquery").
+        call_style: Whether the call is "functional" or "session".
+        target_variable: MOT variable name from the assignment, if any.
+        context_variable: Name of the context variable, if any.
+    """
+
     filepath: Path
     line: int
     col_offset: int
@@ -40,7 +51,14 @@ class FixLocation:
 
 @dataclass
 class FixResult:
-    """Full summary of fixes."""
+    """Aggregated summary of all fixes applied across the scanned codebase.
+
+    Args:
+        locations: Individual fix locations with call metadata.
+        total_fixes: Total number of fixes applied.
+        files_affected: Number of distinct files that were modified.
+    """
+
     locations: list[FixLocation]
     total_fixes: int
     files_affected: int
@@ -262,7 +280,15 @@ def _iter_bodies(node: ast.AST):
 
 
 def find_fixable_calls(source: str, filepath: Path) -> list[FixLocation]:
-    """Analyze source code and return locations of calls that need fixing."""
+    """Analyze source code and return locations of calls that need fixing.
+
+    Args:
+        source: Python source code to analyze.
+        filepath: Path used for error messages and AST filename metadata.
+
+    Returns:
+        List of ``FixLocation`` objects describing each call site that should be fixed.
+    """
     if not source.strip():
         return []
 
@@ -419,8 +445,19 @@ def _apply_add_stream_loop(
     lines.insert(stmt_node.end_lineno, loop_code)
 
 
-def fix_file(filepath: Path, mode: FixMode, dry_run: bool = False) -> list[FixLocation]:
-    """Fix a single file. Returns list of fix locations found."""
+def fix_file(
+    filepath: Path, mode: _FixMode, dry_run: bool = False
+) -> list[FixLocation]:
+    """Fix a single file.
+
+    Args:
+        filepath: Path to the Python file to fix.
+        mode: Fix strategy to apply.
+        dry_run: If ``True``, return locations without modifying the file.
+
+    Returns:
+        List of ``FixLocation`` objects for each call site found (and optionally fixed).
+    """
     source = filepath.read_text()
     locations = find_fixable_calls(source, filepath)
 
@@ -464,17 +501,27 @@ def fix_file(filepath: Path, mode: FixMode, dry_run: bool = False) -> list[FixLo
         lines[-1] += "\n"
 
     for call_node, stmt_node, loc in call_stmt_pairs:
-        if mode == FixMode.ADD_AWAIT_RESULT:
+        if mode == _FixMode.ADD_AWAIT_RESULT:
             _apply_add_await_result(lines, call_node)
-        elif mode == FixMode.ADD_STREAM_LOOP:
+        elif mode == _FixMode.ADD_STREAM_LOOP:
             _apply_add_stream_loop(lines, stmt_node, loc)
 
     filepath.write_text("".join(lines))
     return locations
 
 
-def fix_path(path: Path, mode: FixMode, dry_run: bool = False) -> FixResult:
-    """Fix a file or directory recursively. Returns aggregated results."""
+def fix_path(path: Path, mode: _FixMode, dry_run: bool = False) -> FixResult:
+    """Fix a file or directory recursively.
+
+    Args:
+        path: File or directory to process. Directories are scanned recursively for
+            ``*.py`` files.
+        mode: Fix strategy to apply.
+        dry_run: If ``True``, report locations without modifying files.
+
+    Returns:
+        Aggregated ``FixResult`` with all fix locations and summary counts.
+    """
     all_locations: list[FixLocation] = []
     files_affected = 0
 

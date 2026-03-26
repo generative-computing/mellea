@@ -6,7 +6,7 @@ Tests AST-based detection and fixup of async calls (aact, ainstruct, aquery) aft
 import textwrap
 from pathlib import Path
 
-from cli.fix import FixMode
+from cli.fix import _FixMode
 from cli.fix.fixer import FixLocation, FixResult, find_fixable_calls, fix_file, fix_path
 
 # ---------------------------------------------------------------------------
@@ -379,7 +379,7 @@ class TestAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        locs = fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        locs = fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         fixed = f.read_text()
         assert "await_result=True" in fixed
         assert len(locs) == 1
@@ -397,7 +397,7 @@ class TestAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         fixed = f.read_text()
         assert "await_result=True" in fixed
         compile(fixed, str(f), "exec")
@@ -410,7 +410,7 @@ class TestAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         fixed = f.read_text()
         assert "await_result=True" in fixed
 
@@ -423,7 +423,7 @@ class TestAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        locs = fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        locs = fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         fixed = f.read_text()
         assert fixed.count("await_result=True") == 2
         assert len(locs) == 2
@@ -444,7 +444,7 @@ class TestAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         fixed = f.read_text()
         assert 'print("before")' in fixed
         assert 'print("after")' in fixed
@@ -460,7 +460,7 @@ class TestAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         fixed = f.read_text()
         assert "await_result=True" in fixed
         compile(fixed, str(f), "exec")
@@ -473,7 +473,7 @@ class TestAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         fixed = f.read_text()
         assert "await_result=True" in fixed
         compile(fixed, str(f), "exec")
@@ -487,7 +487,7 @@ class TestAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         fixed = f.read_text()
         assert "await_result=True" in fixed
         assert fixed.count("await_result") == 1
@@ -506,7 +506,7 @@ class TestAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         fixed = f.read_text()
         assert "await_result=True" in fixed
         compile(fixed, str(f), "exec")
@@ -526,7 +526,7 @@ class TestAddStreamLoop:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         fixed = f.read_text()
         assert "while not result.is_computed():" in fixed
         assert "await result.astream()" in fixed
@@ -540,7 +540,7 @@ class TestAddStreamLoop:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         fixed = f.read_text()
         assert "while not result.is_computed():" in fixed
         assert "await result.astream()" in fixed
@@ -555,7 +555,7 @@ class TestAddStreamLoop:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         fixed = f.read_text()
         lines = fixed.splitlines()
         loop_line = next(line for line in lines if "while not" in line)
@@ -570,7 +570,7 @@ class TestAddStreamLoop:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        locs = fix_file(f, FixMode.ADD_STREAM_LOOP)
+        locs = fix_file(f, _FixMode.ADD_STREAM_LOOP)
         fixed = f.read_text()
         assert "while not" not in fixed
         assert len(locs) == 1
@@ -583,7 +583,7 @@ class TestAddStreamLoop:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         fixed = f.read_text()
         assert "while not output.is_computed():" in fixed
         assert "await output.astream()" in fixed
@@ -596,7 +596,7 @@ class TestAddStreamLoop:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         fixed = f.read_text()
         assert "while not answer.is_computed():" in fixed
         compile(fixed, str(f), "exec")
@@ -616,7 +616,7 @@ class TestDryRun:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        locs = fix_file(f, FixMode.ADD_AWAIT_RESULT, dry_run=True)
+        locs = fix_file(f, _FixMode.ADD_AWAIT_RESULT, dry_run=True)
         assert len(locs) == 1
         assert f.read_text() == src
 
@@ -628,7 +628,7 @@ class TestDryRun:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        locs = fix_file(f, FixMode.ADD_AWAIT_RESULT, dry_run=True)
+        locs = fix_file(f, _FixMode.ADD_AWAIT_RESULT, dry_run=True)
         assert locs[0].filepath == f
         assert locs[0].line == 3
         assert locs[0].function_name == "aact"
@@ -648,7 +648,7 @@ class TestTraversal:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        result = fix_path(f, FixMode.ADD_AWAIT_RESULT, dry_run=True)
+        result = fix_path(f, _FixMode.ADD_AWAIT_RESULT, dry_run=True)
         assert isinstance(result, FixResult)
         assert result.total_fixes == 1
         assert result.files_affected == 1
@@ -662,14 +662,14 @@ class TestTraversal:
         (tmp_path / "sub").mkdir()
         (tmp_path / "a.py").write_text(src)
         (tmp_path / "sub" / "b.py").write_text(src)
-        result = fix_path(tmp_path, FixMode.ADD_AWAIT_RESULT, dry_run=True)
+        result = fix_path(tmp_path, _FixMode.ADD_AWAIT_RESULT, dry_run=True)
         assert result.total_fixes == 2
         assert result.files_affected == 2
 
     def test_skips_non_python(self, tmp_path):
         (tmp_path / "data.txt").write_text("not python")
         (tmp_path / "config.json").write_text("{}")
-        result = fix_path(tmp_path, FixMode.ADD_AWAIT_RESULT, dry_run=True)
+        result = fix_path(tmp_path, _FixMode.ADD_AWAIT_RESULT, dry_run=True)
         assert result.total_fixes == 0
 
     def test_skips_pycache(self, tmp_path):
@@ -681,7 +681,7 @@ class TestTraversal:
         cache_dir = tmp_path / "__pycache__"
         cache_dir.mkdir()
         (cache_dir / "mod.py").write_text(src)
-        result = fix_path(tmp_path, FixMode.ADD_AWAIT_RESULT, dry_run=True)
+        result = fix_path(tmp_path, _FixMode.ADD_AWAIT_RESULT, dry_run=True)
         assert result.total_fixes == 0
 
     def test_handles_syntax_errors(self, tmp_path):
@@ -692,7 +692,7 @@ class TestTraversal:
                 r, c = await aact(a, ctx, be, strategy=None)
         """)
         (tmp_path / "good.py").write_text(src)
-        result = fix_path(tmp_path, FixMode.ADD_AWAIT_RESULT, dry_run=True)
+        result = fix_path(tmp_path, _FixMode.ADD_AWAIT_RESULT, dry_run=True)
         assert result.total_fixes == 1
         assert result.files_affected == 1
 
@@ -705,7 +705,7 @@ class TestTraversal:
         venv_dir = tmp_path / ".venv"
         venv_dir.mkdir()
         (venv_dir / "mod.py").write_text(src)
-        result = fix_path(tmp_path, FixMode.ADD_AWAIT_RESULT, dry_run=True)
+        result = fix_path(tmp_path, _FixMode.ADD_AWAIT_RESULT, dry_run=True)
         assert result.total_fixes == 0
 
 
@@ -751,7 +751,7 @@ class TestEdgeCases:
         """)
         (tmp_path / "a.py").write_text(src1)
         (tmp_path / "b.py").write_text(src2)
-        result = fix_path(tmp_path, FixMode.ADD_AWAIT_RESULT, dry_run=True)
+        result = fix_path(tmp_path, _FixMode.ADD_AWAIT_RESULT, dry_run=True)
         assert result.total_fixes == 3
         assert result.files_affected == 2
         assert len(result.locations) == 3
@@ -770,10 +770,10 @@ class TestEdgeCases:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
         # Second run should be a no-op
-        locs = fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        locs = fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
         assert len(locs) == 0
 
@@ -791,9 +791,9 @@ class TestEdgeCases:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
-        locs = fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        locs = fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
         assert len(locs) == 0
 
@@ -811,10 +811,10 @@ class TestEdgeCases:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         first_pass = f.read_text()
         assert first_pass.count("await_result=True") == 1
-        locs = fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        locs = fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == first_pass
         assert len(locs) == 0
 
@@ -854,7 +854,7 @@ class TestExactOutputAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
 
     def test_single_line_session_aact(self, tmp_path):
@@ -870,7 +870,7 @@ class TestExactOutputAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
 
     def test_single_line_aquery(self, tmp_path):
@@ -886,7 +886,7 @@ class TestExactOutputAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
 
     def test_single_line_module_qualified(self, tmp_path):
@@ -902,7 +902,7 @@ class TestExactOutputAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
 
     def test_single_line_trailing_comma(self, tmp_path):
@@ -918,7 +918,7 @@ class TestExactOutputAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
 
     def test_multiline_with_trailing_comma(self, tmp_path):
@@ -945,7 +945,7 @@ class TestExactOutputAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
 
     def test_multiline_without_trailing_comma(self, tmp_path):
@@ -972,7 +972,7 @@ class TestExactOutputAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
 
     def test_replace_await_result_false(self, tmp_path):
@@ -988,7 +988,7 @@ class TestExactOutputAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
 
     def test_multiple_calls_in_file(self, tmp_path):
@@ -1022,7 +1022,7 @@ class TestExactOutputAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
 
     def test_mixed_fixable_and_skipped(self, tmp_path):
@@ -1046,7 +1046,7 @@ class TestExactOutputAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
 
     def test_session_aquery_no_args(self, tmp_path):
@@ -1062,7 +1062,7 @@ class TestExactOutputAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
 
     def test_no_assignment_bare_await(self, tmp_path):
@@ -1078,7 +1078,7 @@ class TestExactOutputAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
 
     def test_custom_alias_functional_module(self, tmp_path):
@@ -1095,7 +1095,7 @@ class TestExactOutputAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
 
     def test_from_stdlib_import_functional_alias(self, tmp_path):
@@ -1112,7 +1112,7 @@ class TestExactOutputAddAwaitResult:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert f.read_text() == expected
 
 
@@ -1134,7 +1134,7 @@ class TestExactOutputAddStreamLoop:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         assert f.read_text() == expected
 
     def test_functional_tuple_unpack(self, tmp_path):
@@ -1152,7 +1152,7 @@ class TestExactOutputAddStreamLoop:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         assert f.read_text() == expected
 
     def test_nested_indentation(self, tmp_path):
@@ -1172,7 +1172,7 @@ class TestExactOutputAddStreamLoop:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         assert f.read_text() == expected
 
     def test_no_assignment_no_loop_inserted(self, tmp_path):
@@ -1188,7 +1188,7 @@ class TestExactOutputAddStreamLoop:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         assert f.read_text() == expected
 
     def test_multiple_calls_with_code_between(self, tmp_path):
@@ -1212,7 +1212,7 @@ class TestExactOutputAddStreamLoop:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         assert f.read_text() == expected
 
     def test_aquery_session_stream_loop(self, tmp_path):
@@ -1230,7 +1230,7 @@ class TestExactOutputAddStreamLoop:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         assert f.read_text() == expected
 
     def test_aquery_functional_stream_loop(self, tmp_path):
@@ -1248,7 +1248,7 @@ class TestExactOutputAddStreamLoop:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         assert f.read_text() == expected
 
 
@@ -1268,13 +1268,13 @@ class TestStreamLoopIdempotency:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        locs1 = fix_file(f, FixMode.ADD_STREAM_LOOP)
+        locs1 = fix_file(f, _FixMode.ADD_STREAM_LOOP)
         assert len(locs1) == 1
         first_pass = f.read_text()
         assert first_pass.count("while not result.is_computed()") == 1
 
         # Second run: no new locations, file unchanged
-        locs2 = fix_file(f, FixMode.ADD_STREAM_LOOP)
+        locs2 = fix_file(f, _FixMode.ADD_STREAM_LOOP)
         assert len(locs2) == 0
         assert f.read_text() == first_pass
 
@@ -1286,11 +1286,11 @@ class TestStreamLoopIdempotency:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         first_pass = f.read_text()
         assert first_pass.count("while not result.is_computed()") == 1
 
-        locs2 = fix_file(f, FixMode.ADD_STREAM_LOOP)
+        locs2 = fix_file(f, _FixMode.ADD_STREAM_LOOP)
         assert len(locs2) == 0
         assert f.read_text() == first_pass
 
@@ -1303,11 +1303,11 @@ class TestStreamLoopIdempotency:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         first_pass = f.read_text()
         assert first_pass.count("while not") == 2
 
-        locs2 = fix_file(f, FixMode.ADD_STREAM_LOOP)
+        locs2 = fix_file(f, _FixMode.ADD_STREAM_LOOP)
         assert len(locs2) == 0
         assert f.read_text() == first_pass
 
@@ -1324,10 +1324,10 @@ class TestCrossModeAwareness:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         after_loop = f.read_text()
 
-        locs = fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        locs = fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert len(locs) == 0
         assert f.read_text() == after_loop
 
@@ -1340,11 +1340,11 @@ class TestCrossModeAwareness:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         after_await = f.read_text()
         assert "await_result=True" in after_await
 
-        locs = fix_file(f, FixMode.ADD_STREAM_LOOP)
+        locs = fix_file(f, _FixMode.ADD_STREAM_LOOP)
         assert len(locs) == 0
         assert f.read_text() == after_await
 
@@ -1357,10 +1357,10 @@ class TestCrossModeAwareness:
         """)
         f = tmp_path / "test.py"
         f.write_text(src)
-        fix_file(f, FixMode.ADD_STREAM_LOOP)
+        fix_file(f, _FixMode.ADD_STREAM_LOOP)
         after_loop = f.read_text()
 
-        locs = fix_file(f, FixMode.ADD_AWAIT_RESULT)
+        locs = fix_file(f, _FixMode.ADD_AWAIT_RESULT)
         assert len(locs) == 0
         assert f.read_text() == after_loop
 

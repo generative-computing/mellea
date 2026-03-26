@@ -7,7 +7,9 @@ import typer
 fix_app = typer.Typer(name="fix", help="Fix code for API changes.")
 
 
-class FixMode(StrEnum):
+class _FixMode(StrEnum):
+    """Types of fixes that can be applied."""
+
     ADD_AWAIT_RESULT = "add-await-result"
     ADD_STREAM_LOOP = "add-stream-loop"
 

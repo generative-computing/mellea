@@ -357,6 +357,8 @@ addopts = [
     "--cov-report=json",
     # Set timeout to 15 minutes for full test suite
     "--timeout=900",
+    # Helps prevent errors with typing / overload tests.
+    "--mypy-pyproject-toml-file=pyproject.toml",
 ]
 filterwarnings = [
     # Show each deprecation warning only once per session
