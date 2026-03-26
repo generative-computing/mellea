@@ -8,10 +8,10 @@ specified extra installed, then runs a generated Python script to verify that:
 
 from __future__ import annotations
 
-import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -113,27 +113,13 @@ TESTED_EXTRAS = {
 def _parse_optional_dependency_groups() -> set[str]:
     """Parse ``pyproject.toml`` and return the set of optional-dependency group names.
 
-    Reads the ``[project.optional-dependencies]`` section and extracts every
-    key that starts a ``name = [`` line.
-
     Returns:
         set[str]: The group names defined in ``pyproject.toml`` (e.g. ``{"hf", "vllm", ...}``).
     """
     pyproject = PROJECT_ROOT / "pyproject.toml"
-    text = pyproject.read_text()
-    in_section = False
-    groups: set[str] = set()
-    for line in text.splitlines():
-        if line.strip() == "[project.optional-dependencies]":
-            in_section = True
-            continue
-        if in_section and line.startswith("["):
-            break
-        if in_section:
-            m = re.match(r"^(\w+)\s*=\s*\[", line)
-            if m:
-                groups.add(m.group(1))
-    return groups
+    with open(pyproject, "rb") as f:
+        data = tomllib.load(f)
+    return set(data.get("project", {}).get("optional-dependencies", {}).keys())
 
 
 def _backend_fail_imports(exclude: set[str] | str = "") -> list[str]:
