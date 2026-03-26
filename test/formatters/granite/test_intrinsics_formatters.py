@@ -174,14 +174,15 @@ _YAML_JSON_COMBOS_LIST = [
         # Granite 4.0 adapters not currently available
         repo_id="ibm-granite/granitelib-core-r1.0",
     ),
-    YamlJsonCombo(
-        short_name="uncertainty_alora",
-        inputs_file=_INPUT_JSON_DIR / "uncertainty.json",
-        task="uncertainty",
-        is_alora=True,
-        # Granite 4.0 adapters not currently available
-        repo_id="ibm-granite/granitelib-core-r1.0",
-    ),
+    # aLoRA adapter for this intrinsic not currently available
+    # YamlJsonCombo(
+    #     short_name="uncertainty_alora",
+    #     inputs_file=_INPUT_JSON_DIR / "uncertainty.json",
+    #     task="uncertainty",
+    #     is_alora=True,
+    #     # Granite 4.0 adapters not currently available
+    #     repo_id="ibm-granite/granitelib-core-r1.0",
+    # ),
     YamlJsonCombo(
         short_name="context_relevance",
         inputs_file=_INPUT_JSON_DIR / "context_relevance.json",
@@ -271,7 +272,8 @@ _YAML_JSON_COMBOS_WITH_LORA_MODEL = {
 # Combinations suitable for an Ollama backend
 _NO_OLLAMA_ADAPTER = {
     # Ollama LoRA adapter not yet available on HF Hub
-    "context-attribution"
+    "context-attribution",
+    "uncertainty",
 }
 _YAML_JSON_COMBOS_FOR_OLLAMA = {
     k: v
