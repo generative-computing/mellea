@@ -202,6 +202,37 @@ or non-unit. Use these to triage at scale (see Audit Procedure, Step 0).
 | GPU / model loading | `import torch`, `.to("cuda")`, `.from_pretrained(` | Hardware dependency |
 | External downloads | URL literals (`http://`, `https://`), `urlopen`, `requests.get` with URLs | Network fetch |
 
+### Training memory signals (check `require_gpu` threshold)
+
+Training tests consume significantly more memory than inference. When these
+patterns appear, verify that `require_gpu(min_vram_gb=N)` uses the **training
+peak**, not just the model parameter size:
+
+| Category | Grep patterns | Notes |
+|---|---|---|
+| Model load | `from_pretrained(`, `AutoModelForCausalLM`, `AutoModelForSeq2SeqLM`, `AutoTokenizer` | Downloading/loading a real model |
+| Training | `train_model(`, `Trainer(`, `trainer.train(`, `epochs=`, `num_train_epochs=` | Any training loop |
+| Inference on real model | `.generate(` in a test body without a mock | Full model forward pass |
+| HF dataset download | `load_dataset(` | Dataset fetch + tokenisation |
+
+**Training memory rule:** Training requires ~2× the base model weight memory
+(activations, optimizer states, gradient temporaries). A test that trains then
+reloads the model for inference has two separate peaks — use the training peak
+plus headroom:
+
+```
+min_vram_gb = (model_param_bytes_in_bfloat16 * 2) + headroom
+            ≈ (params_B * 2 GB) * 2  + ~4 GB headroom
+```
+
+Example: 3B bfloat16 model → 6 GB weights → training peak ~12 GB → set
+`require_gpu(min_vram_gb=20)` so the gate fires on machines where available
+GPU memory is below that, rather than letting the test OOM mid-run.
+
+The VRAM heuristic (`predicates.py`) reports *estimated available* memory, not
+total RAM. A 32 GB Apple Silicon machine reports ~16 GB available. Setting
+`min_vram_gb=20` correctly skips on that machine while running on 48 GB+.
+
 ### SDK-boundary signals (test is likely integration, not unit)
 
 These patterns indicate real third-party SDK objects are being used as
@@ -611,6 +642,9 @@ Run grep across all target files for:
    network literals (`localhost`, `127.0.0.1`, port numbers), HTTP client
    usage, subprocess calls, `_API_KEY`/`_TOKEN`/`_SECRET` in env var checks,
    GPU/model loading (`torch`, `.from_pretrained(`), URL literals.
+1a. **Training signals** — `from_pretrained(`, `train_model(`, `Trainer(`, `epochs=`,
+    `.generate(` (non-mock), `load_dataset(`. Cross-reference against
+    `require_gpu(min_vram_gb=N)` — check N uses the 2× training memory rule.
 2. **SDK-boundary signals** — real third-party SDK objects used as collaborators:
    `InMemoryMetricReader`, `InMemorySpanExporter`, `MeterProvider(metric_readers=`,
    `TracerProvider(`, `LoggingHandler`, `provider.force_flush()`,
@@ -662,6 +696,9 @@ from Part 1 using the project-specific heuristics from Part 2:
 2. **Which backend(s)?** → backend markers (e2e only)
 3. **Deterministic or content-dependent assertions?** → e2e vs qualitative
 4. **What resources?** → resource markers
+5. **Training memory?** → if training signals present (`train_model(`, `Trainer(`,
+   `epochs=`), verify `require_gpu(min_vram_gb=N)` uses 2× the model inference
+   memory + headroom (see Training memory signals table).
 
 If uncertain about a classification (especially qualitative vs e2e), note it
 and ask the user to confirm.
