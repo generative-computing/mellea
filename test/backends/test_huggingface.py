@@ -11,7 +11,7 @@ from unittest.mock import Mock
 
 import pydantic
 import pytest
-import torch
+torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
 from test.predicates import require_gpu
 

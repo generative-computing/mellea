@@ -9,6 +9,8 @@ from mellea.backends.tools import (
     add_tools_from_model_options,
 )
 from mellea.core import ModelOutputThunk
+
+pytest.importorskip("docling", reason="docling not installed — install mellea[mify]")
 from mellea.stdlib.components.docs.richdocument import Table
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.session import MelleaSession

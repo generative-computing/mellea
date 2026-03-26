@@ -16,6 +16,7 @@ pytestmark = [
     ),
 ]
 
+pytest.importorskip("llguidance", reason="llguidance not installed — install mellea[hf]")
 import mellea.backends.model_ids as model_ids
 from mellea import MelleaSession
 from mellea.backends import ModelOption

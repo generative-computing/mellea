@@ -6,7 +6,8 @@ import os
 import pathlib
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message

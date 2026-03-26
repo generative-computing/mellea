@@ -11,7 +11,8 @@ import tempfile
 from pathlib import Path
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 from transformers import AutoTokenizer
 
 from test.predicates import require_gpu

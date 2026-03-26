@@ -12,6 +12,7 @@ pytestmark = [
     require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID"),
 ]
 
+pytest.importorskip("litellm", reason="litellm not installed — install mellea[litellm]")
 from mellea import MelleaSession
 from mellea.backends.litellm import LiteLLMBackend
 from mellea.core import CBlock

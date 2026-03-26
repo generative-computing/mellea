@@ -1,6 +1,8 @@
 import pytest
 
 from mellea.backends import ModelOption
+
+pytest.importorskip("llguidance", reason="llguidance not installed — install mellea[hf]")
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.core import CBlock

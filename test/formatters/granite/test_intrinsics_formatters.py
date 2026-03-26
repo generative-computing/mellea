@@ -16,7 +16,8 @@ import openai
 import pydantic
 import pytest
 import requests
-import torch
+
+torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 import yaml
 
 # First Party

@@ -2,6 +2,8 @@ import os
 import tempfile
 
 import pytest
+
+pytest.importorskip("docling_core", reason="docling_core not installed — install mellea[mify]")
 from docling_core.types.doc.document import DoclingDocument
 
 import mellea

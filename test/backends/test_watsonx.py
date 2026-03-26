@@ -19,6 +19,7 @@ pytestmark = [
     ),
 ]
 
+pytest.importorskip("ibm_watsonx_ai", reason="ibm_watsonx_ai not installed — install mellea[watsonx]")
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
 from mellea.backends.watsonx import WatsonxAIBackend
