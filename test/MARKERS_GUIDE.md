@@ -5,7 +5,7 @@
 ```bash
 # By granularity tier
 pytest -m unit                          # Self-contained, no services (fast)
-pytest -m integration                   # Multi-component, fixture-managed deps
+pytest -m integration                   # Real SDK/library boundary or multi-component wiring
 pytest -m e2e                           # Real backends (ollama, APIs, GPU models)
 pytest -m "e2e and not qualitative"     # Deterministic real-backend tests only
 
@@ -46,17 +46,55 @@ def test_cblock_repr():
 
 ### Integration (explicit)
 
-**Multiple components wired together**, potentially needing additional services
-or fixture-managed dependencies. Backends may be mocked, stubbed, or stood up
-by test fixtures. The test controls or provides its own dependencies.
+**Verifies that your code correctly communicates across a real boundary.**
+The boundary may be a third-party SDK/library whose API contract you are
+asserting against, multiple internal components wired together, or a
+fixture-managed local service. What distinguishes integration from unit is
+that at least one real external component — not a mock or stub — is on the
+other side of the boundary being tested.
 
 - Add `@pytest.mark.integration` explicitly
-- Slower than unit (fixture setup, service lifecycle), may consume more memory
-- No backend markers needed — integration tests don't use real backends
+- No backend markers needed — integration tests do not use real LLM backends
+- Slower than unit (fixture setup, real SDK objects), but faster than e2e
+
+**Positive indicators:**
+
+- Uses a real third-party SDK object to *capture and assert* on output —
+  e.g. `InMemoryMetricReader`, `InMemorySpanExporter`, `LoggingHandler` —
+  rather than patching the SDK away
+- Asserts on the format or content of data as received by an external
+  component (semantic conventions, attribute names, accumulated values)
+- Wires multiple real project components together and mocks only at the
+  outermost boundary
+- Breaking the interface between your code and the external component
+  (e.g. a changed attribute name, a missing SDK call) would cause the test
+  to fail
+
+**Negative indicators (likely unit instead):**
+
+- All external boundaries replaced with `MagicMock`, `patch`, or `AsyncMock`
+- Third-party library imported only as a type or helper, not as a real
+  collaborator being asserted against
+- Toggles env vars and checks booleans or config state with no real SDK
+  objects instantiated
+
+**Tie-breaker:** If you changed the contract between your code and the
+external component, would this test catch it? If yes → integration. If no
+→ unit.
 
 ```python
 @pytest.mark.integration
+def test_token_metrics_format(clean_metrics_env):
+    # Real InMemoryMetricReader — asserting against the OTel SDK contract
+    reader = InMemoryMetricReader()
+    provider = MeterProvider(metric_readers=[reader])
+    record_token_usage_metrics(input_tokens=10, output_tokens=5, ...)
+    metrics_data = reader.get_metrics_data()
+    assert metrics_data.resource_metrics[0]...name == "mellea.llm.tokens.input"
+
+@pytest.mark.integration
 def test_session_chains_components(mock_backend):
+    # Multiple real project components wired together; only LLM call mocked
     session = start_session(backend=mock_backend)
     result = session.instruct("hello")
     assert mock_backend.generate.called

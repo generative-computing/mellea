@@ -3,12 +3,17 @@ import tempfile
 
 import pytest
 
-pytest.importorskip("docling_core", reason="docling_core not installed — install mellea[mify]")
+pytest.importorskip(
+    "docling_core", reason="docling_core not installed — install mellea[mify]"
+)
 from docling_core.types.doc.document import DoclingDocument
 
 import mellea
 from mellea.core import TemplateRepresentation
 from mellea.stdlib.components.docs.richdocument import RichDocument, Table
+from test.predicates import require_gpu
+
+pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(scope="module")
@@ -100,6 +105,10 @@ def test_empty_table():
 
 
 @pytest.mark.skip  # Test requires too much memory for smaller machines.
+@pytest.mark.e2e
+@pytest.mark.huggingface
+@pytest.mark.qualitative
+@require_gpu(min_vram_gb=16)
 def test_richdocument_generation(rd: RichDocument):
     m = mellea.start_session(backend_name="hf")
     response = m.chat(rd.to_markdown()[:500] + "\nSummarize the provided document.")

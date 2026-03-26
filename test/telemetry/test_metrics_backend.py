@@ -162,6 +162,7 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, s
 
 @pytest.mark.asyncio
 @pytest.mark.e2e
+@pytest.mark.openai
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_openai_token_metrics_integration(enable_metrics, metric_reader, stream):
@@ -222,9 +223,6 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
 @require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")
 async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
     """Test that WatsonX backend records token metrics correctly."""
-    if not os.getenv("WATSONX_API_KEY"):
-        pytest.skip("WATSONX_API_KEY not set")
-
     from mellea.backends.watsonx import WatsonxAIBackend
     from mellea.telemetry import metrics as metrics_module
 

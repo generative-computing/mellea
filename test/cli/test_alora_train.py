@@ -215,6 +215,7 @@ def test_invocation_prompt_tokenization():
         )
 
 
+@pytest.mark.integration
 def test_imports_work():
     """Test that PEFT imports work correctly (no IBM alora dependency)."""
     # This test verifies the migration was successful

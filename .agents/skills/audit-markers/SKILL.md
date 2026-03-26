@@ -4,7 +4,7 @@ description: >
   Audit and fix pytest markers on test files and examples. Classifies tests as
   unit/integration/e2e/qualitative using general heuristics and project-specific
   marker rules. Estimates GPU VRAM and RAM requirements by tracing model
-  identifiers and looking up parameter counts. Use when reviewing markers,
+  identifiers and looking up parameter counts. Use when reviewing markers (classification),
   auditing test files, or checking before commit.
 argument-hint: "[file-or-directory] [--dry-run | --apply]"
 compatibility: "Claude Code, IBM Bob"
@@ -54,10 +54,11 @@ to anything external. Pure logic testing.
 **Recognise by:**
 - Imports only from the project and stdlib — no external service clients
 - Creates objects directly, calls methods, checks return values
-- If it uses test doubles, they replace external boundaries (network, DB, services)
+- If it uses test doubles, they replace all external boundaries (network, DB, services, third-party SDKs)
+- Third-party library is imported only as a type or helper, not as a real collaborator being asserted against
 - No fixture that starts/connects to a real or fixture-managed service
 - Runs in milliseconds to low seconds
-- Would pass on any machine with just the language runtime and project deps
+- Would pass identically if you replaced a real SDK import with a stub of the same interface
 
 **Examples of unit assertions:**
 ```python
@@ -69,41 +70,76 @@ mock_backend.generate.assert_called_once()
 
 ### Integration
 
-Tests **multiple components working together**, potentially needing additional
-services or fixture-managed dependencies. Backends may be mocked, stubbed, or
-stood up by test fixtures.
+**Verifies that your code correctly communicates across a real boundary.**
+The boundary may be a third-party SDK/library whose API contract you are
+asserting against, multiple internal components wired together, or a
+fixture-managed local service. What distinguishes integration from unit is
+that at least one real external component — not a mock or stub — is on the
+other side of the boundary being tested.
 
-**Recognise by:**
-- Creates real instances of multiple project components and wires them together
-- External service boundaries may be mocked, stubbed, or managed by fixtures
-- Tests that the components interact correctly — data flows, callbacks fire, errors propagate
-- May need additional services, but the test controls or provides its dependencies
-- Slower than unit (fixture setup, service lifecycle) and may consume more memory
+**Key distinction from unit:** The boundary is not limited to network or
+hardware. A test that wires project code against a real third-party SDK
+object to assert on output format or values is integration — even when
+entirely in-memory with no network I/O. The question is whether a real
+external component's API contract is being verified, not whether there is
+network activity.
 
-**Key distinction from unit:** Count the real (non-mock) project components
-being exercised. Unit isolates **one** class or function — all collaborators
-are faked. Integration wires up **multiple** real components and mocks only
-at the external perimeter (network, backend, database).
+**Key distinction from e2e:** Integration controls or provides its
+dependencies (mocks, in-memory SDK components, fixture-managed local
+services). E2E depends on real backends that exist independently (Ollama,
+cloud APIs, GPU-loaded models).
 
-**Key distinction from e2e:** Integration controls its dependencies (mocks, stubs,
-fixture-managed services). E2E uses real backends that exist independently.
+**Positive indicators:**
 
-**Borderline: unit vs integration (the "scope of mocks" rule)**
+- Uses a real third-party SDK object to *capture and assert* on output —
+  e.g. `InMemoryMetricReader`, `InMemorySpanExporter`, `LoggingHandler` —
+  rather than patching the SDK away
+- Asserts on format or content of data as received by the external component
+  (semantic conventions, attribute names, accumulated values)
+- Wires multiple real project components together and mocks only at the
+  outermost boundary (LLM call, network, hardware)
+- Breaking the interface between your code and the external component (e.g.
+  a changed attribute name, a missing SDK method call) would cause the test
+  to fail
+- Fixture-managed dependencies that stand up or configure real local services
 
-When a test uses mocks, look at *what* is mocked to decide:
+**Negative indicators (likely unit instead):**
 
-- **Mock replaces external I/O only, multiple real internal components wired
-  together** → **integration**. Example: a test that registers a real `Plugin`,
-  calls real `invoke_hook()` and `register()`, but passes `MagicMock()` for
-  the backend. The plugin-manager wiring executes for real; only the LLM call
-  is faked.
-- **Mock replaces internal collaborators too, only one real component under
-  test** → **unit**. Example: a test that instantiates one `Plugin` but
-  passes `MagicMock()` for the session, the backend, and the hook dispatcher.
-  Only the plugin's own logic executes.
+- All external boundaries replaced with `MagicMock`, `patch`, or `AsyncMock`
+- Third-party library imported only as a type or helper, not as a real
+  collaborator being asserted against
+- Toggles env vars and checks booleans or config state with no real SDK
+  objects instantiated
+- Only one real component under test; everything else is faked
 
-When in doubt, ask: "if I broke the *wiring* between two components, would
-this test catch it?" If yes → integration. If no → unit.
+**Tie-breaker:** If you changed the contract between your code and the
+external component (e.g. renamed an attribute, stopped calling the right
+SDK method), would this test catch it? If yes → integration. If no → unit.
+
+**Examples:**
+
+```python
+# Integration — real OTel InMemoryMetricReader, asserting SDK contract
+@pytest.mark.integration
+def test_token_metrics_attributes(clean_metrics_env):
+    reader = InMemoryMetricReader()
+    provider = MeterProvider(metric_readers=[reader])
+    record_token_usage_metrics(input_tokens=10, output_tokens=5, ...)
+    # Asserts against real OTel output — breaking the attribute name would fail this
+    assert attrs["gen_ai.provider.name"] == "ollama"
+
+# Integration — multiple real project components, only LLM call mocked
+@pytest.mark.integration
+def test_session_chains_components(mock_backend):
+    session = start_session(backend=mock_backend)
+    result = session.instruct("hello")
+    assert mock_backend.generate.called
+
+# Unit — real OTel SDK imported but only for isinstance check on a no-op
+def test_instruments_are_noop_when_disabled(clean_metrics_env):
+    counter = create_counter("test.counter")
+    assert counter.__class__.__name__ == "_NoOpCounter"
+```
 
 ### E2E (End-to-End)
 
@@ -166,6 +202,22 @@ or non-unit. Use these to triage at scale (see Audit Procedure, Step 0).
 | GPU / model loading | `import torch`, `.to("cuda")`, `.from_pretrained(` | Hardware dependency |
 | External downloads | URL literals (`http://`, `https://`), `urlopen`, `requests.get` with URLs | Network fetch |
 
+### SDK-boundary signals (test is likely integration, not unit)
+
+These patterns indicate real third-party SDK objects are being used as
+collaborators to assert on output — not mocked away:
+
+| Category | Grep patterns | Notes |
+|---|---|---|
+| OTel metrics | `InMemoryMetricReader`, `MeterProvider(metric_readers=` | Asserting against real OTel metrics output |
+| OTel tracing | `InMemorySpanExporter`, `SimpleSpanProcessor`, `TracerProvider(` | Asserting against real OTel span output |
+| OTel logging | `LoggingHandler`, `LoggerProvider`, `set_logger_provider` | Asserting against real OTel log output |
+| Real SDK setup | `provider.force_flush()`, `reader.get_metrics_data()` | Consuming real SDK output |
+
+Cross-reference: if these appear alongside `@patch(` that patches the SDK
+itself away → unit. If the SDK objects are instantiated and used directly →
+integration.
+
 ### Mock signals (test is likely unit)
 
 | Category | Grep patterns |
@@ -185,15 +237,17 @@ or non-unit. Use these to triage at scale (see Audit Procedure, Step 0).
 
 ### Cross-referencing signals
 
-A single file may contain both live and mock signals. Cross-reference to
-determine the correct bucket:
+A single file may contain multiple signal types. Cross-reference to determine
+the correct bucket:
 
-| Live signals? | Mock signals? | Classification |
-|---|---|---|
-| Yes | No | Almost certainly e2e — deep-read to confirm |
-| Yes | Yes | Needs inspection — partial mock = integration, or mixed file |
-| No | Yes | Likely unit — skip deep read |
-| No | No | Likely unit — skip deep read |
+| Live-backend signals? | SDK-boundary signals? | Mock signals? | Classification |
+|---|---|---|---|
+| Yes | Any | No | Almost certainly e2e — deep-read to confirm |
+| Yes | Any | Yes | Needs inspection — partial mock = integration, or mixed file |
+| No | Yes | No | Likely integration — deep-read to confirm SDK objects are asserted against, not just imported |
+| No | Yes | Yes | Needs inspection — if SDK is patched away → unit; if used directly → integration |
+| No | No | Yes | Likely unit — skip deep read |
+| No | No | No | Likely unit — skip deep read |
 
 ## When to Ask the User
 
@@ -310,6 +364,14 @@ test_func(session) → session uses MagicMock/MockBackend/patch
 ```
 If the test only checks the mock was called → **unit**.
 If the test wires real components around the mock → **integration**.
+
+**Pattern 5b — Real SDK collaborator (integration):**
+```
+test_func(clean_metrics_env) → creates InMemoryMetricReader() + MeterProvider()
+                              → calls project code → asserts on reader output
+```
+No network, no backend — but a real OTel SDK object is on the other side of
+the boundary being asserted against → **integration**.
 
 **Pattern 6 — No backend at all (unit):**
 ```
@@ -549,10 +611,15 @@ Run grep across all target files for:
    network literals (`localhost`, `127.0.0.1`, port numbers), HTTP client
    usage, subprocess calls, `_API_KEY`/`_TOKEN`/`_SECRET` in env var checks,
    GPU/model loading (`torch`, `.from_pretrained(`), URL literals.
-2. **Mock signals** — `MagicMock`, `Mock(`, `AsyncMock`, `@patch(`,
+2. **SDK-boundary signals** — real third-party SDK objects used as collaborators:
+   `InMemoryMetricReader`, `InMemorySpanExporter`, `MeterProvider(metric_readers=`,
+   `TracerProvider(`, `LoggingHandler`, `provider.force_flush()`,
+   `reader.get_metrics_data()`. See the SDK-boundary signal table in the
+   Behavioural Signal Detection section.
+3. **Mock signals** — `MagicMock`, `Mock(`, `AsyncMock`, `@patch(`,
    `monkeypatch`, `mocker`, HTTP mock libraries.
-3. **Existing markers** — `pytestmark`, `@pytest.mark.`, `# pytest:`.
-4. **Live/mock fixture names** from Phase 0.
+4. **Existing markers** — `pytestmark`, `@pytest.mark.`, `# pytest:`.
+5. **Live/mock fixture names** from Phase 0.
 
 ### Phase 2: Bucket and prioritise
 
@@ -560,10 +627,10 @@ Cross-reference the signal hits into four priority buckets:
 
 | Priority | Condition | Action |
 |---|---|---|
-| **P1 — Missing markers** | Live signals present, NO existing markers | Deep-read and classify. These are the most likely gaps. |
-| **P2 — Mixed signals** | Both live AND mock signals present | Deep-read to determine if integration, partial mock, or mixed file. |
-| **P3 — Validate existing** | Live signals present, markers already exist | Spot-check that markers match the actual backend. Replace deprecated `llm`. |
-| **P4 — Skip** | No live signals (mock-only or no signals at all) | Likely unit. Report as clean without deep-reading. Spot-check a sample if the count is large. |
+| **P1 — Missing markers** | Live-backend or SDK-boundary signals present, NO existing markers | Deep-read and classify. These are the most likely gaps. |
+| **P2 — Mixed signals** | Both live/SDK signals AND mock signals present | Deep-read to determine if integration, partial mock, or mixed file. |
+| **P3 — Validate existing** | Live-backend or SDK-boundary signals present, markers already exist | Spot-check that markers match. Replace deprecated `llm`. |
+| **P4 — Skip** | No live-backend or SDK-boundary signals (mock-only or no signals) | Likely unit. Report as clean without deep-reading. Spot-check a sample if the count is large. |
 
 ### Phase 3: Deep-read
 
@@ -588,7 +655,10 @@ The `# pytest:` comment is the only marker mechanism (no `pytestmark`).
 For each `def test_*` or `async def test_*`, apply the general classification
 from Part 1 using the project-specific heuristics from Part 2:
 
-1. **Real backend or mocked?** → determines unit/integration vs e2e
+1. **Real backend, SDK collaborator, or fully mocked?**
+   - Real LLM backend (Ollama, HF, cloud API) → **e2e**
+   - Real third-party SDK object asserted against (OTel reader, logging handler) → **integration**
+   - All external boundaries mocked/patched → **unit** (single component) or **integration** (multiple real components wired)
 2. **Which backend(s)?** → backend markers (e2e only)
 3. **Deterministic or content-dependent assertions?** → e2e vs qualitative
 4. **What resources?** → resource markers
@@ -692,6 +762,7 @@ and MARKERS_GUIDE.md (same apply/confirm rules as other fixes in Step 4).
 Report issues outside marker-edit scope as **notes**. Do NOT fix these:
 - Missing conftest skip logic for a backend
 - Tests with no assertions
+- Files mixing unit and integration tests that could be split
 - Files mixing unit and e2e tests that could be split
 
 ## Output Summary

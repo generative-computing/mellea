@@ -433,7 +433,6 @@ def test_canned_input(yaml_json_combo_no_alora):
     assert after_json == expected_json
 
 
-@pytest.mark.block_network
 def test_openai_compat(yaml_json_combo_no_alora):
     """
     Verify that the dataclasses for intrinsics chat completions can be directly passed
