@@ -120,7 +120,6 @@ def test_incorrect_type_override():
 # Uses granite4:micro-h (3B hybrid, lightweight) in local mode
 @pytest.mark.qualitative
 @pytest.mark.ollama
-@pytest.mark.requires_gpu
 @pytest.mark.e2e
 async def test_generating(session):
     m = session
@@ -163,8 +162,6 @@ async def test_generating(session):
 
 @pytest.mark.qualitative
 @pytest.mark.ollama
-@pytest.mark.requires_gpu
-@pytest.mark.requires_heavy_ram
 @pytest.mark.e2e
 def test_message_typing(session):
     m = session
@@ -180,8 +177,6 @@ def test_message_typing(session):
 
 @pytest.mark.qualitative
 @pytest.mark.ollama
-@pytest.mark.requires_gpu
-@pytest.mark.requires_heavy_ram
 @pytest.mark.e2e
 async def test_generating_with_sampling(session):
     m = session

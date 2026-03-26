@@ -1,4 +1,4 @@
-# pytest: huggingface, requires_heavy_ram, e2e
+# pytest: huggingface, e2e
 
 """Example usage of the guardian-core intrinsic for safety and hallucination detection.
 

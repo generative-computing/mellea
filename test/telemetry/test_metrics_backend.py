@@ -14,6 +14,7 @@ from mellea.backends.model_ids import (
 )
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
+from test.predicates import require_api_key, require_gpu
 
 # Check if OpenTelemetry is available
 try:
@@ -218,7 +219,7 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
 @pytest.mark.asyncio
 @pytest.mark.e2e
 @pytest.mark.watsonx
-@pytest.mark.requires_api_key
+@require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")
 async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
     """Test that WatsonX backend records token metrics correctly."""
     if not os.getenv("WATSONX_API_KEY"):
@@ -331,6 +332,7 @@ async def test_litellm_token_metrics_integration(
 @pytest.mark.asyncio
 @pytest.mark.e2e
 @pytest.mark.huggingface
+@require_gpu(min_vram_gb=8)
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_huggingface_token_metrics_integration(
     enable_metrics, metric_reader, stream, hf_metrics_backend

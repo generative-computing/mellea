@@ -3,14 +3,13 @@ import os
 import pytest
 
 from mellea.backends.tools import MelleaTool
+from test.predicates import require_gpu
 
 # Skip entire module in CI since the single test is qualitative
 pytestmark = [
     pytest.mark.vllm,
     pytest.mark.e2e,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.requires_gpu_isolation,
+    require_gpu(min_vram_gb=18),
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
         reason="Skipping vLLM tools tests in CI - qualitative test",

@@ -5,11 +5,13 @@ import os
 import pydantic
 import pytest
 
+from test.predicates import require_api_key
+
 # Mark all tests in this module with backend and auth requirements
 pytestmark = [
     pytest.mark.watsonx,
     pytest.mark.e2e,
-    pytest.mark.requires_api_key,
+    require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID"),
     # Skip entire module in CI since 8/9 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,

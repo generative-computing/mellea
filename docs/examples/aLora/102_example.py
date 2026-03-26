@@ -1,4 +1,4 @@
-# pytest: skip, huggingface, requires_heavy_ram, e2e
+# pytest: skip, huggingface, e2e
 # SKIP REASON: Requires user input; tests same functionality as 101_example.py.
 
 from stembolts_intrinsic import (

@@ -1,4 +1,4 @@
-# pytest: huggingface, requires_heavy_ram, e2e
+# pytest: huggingface, e2e
 
 import time
 

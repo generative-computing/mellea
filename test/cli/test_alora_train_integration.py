@@ -14,11 +14,12 @@ import pytest
 import torch
 from transformers import AutoTokenizer
 
+from test.predicates import require_gpu
+
 pytestmark = [
     pytest.mark.huggingface,
     pytest.mark.e2e,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
+    require_gpu(min_vram_gb=12),
     # Skip entire module in CI since 17/18 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,

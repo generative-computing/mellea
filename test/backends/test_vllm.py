@@ -5,13 +5,13 @@ from typing import Annotated
 import pydantic
 import pytest
 
+from test.predicates import require_gpu
+
 # Mark all tests in this module with backend and resource requirements
 pytestmark = [
     pytest.mark.vllm,
     pytest.mark.e2e,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.requires_gpu_isolation,  # Activate GPU memory isolation
+    require_gpu(min_vram_gb=4),
     # Skip entire module in CI since all 8 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,

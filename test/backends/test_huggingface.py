@@ -13,13 +13,13 @@ import pydantic
 import pytest
 import torch
 
+from test.predicates import require_gpu
+
 # Mark all tests in this module with backend and resource requirements
 pytestmark = [
     pytest.mark.huggingface,
     pytest.mark.e2e,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.requires_gpu_isolation,  # Activate GPU memory isolation
+    require_gpu(min_vram_gb=20),
     # Skip entire module in CI since 17/18 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,

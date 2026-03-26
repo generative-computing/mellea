@@ -1,4 +1,4 @@
-# pytest: ollama, huggingface, requires_heavy_ram, e2e
+# pytest: ollama, huggingface, e2e
 
 """Example of using GuardianCheck with HuggingFace backend for direct model inference
 

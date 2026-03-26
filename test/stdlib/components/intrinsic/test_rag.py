@@ -13,6 +13,7 @@ from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
+from test.predicates import require_gpu
 
 # Skip entire module in CI since all 7 tests are qualitative
 pytestmark = [
@@ -21,8 +22,7 @@ pytestmark = [
         reason="Skipping RAG tests in CI - all qualitative tests",
     ),
     pytest.mark.huggingface,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,  # 3B model + document processing needs ~30-35GB
+    require_gpu(min_vram_gb=8),
     pytest.mark.e2e,
 ]
 

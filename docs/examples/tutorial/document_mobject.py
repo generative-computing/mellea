@@ -1,4 +1,4 @@
-# pytest: ollama, qualitative, e2e, requires_heavy_ram
+# pytest: ollama, qualitative, e2e
 
 from mellea.backends import model_ids
 from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO

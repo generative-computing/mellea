@@ -2,12 +2,14 @@ import asyncio
 
 import pytest
 
+from test.predicates import require_api_key
+
 # Mark all tests in this module as requiring Watsonx via LiteLLM
 pytestmark = [
     pytest.mark.litellm,
     pytest.mark.watsonx,
     pytest.mark.e2e,
-    pytest.mark.requires_api_key,
+    require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID"),
 ]
 
 from mellea import MelleaSession
