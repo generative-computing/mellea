@@ -152,17 +152,23 @@ def run(
     backend: Annotated[
         DecompBackend,
         typer.Option(
-            help=('Backend used for inference. Options: "ollama", "openai", and "rits".'),
+            help=(
+                'Backend used for inference. Options: "ollama", "openai", and "rits".'
+            ),
             case_sensitive=False,
         ),
     ] = DecompBackend.ollama,
     backend_req_timeout: Annotated[
         int,
-        typer.Option(help='Timeout in seconds for backend requests. Defaults to "300".'),
+        typer.Option(
+            help='Timeout in seconds for backend requests. Defaults to "300".'
+        ),
     ] = 300,
     backend_endpoint: Annotated[
         str | None,
-        typer.Option(help='Backend endpoint / base URL. Required for "openai" and "rits".'),
+        typer.Option(
+            help='Backend endpoint / base URL. Required for "openai" and "rits".'
+        ),
     ] = None,
     backend_api_key: Annotated[
         str | None,
