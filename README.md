@@ -1,205 +1,86 @@
-<img src="https://github.com/generative-computing/mellea/raw/main/docs/mellea_draft_logo_300.png" height=100>
+<img src="https://github.com/generative-computing/mellea/raw/main/docs/mellea_draft_logo_300.png" alt="Mellea logo" height=100>
 
-# Mellea
+# Mellea — build predictable AI without guesswork
 
-Mellea is a library for writing generative programs.
-Generative programming replaces flaky agents and brittle prompts
-with structured, maintainable, robust, and efficient AI workflows.
-
+Inside every AI-powered pipeline, the unreliable part is the same: the LLM call itself.
+Silent failures, untestable outputs, no guarantees.
+Mellea is a Python library for writing *generative programs* — replacing brittle prompts and flaky agents
+with structured, testable AI workflows built around type-annotated outputs, verifiable requirements, and automatic retries.
 
 [//]: # ([![arXiv]&#40;https://img.shields.io/badge/arXiv-2408.09869-b31b1b.svg&#41;]&#40;https://arxiv.org/abs/2408.09869&#41;)
-[![Docs](https://img.shields.io/badge/docs-live-brightgreen)](https://docs.mellea.ai/)
+[![Website](https://img.shields.io/badge/website-mellea.ai-blue)](https://mellea.ai/)
+[![Docs](https://img.shields.io/badge/docs-docs.mellea.ai-brightgreen)](https://docs.mellea.ai/)
 [![PyPI version](https://img.shields.io/pypi/v/mellea)](https://pypi.org/project/mellea/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mellea)](https://pypi.org/project/mellea/)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
-[![GitHub License](https://img.shields.io/github/license/generative-computing/mellea)](https://img.shields.io/github/license/generative-computing/mellea)
+[![GitHub License](https://img.shields.io/github/license/generative-computing/mellea)](https://github.com/generative-computing/mellea/blob/main/LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-3.0-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
-
-## Features
-
- * A standard library of opinionated prompting patterns.
- * Sampling strategies for inference-time scaling.
- * Clean integration between verifiers and samplers.
-    - Batteries-included library of verifiers.
-    - Support for efficient checking of specialized requirements using
-      activated LoRAs.
-    - Train your own verifiers on proprietary classifier data.
- * Compatible with many inference services and model families. Control cost
-   and quality by easily lifting and shifting workloads between:
-        - inference providers
-        - model families
-        - model sizes
- * Easily integrate the power of LLMs into legacy code-bases (mify).
- * Sketch applications by writing specifications and letting `mellea` fill in
-   the details (generative slots).
- * Get started by decomposing your large unwieldy prompts into structured and maintainable mellea problems.
-
-
-
-## Getting Started
-
-You can get started with a local install, or by using Colab notebooks.
-
-### Getting Started with Local Inference
-
-<img src="https://github.com/generative-computing/mellea/raw/main/docs/GetStarted_py.png" style="max-width:800px">
-
-Install with [uv](https://docs.astral.sh/uv/getting-started/installation/):
+## Install
 
 ```bash
 uv pip install mellea
 ```
 
-Install with pip:
+See [installation docs](https://docs.mellea.ai/getting-started/installation) for additional options, such as installing all extras via `uv pip install 'mellea[all]'`.
+For source installation directly from this repo, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-```bash
-pip install mellea
-```
+## Example
 
-> [!NOTE]
-> `mellea` comes with some additional packages as defined in our `pyproject.toml`. If you would like to install all the extra optional dependencies, please run the following commands:
->
-> ```bash
-> uv pip install "mellea[hf]" # for Huggingface extras and Alora capabilities
-> uv pip install "mellea[watsonx]" # for watsonx backend
-> uv pip install "mellea[docling]" # for docling
-> uv pip install "mellea[smolagents]" # for HuggingFace smolagents tools
-> uv pip install "mellea[all]" # for all the optional dependencies
-> ```
->
-> You can also install all the optional dependencies with `uv sync --all-extras`
-
-> [!NOTE]
-> If running on an Intel mac, you may get errors related to torch/torchvision versions. Conda maintains updated versions of these packages. You will need to create a conda environment and run `conda install 'torchvision>=0.22.0'` (this should also install pytorch and torchvision-extra). Then, you should be able to run `uv pip install mellea`. To run the examples, you will need to use `python <filename>` inside the conda environment instead of `uv run --with mellea <filename>`.
-
-> [!NOTE]
-> If you are using python >= 3.13, you may encounter an issue where outlines cannot be installed due to rust compiler issues (`error: can't find Rust compiler`). You can either downgrade to python 3.12 or install the [rust compiler](https://www.rust-lang.org/tools/install) to build the wheel for outlines locally.
-
-For running a simple LLM request locally (using Ollama with Granite model), this is the starting code:
-```python
-# file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/example.py
-import mellea
-
-m = mellea.start_session()
-print(m.chat("What is the etymology of mellea?").content)
-```
-
-
-Then run it:
-> [!NOTE]
-> Before we get started, you will need to download and install [ollama](https://ollama.com/). Mellea can work with many different types of backends, but everything in this tutorial will "just work" on a Macbook running IBM's Granite 4 Micro 3B model.
-```shell
-uv run --with mellea docs/examples/tutorial/example.py
-```
-
-### Get Started with Colab
-
-| Notebook | Try in Colab | Goal |
-|----------|--------------|------|
-| Hello, World | <a target="_blank" rel="noopener noreferrer" href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Quick‑start demo |
-| Simple Email | <a target="_blank" rel="noopener noreferrer" href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/simple_email.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Using the `m.instruct` primitive |
-| Instruct-Validate-Repair | <a target="_blank" rel="noopener noreferrer" href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/instruct_validate_repair.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Introduces our first generative programming design pattern |
-| Model Options | <a target="_blank" rel="noopener noreferrer" href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/model_options_example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Demonstrates how to pass model options through to backends |
-| Sentiment Classifier | <a target="_blank" rel="noopener noreferrer" href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/sentiment_classifier.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Introduces the `@generative` decorator |
-| Managing Context | <a target="_blank" rel="noopener noreferrer" href="https://colab.research.google.com/github/generative-computing/mellea/blob/main//docs/examples/notebooks/context_example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Shows how to construct and manage context in a `MelleaSession` |
-| Generative OOP | <a target="_blank" rel="noopener noreferrer" href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/table_mobject.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Demonstrates object-oriented generative programming in Mellea |
-| Rich Documents | <a target="_blank" rel="noopener noreferrer" href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/document_mobject.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | A generative program that uses Docling to work with rich-text documents |
-| Composing Generative Functions | <a target="_blank" rel="noopener noreferrer" href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/compositionality_with_generative_slots.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Demonstrates contract-oriented programming in Mellea |
-| `m serve` | <a target="_blank" rel="noopener noreferrer" href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/m_serve_example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Serve a generative program as an openai-compatible model endpoint |
-| MCP | <a target="_blank" rel="noopener noreferrer" href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/mcp_example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Mellea + MCP |
-
-
-### Installing from Source
-
-If you want to contribute to Mellea or need the latest development version, see the
-[Getting Started](CONTRIBUTING.md#getting-started) section in our Contributing Guide for
-detailed installation instructions.
-
-## Getting started with validation
-
-Mellea supports validation of generation results through a **instruct-validate-repair** pattern.
-Below, the request for *"Write an email.."* is constrained by the requirements of *"be formal"* and *"Use 'Dear interns' as greeting."*.
-Using a simple rejection sampling strategy, the request is sent up to three (loop_budget) times to the model and
-the output is checked against the constraints using (in this case) LLM-as-a-judge.
-
+The `@generative` decorator turns a typed Python function into a structured LLM call.
+Docstrings become prompts, type hints become schemas — no templates, no parsers:
 
 ```python
-# file: https://github.com/generative-computing/mellea/blob/main/docs/examples/instruct_validate_repair/101_email_with_validate.py
-from mellea import MelleaSession
-from mellea.backends import ModelOption
-from mellea.backends.ollama import OllamaModelBackend
-from mellea.backends import model_ids
-from mellea.stdlib.sampling import RejectionSamplingStrategy
-
-# create a session with Mistral running on Ollama
-m = MelleaSession(
-    backend=OllamaModelBackend(
-        model_id=model_ids.MISTRALAI_MISTRAL_0_3_7B,
-        model_options={ModelOption.MAX_NEW_TOKENS: 300},
-    )
-)
-
-# run an instruction with requirements
-email_v1 = m.instruct(
-    "Write an email to invite all interns to the office party.",
-    requirements=["be formal", "Use 'Dear interns' as greeting."],
-    strategy=RejectionSamplingStrategy(loop_budget=3),
-)
-
-# print result
-print(f"***** email ****\n{str(email_v1)}\n*******")
-```
-
-
-## Getting Started with Generative Slots
-
-Generative slots allow you to define functions without implementing them.
-The `@generative` decorator marks a function as one that should be interpreted by querying an LLM.
-The example below demonstrates how an LLM's sentiment classification
-capability can be wrapped up as a function using Mellea's generative slots and
-a local LLM.
-
-
-```python
-# file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/sentiment_classifier.py#L1-L13
-from typing import Literal
+from pydantic import BaseModel
 from mellea import generative, start_session
 
+class UserProfile(BaseModel):
+    name: str
+    age: int
 
 @generative
-def classify_sentiment(text: str) -> Literal["positive", "negative"]:
-  """Classify the sentiment of the input text as 'positive' or 'negative'."""
+def extract_user(text: str) -> UserProfile:
+    """Extract the user's name and age from the text."""
 
-
-if __name__ == "__main__":
-  m = start_session()
-  sentiment = classify_sentiment(m, text="I love this!")
-  print("Output sentiment is:", sentiment)
+m = start_session()
+user = extract_user(m, text="User log 42: Alice is 31 years old.")
+print(user.name)  # Alice
+print(user.age)   # 31 — always an int, guaranteed by the schema
 ```
 
+## What Mellea Does
+
+- **Structured output** — `@generative` turns typed functions into LLM calls; Pydantic schemas are enforced at generation time
+- **Requirements & repair** — attach natural-language requirements to any call; Mellea validates and retries automatically
+- **Sampling strategies** — run a generation multiple times and pick the best result; swap between rejection sampling, majority voting, and more with one parameter change
+- **Multiple backends** — Ollama, OpenAI, vLLM, HuggingFace, WatsonX, LiteLLM, Bedrock
+- **Legacy integration** — easily drop Mellea into existing codebases with `mify`
+- **MCP compatible** — expose any generative program as an MCP tool
+
+## Learn More
+
+| Resource | Description |
+| --- | --- |
+| [docs.mellea.ai](https://docs.mellea.ai) | Full docs — vision, tutorials, API reference, how-to guides |
+| [Colab notebooks](docs/examples/notebooks/) | Interactive examples you can run immediately |
+| [Code examples](docs/examples/) | Runnable examples: RAG, agents, Instruct-Validate-Repair (IVR), MObjects, and more |
 
 ## Contributing
 
-We welcome contributions to Mellea! There are several ways to contribute:
+We welcome contributions of all kinds — bug fixes, new backends, standard library components, examples, and docs.
 
-1. **Contributing to this repository** - Core features, bug fixes, standard library components
-2. **Applications & Libraries** - Build tools using Mellea (host in your own repo with `mellea-` prefix)
-3. **Community Components** - Contribute to [mellea-contribs](https://github.com/generative-computing/mellea-contribs)
+- **[Contributing Guide](CONTRIBUTING.md)** — development setup, workflow, and coding standards
+- **[Building Extensions](https://docs.mellea.ai/community/building-extensions)** — create reusable components in your own repo
+- **[mellea-contribs](https://github.com/generative-computing/mellea-contribs)** — community library for shared components
 
-Please see our **[Contributing Guide](CONTRIBUTING.md)** for detailed information on:
-- Getting started with development
-- Coding standards and workflow
-- Testing guidelines
-- How to contribute specific types of components
-
-Questions? Create a [discussion](https://github.com/generative-computing/mellea/discussions)!
+Questions? See [GitHub Discussions](https://github.com/generative-computing/mellea/discussions).
 
 ### IBM ❤️ Open Source AI
 
-Mellea has been started by IBM Research in Cambridge, MA.
+Mellea was started by IBM Research in Cambridge, MA.
 
+---
 
-
+Licensed under the [Apache-2.0 License](LICENSE). Copyright © 2026 Mellea.

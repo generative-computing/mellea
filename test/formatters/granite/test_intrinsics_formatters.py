@@ -73,15 +73,17 @@ class YamlJsonCombo(pydantic.BaseModel):
     """Base model on which the target adapter was trained. Should be small enough to
     run on the CI server."""
 
-    @pydantic.model_validator(mode="after")
-    def _maybe_download_yaml(self):
+    def _resolve_yaml(self):
         """
         If YAML file is not provided, download one based on other attributes of this
-        object.
+        object. Called at fixture creation (execution time) to prevent collection time errors.
         """
         if not self.yaml_file:
             self.yaml_file = intrinsics_util.obtain_io_yaml(
-                self.task, self.base_model_id, self.repo_id, revision=self.revision
+                self.task,
+                self.base_model_id,
+                self.repo_id,
+                revision=self.revision,  # type: ignore
             )
         return self
 
@@ -290,7 +292,7 @@ def _yaml_json_combo(request: pytest.FixtureRequest) -> YamlJsonCombo:
 
     Returns test configuration.
     """
-    return _YAML_JSON_COMBOS[request.param]
+    return _YAML_JSON_COMBOS[request.param]._resolve_yaml()
 
 
 @pytest.fixture(
@@ -306,7 +308,7 @@ def _yaml_json_combo_no_alora(request: pytest.FixtureRequest) -> YamlJsonCombo:
     Returns tuple of short name, YAML file, JSON file, model directory, and
     arguments file.
     """
-    return _YAML_JSON_COMBOS_NO_ALORA[request.param]
+    return _YAML_JSON_COMBOS_NO_ALORA[request.param]._resolve_yaml()
 
 
 @pytest.fixture(
@@ -318,7 +320,7 @@ def _yaml_json_combo_with_model(request: pytest.FixtureRequest) -> YamlJsonCombo
     """Version of :func:`_yaml_json_combo()` fixture with only the inputs that have
     models.
     """
-    return _YAML_JSON_COMBOS_WITH_MODEL[request.param]
+    return _YAML_JSON_COMBOS_WITH_MODEL[request.param]._resolve_yaml()
 
 
 @pytest.fixture(
@@ -330,7 +332,7 @@ def _yaml_json_combo_with_lora_model(request: pytest.FixtureRequest) -> YamlJson
     """Version of :func:`_yaml_json_combo()` fixture with only the inputs that have
     non-aLoRA models.
     """
-    return _YAML_JSON_COMBOS_WITH_LORA_MODEL[request.param]
+    return _YAML_JSON_COMBOS_WITH_LORA_MODEL[request.param]._resolve_yaml()
 
 
 @pytest.fixture(
@@ -342,7 +344,7 @@ def _yaml_json_combo_for_ollama(request: pytest.FixtureRequest) -> YamlJsonCombo
     """Version of :func:`_yaml_json_combo()` fixture with only inputs suitable
     for an Ollama backend.
     """
-    return _YAML_JSON_COMBOS_FOR_OLLAMA[request.param]
+    return _YAML_JSON_COMBOS_FOR_OLLAMA[request.param]._resolve_yaml()
 
 
 def test_no_orphan_files():
@@ -566,6 +568,14 @@ def _round_floats(json_data, num_digits: int = 2):
     return result
 
 
+@pytest.mark.huggingface
+@pytest.mark.llm
+@pytest.mark.requires_gpu
+@pytest.mark.requires_heavy_ram
+@pytest.mark.requires_gpu_isolation  # Activate GPU memory isolation
+@pytest.mark.skipif(
+    int(os.environ.get("CICD", 0)) == 1, reason="Skipping HuggingFace tests in CI"
+)
 def test_run_transformers(yaml_json_combo_with_model, gh_run):
     """
     Run the target model end-to-end on transformers.
