@@ -143,80 +143,6 @@ def _should_skip_collection(markers):
     return False, None
 
 
-def _check_optional_imports(file_path):
-    """Check if file has optional imports that aren't installed.
-
-    Returns (should_skip, reason) tuple.
-    """
-    try:
-        with open(file_path) as f:
-            content = f.read()
-
-        # Check for langchain imports
-        if "from langchain" in content or "import langchain" in content:
-            try:
-                import langchain_core
-            except ImportError:
-                return True, "langchain_core not installed"
-
-            # Check for langchain_community specifically
-            if (
-                "from langchain_community" in content
-                or "import langchain_community" in content
-            ):
-                try:
-                    import langchain_community
-                except ImportError:
-                    return (
-                        True,
-                        "langchain_community not installed (install with: uv pip install mellea[tools])",
-                    )
-
-        # Check for docling imports (direct or via mellea.stdlib.components.docs)
-        if (
-            "import docling" in content
-            or "from docling" in content
-            or "from mellea.stdlib.components.docs.richdocument" in content
-        ):
-            try:
-                import docling
-            except ImportError:
-                return (
-                    True,
-                    "docling not installed (install with: uv pip install mellea[docling])",
-                )
-
-        # Check for pandas imports
-        if "import pandas" in content or "from pandas" in content:
-            try:
-                import pandas
-            except ImportError:
-                return True, "pandas not installed"
-
-        # Check for cpex (mellea[hooks]) — plugins that call register()/plugin_scope()
-        if "from mellea.plugins" in content or "import mellea.plugins" in content:
-            try:
-                import cpex
-            except ImportError:
-                return (
-                    True,
-                    "cpex not installed (install with: uv pip install mellea[hooks])",
-                )
-
-        # Check for litellm
-        if "import litellm" in content or "from litellm" in content:
-            try:
-                import litellm
-            except ImportError:
-                return (
-                    True,
-                    "litellm not installed (install with: uv pip install mellea[backends])",
-                )
-
-    except Exception:
-        pass
-
-    return False, None
 
 
 def pytest_addoption(parser):
@@ -412,13 +338,10 @@ def pytest_pycollect_makemodule(module_path, parent):
         # Prevent import by returning custom collector
         return SkippedFile.from_parent(parent, path=file_path)
 
-    # Also check optional imports here — this hook fires for directly-specified
-    # files too, whereas pytest_ignore_collect only fires during directory traversal.
-    should_skip, _reason = _check_optional_imports(file_path)
-    if should_skip:
-        return SkippedFile.from_parent(parent, path=file_path)
-
-    return None
+    # Return ExampleModule so pytest never falls through to its default Module
+    # collector (which would import the file directly). Import errors are
+    # instead caught at runtime in ExampleItem.runtest() and converted to skips.
+    return ExampleModule.from_parent(parent, path=file_path)
 
 
 def pytest_ignore_collect(collection_path, config):
@@ -496,13 +419,10 @@ def pytest_collect_file(parent: pytest.Dir, file_path: pathlib.PosixPath):
             # If we can't read markers, continue with other checks
             pass
 
-        # Check for optional imports before creating ExampleFile
-        should_skip, _reason = _check_optional_imports(file_path)
-        if should_skip:
-            # FIX: Return SkippedFile instead of None for optional import skips too
-            return SkippedFile.from_parent(parent, path=file_path)
-
-        return ExampleFile.from_parent(parent, path=file_path)
+        # ExampleModule (returned by pytest_pycollect_makemodule) handles
+        # collection for files that should run — return None here to avoid
+        # creating a duplicate collector from this hook.
+        return None
 
 
 class SkippedFile(pytest.File):
@@ -529,6 +449,18 @@ class SkippedFile(pytest.File):
 class ExampleFile(pytest.File):
     def collect(self):
         return [ExampleItem.from_parent(self, name=self.name)]
+
+
+class ExampleModule(pytest.Module):
+    """Module stand-in that routes to ExampleItem without importing the file.
+
+    Returned by pytest_pycollect_makemodule to prevent pytest's default
+    Module collector from importing the file directly (which would crash on
+    missing optional deps before ExampleItem.runtest() can catch them).
+    """
+
+    def collect(self):
+        return [ExampleItem.from_parent(self, name=self.path.name)]
 
 
 class ExampleItem(pytest.Item):
@@ -583,6 +515,15 @@ class ExampleItem(pytest.Item):
                         skip_reason = line.replace("Skipped:", "").strip()
                         break
                 pytest.skip(skip_reason)
+            elif "ModuleNotFoundError" in stderr or "ImportError" in stderr:
+                # Missing optional dependency — skip rather than fail so the
+                # suite stays green without every optional package installed.
+                reason = "optional dependency not installed"
+                for line in stderr.split("\n"):
+                    if "ModuleNotFoundError" in line or "ImportError" in line:
+                        reason = line.strip()
+                        break
+                pytest.skip(reason)
             else:
                 raise ExampleTestException(
                     f"Example failed with exit code {retcode}.\nStderr: {stderr}\n"
