@@ -24,7 +24,10 @@ with structured, testable AI workflows built around type-annotated outputs, veri
 uv pip install mellea
 ```
 
-See [installation docs](https://docs.mellea.ai/getting-started/installation) for extras (`[hf]`, `[watsonx]`, `[docling]`, `[all]`, …), or [CONTRIBUTING.md](CONTRIBUTING.md) for source installation from git.
+See [installation docs](https://docs.mellea.ai/getting-started/installation) for additional options, such as installing all extras via `uv pip install 'mellea[all]'`.
+For source installation directly from this repo, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+
 
 ## Example
 
