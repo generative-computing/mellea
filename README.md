@@ -24,7 +24,7 @@ with structured, testable AI workflows built around type-annotated outputs, veri
 uv pip install mellea
 ```
 
-See [installation docs](https://docs.mellea.ai/getting-started/installation) for extras (`[hf]`, `[watsonx]`, `[docling]`, `[all]`, …) and source installation.
+See [installation docs](https://docs.mellea.ai/getting-started/installation) for extras (`[hf]`, `[watsonx]`, `[docling]`, `[all]`, …), or [CONTRIBUTING.md](CONTRIBUTING.md) for source installation from git.
 
 ## Example
 
@@ -62,8 +62,7 @@ print(user.age)   # 31 — always an int, guaranteed by the schema
 
 | Resource | Description |
 | --- | --- |
-| [mellea.ai](https://mellea.ai) | Vision and features |
-| [docs.mellea.ai](https://docs.mellea.ai) | Full docs — tutorials, API reference, how-to guides |
+| [docs.mellea.ai](https://docs.mellea.ai) | Full docs — vision, tutorials, API reference, how-to guides |
 | [Colab notebooks](docs/examples/notebooks/) | Interactive examples you can run immediately |
 | [Code examples](docs/examples/) | Runnable examples: RAG, agents, Instruct-Validate-Repair (IVR), MObjects, and more |
 
