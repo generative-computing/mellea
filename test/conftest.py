@@ -43,7 +43,7 @@ def _check_ollama_available():
         host, port = host_str.rsplit(":", 1)
         port = int(port)
     else:
-        host, port = host_str, 11434
+        host, port = host_str, int(os.environ.get("OLLAMA_PORT", 11434))
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(1)
