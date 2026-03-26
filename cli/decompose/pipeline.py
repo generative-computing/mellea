@@ -5,8 +5,10 @@ Provides the ``decompose()`` function, which orchestrates a series of LLM calls
 (subtask listing, constraint extraction, validation strategy selection, prompt
 generation, and constraint assignment) to produce a ``DecompPipelineResult``
 containing subtasks, per-subtask prompts, constraints, and dependency information.
+
 Supports Ollama, OpenAI-compatible, and RITS inference backends.
 """
+
 
 import re
 from enum import StrEnum
@@ -33,17 +35,30 @@ from .prompt_modules.subtask_prompt_generator import SubtaskPromptItem
 
 
 class ConstraintValData(TypedDict):
+    """Validation metadata associated with a single extracted constraint.
+
+    Attributes:
+        val_strategy: Validation mode selected for the constraint. ``"code"``
+            means the pipeline generated validation code; ``"llm"`` means the
+            constraint should be checked by model reasoning rather than code.
+        val_fn: Generated validation function source code when ``val_strategy``
+            is ``"code"``; otherwise ``None``.
+    """
+
     val_strategy: Literal["code", "llm"]
     val_fn: str | None
 
 
 class ConstraintResult(TypedDict):
-    """A single constraint paired with its assigned validation strategy.
+    """A single constraint paired with its validation metadata.
 
-    Args:
-        constraint (str): Natural-language description of the constraint.
-        validation_strategy (str): Strategy assigned to validate the constraint;
-            either ``"code"`` or ``"llm"``.
+    Attributes:
+        constraint: Natural-language description of the constraint.
+        val_strategy: Validation mode assigned to the constraint.
+        val_fn: Generated validation function source code when the constraint
+            uses code-based validation; otherwise ``None``.
+        val_fn_name: Stable function name assigned to the generated validation
+            function in serialized output.
     """
 
     constraint: str
@@ -53,22 +68,25 @@ class ConstraintResult(TypedDict):
 
 
 class DecompSubtasksResult(TypedDict):
-    """The full structured result for one decomposed subtask.
+    """Structured decomposition data for one subtask.
 
-    Args:
-        subtask (str): Natural-language description of the subtask.
-        tag (str): Short identifier for the subtask, used as a variable name
-            in Jinja2 templates and dependency references.
-        constraints (list[ConstraintResult]): List of constraints assigned to
-            this subtask, each with a validation strategy.
-        prompt_template (str): Jinja2 prompt template string for this subtask,
-            with ``{{ variable }}`` placeholders for inputs and prior subtask results.
-        input_vars_required (list[str]): Ordered list of user-provided input
-            variable names referenced in ``prompt_template``.
-        depends_on (list[str]): Ordered list of subtask tags whose results are
+    Attributes:
+        subtask: Natural-language description of the subtask.
+        tag: Short identifier for the subtask, used as a variable name in Jinja2
+            templates and dependency references.
+        constraints: Constraints assigned to this subtask, each with validation
+            metadata.
+        prompt_template: Jinja2 prompt template for this subtask, with
+            ``{{ variable }}`` placeholders for user inputs and prior subtask
+            results.
+        general_instructions: Additional general instructions derived from the
+            prompt template for this subtask.
+        input_vars_required: Ordered list of user-provided input variable names
             referenced in ``prompt_template``.
-        generated_response (str): Optional field holding the model response
-            produced during execution; not present until the subtask runs.
+        depends_on: Ordered list of subtask tags whose results are referenced in
+            ``prompt_template``.
+        generated_response: Model response produced during execution. This field
+            is absent until the subtask has been run.
     """
 
     subtask: str
@@ -82,19 +100,19 @@ class DecompSubtasksResult(TypedDict):
 
 
 class DecompPipelineResult(TypedDict):
-    """The complete output of a decomposition pipeline run.
+    """Complete output produced by one decomposition run.
 
     Attributes:
-        original_task_prompt (str): The raw task prompt provided by the user.
-        subtask_list (list[str]): Ordered list of subtask descriptions produced
-            by the subtask-listing stage.
-        identified_constraints (list[ConstraintResult]): Constraints extracted
-            from the original task prompt, each with a validation strategy.
-        subtasks (list[DecompSubtasksResult]): Fully annotated subtask objects
-            with prompt templates, constraint assignments, and dependency
+        original_task_prompt: Raw task prompt provided by the user.
+        subtask_list: Ordered list of subtask descriptions produced during the
+            decomposition stage.
+        identified_constraints: Constraints extracted from the original task
+            prompt, each with validation metadata.
+        subtasks: Fully annotated subtask objects with prompt templates,
+            assigned constraints, general instructions, and dependency
             information.
-        final_response (str): Optional field holding the aggregated final
-            response produced during execution; not present until the pipeline runs.
+        final_response: Aggregated final response produced during execution.
+            This field is absent until the pipeline execution stage is run.
     """
 
     original_task_prompt: str
@@ -107,10 +125,10 @@ class DecompPipelineResult(TypedDict):
 class DecompBackend(StrEnum):
     """Inference backends supported by the decomposition pipeline.
 
-    Args:
-        ollama (str): Local Ollama inference server backend.
-        openai (str): Any OpenAI-compatible HTTP endpoint backend.
-        rits (str): IBM RITS (Remote Inference and Training Service) backend.
+    Attributes:
+        ollama: Local Ollama inference server backend.
+        openai: OpenAI-compatible HTTP API backend.
+        rits: IBM RITS remote inference backend.
     """
 
     ollama = "ollama"
@@ -122,14 +140,36 @@ RE_JINJA_VAR = re.compile(r"\{\{\s*(.*?)\s*\}\}")
 
 
 def _dedupe_keep_order(items: list[str]) -> list[str]:
+    """Removes duplicates from a list while preserving first-seen order."""
     return list(dict.fromkeys(items))
 
 
 def _extract_jinja_vars(prompt_template: str) -> list[str]:
+    """Extracts raw Jinja variable names referenced in a prompt template.
+
+    Args:
+        prompt_template: Prompt template containing zero or more Jinja
+            expressions such as ``{{ variable }}``.
+
+    Returns:
+        A list of variable expressions captured from the template in match
+        order. Duplicates are preserved.
+    """
     return re.findall(RE_JINJA_VAR, prompt_template)
 
 
 def _preview_text(text: str, max_len: int = 240) -> str:
+    """Normalizes text whitespace and truncates it for logging preview.
+
+    Args:
+        text: Input text to normalize and preview.
+        max_len: Maximum preview length in characters before truncation.
+
+    Returns:
+        A single-line preview string. Returns the normalized full text when its
+        length does not exceed ``max_len``; otherwise returns a truncated
+        preview ending with ``" ..."``.
+    """
     text = " ".join(text.strip().split())
     if len(text) <= max_len:
         return text
@@ -147,6 +187,29 @@ def build_backend_session(
     backend_api_key: str | None = None,
     log_mode: LogMode = LogMode.demo,
 ) -> MelleaSession:
+    """Builds a model session for the configured inference backend.
+
+    Initializes and returns a ``MelleaSession`` backed by Ollama,
+    an OpenAI-compatible endpoint, or RITS, depending on ``backend``.
+
+    Args:
+        model_id: Model identifier passed to the selected backend.
+        backend: Backend type to use for model inference.
+        backend_req_timeout: Request timeout in seconds for backend calls.
+        backend_endpoint: Base URL or endpoint required by remote backends.
+        backend_api_key: API key required by remote backends.
+        log_mode: Logging verbosity for pipeline execution.
+
+    Returns:
+        A configured ``MelleaSession`` ready for prompt generation calls.
+
+    Raises:
+        AssertionError: If ``backend`` is ``DecompBackend.openai`` or
+            ``DecompBackend.rits`` and the required endpoint or API key is not
+            provided.
+        ImportError: If the RITS backend is selected but the required RITS
+            package is not installed.
+    """
     logger = get_logger("m_decompose.backend")
     log_section(logger, "backend")
 
@@ -214,6 +277,21 @@ def build_backend_session(
 def task_decompose(
     m_session: MelleaSession, task_prompt: str, log_mode: LogMode = LogMode.demo
 ) -> tuple[list[SubtaskItem], list[str]]:
+    """Extracts subtasks and top-level constraints from a task prompt.
+
+    This stage runs two prompt modules: one to produce an ordered subtask list
+    and one to extract task-level constraints from the original prompt.
+
+    Args:
+        m_session: Active model session used to run decomposition prompts.
+        task_prompt: Natural-language task description to decompose.
+        log_mode: Logging verbosity for this stage.
+
+    Returns:
+        A tuple ``(subtasks, task_constraints)``, where ``subtasks`` is the
+        ordered list of parsed ``SubtaskItem`` objects and ``task_constraints``
+        is the ordered list of extracted natural-language constraint strings.
+    """
     logger = get_logger("m_decompose.task_decompose")
     log_section(logger, "task_decompose")
 
@@ -244,6 +322,22 @@ def constraint_validate(
     task_constraints: list[str],
     log_mode: LogMode = LogMode.demo,
 ) -> dict[str, ConstraintValData]:
+    """Selects a validation mode for each constraint and generates code when needed.
+
+    For every extracted constraint, this stage chooses a validation strategy.
+    When the selected strategy is ``"code"``, it also generates a validation
+    function body for later serialization or execution.
+
+    Args:
+        m_session: Active model session used to run validation prompts.
+        task_constraints: Ordered list of extracted natural-language
+            constraints.
+        log_mode: Logging verbosity for this stage.
+
+    Returns:
+        A mapping from each constraint string to its validation metadata,
+        including the selected strategy and optional generated validation code.
+    """
     logger = get_logger("m_decompose.constraint_validate")
     log_section(logger, "constraint_validate")
 
@@ -281,6 +375,33 @@ def task_execute(
     task_constraints: list[str],
     log_mode: LogMode = LogMode.demo,
 ) -> list[SubtaskPromptConstraintsItem]:
+    """Generates per-subtask prompt templates and assigns constraints to them.
+
+    This stage first generates a prompt template for each subtask, then asks the
+    model to assign extracted task constraints to the subtasks they apply to.
+    Constraint assignment is retried up to two times before failing.
+
+    Args:
+        m_session: Active model session used to run prompt-generation and
+            constraint-assignment prompts.
+        task_prompt: Original task description being decomposed.
+        user_input_variable: User-provided input variable names that may appear
+            in generated Jinja prompt templates.
+        subtasks: Parsed subtasks produced by the decomposition stage.
+        task_constraints: Ordered list of extracted task constraints.
+        log_mode: Logging verbosity for this stage.
+
+    Returns:
+        A list of ``SubtaskPromptConstraintsItem`` objects containing each
+        subtask, its generated prompt template, and the constraints assigned to
+        that subtask.
+
+    Raises:
+        Exception: Re-raises the last exception produced by
+            ``subtask_constraint_assign`` after all retry attempts fail.
+        RuntimeError: If constraint assignment fails without preserving a final
+            exception object.
+    """
     logger = get_logger("m_decompose.task_execute")
     log_section(logger, "task_execute")
 
@@ -403,6 +524,29 @@ def finalize_result(
     subtask_prompts_with_constraints: list[SubtaskPromptConstraintsItem],
     log_mode: LogMode = LogMode.demo,
 ) -> DecompPipelineResult:
+    """Builds the final structured pipeline result from intermediate outputs.
+
+    This stage resolves Jinja dependencies for each subtask, attaches validation
+    metadata to assigned constraints, generates general instructions from each
+    prompt template, and assembles the final ``DecompPipelineResult``.
+
+    Args:
+        m_session: Active model session used to generate general instructions.
+        task_prompt: Original task description provided by the user.
+        user_input_variable: User-provided input variable names that should be
+            treated as external inputs rather than subtask dependencies.
+        subtasks: Parsed subtasks produced by the decomposition stage.
+        task_constraints: Ordered list of extracted task constraints.
+        constraint_val_data: Validation metadata for each extracted constraint.
+        subtask_prompts_with_constraints: Prompt templates with per-subtask
+            constraint assignments.
+        log_mode: Logging verbosity for this stage.
+
+    Returns:
+        A ``DecompPipelineResult`` containing the original prompt, extracted
+        constraints, and fully annotated subtasks with dependency and validation
+        information.
+    """
     logger = get_logger("m_decompose.finalize_result")
     log_section(logger, "finalize_result")
 
@@ -490,31 +634,39 @@ def decompose(
     backend_api_key: str | None = None,
     log_mode: LogMode = LogMode.demo,
 ) -> DecompPipelineResult:
-    """Break a task prompt into structured subtasks using a multi-step LLM pipeline.
+    """Breaks a task prompt into structured subtasks with a staged LLM pipeline.
 
-    Orchestrates a series of sequential LLM calls to produce a fully structured
-    decomposition: subtask listing, constraint extraction, validation strategy
-    selection, prompt template generation, and per-subtask constraint assignment.
-    The number of calls depends on the number of constraints extracted.
+    Orchestrates sequential prompt calls for subtask listing, constraint
+    extraction, validation strategy selection, prompt-template generation, and
+    per-subtask constraint assignment. The total number of model calls depends
+    in part on how many constraints are extracted from the original task.
 
     Args:
         task_prompt: Natural-language description of the task to decompose.
-        user_input_variable: Optional list of variable names that will be
-            templated into generated prompts as user-provided input data. Pass
-            ``None`` or an empty list if the task requires no input variables.
-        model_id: Model name or ID used for all pipeline steps.
-        backend: Inference backend -- ``"ollama"``, ``"openai"``, or ``"rits"``.
-        backend_req_timeout: Request timeout in seconds for model inference calls.
-        backend_endpoint: Base URL of the OpenAI-compatible endpoint. Required
-            when ``backend`` is ``"openai"`` or ``"rits"``.
-        backend_api_key: API key for the configured endpoint. Required when
-            ``backend`` is ``"openai"`` or ``"rits"``.
-        log_mode: Mode of logging detail to emit during pipeline execution.
+        user_input_variable: Optional list of user input variable names that may
+            be referenced in generated Jinja prompt templates. Pass ``None`` or
+            an empty list when the task requires no external input variables.
+        model_id: Model name or identifier used for all pipeline stages.
+        backend: Inference backend used for all model calls.
+        backend_req_timeout: Request timeout in seconds for backend inference
+            calls.
+        backend_endpoint: Endpoint URL required by remote backends such as
+            OpenAI-compatible APIs and RITS.
+        backend_api_key: API key required by remote backends.
+        log_mode: Logging verbosity for the pipeline run.
 
     Returns:
-        A ``DecompPipelineResult`` containing the original prompt, subtask list,
-        identified constraints, and fully annotated subtask objects with prompt
-        templates, constraint assignments, and dependency information.
+        A ``DecompPipelineResult`` containing the original prompt, extracted
+        subtask list, identified constraints, and fully annotated subtask
+        records.
+
+    Raises:
+        AssertionError: If a selected remote backend is missing a required
+            endpoint or API key.
+        ImportError: If the RITS backend is selected but its dependency is not
+            installed.
+        Exception: Propagates backend, generation, parsing, or constraint
+            assignment failures raised by lower-level pipeline stages.
     """
 
     configure_logging(log_mode)
