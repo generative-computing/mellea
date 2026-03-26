@@ -1,0 +1,45 @@
+name: "Label PR by conventional commit prefix"
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize]
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Apply label based on PR title prefix
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.pull_request.title;
+            const labelMap = {
+              'feat':     'enhancement',
+              'fix':      'bug',
+              'docs':     'documentation',
+              'test':     'testing',
+              'perf':     'enhancement',
+              'refactor': 'enhancement',
+              'ci':       'integrations',
+              'chore':    null,
+              'build':    null,
+              'style':    null,
+              'revert':   null,
+            };
+
+            const match = title.match(/^(\w+)[\(!\:]/);
+            if (!match) return;
+
+            const prefix = match[1];
+            const label = labelMap[prefix];
+            if (!label) return;
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              labels: [label],
+            });

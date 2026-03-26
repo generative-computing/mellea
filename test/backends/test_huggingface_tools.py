@@ -32,7 +32,11 @@ def backend():
         model_id=model_ids.MISTRALAI_MISTRAL_0_3_7B, cache=SimpleLRUCache(5)
     )
     # add_granite_aloras(backend)
-    return backend
+    yield backend
+
+    from test.conftest import cleanup_gpu_backend
+
+    cleanup_gpu_backend(backend, "huggingface-tools")
 
 
 @pytest.fixture(scope="function")

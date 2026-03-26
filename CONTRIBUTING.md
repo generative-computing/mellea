@@ -71,6 +71,10 @@ to melleaadmin@ibm.com.
    ```bash
    pre-commit install
    ```
+   > **Note:** Some hooks require tools in dev dependency groups to be on your PATH. Activate the virtual environment before committing to ensure they are available:
+   > ```bash
+   > source .venv/bin/activate
+   > ```
 
 ### Installation with `conda`/`mamba`
 
@@ -430,7 +434,7 @@ CICD=1 uv run pytest
 | Output is wrong/None | Model too small or needs better prompt. Try larger model or add `reasoning` field. |
 | `error: can't find Rust compiler` | Python 3.13+ requires Rust for outlines. Install [Rust](https://www.rust-lang.org/tools/install) or use Python 3.12. |
 | Tests fail on Intel Mac | Use conda: `conda install 'torchvision>=0.22.0'` then `uv pip install mellea`. |
-| Pre-commit hooks fail | Run `pre-commit run --all-files` to see specific issues. Fix or use `git commit -n` to bypass. |
+| Pre-commit hooks fail | Run `pre-commit run --all-files` to see specific issues. Fix or use `git commit -n` to bypass. If a tool reports `command not found`, activate the virtual environment before committing: `source .venv/bin/activate`. |
 
 ### Debugging Tips
 
@@ -447,7 +451,7 @@ print(m.last_prompt())
 
 - Check this guide and [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md)
 - Search [existing issues](https://github.com/generative-computing/mellea/issues)
-- Join our [Discord](https://ibm.biz/mellea-discord)
+- Check out [Github Discussions](https://github.com/generative-computing/mellea/discussions)
 - Open a new issue with the appropriate label
 
 ## Additional Resources
@@ -461,7 +465,6 @@ print(m.last_prompt())
 - **[AGENTS_TEMPLATE.md](docs/AGENTS_TEMPLATE.md)** - Template for projects using Mellea
 
 ### Community
-- **[Discord](https://ibm.biz/mellea-discord)** - Join our community
 - **[GitHub Issues](https://github.com/generative-computing/mellea/issues)** - Report bugs or request features
 - **[GitHub Discussions](https://github.com/generative-computing/mellea/discussions)** - Ask questions and share ideas
 

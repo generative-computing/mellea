@@ -9,7 +9,7 @@ import pytest
 import torch
 
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
+from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
@@ -39,13 +39,9 @@ def _backend():
     backend_ = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")  # type: ignore
     yield backend_
 
-    # Code after yield is cleanup code.
-    # Free GPU memory with extreme prejudice.
-    del backend_
-    gc.collect()  # Force a collection of the newest generation
-    gc.collect()
-    gc.collect()  # Hopefully force a collection of the oldest generation
-    torch.cuda.empty_cache()
+    from test.conftest import cleanup_gpu_backend
+
+    cleanup_gpu_backend(backend_, "rag")
 
 
 def _read_input_json(file_name: str):

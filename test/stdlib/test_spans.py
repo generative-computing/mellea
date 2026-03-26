@@ -8,12 +8,7 @@ from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.session import MelleaSession, start_session
 
 # Module-level markers for all tests using Granite 4 hybrid micro (3B model)
-pytestmark = [
-    pytest.mark.huggingface,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.llm,
-]
+pytestmark = [pytest.mark.huggingface, pytest.mark.requires_gpu, pytest.mark.llm]
 
 
 # We edit the context type in the async tests below. Don't change the scope here.
@@ -25,6 +20,10 @@ def m_session(gh_run):
         model_options={ModelOption.MAX_NEW_TOKENS: 64},
     )
     yield m
+
+    from test.conftest import cleanup_gpu_backend
+
+    cleanup_gpu_backend(m.backend, "spans")
     del m
 
 

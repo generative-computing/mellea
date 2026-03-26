@@ -287,6 +287,16 @@ def test_alora_training_integration():
             "✅ Verified adapter activation: both with/without invocation tokens generate successfully"
         )
 
+        # Cleanup GPU memory
+        base_model.cpu()
+        del model_with_adapter
+        del base_model
+        import gc
+
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
 
 def test_lora_training_integration():
     """Integration test: Train a tiny standard LoRA adapter and verify it works.

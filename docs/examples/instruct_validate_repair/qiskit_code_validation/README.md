@@ -1,6 +1,6 @@
 # Qiskit Code Validation with Instruct-Validate-Repair
 
-This example demonstrates using Mellea's Instruct-Validate-Repair (IVR) pattern to generate Qiskit quantum computing code that automatically passes flake8-qiskit-migration validation rules (QKT rules).
+This example demonstrates using Mellea's Instruct-Validate-Repair (IVR) pattern to generate Qiskit quantum computing code that automatically passes `flake8-qiskit-migration` validation rules (QKT rules).
 
 ## What This Example Does
 
@@ -33,6 +33,34 @@ Dependencies (`mellea`, `flake8-qiskit-migration`) are automatically installed.
 2. **Instruction**: LLM generates code following structured requirements
 3. **Post-condition validation**: Validates generated code against QKT rules (see [Qiskit Migration Guide](https://docs.quantum.ibm.com/api/migration-guides))
 4. **Repair loop**: Automatically repairs code that fails validation (up to 5 attempts)
+
+### Sampling Strategies
+
+The example supports two repair strategies (see [Sampling Strategies](../README.md#sampling-strategies)):
+
+- **RepairTemplateStrategy** (default): Adds validation failure reasons directly to the instruction and retries generation
+- **MultiTurnStrategy**: Builds conversation history by adding validation failures as new user messages
+
+To switch strategies, edit the `use_multiturn_strategy` variable in `test_qiskit_code_validation()`
+
+**Note**: `MultiTurnStrategy` requires `ChatContext()` while `RepairTemplateStrategy` works with `SimpleContext()`. The example automatically selects the appropriate context based on your strategy choice.
+
+#### Strategy Performance Comparison
+
+Benchmarks on `mistral-small-3.2-24b-qiskit` model (pass rates measure QKT validation only, not correctness):
+
+| Dataset | Strategy | First Pass | Post-Repair |
+|---------|----------|------------|-------------|
+| **QHE** | RepairTemplate | 78.2% | **99.3%** |
+|         | MultiTurn | 77.5% | 96.7% |
+| **QKT** | RepairTemplate | 54.1% | **83.8%** |
+|         | MultiTurn | 37.8% | 70.3% |
+
+**Datasets:**
+- **QHE** (QiskitHumanEval): Code generation tasks testing general Qiskit programming
+- **QKT**: Qiskit version migration tasks requiring fixes to deprecated APIs
+
+**Note:** These benchmarks measure whether generated code passes QKT validation rules, not whether the code correctly solves the prompt. Both aspects are important for production use.
 
 ### Code Structure
 
@@ -224,6 +252,4 @@ ModuleNotFoundError: No module named 'flake8_qiskit_migration'
 
 The following enhancements are planned for future iterations:
 
-1. **MultiTurnStrategy Integration** - Try using `MultiTurnStrategy` (see [Sampling Strategies](../README.md#sampling-strategies)) which builds conversation history by adding validation failures as new user messages, to see if this approach improves results over the current `RepairTemplateStrategy` which adds failures directly to the instruction.
-
-2. **Enable Smaller Models** - Add system prompt or grounding context with Qiskit API documentation to help smaller models perform accurate migrations. This would allow removing the `pytest.mark.skip` marker and make the example run in standard test suites.
+1. **Enable Smaller Models** - Add system prompt or grounding context with Qiskit API documentation to help smaller models perform accurate migrations. This would allow removing the `pytest.mark.skip` marker and make the example run in standard test suites.
