@@ -107,7 +107,7 @@ def test_await_result_false_with_sampling_still_computes():
 
 
 def test_default_behavior_unchanged():
-    """Test that default behavior (await_result=False) returns uncomputed thunk."""
+    """Test that sync functions always return computed thunks, even without explicit await_result."""
     with start_session() as session:
         # Default behavior should return uncomputed thunk for streaming
         result = session.instruct("Say 'hello'", strategy=None)

@@ -627,12 +627,12 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
             raise ValueError("ComputedModelOutputThunk requires a non-None value.")
 
     async def avalue(self) -> str:
-        """Return the value of the thunk. Use .value() instead."""
+        """Return the value of the thunk. Use .value instead."""
         assert self.value is not None, "ComputedModelOutputThunk value cannot be None"
         return self.value
 
     async def astream(self) -> str:
-        """Cannot astream from ComputedModelOutputThunks. Use .value() instead."""
+        """Cannot astream from ComputedModelOutputThunks. Use .value instead."""
         raise RuntimeError(
             "Cannot stream from a ComputedModelOutputThunk. "
             "This thunk is already fully computed and does not support streaming."
@@ -649,7 +649,7 @@ class ComputedModelOutputThunk(ModelOutputThunk[S]):
         self._underlying_value = v
 
     def is_computed(self) -> Literal[True]:
-        """Returns `True`."""
+        """Returns `True` since thunk is always computed."""
         return True
 
 

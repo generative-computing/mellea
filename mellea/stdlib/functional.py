@@ -113,6 +113,14 @@ def act(
         )  # type: ignore[call-overload]
     )
 
+    computed = False
+    if isinstance(out, SamplingResult):
+        computed = out.result.is_computed()
+    else:
+        mot, _ = out
+        computed = mot.is_computed()
+    assert computed, "Synchronous functions must return a computed result."
+
     return out
 
 

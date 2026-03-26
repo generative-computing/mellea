@@ -28,6 +28,7 @@ SKIP_DIRS = {"__pycache__", ".git", ".venv", "node_modules"}
 
 @dataclass
 class FixLocation:
+    """Location of the fix along with some additional details."""
     filepath: Path
     line: int
     col_offset: int
@@ -39,6 +40,7 @@ class FixLocation:
 
 @dataclass
 class FixResult:
+    """Full summary of fixes."""
     locations: list[FixLocation]
     total_fixes: int
     files_affected: int
