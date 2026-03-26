@@ -28,6 +28,7 @@ jobs:
               'build':    null,
               'style':    null,
               'revert':   null,
+              'release':  null,
             };
 
             const match = title.match(/^(\w+)[\(!\:]/);
