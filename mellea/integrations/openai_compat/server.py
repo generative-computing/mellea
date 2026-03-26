@@ -223,22 +223,6 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
 
         return app.state.sessions[session_key]
 
-    def convert_messages_to_context(messages: list[ChatMessage]) -> ChatContext:
-        """Convert OpenAI messages to mellea Context.
-
-        Args:
-            messages: List of chat messages from the request.
-
-        Returns:
-            ChatContext object with messages.
-        """
-        ctx = ChatContext()
-        for msg in messages:
-            if msg.content:
-                mellea_msg = Message(role=msg.role, content=msg.content)
-                ctx = ctx.add(mellea_msg)
-        return ctx
-
     def build_model_options(request: ChatCompletionRequest) -> dict[str, Any]:
         """Build model options from request parameters.
 
