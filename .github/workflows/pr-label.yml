@@ -31,10 +31,11 @@ jobs:
             };
 
             const match = title.match(/^(\w+)[\(!\:]/);
-            if (!match) return;
+            if (!match) { core.setFailed(`PR title "${title}" does not match conventional commit format.`); return; }
 
             const prefix = match[1];
             const label = labelMap[prefix];
+            if (label === undefined) { core.setFailed(`PR title prefix "${prefix}" is not a recognized conventional commit type.`); return; }
             if (!label) return;
 
             await github.rest.issues.addLabels({
