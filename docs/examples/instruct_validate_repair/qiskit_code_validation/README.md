@@ -213,6 +213,29 @@ The default model is a Qiskit-specialized fine-tune of Mistral Small. It require
 
 General-purpose models (e.g. `granite4:micro-h`) can be used as a lighter alternative but have significantly lower correctness on Qiskit tasks. When using a non-specialized model, set `system_prompt = QISKIT_SYSTEM_PROMPT` to improve results.
 
+## Using Grounding Context
+
+The `grounding_context` parameter accepts a `dict[str, str]` of additional context passed to the LLM alongside the prompt. Keys act as section labels and values are the content. This is useful for injecting relevant documentation snippets, RAG results, or API references at inference time.
+
+**Example — injecting migration guide excerpts:**
+
+```python
+grounding_context = {
+    "primitives_migration": (
+        "SamplerV2 replaces the legacy execute() function. "
+        "Use: sampler = SamplerV2(backend); job = sampler.run([circuit]); result = job.result()"
+    ),
+    "transpilation": (
+        "Use generate_preset_pass_manager() instead of transpile(). "
+        "Example: pm = generate_preset_pass_manager(optimization_level=1, backend=backend); isa_circuit = pm.run(circuit)"
+    ),
+}
+
+code, success, attempts = generate_validated_qiskit_code(
+    m, prompt, strategy, grounding_context=grounding_context
+)
+```
+
 ## Troubleshooting
 
 ### Ollama Connection Refused
