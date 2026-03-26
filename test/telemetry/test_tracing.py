@@ -4,6 +4,10 @@ import os
 
 import pytest
 
+pytest.importorskip(
+    "opentelemetry", reason="opentelemetry not installed — install mellea[telemetry]"
+)
+
 
 @pytest.fixture
 def enable_app_tracing(monkeypatch):
