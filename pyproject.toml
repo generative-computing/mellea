@@ -288,6 +288,11 @@ install_types = true
 non_interactive = true
 disable_error_code = ["empty-body", "import-untyped"]
 python_version = "3.11"
+exclude = [
+"^tooling/",
+"^scratchpad/",
+"^tmp/"
+]
 
 [[tool.mypy.overrides]]
 # Keep import-not-found suppressed for optional dependencies
