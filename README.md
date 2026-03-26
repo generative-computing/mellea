@@ -27,8 +27,6 @@ uv pip install mellea
 See [installation docs](https://docs.mellea.ai/getting-started/installation) for additional options, such as installing all extras via `uv pip install 'mellea[all]'`.
 For source installation directly from this repo, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-
-
 ## Example
 
 The `@generative` decorator turns a typed Python function into a structured LLM call.
