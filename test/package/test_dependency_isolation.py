@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 pytestmark = [
+    pytest.mark.integration,
     pytest.mark.slow,  # Very slow on the first run.
     pytest.mark.timeout(600),
 ]
