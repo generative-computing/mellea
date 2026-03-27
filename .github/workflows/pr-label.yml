@@ -3,6 +3,7 @@ name: "Label PR by conventional commit prefix"
 on:
   pull_request_target:
     types: [opened, edited, synchronize]
+  merge_group:
 
 jobs:
   label:
@@ -45,3 +46,10 @@ jobs:
               issue_number: context.payload.pull_request.number,
               labels: [label],
             });
+  conventional-commit:
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "PR title already validated at PR open/edit time"
+
+
