@@ -288,14 +288,30 @@ def test_alora_training_integration():
         )
 
         # Cleanup GPU memory
-        base_model.cpu()
-        del model_with_adapter
-        del base_model
         import gc
 
+        # 1. Remove accelerate dispatch hooks before moving to CPU.
+        #    device_map="auto" installs hooks that prevent full VRAM release otherwise.
+        try:
+            from accelerate.hooks import remove_hook_from_module
+
+            remove_hook_from_module(base_model, recurse=True)
+        except (ImportError, Exception):
+            pass
+
+        # 2. Delete the PeftModel wrapper first — it holds internal refs to base_model.
+        del model_with_adapter
+
+        # 3. Now move base_model to CPU and delete it.
+        base_model.cpu()
+        del base_model
+
+        # 4. Force GC and flush CUDA cache synchronously.
+        gc.collect()
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+            torch.cuda.synchronize()
 
 
 def test_lora_training_integration():
@@ -369,3 +385,12 @@ def test_lora_training_integration():
         print(
             f"✅ Config format verified: {config.get('peft_type')} without alora_invocation_tokens"
         )
+
+        # Cleanup GPU memory after training
+        import gc
+
+        gc.collect()
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
