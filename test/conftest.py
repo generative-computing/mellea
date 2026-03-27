@@ -231,8 +231,8 @@ BACKEND_GROUPS = {
         "description": "Ollama backend tests (local server)",
     },
     "api": {
-        "marker": "requires_api_key",
-        "description": "API-based backends (OpenAI, Watsonx, Bedrock)",
+        "markers": ["watsonx", "bedrock"],
+        "description": "API-based backends (Watsonx, Bedrock — require cloud credentials)",
     },
 }
 
@@ -297,9 +297,6 @@ def pytest_configure(config):
         config.addinivalue_line("markers", f"{name}: {desc}")
 
     # Capability markers
-    config.addinivalue_line(
-        "markers", "requires_api_key: Tests requiring external API keys"
-    )
     config.addinivalue_line("markers", "qualitative: Non-deterministic quality tests")
 
     # Granularity markers
@@ -496,11 +493,13 @@ def pytest_collection_modifyitems(config, items):
         seen = set()
 
         for group_name in BACKEND_GROUP_ORDER:
-            marker = BACKEND_GROUPS[group_name]["marker"]
+            group_info = BACKEND_GROUPS[group_name]
+            markers = group_info.get("markers") or [group_info["marker"]]
             group_tests = [
                 item
                 for item in items
-                if item.get_closest_marker(marker) and id(item) not in seen
+                if any(item.get_closest_marker(m) for m in markers)
+                and id(item) not in seen
             ]
 
             if group_tests:
@@ -540,7 +539,8 @@ def pytest_runtest_setup(item):
     if config.getoption("--group-by-backend", default=False):
         current_group = None
         for group_name, group_info in BACKEND_GROUPS.items():
-            if item.get_closest_marker(group_info["marker"]):
+            markers = group_info.get("markers") or [group_info["marker"]]
+            if any(item.get_closest_marker(m) for m in markers):
                 current_group = group_name
                 break
 
@@ -589,15 +589,6 @@ def pytest_runtest_setup(item):
         pytest.skip(
             reason="Skipping qualitative test: got env variable CICD == 1. Used only in gh workflows."
         )
-
-    # Skip tests requiring API keys if not available
-    if item.get_closest_marker("requires_api_key"):
-        for backend in ["openai", "watsonx"]:
-            if item.get_closest_marker(backend):
-                if not capabilities["has_api_keys"].get(backend):
-                    pytest.skip(
-                        f"Skipping test: {backend} API key not found in environment"
-                    )
 
     if item.get_closest_marker("watsonx"):
         if not capabilities["has_api_keys"].get("watsonx"):

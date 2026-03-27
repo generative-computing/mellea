@@ -342,7 +342,6 @@ markers = [
     "bedrock: Tests requiring AWS Bedrock backend (requires credentials)",
 
     # Capability markers
-    "requires_api_key: Tests requiring external API keys",
     "qualitative: Non-deterministic quality tests",
     "slow: Tests taking >1 minute (e.g., multi-step pipelines like researcher)",
 
