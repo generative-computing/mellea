@@ -19,6 +19,10 @@ uv run pytest -m slow
 
 - `CICD=1` - Enable CI mode (skips qualitative tests)
 - `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` - Helps with GPU memory fragmentation
+- `OLLAMA_KEEP_ALIVE=1m` - Reduce Ollama model idle window from the default 5 minutes to 1 minute.
+  Useful when running without `--group-by-backend`: limits how long a loaded Ollama model occupies
+  unified memory while HF/torch tests are running. Has no effect mid-run (timer resets per request),
+  but reduces the overlap window when switching between backend groups.
 
 ## GPU Testing on CUDA Systems
 
