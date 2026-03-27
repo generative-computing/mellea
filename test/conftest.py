@@ -82,7 +82,9 @@ def get_system_capabilities():
         try:
             out = _subprocess.run(
                 ["sysctl", "-n", "hw.memsize"],
-                capture_output=True, text=True, timeout=2,
+                capture_output=True,
+                text=True,
+                timeout=2,
             )
             total_gb = int(out.stdout.strip()) / (1024**3)
             capabilities["gpu_memory_gb"] = min(total_gb * 0.75, total_gb - 16)
@@ -149,25 +151,9 @@ def gh_run() -> int:
 def shared_vllm_backend(request):
     """Shared vLLM backend for ALL vLLM tests across all modules.
 
-    When --isolate-heavy is used, returns None to allow module-scoped backends.
     When --group-by-backend is used, delays creation until after openai_vllm group.
     Uses IBM Granite 4 Micro as a small, fast model suitable for all vLLM tests.
     """
-    # Check if process isolation is enabled
-    use_isolation = (
-        request.config.getoption("--isolate-heavy", default=False)
-        or os.environ.get("CICD", "0") == "1"
-    )
-
-    if use_isolation:
-        logger = FancyLogger.get_logger()
-        logger.info(
-            "Process isolation enabled (--isolate-heavy). "
-            "Skipping shared vLLM backend - each module will create its own."
-        )
-        yield None
-        return
-
     # When using --group-by-backend, delay backend creation until after openai_vllm group
     if request.config.getoption("--group-by-backend", default=False):
         # Check if we're currently in the openai_vllm group
@@ -311,12 +297,6 @@ def pytest_addoption(parser):
         help="Register all acceptance plugin sets for every test",
     )
     add_option_safe(
-        "--isolate-heavy",
-        action="store_true",
-        default=False,
-        help="Run heavy GPU tests in isolated subprocesses (slower, but guarantees CUDA memory release)",
-    )
-    add_option_safe(
         "--group-by-backend",
         action="store_true",
         default=False,
@@ -384,104 +364,6 @@ def pytest_configure(config):
 # ============================================================================
 # Heavy GPU Test Process Isolation
 # ============================================================================
-
-
-def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
-    """Run heavy RAM test modules in separate processes for GPU memory isolation.
-
-    Streams output in real-time and parses for test failures to provide
-    a clear summary at the end.
-
-    Returns exit code (0 = all passed, 1 = any failed).
-    """
-    print("\n" + "=" * 70)
-    print("Heavy GPU Test Process Isolation Active")
-    print("=" * 70)
-    print(
-        f"Running {len(heavy_modules)} heavy GPU test module(s) in separate processes"
-    )
-    print("to ensure GPU memory is fully released between modules.\n")
-
-    # Set environment variables for vLLM
-    env = os.environ.copy()
-    env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-
-    all_passed = True
-    failed_modules = {}  # module_path -> list of failed test names
-
-    for i, module_path in enumerate(heavy_modules, 1):
-        print(f"\n[{i}/{len(heavy_modules)}] Running: {module_path}")
-        print("-" * 70)
-
-        # Build pytest command with same options as parent session
-        cmd = [sys.executable, "-m", "pytest", module_path, "-v", "--no-cov"]
-
-        # Add markers from original command if present
-        config = session.config
-        markexpr = config.getoption("-m", default=None)
-        if markexpr:
-            cmd.extend(["-m", markexpr])
-
-        import pathlib
-
-        repo_root = str(pathlib.Path(__file__).parent.parent.resolve())
-        env["PYTHONPATH"] = f"{repo_root}{os.pathsep}{env.get('PYTHONPATH', '')}"
-
-        # Stream output in real-time while capturing for parsing
-        process = subprocess.Popen(
-            cmd,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,  # Merge stderr into stdout
-            text=True,
-            bufsize=1,  # Line buffered for immediate output
-        )
-
-        failed_tests = []
-
-        # Stream output line by line
-        if process.stdout:
-            for line in process.stdout:
-                print(line, end="")  # Print immediately (streaming)
-
-                # Parse for failures (pytest format: "test_file.py::test_name FAILED")
-                if " FAILED " in line:
-                    # Extract test name from pytest output
-                    try:
-                        parts = line.split(" FAILED ")
-                        if len(parts) >= 2:
-                            # Get the test identifier (the part before " FAILED ")
-                            # Strip whitespace and take last token (handles indentation)
-                            test_name = parts[0].strip().split()[-1]
-                            failed_tests.append(test_name)
-                    except Exception:
-                        # If parsing fails, continue - we'll still show module failed
-                        pass
-
-        process.wait()
-
-        if process.returncode != 0:
-            all_passed = False
-            failed_modules[module_path] = failed_tests
-            print(f"✗ Module failed: {module_path}")
-        else:
-            print(f"✓ Module passed: {module_path}")
-
-    print("\n" + "=" * 70)
-    if all_passed:
-        print("All heavy GPU modules passed!")
-    else:
-        print(f"Failed modules ({len(failed_modules)}):")
-        for module, tests in failed_modules.items():
-            print(f"  {module}:")
-            if tests:
-                for test in tests:
-                    print(f"    - {test}")
-            else:
-                print("    (module failed but couldn't parse specific test names)")
-    print("=" * 70 + "\n")
-
-    return 0 if all_passed else 1
 
 
 # ============================================================================
@@ -607,68 +489,6 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
 
     except ImportError:
         pass
-
-
-def pytest_collection_finish(session):
-    """
-    Opt-in process isolation for heavy GPU tests.
-    Prevents CUDA OOMs by forcing OS-level memory release between heavy modules.
-    """
-    # 1. Test Discovery Guard: Never isolate during discovery
-    if session.config.getoption("collectonly", default=False):
-        return
-
-    # 2. Opt-in Guard: Only isolate if explicitly requested or in CI
-    use_isolation = (
-        session.config.getoption("--isolate-heavy", default=False)
-        or os.environ.get("CICD", "0") == "1"
-    )
-    if not use_isolation:
-        return
-
-    # 3. Hardware Guard: Only applies to CUDA environments
-    try:
-        import torch
-
-        if not torch.cuda.is_available():
-            return
-    except ImportError:
-        return
-
-    # Collect modules explicitly marked for GPU isolation
-    heavy_items = [
-        item
-        for item in session.items
-        if item.get_closest_marker("requires_gpu_isolation")
-    ]
-
-    # Extract unique module paths
-    heavy_modules = list({str(item.path) for item in heavy_items})
-
-    if len(heavy_modules) <= 1:
-        return  # No isolation needed for a single module
-
-    # Confirmation logging: Show which modules will be isolated
-    print(f"\n[INFO] GPU Isolation enabled for {len(heavy_modules)} modules:")
-    for module in heavy_modules:
-        print(f"  - {module}")
-
-    # Execute heavy modules in subprocesses
-    exit_code = _run_heavy_modules_isolated(session, heavy_modules)
-
-    # 4. Non-Destructive Execution: Remove heavy items, DO NOT exit.
-    session.items = [
-        item for item in session.items if str(item.path) not in heavy_modules
-    ]
-
-    # Propagate subprocess failures to the main pytest session
-    if exit_code != 0:
-        # Count actual test failures from the isolated modules
-        # Note: We increment testsfailed by the number of modules that failed,
-        # not the total number of modules. The _run_heavy_modules_isolated
-        # function already tracks which modules failed.
-        session.testsfailed += 1  # Mark that failures occurred
-        session.exitstatus = exit_code
 
 
 # ============================================================================

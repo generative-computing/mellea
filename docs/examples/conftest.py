@@ -121,7 +121,7 @@ def _should_skip_collection(markers):
         return True, "Skipping slow test (SKIP_SLOW=1)"
 
     # Skip tests requiring GPU if not available
-    if "requires_gpu" in markers or "huggingface" in markers or "vllm" in markers:
+    if "huggingface" in markers or "vllm" in markers:
         if not capabilities["has_gpu"]:
             return True, "GPU not available"
 
@@ -131,15 +131,14 @@ def _should_skip_collection(markers):
             return True, "Ollama not available (port 11434 not listening)"
 
     # Skip tests requiring API keys
-    if "requires_api_key" in markers or "watsonx" in markers:
-        if "watsonx" in markers and not capabilities["has_api_keys"].get("watsonx"):
+    if "watsonx" in markers:
+        if not capabilities["has_api_keys"].get("watsonx"):
             return True, "Watsonx API credentials not found"
-        if "openai" in markers and not capabilities["has_api_keys"].get("openai"):
+    if "openai" in markers:
+        if not capabilities["has_api_keys"].get("openai"):
             return True, "OpenAI API key not found"
 
     return False, None
-
-
 
 
 def pytest_addoption(parser):
@@ -577,20 +576,9 @@ def pytest_runtest_setup(item):
             reason="Skipping qualitative test: got env variable CICD == 1. Used only in gh workflows."
         )
 
-    # Skip tests requiring API keys if not available
-    if item.get_closest_marker("requires_api_key") and not ignore_api_key:
-        for backend in ["openai", "watsonx"]:
-            if item.get_closest_marker(backend):
-                if not capabilities["has_api_keys"].get(backend):
-                    pytest.skip(
-                        f"Skipping test: {backend} API key not found in environment"
-                    )
-
     # Skip tests requiring GPU if not available
     if (
-        item.get_closest_marker("requires_gpu")
-        or item.get_closest_marker("huggingface")
-        or item.get_closest_marker("vllm")
+        item.get_closest_marker("huggingface") or item.get_closest_marker("vllm")
     ) and not ignore_gpu:
         if not capabilities["has_gpu"]:
             pytest.skip("Skipping test: GPU not available")

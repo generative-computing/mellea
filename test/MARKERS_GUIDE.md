@@ -313,7 +313,6 @@ jobs:
 ```
 
 - `CICD=1` skips qualitative tests
-- `CICD=1` enables GPU process isolation (`--isolate-heavy` behaviour)
 - `slow` tests excluded by default (add `-m slow` to include)
 
 ## Related Files

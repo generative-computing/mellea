@@ -233,6 +233,34 @@ The VRAM heuristic (`predicates.py`) reports *estimated available* memory, not
 total RAM. A 32 GB Apple Silicon machine reports ~16 GB available. Setting
 `min_vram_gb=20` correctly skips on that machine while running on 48 GB+.
 
+### Adapter accumulation signals (module-scoped backend with multiple intrinsics)
+
+When a test module uses a **module-scoped backend fixture** and calls multiple different intrinsic
+functions (`call_intrinsic`, `guardian_check`, `policy_guardrails`, `guardian_check_harm`, etc.)
+against the same backend, each intrinsic loads a separate LoRA adapter that stays resident in
+`_loaded_adapters` for the lifetime of the fixture. Adapters do NOT auto-unload between tests.
+
+| Signal | Pattern | Notes |
+|---|---|---|
+| Module-scoped HF backend | `scope="module"` on a `LocalHFBackend` fixture | Adapter accumulation possible |
+| Multiple intrinsic calls | `call_intrinsic(`, `guardian_check(`, `policy_guardrails(`, `factuality_` | Each loads a distinct adapter |
+| No `unload_adapter` | Absence of `backend.unload_adapter(` in fixture teardown | Adapters pile up |
+
+**Memory estimate for modules with adapter accumulation:**
+
+```
+min_vram_gb = base_model_gb + (N_distinct_intrinsics × ~0.2 GB) + inference_overhead_gb
+```
+
+For `test_guardian.py` (6 tests, 3B base model, ~4 distinct adapters):
+- Base model: ~6 GB
+- 4 adapters: ~0.8 GB
+- Inference overhead: ~2 GB
+- Total: ~9 GB minimum → use `require_gpu(min_vram_gb=12)` for headroom
+
+Flag any module where `scope="module"` backend + multiple distinct intrinsic calls has
+`require_gpu(min_vram_gb=N)` set only to cover the base model size.
+
 ### SDK-boundary signals (test is likely integration, not unit)
 
 These patterns indicate real third-party SDK objects are being used as

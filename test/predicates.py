@@ -45,13 +45,12 @@ def _apple_silicon_vram_gb() -> float:
     Metal's ``recommendedMaxWorkingSetSize`` is a static device property
     (~75% of total RAM) that does not account for current system load.
     We use ``min(total * 0.75, total - 16)`` to leave headroom for the OS
-    and desktop applications, which typically consume 8–16 GB on a loaded
+    and desktop applications, which typically consume 8-16 GB on a loaded
     developer machine.
     """
     try:
         out = subprocess.run(
-            ["sysctl", "-n", "hw.memsize"],
-            capture_output=True, text=True, timeout=2,
+            ["sysctl", "-n", "hw.memsize"], capture_output=True, text=True, timeout=2
         )
         total_gb = int(out.stdout.strip()) / (1024**3)
         return min(total_gb * 0.75, total_gb - 16)
@@ -131,27 +130,6 @@ def require_ram(min_gb: int):
             True, reason=f"Insufficient RAM: {ram:.0f} GB < {min_gb} GB required"
         )
     return pytest.mark.skipif(False, reason="")
-
-
-# ---------------------------------------------------------------------------
-# GPU process isolation
-# ---------------------------------------------------------------------------
-
-
-def require_gpu_isolation():
-    """Skip unless GPU process isolation is enabled.
-
-    Isolation is active when ``--isolate-heavy`` is passed or ``CICD=1``.
-    Tests marked with this predicate will be run in separate subprocesses
-    to prevent CUDA OOM from cross-test memory leaks.
-    """
-    isolate = os.environ.get("CICD", "0") == "1"
-    # Note: --isolate-heavy is a pytest CLI flag checked at collection time
-    # by conftest.py.  At import time we can only check the env var.
-    return pytest.mark.skipif(
-        not (isolate or _gpu_available()),
-        reason="GPU isolation requires CICD=1 or --isolate-heavy with a GPU",
-    )
 
 
 # ---------------------------------------------------------------------------

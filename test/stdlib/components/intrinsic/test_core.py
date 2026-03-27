@@ -27,7 +27,7 @@ pytestmark = [
         reason="Skipping core intrinsic tests in CI - all qualitative tests",
     ),
     pytest.mark.huggingface,
-    require_gpu(min_vram_gb=8),
+    require_gpu(min_vram_gb=12),
     pytest.mark.e2e,
 ]
 

@@ -25,7 +25,6 @@ uv run pytest                         # Default: qualitative tests, skip slow te
 uv run pytest -m "not qualitative"    # Fast tests only (~2 min)
 uv run pytest -m slow                 # Run only slow tests (>5 min)
 uv run pytest --co -q                 # Run ALL tests including slow (bypass config)
-uv run pytest --isolate-heavy         # Enable GPU process isolation (opt-in)
 uv run ruff format .                  # Format code
 uv run ruff check .                   # Lint code
 uv run mypy .                         # Type check

@@ -2,7 +2,9 @@ import pytest
 
 from mellea.backends import ModelOption
 
-pytest.importorskip("llguidance", reason="llguidance not installed — install mellea[hf]")
+pytest.importorskip(
+    "llguidance", reason="llguidance not installed — install mellea[hf]"
+)
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.core import CBlock
@@ -11,7 +13,7 @@ from mellea.stdlib.session import MelleaSession, start_session
 from test.predicates import require_gpu
 
 # Module-level markers for all tests using Granite 4 hybrid micro (3B model)
-pytestmark = [pytest.mark.huggingface, require_gpu(min_vram_gb=8), pytest.mark.e2e]
+pytestmark = [pytest.mark.huggingface, require_gpu(min_vram_gb=12), pytest.mark.e2e]
 
 
 # We edit the context type in the async tests below. Don't change the scope here.
