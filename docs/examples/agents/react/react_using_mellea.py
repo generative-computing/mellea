@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, llm, qualitative, slow
 
 """React examples using the Mellea library's framework."""
 
@@ -36,6 +36,7 @@ async def main():
         context=ChatContext(),
         backend=m.backend,
         tools=[search_tool],
+        loop_budget=12,
     )
     print(out)
 
