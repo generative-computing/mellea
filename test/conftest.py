@@ -261,30 +261,6 @@ def pytest_addoption(parser):
             pass
 
     add_option_safe(
-        "--ignore-gpu-check",
-        action="store_true",
-        default=False,
-        help="Ignore GPU requirement checks (tests may fail without GPU)",
-    )
-    add_option_safe(
-        "--ignore-ollama-check",
-        action="store_true",
-        default=False,
-        help="Ignore Ollama availability checks (tests will fail if Ollama not running)",
-    )
-    add_option_safe(
-        "--ignore-api-key-check",
-        action="store_true",
-        default=False,
-        help="Ignore API key checks (tests will fail without valid API keys)",
-    )
-    add_option_safe(
-        "--ignore-all-checks",
-        action="store_true",
-        default=False,
-        help="Ignore all requirement checks (GPU, RAM, Ollama, API keys)",
-    )
-    add_option_safe(
         "--disable-default-mellea-plugins",
         action="store_true",
         default=False,
@@ -492,12 +468,6 @@ def pytest_collection_modifyitems(config, items):
     """
     capabilities = get_system_capabilities()
 
-    # Check for override flags
-    ignore_all = config.getoption("--ignore-all-checks", default=False)
-    ignore_ollama = (
-        config.getoption("--ignore-ollama-check", default=False) or ignore_all
-    )
-
     skip_ollama = pytest.mark.skip(
         reason="Ollama not available (port 11434 not listening)"
     )
@@ -508,7 +478,7 @@ def pytest_collection_modifyitems(config, items):
 
     for item in items:
         # Skip ollama tests if ollama not available
-        if item.get_closest_marker("ollama") and not ignore_ollama:
+        if item.get_closest_marker("ollama"):
             if not capabilities["has_ollama"]:
                 item.add_marker(skip_ollama)
 
@@ -561,9 +531,6 @@ def pytest_runtest_setup(item):
     """Skip tests based on markers and system capabilities.
 
     Can be overridden with command-line options:
-    - pytest --ignore-gpu-check
-    - pytest --ignore-ollama-check
-    - pytest --ignore-api-key-check
     """
     capabilities = get_system_capabilities()
     gh_run = int(os.environ.get("CICD", 0))
@@ -617,22 +584,14 @@ def pytest_runtest_setup(item):
 
         pytest_runtest_setup._last_backend_group = current_group
 
-    # Check for override flags from CLI
-    ignore_all = config.getoption("--ignore-all-checks", default=False)
-    ignore_gpu = config.getoption("--ignore-gpu-check", default=False) or ignore_all
-    ignore_api_key = (
-        config.getoption("--ignore-api-key-check", default=False) or ignore_all
-    )
-
     # Skip qualitative tests in CI
     if item.get_closest_marker("qualitative") and gh_run == 1:
         pytest.skip(
             reason="Skipping qualitative test: got env variable CICD == 1. Used only in gh workflows."
         )
 
-    # Skip tests requiring API keys if not available (unless override)
-    if item.get_closest_marker("requires_api_key") and not ignore_api_key:
-        # Check specific backend markers
+    # Skip tests requiring API keys if not available
+    if item.get_closest_marker("requires_api_key"):
         for backend in ["openai", "watsonx"]:
             if item.get_closest_marker(backend):
                 if not capabilities["has_api_keys"].get(backend):
@@ -640,19 +599,13 @@ def pytest_runtest_setup(item):
                         f"Skipping test: {backend} API key not found in environment"
                     )
 
-    # Backend-specific skipping
-    # Leaving OpenAI commented since our current OpenAI tests don't require OpenAI apikeys.
-    # if item.get_closest_marker("openai") and not ignore_api_key:
-    #     if not capabilities["has_api_keys"].get("openai"):
-    #         pytest.skip("Skipping test: OPENAI_API_KEY not found in environment")
-
-    if item.get_closest_marker("watsonx") and not ignore_api_key:
+    if item.get_closest_marker("watsonx"):
         if not capabilities["has_api_keys"].get("watsonx"):
             pytest.skip(
                 "Skipping test: Watsonx API credentials not found in environment"
             )
 
-    if item.get_closest_marker("vllm") and not ignore_gpu:
+    if item.get_closest_marker("vllm"):
         if not capabilities["has_gpu"]:
             pytest.skip("Skipping test: vLLM requires GPU")
 

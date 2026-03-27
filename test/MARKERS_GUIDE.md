@@ -222,13 +222,11 @@ removed. Use `require_gpu(min_vram_gb=N)` from `test.predicates` instead.
 The test suite automatically detects system capabilities and skips tests
 whose requirements are not met. No configuration needed.
 
-| Capability | How detected                  | Override flag            |
-| ---------- | ----------------------------- | ------------------------ |
-| Ollama     | Port 11434 check              | `--ignore-ollama-check`  |
-| GPU        | `torch.cuda.is_available()`   | `--ignore-gpu-check`     |
-| RAM        | `psutil.virtual_memory()`     | `--ignore-ram-check`     |
-| API keys   | Environment variable check    | `--ignore-api-key-check` |
-| All        | —                             | `--ignore-all-checks`    |
+| Capability | How detected                  |
+| ---------- | ----------------------------- |
+| Ollama     | Port 11434 check              |
+| GPU/VRAM   | `torch` + `sysctl hw.memsize` |
+| API keys   | Environment variable check    |
 
 Use `-rs` with pytest to see skip reasons:
 
