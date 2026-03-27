@@ -11,6 +11,7 @@ from unittest.mock import Mock
 
 import pydantic
 import pytest
+
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
 from test.predicates import require_gpu
@@ -360,7 +361,7 @@ async def test_generate_with_lock(backend) -> None:
     )
     b.add_adapter(IntrinsicAdapter("answerability", base_model_name=b.base_model_name))
 
-    memoized: dict[torch.Tensor, str] = dict()
+    memoized: dict[torch.Tensor, str] = dict()  # type: ignore[name-defined]
     gen_func = model.generate
 
     def mock_func(input_ids, *args, **kwargs):
