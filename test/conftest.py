@@ -588,7 +588,7 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
                 pass
             del backend._underlying_model
 
-        # 8. Force garbage collection and flush CUDA cache
+        # 8. Force garbage collection and flush device caches
         gc.collect()
         gc.collect()
 
@@ -602,6 +602,8 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
                 f"/ {total / 1024**3:.1f}GB total "
                 f"(reclaimed {(free_after - free_before) / 1024**3:.1f}GB)"
             )
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
 
     except ImportError:
         pass
