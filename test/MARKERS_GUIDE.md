@@ -211,16 +211,11 @@ These are not resource predicates but still control test selection:
 | `slow`         | Tests taking >1 minute           | Excluded by default via `pyproject.toml` addopts |
 | `qualitative`  | Non-deterministic output         | Skipped when `CICD=1`                            |
 
-### Legacy resource markers (deprecated)
+### Removed markers
 
-The markers `requires_gpu`, `requires_heavy_ram`, `requires_api_key`, and
-`requires_gpu_isolation` are deprecated. Existing tests using them still work
-(conftest auto-skip logic handles them) but new tests should use predicates.
-When migrating: `requires_gpu` → `require_gpu(min_vram_gb=N)`;
-`requires_api_key` → `require_api_key(...)`;
-`requires_heavy_ram` and `requires_gpu_isolation` → **remove** (no replacement
-needed — `requires_heavy_ram` conflated VRAM with RAM, and GPU isolation is
-now automatic).
+`requires_gpu`, `requires_heavy_ram`, and `requires_gpu_isolation` have been
+removed. Use `require_gpu(min_vram_gb=N)` from `test.predicates` instead.
+`requires_api_key` is still active — see below.
 
 ## Auto-Detection
 
@@ -236,6 +231,7 @@ whose requirements are not met. No configuration needed.
 | All        | —                             | `--ignore-all-checks`    |
 
 Use `-rs` with pytest to see skip reasons:
+
 ```bash
 pytest -rs
 ```

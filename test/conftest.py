@@ -267,12 +267,6 @@ def pytest_addoption(parser):
         help="Ignore GPU requirement checks (tests may fail without GPU)",
     )
     add_option_safe(
-        "--ignore-ram-check",
-        action="store_true",
-        default=False,
-        help="Ignore RAM requirement checks (tests may fail with insufficient RAM)",
-    )
-    add_option_safe(
         "--ignore-ollama-check",
         action="store_true",
         default=False,
@@ -329,12 +323,6 @@ def pytest_configure(config):
     # Capability markers
     config.addinivalue_line(
         "markers", "requires_api_key: Tests requiring external API keys"
-    )
-    config.addinivalue_line("markers", "requires_gpu: Tests requiring GPU")
-    config.addinivalue_line("markers", "requires_heavy_ram: Tests requiring 16GB+ RAM")
-    config.addinivalue_line(
-        "markers",
-        "requires_gpu_isolation: Explicitly tag tests/modules that require OS-level process isolation to clear CUDA memory.",
     )
     config.addinivalue_line("markers", "qualitative: Non-deterministic quality tests")
 
@@ -574,7 +562,6 @@ def pytest_runtest_setup(item):
 
     Can be overridden with command-line options:
     - pytest --ignore-gpu-check
-    - pytest --ignore-ram-check
     - pytest --ignore-ollama-check
     - pytest --ignore-api-key-check
     """
@@ -633,7 +620,6 @@ def pytest_runtest_setup(item):
     # Check for override flags from CLI
     ignore_all = config.getoption("--ignore-all-checks", default=False)
     ignore_gpu = config.getoption("--ignore-gpu-check", default=False) or ignore_all
-    ignore_ram = config.getoption("--ignore-ram-check", default=False) or ignore_all
     ignore_api_key = (
         config.getoption("--ignore-api-key-check", default=False) or ignore_all
     )
@@ -653,25 +639,6 @@ def pytest_runtest_setup(item):
                     pytest.skip(
                         f"Skipping test: {backend} API key not found in environment"
                     )
-
-    # Skip tests requiring GPU if not available (unless override)
-    if item.get_closest_marker("requires_gpu") and not ignore_gpu:
-        if not capabilities["has_gpu"]:
-            pytest.skip("Skipping test: GPU not available")
-
-    # Skip tests requiring heavy RAM if insufficient (unless override)
-    # NOTE: The 48GB threshold is based on empirical testing:
-    #   - HuggingFace tests with granite-3.3-8b-instruct failed on 32GB M1 MacBook
-    #   - Also failed on 36GB system
-    #   - Set to 48GB as safe threshold for 8B model + overhead
-    # TODO: Consider per-model thresholds or make configurable
-    #       Can be overridden with: pytest --ignore-ram-check
-    if item.get_closest_marker("requires_heavy_ram") and not ignore_ram:
-        RAM_THRESHOLD_GB = 48  # Based on real-world testing
-        if capabilities["ram_gb"] > 0 and capabilities["ram_gb"] < RAM_THRESHOLD_GB:
-            pytest.skip(
-                f"Skipping test: Insufficient RAM ({capabilities['ram_gb']:.1f}GB < {RAM_THRESHOLD_GB}GB)"
-            )
 
     # Backend-specific skipping
     # Leaving OpenAI commented since our current OpenAI tests don't require OpenAI apikeys.
