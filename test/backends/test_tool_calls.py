@@ -10,7 +10,7 @@ from mellea.backends.tools import (
 )
 from mellea.core import ModelOutputThunk
 
-pytest.importorskip("docling", reason="docling not installed — install mellea[mify]")
+pytest.importorskip("docling", reason="docling not installed — install mellea[docling]")
 from mellea.stdlib.components.docs.richdocument import Table
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.session import MelleaSession

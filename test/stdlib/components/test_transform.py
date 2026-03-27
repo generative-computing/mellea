@@ -3,7 +3,7 @@ import pytest
 from mellea.core import TemplateRepresentation
 from mellea.stdlib.components import MObject, Query, Transform
 
-pytest.importorskip("docling", reason="docling not installed — install mellea[mify]")
+pytest.importorskip("docling", reason="docling not installed — install mellea[docling]")
 from mellea.stdlib.components.docs.richdocument import TableTransform
 
 custom_mobject_description = "custom mobject description"
