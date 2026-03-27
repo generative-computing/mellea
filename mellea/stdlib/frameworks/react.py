@@ -107,9 +107,19 @@ async def react(
                 if tool_res.name == MELLEA_FINALIZER_TOOL:
                     is_final = True
 
-        if is_final:
-            assert len(tool_responses) == 1, "multiple tools were called with 'final'"
+        # Check if we should return: either finalizer was called or model gave direct answer
+        should_return = is_final or (step.tool_calls is None and step.value is not None)
 
+        if should_return:
+            if is_final:
+                assert len(tool_responses) == 1, (
+                    "multiple tools were called with 'final'"
+                )
+                if format is None:
+                    # The tool has already been called above.
+                    step._underlying_value = str(tool_responses[0].content)
+
+            # Apply format if requested (works for both finalizer and direct answer cases)
             if format is not None:
                 step, next_context = await mfuncs.aact(
                     action=ReactThought(),
@@ -124,9 +134,7 @@ async def react(
                 )
                 assert isinstance(next_context, ChatContext)
                 context = next_context
-            else:
-                # The tool has already been called above.
-                step._underlying_value = str(tool_responses[0].content)
+
             return step, context
 
     raise RuntimeError(f"could not complete react loop in {loop_budget} iterations")
