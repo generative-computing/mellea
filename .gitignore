@@ -451,7 +451,8 @@ pyrightconfig.json
 
 # AI agent configs
 .bob/
-.claude/
+.claude/*
+!.claude/settings.json
 
 # Generated API documentation (built by tooling/docs-autogen/)
 docs/docs/api/
