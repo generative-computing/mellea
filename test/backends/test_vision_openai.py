@@ -68,6 +68,7 @@ def test_image_block_construction_from_pil(pil_image: Image.Image):
     assert ImageBlock.is_valid_base64_png(str(image_block))
 
 
+@pytest.mark.qualitative
 def test_image_block_in_instruction(
     m_session: MelleaSession, pil_image: Image.Image, gh_run: int
 ):
