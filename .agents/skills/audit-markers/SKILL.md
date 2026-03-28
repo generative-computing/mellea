@@ -4,8 +4,12 @@ description: >
   Audit and fix pytest markers on test files and examples. Classifies tests as
   unit/integration/e2e/qualitative using general heuristics and project-specific
   marker rules. Estimates GPU VRAM and RAM requirements by tracing model
-  identifiers and looking up parameter counts. Use when reviewing markers (classification),
-  auditing test files, or checking before commit.
+  identifiers and looking up parameter counts.
+  Use when: writing a new test and unsure which markers to apply; reviewing or
+  auditing existing test markers; a test is unexpectedly skipped or not collected;
+  a test is consuming too much GPU/RAM and you want to check its resource gates;
+  checking marker correctness before committing; or any question about why a test
+  does or doesn't run in a given configuration.
 argument-hint: "[file-or-directory] [--dry-run | --apply]"
 compatibility: "Claude Code, IBM Bob"
 metadata:
