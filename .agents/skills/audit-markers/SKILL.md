@@ -30,6 +30,41 @@ marker rules for **mellea**.
 - `--apply` — produce report and apply fixes without asking.
 - `--dry-run` — report only, do not offer to apply.
 
+Single-file use: skip the triage phase (Step 0) entirely — deep-read the file directly and proceed from Step 1.
+
+## Modes of use
+
+This skill has two modes. Choose based on what the user asked:
+
+### Audit mode (default)
+User wants markers classified or fixed — for a new test, an existing file, or a
+pre-commit check. Follow the full Audit Procedure (Steps 0–4).
+
+### Diagnostic mode
+User wants to know **why** a specific test is not running, is being skipped, or
+is consuming unexpected resources. Do NOT produce an audit report. Instead:
+
+1. **Read the test** — identify its markers and any predicate decorators.
+2. **Check the default filter** — read `pyproject.toml` `[tool.pytest.ini_options]`
+   `addopts`. The project default is `-m "not slow"`. If the test has `slow`, it
+   is excluded from a plain `uv run pytest` run.
+3. **Check backend auto-skip** — read `test/conftest.py` `pytest_configure` and
+   the `pytest_collection_modifyitems` hook. Backend markers (`ollama`, `huggingface`,
+   etc.) trigger auto-skip when the backend is unavailable. Check whether the
+   relevant service or credentials are present on the user's machine.
+4. **Evaluate predicates** — if the test has a predicate decorator (`require_gpu`,
+   `require_api_key`, `require_ram`, etc.), read `test/predicates.py` and explain
+   what condition would cause the skip. For `require_gpu(min_vram_gb=N)`, compare N
+   against the system's detected VRAM (run `get_system_capabilities()` logic or
+   check `sysctl hw.memsize` on Apple Silicon / `nvidia-smi` on CUDA).
+5. **Report directly** — answer "this test is skipped because X" with the specific
+   condition, the value it evaluated to, and how to override if appropriate (e.g.
+   `uv run pytest test/path/test_foo.py` bypasses the `-m "not slow"` default filter).
+
+For resource overload (test consuming too much GPU/RAM): classify the test's
+resource gates using the VRAM heuristics in Part 2, compare against what the
+test actually loads, and report whether the gate is correctly set or too loose.
+
 ## Project References
 
 Read these before auditing — they are the authoritative source for marker conventions:
