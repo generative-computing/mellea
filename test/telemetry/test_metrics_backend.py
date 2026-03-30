@@ -71,11 +71,9 @@ def hf_metrics_backend(gh_run):
 
     yield backend
 
-    # Cleanup
-    import gc
+    from test.conftest import cleanup_gpu_backend
 
-    del backend
-    gc.collect()
+    cleanup_gpu_backend(backend, "hf-metrics")
 
 
 def get_metric_value(metrics_data, metric_name, attributes=None):
@@ -324,7 +322,6 @@ async def test_litellm_token_metrics_integration(
 @pytest.mark.asyncio
 @pytest.mark.llm
 @pytest.mark.huggingface
-@pytest.mark.requires_heavy_ram
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_huggingface_token_metrics_integration(
     enable_metrics, metric_reader, stream, hf_metrics_backend

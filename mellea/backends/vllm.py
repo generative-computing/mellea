@@ -184,11 +184,15 @@ class LocalVLLMBackend(FormatterBackend):
                     or engine_args["gpu_memory_utilization"] < 0.1
                 ):
                     raise RuntimeError(
-                        "no matter how I reduced max_model_len and max_num_seqs, there is not enough memory! \n"
-                        "final values:\n"
-                        f"gpu_memory_utilization: {engine_args['gpu_memory_utilization']}\n"
-                        f"max_model_len: {engine_args['max_model_len']}\n"
-                        f"max_num_seqs: {engine_args['max_num_seqs']}\n"
+                        f"Failed to initialize vLLM engine (last error: {e}).\n"
+                        "\n"
+                        "Exhausted all retry attempts:\n"
+                        f"  • gpu_memory_utilization: {engine_args['gpu_memory_utilization']:.2f}\n"
+                        f"  • max_model_len: {engine_args['max_model_len']}\n"
+                        f"  • max_num_seqs: {engine_args['max_num_seqs']}\n"
+                        "\n"
+                        "Please check the full stack trace above for details.\n"
+                        "Common issues: OOM, CUDA fork errors, GPU exclusive_process mode.\n"
                     )
                 logger.info(
                     f"Reducing vllm model parameters to make it fit in the GPU memory.\n"

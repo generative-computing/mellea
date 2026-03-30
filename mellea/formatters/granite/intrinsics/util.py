@@ -111,7 +111,7 @@ def obtain_lora(
 
     Downloads a LoRA or aLoRA adapter from a collection of adapters that follow the
     same layout as the [Granite Intrinsics Library](
-    https://huggingface.co/ibm-granite/granite-lib-rag-r1.0). Caches the downloaded
+    https://huggingface.co/ibm-granite/granitelib-rag-r1.0). Caches the downloaded
     adapter files on local disk.
 
     Args:
@@ -186,7 +186,7 @@ def obtain_io_yaml(
     Downloads an ``io.yaml`` configuration file for an intrinsic
     with a model repository that follows the format of the
     [Granite Intrinsics Library](
-    https://huggingface.co/ibm-granite/granite-lib-rag-r1.0) if one is not
+    https://huggingface.co/ibm-granite/granitelib-rag-r1.0) if one is not
     already in the local cache.
 
     Args:

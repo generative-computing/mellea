@@ -95,7 +95,7 @@ class MelleaTool(AbstractMelleaTool):
 
                 def parameter_remapper(*args, **kwargs):
                     """Langchain tools expect their first argument to be 'tool_input'."""
-                    if args is not None or len(args) != 0:
+                    if args:
                         # This shouldn't happen. Our ModelToolCall.call_func actually passes in everything as kwargs.
                         FancyLogger.get_logger().warning(
                             f"ignoring unexpected args while calling langchain tool ({tool_name}): ({args})"

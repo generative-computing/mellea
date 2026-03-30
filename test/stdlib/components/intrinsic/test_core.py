@@ -9,9 +9,14 @@ import pytest
 import torch
 
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.stdlib.components import Message
+from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import core
 from mellea.stdlib.context import ChatContext
+from test.conftest import cleanup_gpu_backend
+from test.stdlib.components.intrinsic.test_rag import (
+    _read_input_json as _read_rag_input_json,
+    _read_output_json as _read_rag_output_json,
+)
 
 # Skip entire module in CI since all tests are qualitative
 pytestmark = [
@@ -42,12 +47,7 @@ def _backend():
     yield backend_
 
     # Code after yield is cleanup code.
-    # Free GPU memory with extreme prejudice.
-    del backend_
-    gc.collect()
-    gc.collect()
-    gc.collect()
-    torch.cuda.empty_cache()
+    cleanup_gpu_backend(backend_, "test_core")
 
 
 def _read_input_json(file_name: str):
@@ -88,6 +88,20 @@ def test_requirement_check(backend):
 
     result2 = core.requirement_check(context, backend, requirement)
     assert 0.0 <= result2 <= 1.0
+
+
+@pytest.mark.qualitative
+def test_find_context_attributions(backend):
+    """Verify that the context-attribution intrinsic functions properly."""
+    context, assistant_response, documents = _read_rag_input_json(
+        "context-attribution.json"
+    )
+    expected = _read_rag_output_json("context-attribution.json")
+
+    result = core.find_context_attributions(
+        assistant_response, documents, context, backend
+    )
+    assert result == expected
 
 
 if __name__ == "__main__":

@@ -38,7 +38,8 @@ def _read_file(name):
 _TEST_DATA_DIR = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 
 # Location from which our tests download adapters and YAML files
-_RAG_INTRINSICS_REPO_NAME = "ibm-granite/granite-lib-rag-r1.0"
+_RAG_INTRINSICS_REPO_NAME = "ibm-granite/granitelib-rag-r1.0"
+_CORE_R1_REPO_NAME = "ibm-granite/granitelib-core-r1.0"
 
 
 _INPUT_JSON_DIR = _TEST_DATA_DIR / "input_json"
@@ -73,15 +74,17 @@ class YamlJsonCombo(pydantic.BaseModel):
     """Base model on which the target adapter was trained. Should be small enough to
     run on the CI server."""
 
-    @pydantic.model_validator(mode="after")
-    def _maybe_download_yaml(self):
+    def _resolve_yaml(self):
         """
         If YAML file is not provided, download one based on other attributes of this
-        object.
+        object. Called at fixture creation (execution time) to prevent collection time errors.
         """
         if not self.yaml_file:
             self.yaml_file = intrinsics_util.obtain_io_yaml(
-                self.task, self.base_model_id, self.repo_id, revision=self.revision
+                self.task,
+                self.base_model_id,
+                self.repo_id,
+                revision=self.revision,  # type: ignore
             )
         return self
 
@@ -144,6 +147,9 @@ _YAML_JSON_COMBOS_LIST = [
         inputs_file=_INPUT_JSON_DIR / "query_rewrite.json",
         task="query_rewrite",
     ),
+    # NOTE for the following two entries:
+    # The "requirement_check" intrinsic has not yet been ported to the latest format
+    # or to Granite 4.0.
     YamlJsonCombo(
         short_name="requirement_check",
         inputs_file=_INPUT_JSON_DIR / "requirement_check.json",
@@ -168,18 +174,17 @@ _YAML_JSON_COMBOS_LIST = [
         inputs_file=_INPUT_JSON_DIR / "uncertainty.json",
         task="uncertainty",
         # Granite 4.0 adapters not currently available
-        repo_id="ibm-granite/rag-intrinsics-lib",
-        base_model_id="ibm-granite/granite-3.3-2b-instruct",
+        repo_id="ibm-granite/granitelib-core-r1.0",
     ),
-    YamlJsonCombo(
-        short_name="uncertainty_alora",
-        inputs_file=_INPUT_JSON_DIR / "uncertainty.json",
-        task="uncertainty",
-        is_alora=True,
-        # Granite 4.0 adapters not currently available
-        repo_id="ibm-granite/rag-intrinsics-lib",
-        base_model_id="ibm-granite/granite-3.3-2b-instruct",
-    ),
+    # aLoRA adapter for this intrinsic not currently available
+    # YamlJsonCombo(
+    #     short_name="uncertainty_alora",
+    #     inputs_file=_INPUT_JSON_DIR / "uncertainty.json",
+    #     task="uncertainty",
+    #     is_alora=True,
+    #     # Granite 4.0 adapters not currently available
+    #     repo_id="ibm-granite/granitelib-core-r1.0",
+    # ),
     YamlJsonCombo(
         short_name="context_relevance",
         inputs_file=_INPUT_JSON_DIR / "context_relevance.json",
@@ -194,32 +199,6 @@ _YAML_JSON_COMBOS_LIST = [
         is_alora=True,
     ),
     YamlJsonCombo(
-        short_name="answer_relevance_classifier",
-        inputs_file=_INPUT_JSON_DIR / "answer_relevance_classifier.json",
-        task="answer_relevance_classifier",
-    ),
-    # aLoRA adapter for this intrinsic not currently available
-    # YamlJsonCombo(
-    #     short_name="answer_relevance_classifier_alora",
-    #     inputs_file=_INPUT_JSON_DIR / "answer_relevance_classifier.json",
-    #     task="answer_relevance_classifier",
-    #     is_alora=True,
-    # ),
-    YamlJsonCombo(
-        short_name="answer_relevance_rewriter",
-        inputs_file=_INPUT_JSON_DIR / "answer_relevance_rewriter.json",
-        arguments_file=_INPUT_ARGS_DIR / "answer_relevance_rewriter.json",
-        task="answer_relevance_rewriter",
-    ),
-    # aLoRA adapter for this intrinsic not currently available
-    # YamlJsonCombo(
-    #     short_name="answer_relevance_rewriter_alora",
-    #     inputs_file=_INPUT_JSON_DIR / "answer_relevance_rewriter.json",
-    #     arguments_file=_INPUT_ARGS_DIR / "answer_relevance_rewriter.json",
-    #     task="answer_relevance_rewriter",
-    #     is_alora=True,
-    # ),
-    YamlJsonCombo(
         short_name="citations",
         inputs_file=_INPUT_JSON_DIR / "citations.json",
         task="citations",
@@ -231,33 +210,39 @@ _YAML_JSON_COMBOS_LIST = [
     #     task="citations",
     #     is_alora=True,
     # ),
+    YamlJsonCombo(
+        short_name="context-attribution",
+        inputs_file=_INPUT_JSON_DIR / "context-attribution.json",
+        task="context-attribution",
+        repo_id="ibm-granite/granitelib-core-r1.0",
+    ),
     # gpt-oss-20b intrinsics (canned output tests only, no inference)
     YamlJsonCombo(
         short_name="gpt_oss_answerability",
         inputs_file=_INPUT_JSON_DIR / "answerable.json",
         task="answerability",
-        repo_id="ibm-granite/granite-lib-rag-gpt-oss-r1.0",
+        repo_id="ibm-granite/granitelib-rag-gpt-oss-r1.0",
         base_model_id="openai/gpt-oss-20b",
     ),
     YamlJsonCombo(
         short_name="gpt_oss_citations",
         inputs_file=_INPUT_JSON_DIR / "citations.json",
         task="citations",
-        repo_id="ibm-granite/granite-lib-rag-gpt-oss-r1.0",
+        repo_id="ibm-granite/granitelib-rag-gpt-oss-r1.0",
         base_model_id="openai/gpt-oss-20b",
     ),
     YamlJsonCombo(
         short_name="gpt_oss_hallucination_detection",
         inputs_file=_INPUT_JSON_DIR / "hallucination_detection.json",
         task="hallucination_detection",
-        repo_id="ibm-granite/granite-lib-rag-gpt-oss-r1.0",
+        repo_id="ibm-granite/granitelib-rag-gpt-oss-r1.0",
         base_model_id="openai/gpt-oss-20b",
     ),
     YamlJsonCombo(
         short_name="gpt_oss_query_rewrite",
         inputs_file=_INPUT_JSON_DIR / "query_rewrite.json",
         task="query_rewrite",
-        repo_id="ibm-granite/granite-lib-rag-gpt-oss-r1.0",
+        repo_id="ibm-granite/granitelib-rag-gpt-oss-r1.0",
         base_model_id="openai/gpt-oss-20b",
     ),
 ]
@@ -287,12 +272,18 @@ _YAML_JSON_COMBOS_WITH_LORA_MODEL = {
 }
 
 # Combinations suitable for an Ollama backend
+_NO_OLLAMA_ADAPTER = {
+    # Ollama LoRA adapter not yet available on HF Hub
+    "context-attribution",
+    "uncertainty",
+}
 _YAML_JSON_COMBOS_FOR_OLLAMA = {
     k: v
     for k, v in _YAML_JSON_COMBOS.items()
     if v.task is not None
     and not v.is_alora
     and v.base_model_id == "ibm-granite/granite-4.0-micro"
+    and k not in _NO_OLLAMA_ADAPTER
 }
 
 
@@ -305,7 +296,7 @@ def _yaml_json_combo(request: pytest.FixtureRequest) -> YamlJsonCombo:
 
     Returns test configuration.
     """
-    return _YAML_JSON_COMBOS[request.param]
+    return _YAML_JSON_COMBOS[request.param]._resolve_yaml()
 
 
 @pytest.fixture(
@@ -321,7 +312,7 @@ def _yaml_json_combo_no_alora(request: pytest.FixtureRequest) -> YamlJsonCombo:
     Returns tuple of short name, YAML file, JSON file, model directory, and
     arguments file.
     """
-    return _YAML_JSON_COMBOS_NO_ALORA[request.param]
+    return _YAML_JSON_COMBOS_NO_ALORA[request.param]._resolve_yaml()
 
 
 @pytest.fixture(
@@ -333,7 +324,7 @@ def _yaml_json_combo_with_model(request: pytest.FixtureRequest) -> YamlJsonCombo
     """Version of :func:`_yaml_json_combo()` fixture with only the inputs that have
     models.
     """
-    return _YAML_JSON_COMBOS_WITH_MODEL[request.param]
+    return _YAML_JSON_COMBOS_WITH_MODEL[request.param]._resolve_yaml()
 
 
 @pytest.fixture(
@@ -345,7 +336,7 @@ def _yaml_json_combo_with_lora_model(request: pytest.FixtureRequest) -> YamlJson
     """Version of :func:`_yaml_json_combo()` fixture with only the inputs that have
     non-aLoRA models.
     """
-    return _YAML_JSON_COMBOS_WITH_LORA_MODEL[request.param]
+    return _YAML_JSON_COMBOS_WITH_LORA_MODEL[request.param]._resolve_yaml()
 
 
 @pytest.fixture(
@@ -357,7 +348,7 @@ def _yaml_json_combo_for_ollama(request: pytest.FixtureRequest) -> YamlJsonCombo
     """Version of :func:`_yaml_json_combo()` fixture with only inputs suitable
     for an Ollama backend.
     """
-    return _YAML_JSON_COMBOS_FOR_OLLAMA[request.param]
+    return _YAML_JSON_COMBOS_FOR_OLLAMA[request.param]._resolve_yaml()
 
 
 def test_no_orphan_files():
@@ -581,6 +572,14 @@ def _round_floats(json_data, num_digits: int = 2):
     return result
 
 
+@pytest.mark.huggingface
+@pytest.mark.llm
+@pytest.mark.requires_gpu
+@pytest.mark.requires_heavy_ram
+@pytest.mark.requires_gpu_isolation  # Activate GPU memory isolation
+@pytest.mark.skipif(
+    int(os.environ.get("CICD", 0)) == 1, reason="Skipping HuggingFace tests in CI"
+)
 def test_run_transformers(yaml_json_combo_with_model, gh_run):
     """
     Run the target model end-to-end on transformers.
