@@ -27,14 +27,16 @@ from .utils import validate_filename
 
 
 class DecompVersion(StrEnum):
-    """Available versions of the decomposition pipeline template.
+    """Available template versions for generated decomposition programs.
 
-    Newer versions must be declared last to ensure ``latest`` always resolves to
-    the most recent template.
+    Newer concrete versions must be declared after older ones so that
+    ``latest`` can resolve to the most recently declared template version.
 
-    Args:
-        latest (str): Sentinel value that resolves to the last declared version.
-        v1 (str): Version 1 of the decomposition pipeline template.
+    Attributes:
+        latest: Sentinel value that resolves to the last declared concrete
+            template version.
+        v1: Version 1 of the decomposition program template.
+        v2: Version 2 of the decomposition program template.
     """
 
     latest = "latest"

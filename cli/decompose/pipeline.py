@@ -1,5 +1,5 @@
 # decompose/pipeline.py
-"""Core decomposition pipeline that breaks a task prompt into structured subtasks.
+"""Core decomposition pipeline for turning a task query into scheduled subtasks.
 
 Provides the ``decompose()`` function, which orchestrates a series of LLM calls
 (subtask listing, constraint extraction, validation strategy selection, prompt
