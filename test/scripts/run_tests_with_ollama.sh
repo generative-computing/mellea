@@ -46,6 +46,10 @@ fi
 mkdir -p "$LOGDIR"
 
 cleanup() {
+    if [[ "${OLLAMA_EXTERNAL:-0}" == "1" ]]; then
+        log "Ollama managed externally (OLLAMA_EXTERNAL=1) — skipping shutdown"
+        return
+    fi
     log "Shutting down ollama server..."
     if [[ -n "${OLLAMA_PID:-}" ]] && kill -0 "$OLLAMA_PID" 2>/dev/null; then
         kill "$OLLAMA_PID" 2>/dev/null
@@ -138,14 +142,18 @@ done
 log "All models ready."
 
 # --- Warm up models (first load into memory is slow) ---
-log "Warming up models..."
-for model in "${OLLAMA_MODELS[@]}"; do
-    log "  Warming $model ..."
-    curl -sf "http://127.0.0.1:${OLLAMA_PORT}/api/generate" \
-        -d "{\"model\": \"$model\", \"prompt\": \"hi\", \"stream\": false}" \
-        -o /dev/null --max-time 120 || log "  Warning: warmup for $model timed out (will load on first test)"
-done
-log "Warmup complete."
+if [[ "${OLLAMA_SKIP_WARMUP:-0}" == "1" ]]; then
+    log "Skipping model warmup (OLLAMA_SKIP_WARMUP=1)"
+else
+    log "Warming up models..."
+    for model in "${OLLAMA_MODELS[@]}"; do
+        log "  Warming $model ..."
+        curl -sf "http://127.0.0.1:${OLLAMA_PORT}/api/generate" \
+            -d "{\"model\": \"$model\", \"prompt\": \"hi\", \"stream\": false}" \
+            -o /dev/null --max-time 120 || log "  Warning: warmup for $model timed out (will load on first test)"
+    done
+    log "Warmup complete."
+fi
 
 # --- Run tests ---
 log "Starting pytest..."

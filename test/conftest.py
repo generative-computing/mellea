@@ -582,6 +582,47 @@ def pytest_runtest_setup(item):
             except ImportError:
                 pass
 
+        # Warm up Ollama models when entering Ollama group
+        if current_group == "ollama" and prev_group != "ollama":
+            logger = FancyLogger.get_logger()
+            host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1")
+            port = os.environ.get("OLLAMA_PORT", "11434")
+            logger.info(
+                "Warming up ollama models before ollama group (keep_alive=-1)..."
+            )
+            for model in ["granite4:micro", "granite4:micro-h", "granite3.2-vision"]:
+                try:
+                    requests.post(
+                        f"http://{host_str}:{port}/api/generate",
+                        json={
+                            "model": model,
+                            "prompt": "hi",
+                            "stream": False,
+                            "keep_alive": -1,
+                        },
+                        timeout=120,
+                    )
+                    logger.info("  Warmed up and pinned: %s", model)
+                except Exception as e:
+                    logger.warning("  Warmup failed for %s: %s", model, e)
+
+        # Evict Ollama models when leaving Ollama group
+        if prev_group == "ollama" and current_group != "ollama":
+            logger = FancyLogger.get_logger()
+            host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1")
+            port = os.environ.get("OLLAMA_PORT", "11434")
+            logger.info("Evicting ollama models from VRAM after ollama group...")
+            for model in ["granite4:micro", "granite4:micro-h", "granite3.2-vision"]:
+                try:
+                    requests.post(
+                        f"http://{host_str}:{port}/api/generate",
+                        json={"model": model, "keep_alive": 0},
+                        timeout=10,
+                    )
+                    logger.info("  Evicted: %s", model)
+                except Exception as e:
+                    logger.warning("  Eviction failed for %s: %s", model, e)
+
         pytest_runtest_setup._last_backend_group = current_group
 
     # Skip qualitative tests in CI

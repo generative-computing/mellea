@@ -99,6 +99,30 @@ def test_from_langchain():
     assert t.run(input=2) == "2"
 
 
+def test_from_langchain_args_handling(caplog):
+    """Test that langchain tools handle args correctly.
+
+    Verifies that:
+    1. Tools work correctly when called with kwargs only (normal case)
+    2. A warning is logged if positional args are passed (shouldn't happen)
+    """
+    t = MelleaTool.from_langchain(langchain_tool)
+
+    # Normal case: kwargs only (no warning expected)
+    caplog.clear()
+    result = t.run(input=5)
+    assert result == "5"
+    assert "ignoring unexpected args" not in caplog.text
+
+    # Edge case: positional args passed (warning expected)
+    # This shouldn't happen in practice since ModelToolCall.call_func uses **kwargs
+    caplog.clear()
+    result = t.run(42, input=5)  # Pass both positional and keyword args
+    assert result == "5"  # Should still work, using kwargs
+    assert "ignoring unexpected args" in caplog.text
+    assert "langchain_tool" in caplog.text
+
+
 @pytest.mark.qualitative
 @pytest.mark.ollama
 @pytest.mark.e2e
