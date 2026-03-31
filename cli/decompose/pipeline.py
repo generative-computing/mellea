@@ -8,8 +8,6 @@ containing subtasks, per-subtask prompts, constraints, and dependency informatio
 
 Supports Ollama, OpenAI-compatible, and RITS inference backends.
 """
-
-
 import re
 from enum import StrEnum
 from typing import Literal, NotRequired, TypedDict
