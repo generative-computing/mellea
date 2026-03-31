@@ -87,7 +87,7 @@ The pipeline then executes each step and produces the final answer.
 
 ---
 
-# Hightlights
+# Highlights
 
 - **Task Decomposition and Execution** — analyze complex problems into smaller planning and execution steps.  
 - **Generative Mellea Program** — conduct LLM workflows as an programmatic pipeline instead of single call.  
