@@ -93,18 +93,6 @@ def generate_validated_qiskit_code(
     Returns:
         Tuple of (generated_code, success, attempts_used)
     """
-    # Pre-validate input code if present — include violations as context rather than failing
-    is_valid, error_msg = validate_input_code(prompt)
-    if not is_valid:
-        print(
-            f"Input code has QKT violations, including as context for LLM: {error_msg}"
-        )
-        prompt = (
-            f"{prompt}\n\n"
-            f"Note: the code above has the following Qiskit migration issues that must be fixed:\n"
-            f"{error_msg}"
-        )
-
     # Only pass optional kwargs if they have values — avoids passing None to m.instruct()
     extra: dict = {}
     if grounding_context:
