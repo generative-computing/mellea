@@ -27,11 +27,11 @@ m decompose run --input-file task.txt --out-dir ./output/
 > automatically (~15 GB for the full model). Use `--model-id` with a smaller model
 > (e.g. `granite4:micro`) to avoid the large download.
 
-This produces two files in `./output/`:
+This produces a subdirectory under `./output/` (one per task job):
 
-- `m_decomp_result.json` — the full decomposition: subtask list, constraints,
-  dependency graph, and prompt templates
-- `m_decomp_result.py` — a runnable Python script that calls
+- `./output/m_decomp_result/m_decomp_result.json` — the full decomposition:
+  subtask list, constraints, dependency graph, and prompt templates
+- `./output/m_decomp_result/m_decomp_result.py` — a runnable Python script that calls
   `m.instruct()` for each subtask in dependency order
 
 ## Example
@@ -54,7 +54,7 @@ m decompose run --input-file task.txt --out-dir ./output/
 Then execute the generated script:
 
 ```bash
-python output/m_decomp_result.py
+python output/m_decomp_result/m_decomp_result.py
 ```
 
 ## Backend options
