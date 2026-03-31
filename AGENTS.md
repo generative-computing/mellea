@@ -146,3 +146,37 @@ Found a bug, workaround, or pattern? Update the docs:
 - **Issue/workaround?** → Add to Section 7 (Common Issues) in this file
 - **Usage pattern?** → Add to [`docs/AGENTS_TEMPLATE.md`](docs/AGENTS_TEMPLATE.md)
 - **New pitfall?** → Add warning near relevant section
+
+## 13. Working with Intrinsics
+
+Intrinsics are specialized LoRA adapters hosted on Hugging Face that add task-specific capabilities (RAG evaluation, safety checks, calibration, etc.) to Granite models.
+
+**⚠️ Before writing code that uses an intrinsic, fetch its README from Hugging Face.** Each README contains the authoritative specification for input format, output format, intended use, and examples. Do not guess these details.
+
+### Hugging Face Repositories
+
+| Repo | Purpose | Intrinsics |
+|------|---------|------------|
+| [`ibm-granite/granitelib-rag-r1.0`](https://huggingface.co/ibm-granite/granitelib-rag-r1.0) | RAG pipeline | answerability, citations, context_relevance, hallucination_detection, query_rewrite, query_clarification |
+| [`ibm-granite/granitelib-core-r1.0`](https://huggingface.co/ibm-granite/granitelib-core-r1.0) | Core capabilities | context-attribution, requirement-check, uncertainty |
+| [`ibm-granite/granitelib-guardian-r1.0`](https://huggingface.co/ibm-granite/granitelib-guardian-r1.0) | Safety & compliance | guardian-core, policy-guardrails, factuality-detection, factuality-correction |
+
+### README URLs
+
+Each intrinsic has a README at a predictable URL. The path depends on the repo:
+
+**RAG intrinsics** (no model subfolder):
+```
+https://huggingface.co/ibm-granite/granitelib-rag-r1.0/blob/main/{intrinsic_name}/README.md
+```
+
+**Core and Guardian intrinsics** (include model subfolder):
+```
+https://huggingface.co/ibm-granite/granitelib-{core,guardian}-r1.0/blob/main/{intrinsic_name}/granite-4.0-micro/README.md
+```
+
+### Project Resources
+
+- **Canonical catalog**: `mellea/backends/adapters/catalog.py` — source of truth for intrinsic names, HF repo IDs, and adapter types
+- **Usage examples**: `docs/examples/intrinsics/` — working code for every intrinsic
+- **Helper functions**: `mellea/stdlib/components/intrinsic/rag.py` and `core.py` — high-level wrappers like `check_answerability()`, `check_certainty()`, etc.
