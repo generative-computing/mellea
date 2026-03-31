@@ -1,102 +1,114 @@
-# m_decompose
+# m decompose
 
-This automatic pipeline demonstrates **task decomposition and execution** built with *Mellea generative programs*.
+`m decompose` helps you break a complex task prompt into structured, dependency-aware subtasks.
 
-Instead of solving a complex task with a single prompt, the system first **decomposes the task into subtasks**, then executes them sequentially through a assembled pipeline.
+The decomposition pipeline extracts constraints, generates prompt templates for each subtask, and writes runnable outputs so you can inspect and execute the workflow.
 
-This pattern improves reasoning quality, interpretability, and modularity in LLM-powered systems.
+## How users run it (current behavior)
 
----
+### CLI mode (recommended)
 
-# Overview
+1. Prepare an output directory (must already exist).
+2. Put task prompt(s) in a text file.
+3. Run `m decompose run`.
 
-Many complex tasks contain multiple reasoning steps.  
-The `m_decompose` pipeline handles this by splitting the task into smaller units.
-
-```
-User Request
-     ↓
-Task Decomposition
-     ↓
-Subtasks
-     ↓
-Task Execution
-     ↓
-Final Result
+```bash
+mkdir -p ./output
+m decompose run \
+  --input-file task.txt \
+  --out-dir ./output \
+  --out-name my_decomp
 ```
 
-Rather than writing a large prompt, the workflow uses **generative modules and reusable prompts**.
+Important runtime behavior:
 
----
+- `--input-file` supports **multiple non-empty lines**. Each line is treated as one task job.
+- Multiple jobs produce numbered outputs: `my_decomp_1/`, `my_decomp_2/`, ...
+- Outputs are written under `out_dir/out_name/` (or numbered job directories).
+- Backend default: `ollama`
+- Model default: `mistral-small3.2:latest`
 
-# Directory
+### Interactive mode
 
+If `--input-file` is omitted, the CLI prompts for one task string interactively.
+
+Note:
+
+- Interactive mode is intended for single prompt input.
+- `--input-var` is ignored in interactive mode by current implementation.
+
+## Output structure
+
+For one task, `m decompose run` creates:
+
+```text
+<out-dir>/<out-name>/
+├── <out-name>.json
+├── <out-name>.py
+└── validations/
+    ├── __init__.py
+    └── val_fn_*.py  # only when a constraint uses code validation
 ```
-m_decompose/
-├── decompose.py
-├── pipeline.py
-├── prompt_modules
-└── README.md
-```
 
-**decompose.py**
+- `*.json`: full decomposition result (`subtask_list`, `identified_constraints`, `subtasks`, ...)
+- `*.py`: rendered runnable program from the selected template version (`latest` currently resolves to `v2`)
+- `validations/`: generated validation helper functions for constraints using `code` strategy
 
-Generates the refined subtasks from the user request.
+## Key CLI options
 
-**pipeline.py**
+- `--backend`: `ollama` | `openai` | `rits`
+- `--model-id`: inference model id/name
+- `--backend-endpoint`: required for `openai` and `rits`
+- `--backend-api-key`: required for `openai` and `rits`
+- `--backend-req-timeout`: request timeout (seconds), default `300`
+- `--input-var`: optional input variable names (repeatable, must be valid Python identifiers)
+- `--version`: template version (`latest`, `v1`, `v2`)
+- `--log-mode`: `demo` | `debug`
 
-Runs the full workflow:
+## Python API (pipeline interface)
 
-1. decompose the task  
-2. execute subtasks  
-3. aggregate results
-
-**prompt_modules**
-
-Reusable prompt components used by the pipeline.
-
-**m_decomp_result_v1.py.jinja2**
-
-Template used to format the final output.
-
----
-
-# Quick Start
-
-Example usage:
+You can call the decomposition pipeline directly:
 
 ```python
-from mellea.cli.decompose.pipeline import decompose, DecompBackend
 import json
 
-query = """I will visit Grand Canyon National Park for 3 days in early May. Please create a travel itinerary that includes major scenic viewpoints and short hiking trails. The daily walking distance should stay under 6 miles, and each day should include at least one sunset or sunrise viewpoint."""
+from cli.decompose.pipeline import DecompBackend, decompose
 
 result = decompose(
-    task_prompt=query,
-    model_id="mistralai/Mistral-Small-3.2-24B-Instruct-2506",
-    backend=DecompBackend.openai,
-    backend_endpoint="http://localhost:8000/v1",
-    backend_api_key="EMPTY",
+    task_prompt="Write a short blog post about morning exercise.",
+    user_input_variable=["USER_CONTEXT"],
+    model_id="mistral-small3.2:latest",
+    backend=DecompBackend.ollama,
 )
 
 print(json.dumps(result, indent=2, ensure_ascii=False))
 ```
 
+`result["subtasks"]` items include:
 
-The pipeline then executes each step and produces the final answer.
+- `subtask`
+- `tag`
+- `prompt_template`
+- `general_instructions`
+- `input_vars_required`
+- `depends_on`
+- `constraints` (with `val_strategy`, `val_fn_name`, `val_fn`)
 
----
+## Example: OpenAI-compatible endpoint
 
-# What This Example Shows
+```bash
+m decompose run \
+  --input-file task.txt \
+  --out-dir ./output \
+  --backend openai \
+  --model-id gpt-4o-mini \
+  --backend-endpoint http://localhost:8000/v1 \
+  --backend-api-key EMPTY
+```
 
-This example highlights three key ideas:
+## What this example demonstrates
 
-- **Task Decomposition and Execution** — analyze complex problems into smaller planning and execution steps.  
-- **Generative Mellea Program** — conduct LLM workflows as an programmatic pipeline instead of single call.  
-- **Instruction Modular** — separate instruction design from execution logic using reusable modules.
-
----
-
-# Summary
-
-`m_decompose` shows how to build **LLM pipelines** using task decomposition.
+- Decomposing one large task into manageable subtasks
+- Preserving explicit constraints across subtasks
+- Producing inspectable intermediate artifacts for debugging and editing
+- Generating a runnable decomposition program instead of a single opaque prompt call
