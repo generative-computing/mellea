@@ -11,14 +11,18 @@ import tempfile
 from pathlib import Path
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 from transformers import AutoTokenizer
+
+from test.predicates import require_gpu
 
 pytestmark = [
     pytest.mark.huggingface,
-    pytest.mark.llm,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
+    pytest.mark.e2e,
+    require_gpu(
+        min_vram_gb=20
+    ),  # 3B bfloat16: ~6 GB inference, ~12 GB training peak + headroom
     # Skip entire module in CI since 17/18 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,

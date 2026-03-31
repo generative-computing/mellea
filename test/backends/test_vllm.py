@@ -5,13 +5,13 @@ from typing import Annotated
 import pydantic
 import pytest
 
+from test.predicates import require_gpu
+
 # Mark all tests in this module with backend and resource requirements
 pytestmark = [
     pytest.mark.vllm,
-    pytest.mark.llm,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.requires_gpu_isolation,  # Activate GPU memory isolation
+    pytest.mark.e2e,
+    require_gpu(min_vram_gb=4),
     # Skip entire module in CI since all 8 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -34,21 +34,16 @@ except ImportError as e:
     )
 
 
-# vLLM tests use hybrid backend strategy (see conftest.py):
-# - Default: Shared session-scoped backend (fast, no fragmentation)
-# - --isolate-heavy: Module-scoped backends in separate processes
+# vLLM tests use a shared session-scoped backend (see conftest.py shared_vllm_backend).
+# Falls back to a module-scoped backend when --group-by-backend delays shared creation.
 @pytest.fixture(scope="module")
 def backend(shared_vllm_backend):
-    """Use shared session-scoped backend, or create module-scoped if isolated.
-
-    Without --isolate-heavy: Uses shared backend (fast, no fragmentation)
-    With --isolate-heavy: Creates module-scoped backend (process isolation)
-    """
+    """Use shared session-scoped backend, or create module-scoped as fallback."""
     if shared_vllm_backend is not None:
         yield shared_vllm_backend
         return  # skip cleanup — shared backend cleaned up by conftest
 
-    # Isolation mode - create module-scoped backend
+    # Fallback: shared backend not available, create module-scoped backend
     backend = LocalVLLMBackend(
         model_id=model_ids.IBM_GRANITE_4_MICRO_3B,
         model_options={

@@ -3,14 +3,13 @@ import os
 import pytest
 
 from mellea.backends.tools import MelleaTool
+from test.predicates import require_gpu
 
 # Skip entire module in CI since the single test is qualitative
 pytestmark = [
     pytest.mark.vllm,
-    pytest.mark.llm,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.requires_gpu_isolation,
+    pytest.mark.e2e,
+    require_gpu(min_vram_gb=18),
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
         reason="Skipping vLLM tools tests in CI - qualitative test",
@@ -31,23 +30,18 @@ except ImportError as e:
     )
 
 
-# vLLM tests use hybrid backend strategy (see conftest.py):
-# - Default: Shared session-scoped backend (fast, no fragmentation)
-# - --isolate-heavy: Module-scoped backends in separate processes
+# vLLM tests use a shared session-scoped backend (see conftest.py shared_vllm_backend).
+# Falls back to a module-scoped backend when --group-by-backend delays shared creation.
 # Note: Originally used Mistral-7B, now uses Granite 4 Micro for consistency.
 # Granite 4 Micro supports tool calling and is sufficient for testing.
 @pytest.fixture(scope="module")
 def backend(shared_vllm_backend):
-    """Use shared session-scoped backend, or create module-scoped if isolated.
-
-    Without --isolate-heavy: Uses shared backend (fast, no fragmentation)
-    With --isolate-heavy: Creates module-scoped backend (process isolation)
-    """
+    """Use shared session-scoped backend, or create module-scoped as fallback."""
     if shared_vllm_backend is not None:
         yield shared_vllm_backend
         return
 
-    # Isolation mode - create module-scoped backend
+    # Fallback: shared backend not available, create module-scoped backend
     backend = LocalVLLMBackend(
         model_id=model_ids.IBM_GRANITE_4_MICRO_3B,
         model_options={

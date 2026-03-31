@@ -25,7 +25,6 @@ uv run pytest                         # Default: qualitative tests, skip slow te
 uv run pytest -m "not qualitative"    # Fast tests only (~2 min)
 uv run pytest -m slow                 # Run only slow tests (>5 min)
 uv run pytest --co -q                 # Run ALL tests including slow (bypass config)
-uv run pytest --isolate-heavy         # Enable GPU process isolation (opt-in)
 uv run ruff format .                  # Format code
 uv run ruff check .                   # Lint code
 uv run mypy .                         # Type check
@@ -44,49 +43,44 @@ uv run mypy .                         # Type check
 | `cli/` | CLI commands (`m serve`, `m alora`, `m decompose`, `m eval`) |
 | `test/` | All tests (run from repo root) |
 | `docs/examples/` | Example code (run as tests via pytest) |
+| `.agents/skills/` | Agent skills ([agentskills.io](https://agentskills.io) standard) |
 | `scratchpad/` | Experiments (git-ignored) |
 
 ## 3. Test Markers
-All tests and examples use markers to indicate requirements. The test infrastructure automatically skips tests based on system capabilities.
+Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. The `unit` marker is auto-applied by conftest — never write it explicitly. The `llm` marker is deprecated; use `e2e` instead.
 
-**Backend Markers:**
-- `@pytest.mark.ollama` — Requires Ollama running (local, lightweight)
-- `@pytest.mark.huggingface` — Requires HuggingFace backend (local, heavy)
-- `@pytest.mark.vllm` — Requires vLLM backend (local, GPU required)
-- `@pytest.mark.openai` — Requires OpenAI API (requires API key)
-- `@pytest.mark.watsonx` — Requires Watsonx API (requires API key)
-- `@pytest.mark.litellm` — Requires LiteLLM backend
+See **[test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md)** for the full marker reference (tier definitions, backend markers, resource gates, auto-skip logic, common patterns).
 
-**Capability Markers:**
-- `@pytest.mark.requires_gpu` — Requires GPU
-- `@pytest.mark.requires_heavy_ram` — Requires 48GB+ RAM
-- `@pytest.mark.requires_api_key` — Requires external API keys
-- `@pytest.mark.qualitative` — LLM output quality tests (skipped in CI via `CICD=1`)
-- `@pytest.mark.llm` — Makes LLM calls (needs at least Ollama)
-- `@pytest.mark.slow` — Tests taking >5 minutes (skipped via `SKIP_SLOW=1`)
-
-**Execution Strategy Markers:**
-- `@pytest.mark.requires_gpu_isolation` — Requires OS-level process isolation to clear CUDA memory (use with `--isolate-heavy` or `CICD=1`)
-
-**Examples in `docs/examples/`** use comment-based markers for clean code:
+**Examples in `docs/examples/`** use comment-based markers:
 ```python
-# pytest: ollama, llm, requires_heavy_ram
+# pytest: e2e, ollama, qualitative
 """Example description..."""
-
-# Your clean example code here
 ```
 
-Tests/examples automatically skip if system lacks required resources. Heavy examples (e.g., HuggingFace) are skipped during collection to prevent memory issues.
+⚠️ Don't add `qualitative` to trivial tests — keep the fast loop fast.
+⚠️ Mark tests taking >1 minute with `slow`.
 
-**Default behavior:**
-- `uv run pytest` skips slow tests (>5 min) but runs qualitative tests
-- Use `pytest -m "not qualitative"` for fast tests only (~2 min)
-- Use `pytest -m slow` or `pytest` (without config) to include slow tests
+## 4. Agent Skills
 
-⚠️ Don't add `qualitative` to trivial tests—keep the fast loop fast.
-⚠️ Mark tests taking >5 minutes with `slow` (e.g., dataset loading, extensive evaluations).
+Skills live in `.agents/skills/` following the [agentskills.io](https://agentskills.io) open standard. Each skill is a directory with a `SKILL.md` file (YAML frontmatter + markdown instructions).
 
-## 4. Coding Standards
+**Tool discovery:**
+
+| Tool              | Project skills    | Global skills       | Config needed                                                      |
+| ----------------- | ----------------- | ------------------- | ------------------------------------------------------------------ |
+| Claude Code       | `.agents/skills/` | `~/.claude/skills/` | `"skillLocations": [".agents/skills"]` in `.claude/settings.json`  |
+| IBM Bob           | `.bob/skills/`    | `~/.bob/skills/`    | Symlink: `.bob/skills` → `.agents/skills`                          |
+| VS Code / Copilot | `.agents/skills/` | —                   | None (auto-discovered)                                             |
+
+**Bob users:** create the symlink once per clone:
+
+```bash
+mkdir -p .bob && ln -s ../.agents/skills .bob/skills
+```
+
+**Available skills:** `/audit-markers`, `/skill-author`
+
+## 5. Coding Standards
 - **Types required** on all core functions
 - **Docstrings are prompts** — be specific, the LLM reads them
 - **Google-style docstrings** — `Args:` on the **class docstring only**; `__init__` gets a single summary sentence. Add `Attributes:` only when a stored value differs in type/behaviour from its constructor input (type transforms, computed values, class constants). See CONTRIBUTING.md for a full example.
@@ -96,15 +90,15 @@ Tests/examples automatically skip if system lacks required resources. Heavy exam
 - **Friendly Dependency Errors**: Wraps optional backend imports in `try/except ImportError` with a helpful message (e.g., "Please pip install mellea[hf]"). See `mellea/stdlib/session.py` for examples.
 - **Backend telemetry fields**: All backends must populate `mot.usage` (dict with `prompt_tokens`, `completion_tokens`, `total_tokens`), `mot.model` (str), and `mot.provider` (str) in their `post_processing()` method. Metrics are automatically recorded by `TokenMetricsPlugin` — don't add manual `record_token_usage_metrics()` calls.
 
-## 5. Commits & Hooks
+## 6. Commits & Hooks
 [Angular format](https://github.com/angular/angular/blob/main/CONTRIBUTING.md#commit): `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `release:`
 
 Pre-commit runs: ruff, mypy, uv-lock, codespell
 
-## 6. Timing
+## 7. Timing
 > **Don't cancel**: `pytest` (full) and `pre-commit --all-files` may take minutes. Canceling mid-run can corrupt state.
 
-## 7. Common Issues
+## 8. Common Issues
 | Problem | Fix |
 |---------|-----|
 | `ComponentParseError` | Add examples to docstring |
@@ -112,21 +106,22 @@ Pre-commit runs: ruff, mypy, uv-lock, codespell
 | Ollama refused | Run `ollama serve` |
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
 
-## 8. Self-Review (before notifying user)
+## 9. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?
 2. `ruff format` and `ruff check` clean?
 3. New functions typed with concise docstrings?
 4. Unit tests added for new functionality?
 5. Avoided over-engineering?
 
-## 9. Writing Tests
+## 10. Writing Tests
+
 - Place tests in `test/` mirroring source structure
 - Name files `test_*.py` (required for pydocstyle)
 - Use `gh_run` fixture for CI-aware tests (see `test/conftest.py`)
 - Mark tests checking LLM output quality with `@pytest.mark.qualitative`
 - If a test fails, fix the **code**, not the test (unless the test was wrong)
 
-## 10. Writing Docs
+## 11. Writing Docs
 
 If you are modifying or creating pages under `docs/docs/`, follow the writing
 conventions in [`docs/docs/guide/CONTRIBUTING.md`](docs/docs/guide/CONTRIBUTING.md).
@@ -144,7 +139,7 @@ Key rules that differ from typical Markdown habits:
   mellea source; mark forward-looking content with `> **Coming soon:**`
 - **No visible TODOs** — if content is missing, open a GitHub issue instead
 
-## 11. Feedback Loop
+## 12. Feedback Loop
 
 Found a bug, workaround, or pattern? Update the docs:
 

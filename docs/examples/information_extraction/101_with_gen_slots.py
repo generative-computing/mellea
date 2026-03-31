@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 
 """Simple Example of information extraction with Mellea using generative slots."""
 

@@ -8,9 +8,10 @@ from mellea.core import ModelOutputThunk
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.session import MelleaSession, start_session
+from test.predicates import require_api_key
 
 # Mark all tests as requiring Ollama (start_session defaults to Ollama)
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 
 # We edit the context type in the async tests below. Don't change the scope here.
@@ -22,7 +23,7 @@ def m_session(gh_run):
 
 
 @pytest.mark.watsonx
-@pytest.mark.requires_api_key
+@require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")
 def test_start_session_watsonx(gh_run):
     if gh_run == 1:
         pytest.skip("Skipping watsonx tests.")

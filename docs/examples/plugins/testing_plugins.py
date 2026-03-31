@@ -1,3 +1,4 @@
+# pytest: unit
 # Testing plugins — how to unit-test hook functions without a live session.
 #
 # This example shows how to:

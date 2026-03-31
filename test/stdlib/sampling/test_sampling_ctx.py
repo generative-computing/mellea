@@ -16,7 +16,7 @@ def m_session():
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.qualitative
 class TestSamplingCtxCase:
     def _run_asserts_for_ctx_testing(self, res):

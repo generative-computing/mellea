@@ -16,7 +16,8 @@ import openai
 import pydantic
 import pytest
 import requests
-import torch
+
+torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 import yaml
 
 # First Party
@@ -28,6 +29,7 @@ from mellea.formatters.granite import (
 )
 from mellea.formatters.granite.base import util as base_util
 from mellea.formatters.granite.intrinsics import json_util, util as intrinsics_util
+from test.predicates import require_gpu
 
 
 def _read_file(name):
@@ -432,7 +434,6 @@ def test_canned_input(yaml_json_combo_no_alora):
     assert after_json == expected_json
 
 
-@pytest.mark.block_network
 def test_openai_compat(yaml_json_combo_no_alora):
     """
     Verify that the dataclasses for intrinsics chat completions can be directly passed
@@ -573,10 +574,8 @@ def _round_floats(json_data, num_digits: int = 2):
 
 
 @pytest.mark.huggingface
-@pytest.mark.llm
-@pytest.mark.requires_gpu
-@pytest.mark.requires_heavy_ram
-@pytest.mark.requires_gpu_isolation  # Activate GPU memory isolation
+@pytest.mark.e2e
+@require_gpu(min_vram_gb=12)
 @pytest.mark.skipif(
     int(os.environ.get("CICD", 0)) == 1, reason="Skipping HuggingFace tests in CI"
 )

@@ -333,18 +333,15 @@ uv run pytest
 # Fast tests only (no qualitative, ~2 min)
 uv run pytest -m "not qualitative"
 
-# Run only slow tests (>5 min)
-uv run pytest -m slow
+# Unit tests only (self-contained, no services)
+uv run pytest -m unit
 
-# Run ALL tests including slow (bypass config)
-uv run pytest --co -q
+# Run only slow tests (>1 min)
+uv run pytest -m slow
 
 # Run specific backend tests
 uv run pytest -m "ollama"
 uv run pytest -m "openai"
-
-# Run tests without LLM calls (unit tests only)
-uv run pytest -m "not llm"
 
 # CI/CD mode (skips qualitative tests)
 CICD=1 uv run pytest
@@ -366,37 +363,7 @@ _Note: ollama models can be obtained by running `ollama pull <model>`_
 
 ### Test Markers
 
-Tests are categorized using pytest markers:
-
-**Backend Markers:**
-- `@pytest.mark.ollama` - Requires Ollama running (local, lightweight)
-- `@pytest.mark.huggingface` - Requires HuggingFace backend (local, heavy)
-- `@pytest.mark.vllm` - Requires vLLM backend (local, GPU required)
-- `@pytest.mark.openai` - Requires OpenAI API (requires API key)
-- `@pytest.mark.watsonx` - Requires Watsonx API (requires API key)
-- `@pytest.mark.litellm` - Requires LiteLLM backend
-
-**Capability Markers:**
-- `@pytest.mark.requires_gpu` - Requires GPU
-- `@pytest.mark.requires_heavy_ram` - Requires 48GB+ RAM
-- `@pytest.mark.requires_api_key` - Requires external API keys
-- `@pytest.mark.qualitative` - LLM output quality tests (skipped in CI via `CICD=1`)
-- `@pytest.mark.llm` - Makes LLM calls (needs at least Ollama)
-- `@pytest.mark.slow` - Tests taking >5 minutes (skipped via `SKIP_SLOW=1`)
-
-**Execution Strategy Markers:**
-- `@pytest.mark.requires_gpu_isolation` - Requires OS-level process isolation to clear CUDA memory (use with `--isolate-heavy` or `CICD=1`)
-
-**Default behavior:**
-- `uv run pytest` skips slow tests (>5 min) but runs qualitative tests
-- Use `pytest -m "not qualitative"` for fast tests only (~2 min)
-- Use `pytest -m slow` or `pytest --co -q` to include slow tests
-
-⚠️ **Don't add `qualitative` to trivial tests** - keep the fast loop fast.
-⚠️ **Mark tests taking >5 minutes with `slow`** (e.g., dataset loading, extensive evaluations).
-
-For detailed information about test markers, resource requirements, and running specific
-test categories, see [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md).
+Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. See [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md) for the full marker reference, including tier definitions, backend markers, resource gates, and auto-skip logic.
 
 ### CI/CD Tests
 
@@ -417,7 +384,7 @@ CICD=1 uv run pytest
 
 - Fast tests (`-m "not qualitative"`): ~2 minutes
 - Default tests (qualitative, no slow): Several minutes
-- Slow tests (`-m slow`): >5 minutes
+- Slow tests (`-m slow`): >1 minute each
 - Pre-commit hooks: 1-5 minutes
 
 ⚠️ **Don't cancel mid-run** - canceling `pytest` or `pre-commit` can corrupt state.

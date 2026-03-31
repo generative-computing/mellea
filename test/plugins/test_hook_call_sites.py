@@ -16,6 +16,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
 pytest.importorskip("cpex.framework")
 
 from mellea.core.backend import Backend

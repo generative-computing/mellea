@@ -709,7 +709,7 @@ class TestSOFAIS2ModesGraphColoring:
 
 @pytest.mark.qualitative
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 class TestSOFAIGraphColoringIntegration:
     """Integration tests with actual LLM backends.
 

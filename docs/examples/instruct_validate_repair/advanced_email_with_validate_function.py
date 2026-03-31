@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 
 from docs.examples.helper import w
 from mellea import start_session
