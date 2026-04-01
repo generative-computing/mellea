@@ -32,15 +32,17 @@ class DecompVersion(StrEnum):
     Newer versions must be declared last to ensure ``latest`` always resolves to
     the most recent template.
 
-    Args:
+    Attributes:
         latest (str): Sentinel value that resolves to the last declared version.
         v1 (str): Version 1 of the decomposition pipeline template.
+        v2 (str): Version 2 of the decomposition pipeline template.
+        v3 (str): Version 3 of the decomposition pipeline template.
     """
 
     latest = "latest"
     v1 = "v1"
     v2 = "v2"
-    # v3 = "v3"
+    v3 = "v3"
 
 
 this_file_dir = Path(__file__).resolve().parent

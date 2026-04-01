@@ -1,0 +1,100 @@
+{% if user_inputs -%}
+import os
+{% endif -%}
+import textwrap
+
+import mellea
+
+{%- set ns = namespace(need_req=false) -%}
+{%- for item in subtasks -%}
+  {%- for c in item.constraints or [] -%}
+    {%- if c.val_fn -%}
+      {%- set ns.need_req = true -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endfor %}
+
+{%- if ns.need_req %}
+from mellea.stdlib.requirements import req
+{%- for c in identified_constraints %}
+{%- if c.val_fn and c.val_fn_name %}
+from validations.{{ c.val_fn_name }} import validate_input as {{ c.val_fn_name }}
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+
+m = mellea.start_session()
+{%- if user_inputs %}
+
+
+# User Input Variables
+try:
+    {%- for var in user_inputs %}
+    {{ var | lower }} = os.environ["{{ var | upper }}"]
+    {%- endfor %}
+except KeyError as e:
+    raise SystemExit(f"ERROR: One or more required environment variables are not set: {e}")
+{%- endif %}
+{%- for item in subtasks %}
+
+
+{{ item.tag | lower }}_gnrl = textwrap.dedent(
+    R"""
+    {{ item.general_instructions | trim | indent(width=4, first=False) }}
+    """.strip()
+)
+{{ item.tag | lower }} = m.instruct(
+    {%- if not (item.input_vars_required or []) %}
+    {{ item.subtask[3:] | trim | tojson }},
+    {%- else %}
+    textwrap.dedent(
+        R"""
+        {{ item.subtask[3:] | trim }}
+
+        Here are the input variables and their content:
+        {%- for var in item.input_vars_required or [] %}
+
+        - {{ var | upper }} = {{ "{{" }}{{ var | upper }}{{ "}}" }}
+        {%- endfor %}
+        """.strip()
+    ),
+    {%- endif %}
+    {%- if item.constraints %}
+    requirements=[
+        {%- for c in item.constraints %}
+        {%- if c.val_fn and c.val_fn_name %}
+        req(
+            {{ c.constraint | tojson}},
+            validation_fn={{ c.val_fn_name }},
+        ),
+        {%- else %}
+        {{ c.constraint | tojson}},
+        {%- endif %}
+        {%- endfor %}
+    ],
+    {%- else %}
+    requirements=None,
+    {%- endif %}
+    {%- if item.input_vars_required %}
+    user_variables={
+        {%- for var in item.input_vars_required or [] %}
+        {{ var | upper | tojson }}: {{ var | lower }},
+        {%- endfor %}
+    },
+    {%- endif %}
+    grounding_context={
+        "GENERAL_INSTRUCTIONS": {{ item.tag | lower }}_gnrl,
+        {%- for var in item.depends_on or [] %}
+        {{ var | upper | tojson }}: {{ var | lower }}.value,
+        {%- endfor %}
+    },
+)
+assert {{ item.tag | lower }}.value is not None, 'ERROR: task "{{ item.tag | lower }}" execution failed'
+{%- if loop.last %}
+
+
+final_answer = {{ item.tag | lower }}.value
+
+print(final_answer)
+{%- endif -%}
+{%- endfor -%}
