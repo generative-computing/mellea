@@ -3,9 +3,10 @@
 from unittest.mock import Mock
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from cli.serve.app import app, make_chat_endpoint
+from cli.serve.app import make_chat_endpoint
 from cli.serve.models import ChatCompletionRequest, ChatMessage
 
 
@@ -61,11 +62,10 @@ def sample_request():
 @pytest.mark.unit
 def test_successful_completion(mock_module_success, sample_request):
     """Test successful chat completion."""
+    app = FastAPI()
     endpoint = make_chat_endpoint(mock_module_success)
-    client = TestClient(app)
-
-    # Add the endpoint to the app
     app.add_api_route("/test/completions", endpoint, methods=["POST"])
+    client = TestClient(app)
 
     response = client.post("/test/completions", json=sample_request.model_dump())
 
@@ -80,10 +80,10 @@ def test_successful_completion(mock_module_success, sample_request):
 @pytest.mark.unit
 def test_attribute_error_handling(mock_module_attribute_error, sample_request):
     """Test handling of AttributeError (e.g., missing 'value' attribute)."""
+    app = FastAPI()
     endpoint = make_chat_endpoint(mock_module_attribute_error)
-    client = TestClient(app)
-
     app.add_api_route("/test/attribute-error", endpoint, methods=["POST"])
+    client = TestClient(app)
 
     response = client.post("/test/attribute-error", json=sample_request.model_dump())
 
@@ -97,10 +97,10 @@ def test_attribute_error_handling(mock_module_attribute_error, sample_request):
 @pytest.mark.unit
 def test_value_error_handling(mock_module_value_error, sample_request):
     """Test handling of ValueError (validation errors)."""
+    app = FastAPI()
     endpoint = make_chat_endpoint(mock_module_value_error)
-    client = TestClient(app)
-
     app.add_api_route("/test/value-error", endpoint, methods=["POST"])
+    client = TestClient(app)
 
     response = client.post("/test/value-error", json=sample_request.model_dump())
 
@@ -115,10 +115,10 @@ def test_value_error_handling(mock_module_value_error, sample_request):
 @pytest.mark.unit
 def test_generic_error_handling(mock_module_generic_error, sample_request):
     """Test handling of generic exceptions."""
+    app = FastAPI()
     endpoint = make_chat_endpoint(mock_module_generic_error)
-    client = TestClient(app)
-
     app.add_api_route("/test/generic-error", endpoint, methods=["POST"])
+    client = TestClient(app)
 
     response = client.post("/test/generic-error", json=sample_request.model_dump())
 

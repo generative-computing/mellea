@@ -105,13 +105,6 @@ def make_chat_endpoint(module):
                 system_fingerprint=system_fingerprint,
                 usage=usage,
             )  # type: ignore
-        except AttributeError as e:
-            # Handle missing 'value' attribute or other attribute errors
-            return create_openai_error_response(
-                status_code=500,
-                message=f"Internal server error: {e!s}",
-                error_type="server_error",
-            )
         except ValueError as e:
             # Handle validation errors or invalid input
             return create_openai_error_response(
@@ -120,7 +113,7 @@ def make_chat_endpoint(module):
                 error_type="invalid_request_error",
             )
         except Exception as e:
-            # Catch-all for any other unexpected errors
+            # Catch-all for any unexpected errors (including AttributeError)
             return create_openai_error_response(
                 status_code=500,
                 message=f"Internal server error: {e!s}",
@@ -147,7 +140,7 @@ def serve(
         route_path,
         make_chat_endpoint(module),
         methods=["POST"],
-        response_model=None,  # Allow both ChatCompletion and error responses
+        response_model=ChatCompletion | OpenAIErrorResponse,
     )
     typer.echo(f"Serving {route_path} at http://{host}:{port}")
     uvicorn.run(app, host=host, port=port)
