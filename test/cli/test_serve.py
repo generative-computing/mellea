@@ -238,6 +238,3 @@ class TestChatEndpoint:
         assert response.system_fingerprint == "gpt-4"  # model takes precedence
         assert response.object == "chat.completion"
         assert response.id.startswith("chatcmpl-")
-
-
-# Made with Bob
