@@ -23,7 +23,7 @@ from validations.{{ c.val_fn_name }} import validate_input as {{ c.val_fn_name }
 {%- endfor %}
 {%- endif %}
 
-m = mellea.start_session()
+m = mellea.start_session(model_id="mistral-small3.2:latest")
 {%- if user_inputs %}
 
 
