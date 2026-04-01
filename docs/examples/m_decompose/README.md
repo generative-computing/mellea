@@ -13,8 +13,12 @@ The decomposition pipeline extracts constraints, generates prompt templates for 
 3. Run `m decompose run`.
 
 ```bash
+MODEL_ID=mistral-small3.2:latest  # e.g. granite4:latest
+
 mkdir -p ./output
+
 m decompose run \
+  --model-id $MODEL_ID \
   --input-file task.txt \
   --out-dir ./output \
   --out-name my_decomp
@@ -39,7 +43,7 @@ Note:
 
 ## Output structure
 
-For one task, `m decompose run` creates:
+For one query, `m decompose run` creates:
 
 ```text
 <out-dir>/<out-name>/
@@ -49,10 +53,19 @@ For one task, `m decompose run` creates:
     ├── __init__.py
     └── val_fn_*.py  # only when a constraint uses code validation
 ```
+For multiple queries:
+```text
+<out-dir>/
+├── <out-name>_1/
+├── <out-name>_2/
+└── ...
+```
 
 - `*.json`: full decomposition result (`subtask_list`, `identified_constraints`, `subtasks`, ...)
 - `*.py`: rendered runnable program from the selected template version (`latest` currently resolves to `v2`)
 - `validations/`: generated validation helper functions for constraints using `code` strategy
+
+
 
 ## Key CLI options
 
