@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 #
 # Standalone function hooks — the simplest way to extend Mellea.
 #

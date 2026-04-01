@@ -1,4 +1,4 @@
-# pytest: ollama, llm, qualitative, skip
+# pytest: ollama, e2e, qualitative, skip
 # /// script
 # dependencies = [
 #   "mellea",

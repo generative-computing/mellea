@@ -27,9 +27,11 @@ try:
 except ImportError:
     OTEL_AVAILABLE = False
 
-pytestmark = pytest.mark.skipif(
-    not OTEL_AVAILABLE, reason="OpenTelemetry not installed"
-)
+pytestmark = [
+    pytest.mark.skipif(not OTEL_AVAILABLE, reason="OpenTelemetry not installed"),
+    pytest.mark.e2e,
+    pytest.mark.ollama,
+]
 
 
 @pytest.fixture(scope="module", autouse=True)

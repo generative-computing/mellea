@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 
 # This is the 101 example for using `session` and `instruct`.
 # helper function to wrap text

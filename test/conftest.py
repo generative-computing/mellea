@@ -54,8 +54,15 @@ def _check_ollama_available():
         return False
 
 
+_capabilities_cache: dict | None = None
+
+
 def get_system_capabilities():
     """Detect system capabilities for test requirements."""
+    global _capabilities_cache
+    if _capabilities_cache is not None:
+        return _capabilities_cache
+
     capabilities = {
         "has_gpu": False,
         "gpu_memory_gb": 0,
@@ -65,12 +72,27 @@ def get_system_capabilities():
     }
 
     # Detect GPU (CUDA for NVIDIA, MPS for Apple Silicon)
-    if HAS_TORCH:
-        has_cuda = torch.cuda.is_available()
-        has_mps = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
-        capabilities["has_gpu"] = has_cuda or has_mps
+    import platform as _platform
+    import subprocess as _subprocess
 
-        if has_cuda:
+    _is_apple_silicon = sys.platform == "darwin" and _platform.machine() == "arm64"
+
+    if _is_apple_silicon:
+        capabilities["has_gpu"] = True
+        try:
+            out = _subprocess.run(
+                ["sysctl", "-n", "hw.memsize"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            total_gb = int(out.stdout.strip()) / (1024**3)
+            capabilities["gpu_memory_gb"] = min(total_gb * 0.75, total_gb - 16)
+        except Exception:
+            pass
+    elif HAS_TORCH:
+        if torch.cuda.is_available():
+            capabilities["has_gpu"] = True
             try:
                 # Use nvidia-smi to avoid initializing CUDA in parent process.
                 # torch.cuda.get_device_properties(0) creates a CUDA context,
@@ -89,7 +111,6 @@ def get_system_capabilities():
                 capabilities["gpu_memory_gb"] = float(result.stdout.strip()) / 1024
             except Exception:
                 pass
-        # Note: MPS doesn't provide easy memory query, leave at 0
 
     # Detect RAM
     if HAS_PSUTIL:
@@ -111,6 +132,7 @@ def get_system_capabilities():
     # Detect Ollama availability
     capabilities["has_ollama"] = _check_ollama_available()
 
+    _capabilities_cache = capabilities
     return capabilities
 
 
@@ -129,25 +151,9 @@ def gh_run() -> int:
 def shared_vllm_backend(request):
     """Shared vLLM backend for ALL vLLM tests across all modules.
 
-    When --isolate-heavy is used, returns None to allow module-scoped backends.
     When --group-by-backend is used, delays creation until after openai_vllm group.
     Uses IBM Granite 4 Micro as a small, fast model suitable for all vLLM tests.
     """
-    # Check if process isolation is enabled
-    use_isolation = (
-        request.config.getoption("--isolate-heavy", default=False)
-        or os.environ.get("CICD", "0") == "1"
-    )
-
-    if use_isolation:
-        logger = FancyLogger.get_logger()
-        logger.info(
-            "Process isolation enabled (--isolate-heavy). "
-            "Skipping shared vLLM backend - each module will create its own."
-        )
-        yield None
-        return
-
     # When using --group-by-backend, delay backend creation until after openai_vllm group
     if request.config.getoption("--group-by-backend", default=False):
         # Check if we're currently in the openai_vllm group
@@ -225,8 +231,8 @@ BACKEND_GROUPS = {
         "description": "Ollama backend tests (local server)",
     },
     "api": {
-        "marker": "requires_api_key",
-        "description": "API-based backends (OpenAI, Watsonx, Bedrock)",
+        "markers": ["watsonx", "bedrock"],
+        "description": "API-based backends (Watsonx, Bedrock — require cloud credentials)",
     },
 }
 
@@ -255,46 +261,10 @@ def pytest_addoption(parser):
             pass
 
     add_option_safe(
-        "--ignore-gpu-check",
-        action="store_true",
-        default=False,
-        help="Ignore GPU requirement checks (tests may fail without GPU)",
-    )
-    add_option_safe(
-        "--ignore-ram-check",
-        action="store_true",
-        default=False,
-        help="Ignore RAM requirement checks (tests may fail with insufficient RAM)",
-    )
-    add_option_safe(
-        "--ignore-ollama-check",
-        action="store_true",
-        default=False,
-        help="Ignore Ollama availability checks (tests will fail if Ollama not running)",
-    )
-    add_option_safe(
-        "--ignore-api-key-check",
-        action="store_true",
-        default=False,
-        help="Ignore API key checks (tests will fail without valid API keys)",
-    )
-    add_option_safe(
-        "--ignore-all-checks",
-        action="store_true",
-        default=False,
-        help="Ignore all requirement checks (GPU, RAM, Ollama, API keys)",
-    )
-    add_option_safe(
         "--disable-default-mellea-plugins",
         action="store_true",
         default=False,
         help="Register all acceptance plugin sets for every test",
-    )
-    add_option_safe(
-        "--isolate-heavy",
-        action="store_true",
-        default=False,
-        help="Run heavy GPU tests in isolated subprocesses (slower, but guarantees CUDA memory release)",
     )
     add_option_safe(
         "--group-by-backend",
@@ -304,46 +274,48 @@ def pytest_addoption(parser):
     )
 
 
+BACKEND_MARKERS: dict[str, str] = {
+    "ollama": "Tests requiring Ollama backend (local, light)",
+    "openai": "Tests requiring OpenAI API (requires API key)",
+    "watsonx": "Tests requiring Watsonx API (requires API key)",
+    "huggingface": "Tests requiring HuggingFace backend (local, heavy)",
+    "vllm": "Tests requiring vLLM backend (local, GPU required)",
+    "litellm": "Tests requiring LiteLLM backend",
+    "bedrock": "Tests requiring AWS Bedrock backend (requires credentials)",
+}
+"""Single source of truth for backend marker names and descriptions.
+
+Add new backends here — ``pytest_configure`` registers them automatically.
+Keep ``pyproject.toml`` ``[tool.pytest.ini_options].markers`` in sync.
+"""
+
+
 def pytest_configure(config):
     """Register custom markers."""
-    # Backend markers
-    config.addinivalue_line(
-        "markers", "ollama: Tests requiring Ollama backend (local, light)"
-    )
-    config.addinivalue_line(
-        "markers", "openai: Tests requiring OpenAI API (requires API key)"
-    )
-    config.addinivalue_line(
-        "markers", "watsonx: Tests requiring Watsonx API (requires API key)"
-    )
-    config.addinivalue_line(
-        "markers", "huggingface: Tests requiring HuggingFace backend (local, heavy)"
-    )
-    config.addinivalue_line(
-        "markers", "vllm: Tests requiring vLLM backend (local, GPU required)"
-    )
-    config.addinivalue_line("markers", "litellm: Tests requiring LiteLLM backend")
+    # Backend markers (driven by BACKEND_MARKERS registry)
+    for name, desc in BACKEND_MARKERS.items():
+        config.addinivalue_line("markers", f"{name}: {desc}")
 
     # Capability markers
-    config.addinivalue_line(
-        "markers", "requires_api_key: Tests requiring external API keys"
-    )
-    config.addinivalue_line("markers", "requires_gpu: Tests requiring GPU")
-    config.addinivalue_line("markers", "requires_heavy_ram: Tests requiring 16GB+ RAM")
-    config.addinivalue_line(
-        "markers",
-        "requires_gpu_isolation: Explicitly tag tests/modules that require OS-level process isolation to clear CUDA memory.",
-    )
     config.addinivalue_line("markers", "qualitative: Non-deterministic quality tests")
 
-    # Composite markers
+    # Granularity markers
     config.addinivalue_line(
-        "markers", "llm: Tests that make LLM calls (needs at least Ollama)"
+        "markers",
+        "unit: Self-contained tests — no services, no I/O (auto-applied when no other granularity marker present)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "integration: Tests needing additional services or multi-component wiring (may use fixture-managed dependencies)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "e2e: Tests against real backends — cloud APIs, local servers, or GPU-loaded models",
     )
 
-    # Plugin acceptance markers
+    # Composite markers (llm is deprecated — use e2e instead)
     config.addinivalue_line(
-        "markers", "plugins: Acceptance tests that register all built-in plugin sets"
+        "markers", "llm: Tests that make LLM calls (deprecated — use e2e instead)"
     )
 
     # Store vLLM isolation flag in config
@@ -353,104 +325,6 @@ def pytest_configure(config):
 # ============================================================================
 # Heavy GPU Test Process Isolation
 # ============================================================================
-
-
-def _run_heavy_modules_isolated(session, heavy_modules: list[str]) -> int:
-    """Run heavy RAM test modules in separate processes for GPU memory isolation.
-
-    Streams output in real-time and parses for test failures to provide
-    a clear summary at the end.
-
-    Returns exit code (0 = all passed, 1 = any failed).
-    """
-    print("\n" + "=" * 70)
-    print("Heavy GPU Test Process Isolation Active")
-    print("=" * 70)
-    print(
-        f"Running {len(heavy_modules)} heavy GPU test module(s) in separate processes"
-    )
-    print("to ensure GPU memory is fully released between modules.\n")
-
-    # Set environment variables for vLLM
-    env = os.environ.copy()
-    env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-
-    all_passed = True
-    failed_modules = {}  # module_path -> list of failed test names
-
-    for i, module_path in enumerate(heavy_modules, 1):
-        print(f"\n[{i}/{len(heavy_modules)}] Running: {module_path}")
-        print("-" * 70)
-
-        # Build pytest command with same options as parent session
-        cmd = [sys.executable, "-m", "pytest", module_path, "-v", "--no-cov"]
-
-        # Add markers from original command if present
-        config = session.config
-        markexpr = config.getoption("-m", default=None)
-        if markexpr:
-            cmd.extend(["-m", markexpr])
-
-        import pathlib
-
-        repo_root = str(pathlib.Path(__file__).parent.parent.resolve())
-        env["PYTHONPATH"] = f"{repo_root}{os.pathsep}{env.get('PYTHONPATH', '')}"
-
-        # Stream output in real-time while capturing for parsing
-        process = subprocess.Popen(
-            cmd,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,  # Merge stderr into stdout
-            text=True,
-            bufsize=1,  # Line buffered for immediate output
-        )
-
-        failed_tests = []
-
-        # Stream output line by line
-        if process.stdout:
-            for line in process.stdout:
-                print(line, end="")  # Print immediately (streaming)
-
-                # Parse for failures (pytest format: "test_file.py::test_name FAILED")
-                if " FAILED " in line:
-                    # Extract test name from pytest output
-                    try:
-                        parts = line.split(" FAILED ")
-                        if len(parts) >= 2:
-                            # Get the test identifier (the part before " FAILED ")
-                            # Strip whitespace and take last token (handles indentation)
-                            test_name = parts[0].strip().split()[-1]
-                            failed_tests.append(test_name)
-                    except Exception:
-                        # If parsing fails, continue - we'll still show module failed
-                        pass
-
-        process.wait()
-
-        if process.returncode != 0:
-            all_passed = False
-            failed_modules[module_path] = failed_tests
-            print(f"✗ Module failed: {module_path}")
-        else:
-            print(f"✓ Module passed: {module_path}")
-
-    print("\n" + "=" * 70)
-    if all_passed:
-        print("All heavy GPU modules passed!")
-    else:
-        print(f"Failed modules ({len(failed_modules)}):")
-        for module, tests in failed_modules.items():
-            print(f"  {module}:")
-            if tests:
-                for test in tests:
-                    print(f"    - {test}")
-            else:
-                print("    (module failed but couldn't parse specific test names)")
-    print("=" * 70 + "\n")
-
-    return 0 if all_passed else 1
 
 
 # ============================================================================
@@ -557,7 +431,7 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
                 pass
             del backend._underlying_model
 
-        # 8. Force garbage collection and flush CUDA cache
+        # 8. Force garbage collection and flush device caches
         gc.collect()
         gc.collect()
 
@@ -571,71 +445,11 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
                 f"/ {total / 1024**3:.1f}GB total "
                 f"(reclaimed {(free_after - free_before) / 1024**3:.1f}GB)"
             )
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
 
     except ImportError:
         pass
-
-
-def pytest_collection_finish(session):
-    """
-    Opt-in process isolation for heavy GPU tests.
-    Prevents CUDA OOMs by forcing OS-level memory release between heavy modules.
-    """
-    # 1. Test Discovery Guard: Never isolate during discovery
-    if session.config.getoption("collectonly", default=False):
-        return
-
-    # 2. Opt-in Guard: Only isolate if explicitly requested or in CI
-    use_isolation = (
-        session.config.getoption("--isolate-heavy", default=False)
-        or os.environ.get("CICD", "0") == "1"
-    )
-    if not use_isolation:
-        return
-
-    # 3. Hardware Guard: Only applies to CUDA environments
-    try:
-        import torch
-
-        if not torch.cuda.is_available():
-            return
-    except ImportError:
-        return
-
-    # Collect modules explicitly marked for GPU isolation
-    heavy_items = [
-        item
-        for item in session.items
-        if item.get_closest_marker("requires_gpu_isolation")
-    ]
-
-    # Extract unique module paths
-    heavy_modules = list({str(item.path) for item in heavy_items})
-
-    if len(heavy_modules) <= 1:
-        return  # No isolation needed for a single module
-
-    # Confirmation logging: Show which modules will be isolated
-    print(f"\n[INFO] GPU Isolation enabled for {len(heavy_modules)} modules:")
-    for module in heavy_modules:
-        print(f"  - {module}")
-
-    # Execute heavy modules in subprocesses
-    exit_code = _run_heavy_modules_isolated(session, heavy_modules)
-
-    # 4. Non-Destructive Execution: Remove heavy items, DO NOT exit.
-    session.items = [
-        item for item in session.items if str(item.path) not in heavy_modules
-    ]
-
-    # Propagate subprocess failures to the main pytest session
-    if exit_code != 0:
-        # Count actual test failures from the isolated modules
-        # Note: We increment testsfailed by the number of modules that failed,
-        # not the total number of modules. The _run_heavy_modules_isolated
-        # function already tracks which modules failed.
-        session.testsfailed += 1  # Mark that failures occurred
-        session.exitstatus = exit_code
 
 
 # ============================================================================
@@ -651,21 +465,23 @@ def pytest_collection_modifyitems(config, items):
     """
     capabilities = get_system_capabilities()
 
-    # Check for override flags
-    ignore_all = config.getoption("--ignore-all-checks", default=False)
-    ignore_ollama = (
-        config.getoption("--ignore-ollama-check", default=False) or ignore_all
-    )
-
     skip_ollama = pytest.mark.skip(
         reason="Ollama not available (port 11434 not listening)"
     )
 
+    # Auto-apply 'unit' marker to tests without explicit granularity markers.
+    # This enables `pytest -m unit` without per-file maintenance burden.
+    _NON_UNIT = {"integration", "e2e", "qualitative", "llm"}
+
     for item in items:
         # Skip ollama tests if ollama not available
-        if item.get_closest_marker("ollama") and not ignore_ollama:
+        if item.get_closest_marker("ollama"):
             if not capabilities["has_ollama"]:
                 item.add_marker(skip_ollama)
+
+        # Auto-apply unit marker
+        if not any(item.get_closest_marker(m) for m in _NON_UNIT):
+            item.add_marker(pytest.mark.unit)
 
     # Reorder tests by backend if requested
     if config.getoption("--group-by-backend", default=False):
@@ -677,11 +493,13 @@ def pytest_collection_modifyitems(config, items):
         seen = set()
 
         for group_name in BACKEND_GROUP_ORDER:
-            marker = BACKEND_GROUPS[group_name]["marker"]
+            group_info = BACKEND_GROUPS[group_name]
+            markers = group_info.get("markers") or [group_info["marker"]]
             group_tests = [
                 item
                 for item in items
-                if item.get_closest_marker(marker) and id(item) not in seen
+                if any(item.get_closest_marker(m) for m in markers)
+                and id(item) not in seen
             ]
 
             if group_tests:
@@ -712,10 +530,6 @@ def pytest_runtest_setup(item):
     """Skip tests based on markers and system capabilities.
 
     Can be overridden with command-line options:
-    - pytest --ignore-gpu-check
-    - pytest --ignore-ram-check
-    - pytest --ignore-ollama-check
-    - pytest --ignore-api-key-check
     """
     capabilities = get_system_capabilities()
     gh_run = int(os.environ.get("CICD", 0))
@@ -725,7 +539,8 @@ def pytest_runtest_setup(item):
     if config.getoption("--group-by-backend", default=False):
         current_group = None
         for group_name, group_info in BACKEND_GROUPS.items():
-            if item.get_closest_marker(group_info["marker"]):
+            markers = group_info.get("markers") or [group_info["marker"]]
+            if any(item.get_closest_marker(m) for m in markers):
                 current_group = group_name
                 break
 
@@ -810,62 +625,19 @@ def pytest_runtest_setup(item):
 
         pytest_runtest_setup._last_backend_group = current_group
 
-    # Check for override flags from CLI
-    ignore_all = config.getoption("--ignore-all-checks", default=False)
-    ignore_gpu = config.getoption("--ignore-gpu-check", default=False) or ignore_all
-    ignore_ram = config.getoption("--ignore-ram-check", default=False) or ignore_all
-    ignore_api_key = (
-        config.getoption("--ignore-api-key-check", default=False) or ignore_all
-    )
-
     # Skip qualitative tests in CI
     if item.get_closest_marker("qualitative") and gh_run == 1:
         pytest.skip(
             reason="Skipping qualitative test: got env variable CICD == 1. Used only in gh workflows."
         )
 
-    # Skip tests requiring API keys if not available (unless override)
-    if item.get_closest_marker("requires_api_key") and not ignore_api_key:
-        # Check specific backend markers
-        for backend in ["openai", "watsonx"]:
-            if item.get_closest_marker(backend):
-                if not capabilities["has_api_keys"].get(backend):
-                    pytest.skip(
-                        f"Skipping test: {backend} API key not found in environment"
-                    )
-
-    # Skip tests requiring GPU if not available (unless override)
-    if item.get_closest_marker("requires_gpu") and not ignore_gpu:
-        if not capabilities["has_gpu"]:
-            pytest.skip("Skipping test: GPU not available")
-
-    # Skip tests requiring heavy RAM if insufficient (unless override)
-    # NOTE: The 48GB threshold is based on empirical testing:
-    #   - HuggingFace tests with granite-3.3-8b-instruct failed on 32GB M1 MacBook
-    #   - Also failed on 36GB system
-    #   - Set to 48GB as safe threshold for 8B model + overhead
-    # TODO: Consider per-model thresholds or make configurable
-    #       Can be overridden with: pytest --ignore-ram-check
-    if item.get_closest_marker("requires_heavy_ram") and not ignore_ram:
-        RAM_THRESHOLD_GB = 48  # Based on real-world testing
-        if capabilities["ram_gb"] > 0 and capabilities["ram_gb"] < RAM_THRESHOLD_GB:
-            pytest.skip(
-                f"Skipping test: Insufficient RAM ({capabilities['ram_gb']:.1f}GB < {RAM_THRESHOLD_GB}GB)"
-            )
-
-    # Backend-specific skipping
-    # Leaving OpenAI commented since our current OpenAI tests don't require OpenAI apikeys.
-    # if item.get_closest_marker("openai") and not ignore_api_key:
-    #     if not capabilities["has_api_keys"].get("openai"):
-    #         pytest.skip("Skipping test: OPENAI_API_KEY not found in environment")
-
-    if item.get_closest_marker("watsonx") and not ignore_api_key:
+    if item.get_closest_marker("watsonx"):
         if not capabilities["has_api_keys"].get("watsonx"):
             pytest.skip(
                 "Skipping test: Watsonx API credentials not found in environment"
             )
 
-    if item.get_closest_marker("vllm") and not ignore_gpu:
+    if item.get_closest_marker("vllm"):
         if not capabilities["has_gpu"]:
             pytest.skip("Skipping test: vLLM requires GPU")
 

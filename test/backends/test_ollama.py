@@ -13,7 +13,7 @@ from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.requirements import simple_validate
 
 # Mark all tests in this module as requiring Ollama
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 
 @pytest.fixture(scope="function")

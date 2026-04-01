@@ -2,14 +2,17 @@ import asyncio
 
 import pytest
 
+from test.predicates import require_api_key
+
 # Mark all tests in this module as requiring Watsonx via LiteLLM
 pytestmark = [
     pytest.mark.litellm,
     pytest.mark.watsonx,
-    pytest.mark.llm,
-    pytest.mark.requires_api_key,
+    pytest.mark.e2e,
+    require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID"),
 ]
 
+pytest.importorskip("litellm", reason="litellm not installed — install mellea[litellm]")
 from mellea import MelleaSession
 from mellea.backends.litellm import LiteLLMBackend
 from mellea.core import CBlock

@@ -9,13 +9,14 @@ import pydantic
 import pytest
 import requests
 
+from test.predicates import require_gpu
+
 # Mark all tests in this module with backend and resource requirements
 pytestmark = [
     pytest.mark.openai,
-    pytest.mark.llm,
+    pytest.mark.e2e,
     pytest.mark.vllm,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
+    require_gpu(min_vram_gb=8),
     # Skip entire module in CI since all 8 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,

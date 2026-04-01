@@ -13,7 +13,7 @@ from mellea.stdlib.session import start_session
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.qualitative
 async def test_astream_returns_incremental_chunks():
     """Test that astream() returns only new content, not accumulated content.
@@ -68,7 +68,7 @@ async def test_astream_returns_incremental_chunks():
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.qualitative
 async def test_astream_multiple_calls_accumulate_correctly():
     """Test that multiple astream() calls accumulate to the final value.
@@ -112,7 +112,7 @@ async def test_astream_multiple_calls_accumulate_correctly():
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.qualitative
 async def test_astream_beginning_length_tracking():
     """Test that beginning_length is correctly tracked across astream calls.
@@ -143,7 +143,7 @@ async def test_astream_beginning_length_tracking():
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.qualitative
 async def test_astream_empty_beginning():
     """Test astream when _underlying_value starts as None."""
@@ -168,7 +168,7 @@ async def test_astream_empty_beginning():
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 async def test_computed_mot_raises_error_for_astream():
     """Test that computed mot raises an error for astream() calls."""
     # Create a pre-computed thunk
@@ -185,7 +185,7 @@ async def test_computed_mot_raises_error_for_astream():
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 async def test_non_streaming_astream():
     """Test that non-streaming astream has exactly one chunk."""
     session = start_session()

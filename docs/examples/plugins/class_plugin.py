@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 #
 # Class-based plugin — group related hooks in a single Plugin subclass.
 #

@@ -6,7 +6,8 @@ import os
 import pathlib
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
@@ -14,6 +15,7 @@ from mellea.stdlib.components import Message
 from mellea.stdlib.components.intrinsic import guardian
 from mellea.stdlib.context import ChatContext
 from test.conftest import cleanup_gpu_backend
+from test.predicates import require_gpu
 
 # Skip entire module in CI since all tests are qualitative
 pytestmark = [
@@ -22,9 +24,8 @@ pytestmark = [
         reason="Skipping Guardian tests in CI - all qualitative tests",
     ),
     pytest.mark.huggingface,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.llm,
+    require_gpu(min_vram_gb=12),
+    pytest.mark.e2e,
 ]
 
 DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"

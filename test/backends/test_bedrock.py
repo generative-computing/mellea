@@ -1,5 +1,3 @@
-import os
-
 import openai
 import pytest
 
@@ -9,14 +7,12 @@ from mellea import MelleaSession
 from mellea.backends.bedrock import create_bedrock_mantle_backend
 from mellea.backends.openai import OpenAIBackend
 from mellea.stdlib.context import ChatContext
+from test.predicates import require_api_key
 
-# Skip entire module in CI since the single test is qualitative
 pytestmark = [
-    pytest.mark.llm,
-    pytest.mark.skipif(
-        "AWS_BEARER_TOKEN_BEDROCK" not in os.environ.keys(),
-        reason="Skipping Bedrock backend tests if $AWS_BEARER_TOKEN_BEDROCK is not set.",
-    ),
+    pytest.mark.e2e,
+    pytest.mark.bedrock,
+    require_api_key("AWS_BEARER_TOKEN_BEDROCK"),
 ]
 
 

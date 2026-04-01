@@ -1,4 +1,4 @@
-# pytest: ollama, llm, slow, qualitative
+# pytest: ollama, e2e, slow, qualitative
 #!/usr/bin/env python3
 """
 Example: Using Mellea's decompose functionality programmatically

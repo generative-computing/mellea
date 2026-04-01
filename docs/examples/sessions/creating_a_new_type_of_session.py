@@ -1,4 +1,4 @@
-# pytest: ollama, qualitative, llm
+# pytest: ollama, qualitative, e2e
 
 from typing import Literal
 

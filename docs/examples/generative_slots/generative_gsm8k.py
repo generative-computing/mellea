@@ -1,4 +1,4 @@
-# pytest: ollama, qualitative, llm, slow
+# pytest: ollama, qualitative, e2e, slow
 
 """Example of chain-of-thought reasoning on a mathematical question from the GSM8K dataset, structured as code for improved performance with Granite 4 models. The original accuracy in standard "thinking" mode is approximately 80%, while this implementation achieves 85-89% accuracy—up to 9 points higher.
 

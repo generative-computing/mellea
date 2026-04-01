@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
+
 from mellea.core.base import ModelOutputThunk
 from mellea.plugins.hooks.generation import GenerationPostCallPayload
 from mellea.telemetry.metrics_plugins import TokenMetricsPlugin

@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 #
 # Tool hook plugins — safety and security policies for tool invocation.
 #

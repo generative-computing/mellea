@@ -6,13 +6,15 @@ import os
 import pathlib
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import core
 from mellea.stdlib.context import ChatContext
 from test.conftest import cleanup_gpu_backend
+from test.predicates import require_gpu
 from test.stdlib.components.intrinsic.test_rag import (
     _read_input_json as _read_rag_input_json,
     _read_output_json as _read_rag_output_json,
@@ -25,9 +27,8 @@ pytestmark = [
         reason="Skipping core intrinsic tests in CI - all qualitative tests",
     ),
     pytest.mark.huggingface,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.llm,
+    require_gpu(min_vram_gb=12),
+    pytest.mark.e2e,
 ]
 
 DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"
