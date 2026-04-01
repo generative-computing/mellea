@@ -196,7 +196,9 @@ class TestChatEndpoint:
         assert response.usage is not None
         assert response.usage.prompt_tokens == 10
         assert response.usage.completion_tokens == 0  # Should default to 0
-        assert response.usage.total_tokens == 0
+        assert (
+            response.usage.total_tokens == 10
+        )  # Should be prompt_tokens + completion_tokens
 
     @pytest.mark.asyncio
     async def test_all_fields_together(self, mock_module, sample_request):

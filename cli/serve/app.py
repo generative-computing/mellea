@@ -55,10 +55,16 @@ def make_chat_endpoint(module):
         # Extract usage information from the ModelOutputThunk if available
         usage = None
         if hasattr(output, "usage") and output.usage is not None:
+            prompt_tokens = output.usage.get("prompt_tokens", 0)
+            completion_tokens = output.usage.get("completion_tokens", 0)
+            # Calculate total_tokens if not provided
+            total_tokens = output.usage.get(
+                "total_tokens", prompt_tokens + completion_tokens
+            )
             usage = CompletionUsage(
-                prompt_tokens=output.usage.get("prompt_tokens", 0),
-                completion_tokens=output.usage.get("completion_tokens", 0),
-                total_tokens=output.usage.get("total_tokens", 0),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
             )
 
         # system_fingerprint represents backend config hash, not model name
