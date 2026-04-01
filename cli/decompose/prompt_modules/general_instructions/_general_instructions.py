@@ -18,13 +18,11 @@ RE_GENERAL_INSTRUCTIONS = re.compile(
 )
 
 RE_GENERAL_INSTRUCTIONS_OPEN = re.compile(
-    r"<general_instructions>(.*)",
-    flags=re.IGNORECASE | re.DOTALL,
+    r"<general_instructions>(.*)", flags=re.IGNORECASE | re.DOTALL
 )
 
 RE_FINAL_SENTENCE = re.compile(
-    r"\n*All tags are closed and my assignment is finished\.\s*$",
-    flags=re.IGNORECASE,
+    r"\n*All tags are closed and my assignment is finished\.\s*$", flags=re.IGNORECASE
 )
 
 
@@ -48,9 +46,7 @@ class _GeneralInstructions(PromptModule):
             general_instructions_str = general_instructions_match.group(1).strip()
 
         general_instructions_str = re.sub(
-            RE_FINAL_SENTENCE,
-            "",
-            general_instructions_str,
+            RE_FINAL_SENTENCE, "", general_instructions_str
         ).strip()
 
         return general_instructions_str
@@ -77,10 +73,7 @@ class _GeneralInstructions(PromptModule):
         }
 
         try:
-            response = mellea_session.act(
-                action=action,
-                model_options=model_options,
-            )
+            response = mellea_session.act(action=action, model_options=model_options)
             gen_result = response.value
         except Exception as e:
             raise BackendGenerationError(f"LLM generation failed: {e}") from e
