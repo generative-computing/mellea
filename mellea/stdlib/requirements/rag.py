@@ -1,101 +1,72 @@
 """Requirements for RAG (Retrieval-Augmented Generation) workflows."""
 
+import json
+import logging
+import re
 from collections.abc import Iterable
-from enum import Enum
 
 from ...backends.adapters import AdapterMixin
-from ...core import Backend, Context, Requirement, ValidationResult
+from ...core import Backend, CBlock, Context, Requirement, ValidationResult
 from ..components import Document, Message
 from ..context import ChatContext
 
-
-class CitationMode(Enum):
-    """Mode for calculating citation coverage.
-
-    Attributes:
-        CLAIMS: Count the fraction of factual claims that have citations.
-            Each citation record from find_citations represents one claim.
-        CHARACTERS: Calculate the ratio of cited characters to total characters.
-            Sums character ranges covered by citations.
-    """
-
-    CLAIMS = "claims"
-    CHARACTERS = "characters"
+logger = logging.getLogger(__name__)
 
 
-class CitationRequirement(Requirement):
-    """Requirement that validates RAG responses have adequate citation coverage.
+class GroundednessRequirement(Requirement):
+    """Requirement that validates LLM responses are grounded by citations.
 
-    Uses the find_citations intrinsic to identify which parts of an assistant's
-    response are supported by explicit citations to retrieved documents. Content
-    without citations below the minimum coverage threshold fails validation.
+    This requirement implements a sophisticated 4-step validation pipeline to ensure
+    that LLM responses are fully grounded by citations to provided documents:
+
+    1. **Citation Generation**: Generate citations for the response using the
+       find_citations intrinsic.
+    2. **Citation Necessity**: Identify which response spans require citations (vs.
+       conversational/inference text that doesn't need citations).
+    3. **Citation Support**: For spans that need citations, assess the level of
+       citation support: fully, partially, or not supported.
+    4. **Groundedness Output**: Declare response grounded iff all spans needing
+       citations are fully supported.
 
     **Important**: This requirement requires a HuggingFace backend (LocalHFBackend)
-    as the find_citations intrinsic only works with HuggingFace models. Using other
-    backends (Ollama, OpenAI, etc.) will result in a validation error.
-
-    This requirement is designed for RAG workflows where you want to ensure
-    responses properly cite their sources. It works with:
-    - A user question in the context
-    - Retrieved documents
-    - An assistant response to validate
-
-    Documents can be provided either:
-    1. In the constructor (for reusable requirements with fixed documents)
-    2. Attached to the assistant message in the context (for dynamic documents)
+    as it uses both the find_citations intrinsic and LLM-as-Judge for assessment.
 
     Args:
-        min_citation_coverage: Minimum ratio of cited content (0.0-1.0).
-            Interpretation depends on mode:
-            - CLAIMS mode: fraction of factual claims with citations
-            - CHARACTERS mode: ratio of cited characters to total characters
-            Default is 0.8 (80% coverage).
         documents: Optional documents to validate against. Can be Document
             objects or strings (will be converted to Documents). If provided,
             these documents will be used instead of documents attached to
             messages in the context. Default is None (use context documents).
-        mode: Citation coverage calculation mode. Default is CitationMode.CLAIMS
-            (count fraction of claims with citations). Use CitationMode.CHARACTERS
-            to calculate character-based coverage ratio instead.
+        allow_partial_support: Whether to accept partially supported spans as
+            grounded. If False (default), response is grounded iff all spans
+            needing citations are FULLY supported. If True, response is grounded
+            if spans are fully or partially supported. Default is False (strict).
         description: Custom description for the requirement. If None,
-            generates a description based on coverage threshold and mode.
+            generates a default description.
 
     Example:
         ```python
         from mellea.backends.huggingface import LocalHFBackend
-        from mellea.stdlib.requirements.rag import CitationRequirement
+        from mellea.stdlib.requirements.rag import GroundednessRequirement
 
         backend = LocalHFBackend(model_id="meta-llama/Llama-3.2-1B-Instruct")
 
-        # Option 1: Documents in constructor
-        req = CitationRequirement(
+        req = GroundednessRequirement(
             documents=doc_objects,
-            min_citation_coverage=0.8
+            allow_partial_support=False
         )
 
-        # Option 2: Documents in context (original pattern)
-        req = CitationRequirement(min_citation_coverage=0.8)
-        ctx = ChatContext().add(
-            Message("assistant", response, documents=doc_objects)
-        )
+        result = await req.validate(backend, ctx)
         ```
     """
 
     def __init__(
         self,
-        min_citation_coverage: float = 0.8,
         documents: Iterable[Document] | Iterable[str] | None = None,
-        mode: CitationMode = CitationMode.CLAIMS,
+        allow_partial_support: bool = False,
         description: str | None = None,
     ):
-        """Initialize citation coverage requirement."""
-        if not 0.0 <= min_citation_coverage <= 1.0:
-            raise ValueError(
-                f"min_citation_coverage must be between 0.0 and 1.0, got {min_citation_coverage}"
-            )
-
-        self.min_citation_coverage = min_citation_coverage
-        self.mode = mode
+        """Initialize grounded requirement."""
+        self.allow_partial_support = allow_partial_support
 
         # Convert documents to Document objects if provided
         if documents is not None:
@@ -110,16 +81,13 @@ class CitationRequirement(Requirement):
 
         # Generate description if not provided
         if description is None:
-            if mode == CitationMode.CLAIMS:
-                description = (
-                    f"Response must have adequate citation coverage "
-                    f"(minimum {min_citation_coverage * 100:.0f}% of factual claims cited)"
-                )
-            else:  # CitationMode.CHARACTERS
-                description = (
-                    f"Response must have adequate citation coverage "
-                    f"(minimum {min_citation_coverage * 100:.0f}% of characters cited)"
-                )
+            support_text = (
+                "fully supported" if not allow_partial_support else "supported"
+            )
+            description = (
+                f"Response must be grounded in citations "
+                f"(all spans needing citations must be {support_text})"
+            )
 
         # Initialize parent without validation function - we override validate() instead
         super().__init__(description=description, validation_fn=None)
@@ -132,30 +100,30 @@ class CitationRequirement(Requirement):
         format: type | None = None,
         model_options: dict | None = None,
     ) -> ValidationResult:
-        """Validate citation coverage in the context using the backend.
+        """Validate groundedness of the response using the 4-step pipeline.
 
         Args:
-            backend: Backend to use for citation detection. Must be LocalHFBackend
-                as the find_citations intrinsic only works with HuggingFace models.
+            backend: Backend to use for citation detection and LLM judgment.
+                Must be LocalHFBackend as this uses find_citations intrinsic.
             ctx: Context containing the conversation history
             format: Unused for this requirement
             model_options: Unused for this requirement
 
         Returns:
-            ValidationResult with pass/fail status, reason, and score
+            ValidationResult with pass/fail status and detailed reason
         """
         # Extract last message (should be assistant response)
         messages = ctx.as_list()
         if not messages:
             return ValidationResult(
-                False, reason="Context is empty, cannot validate citation coverage"
+                False, reason="Context is empty, cannot validate groundedness"
             )
 
         last_message = messages[-1]
         if not isinstance(last_message, Message):
             return ValidationResult(
                 False,
-                reason="Last context item is not a Message, cannot validate citation coverage",
+                reason="Last context item is not a Message, cannot validate groundedness",
             )
 
         if last_message.role != "assistant":
@@ -170,14 +138,13 @@ class CitationRequirement(Requirement):
         if self.documents is not None:
             documents = self.documents
         else:
-            # Access private _docs attribute since documents property returns formatted strings
             documents = last_message._docs or []
 
         if not documents:
             return ValidationResult(
                 False,
-                reason="No documents provided for citation validation. "
-                "Either pass documents to CitationRequirement constructor "
+                reason="No documents provided for grounding validation. "
+                "Either pass documents to GroundednessRequirement constructor "
                 "or attach them to the assistant message.",
             )
 
@@ -185,137 +152,509 @@ class CitationRequirement(Requirement):
         if not isinstance(backend, AdapterMixin):
             return ValidationResult(
                 False,
-                reason=f"Backend {backend.__class__.__name__} does not support adapters required for citation detection",
+                reason=f"Backend {backend.__class__.__name__} does not support adapters required for grounding validation",
             )
 
-        # Create context before the response by getting all but the last message
+        # Handle empty response
+        if not response.strip():
+            return ValidationResult(
+                True, reason="Empty response is considered grounded"
+            )
+
+        # Create context before the response
         all_messages = ctx.as_list()
         if len(all_messages) > 1:
-            # Rebuild context without last message
             context_before_response = ChatContext()
             for msg in all_messages[:-1]:
                 context_before_response = context_before_response.add(msg)
         else:
-            # If only one message, use empty context
             context_before_response = ChatContext()
 
-        # Handle empty response before calling intrinsic
-        total_chars = len(response)
-        if total_chars == 0:
-            return ValidationResult(
-                True,
-                reason="Empty response is considered to have adequate citation coverage",
-                score=1.0,
-            )
-
-        # Call find_citations intrinsic
         try:
-            # Import here to avoid circular dependency with backends
+            # Step 1: Citation Generation
             from ..components.intrinsic import rag
 
             citations: list[dict] = rag.find_citations(
                 response, documents, context_before_response, backend
             )
+            logger.debug(
+                f"Step 1 - Citations generated: {len(citations)} citations found"
+            )
+            for i, cit in enumerate(citations):
+                logger.debug(
+                    f"  Citation {i}: response_begin={cit.get('response_begin')}, response_end={cit.get('response_end')}, text={cit.get('citation_text', '')[:50]}"
+                )
         except Exception as e:
             return ValidationResult(
-                False, reason=f"Citation detection intrinsic failed: {e!s}"
+                False, reason=f"Citation generation intrinsic failed: {e!s}"
             )
 
-        # Calculate citation coverage based on mode
-        if self.mode == CitationMode.CLAIMS:
-            # Count fraction of claims (citation records) that exist
-            # Each citation record represents a factual claim that has a citation
-            # We need to estimate total claims in the response
-            # For now, use a simple heuristic: split by sentence-ending punctuation
-            import re
-
-            # Split response into sentences (simple heuristic)
-            sentences = re.split(r"[.!?]+", response)
-            # Filter out empty strings and whitespace-only strings
-            sentences = [s.strip() for s in sentences if s.strip()]
-            total_claims = len(sentences)
-
-            if total_claims == 0:
-                # Edge case: no sentences detected
-                coverage_ratio = 1.0 if len(citations) == 0 else 0.0
-            else:
-                # Number of claims with citations = number of citation records
-                cited_claims = len(citations)
-                coverage_ratio = cited_claims / total_claims
-        else:  # CitationMode.CHARACTERS
-            # Calculate character-based coverage
-            cited_chars = sum(
-                citation["response_end"] - citation["response_begin"]
-                for citation in citations
+        # Step 2: Citation Necessity
+        try:
+            span_necessity = await self._identify_citation_necessity(
+                response, citations, backend, context_before_response
             )
-            coverage_ratio = cited_chars / total_chars
+            logger.debug(
+                f"Step 2 - Citation necessity identified: {len(span_necessity)} spans"
+            )
+            for span_key, needs_cit in span_necessity.items():
+                begin, end = span_key
+                logger.debug(
+                    f"  Span [{begin}:{end}] needs_citation={needs_cit}: '{response[begin:end][:50]}'"
+                )
+        except Exception as e:
+            return ValidationResult(
+                False, reason=f"Citation necessity assessment failed: {e!s}"
+            )
 
-        # Check against min_citation_coverage
-        passed = coverage_ratio >= self.min_citation_coverage
+        # Step 3: Citation Support
+        try:
+            span_support = await self._assess_citation_support(
+                response, citations, span_necessity, backend, context_before_response
+            )
+            logger.debug(
+                f"Step 3 - Citation support assessed: {len(span_support)} spans"
+            )
+            for span_key, support in span_support.items():
+                begin, end = span_key
+                logger.debug(f"  Span [{begin}:{end}] support={support}")
+        except Exception as e:
+            return ValidationResult(
+                False, reason=f"Citation support assessment failed: {e!s}"
+            )
 
-        # Build detailed reason
-        reason = self._build_reason(citations, coverage_ratio, passed)
+        # Step 4: Groundedness Output
+        passed, reason = self._build_groundedness_result(
+            response, citations, span_necessity, span_support
+        )
 
-        return ValidationResult(passed, reason=reason, score=coverage_ratio)
+        return ValidationResult(passed, reason=reason)
 
-    def _build_reason(
-        self, citations: list[dict], coverage_ratio: float, passed: bool
-    ) -> str:
-        """Build a detailed reason string for the validation result.
+    async def _identify_citation_necessity(
+        self,
+        response: str,
+        citations: list[dict],
+        backend: Backend,
+        context: ChatContext,
+    ) -> dict[tuple[int, int], bool]:
+        """Identify which response spans need citations.
 
         Args:
-            citations: List of citation records from find_citations
-            coverage_ratio: Ratio of cited content
-            passed: Whether validation passed
+            response: The assistant response text
+            citations: Citation records from find_citations
+            backend: Backend for LLM judgment
+            context: Chat context
 
         Returns:
-            Detailed reason string
+            Dictionary mapping span (begin, end) to boolean (needs_citation)
         """
-        num_citations = len(citations)
-        coverage_pct = coverage_ratio * 100
-        threshold_pct = self.min_citation_coverage * 100
+        # Extract response spans: both cited and uncited portions
+        spans = self._extract_response_spans(response, citations)
 
-        if self.mode == CitationMode.CLAIMS:
-            metric_name = "claims"
+        if not spans:
+            return {}
+
+        # Build prompt for LLM to assess citation necessity
+        prompt = self._build_necessity_prompt(response, spans)
+        logger.debug(f"Necessity judgment prompt:\n{prompt}\n")
+
+        # Get LLM judgment
+        judgment_ctx = context.add(Message("user", prompt))
+        try:
+            action = CBlock("")
+            result, _ = await backend.generate_from_context(
+                action, judgment_ctx, model_options={"temperature": 0.0}
+            )
+            await result.avalue()
+            output_text = result.value
+            if output_text is None:
+                raise ValueError("LLM judgment returned None")
+            logger.debug(f"LLM necessity judgment output: {output_text}")
+        except Exception as e:
+            raise ValueError(f"LLM judgment failed: {e}")
+
+        # Parse LLM output
+        span_necessity = self._parse_necessity_output(output_text, spans)
+
+        return span_necessity
+
+    async def _assess_citation_support(
+        self,
+        response: str,
+        citations: list[dict],
+        span_necessity: dict[tuple[int, int], bool],
+        backend: Backend,
+        context: ChatContext,
+    ) -> dict[tuple[int, int], str]:
+        """Assess level of support for spans that need citations.
+
+        Args:
+            response: The assistant response text
+            citations: Citation records from find_citations
+            span_necessity: Mapping of span (begin, end) to needs_citation flag
+            backend: Backend for LLM judgment
+            context: Chat context
+
+        Returns:
+            Dictionary mapping span (begin, end) to support level
+            ("FULLY_SUPPORTED", "PARTIALLY_SUPPORTED", or "NOT_SUPPORTED")
+        """
+        span_support: dict[tuple[int, int], str] = {}
+
+        # For each span that needs citations, assess support level
+        for span_key, needs_citation in span_necessity.items():
+            if not needs_citation:
+                # Skip spans that don't need citations
+                continue
+
+            begin, end = span_key
+            span_text = response[begin:end].strip()
+
+            # Find citations that overlap with this span
+            span_citations = []
+            for citation in citations:
+                # Check if citation overlaps with span
+                if (
+                    citation["response_begin"] < end
+                    and citation["response_end"] > begin
+                ):
+                    span_citations.append(citation)
+
+            if not span_citations:
+                # No citations for this span
+                span_support[span_key] = "NOT_SUPPORTED"
+            else:
+                # Have citations, assess support level with LLM
+                prompt = self._build_support_prompt(span_text, span_citations)
+                judgment_ctx = context.add(Message("user", prompt))
+
+                try:
+                    action = CBlock("")
+                    result, _ = await backend.generate_from_context(
+                        action, judgment_ctx, model_options={"temperature": 0.0}
+                    )
+                    await result.avalue()
+                    output_text = result.value
+                    if output_text is None:
+                        raise ValueError("LLM judgment returned None")
+                except Exception as e:
+                    raise ValueError(f"LLM judgment for support failed: {e}")
+
+                # Parse support level
+                support_level = self._parse_support_output(output_text)
+                span_support[span_key] = support_level
+
+        return span_support
+
+    def _extract_response_spans(
+        self, response: str, citations: list[dict]
+    ) -> list[dict]:
+        """Extract all response spans (cited and uncited) from response.
+
+        Uses sentence-level segmentation for clarity. Each span is either:
+        - A full response span covered by citations
+        - An uncited gap between citations
+
+        Args:
+            response: The assistant response text
+            citations: Citation records with response_begin/response_end
+
+        Returns:
+            List of span dictionaries with begin, end, text
+        """
+        if not response.strip():
+            return []
+
+        # Build a coverage map: which characters are covered by citations
+        covered = [False] * len(response)
+        for citation in citations:
+            begin = citation["response_begin"]
+            end = min(citation["response_end"], len(response))
+            for i in range(begin, end):
+                covered[i] = True
+
+        logger.debug(
+            f"Response span extraction - coverage map: {sum(covered)}/{len(response)} chars covered by citations"
+        )
+
+        # Extract spans by finding boundaries
+        spans: list[dict] = []
+        current_span_start = 0
+        current_is_covered = covered[0] if covered else False
+
+        for i in range(1, len(response) + 1):
+            # Check if we're at a boundary (coverage changed or end of response)
+            at_end = i == len(response)
+            next_is_covered = False if at_end else covered[i]
+            at_boundary = at_end or next_is_covered != current_is_covered
+
+            if at_boundary:
+                span_text = response[current_span_start:i].strip()
+                if span_text:  # Only include non-empty spans
+                    spans.append(
+                        {
+                            "begin": current_span_start,
+                            "end": i,
+                            "text": span_text,
+                            "is_cited": current_is_covered,
+                        }
+                    )
+
+                current_span_start = i
+                if not at_end:
+                    current_is_covered = next_is_covered
+
+        logger.debug(f"Response span extraction - extracted {len(spans)} spans")
+        for span in spans:
+            logger.debug(
+                f"  Span: is_cited={span['is_cited']}, text='{span['text'][:60]}'"
+            )
+
+        return spans
+
+    def _build_necessity_prompt(self, response: str, spans: list[dict]) -> str:
+        """Build prompt to determine if spans need citations.
+
+        Args:
+            response: The full response text
+            spans: List of response spans
+
+        Returns:
+            Formatted prompt for LLM
+        """
+        # Create labeled spans for LLM
+        labeled_spans = []
+        for i, span in enumerate(spans):
+            labeled_spans.append(f'{{"span_id": {i}, "text": "{span["text"]}"}}')
+
+        spans_text = ",\n".join(labeled_spans)
+
+        prompt = (
+            "You are given a response and a set of spans extracted from the response. "
+            "For each span, determine whether it contains factual claims that require grounding in source material. "
+            "A span needs citation if it makes factual or informational claims about the world. "
+            "A span does NOT need citation only if it is:\n"
+            "  - An explicit I-do-not-know or uncertainty statement (e.g., 'I don't have information about...')\n"
+            "  - Purely conversational or transitional text (e.g., 'Let me explain', 'In summary')\n"
+            "  - A direct restatement or reformulation of information already stated in another span\n\n"
+            "Output a JSON array of the form "
+            '[{"span_id": ..., "needs_citation": ...}, ...], with one object for each span. '
+            'Set "needs_citation" to "yes" if the span contains factual claims needing grounding, '
+            'or "no" if it is exempt per the criteria above. '
+            "Output ONLY the JSON array, no other text.\n\n"
+            f"Response:\n{response}\n\n"
+            f"Spans to Evaluate:\n[{spans_text}]\n\n"
+            "JSON Output:\n"
+        )
+        return prompt
+
+    def _build_support_prompt(self, span_text: str, span_citations: list[dict]) -> str:
+        """Build prompt to assess citation support level.
+
+        Args:
+            span_text: The response span text
+            span_citations: Citation records for this span
+
+        Returns:
+            Formatted prompt for LLM
+        """
+        citations_text = []
+        for i, citation in enumerate(span_citations):
+            citation_text = citation.get("citation_text", "")
+            doc_id = citation.get("citation_doc_id", "unknown")
+            citations_text.append(
+                f'Citation {i} (from doc {doc_id}): "{citation_text}"'
+            )
+
+        citations_formatted = "\n".join(citations_text)
+
+        prompt = (
+            "Assess the level of support for a response span based on provided citations.\n\n"
+            f"Response span:\n{span_text}\n\n"
+            f"Provided citations:\n{citations_formatted}\n\n"
+            "Determine if the citations fully support, partially support, or do not support the span.\n"
+            "Respond with ONLY one of these three words: FULLY_SUPPORTED, PARTIALLY_SUPPORTED, or NOT_SUPPORTED."
+        )
+        return prompt
+
+    def _parse_necessity_output(
+        self, output_text: str, spans: list[dict]
+    ) -> dict[tuple[int, int], bool]:
+        """Parse LLM output for citation necessity judgments.
+
+        Args:
+            output_text: LLM output text
+            spans: Original span list
+
+        Returns:
+            Dictionary mapping span (begin, end) to needs_citation boolean
+        """
+        span_necessity: dict[tuple[int, int], bool] = {}
+
+        logger.debug(f"Parsing necessity output: {output_text[:300]}")
+
+        try:
+            # Try to extract JSON array from output
+            # Use a non-greedy match first to find the start, then look for closing bracket
+            json_start = output_text.find("[")
+            if json_start == -1:
+                raise ValueError("No JSON array start found in LLM output")
+
+            # Find matching closing bracket
+            bracket_count = 0
+            json_end = -1
+            for i in range(json_start, len(output_text)):
+                if output_text[i] == "[":
+                    bracket_count += 1
+                elif output_text[i] == "]":
+                    bracket_count -= 1
+                    if bracket_count == 0:
+                        json_end = i + 1
+                        break
+
+            if json_end == -1:
+                # Didn't find matching bracket, try to recover
+                logger.debug("No matching closing bracket found, attempting recovery")
+                # Take from start to end and close with ]
+                json_text = output_text[json_start:] + "]"
+            else:
+                json_text = output_text[json_start:json_end]
+
+            # Try to parse
+            try:
+                judgments = json.loads(json_text)
+            except json.JSONDecodeError as e:
+                logger.debug(f"JSON parse error: {e}, attempting repair")
+                # Try to find and close the last object
+                last_brace = json_text.rfind("}")
+                if last_brace != -1:
+                    json_text = json_text[: last_brace + 1] + "]"
+                    judgments = json.loads(json_text)
+                else:
+                    raise
+
+            logger.debug(f"Parsed JSON judgments: {len(judgments)} judgments")
+
+            # Map judgments to spans
+            for judgment in judgments:
+                if not isinstance(judgment, dict):
+                    continue
+
+                span_id = judgment.get("span_id")
+                needs_citation_flag = judgment.get("needs_citation", "").lower().strip()
+
+                logger.debug(
+                    f"  Judgment: span_id={span_id}, needs_citation={needs_citation_flag}"
+                )
+
+                if span_id is not None and 0 <= span_id < len(spans):
+                    span = spans[span_id]
+                    span_key = (span["begin"], span["end"])
+                    # Handle variations: "yes", "true", "1" -> True
+                    span_necessity[span_key] = needs_citation_flag in (
+                        "yes",
+                        "true",
+                        "1",
+                    )
+
+            # Ensure all spans are in the result
+            for span in spans:
+                span_key = (span["begin"], span["end"])
+                if span_key not in span_necessity:
+                    # Default: assume needs citation if not specified
+                    logger.debug(
+                        f"  Span {span_key} not in judgments, defaulting to True"
+                    )
+                    span_necessity[span_key] = True
+
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.debug(
+                f"Parse error in necessity output: {e}, assuming all spans need citations"
+            )
+            # On parse error, conservatively assume all spans need citations
+            for span in spans:
+                span_necessity[(span["begin"], span["end"])] = True
+
+        return span_necessity
+
+    def _parse_support_output(self, output_text: str) -> str:
+        """Parse LLM output for support level.
+
+        Args:
+            output_text: LLM output text
+
+        Returns:
+            Support level: "FULLY_SUPPORTED", "PARTIALLY_SUPPORTED", or "NOT_SUPPORTED"
+        """
+        output_upper = output_text.upper()
+
+        if "FULLY" in output_upper and "SUPPORTED" in output_upper:
+            return "FULLY_SUPPORTED"
+        elif "PARTIALLY" in output_upper and "SUPPORTED" in output_upper:
+            return "PARTIALLY_SUPPORTED"
         else:
-            metric_name = "characters"
+            return "NOT_SUPPORTED"
 
+    def _build_groundedness_result(
+        self,
+        response: str,
+        citations: list[dict],
+        span_necessity: dict[tuple[int, int], bool],
+        span_support: dict[tuple[int, int], str],
+    ) -> tuple[bool, str]:
+        """Build final groundedness result.
+
+        Args:
+            response: The assistant response
+            citations: Citation records
+            span_necessity: Mapping of span to needs_citation flag
+            span_support: Mapping of span to support level
+
+        Returns:
+            Tuple of (passed: bool, reason: str)
+        """
+        # Find problematic spans (those that need citations but aren't fully supported)
+        problematic_spans: list[tuple[int, int]] = []
+
+        for span_key, needs_citation in span_necessity.items():
+            if not needs_citation:
+                continue
+
+            support = span_support.get(span_key, "NOT_SUPPORTED")
+
+            # Check if support is acceptable
+            if support == "NOT_SUPPORTED":
+                problematic_spans.append(span_key)
+            elif support == "PARTIALLY_SUPPORTED" and not self.allow_partial_support:
+                problematic_spans.append(span_key)
+
+        # Determine pass/fail
+        passed = len(problematic_spans) == 0
+
+        # Build reason string
         if passed:
-            reason = (
-                f"Response has adequate citation coverage "
-                f"({coverage_pct:.1f}% of {metric_name} cited, threshold: {threshold_pct:.1f}%)"
-            )
+            reason = "Response is grounded in citations."
         else:
-            reason = (
-                f"Response has insufficient citation coverage "
-                f"({coverage_pct:.1f}% of {metric_name} cited, threshold: {threshold_pct:.1f}%)"
-            )
+            reason = "Response is not grounded - the following spans are not properly supported:\n\n"
 
-        # Add details about citations
-        if citations:
-            reason += f"\n\nCitations found ({num_citations}):"
-            for i, citation in enumerate(citations[:5]):  # Show first 5
-                response_text = citation["response_text"].strip()
-                doc_id = citation.get("citation_doc_id", "unknown")
-                citation_text = citation.get("citation_text", "").strip()
-                # Truncate long texts
-                if len(response_text) > 60:
-                    response_text = response_text[:57] + "..."
-                if len(citation_text) > 60:
-                    citation_text = citation_text[:57] + "..."
-                reason += f"\n  {i + 1}. '{response_text}' → Document '{doc_id}'"
-                if citation_text:
-                    reason += f"\n     Source: '{citation_text}'"
+            for begin, end in problematic_spans:
+                span_text = response[begin:end]
+                support = span_support.get((begin, end), "NOT_SUPPORTED")
+                reason += f'- "{span_text}" [{support}]\n'
 
-            if len(citations) > 5:
-                reason += f"\n  ... and {len(citations) - 5} more citation(s)"
-        else:
-            reason += "\n\nNo citations found in the response."
+        # Add summary statistics
+        total_spans_needing_citations = sum(
+            1 for needs in span_necessity.values() if needs
+        )
+        fully_supported = sum(
+            1
+            for span_key, needs in span_necessity.items()
+            if needs and span_support.get(span_key) == "FULLY_SUPPORTED"
+        )
 
-        if not passed:
-            uncited_pct = 100.0 - coverage_pct
-            reason += (
-                f"\n\nUncited content represents {uncited_pct:.1f}% of the response."
-            )
+        reason += (
+            f"\nSummary: {fully_supported}/{total_spans_needing_citations} "
+            f"spans needing citations are fully supported."
+        )
 
-        return reason
+        return passed, reason
