@@ -36,6 +36,8 @@ class LogitBias(BaseModel):
 
 
 class ChatCompletionRequest(BaseModel):
+    model_config = {"extra": "allow"}
+
     model: str
     messages: list[ChatMessage]
     requirements: list[str | None] | None = Field(default_factory=list)
@@ -58,9 +60,6 @@ class ChatCompletionRequest(BaseModel):
 
     # For future/undocumented fields
     extra: dict[str, Any] = Field(default_factory=dict)
-
-    class Config:
-        extra = "allow"
 
 
 # Taking this from OpenAI types https://github.com/openai/openai-python/blob/main/src/openai/types/chat/chat_completion.py,
@@ -124,3 +123,26 @@ class ChatCompletion(BaseModel):
 
     usage: CompletionUsage | None = None
     """Usage statistics for the completion request."""
+
+
+class OpenAIError(BaseModel):
+    """OpenAI API error object."""
+
+    message: str
+    """A human-readable error message."""
+
+    type: str
+    """The type of error (e.g., 'invalid_request_error', 'server_error')."""
+
+    param: str | None = None
+    """The parameter that caused the error, if applicable."""
+
+    code: str | None = None
+    """An error code, if applicable."""
+
+
+class OpenAIErrorResponse(BaseModel):
+    """OpenAI API error response wrapper."""
+
+    error: OpenAIError
+    """The error object."""
