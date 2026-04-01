@@ -425,6 +425,16 @@ def finalize_result(
         if log_mode == LogMode.debug:
             logger.debug("  prompt_template=%s", subtask_data.prompt_template)
 
+        unknown_constraints = [
+            c for c in subtask_data.constraints if c not in constraint_val_data
+        ]
+        if unknown_constraints:
+            logger.warning(
+                "  [%02d] skipping %d unrecognized constraint(s) not in constraint_val_data",
+                subtask_i,
+                len(unknown_constraints),
+            )
+
         subtask_constraints: list[ConstraintResult] = [
             {
                 "constraint": cons_str,
@@ -433,6 +443,7 @@ def finalize_result(
                 "val_fn": constraint_val_data[cons_str]["val_fn"],
             }
             for cons_str in subtask_data.constraints
+            if cons_str in constraint_val_data
         ]
 
         parsed_general_instructions: str = general_instructions.generate(

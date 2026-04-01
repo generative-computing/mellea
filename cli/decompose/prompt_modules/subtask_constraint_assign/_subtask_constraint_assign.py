@@ -113,8 +113,11 @@ class _SubtaskConstraintAssign(PromptModule):
                 subtask_constraint_assign = []
             else:
                 subtask_constraint_assign = [
-                    line.strip()[2:] if line.strip()[:2] == "- " else line.strip()
+                    line.strip()[2:]
+                    if line.strip()[:2] in ("- ", "* ", "• ")
+                    else line.strip()
                     for line in subtask_constraint_assign_str.splitlines()
+                    if line.strip()
                 ]
 
             result.append(

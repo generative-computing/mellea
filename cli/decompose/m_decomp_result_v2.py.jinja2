@@ -5,7 +5,7 @@ import textwrap
 
 import mellea
 {%- if "code" in identified_constraints | map(attribute="val_strategy") %}
-from mellea.stdlib.requirement import req
+from mellea.stdlib.requirements.requirement import req
 {% for c in identified_constraints %}
 {%- if c.val_fn %}
 from validations.{{ c.val_fn_name }} import validate_input as {{ c.val_fn_name }}
