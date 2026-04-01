@@ -57,12 +57,12 @@ class _SubtaskConstraintAssign(PromptModule):
             For example
             ```
             [ SubtaskPromptConstraintsItem(
-                  subtask=<str>,
-                  tag=<str>,
-                  prompt_template=<str>
-                  constraints=<list[str]>
-              ),
-              ...
+                subtask=<str>,
+                tag=<str>,
+                prompt_template=<str>
+                constraints=<list[str]>
+            ),
+            ...
             ]
             ```
 
@@ -108,6 +108,8 @@ class _SubtaskConstraintAssign(PromptModule):
 
             subtask_constraint_assign_str_upper = subtask_constraint_assign_str.upper()
 
+            subtask_constraint_assign: list[str] = []
+
             if (
                 "N/A" in subtask_constraint_assign_str_upper
                 or "N / A" in subtask_constraint_assign_str_upper
@@ -116,7 +118,6 @@ class _SubtaskConstraintAssign(PromptModule):
             ):
                 subtask_constraint_assign = []
             else:
-                subtask_constraint_assign = []
                 for line in subtask_constraint_assign_str.splitlines():
                     stripped = line.strip()
 
@@ -128,12 +129,9 @@ class _SubtaskConstraintAssign(PromptModule):
                         value = stripped[2:].strip()
                         if value:
                             subtask_constraint_assign.append(value)
-                        continue
 
                 # Remove duplicates while preserving order
-                subtask_constraint_assign = list(
-                    dict.fromkeys(subtask_constraint_assign)
-                )
+                subtask_constraint_assign = list(dict.fromkeys(subtask_constraint_assign))
 
             result.append(
                 SubtaskPromptConstraintsItem(
