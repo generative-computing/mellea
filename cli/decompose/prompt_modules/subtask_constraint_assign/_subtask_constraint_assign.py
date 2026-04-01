@@ -19,7 +19,7 @@ RE_GEN_DATA_FORMAT = re.compile(
 )
 
 RE_ASSIGNED_CONS = re.compile(
-    r"<assigned_constraints>(.+?)</assigned_constraints>",
+    r"<assigned_constraints>(.*?)</assigned_constraints>",
     flags=re.IGNORECASE | re.DOTALL,
 )
 
@@ -92,18 +92,22 @@ class _SubtaskConstraintAssign(PromptModule):
 
             subtask_constraint_assign_match = re.search(RE_ASSIGNED_CONS, data[3])
 
-            subtask_constraint_assign_str: str | None = (
+            # ===== fallback: use raw text when there is no tag =====
+            subtask_constraint_assign_str: str = (
                 subtask_constraint_assign_match.group(1).strip()
                 if subtask_constraint_assign_match
-                else None
+                else data[3].strip()
             )
 
-            if subtask_constraint_assign_str is None:
-                raise TagExtractionError(
-                    'LLM failed to generate correct tags for extraction: "<assigned_constraints>"'
-                )
+            subtask_constraint_assign_str = re.sub(
+                r"\n*All tags are closed and my assignment is finished\.\s*$",
+                "",
+                subtask_constraint_assign_str,
+                flags=re.IGNORECASE,
+            ).strip()
 
             subtask_constraint_assign_str_upper = subtask_constraint_assign_str.upper()
+
             if (
                 "N/A" in subtask_constraint_assign_str_upper
                 or "N / A" in subtask_constraint_assign_str_upper
@@ -112,10 +116,22 @@ class _SubtaskConstraintAssign(PromptModule):
             ):
                 subtask_constraint_assign = []
             else:
-                subtask_constraint_assign = [
-                    line.strip()[2:] if line.strip()[:2] == "- " else line.strip()
-                    for line in subtask_constraint_assign_str.splitlines()
-                ]
+                subtask_constraint_assign = []
+                for line in subtask_constraint_assign_str.splitlines():
+                    stripped = line.strip()
+
+                    if not stripped:
+                        continue
+
+                    # Only keep lines starting with "- "
+                    if stripped.startswith("- "):
+                        value = stripped[2:].strip()
+                        if value:
+                            subtask_constraint_assign.append(value)
+                        continue
+
+                # Remove duplicates while preserving order
+                subtask_constraint_assign = list(dict.fromkeys(subtask_constraint_assign))
 
             result.append(
                 SubtaskPromptConstraintsItem(
