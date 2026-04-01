@@ -13,7 +13,7 @@ Do not write anything between </general_instructions> and the final sentence exc
 Here are some complete examples to guide you on how to complete your assignment:
 
 {% for item in icl_examples -%}
-<example>
+<example_{{ loop.index }}>
 <task_prompt>
 {{ item["task_prompt"] }}
 </task_prompt>
@@ -22,7 +22,7 @@ Here are some complete examples to guide you on how to complete your assignment:
 </general_instructions>
 
 All tags are closed and my assignment is finished.
-</example>
+</example_{{ loop.index }}>
 
 {% endfor -%}
 That concludes the complete examples of your assignment.
