@@ -61,12 +61,10 @@ def make_chat_endpoint(module):
                 total_tokens=output.usage.get("total_tokens", 0),
             )
 
-        # Extract system_fingerprint (model identifier) if available
+        # system_fingerprint represents backend config hash, not model name
+        # The model name is already in response.model (line 73)
+        # Leave as None since we don't track backend config fingerprints yet
         system_fingerprint = None
-        if hasattr(output, "model") and output.model is not None:
-            system_fingerprint = output.model
-        elif hasattr(output, "provider") and output.provider is not None:
-            system_fingerprint = output.provider
 
         return ChatCompletion(
             id=completion_id,

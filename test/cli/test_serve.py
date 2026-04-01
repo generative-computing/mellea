@@ -99,42 +99,25 @@ class TestChatEndpoint:
         assert response.usage is None
 
     @pytest.mark.asyncio
-    async def test_system_fingerprint_from_model(self, mock_module, sample_request):
-        """Test that system_fingerprint is populated from model field."""
+    async def test_system_fingerprint_always_none(self, mock_module, sample_request):
+        """Test that system_fingerprint is always None.
+
+        Per OpenAI spec, system_fingerprint represents a hash of backend config,
+        not the model name. The model name is in response.model.
+        We don't currently track backend config fingerprints.
+        """
         mock_output = ModelOutputThunk("Test response")
         mock_output.model = "gpt-4-turbo"
+        mock_output.provider = "openai"
         mock_module.serve.return_value = mock_output
 
         endpoint = make_chat_endpoint(mock_module)
         response = await endpoint(sample_request)
 
-        assert response.system_fingerprint == "gpt-4-turbo"
-
-    @pytest.mark.asyncio
-    async def test_system_fingerprint_from_provider(self, mock_module, sample_request):
-        """Test that system_fingerprint falls back to provider field."""
-        mock_output = ModelOutputThunk("Test response")
-        mock_output.provider = "ollama"
-        mock_module.serve.return_value = mock_output
-
-        endpoint = make_chat_endpoint(mock_module)
-        response = await endpoint(sample_request)
-
-        assert response.system_fingerprint == "ollama"
-
-    @pytest.mark.asyncio
-    async def test_system_fingerprint_none_when_unavailable(
-        self, mock_module, sample_request
-    ):
-        """Test that system_fingerprint is None when not available."""
-        mock_output = ModelOutputThunk("Test response")
-        # Don't set model or provider
-        mock_module.serve.return_value = mock_output
-
-        endpoint = make_chat_endpoint(mock_module)
-        response = await endpoint(sample_request)
-
+        # system_fingerprint should be None, not the model name
         assert response.system_fingerprint is None
+        # Model name should be in the model field
+        assert response.model == sample_request.model
 
     @pytest.mark.asyncio
     async def test_model_options_passed_correctly(self, mock_module, sample_request):
@@ -235,6 +218,6 @@ class TestChatEndpoint:
         assert response.choices[0].finish_reason == "stop"
         assert response.usage is not None
         assert response.usage.total_tokens == 30
-        assert response.system_fingerprint == "gpt-4"  # model takes precedence
+        assert response.system_fingerprint is None  # Not tracking backend config
         assert response.object == "chat.completion"
         assert response.id.startswith("chatcmpl-")
