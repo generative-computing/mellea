@@ -10,7 +10,13 @@ import typer
 import uvicorn
 from fastapi import FastAPI
 
-from .models import ChatCompletion, ChatCompletionMessage, ChatCompletionRequest, Choice
+from .models import (
+    ChatCompletion,
+    ChatCompletionMessage,
+    ChatCompletionRequest,
+    Choice,
+    CompletionUsage,
+)
 
 app = FastAPI(
     title="M serve OpenAI API Compatible Server",
@@ -40,9 +46,27 @@ def make_chat_endpoint(module):
             input=request.messages,
             requirements=request.requirements,
             model_options={
-                k: v for k, v in request if k not in ["messages", "requirements"]
+                k: v
+                for k, v in request.model_dump().items()
+                if k not in ["messages", "requirements"]
             },
         )
+
+        # Extract usage information from the ModelOutputThunk if available
+        usage = None
+        if hasattr(output, "usage") and output.usage is not None:
+            usage = CompletionUsage(
+                prompt_tokens=output.usage.get("prompt_tokens", 0),
+                completion_tokens=output.usage.get("completion_tokens", 0),
+                total_tokens=output.usage.get("total_tokens", 0),
+            )
+
+        # Extract system_fingerprint (model identifier) if available
+        system_fingerprint = None
+        if hasattr(output, "model") and output.model is not None:
+            system_fingerprint = output.model
+        elif hasattr(output, "provider") and output.provider is not None:
+            system_fingerprint = output.provider
 
         return ChatCompletion(
             id=completion_id,
@@ -54,9 +78,12 @@ def make_chat_endpoint(module):
                     message=ChatCompletionMessage(
                         content=output.value, role="assistant"
                     ),
+                    finish_reason="stop",
                 )
             ],
             object="chat.completion",  # type: ignore
+            system_fingerprint=system_fingerprint,
+            usage=usage,
         )  # type: ignore
 
     endpoint.__name__ = f"chat_{module.__name__}_endpoint"
