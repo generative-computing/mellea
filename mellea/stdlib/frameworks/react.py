@@ -7,6 +7,8 @@ any list of ``AbstractMelleaTool`` instances and a ``ChatContext`` for multi-tur
 history tracking. Raises ``RuntimeError`` if the loop ends without a final answer.
 """
 
+import pydantic
+
 # from PIL import Image as PILImage
 from mellea.backends.model_options import ModelOption
 from mellea.core.backend import Backend, BaseModelSubclass
@@ -22,6 +24,14 @@ from mellea.stdlib.components.react import (
     ReactThought,
 )
 from mellea.stdlib.context import ChatContext
+
+
+class TrueOrFalse(pydantic.BaseModel):
+    """Response indicating whether the ReACT agent has completed its task."""
+
+    answer: bool = pydantic.Field(
+        description="True if you have enough information to answer the user's question, False if you need more tool calls"
+    )
 
 
 async def react(
@@ -107,19 +117,43 @@ async def react(
                 if tool_res.name == MELLEA_FINALIZER_TOOL:
                     is_final = True
 
-        # Check if we should return: either finalizer was called or model gave direct answer
-        should_return = is_final or (step.tool_calls is None and step.value is not None)
+        # Check for special case where model already has the answer, but it won't call the finalize tool.
+        # Instead of letting this run out of iterations and fail, let's ask.
+        # Only do this before we fail on iteration limit as a last resort because it's hard to justify doing it earlier for now.
+        elif -1 < loop_budget <= turn_num and step.value:
+            # If the turn number has reached the end of loop budget (and budget is not unlimited),
+            # then it's time to check if the model is just loopy and already has the answer.
+            print("### Done Check")
+            print("STEP_TOOL_CALLS:", step.tool_calls)
+            print("STEP:", step)
+            print("CONTEXT:", context)
+            content = mfuncs.chat(
+                content=f"Do you know the answer to the user's original query ({goal})? If so, respond with True. If you need to take more actions, then respond False.",
+                context=context,
+                backend=backend,
+                format=TrueOrFalse,
+            )[0].content
+            have_answer = TrueOrFalse.model_validate_json(content).answer
 
-        if should_return:
-            if is_final:
-                assert len(tool_responses) == 1, (
-                    "multiple tools were called with 'final'"
+            print("### Done Check ANSWER: ", have_answer)
+            if have_answer:
+                # Create a synthetic finalizer tool response to be consistent with normal loop
+                finalizer_response = ToolMessage(
+                    role="tool",
+                    content=step.value,
+                    tool_output=step.value,
+                    name=MELLEA_FINALIZER_TOOL,
+                    args={},
+                    tool=None,  # type: ignore
                 )
-                if format is None:
-                    # The tool has already been called above.
-                    step._underlying_value = str(tool_responses[0].content)
+                tool_responses = [finalizer_response]
+                context = context.add(finalizer_response)
+                is_final = True
 
-            # Apply format if requested (works for both finalizer and direct answer cases)
+        if is_final:
+            assert len(tool_responses) == 1, "multiple tools were called with 'final'"
+
+            # Apply format if requested
             if format is not None:
                 step, next_context = await mfuncs.aact(
                     action=ReactThought(),
@@ -134,7 +168,9 @@ async def react(
                 )
                 assert isinstance(next_context, ChatContext)
                 context = next_context
-
+            else:
+                # The tool has already been called above.
+                step._underlying_value = str(tool_responses[0].content)
             return step, context
 
     raise RuntimeError(f"could not complete react loop in {loop_budget} iterations")
