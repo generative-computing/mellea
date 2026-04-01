@@ -96,6 +96,7 @@ def generate_python_script(
     python_script_content = m_template.render(
         subtasks=result["subtasks"],
         user_inputs=[],  # No user inputs for this simple example
+        identified_constraints=result["identified_constraints"],
     )
 
     # Save the generated Python script
@@ -105,6 +106,31 @@ def generate_python_script(
 
     print(f"💾 Generated Python script saved to: {py_output_file}")
     return py_output_file
+
+
+def write_validation_files(result: DecompPipelineResult, output_dir: Path) -> int:
+    """
+    Write validation function files alongside the generated script.
+
+    Args:
+        result: Decomposition results dictionary
+        output_dir: Directory containing the generated script
+
+    Returns:
+        Number of validation files written
+    """
+    val_fn_dir = output_dir / "validations"
+    val_fn_dir.mkdir(exist_ok=True)
+    (val_fn_dir / "__init__.py").touch()
+
+    count = 0
+    for constraint in result["identified_constraints"]:
+        if constraint["val_fn"] is not None:
+            count += 1
+            with open(val_fn_dir / f"{constraint['val_fn_name']}.py", "w") as f:
+                f.write(constraint["val_fn"] + "\n")
+
+    return count
 
 
 def run_generated_script(
@@ -216,7 +242,14 @@ def main():
     # Step 4: Generate Python script
     script_path = generate_python_script(result, output_dir)
 
-    # Step 5: Run the generated script (optional)
+    # Step 5: Write validation function files (required before running the script)
+    val_count = write_validation_files(result, output_dir)
+    if val_count:
+        print(
+            f"📄 Wrote {val_count} validation file(s) to {output_dir / 'validations'}"
+        )
+
+    # Step 6: Run the generated script (optional)
     run_generated_script(script_path, output_dir)
 
     print("\n" + "=" * 70)

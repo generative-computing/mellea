@@ -1,119 +1,202 @@
 {
   "original_task_prompt": "Write a short blog post about the benefits of morning exercise.\nInclude a catchy title, an introduction paragraph, three main benefits\nwith explanations, and a conclusion that encourages readers to start\ntheir morning exercise routine.",
   "subtask_list": [
-    "1. Create a catchy title for the blog post about the benefits of morning exercise. -",
-    "2. Write an introduction paragraph that sets the stage for the blog post. -",
-    "3. Identify and explain three main benefits of morning exercise with detailed explanations. -",
-    "4. Write a conclusion that encourages readers to start their morning exercise routine. -",
-    "5. Compile the title, introduction, three main benefits, and conclusion into a single cohesive blog post. -"
+    "1. Brainstorm and select a catchy title related to the benefits of morning exercise. -",
+    "2. Write an introduction paragraph that engages readers and introduces the topic of morning exercise. -",
+    "3. Identify three main benefits of morning exercise, then write detailed explanations for each benefit. -",
+    "4. Compile the identified benefits with their explanations into a structured format for the blog post. -",
+    "5. Write a conclusion paragraph that encourages readers to start incorporating morning exercise into their routine. -",
+    "6. Combine all parts (title, introduction, benefits explanation, and conclusion) into a cohesive short blog post. -"
   ],
   "identified_constraints": [
     {
-      "constraint": "Include a catchy title",
-      "validation_strategy": "llm"
+      "constraint": "The blog post must have a catchy title",
+      "val_strategy": "llm",
+      "val_fn": null,
+      "val_fn_name": "val_fn_1"
     },
     {
-      "constraint": "Include an introduction paragraph",
-      "validation_strategy": "llm"
+      "constraint": "The post should include an introduction paragraph",
+      "val_strategy": "code",
+      "val_fn": "def validate_input(input: str) -> bool:\n    \"\"\"\n    Validates that the input contains an introduction paragraph.\n    \n    An introduction paragraph is defined as a block of text that appears at the beginning of a document and provides context or overview of the content to follow.\n    \n    Args:\n        input (str): The input to validate\n        \n    Returns:\n        bool: True if the input contains an introduction paragraph, False otherwise\n    \"\"\"\n    try:\n        # Splitting the input into sentences for analysis\n        sentences = re.split('[.!?]', input)\n        \n        # An introduction paragraph is typically the first sentence or a group of closely related sentences at the start\n        return any(sentence.strip() and not sentence.lower().startswith('rephrased from') for sentence in sentences[:3])\n    except Exception:\n        return False",
+      "val_fn_name": "val_fn_2"
     },
     {
-      "constraint": "Include three main benefits with explanations",
-      "validation_strategy": "llm"
+      "constraint": "Three main benefits of morning exercise with explanations are required",
+      "val_strategy": "llm",
+      "val_fn": null,
+      "val_fn_name": "val_fn_3"
     },
     {
-      "constraint": "Include a conclusion that encourages readers to start their morning exercise routine",
-      "validation_strategy": "llm"
+      "constraint": "A conclusion that encourages readers to start their morning exercise routine is necessary",
+      "val_strategy": "llm",
+      "val_fn": null,
+      "val_fn_name": "val_fn_4"
     }
   ],
   "subtasks": [
     {
-      "subtask": "1. Create a catchy title for the blog post about the benefits of morning exercise. -",
+      "subtask": "1. Brainstorm and select a catchy title related to the benefits of morning exercise. -",
       "tag": "BLOG_TITLE",
       "constraints": [
         {
-          "constraint": "Include a catchy title",
-          "validation_strategy": "llm"
+          "constraint": "The blog post must have a catchy title",
+          "val_strategy": "llm",
+          "val_fn_name": "val_fn_1",
+          "val_fn": null
+        },
+        {
+          "constraint": "The post should include an introduction paragraph",
+          "val_strategy": "code",
+          "val_fn_name": "val_fn_2",
+          "val_fn": "def validate_input(input: str) -> bool:\n    \"\"\"\n    Validates that the input contains an introduction paragraph.\n    \n    An introduction paragraph is defined as a block of text that appears at the beginning of a document and provides context or overview of the content to follow.\n    \n    Args:\n        input (str): The input to validate\n        \n    Returns:\n        bool: True if the input contains an introduction paragraph, False otherwise\n    \"\"\"\n    try:\n        # Splitting the input into sentences for analysis\n        sentences = re.split('[.!?]', input)\n        \n        # An introduction paragraph is typically the first sentence or a group of closely related sentences at the start\n        return any(sentence.strip() and not sentence.lower().startswith('rephrased from') for sentence in sentences[:3])\n    except Exception:\n        return False"
+        },
+        {
+          "constraint": "Three main benefits of morning exercise with explanations are required",
+          "val_strategy": "llm",
+          "val_fn_name": "val_fn_3",
+          "val_fn": null
+        },
+        {
+          "constraint": "A conclusion that encourages readers to start their morning exercise routine is necessary",
+          "val_strategy": "llm",
+          "val_fn_name": "val_fn_4",
+          "val_fn": null
         }
       ],
-      "prompt_template": "Your task is to create a catchy title for a blog post about the benefits of morning exercise. Follow these steps to accomplish your task:\n\n1. **Understand the Topic**: The blog post will focus on the benefits of morning exercise. The title should be engaging and clearly convey the main topic of the post.\n\n2. **Identify Key Elements**: Consider the key elements that make morning exercise beneficial. These could include improved mood, increased energy, better focus, and enhanced metabolism.\n\n3. **Use Power Words**: Incorporate power words that evoke curiosity, excitement, or a sense of urgency. Examples include \"Boost,\" \"Transform,\" \"Unlock,\" \"Energize,\" and \"Revitalize.\"\n\n4. **Keep It Concise**: The title should be short and to the point, ideally between 5 to 10 words. It should be easy to read and remember.\n\n5. **Make It Action-Oriented**: Use verbs that encourage action, such as \"Start,\" \"Jumpstart,\" \"Kickstart,\" or \"Ignite.\"\n\n6. **Consider SEO**: Think about common search terms related to morning exercise. Including relevant keywords can help improve the post's visibility.\n\n7. **Examples for Inspiration**:\n   - \"Jumpstart Your Day: The Power of Morning Exercise\"\n   - \"Energize Your Mornings: Unlock the Benefits of Morning Exercise\"\n   - \"Transform Your Day with Morning Exercise\"\n   - \"Boost Your Energy: The Magic of Morning Workouts\"\n   - \"Revitalize Your Mornings: The Benefits of Morning Exercise\"\n\n8. **Create the Title**: Based on the above guidelines, create a catchy and engaging title for the blog post. Ensure it captures the essence of the topic and entices readers to click and read more.\n\nYour final answer should be only the title text.",
+      "prompt_template": "Your task is to brainstorm and select a catchy title related to the benefits of morning exercise for a blog post. Follow these steps to accomplish your task:\n\n1. **Understand the Topic**:\n   Begin by reflecting on the topic, which is the benefits of morning exercise. Consider what makes morning workouts unique and advantageous.\n\n2. **Brainstorm Title Ideas**:\n   Generate several title options that are catchy, engaging, and clearly indicate the content of your blog post. The titles should pique readers' interest and accurately represent the topic.\n\n3. **Select the Best Title**:\n   From your brainstormed list, choose the most compelling and relevant title for a blog post about the benefits of morning exercise. Ensure it is concise, informative, and appealing to your target audience.\n\n4. **Finalize Your Choice**:\n   Once you've selected the best title, prepare to use it as the basis for your blog post. This chosen title will be referenced in subsequent steps for compiling the complete blog post content.\n\nRemember, your goal is to create a title that effectively communicates the value of morning exercise and encourages readers to continue reading the blog post.",
+      "general_instructions": "1. Reflect on the topic of benefits of morning exercise to understand its unique aspects.\n2. Generate multiple catchy, engaging, and informative title options that accurately represent the content of a blog post about this topic.\n3. From the brainstormed titles, select the most compelling and relevant one for the target audience, ensuring it is concise and appealing.\n4. Finalize the chosen title to be used as the basis for the blog post content compilation.",
       "input_vars_required": [],
       "depends_on": []
     },
     {
-      "subtask": "2. Write an introduction paragraph that sets the stage for the blog post. -",
+      "subtask": "2. Write an introduction paragraph that engages readers and introduces the topic of morning exercise. -",
       "tag": "INTRODUCTION",
+      "constraints": [],
+      "prompt_template": "Your task is to write an introduction paragraph for a blog post about the benefits of morning exercise. This paragraph should be engaging, capture the reader's attention, and introduce the topic effectively. Follow these steps:\n\n1. **Understand the Topic**:\n   Begin by reviewing the overall theme of the blog post, which focuses on the benefits of morning exercise. Keep this in mind as you craft your introduction.\n\n2. **Engage Readers**:\n   Start with a hook to draw readers into the topic. This could be an intriguing question, a surprising fact, or a relatable scenario related to mornings and exercise.\n\n3. **Introduce Morning Exercise**:\n   After capturing attention, briefly introduce morning exercise as the subject of your blog post. Mention that you will explore its benefits in detail throughout the article.\n\n4. **Set Expectations**:\n   Conclude the introduction by hinting at what readers can expect to learn from the rest of the post. This should create anticipation and encourage them to continue reading.\n\nWrite a concise yet compelling introduction paragraph (approximately 5-7 sentences) that adheres to these guidelines, ensuring it sets the stage for the detailed exploration of morning exercise benefits in subsequent sections of your blog post.",
+      "general_instructions": "1. Begin by understanding the overarching theme of the blog post, which centers on the advantages of morning exercise.\n2. Craft an engaging hook to captivate readers' interest, using a compelling question, surprising fact, or relatable morning scenario related to exercise.\n3. Introduce morning exercise as the topic of discussion, indicating that its benefits will be explored in detail throughout the article.\n4. Conclude the introduction by providing a sneak peek into what readers can anticipate learning from the rest of the post, fostering curiosity and encouraging further reading.\n5. Ensure the introduction is concise yet compelling, consisting of approximately 5-7 sentences, setting the stage for an in-depth examination of morning exercise benefits in subsequent sections.",
+      "input_vars_required": [],
+      "depends_on": []
+    },
+    {
+      "subtask": "3. Identify three main benefits of morning exercise, then write detailed explanations for each benefit. -",
+      "tag": "BENEFITS_EXPLANATION",
+      "constraints": [],
+      "prompt_template": "Your task is to identify three main benefits of morning exercise and provide detailed explanations for each. Follow these steps to accomplish your task:\n\n1. **Research Morning Exercise Benefits**: Begin by researching the advantages associated with morning workouts. Focus on finding credible sources that highlight key benefits. Some common benefits include improved mood, increased energy levels throughout the day, and better sleep quality.\n\n2. **Select Three Key Benefits**: From your research, choose three of the most significant benefits to focus on for this blog post. Ensure these benefits are well-supported by evidence from reliable sources.\n\n3. **Write Detailed Explanations**: For each selected benefit, write a detailed explanation. Each explanation should include:\n   - A clear statement of the benefit.\n   - Scientific or empirical evidence supporting the benefit.\n   - Practical examples or anecdotes to illustrate how this benefit manifests in real life.\n\n4. **Format for Blog Post**: Structure your explanations in a way that they can be easily integrated into the blog post format. Consider using bullet points or numbered lists for clarity if needed.\n\n5. **Compile Explanations**: Compile these detailed explanations into a structured format, ready to be combined with other parts of the blog post (title and conclusion) in the next steps.\n\nEnsure that your explanations are clear, informative, and engaging, maintaining a tone suitable for a health and wellness blog audience.",
+      "general_instructions": "1. Conduct research to identify advantages of morning exercise, focusing on credible sources that highlight key benefits such as improved mood, increased energy levels, and better sleep quality.\n2. From the gathered information, select three most significant benefits relevant for a blog post, ensuring they are well-supported by evidence from reliable sources.\n3. For each selected benefit, craft detailed explanations including:\n   - A clear statement of the benefit.\n   - Scientific or empirical evidence supporting the benefit.\n   - Practical examples or anecdotes to illustrate real-life manifestation of this benefit.\n4. Structure these explanations in a format suitable for a blog post, using bullet points or numbered lists if necessary for clarity.\n5. Compile the detailed explanations into a cohesive and organized format, ready for integration with other components of the blog post like title and conclusion.\nEnsure all explanations are clear, informative, engaging, and tailored to a health and wellness audience.",
+      "input_vars_required": [],
+      "depends_on": []
+    },
+    {
+      "subtask": "4. Compile the identified benefits with their explanations into a structured format for the blog post. -",
+      "tag": "STRUCTURED_BENEFITS",
       "constraints": [
         {
-          "constraint": "Include an introduction paragraph",
-          "validation_strategy": "llm"
+          "constraint": "The blog post must have a catchy title",
+          "val_strategy": "llm",
+          "val_fn_name": "val_fn_1",
+          "val_fn": null
+        },
+        {
+          "constraint": "The post should include an introduction paragraph",
+          "val_strategy": "code",
+          "val_fn_name": "val_fn_2",
+          "val_fn": "def validate_input(input: str) -> bool:\n    \"\"\"\n    Validates that the input contains an introduction paragraph.\n    \n    An introduction paragraph is defined as a block of text that appears at the beginning of a document and provides context or overview of the content to follow.\n    \n    Args:\n        input (str): The input to validate\n        \n    Returns:\n        bool: True if the input contains an introduction paragraph, False otherwise\n    \"\"\"\n    try:\n        # Splitting the input into sentences for analysis\n        sentences = re.split('[.!?]', input)\n        \n        # An introduction paragraph is typically the first sentence or a group of closely related sentences at the start\n        return any(sentence.strip() and not sentence.lower().startswith('rephrased from') for sentence in sentences[:3])\n    except Exception:\n        return False"
+        },
+        {
+          "constraint": "Three main benefits of morning exercise with explanations are required",
+          "val_strategy": "llm",
+          "val_fn_name": "val_fn_3",
+          "val_fn": null
+        },
+        {
+          "constraint": "A conclusion that encourages readers to start their morning exercise routine is necessary",
+          "val_strategy": "llm",
+          "val_fn_name": "val_fn_4",
+          "val_fn": null
         }
       ],
-      "prompt_template": "Your task is to write an engaging introduction paragraph for a blog post about the benefits of morning exercise. The introduction should set the stage for the blog post, capturing the reader's attention and providing a brief overview of what will be discussed.\n\nTo accomplish this, follow these steps:\n\n1. **Understand the Context**:\n   - The blog post is about the benefits of morning exercise.\n   - The title of the blog post is: {{BLOG_TITLE}}\n\n2. **Craft the Introduction**:\n   - Start with a hook that grabs the reader's attention. This could be a question, a surprising fact, or a relatable scenario.\n   - Briefly introduce the topic of morning exercise and why it is important.\n   - Provide a smooth transition to the main benefits that will be discussed in the blog post.\n\n3. **Ensure Engagement**:\n   - Use a conversational and engaging tone to connect with the readers.\n   - Keep the introduction concise and to the point, ideally between 3 to 5 sentences.\n\nHere is an example structure to guide your writing:\n- **Sentence 1**: Hook to grab the reader's attention.\n- **Sentence 2**: Introduce the topic of morning exercise.\n- **Sentence 3**: Briefly mention the benefits that will be discussed.\n- **Sentence 4**: Transition to the main content of the blog post.\n\nEnsure that the introduction flows naturally and sets the stage for the rest of the blog post. You should write only the introduction paragraph, do not include the guidance structure.",
+      "prompt_template": "Your task is to compile the identified benefits of morning exercise and their detailed explanations into a structured format suitable for a blog post. Follow these steps to accomplish your task:\n\nFirst, review the benefits of morning exercise that have been identified and explained in the previous step:\n<benefits_explanation>\n{{BENEFITS_EXPLANATION}}\n</benefits_explanation>\n\nNext, organize these benefits into a clear and logical structure for the blog post. A common format for presenting benefits is to list each benefit as a distinct point or heading, followed by an explanation of that benefit.\n\nFor example, you might structure your compiled benefits like this:\n\n### Benefit 1: [Benefit Name]\n[Detailed Explanation of the benefit]\n\n### Benefit 2: [Benefit Name]\n[Detailed Explanation of the benefit]\n\n### Benefit 3: [Benefit Name]\n[Detailed Explanation of the benefit]\n\nEnsure that each benefit is presented clearly and concisely, with a heading that accurately reflects the nature of the benefit. The explanation should be comprehensive yet easy to understand, providing readers with valuable insights into why morning exercise is beneficial.\n\nFinally, ensure this structured format aligns with the overall flow and style of the blog post being created. This compiled version will be used in conjunction with other parts of the blog post (title, introduction, conclusion) to form a cohesive piece of content.",
+      "general_instructions": "Review the identified benefits of morning exercise and their detailed explanations from the previous step.\n\nOrganize these benefits into a clear and logical structure for a blog post, listing each benefit as a distinct point or heading followed by an explanation. Ensure that each benefit is presented clearly and concisely with an accurate heading reflecting its nature, and provide comprehensive yet easy-to-understand explanations.\n\nAlign this structured format with the overall flow and style of the intended blog post to create cohesive content when combined with other parts like title, introduction, and conclusion.",
       "input_vars_required": [],
       "depends_on": [
-        "BLOG_TITLE"
+        "BENEFITS_EXPLANATION"
       ]
     },
     {
-      "subtask": "3. Identify and explain three main benefits of morning exercise with detailed explanations. -",
-      "tag": "BENEFITS",
-      "constraints": [
-        {
-          "constraint": "Include three main benefits with explanations",
-          "validation_strategy": "llm"
-        }
-      ],
-      "prompt_template": "Your task is to identify and explain three main benefits of morning exercise with detailed explanations. Follow these steps to accomplish your task:\n\nFirst, review the title and introduction created in the previous steps to understand the context and tone of the blog post:\n<title>\n{{BLOG_TITLE}}\n</title>\n<introduction>\n{{INTRODUCTION}}\n</introduction>\n\nNext, research and identify three main benefits of morning exercise. These benefits should be supported by evidence or expert opinions to ensure credibility.\n\nFor each benefit, provide a detailed explanation that includes:\n- The specific benefit of morning exercise\n- How this benefit positively impacts health, well-being, or daily life\n- Any relevant studies, expert opinions, or personal anecdotes that support the benefit\n\nEnsure that the explanations are clear, concise, and engaging to keep the reader interested.\n\nFinally, present the three main benefits with their detailed explanations in a structured format that can be easily integrated into the blog post.",
-      "input_vars_required": [],
-      "depends_on": [
-        "BLOG_TITLE",
-        "INTRODUCTION"
-      ]
-    },
-    {
-      "subtask": "4. Write a conclusion that encourages readers to start their morning exercise routine. -",
+      "subtask": "5. Write a conclusion paragraph that encourages readers to start incorporating morning exercise into their routine. -",
       "tag": "CONCLUSION",
       "constraints": [
         {
-          "constraint": "Include a conclusion that encourages readers to start their morning exercise routine",
-          "validation_strategy": "llm"
+          "constraint": "The blog post must have a catchy title",
+          "val_strategy": "llm",
+          "val_fn_name": "val_fn_1",
+          "val_fn": null
+        },
+        {
+          "constraint": "The post should include an introduction paragraph",
+          "val_strategy": "code",
+          "val_fn_name": "val_fn_2",
+          "val_fn": "def validate_input(input: str) -> bool:\n    \"\"\"\n    Validates that the input contains an introduction paragraph.\n    \n    An introduction paragraph is defined as a block of text that appears at the beginning of a document and provides context or overview of the content to follow.\n    \n    Args:\n        input (str): The input to validate\n        \n    Returns:\n        bool: True if the input contains an introduction paragraph, False otherwise\n    \"\"\"\n    try:\n        # Splitting the input into sentences for analysis\n        sentences = re.split('[.!?]', input)\n        \n        # An introduction paragraph is typically the first sentence or a group of closely related sentences at the start\n        return any(sentence.strip() and not sentence.lower().startswith('rephrased from') for sentence in sentences[:3])\n    except Exception:\n        return False"
+        },
+        {
+          "constraint": "Three main benefits of morning exercise with explanations are required",
+          "val_strategy": "llm",
+          "val_fn_name": "val_fn_3",
+          "val_fn": null
+        },
+        {
+          "constraint": "A conclusion that encourages readers to start their morning exercise routine is necessary",
+          "val_strategy": "llm",
+          "val_fn_name": "val_fn_4",
+          "val_fn": null
         }
       ],
-      "prompt_template": "Your task is to write a compelling conclusion for a blog post about the benefits of morning exercise. The conclusion should encourage readers to start their morning exercise routine. Follow these steps to accomplish your task:\n\nFirst, review the title and introduction of the blog post to understand the context and tone:\n<title>\n{{BLOG_TITLE}}\n</title>\n<introduction>\n{{INTRODUCTION}}\n</introduction>\n\nNext, consider the three main benefits of morning exercise that have been previously identified and explained:\n<benefits>\n{{BENEFITS}}\n</benefits>\n\nUse the information from the title, introduction, and benefits to craft a conclusion that:\n1. Summarizes the key points discussed in the blog post.\n2. Reinforces the importance of morning exercise.\n3. Encourages readers to take action and start their morning exercise routine.\n4. Maintains a positive and motivating tone.\n\nEnsure the conclusion is concise, engaging, and leaves readers feeling inspired to make a change in their daily routine.\n\nFinally, write the conclusion paragraph that encourages readers to start their morning exercise routine.",
+      "prompt_template": "Your task is to write a conclusion paragraph that encourages readers to start incorporating morning exercise into their routine for the blog post about the benefits of morning exercise. Follow these steps:\n\n1. **Review Previous Steps**:\n   Begin by reviewing the structured benefits and explanations from previous steps, which can be found here:\n   <structured_benefits>\n   {{STRUCTURED_BENEFITS}}\n   </structured_benefits>\n\n   This will help you understand the key points that have already been covered in the blog post.\n\n2. **Summarize Key Benefits**:\n   Briefly summarize the main benefits of morning exercise as discussed earlier to remind readers of their significance. You can refer to {{BENEFITS_EXPLANATION}} for specifics on each benefit.\n\n3. **Craft an Encouraging Message**:\n   Write a paragraph that motivates readers to start their own morning exercise routine. Use persuasive language and emphasize the positive impact of making this change.\n\n4. **Structure the Conclusion**:\n   Ensure your conclusion is concise, engaging, and effectively encourages action from the reader. It should wrap up the blog post by reinforcing the importance of morning exercise and inspiring readers to take the first step towards integrating it into their daily routine.\n\nHere's a suggested structure for your conclusion paragraph:\n   - Briefly restate or reference one or two key benefits discussed in the body of the blog post.\n   - Use motivational language to encourage readers to adopt morning exercise.\n   - Provide a clear, actionable call to action (e.g., \"Start today with a short walk around your neighborhood\").\n\n5. **Finalize and Output**:\n   Once you have written the conclusion paragraph, ensure it is polished and ready for integration into the final blog post. Do not include any additional information or explanation beyond the requested conclusion text.",
+      "general_instructions": "Review structured benefits of morning exercise from previous steps to understand key points.\n\nSummarize main benefits, referring to specific explanations if needed.\n\nCraft an encouraging message using persuasive language to motivate readers to start a morning exercise routine. Emphasize positive impacts of this change.\n\nStructure the conclusion in a concise and engaging manner, reinforcing importance of morning exercise and inspiring action from the reader. Include a clear call to action, such as \"Start today with a short walk around your neighborhood\".\n\nEnsure the final conclusion paragraph is polished and ready for integration into the blog post without additional information or explanation beyond the requested text.",
       "input_vars_required": [],
       "depends_on": [
-        "BLOG_TITLE",
-        "INTRODUCTION",
-        "BENEFITS"
+        "STRUCTURED_BENEFITS",
+        "BENEFITS_EXPLANATION"
       ]
     },
     {
-      "subtask": "5. Compile the title, introduction, three main benefits, and conclusion into a single cohesive blog post. -",
+      "subtask": "6. Combine all parts (title, introduction, benefits explanation, and conclusion) into a cohesive short blog post. -",
       "tag": "FINAL_BLOG_POST",
       "constraints": [
         {
-          "constraint": "Include a catchy title",
-          "validation_strategy": "llm"
+          "constraint": "The blog post must have a catchy title",
+          "val_strategy": "llm",
+          "val_fn_name": "val_fn_1",
+          "val_fn": null
         },
         {
-          "constraint": "Include an introduction paragraph",
-          "validation_strategy": "llm"
+          "constraint": "The post should include an introduction paragraph",
+          "val_strategy": "code",
+          "val_fn_name": "val_fn_2",
+          "val_fn": "def validate_input(input: str) -> bool:\n    \"\"\"\n    Validates that the input contains an introduction paragraph.\n    \n    An introduction paragraph is defined as a block of text that appears at the beginning of a document and provides context or overview of the content to follow.\n    \n    Args:\n        input (str): The input to validate\n        \n    Returns:\n        bool: True if the input contains an introduction paragraph, False otherwise\n    \"\"\"\n    try:\n        # Splitting the input into sentences for analysis\n        sentences = re.split('[.!?]', input)\n        \n        # An introduction paragraph is typically the first sentence or a group of closely related sentences at the start\n        return any(sentence.strip() and not sentence.lower().startswith('rephrased from') for sentence in sentences[:3])\n    except Exception:\n        return False"
         },
         {
-          "constraint": "Include three main benefits with explanations",
-          "validation_strategy": "llm"
+          "constraint": "Three main benefits of morning exercise with explanations are required",
+          "val_strategy": "llm",
+          "val_fn_name": "val_fn_3",
+          "val_fn": null
         },
         {
-          "constraint": "Include a conclusion that encourages readers to start their morning exercise routine",
-          "validation_strategy": "llm"
+          "constraint": "A conclusion that encourages readers to start their morning exercise routine is necessary",
+          "val_strategy": "llm",
+          "val_fn_name": "val_fn_4",
+          "val_fn": null
         }
       ],
-      "prompt_template": "Your task is to compile the title, introduction, three main benefits, and conclusion into a single cohesive blog post about the benefits of morning exercise.\n\nTo accomplish this, follow these steps:\n\n1. **Review the Components**:\n   Carefully review the title, introduction, three main benefits, and conclusion that have been generated in the previous steps. These components are provided below:\n\n   <blog_title>\n   {{BLOG_TITLE}}\n   </blog_title>\n\n   <introduction>\n   {{INTRODUCTION}}\n   </introduction>\n\n   <benefits>\n   {{BENEFITS}}\n   </benefits>\n\n   <conclusion>\n   {{CONCLUSION}}\n   </conclusion>\n\n2. **Structure the Blog Post**:\n   Organize the components into a well-structured blog post. The structure should include:\n   - The catchy title at the beginning.\n   - The introduction paragraph that sets the stage for the blog post.\n   - The three main benefits with detailed explanations.\n   - The conclusion that encourages readers to start their morning exercise routine.\n\n3. **Ensure Cohesion**:\n   Make sure the blog post flows smoothly from one section to the next. The transitions between the introduction, benefits, and conclusion should be natural and logical.\n\n4. **Check for Consistency**:\n   Verify that the tone and style are consistent throughout the blog post. Ensure that the language used in the title, introduction, benefits, and conclusion aligns with the overall theme of the blog post.\n\n5. **Final Review**:\n   Read through the entire blog post to ensure it is cohesive, well-organized, and free of any grammatical or spelling errors. Make any necessary adjustments to improve clarity and readability.\n\n6. **Output the Blog Post**:\n   Provide the final compiled blog post as your answer. Ensure that the output includes only the blog post text without any additional information or instructions.\n\nBy following these steps, you will create a single cohesive blog post that effectively communicates the benefits of morning exercise.",
+      "prompt_template": "Your task is to combine all the identified parts\u2014the catchy title, engaging introduction, detailed explanations of three main benefits, and an encouraging conclusion\u2014into a cohesive short blog post about the benefits of morning exercise. Follow these steps to accomplish your task:\n\nFirst, review the components you have already generated for this subtask:\n<generated_components>\n{{BLOG_TITLE}}\n{{INTRODUCTION}}\n{{BENEFITS_EXPLANATION}}\n{{STRUCTURED_BENEFITS}}\n{{CONCLUSION}}\n</generated_components>\n\nNext, structure the blog post by arranging these components in a logical order. A typical structure for a short blog post would be:\n1. **Title**: Start with your catchy title related to morning exercise benefits.\n2. **Introduction**: Follow the title with an engaging introduction paragraph that sets the stage and introduces the topic of morning exercise.\n3. **Main Benefits Section**: Present the three main benefits of morning exercise, each accompanied by a detailed explanation as you have generated in {{BENEFITS_EXPLANATION}}. Ensure these explanations are clear, concise, and supported by the structured information in {{STRUCTURED_BENEFITS}}.\n4. **Conclusion**: End with an encouraging conclusion that motivates readers to start or continue their morning exercise routine. Use the provided {{CONCLUSION}} for this purpose.\n\nWrite a cohesive blog post by weaving these components together, ensuring smooth transitions between sections. Maintain a friendly and informative tone throughout the post, keeping it concise yet comprehensive.\n\nFinally, present only the completed short blog post as your answer without any additional information or explanation.",
+      "general_instructions": "1. Review the components generated for this subtask: catchy title, engaging introduction, detailed explanations of three main benefits, and an encouraging conclusion related to morning exercise.\n2. Structure the blog post with a logical order:\n   - **Title**: Start with the catchy title.\n   - **Introduction**: Follow the title with an engaging paragraph introducing the topic of morning exercise.\n   - **Main Benefits Section**: Present three main benefits, each accompanied by a detailed explanation supported by structured information.\n   - **Conclusion**: End with an encouraging conclusion motivating readers to adopt or maintain a morning exercise routine.\n3. Weave these components together into a cohesive blog post, ensuring smooth transitions between sections.\n4. Maintain a friendly and informative tone throughout the post, keeping it concise yet comprehensive.\n5. Present only the completed short blog post as the final answer without additional information or explanation.",
       "input_vars_required": [],
       "depends_on": [
         "BLOG_TITLE",
         "INTRODUCTION",
-        "BENEFITS",
+        "BENEFITS_EXPLANATION",
+        "STRUCTURED_BENEFITS",
         "CONCLUSION"
       ]
     }
