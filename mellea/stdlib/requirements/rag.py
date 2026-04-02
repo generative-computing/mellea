@@ -1,16 +1,16 @@
 """Requirements for RAG (Retrieval-Augmented Generation) workflows."""
 
 import json
-import logging
 import re
 from collections.abc import Iterable
 
 from ...backends.adapters import AdapterMixin
 from ...core import Backend, CBlock, Context, Requirement, ValidationResult
+from ...core.utils import FancyLogger
 from ..components import Document, Message
 from ..context import ChatContext
 
-logger = logging.getLogger(__name__)
+logger = FancyLogger.get_logger()
 
 
 class GroundednessRequirement(Requirement):
@@ -39,7 +39,7 @@ class GroundednessRequirement(Requirement):
         allow_partial_support: Whether to accept partially supported spans as
             grounded. If False (default), response is grounded iff all spans
             needing citations are FULLY supported. If True, response is grounded
-            if spans are fully or partially supported. Default is False (strict).
+            if spans are fully or partially supported.
         description: Custom description for the requirement. If None,
             generates a default description.
 
@@ -48,7 +48,7 @@ class GroundednessRequirement(Requirement):
         from mellea.backends.huggingface import LocalHFBackend
         from mellea.stdlib.requirements.rag import GroundednessRequirement
 
-        backend = LocalHFBackend(model_id="meta-llama/Llama-3.2-1B-Instruct")
+        backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
 
         req = GroundednessRequirement(
             documents=doc_objects,
@@ -161,7 +161,12 @@ class GroundednessRequirement(Requirement):
                 True, reason="Empty response is considered grounded"
             )
 
-        # Create context before the response
+        # Create context without the response being validated.
+        # This removes the assistant's response from the context passed to intrinsics,
+        # ensuring they only see the conversation history (user messages and prior context).
+        # This is important because intrinsics need to assess citations/necessity/support
+        # for the response independently, without the response itself influencing the judgment.
+        # ChatContext is immutable, so we build a new one with all messages except the last.
         all_messages = ctx.as_list()
         if len(all_messages) > 1:
             context_before_response = ChatContext()
@@ -172,10 +177,14 @@ class GroundednessRequirement(Requirement):
 
         try:
             # Step 1: Citation Generation
-            from ..components.intrinsic import rag
+            # Call intrinsic directly for explicit control over model options
+            from ..components.intrinsic._util import call_intrinsic
 
-            citations: list[dict] = rag.find_citations(
-                response, documents, context_before_response, backend
+            citation_context = context_before_response.add(
+                Message("assistant", response, documents=list(documents))
+            )
+            citations: list[dict] = call_intrinsic(
+                "citations", citation_context, backend
             )
             logger.debug(
                 f"Step 1 - Citations generated: {len(citations)} citations found"
@@ -258,12 +267,11 @@ class GroundednessRequirement(Requirement):
         prompt = self._build_necessity_prompt(response, spans)
         logger.debug(f"Necessity judgment prompt:\n{prompt}\n")
 
-        # Get LLM judgment
-        judgment_ctx = context.add(Message("user", prompt))
+        # Get LLM judgment using prompt as the action/instruction
         try:
-            action = CBlock("")
+            action = CBlock(prompt)
             result, _ = await backend.generate_from_context(
-                action, judgment_ctx, model_options={"temperature": 0.0}
+                action, context, model_options={"temperature": 0.0}
             )
             await result.avalue()
             output_text = result.value
@@ -310,10 +318,16 @@ class GroundednessRequirement(Requirement):
             begin, end = span_key
             span_text = response[begin:end].strip()
 
-            # Find citations that overlap with this span
+            # Find citations that overlap with this span.
+            # Note: We're only assessing spans marked as needing_citation=True.
+            # Such a span may have no overlapping citations (LLM determined it needs
+            # grounding but citations didn't cover it), in which case it gets NOT_SUPPORTED.
+            # Or it may have overlapping citations that we'll assess for support level.
             span_citations = []
             for citation in citations:
-                # Check if citation overlaps with span
+                # Check if citation overlaps with span.
+                # Both use half-open intervals [begin, end), so overlap occurs when:
+                # citation.begin < span.end AND citation.end > span.begin
                 if (
                     citation["response_begin"] < end
                     and citation["response_end"] > begin
@@ -324,14 +338,13 @@ class GroundednessRequirement(Requirement):
                 # No citations for this span
                 span_support[span_key] = "NOT_SUPPORTED"
             else:
-                # Have citations, assess support level with LLM
+                # Have citations, assess support level with LLM using prompt as action
                 prompt = self._build_support_prompt(span_text, span_citations)
-                judgment_ctx = context.add(Message("user", prompt))
 
                 try:
-                    action = CBlock("")
+                    action = CBlock(prompt)
                     result, _ = await backend.generate_from_context(
-                        action, judgment_ctx, model_options={"temperature": 0.0}
+                        action, context, model_options={"temperature": 0.0}
                     )
                     await result.avalue()
                     output_text = result.value
@@ -365,27 +378,49 @@ class GroundednessRequirement(Requirement):
         if not response.strip():
             return []
 
-        # Build a coverage map: which characters are covered by citations
-        covered = [False] * len(response)
+        # Build a list of covered ranges (intervals) from citations
+        covered_ranges: list[tuple[int, int]] = []
         for citation in citations:
             begin = citation["response_begin"]
             end = min(citation["response_end"], len(response))
-            for i in range(begin, end):
-                covered[i] = True
+            if begin < end:
+                covered_ranges.append((begin, end))
 
+        # Merge overlapping ranges for efficient coverage lookup
+        covered_ranges.sort()
+        merged_ranges: list[tuple[int, int]] = []
+        for begin, end in covered_ranges:
+            if merged_ranges and begin <= merged_ranges[-1][1]:
+                merged_ranges[-1] = (
+                    merged_ranges[-1][0],
+                    max(merged_ranges[-1][1], end),
+                )
+            else:
+                merged_ranges.append((begin, end))
+
+        covered_chars = sum(end - begin for begin, end in merged_ranges)
         logger.debug(
-            f"Response span extraction - coverage map: {sum(covered)}/{len(response)} chars covered by citations"
+            f"Response span extraction - coverage: {covered_chars}/{len(response)} chars covered by citations"
         )
 
-        # Extract spans by finding boundaries
+        # Check if a position is covered by any citation
+        def is_covered(pos: int) -> bool:
+            for begin, end in merged_ranges:
+                if begin <= pos < end:
+                    return True
+                if begin > pos:
+                    break
+            return False
+
+        # Extract spans by finding boundaries between covered and uncovered regions
         spans: list[dict] = []
         current_span_start = 0
-        current_is_covered = covered[0] if covered else False
+        current_is_covered = is_covered(0) if response else False
 
         for i in range(1, len(response) + 1):
             # Check if we're at a boundary (coverage changed or end of response)
             at_end = i == len(response)
-            next_is_covered = False if at_end else covered[i]
+            next_is_covered = False if at_end else is_covered(i)
             at_boundary = at_end or next_is_covered != current_is_covered
 
             if at_boundary:
