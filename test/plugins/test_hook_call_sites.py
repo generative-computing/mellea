@@ -146,7 +146,6 @@ class TestGenerationHookCallSites:
         assert p.action.value == action.value
         assert p.context is not None
 
-    # TODO: JAL.
     async def test_generation_post_call_fires_once(self) -> None:
         """GENERATION_POST_CALL fires exactly once after generate_from_context() returns."""
         observed: list[Any] = []
@@ -166,7 +165,6 @@ class TestGenerationHookCallSites:
         await mot.avalue()
         assert len(observed) == 1
 
-    # TODO: JAL.
     async def test_generation_post_call_model_output_is_the_returned_thunk(
         self,
     ) -> None:
@@ -188,7 +186,6 @@ class TestGenerationHookCallSites:
 
         assert observed[0].model_output is not None
 
-    # TODO: JAL.
     async def test_generation_post_call_latency_ms_is_non_negative(self) -> None:
         """GENERATION_POST_CALL payload.latency_ms >= 0."""
         observed: list[Any] = []

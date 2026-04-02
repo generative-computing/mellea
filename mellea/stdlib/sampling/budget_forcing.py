@@ -9,9 +9,9 @@ from ...core import (
     Backend,
     BaseModelSubclass,
     Component,
+    ComputedModelOutputThunk,
     Context,
     FancyLogger,
-    ModelOutputThunk,
     Requirement,
     S,
     SamplingResult,
@@ -127,7 +127,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
 
         flog = FancyLogger.get_logger()
 
-        sampled_results: list[ModelOutputThunk] = []
+        sampled_results: list[ComputedModelOutputThunk] = []
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         sampled_actions: list[Component] = []
         sample_contexts: list[Context] = []
@@ -184,6 +184,8 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                 model_options=model_options,
             )
             result_ctx = next_context
+            await result.avalue()
+            result = ComputedModelOutputThunk(result)
 
             # Sampling strategies may use different components from the original
             # action. This might cause discrepancies in the expected parsed_repr

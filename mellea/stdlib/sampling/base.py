@@ -23,9 +23,9 @@ from ...core import (
     Backend,
     BaseModelSubclass,
     Component,
+    ComputedModelOutputThunk,
     Context,
     FancyLogger,
-    ModelOutputThunk,
     Requirement,
     S,
     SamplingResult,
@@ -71,7 +71,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: list[Component],
-        past_results: list[ModelOutputThunk],
+        past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
         """Repair function that is being invoked if not all requirements are fulfilled. It should return a next action component.
@@ -94,7 +94,7 @@ class BaseSamplingStrategy(SamplingStrategy):
     @abc.abstractmethod
     def select_from_failure(
         sampled_actions: list[Component],
-        sampled_results: list[ModelOutputThunk],
+        sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
         """This function returns the index of the result that should be selected as `.value` iff the loop budget is exhausted and no success.
@@ -145,7 +145,7 @@ class BaseSamplingStrategy(SamplingStrategy):
 
         flog = FancyLogger.get_logger()
 
-        sampled_results: list[ModelOutputThunk] = []
+        sampled_results: list[ComputedModelOutputThunk] = []
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         sampled_actions: list[Component] = []
         sample_contexts: list[Context] = []
@@ -204,6 +204,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 tool_calls=tool_calls,
             )
             await result.avalue()
+            result = ComputedModelOutputThunk(result)
 
             # Sampling strategies may use different components from the original
             # action. This might cause discrepancies in the expected parsed_repr
@@ -380,7 +381,7 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
     @staticmethod
     def select_from_failure(
         sampled_actions: list[Component],
-        sampled_results: list[ModelOutputThunk],
+        sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
         """Always returns the 0th index.
@@ -400,7 +401,7 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: list[Component],
-        past_results: list[ModelOutputThunk],
+        past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
         """Always returns the unedited, last action.
@@ -424,7 +425,7 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
     @staticmethod
     def select_from_failure(
         sampled_actions: list[Component],
-        sampled_results: list[ModelOutputThunk],
+        sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
         """Always returns the 0th index.
@@ -444,7 +445,7 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: list[Component],
-        past_results: list[ModelOutputThunk],
+        past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
         """Adds a description of the requirements that failed to a copy of the original instruction.
@@ -489,7 +490,7 @@ class MultiTurnStrategy(BaseSamplingStrategy):
     @staticmethod
     def select_from_failure(
         sampled_actions: list[Component],
-        sampled_results: list[ModelOutputThunk],
+        sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
         """Always returns the last index. The last message from the model will always be returned if all results are failures.
@@ -509,7 +510,7 @@ class MultiTurnStrategy(BaseSamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: list[Component],
-        past_results: list[ModelOutputThunk],
+        past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
         """Returns a Message with a description (and validation reasons) of the failed requirements.
