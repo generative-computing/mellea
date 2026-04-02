@@ -50,6 +50,10 @@ Example - Multiple exporters:
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
     export MELLEA_METRICS_PROMETHEUS=true
 
+Built-in metrics (auto-recorded via plugins when metrics are enabled):
+- Token counters: mellea.llm.tokens.input, mellea.llm.tokens.output (unit: tokens)
+- Latency histograms: mellea.llm.request.duration (unit: s), mellea.llm.ttfb (unit: s, streaming only)
+
 Programmatic usage:
     from mellea.telemetry.metrics import create_counter, create_histogram
 
@@ -63,9 +67,9 @@ Programmatic usage:
     latency_histogram = create_histogram(
         "mellea.request.duration",
         description="Request latency distribution",
-        unit="ms"
+        unit="s"
     )
-    latency_histogram.record(150.5, {"backend": "ollama"})
+    latency_histogram.record(1.5, {"backend": "ollama"})
 """
 
 import os
@@ -84,6 +88,7 @@ try:
         ConsoleMetricExporter,
         PeriodicExportingMetricReader,
     )
+    from opentelemetry.sdk.metrics.view import ExplicitBucketHistogramAggregation, View
     from opentelemetry.sdk.resources import Resource
 
     _OTEL_AVAILABLE = True
@@ -232,7 +237,23 @@ def _setup_meter_provider() -> Any:
             stacklevel=2,
         )
 
-    provider = MeterProvider(resource=resource, metric_readers=readers)  # type: ignore
+    # Configure explicit bucket boundaries for LLM latency histograms
+    views = [
+        View(  # type: ignore
+            instrument_name="mellea.llm.request.duration",
+            aggregation=ExplicitBucketHistogramAggregation(  # type: ignore
+                [0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120]
+            ),
+        ),
+        View(  # type: ignore
+            instrument_name="mellea.llm.ttfb",
+            aggregation=ExplicitBucketHistogramAggregation(  # type: ignore
+                [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10]
+            ),
+        ),
+    ]
+
+    provider = MeterProvider(resource=resource, metric_readers=readers, views=views)  # type: ignore
     metrics.set_meter_provider(provider)  # type: ignore
     return provider
 
@@ -446,24 +467,119 @@ def record_token_usage_metrics(
         output_counter.add(output_tokens, attributes)
 
 
-# Auto-register TokenMetricsPlugin when metrics are enabled
+# Latency histograms following Gen-AI semantic conventions
+# These are lazily initialized on first use and kept internal
+_duration_histogram: Any = None
+_ttfb_histogram: Any = None
+
+
+def _get_latency_histograms() -> tuple[Any, Any]:
+    """Get or create latency histograms (internal use only).
+
+    Returns:
+        Tuple of (duration_histogram, ttfb_histogram)
+    """
+    global _duration_histogram, _ttfb_histogram
+
+    if _duration_histogram is None:
+        _duration_histogram = create_histogram(
+            "mellea.llm.request.duration",
+            description="Total LLM request duration",
+            unit="s",
+        )
+
+    if _ttfb_histogram is None:
+        _ttfb_histogram = create_histogram(
+            "mellea.llm.ttfb",
+            description="Time to first token for streaming LLM requests",
+            unit="s",
+        )
+
+    return _duration_histogram, _ttfb_histogram
+
+
+def record_request_duration(
+    duration_s: float, model: str, provider: str, streaming: bool = False
+) -> None:
+    """Record total LLM request duration.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+
+    Args:
+        duration_s: Request duration in seconds
+        model: Model identifier (e.g., "gpt-4", "llama2:7b")
+        provider: Provider name (e.g., "openai", "ollama", "watsonx")
+        streaming: Whether the request used streaming mode
+
+    Example:
+        record_request_duration(
+            duration_s=1.25,
+            model="llama2:7b",
+            provider="ollama",
+            streaming=True,
+        )
+    """
+    if not _METRICS_ENABLED:
+        return
+
+    duration_hist, _ = _get_latency_histograms()
+    attributes = {
+        "gen_ai.request.model": model,
+        "gen_ai.provider.name": provider,
+        "streaming": streaming,
+    }
+    duration_hist.record(duration_s, attributes)
+
+
+def record_ttfb(ttfb_s: float, model: str, provider: str) -> None:
+    """Record time-to-first-token for streaming LLM requests.
+
+    This is a no-op when metrics are disabled, ensuring zero overhead.
+    Should only be called for streaming requests.
+
+    Args:
+        ttfb_s: Time to first token in seconds
+        model: Model identifier (e.g., "gpt-4", "llama2:7b")
+        provider: Provider name (e.g., "openai", "ollama", "watsonx")
+
+    Example:
+        record_ttfb(
+            ttfb_s=0.18,
+            model="llama2:7b",
+            provider="ollama",
+        )
+    """
+    if not _METRICS_ENABLED:
+        return
+
+    _, ttfb_hist = _get_latency_histograms()
+    attributes = {"gen_ai.request.model": model, "gen_ai.provider.name": provider}
+    ttfb_hist.record(ttfb_s, attributes)
+
+
+# Auto-register metrics plugins when metrics are enabled
 if _OTEL_AVAILABLE and _METRICS_ENABLED:
     try:
         from mellea.plugins.registry import register
-        from mellea.telemetry.metrics_plugins import TokenMetricsPlugin
+        from mellea.telemetry.metrics_plugins import (
+            LatencyMetricsPlugin,
+            TokenMetricsPlugin,
+        )
 
-        # Idempotent registration (supports module reloads in tests)
-        try:
-            register(TokenMetricsPlugin())
-        except ValueError as e:
-            # Already registered (expected during module reloads in tests)
-            warnings.warn(
-                f"TokenMetricsPlugin already registered: {e}", UserWarning, stacklevel=2
-            )
+        for _plugin_cls in (TokenMetricsPlugin, LatencyMetricsPlugin):
+            try:
+                register(_plugin_cls())
+            except ValueError as e:
+                # Already registered (expected during module reloads in tests)
+                warnings.warn(
+                    f"{_plugin_cls.__name__} already registered: {e}",
+                    UserWarning,
+                    stacklevel=2,
+                )
     except ImportError:
         warnings.warn(
             "Metrics are enabled but the plugin framework is not installed. "
-            "Token usage metrics will not be recorded automatically. "
+            "Token usage and latency metrics will not be recorded automatically. "
             "Install with: pip install mellea[telemetry]",
             UserWarning,
             stacklevel=2,
@@ -475,5 +591,7 @@ __all__ = [
     "create_histogram",
     "create_up_down_counter",
     "is_metrics_enabled",
+    "record_request_duration",
     "record_token_usage_metrics",
+    "record_ttfb",
 ]

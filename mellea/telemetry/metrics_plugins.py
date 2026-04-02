@@ -4,6 +4,7 @@ This module contains plugins that hook into the generation pipeline to
 automatically record metrics when enabled. Currently includes:
 
 - TokenMetricsPlugin: Records token usage statistics from ModelOutputThunk.usage
+- LatencyMetricsPlugin: Records request duration and TTFB latency histograms
 """
 
 from __future__ import annotations
@@ -60,3 +61,48 @@ class TokenMetricsPlugin(Plugin, name="token_metrics", priority=50):
             model=mot.model or "unknown",
             provider=mot.provider or "unknown",
         )
+
+
+class LatencyMetricsPlugin(Plugin, name="latency_metrics", priority=50):
+    """Records request duration and TTFB latency metrics from generation outputs.
+
+    This plugin hooks into the generation_post_call event to automatically
+    record latency metrics. It records total request duration for every request
+    and time-to-first-token (TTFB) for streaming requests.
+
+    Example:
+        >>> from mellea.telemetry.metrics_plugins import LatencyMetricsPlugin
+        >>> from mellea.telemetry.metrics import enable_metrics
+        >>>
+        >>> enable_metrics()
+        >>> with LatencyMetricsPlugin():
+        ...     result = session.instruct("Hello, world!")
+    """
+
+    @hook("generation_post_call", mode=PluginMode.FIRE_AND_FORGET)
+    async def record_latency_metrics(
+        self, payload: GenerationPostCallPayload, context: dict[str, Any]
+    ) -> None:
+        """Record latency metrics after generation completes.
+
+        Args:
+            payload: Contains latency_ms and model_output
+            context: Plugin context (unused)
+        """
+        from mellea.telemetry.metrics import record_request_duration, record_ttfb
+
+        mot = payload.model_output
+        model = mot.model or "unknown"
+        provider = mot.provider or "unknown"
+
+        # Record total request duration (convert ms → seconds)
+        record_request_duration(
+            duration_s=payload.latency_ms / 1000.0,
+            model=model,
+            provider=provider,
+            streaming=mot.streaming,
+        )
+
+        # Record TTFB only for streaming requests with a measured value
+        if mot.streaming and mot.ttfb_ms is not None:
+            record_ttfb(ttfb_s=mot.ttfb_ms / 1000.0, model=model, provider=provider)

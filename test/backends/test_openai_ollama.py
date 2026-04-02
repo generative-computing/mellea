@@ -188,6 +188,10 @@ async def test_async_parallel_requests(m_session) -> None:
     assert m1_final_val == mot1.value
     assert m2_final_val == mot2.value
 
+    assert mot1.streaming is True
+    assert mot1.ttfb_ms is not None
+    assert mot1.ttfb_ms > 0
+
 
 async def test_async_avalue(m_session) -> None:
     mot1, _ = await m_session.backend.generate_from_context(
@@ -204,6 +208,8 @@ async def test_async_avalue(m_session) -> None:
     assert mot1.usage["total_tokens"] > 0
     assert isinstance(mot1.model, str)
     assert mot1.provider == "openai"
+    assert mot1.streaming is False
+    assert mot1.ttfb_ms is None
 
 
 def test_client_cache(backend) -> None:

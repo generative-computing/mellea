@@ -14,10 +14,9 @@ try:
 except ImportError:
     OTEL_AVAILABLE = False
 
-pytestmark = [
-    pytest.mark.skipif(not OTEL_AVAILABLE, reason="OpenTelemetry not installed"),
-    pytest.mark.integration,
-]
+pytestmark = pytest.mark.skipif(
+    not OTEL_AVAILABLE, reason="OpenTelemetry not installed"
+)
 
 
 @pytest.fixture
@@ -555,29 +554,89 @@ def test_prometheus_exporter_with_console_exporter(monkeypatch):
     assert _METRICS_CONSOLE is True
 
 
-# Token Counter Tests
+# Metric Instrument Tests
 
 
-def test_token_counters_lazy_initialization(enable_metrics):
-    """Test that token counters are lazily initialized."""
-    from mellea.telemetry.metrics import _input_token_counter, _output_token_counter
+def test_metric_instruments_lazy_initialization(enable_metrics):
+    """Test that all metric instruments are lazily initialized."""
+    from mellea.telemetry.metrics import (
+        _duration_histogram,
+        _input_token_counter,
+        _output_token_counter,
+        _ttfb_histogram,
+    )
 
-    # Initially None
+    # All initially None
     assert _input_token_counter is None
     assert _output_token_counter is None
+    assert _duration_histogram is None
+    assert _ttfb_histogram is None
 
-    # Call record_token_usage_metrics
-    from mellea.telemetry.metrics import record_token_usage_metrics
+    from mellea.telemetry.metrics import (
+        record_request_duration,
+        record_token_usage_metrics,
+    )
 
     record_token_usage_metrics(
         input_tokens=100, output_tokens=50, model="llama2:7b", provider="ollama"
     )
+    record_request_duration(duration_s=1.0, model="llama2:7b", provider="ollama")
 
-    # Now should be initialized
-    from mellea.telemetry.metrics import _input_token_counter, _output_token_counter
+    from mellea.telemetry.metrics import (
+        _duration_histogram,
+        _input_token_counter,
+        _output_token_counter,
+        _ttfb_histogram,
+    )
 
     assert _input_token_counter is not None
     assert _output_token_counter is not None
+    assert _duration_histogram is not None
+    assert (
+        _ttfb_histogram is not None
+    )  # initialized together via _get_latency_histograms
+
+
+def test_record_metrics_noop_when_disabled(clean_metrics_env):
+    """Test that all record functions are no-ops when metrics disabled."""
+    from mellea.telemetry.metrics import (
+        record_request_duration,
+        record_token_usage_metrics,
+    )
+
+    record_token_usage_metrics(
+        input_tokens=100, output_tokens=50, model="llama2:7b", provider="ollama"
+    )
+    record_request_duration(duration_s=1.0, model="llama2:7b", provider="ollama")
+
+    # No instruments should have been initialized
+    from mellea.telemetry.metrics import (
+        _duration_histogram,
+        _input_token_counter,
+        _output_token_counter,
+        _ttfb_histogram,
+    )
+
+    assert _input_token_counter is None
+    assert _output_token_counter is None
+    assert _duration_histogram is None
+    assert _ttfb_histogram is None
+
+
+def test_record_functions_exported_in_public_api():
+    """Test that all record functions are exported in the public API."""
+    from mellea.telemetry import (
+        record_request_duration,
+        record_token_usage_metrics,
+        record_ttfb,
+    )
+
+    assert callable(record_token_usage_metrics)
+    assert callable(record_request_duration)
+    assert callable(record_ttfb)
+
+
+# Token Counter Tests
 
 
 def test_record_token_usage_metrics_with_valid_tokens(enable_metrics):
@@ -608,27 +667,3 @@ def test_record_token_usage_metrics_with_zero_tokens(enable_metrics):
     record_token_usage_metrics(
         input_tokens=0, output_tokens=0, model="llama2:7b", provider="ollama"
     )
-
-
-def test_record_token_usage_metrics_noop_when_disabled(clean_metrics_env):
-    """Test that record_token_usage_metrics is no-op when metrics disabled."""
-    from mellea.telemetry.metrics import record_token_usage_metrics
-
-    # Should not raise and should be no-op
-    record_token_usage_metrics(
-        input_tokens=100, output_tokens=50, model="llama2:7b", provider="ollama"
-    )
-
-    # Counters should still be None (not initialized)
-    from mellea.telemetry.metrics import _input_token_counter, _output_token_counter
-
-    assert _input_token_counter is None
-    assert _output_token_counter is None
-
-
-def test_record_token_usage_metrics_exported_in_public_api():
-    """Test that record_token_usage_metrics is exported in public API."""
-    from mellea.telemetry import record_token_usage_metrics
-
-    assert record_token_usage_metrics is not None
-    assert callable(record_token_usage_metrics)

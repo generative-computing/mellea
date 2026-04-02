@@ -2,7 +2,7 @@
 
 """Example demonstrating OpenTelemetry metrics exporters in Mellea.
 
-This example shows how to use token usage metrics with different exporters:
+This example shows how to use metrics with different exporters:
 - Console: Print metrics to console for debugging
 - OTLP: Export to OpenTelemetry Protocol collectors
 - Prometheus: Expose HTTP endpoint for Prometheus scraping
@@ -42,6 +42,7 @@ python metrics_example.py
 import os
 
 from mellea import generative, start_session
+from mellea.backends import ModelOption
 from mellea.stdlib.requirements import req
 
 
@@ -58,7 +59,7 @@ def translate_to_spanish(text: str) -> str:
 def main():
     """Run example with metrics collection."""
     print("=" * 60)
-    print("Mellea Token Metrics Example")
+    print("Mellea Metrics Example")
     print("=" * 60)
 
     # Check if metrics are enabled
@@ -70,7 +71,7 @@ def main():
         print("=" * 60)
         return
 
-    print("✓ Token metrics enabled")
+    print("Metrics enabled")
 
     # When Prometheus is enabled, start an HTTP server to expose metrics
     if os.getenv("MELLEA_METRICS_PROMETHEUS", "false").lower() == "true":
@@ -118,8 +119,18 @@ def main():
         response = m.chat("What is the capital of France?")
         print(f"Response: {str(response)[:100]}...")
 
+        # Example 5: Streaming with latency metrics
+        print("\n5. Streaming request (latency metrics)...")
+        streamed = m.instruct(
+            "Name three programming languages in one sentence.",
+            model_options={ModelOption.STREAM: True},
+        )
+        print(f"Response: {str(streamed)[:100]}...")
+        if streamed.streaming and streamed.ttfb_ms is not None:
+            print(f"  -> Time to first token: {streamed.ttfb_ms:.1f} ms")
+
     print("\n" + "=" * 60)
-    print("Example complete! Token metrics recorded.")
+    print("Example complete! Metrics recorded.")
 
     # When Prometheus is enabled, keep the process running so the endpoint can be scraped
     if os.getenv("MELLEA_METRICS_PROMETHEUS", "false").lower() == "true":

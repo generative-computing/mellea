@@ -25,9 +25,10 @@ try:
 except ImportError:
     OTEL_AVAILABLE = False
 
-pytestmark = pytest.mark.skipif(
-    not OTEL_AVAILABLE, reason="OpenTelemetry not installed"
-)
+pytestmark = [
+    pytest.mark.skipif(not OTEL_AVAILABLE, reason="OpenTelemetry not installed"),
+    pytest.mark.e2e,
+]
 
 
 @pytest.fixture
@@ -78,6 +79,35 @@ def hf_metrics_backend(gh_run):
     cleanup_gpu_backend(backend, "hf-metrics")
 
 
+def _setup_metrics_provider(metrics_module, metric_reader):
+    """Wire an InMemoryMetricReader into the metrics module globals."""
+    provider = MeterProvider(metric_readers=[metric_reader])
+    metrics_module._meter_provider = provider
+    metrics_module._meter = provider.get_meter("mellea")
+    metrics_module._input_token_counter = None
+    metrics_module._output_token_counter = None
+    metrics_module._duration_histogram = None
+    metrics_module._ttfb_histogram = None
+    return provider
+
+
+def _find_histogram_data_point(metrics_data, metric_name, attributes=None):
+    """Return the first histogram data point matching the given attributes."""
+    if metrics_data is None:
+        return None
+    for rm in metrics_data.resource_metrics:
+        for sm in rm.scope_metrics:
+            for metric in sm.metrics:
+                if metric.name == metric_name:
+                    for dp in metric.data.data_points:
+                        if attributes is None:
+                            return dp
+                        point_attrs = dict(dp.attributes)
+                        if all(point_attrs.get(k) == v for k, v in attributes.items()):
+                            return dp
+    return None
+
+
 def get_metric_value(metrics_data, metric_name, attributes=None):
     """Helper to extract metric value from metrics data.
 
@@ -107,7 +137,6 @@ def get_metric_value(metrics_data, metric_name, attributes=None):
 
 
 @pytest.mark.asyncio
-@pytest.mark.e2e
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, stream):
@@ -116,11 +145,7 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, s
     from mellea.backends.ollama import OllamaModelBackend
     from mellea.telemetry import metrics as metrics_module
 
-    provider = MeterProvider(metric_readers=[metric_reader])
-    metrics_module._meter_provider = provider
-    metrics_module._meter = provider.get_meter("mellea")
-    metrics_module._input_token_counter = None
-    metrics_module._output_token_counter = None
+    provider = _setup_metrics_provider(metrics_module, metric_reader)
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
     ctx = SimpleContext()
@@ -159,9 +184,20 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, s
     assert output_tokens is not None, "Output tokens should not be None"
     assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"
 
+    # Verify latency metrics
+    duration_dp = _find_histogram_data_point(
+        metrics_data, "mellea.llm.request.duration", {"streaming": stream}
+    )
+    assert duration_dp is not None, "Request duration should be recorded"
+    assert duration_dp.sum > 0, "Request duration should be > 0"
+
+    if stream:
+        ttfb_dp = _find_histogram_data_point(metrics_data, "mellea.llm.ttfb")
+        assert ttfb_dp is not None, "TTFB should be recorded for streaming requests"
+        assert ttfb_dp.sum > 0, "TTFB should be > 0"
+
 
 @pytest.mark.asyncio
-@pytest.mark.e2e
 @pytest.mark.openai
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
@@ -171,11 +207,7 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
     from mellea.backends.openai import OpenAIBackend
     from mellea.telemetry import metrics as metrics_module
 
-    provider = MeterProvider(metric_readers=[metric_reader])
-    metrics_module._meter_provider = provider
-    metrics_module._meter = provider.get_meter("mellea")
-    metrics_module._input_token_counter = None
-    metrics_module._output_token_counter = None
+    provider = _setup_metrics_provider(metrics_module, metric_reader)
 
     # Use Ollama's OpenAI-compatible endpoint
     backend = OpenAIBackend(
@@ -216,9 +248,20 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
     assert output_tokens is not None, "Output tokens should be recorded"
     assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"
 
+    # Verify latency metrics
+    duration_dp = _find_histogram_data_point(
+        metrics_data, "mellea.llm.request.duration", {"streaming": stream}
+    )
+    assert duration_dp is not None, "Request duration should be recorded"
+    assert duration_dp.sum > 0, "Request duration should be > 0"
+
+    if stream:
+        ttfb_dp = _find_histogram_data_point(metrics_data, "mellea.llm.ttfb")
+        assert ttfb_dp is not None, "TTFB should be recorded for streaming requests"
+        assert ttfb_dp.sum > 0, "TTFB should be > 0"
+
 
 @pytest.mark.asyncio
-@pytest.mark.e2e
 @pytest.mark.watsonx
 @require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")
 async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
@@ -226,11 +269,7 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
     from mellea.backends.watsonx import WatsonxAIBackend
     from mellea.telemetry import metrics as metrics_module
 
-    provider = MeterProvider(metric_readers=[metric_reader])
-    metrics_module._meter_provider = provider
-    metrics_module._meter = provider.get_meter("mellea")
-    metrics_module._input_token_counter = None
-    metrics_module._output_token_counter = None
+    provider = _setup_metrics_provider(metrics_module, metric_reader)
 
     backend = WatsonxAIBackend(
         model_id=IBM_GRANITE_4_HYBRID_SMALL.watsonx_name,  # type: ignore
@@ -263,9 +302,15 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
     assert output_tokens is not None, "Output tokens should be recorded"
     assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"
 
+    # Verify latency metrics (watsonx is non-streaming only)
+    duration_dp = _find_histogram_data_point(
+        metrics_data, "mellea.llm.request.duration", {"streaming": False}
+    )
+    assert duration_dp is not None, "Request duration should be recorded"
+    assert duration_dp.sum > 0, "Request duration should be > 0"
+
 
 @pytest.mark.asyncio
-@pytest.mark.e2e
 @pytest.mark.litellm
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
@@ -282,11 +327,7 @@ async def test_litellm_token_metrics_integration(
     monkeypatch.setenv("OPENAI_API_KEY", "ollama")
     monkeypatch.setenv("OPENAI_BASE_URL", ollama_url)
 
-    provider = MeterProvider(metric_readers=[metric_reader])
-    metrics_module._meter_provider = provider
-    metrics_module._meter = provider.get_meter("mellea")
-    metrics_module._input_token_counter = None
-    metrics_module._output_token_counter = None
+    provider = _setup_metrics_provider(metrics_module, metric_reader)
 
     # Use LiteLLM with openai/ prefix - it will use the OPENAI_BASE_URL env var
     # This tests LiteLLM with a provider that properly returns token usage
@@ -326,9 +367,20 @@ async def test_litellm_token_metrics_integration(
     assert output_tokens is not None, "Output tokens should be recorded"
     assert output_tokens > 0, f"Output tokens should be > 0, got {output_tokens}"
 
+    # Verify latency metrics
+    duration_dp = _find_histogram_data_point(
+        metrics_data, "mellea.llm.request.duration", {"streaming": stream}
+    )
+    assert duration_dp is not None, "Request duration should be recorded"
+    assert duration_dp.sum > 0, "Request duration should be > 0"
+
+    if stream:
+        ttfb_dp = _find_histogram_data_point(metrics_data, "mellea.llm.ttfb")
+        assert ttfb_dp is not None, "TTFB should be recorded for streaming requests"
+        assert ttfb_dp.sum > 0, "TTFB should be > 0"
+
 
 @pytest.mark.asyncio
-@pytest.mark.e2e
 @pytest.mark.huggingface
 @require_gpu(min_vram_gb=8)
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
@@ -339,11 +391,7 @@ async def test_huggingface_token_metrics_integration(
     from mellea.backends.model_options import ModelOption
     from mellea.telemetry import metrics as metrics_module
 
-    provider = MeterProvider(metric_readers=[metric_reader])
-    metrics_module._meter_provider = provider
-    metrics_module._meter = provider.get_meter("mellea")
-    metrics_module._input_token_counter = None
-    metrics_module._output_token_counter = None
+    provider = _setup_metrics_provider(metrics_module, metric_reader)
 
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'hello' and nothing else"))
