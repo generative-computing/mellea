@@ -1,6 +1,8 @@
 """A simple app that runs an OpenAI compatible server wrapped around a M program."""
 
+import asyncio
 import importlib.util
+import inspect
 import os
 import sys
 import time
@@ -58,15 +60,30 @@ def make_chat_endpoint(module):
             completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
             created_timestamp = int(time.time())
 
-            output = module.serve(
-                input=request.messages,
-                requirements=request.requirements,
-                model_options={
-                    k: v
-                    for k, v in request.model_dump().items()
-                    if k not in ["messages", "requirements"]
-                },
-            )
+            # Detect if serve is async or sync and handle accordingly
+            if inspect.iscoroutinefunction(module.serve):
+                # It's async, await it directly
+                output = await module.serve(
+                    input=request.messages,
+                    requirements=request.requirements,
+                    model_options={
+                        k: v
+                        for k, v in request.model_dump().items()
+                        if k not in ["messages", "requirements"]
+                    },
+                )
+            else:
+                # It's sync, run in thread pool to avoid blocking event loop
+                output = await asyncio.to_thread(
+                    module.serve,
+                    input=request.messages,
+                    requirements=request.requirements,
+                    model_options={
+                        k: v
+                        for k, v in request.model_dump().items()
+                        if k not in ["messages", "requirements"]
+                    },
+                )
 
             # Extract usage information from the ModelOutputThunk if available
             usage = None
