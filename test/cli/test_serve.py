@@ -122,6 +122,8 @@ class TestChatEndpoint:
     @pytest.mark.asyncio
     async def test_model_options_passed_correctly(self, mock_module, sample_request):
         """Test that model options are passed to serve function correctly."""
+        from mellea.backends.model_options import ModelOption
+
         mock_output = ModelOutputThunk("Test response")
         mock_module.serve.return_value = mock_output
 
@@ -134,11 +136,11 @@ class TestChatEndpoint:
         assert "model_options" in call_args.kwargs
         model_options = call_args.kwargs["model_options"]
 
-        # Should include temperature and max_tokens but not messages/requirements
-        assert "temperature" in model_options
-        assert model_options["temperature"] == 0.7
-        assert "max_tokens" in model_options
-        assert model_options["max_tokens"] == 100
+        # Should include ModelOption sentinels for temperature and max_tokens
+        assert ModelOption.TEMPERATURE in model_options
+        assert model_options[ModelOption.TEMPERATURE] == 0.7
+        assert ModelOption.MAX_NEW_TOKENS in model_options
+        assert model_options[ModelOption.MAX_NEW_TOKENS] == 100
         assert "messages" not in model_options
         assert "requirements" not in model_options
 

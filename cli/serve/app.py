@@ -13,6 +13,8 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from mellea.backends.model_options import ModelOption
+
 from .models import (
     ChatCompletion,
     ChatCompletionMessage,
@@ -55,10 +57,37 @@ def create_openai_error_response(
 def make_chat_endpoint(module):
     """Makes a chat endpoint using a custom module."""
 
+    def _build_model_options(request: ChatCompletionRequest) -> dict:
+        """Build model_options dict, mapping OpenAI params to ModelOption sentinels."""
+        model_options = {}
+
+        # Map standard OpenAI parameters to ModelOption sentinels
+        if request.temperature is not None:
+            model_options[ModelOption.TEMPERATURE] = request.temperature
+        if request.max_tokens is not None:
+            model_options[ModelOption.MAX_NEW_TOKENS] = request.max_tokens
+        if request.seed is not None:
+            model_options[ModelOption.SEED] = request.seed
+
+        # Include any other fields that aren't messages or requirements
+        for k, v in request.model_dump().items():
+            if k not in [
+                "messages",
+                "requirements",
+                "temperature",
+                "max_tokens",
+                "seed",
+            ]:
+                model_options[k] = v
+
+        return model_options
+
     async def endpoint(request: ChatCompletionRequest):
         try:
             completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
             created_timestamp = int(time.time())
+
+            model_options = _build_model_options(request)
 
             # Detect if serve is async or sync and handle accordingly
             if inspect.iscoroutinefunction(module.serve):
@@ -66,11 +95,7 @@ def make_chat_endpoint(module):
                 output = await module.serve(
                     input=request.messages,
                     requirements=request.requirements,
-                    model_options={
-                        k: v
-                        for k, v in request.model_dump().items()
-                        if k not in ["messages", "requirements"]
-                    },
+                    model_options=model_options,
                 )
             else:
                 # It's sync, run in thread pool to avoid blocking event loop
@@ -78,11 +103,7 @@ def make_chat_endpoint(module):
                     module.serve,
                     input=request.messages,
                     requirements=request.requirements,
-                    model_options={
-                        k: v
-                        for k, v in request.model_dump().items()
-                        if k not in ["messages", "requirements"]
-                    },
+                    model_options=model_options,
                 )
 
             # Extract usage information from the ModelOutputThunk if available

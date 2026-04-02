@@ -7,6 +7,7 @@ import pytest
 
 from cli.serve.app import make_chat_endpoint
 from cli.serve.models import ChatCompletionRequest, ChatMessage
+from mellea.backends.model_options import ModelOption
 from mellea.core import ModelOutputThunk
 
 
@@ -193,8 +194,32 @@ class TestSyncAsyncServeHandling:
         mock_sync_module.serve.assert_called_once()
         call_kwargs = mock_sync_module.serve.call_args.kwargs
         model_options = call_kwargs["model_options"]
-        assert "temperature" in model_options
-        assert "max_tokens" in model_options
+        assert ModelOption.TEMPERATURE in model_options
+        assert ModelOption.MAX_NEW_TOKENS in model_options
+
+    @pytest.mark.asyncio
+    async def test_openai_params_mapped_to_model_options(self, mock_sync_module):
+        """Test that OpenAI parameters are mapped to ModelOption sentinels."""
+        endpoint = make_chat_endpoint(mock_sync_module)
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Test")],
+            temperature=0.8,
+            max_tokens=150,
+            seed=42,
+        )
+
+        await endpoint(request)
+
+        # Verify parameters are mapped correctly
+        mock_sync_module.serve.assert_called_once()
+        call_kwargs = mock_sync_module.serve.call_args.kwargs
+        model_options = call_kwargs["model_options"]
+
+        assert model_options[ModelOption.TEMPERATURE] == 0.8
+        assert model_options[ModelOption.MAX_NEW_TOKENS] == 150
+        assert model_options[ModelOption.SEED] == 42
 
 
 class TestEndpointIntegration:
