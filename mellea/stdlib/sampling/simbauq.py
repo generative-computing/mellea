@@ -1,9 +1,16 @@
 """SIMBA-UQ Sampling Strategy.
 
-Implements confidence-aware sample selection using similarity-based aggregation
-from the SIMBA-UQ framework (Bhattacharjya et al., 2024). Generates multiple
-samples across a range of temperatures, computes per-sample confidence via
-pairwise similarity aggregation, and returns the most confident sample.
+Implements confidence-aware sample selection using the SIMBA-UQ framework
+(Bhattacharjya et al., 2024). Generates multiple samples across a range of
+temperatures and selects the most confident one.
+
+Two confidence estimation methods are supported:
+
+* **aggregation** (data-free) — computes pairwise similarity between all
+  samples, then aggregates per-sample similarities into a confidence score.
+* **classifier** — extracts pairwise similarity features and feeds them into
+  a trained probabilistic classifier (e.g. random forest) that predicts
+  P(correct) for each sample.
 
 Reference:
     Bhattacharjya et al. (2024), "SIMBA: Similarity-Based Aggregation for
@@ -36,12 +43,11 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
 
     Generates ``len(temperatures) * n_per_temp`` samples across a range of
     temperature values, computes pairwise similarity between all samples, and
-    aggregates per-sample similarity scores into confidence estimates. The sample
-    with the highest confidence is returned.
+    uses either similarity aggregation or a trained classifier to estimate
+    per-sample confidence. The sample with the highest confidence is returned.
 
     Confidence metadata is stored on the selected ``ModelOutputThunk`` in
-    ``mot.meta['simba_uq']`` with keys ``confidence``, ``all_confidences``,
-    ``temperatures_used``, ``similarity_metric``, and ``aggregation``.
+    ``mot.meta['simba_uq']``.
 
     Args:
         temperatures (list[float]): Temperature values to sample at.
@@ -50,16 +56,34 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             similarity metric. ``'rouge'`` uses RougeL F-measure; ``'jaccard'``
             uses word-level Jaccard index; ``'sbert'`` uses cosine similarity of
             Sentence-BERT embeddings (requires ``sentence-transformers``).
+        confidence_method (Literal['aggregation', 'classifier']): How to
+            compute confidence from the similarity matrix. ``'aggregation'``
+            uses a data-free aggregation function; ``'classifier'`` uses a
+            trained probabilistic classifier.
         aggregation (Literal['mean', 'geometric_mean', 'harmonic_mean',
-            'median', 'max', 'min']): Method for aggregating pairwise
-            similarities into a single confidence score per sample.
-        rouge_type (str): Rouge variant to use when ``similarity_metric`` is
-            ``'rouge'``.
-        sbert_model (str): Sentence-BERT model name to use when
-            ``similarity_metric`` is ``'sbert'``.
-        requirements (list[Requirement] | None): Optional global requirements to
-            validate the selected sample against.
+            'median', 'max', 'min']): Aggregation function used when
+            ``confidence_method='aggregation'``.
+        classifier: Pre-trained sklearn-compatible classifier with a
+            ``predict_proba`` method. Used when
+            ``confidence_method='classifier'``. If not provided, a random
+            forest is trained from ``training_samples`` and
+            ``training_labels``.
+        training_samples (list[list[str]] | None): Training data for the
+            classifier — a list of query groups, each containing sample
+            strings. Each group must have the same number of samples as
+            ``len(temperatures) * n_per_temp``.
+        training_labels (list[list[int]] | None): Binary correctness labels
+            (0/1) matching ``training_samples``.
+        clf_max_depth (int): Maximum tree depth for the random forest when
+            training from data.
+        rouge_type (str): Rouge variant when ``similarity_metric='rouge'``.
+        sbert_model (str): Sentence-BERT model name when
+            ``similarity_metric='sbert'``.
+        requirements (list[Requirement] | None): Optional global requirements
+            to validate the selected sample against.
     """
+
+    _CLF_EPS = 1e-6
 
     def __init__(
         self,
@@ -67,9 +91,14 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         temperatures: list[float] | None = None,
         n_per_temp: int = 4,
         similarity_metric: Literal["rouge", "jaccard", "sbert"] = "rouge",
+        confidence_method: Literal["aggregation", "classifier"] = "aggregation",
         aggregation: Literal[
             "mean", "geometric_mean", "harmonic_mean", "median", "max", "min"
         ] = "mean",
+        classifier: object | None = None,
+        training_samples: list[list[str]] | None = None,
+        training_labels: list[list[int]] | None = None,
+        clf_max_depth: int = 4,
         rouge_type: str = "rougeL",
         sbert_model: str = "all-MiniLM-L6-v2",
         requirements: list[Requirement] | None = None,
@@ -83,11 +112,14 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         self.temperatures = temperatures
         self.n_per_temp = n_per_temp
         self.similarity_metric = similarity_metric
+        self.confidence_method = confidence_method
         self.aggregation = aggregation
+        self.clf_max_depth = clf_max_depth
         self.rouge_type = rouge_type
         self.sbert_model = sbert_model
         self.requirements = requirements
 
+        # --- Similarity metric initialization ---
         if similarity_metric == "rouge":
             self._rouge_scorer = RougeScorer([rouge_type], use_stemmer=True)
         elif similarity_metric == "sbert":
@@ -103,6 +135,35 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             self._sbert_model_obj = sentence_transformers.SentenceTransformer(
                 sbert_model
             )
+
+        # --- Classifier initialization ---
+        self._classifier: object | None = None
+        if confidence_method == "classifier":
+            if classifier is not None:
+                self._classifier = classifier
+            elif training_samples is not None and training_labels is not None:
+                n_samples = len(temperatures) * n_per_temp
+                for i, group in enumerate(training_samples):
+                    assert len(group) == n_samples, (
+                        f"Training group {i} has {len(group)} samples, "
+                        f"expected {n_samples} "
+                        f"(len(temperatures) * n_per_temp)"
+                    )
+                    assert len(training_labels[i]) == n_samples, (
+                        f"Training labels group {i} has "
+                        f"{len(training_labels[i])} labels, "
+                        f"expected {n_samples}"
+                    )
+                self._classifier = self._train_classifier(
+                    training_samples, training_labels
+                )
+            else:
+                msg = (
+                    "confidence_method='classifier' requires either a "
+                    "'classifier' or both 'training_samples' and "
+                    "'training_labels'"
+                )
+                raise ValueError(msg)
 
     async def sample(
         self,
@@ -180,10 +241,13 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             confidences = np.array([0.5])
         else:
             sim_matrix = self._compute_similarity_matrix(sample_strings)
-            confidences = np.zeros(n)
-            for i in range(n):
-                others = np.concatenate([sim_matrix[i, :i], sim_matrix[i, i + 1 :]])
-                confidences[i] = self._aggregate(others)
+            if self.confidence_method == "classifier":
+                confidences = self._compute_confidences_classifier(sim_matrix, n)
+            else:
+                confidences = np.zeros(n)
+                for i in range(n):
+                    others = np.concatenate([sim_matrix[i, :i], sim_matrix[i, i + 1 :]])
+                    confidences[i] = self._aggregate(others)
 
         # Select the sample with the highest confidence.
         best_index = int(np.argmax(confidences))
@@ -198,6 +262,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             "all_confidences": confidences.tolist(),
             "similarity_matrix": sim_matrix.tolist(),
             "temperatures_used": temp_assignments,
+            "confidence_method": self.confidence_method,
             "similarity_metric": self.similarity_metric,
             "aggregation": self.aggregation,
         }
@@ -314,6 +379,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         Returns:
             Aggregated confidence score.
         """
+        epsilon = 1e-10
         if len(similarities) == 0:
             return 0.0
 
@@ -321,14 +387,13 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             return float(np.mean(similarities))
 
         if self.aggregation == "geometric_mean":
-            epsilon = 1e-10
             log_sims = np.log(similarities + epsilon)
             return float(np.exp(np.mean(log_sims)))
 
         if self.aggregation == "harmonic_mean":
             from scipy import stats as scipy_stats
 
-            return float(scipy_stats.hmean(similarities + 1e-10))
+            return float(scipy_stats.hmean(similarities + epsilon))
 
         if self.aggregation == "median":
             return float(np.median(similarities))
@@ -341,6 +406,68 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
 
         msg = f"Unknown aggregation method: {self.aggregation}"
         raise ValueError(msg)
+
+    def _extract_features(
+        self, sim_matrix: np.ndarray, sample_index: int
+    ) -> np.ndarray:
+        """Extract pairwise similarity features for a single sample.
+
+        Returns the similarity row with self-similarity removed and values
+        clipped to ``(eps, 1 - eps)`` for numerical stability.
+
+        Args:
+            sim_matrix: Symmetric (N, N) similarity matrix.
+            sample_index: Index of the sample to extract features for.
+
+        Returns:
+            1-D feature array of length ``N - 1``.
+        """
+        row = np.delete(sim_matrix[sample_index, :], sample_index)
+        return np.clip(row, self._CLF_EPS, 1.0 - self._CLF_EPS)
+
+    def _train_classifier(
+        self, training_samples: list[list[str]], training_labels: list[list[int]]
+    ) -> object:
+        """Train a random forest classifier on similarity features.
+
+        Args:
+            training_samples: List of query groups, each a list of sample
+                strings with the same length as the inference-time sample
+                count.
+            training_labels: Binary correctness labels (0/1) matching
+                ``training_samples``.
+
+        Returns:
+            Trained ``RandomForestClassifier``.
+        """
+        from sklearn.ensemble import RandomForestClassifier
+
+        x_train: list[np.ndarray] = []
+        y_train: list[int] = []
+        for samples, labels in zip(training_samples, training_labels):
+            sim_matrix = self._compute_similarity_matrix(samples)
+            for i, label in enumerate(labels):
+                x_train.append(self._extract_features(sim_matrix, i))
+                y_train.append(label)
+        clf = RandomForestClassifier(max_depth=self.clf_max_depth, random_state=0)
+        clf.fit(x_train, y_train)
+        return clf
+
+    def _compute_confidences_classifier(
+        self, sim_matrix: np.ndarray, n: int
+    ) -> np.ndarray:
+        """Compute per-sample confidence using the trained classifier.
+
+        Args:
+            sim_matrix: Pre-computed (N, N) similarity matrix.
+            n: Number of samples.
+
+        Returns:
+            Array of P(correct) confidence scores with shape ``(n,)``.
+        """
+        x_test = [self._extract_features(sim_matrix, i) for i in range(n)]
+        probs = self._classifier.predict_proba(x_test)  # type: ignore[union-attr]
+        return probs[:, 1]
 
     def _compute_confidences(self, samples: list[str]) -> np.ndarray:
         """Compute per-sample confidence using similarity-based aggregation.

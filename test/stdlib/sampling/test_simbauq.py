@@ -171,6 +171,132 @@ class TestSBERTSimilarity:
         assert confs[3] < confs[2]
 
 
+class TestClassifierConfidence:
+    """Tests for the classifier-based confidence estimation method."""
+
+    # Synthetic training data: 3 groups of 4 samples each.
+    # Groups have 3 "correct" similar answers and 1 "incorrect" outlier.
+    TRAINING_SAMPLES = [
+        [
+            "The capital of France is Paris.",
+            "Paris is the capital of France.",
+            "France's capital city is Paris.",
+            "Bananas are a yellow tropical fruit.",
+        ],
+        [
+            "Water boils at 100 degrees Celsius.",
+            "At 100 degrees Celsius water boils.",
+            "The boiling point of water is 100C.",
+            "The sky is often blue on clear days.",
+        ],
+        [
+            "Python is a programming language.",
+            "Python is a popular programming language.",
+            "The Python programming language is widely used.",
+            "Mount Everest is very tall.",
+        ],
+    ]
+    TRAINING_LABELS = [[1, 1, 1, 0], [1, 1, 1, 0], [1, 1, 1, 0]]
+
+    def test_extract_features(self):
+        strategy = SIMBAUQSamplingStrategy(similarity_metric="jaccard")
+        sim_matrix = np.array([[1.0, 0.8, 0.2], [0.8, 1.0, 0.3], [0.2, 0.3, 1.0]])
+        features = strategy._extract_features(sim_matrix, 0)
+        assert len(features) == 2
+        assert features[0] == pytest.approx(0.8)
+        assert features[1] == pytest.approx(0.2)
+
+    def test_extract_features_clipping(self):
+        strategy = SIMBAUQSamplingStrategy(similarity_metric="jaccard")
+        sim_matrix = np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 0.5], [1.0, 0.5, 1.0]])
+        features = strategy._extract_features(sim_matrix, 0)
+        # 0.0 clipped to eps, 1.0 clipped to 1-eps
+        assert features[0] > 0.0
+        assert features[1] < 1.0
+
+    def test_train_classifier(self):
+        strategy = SIMBAUQSamplingStrategy(
+            temperatures=[0.5],
+            n_per_temp=4,
+            similarity_metric="jaccard",
+            confidence_method="classifier",
+            training_samples=self.TRAINING_SAMPLES,
+            training_labels=self.TRAINING_LABELS,
+        )
+        assert strategy._classifier is not None
+        assert hasattr(strategy._classifier, "predict_proba")
+
+    def test_classifier_confidence_produces_valid_scores(self):
+        strategy = SIMBAUQSamplingStrategy(
+            temperatures=[0.5],
+            n_per_temp=4,
+            similarity_metric="jaccard",
+            confidence_method="classifier",
+            training_samples=self.TRAINING_SAMPLES,
+            training_labels=self.TRAINING_LABELS,
+        )
+        # Test samples: 3 similar + 1 outlier (same structure as training)
+        test_samples = [
+            "The capital of Germany is Berlin.",
+            "Berlin is the capital of Germany.",
+            "Germany's capital is Berlin.",
+            "Cats like to chase mice around.",
+        ]
+        sim_matrix = strategy._compute_similarity_matrix(test_samples)
+        confs = strategy._compute_confidences_classifier(sim_matrix, len(test_samples))
+        assert len(confs) == 4
+        for c in confs:
+            assert 0.0 <= c <= 1.0
+
+    def test_classifier_outlier_lower_confidence(self):
+        strategy = SIMBAUQSamplingStrategy(
+            temperatures=[0.5],
+            n_per_temp=4,
+            similarity_metric="jaccard",
+            confidence_method="classifier",
+            training_samples=self.TRAINING_SAMPLES,
+            training_labels=self.TRAINING_LABELS,
+        )
+        test_samples = [
+            "The capital of Italy is Rome.",
+            "Rome is the capital of Italy.",
+            "Italy has Rome as its capital.",
+            "Elephants are the largest land animals.",
+        ]
+        sim_matrix = strategy._compute_similarity_matrix(test_samples)
+        confs = strategy._compute_confidences_classifier(sim_matrix, len(test_samples))
+        # Outlier (index 3) should have lower confidence than the similar ones.
+        assert confs[3] < confs[0]
+
+    def test_pretrained_classifier(self):
+        from sklearn.ensemble import RandomForestClassifier
+
+        # Train a classifier manually.
+        strategy_train = SIMBAUQSamplingStrategy(
+            temperatures=[0.5],
+            n_per_temp=4,
+            similarity_metric="jaccard",
+            confidence_method="classifier",
+            training_samples=self.TRAINING_SAMPLES,
+            training_labels=self.TRAINING_LABELS,
+        )
+        trained_clf = strategy_train._classifier
+
+        # Use pre-trained classifier in a new strategy.
+        strategy = SIMBAUQSamplingStrategy(
+            temperatures=[0.5],
+            n_per_temp=4,
+            similarity_metric="jaccard",
+            confidence_method="classifier",
+            classifier=trained_clf,
+        )
+        assert strategy._classifier is trained_clf
+
+    def test_classifier_requires_data_or_clf(self):
+        with pytest.raises(ValueError, match="requires either"):
+            SIMBAUQSamplingStrategy(confidence_method="classifier")
+
+
 class TestInit:
     def test_default_temperatures(self):
         strategy = SIMBAUQSamplingStrategy()

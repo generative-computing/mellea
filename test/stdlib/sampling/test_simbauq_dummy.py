@@ -63,7 +63,7 @@ def _print_results(result: SamplingResult) -> None:
     print("-" * 70)
     for i, mot in enumerate(result.sample_generations):
         text = str(mot).replace("\n", " ")
-        truncated = (text[:60] + "...") if len(text) > 60 else text
+        truncated = (text[:100] + "...") if len(text) > 100 else text
         marker = " <-- best" if i == result.result_index else ""
         print(
             f"{i:>4}  {temperatures[i]:>5.2f}  {confidences[i]:>8.4f}  {truncated}{marker}"
@@ -90,8 +90,8 @@ def test_simbauq_rits_dummy():
     strategy = SIMBAUQSamplingStrategy(
         temperatures=[0.3, 0.5, 0.7, 1.0],
         n_per_temp=3,
-        similarity_metric="sbert",
-        aggregation="mean",
+        similarity_metric="rouge",
+        aggregation="harmonic_mean",
     )
 
     result: SamplingResult = m.instruct(
@@ -108,5 +108,88 @@ def test_simbauq_rits_dummy():
     del m
 
 
+def test_simbauq_rits_classifier():
+    """Run SIMBAUQSamplingStrategy with classifier confidence and RITSBackend."""
+    m = _make_session()
+
+    # Synthetic training data: 3 groups of 12 samples (4 temps * 3 per temp).
+    # Each group has mostly "correct" similar answers and a few outliers.
+    training_samples = [
+        [
+            "Paris is the capital of France.",
+            "The capital of France is Paris.",
+            "France's capital city is Paris.",
+            "Paris, the capital of France.",
+            "The capital city of France is Paris.",
+            "France has Paris as its capital.",
+            "Paris serves as France's capital.",
+            "In France, Paris is the capital.",
+            "The French capital is Paris.",
+            "Bananas are a yellow fruit.",
+            "Dogs are loyal pets.",
+            "The ocean is very deep.",
+        ],
+        [
+            "Water boils at 100 degrees Celsius.",
+            "At 100C water reaches boiling point.",
+            "The boiling point of water is 100 degrees.",
+            "Water boils when heated to 100C.",
+            "100 degrees Celsius is water's boiling point.",
+            "Boiling occurs at 100C for water.",
+            "Water starts boiling at one hundred degrees.",
+            "At 100 degrees water boils.",
+            "The temperature for boiling water is 100C.",
+            "Cats like to sleep a lot.",
+            "Mountains can be very high.",
+            "Stars shine in the night sky.",
+        ],
+        [
+            "Python is a programming language.",
+            "Python is a popular programming language.",
+            "The Python programming language is widely used.",
+            "Python is used for programming.",
+            "Programming in Python is common.",
+            "Python is a well-known language for coding.",
+            "Many developers use Python.",
+            "Python is a general-purpose language.",
+            "The language Python is popular.",
+            "Pizza originated in Italy.",
+            "Rain falls from clouds.",
+            "Books contain many pages.",
+        ],
+    ]
+    training_labels = [
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+    ]
+
+    strategy = SIMBAUQSamplingStrategy(
+        temperatures=[0.3, 0.5, 0.7, 1.0],
+        n_per_temp=3,
+        similarity_metric="rouge",
+        confidence_method="classifier",
+        training_samples=training_samples,
+        training_labels=training_labels,
+    )
+
+    result: SamplingResult = m.instruct(
+        "Which magazine was started first Arthur's Magazine or First for Women?",
+        strategy=strategy,
+        return_sampling_results=True,
+    )
+
+    assert isinstance(result, SamplingResult)
+    assert len(result.sample_generations) == 12
+
+    print("\n>>> CLASSIFIER CONFIDENCE METHOD <<<\n")
+    _print_results(result)
+
+    del m
+
+
 if __name__ == "__main__":
+    print(">>> AGGREGATION CONFIDENCE METHOD <<<\n")
     test_simbauq_rits_dummy()
+    print("\n" + "=" * 70 + "\n")
+    test_simbauq_rits_classifier()
