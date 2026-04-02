@@ -174,7 +174,16 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
 
         # --- Phase 2: Compute SIMBA-UQ confidence scores ---
         sample_strings = [str(mot) for mot in all_mots]
-        confidences = self._compute_confidences(sample_strings)
+        n = len(sample_strings)
+        if n == 1:
+            sim_matrix = np.ones((1, 1))
+            confidences = np.array([0.5])
+        else:
+            sim_matrix = self._compute_similarity_matrix(sample_strings)
+            confidences = np.zeros(n)
+            for i in range(n):
+                others = np.concatenate([sim_matrix[i, :i], sim_matrix[i, i + 1 :]])
+                confidences[i] = self._aggregate(others)
 
         # Select the sample with the highest confidence.
         best_index = int(np.argmax(confidences))
@@ -187,6 +196,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         best_mot._meta["simba_uq"] = {
             "confidence": best_confidence,
             "all_confidences": confidences.tolist(),
+            "similarity_matrix": sim_matrix.tolist(),
             "temperatures_used": temp_assignments,
             "similarity_metric": self.similarity_metric,
             "aggregation": self.aggregation,
