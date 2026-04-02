@@ -1,4 +1,4 @@
-# pytest: huggingface, llm, requires_heavy_ram
+# pytest: huggingface, e2e, requires_heavy_ram
 """Example demonstrating GroundednessRequirement for grounded response validation.
 
 This example shows how to use GroundednessRequirement to validate that
@@ -67,9 +67,9 @@ async def main():
     ctx1 = ChatContext().add(
         Message("user", "How did Murdoch expand in Australia and New Zealand?")
     )
-    ctx1 = ctx1.add(Message("assistant", response1, documents=docs))
+    ctx1 = ctx1.add(Message("assistant", response1))
 
-    req1 = GroundednessRequirement(allow_partial_support=False)
+    req1 = GroundednessRequirement(documents=docs, allow_partial_support=False)
     result1 = await req1.validate(backend, ctx1)
 
     print(f"Response: {response1}")
@@ -85,9 +85,9 @@ async def main():
     )
 
     ctx2 = ChatContext().add(Message("user", "How did Murdoch expand geographically?"))
-    ctx2 = ctx2.add(Message("assistant", response2, documents=docs))
+    ctx2 = ctx2.add(Message("assistant", response2))
 
-    req2 = GroundednessRequirement(allow_partial_support=False)
+    req2 = GroundednessRequirement(documents=docs, allow_partial_support=False)
     result2 = await req2.validate(backend, ctx2)
 
     print(f"Response: {response2}")
@@ -96,7 +96,7 @@ async def main():
 
     # Example 3: Same response with allow_partial_support=True
     print("\n--- Example 3: Same response with allow_partial_support=True ---")
-    req3 = GroundednessRequirement(allow_partial_support=True)
+    req3 = GroundednessRequirement(documents=docs, allow_partial_support=True)
     result3 = await req3.validate(backend, ctx2)
 
     print(f"Validation passed: {result3.as_bool()}")
@@ -111,9 +111,9 @@ async def main():
     )
 
     ctx4 = ChatContext().add(Message("user", "Tell me about Murdoch's expansion."))
-    ctx4 = ctx4.add(Message("assistant", response4, documents=docs))
+    ctx4 = ctx4.add(Message("assistant", response4))
 
-    req4 = GroundednessRequirement(allow_partial_support=False)
+    req4 = GroundednessRequirement(documents=docs, allow_partial_support=False)
     result4 = await req4.validate(backend, ctx4)
 
     print(f"Response: {response4}")
