@@ -17,6 +17,7 @@ def mock_module_success():
     module.__name__ = "test_module"
     output = Mock()
     output.value = "Test response"
+    output.usage = None  # No usage info in this test
     module.serve = Mock(return_value=output)
     return module
 
