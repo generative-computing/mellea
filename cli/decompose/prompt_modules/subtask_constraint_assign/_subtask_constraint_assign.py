@@ -131,7 +131,9 @@ class _SubtaskConstraintAssign(PromptModule):
                             subtask_constraint_assign.append(value)
 
                 # Remove duplicates while preserving order
-                subtask_constraint_assign = list(dict.fromkeys(subtask_constraint_assign))
+                subtask_constraint_assign = list(
+                    dict.fromkeys(subtask_constraint_assign)
+                )
 
             result.append(
                 SubtaskPromptConstraintsItem(
