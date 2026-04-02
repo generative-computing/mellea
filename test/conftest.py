@@ -147,65 +147,6 @@ def gh_run() -> int:
     return int(os.environ.get("CICD", 0))  # type: ignore
 
 
-@pytest.fixture(scope="session")
-def shared_vllm_backend(request):
-    """Shared vLLM backend for ALL vLLM tests across all modules.
-
-    When --group-by-backend is used, delays creation until after openai_vllm group.
-    Uses IBM Granite 4 Micro as a small, fast model suitable for all vLLM tests.
-    """
-    # When using --group-by-backend, delay backend creation until after openai_vllm group
-    if request.config.getoption("--group-by-backend", default=False):
-        # Check if we're currently in the openai_vllm group
-        if hasattr(pytest_runtest_setup, "_last_backend_group"):
-            current_group = pytest_runtest_setup._last_backend_group
-            if current_group == "openai_vllm":
-                logger = FancyLogger.get_logger()
-                logger.info(
-                    "Backend grouping enabled: Delaying vLLM backend creation until after openai_vllm group"
-                )
-                yield None
-                return
-
-    try:
-        import mellea.backends.model_ids as model_ids
-        from mellea.backends.vllm import LocalVLLMBackend
-    except ImportError:
-        pytest.skip("vLLM backend not available")
-        return
-
-    try:
-        import torch
-
-        if not torch.cuda.is_available():
-            pytest.skip("CUDA not available for vLLM tests")
-            return
-    except ImportError:
-        pytest.skip("PyTorch not available")
-        return
-
-    logger = FancyLogger.get_logger()
-    logger.info(
-        "Creating shared vLLM backend (session-scoped) for all vLLM tests. "
-        "This backend will be reused to avoid GPU memory fragmentation."
-    )
-
-    backend = LocalVLLMBackend(
-        model_id=model_ids.IBM_GRANITE_4_MICRO_3B,
-        model_options={
-            "gpu_memory_utilization": 0.6,
-            "max_model_len": 4096,
-            "max_num_seqs": 4,
-        },
-    )
-
-    logger.info("Shared vLLM backend created successfully.")
-    yield backend
-
-    logger.info("Cleaning up shared vLLM backend (end of test session)")
-    cleanup_gpu_backend(backend, "shared-vllm")
-
-
 # ============================================================================
 # Backend Test Grouping Configuration
 # ============================================================================
@@ -220,11 +161,7 @@ BACKEND_GROUPS = {
     },
     "openai_vllm": {
         "marker": "openai",
-        "description": "OpenAI backend tests with vLLM server (subprocess)",
-    },
-    "vllm": {
-        "marker": "vllm",
-        "description": "vLLM backend tests (GPU, shared in-process backend)",
+        "description": "OpenAI backend tests (including tests with vLLM server subprocess)",
     },
     "ollama": {
         "marker": "ollama",
@@ -237,7 +174,7 @@ BACKEND_GROUPS = {
 }
 
 # Execution order when --group-by-backend is used
-BACKEND_GROUP_ORDER = ["huggingface", "openai_vllm", "vllm", "ollama", "api"]
+BACKEND_GROUP_ORDER = ["huggingface", "openai_vllm", "ollama", "api"]
 
 
 # ============================================================================
@@ -279,7 +216,6 @@ BACKEND_MARKERS: dict[str, str] = {
     "openai": "Tests requiring OpenAI API (requires API key)",
     "watsonx": "Tests requiring Watsonx API (requires API key)",
     "huggingface": "Tests requiring HuggingFace backend (local, heavy)",
-    "vllm": "Tests requiring vLLM backend (local, GPU required)",
     "litellm": "Tests requiring LiteLLM backend",
     "bedrock": "Tests requiring AWS Bedrock backend (requires credentials)",
 }
@@ -317,9 +253,6 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "llm: Tests that make LLM calls (deprecated — use e2e instead)"
     )
-
-    # Store vLLM isolation flag in config
-    config._vllm_process_isolation = False
 
 
 # ============================================================================
@@ -417,21 +350,13 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
             try:
                 del backend._model
             except AttributeError:
-                pass  # _model is a @property on vLLM backends (no deleter)
+                pass
 
         # 6. Delete tokenizer
         if hasattr(backend, "_tokenizer"):
             del backend._tokenizer
 
-        # 7. vLLM backends
-        if hasattr(backend, "_underlying_model"):
-            try:
-                backend._underlying_model.shutdown()
-            except Exception:
-                pass
-            del backend._underlying_model
-
-        # 8. Force garbage collection and flush device caches
+        # 7. Force garbage collection and flush device caches
         gc.collect()
         gc.collect()
 
@@ -553,23 +478,6 @@ def pytest_runtest_setup(item):
                 "Running GPU cleanup."
             )
 
-            # Clean up shared vLLM backend if leaving vLLM group
-            if prev_group in ("vllm", "openai_vllm"):
-                try:
-                    shared_backend_defs = (
-                        item.session._fixturemanager._arg2fixturedefs.get(
-                            "shared_vllm_backend"
-                        )
-                    )
-                    if shared_backend_defs:
-                        backend_instance = shared_backend_defs[-1].cached_result[0]
-                        if backend_instance is not None:
-                            cleanup_gpu_backend(
-                                backend_instance, "shared-vllm-transition"
-                            )
-                except Exception as e:
-                    logger.warning(f"Failed to cleanup vLLM backend on transition: {e}")
-
             # General GPU flush for any transition
             try:
                 import torch
@@ -636,10 +544,6 @@ def pytest_runtest_setup(item):
             pytest.skip(
                 "Skipping test: Watsonx API credentials not found in environment"
             )
-
-    if item.get_closest_marker("vllm"):
-        if not capabilities["has_gpu"]:
-            pytest.skip("Skipping test: vLLM requires GPU")
 
     # Note: Ollama tests are now skipped at collection time in pytest_collection_modifyitems
     # to prevent fixture setup errors

@@ -47,8 +47,6 @@ def get_system_name(backend: Any) -> str:
         return "watsonx"
     elif "litellm" in backend_class:
         return "litellm"
-    elif "vllm" in backend_class:
-        return "vllm"
     else:
         return backend.__class__.__name__
 

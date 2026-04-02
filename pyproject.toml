@@ -51,10 +51,6 @@ hf = [
     "huggingface-hub>=0.33.4",
 ]
 
-vllm = [
-    "vllm>=0.13.0; sys_platform != 'darwin'",
-    "numpy<=2.2", # ImportError: Numba needs NumPy 2.2 or less. Got NumPy 2.4.
-]
 
 litellm = [
     "litellm>=1.76",
@@ -101,7 +97,7 @@ sandbox = [
     "llm-sandbox[docker]>=0.3.23",
 ]
 
-backends = ["mellea[watsonx,hf,vllm,litellm]"]
+backends = ["mellea[watsonx,hf,litellm]"]
 
 hooks = [
     "cpex>=0.1.0.dev10; python_version >= '3.11'",
@@ -302,12 +298,6 @@ disable_error_code = [
     "import-not-found",
 ]
 
-[[tool.mypy.overrides]]
-# vLLM is an optional backend that doesn't work on macOS
-module = "mellea.backends.vllm"
-disable_error_code = [
-    "import-not-found",
-]
 
 # -----------------------------
 # Codespell - Spell Checking
@@ -337,7 +327,6 @@ markers = [
     "openai: Tests requiring OpenAI API (requires API key)",
     "watsonx: Tests requiring Watsonx API (requires API key)",
     "huggingface: Tests requiring HuggingFace backend (local, heavy)",
-    "vllm: Tests requiring vLLM backend (local, GPU required)",
     "litellm: Tests requiring LiteLLM backend",
     "bedrock: Tests requiring AWS Bedrock backend (requires credentials)",
 
@@ -368,10 +357,6 @@ filterwarnings = [
     # Deduplicate noisy Pydantic serialization warnings
     "once:.*PydanticSerializationUnexpectedValue.*:UserWarning",
 
-    # Ignore SWIG C/C++ binding warnings from vLLM (Python 3.12 issue)
-    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
-    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
-    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
 
     # Keep Watsonx deprecation visible (important for migration)
     "default:.*Watsonx Backend is deprecated.*:DeprecationWarning",
