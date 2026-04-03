@@ -425,3 +425,113 @@ async def test_identify_citation_necessity_prompt_as_action():
     assert len(messages) == 1  # Only the original message
     assert messages[0].role == "user"
     assert messages[0].content == "Original context message"
+
+
+def test_build_batch_support_prompt():
+    """Test building the batch support prompt for multiple spans."""
+    req = GroundednessRequirement()
+
+    response = "The sky is blue. Grass is green."
+    spans_to_assess = [
+        {
+            "text": "The sky is blue",
+            "citations": [
+                {
+                    "citation_text": "The sky appears blue due to Rayleigh scattering",
+                    "citation_doc_id": "0",
+                }
+            ],
+        },
+        {
+            "text": "Grass is green",
+            "citations": [
+                {
+                    "citation_text": "Grass contains chlorophyll which is green",
+                    "citation_doc_id": "1",
+                }
+            ],
+        },
+    ]
+
+    prompt = req._build_batch_support_prompt(response, spans_to_assess)
+
+    # Verify prompt structure
+    assert "JSON array" in prompt or "json" in prompt.lower()
+    assert "span_id" in prompt
+    assert "support_level" in prompt
+    assert "FULLY_SUPPORTED" in prompt or "fully" in prompt.lower()
+    assert "PARTIALLY_SUPPORTED" in prompt or "partially" in prompt.lower()
+    assert "NOT_SUPPORTED" in prompt or "not" in prompt.lower()
+    assert "The sky is blue" in prompt
+    assert "Grass is green" in prompt
+
+
+def test_parse_batch_support_output():
+    """Test parsing batch support output."""
+    req = GroundednessRequirement()
+
+    # Simulate LLM output: two spans with different support levels
+    output_text = """
+    [
+        {"span_id": 0, "support_level": "FULLY_SUPPORTED"},
+        {"span_id": 1, "support_level": "PARTIALLY_SUPPORTED"}
+    ]
+    """
+
+    result = req._parse_batch_support_output(output_text, 2)
+
+    assert len(result) == 2
+    assert result[0] == "FULLY_SUPPORTED"
+    assert result[1] == "PARTIALLY_SUPPORTED"
+
+
+def test_parse_batch_support_output_with_recovery():
+    """Test parsing batch support output with malformed JSON recovery."""
+    req = GroundednessRequirement()
+
+    # Simulate malformed LLM output that needs recovery
+    output_text = """
+    Some preamble text
+    [
+        {"span_id": 0, "support_level": "FULLY_SUPPORTED"},
+        {"span_id": 1, "support_level": "NOT_SUPPORTED"
+    ]
+    """
+
+    result = req._parse_batch_support_output(output_text, 2)
+
+    # Should recover and parse both spans
+    assert 0 in result
+    assert 1 in result
+    assert result[0] == "FULLY_SUPPORTED"
+    assert result[1] == "NOT_SUPPORTED"
+
+
+def test_parse_batch_support_output_missing_spans():
+    """Test parsing batch support output when some spans are missing."""
+    req = GroundednessRequirement()
+
+    # Output only has one span, but we expect two
+    output_text = '[{"span_id": 0, "support_level": "FULLY_SUPPORTED"}]'
+
+    result = req._parse_batch_support_output(output_text, 2)
+
+    # Should have default NOT_SUPPORTED for missing span
+    assert len(result) == 2
+    assert result[0] == "FULLY_SUPPORTED"
+    assert result[1] == "NOT_SUPPORTED"  # Default
+
+
+def test_parse_batch_support_output_invalid_json():
+    """Test parsing batch support output with invalid JSON."""
+    req = GroundednessRequirement()
+
+    # Invalid JSON
+    output_text = "This is not JSON at all"
+
+    result = req._parse_batch_support_output(output_text, 2)
+
+    # Should conservatively default all to NOT_SUPPORTED
+    assert len(result) == 2
+    assert result[0] == "NOT_SUPPORTED"
+    assert result[1] == "NOT_SUPPORTED"
