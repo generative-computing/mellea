@@ -149,11 +149,52 @@ Found a bug, workaround, or pattern? Update the docs:
 
 ## 13. Working with Intrinsics
 
-Intrinsics are specialized LoRA adapters hosted on Hugging Face that add task-specific capabilities (RAG evaluation, safety checks, calibration, etc.) to Granite models.
+Intrinsics are specialized LoRA adapters that add task-specific capabilities (RAG evaluation, safety checks, calibration, etc.) to Granite models. Mellea handles adapter loading and input formatting automatically — you just call the right function.
 
-**⚠️ Before writing code that uses an intrinsic, fetch its README from Hugging Face.** Each README contains the authoritative specification for input format, output format, intended use, and examples. Do not guess these details.
+### Using Intrinsics in Mellea
 
-### Hugging Face Repositories
+**Prefer the high-level wrappers** in `mellea/stdlib/components/intrinsic/`. These handle adapter loading, context formatting, and output parsing for you:
+
+| Module | Function | Description |
+|--------|----------|-------------|
+| `core` | `check_certainty(context, backend)` | Model certainty about its last response (0–1) |
+| `core` | `requirement_check(context, backend, requirement)` | Whether text meets a requirement (0–1) |
+| `core` | `find_context_attributions(response, documents, context, backend)` | Sentences that influenced the response |
+| `rag` | `check_answerability(question, documents, context, backend)` | Whether documents can answer a question (0–1) |
+| `rag` | `rewrite_question(question, context, backend)` | Rewrite question into a retrieval query |
+| `rag` | `clarify_query(question, documents, context, backend)` | Generate clarification or return "CLEAR" |
+| `rag` | `find_citations(response, documents, context, backend)` | Document sentences supporting the response |
+| `rag` | `check_context_relevance(question, document, context, backend)` | Whether a document is relevant (0–1) |
+| `rag` | `flag_hallucinated_content(response, documents, context, backend)` | Flag potentially hallucinated sentences |
+
+```python
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components import Message
+from mellea.stdlib.components.intrinsic import core
+from mellea.stdlib.context import ChatContext
+
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+context = (
+    ChatContext()
+    .add(Message("user", "What is the square root of 4?"))
+    .add(Message("assistant", "The square root of 4 is 2."))
+)
+score = core.check_certainty(context, backend)
+```
+
+For lower-level control (custom adapters, model options), use `mfuncs.act()` with `Intrinsic` directly — see examples in `docs/examples/intrinsics/`.
+
+### Project Resources
+
+- **Canonical catalog**: `mellea/backends/adapters/catalog.py` — source of truth for intrinsic names, HF repo IDs, and adapter types
+- **Usage examples**: `docs/examples/intrinsics/` — working code for every intrinsic
+- **Helper functions**: `mellea/stdlib/components/intrinsic/rag.py` and `core.py`
+
+### Adding New Intrinsics
+
+When adding support for a new intrinsic (not just using an existing one), fetch its README from Hugging Face first. Each README contains the authoritative spec for input/output format, intended use, and examples.
+
+**Writing examples?** The HF READMEs also document intended usage patterns and example inputs — useful reference when writing code in `docs/examples/intrinsics/`.
 
 | Repo | Purpose | Intrinsics |
 |------|---------|------------|
@@ -161,22 +202,12 @@ Intrinsics are specialized LoRA adapters hosted on Hugging Face that add task-sp
 | [`ibm-granite/granitelib-core-r1.0`](https://huggingface.co/ibm-granite/granitelib-core-r1.0) | Core capabilities | context-attribution, requirement-check, uncertainty |
 | [`ibm-granite/granitelib-guardian-r1.0`](https://huggingface.co/ibm-granite/granitelib-guardian-r1.0) | Safety & compliance | guardian-core, policy-guardrails, factuality-detection, factuality-correction |
 
-### README URLs
-
-Each intrinsic has a README at a predictable URL. The path depends on the repo:
-
-**RAG intrinsics** (no model subfolder):
+**README URLs** — RAG intrinsics (no model subfolder):
 ```
 https://huggingface.co/ibm-granite/granitelib-rag-r1.0/blob/main/{intrinsic_name}/README.md
 ```
 
-**Core and Guardian intrinsics** (include model subfolder):
+Core and Guardian intrinsics (include model subfolder):
 ```
 https://huggingface.co/ibm-granite/granitelib-{core,guardian}-r1.0/blob/main/{intrinsic_name}/granite-4.0-micro/README.md
 ```
-
-### Project Resources
-
-- **Canonical catalog**: `mellea/backends/adapters/catalog.py` — source of truth for intrinsic names, HF repo IDs, and adapter types
-- **Usage examples**: `docs/examples/intrinsics/` — working code for every intrinsic
-- **Helper functions**: `mellea/stdlib/components/intrinsic/rag.py` and `core.py` — high-level wrappers like `check_answerability()`, `check_certainty()`, etc.
