@@ -1,17 +1,24 @@
 #!/bin/bash
-# run_tests_with_ollama.sh
-# Starts a local ollama server (no sudo), pulls required models, runs tests,
-# and shuts everything down cleanly.
+# run_tests_with_ollama_and_vllm.sh
+# Starts a local ollama server (no sudo), optionally starts a local vLLM server,
+# pulls/installs required models, runs tests, and shuts everything down cleanly.
+#
+# vLLM is enabled automatically when a CUDA GPU is detected, or explicitly with
+# WITH_VLLM=1. Override with WITH_VLLM=0 to force-disable even on GPU hosts.
 #
 # Usage:
-#   ./run_tests_with_ollama.sh                              # run all tests
-#   ./run_tests_with_ollama.sh -m ollama                    # only ollama tests
-#   ./run_tests_with_ollama.sh --group-by-backend -v -s     # custom pytest args
+#   ./run_tests_with_ollama_and_vllm.sh                              # auto (vLLM on GPU hosts)
+#   ./run_tests_with_ollama_and_vllm.sh -m ollama                    # only ollama tests
+#   ./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s     # custom pytest args
+#   WITH_VLLM=1 ./run_tests_with_ollama_and_vllm.sh                  # force-enable vLLM
+#   WITH_VLLM=0 ./run_tests_with_ollama_and_vllm.sh                  # force-disable vLLM
+#   WITH_VLLM=1 VLLM_MODEL=ibm-granite/granite-3.3-8b-instruct \
+#     ./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s
 #
 # LSF example:
 #   bsub -n 1 -G grp_preemptable -q preemptable \
 #     -gpu "num=1/task:mode=shared:j_exclusive=yes" \
-#     "./run_tests_with_ollama.sh --group-by-backend -v -s"
+#     "./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s"
 
 set -euo pipefail
 
@@ -19,7 +26,7 @@ set -euo pipefail
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 die() { log "ERROR: $*" >&2; exit 1; }
 
-# --- Configuration ---
+# --- Ollama configuration ---
 OLLAMA_HOST="${OLLAMA_HOST:-127.0.0.1}"
 OLLAMA_PORT="${OLLAMA_PORT:-11434}"
 if [[ -n "${CACHE_DIR:-}" ]]; then
@@ -35,6 +42,25 @@ OLLAMA_MODELS=(
     "granite3.2-vision"
 )
 
+# --- vLLM configuration ---
+# Auto-enable vLLM when a CUDA GPU is available (nvidia-smi honours CUDA_VISIBLE_DEVICES
+# so this is safe on multi-tenant LSF hosts). Override with WITH_VLLM=0 or WITH_VLLM=1.
+if [[ -z "${WITH_VLLM:-}" ]]; then
+    if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+        WITH_VLLM=1
+        log "CUDA GPU detected — enabling vLLM (set WITH_VLLM=0 to disable)"
+    else
+        WITH_VLLM=0
+    fi
+fi
+VLLM_PORT="${VLLM_PORT:-8100}"
+VLLM_MODEL="${VLLM_MODEL:-ibm-granite/granite-3.3-8b-instruct}"
+VLLM_GPU_MEM="${VLLM_GPU_MEM:-0.85}"
+VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-4096}"
+VLLM_VENV="${CACHE_DIR:+${CACHE_DIR}/.vllm-venv}"
+VLLM_VENV="${VLLM_VENV:-.vllm-venv}"
+VLLM_PID=""
+
 # Log directory - use MELLEA_LOGDIR if set (from nightly.py), otherwise create standalone
 if [[ -n "${MELLEA_LOGDIR:-}" ]]; then
     LOGDIR="$MELLEA_LOGDIR"
@@ -48,14 +74,28 @@ mkdir -p "$LOGDIR"
 cleanup() {
     if [[ "${OLLAMA_EXTERNAL:-0}" == "1" ]]; then
         log "Ollama managed externally (OLLAMA_EXTERNAL=1) — skipping shutdown"
-        return
+    else
+        log "Shutting down ollama server..."
+        if [[ -n "${OLLAMA_PID:-}" ]] && kill -0 "$OLLAMA_PID" 2>/dev/null; then
+            kill "$OLLAMA_PID" 2>/dev/null
+            wait "$OLLAMA_PID" 2>/dev/null || true
+        fi
+        log "Ollama stopped."
     fi
-    log "Shutting down ollama server..."
-    if [[ -n "${OLLAMA_PID:-}" ]] && kill -0 "$OLLAMA_PID" 2>/dev/null; then
-        kill "$OLLAMA_PID" 2>/dev/null
-        wait "$OLLAMA_PID" 2>/dev/null || true
+
+    if [[ "$WITH_VLLM" == "1" ]]; then
+        if [[ "${VLLM_EXTERNAL:-0}" == "1" ]]; then
+            log "vLLM managed externally (VLLM_EXTERNAL=1) — skipping shutdown"
+        elif [[ -n "$VLLM_PID" ]] && kill -0 "$VLLM_PID" 2>/dev/null; then
+            log "Shutting down vLLM server..."
+            kill "$VLLM_PID" 2>/dev/null
+            wait "$VLLM_PID" 2>/dev/null || true
+            log "vLLM stopped."
+        fi
+        if [[ "${KEEP_VLLM_VENV:-0}" != "1" ]]; then
+            rm -rf "$VLLM_VENV"
+        fi
     fi
-    log "Ollama stopped."
 }
 trap cleanup EXIT
 
@@ -139,7 +179,7 @@ for model in "${OLLAMA_MODELS[@]}"; do
     fi
 done
 
-log "All models ready."
+log "All ollama models ready."
 
 # --- Warm up models (first load into memory is slow) ---
 if [[ "${OLLAMA_SKIP_WARMUP:-0}" == "1" ]]; then
@@ -153,6 +193,71 @@ else
             -o /dev/null --max-time 120 || log "  Warning: warmup for $model timed out (will load on first test)"
     done
     log "Warmup complete."
+fi
+
+# --- vLLM server (optional, auto-enabled on CUDA hosts) ---
+if [[ "$WITH_VLLM" == "1" ]]; then
+    if [[ "${VLLM_EXTERNAL:-0}" == "1" ]]; then
+        log "vLLM managed externally (VLLM_EXTERNAL=1) — skipping startup"
+        if ! curl -sf "http://127.0.0.1:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
+            die "VLLM_EXTERNAL=1 but no vLLM server found on port ${VLLM_PORT}"
+        fi
+    else
+        # Find a free port starting from VLLM_PORT
+        while ss -tln 2>/dev/null | grep -q ":${VLLM_PORT} " || \
+              netstat -tln 2>/dev/null | grep -q ":${VLLM_PORT} "; do
+            log "Port $VLLM_PORT in use, trying $((VLLM_PORT + 1))..."
+            VLLM_PORT=$((VLLM_PORT + 1))
+        done
+
+        # Install vLLM into an isolated venv so it never enters mellea's own deps
+        if [[ -d "$VLLM_VENV" ]] && [[ "${KEEP_VLLM_VENV:-0}" == "1" ]]; then
+            log "Reusing existing vLLM venv at $VLLM_VENV (KEEP_VLLM_VENV=1)"
+        else
+            log "Creating isolated vLLM venv at $VLLM_VENV ..."
+            uv venv "$VLLM_VENV" --python 3.11
+            log "Installing vllm into $VLLM_VENV ..."
+            uv pip install --python "$VLLM_VENV/bin/python" vllm \
+                > "$LOGDIR/vllm_install.log" 2>&1 \
+                || die "vllm install failed. Check $LOGDIR/vllm_install.log"
+            log "vllm installed."
+        fi
+
+        # Start vllm serve in the background
+        log "Starting vLLM server — model: $VLLM_MODEL, port: $VLLM_PORT ..."
+        "$VLLM_VENV/bin/python" -m vllm.entrypoints.openai.api_server \
+            --model "$VLLM_MODEL" \
+            --port "$VLLM_PORT" \
+            --max-model-len "$VLLM_MAX_MODEL_LEN" \
+            --gpu-memory-utilization "$VLLM_GPU_MEM" \
+            > "$LOGDIR/vllm.log" 2>&1 &
+        VLLM_PID=$!
+        log "vLLM server PID: $VLLM_PID"
+
+        # Wait for vLLM to be ready (model load can take 60-90s)
+        log "Waiting for vLLM to be ready..."
+        for i in $(seq 1 120); do
+            if curl -sf "http://127.0.0.1:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
+                log "vLLM ready after ${i}s"
+                break
+            fi
+            if ! kill -0 "$VLLM_PID" 2>/dev/null; then
+                die "vLLM process died during startup. Check $LOGDIR/vllm.log"
+            fi
+            sleep 1
+        done
+
+        if ! curl -sf "http://127.0.0.1:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
+            die "vLLM failed to start within 120s. Check $LOGDIR/vllm.log"
+        fi
+    fi
+
+    # Export for pytest fixtures
+    export VLLM_TEST_BASE_URL="http://127.0.0.1:${VLLM_PORT}"
+    export VLLM_TEST_MODEL="$VLLM_MODEL"
+    log "vLLM ready. VLLM_TEST_BASE_URL=$VLLM_TEST_BASE_URL"
+else
+    log "vLLM disabled (WITH_VLLM=0). Pass WITH_VLLM=1 to enable, or run on a CUDA host for auto-detection."
 fi
 
 # --- Run tests ---
