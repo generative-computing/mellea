@@ -1,15 +1,33 @@
-"""Standalone demo of SIMBAUQSamplingStrategy with RITSBackend.
+# pytest: openai, llm, qualitative
 
-Run from VS Code or the command line:
+"""SIMBA-UQ Sampling Strategy Example.
 
-    uv run python test/stdlib/sampling/test_simbauq_dummy.py
+This example demonstrates the SIMBAUQSamplingStrategy using both confidence
+estimation methods:
 
-Requires environment variables:
-    RITS_API_KEY  — RITS API key
+1. **Aggregation** (data-free) - Computes pairwise similarity between all
+   generated samples and aggregates them into per-sample confidence scores.
+   The sample with the highest confidence is selected.
+
+2. **Classifier** (trained) - Uses a random forest classifier trained on
+   labeled examples to predict P(correct) for each sample based on its
+   pairwise similarity features.
+
+Both methods generate multiple samples across different temperature values,
+compute a similarity matrix, and select the most confident response.
+
+The example uses RITSBackend with granite-4.0-micro. To run:
+
+    uv run python docs/examples/simbauq/simbauq_example.py
+
+Requires:
+    RITS_API_KEY environment variable or hardcoded key below.
 """
 
+import os
+
 import numpy as np
-import pytest
+from dotenv import load_dotenv
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
@@ -17,17 +35,13 @@ from mellea.core import SamplingResult
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.sampling.simbauq import SIMBAUQSamplingStrategy
 
-RITS_API_KEY = "eefb7c6fe528efb691cbf3be97fc387f"
+load_dotenv()  # Load environment variables from .env file if present
 
-pytestmark = [
-    pytest.mark.openai,
-    pytest.mark.llm,
-    pytest.mark.qualitative,
-    pytest.mark.skipif(not RITS_API_KEY, reason="RITS_API_KEY must be set"),
-]
+RITS_API_KEY = os.getenv("RITS_API_KEY", None)
 
 
-def _make_session() -> MelleaSession:
+def make_session() -> MelleaSession:
+    """Create a MelleaSession with RITSBackend."""
     from mellea_ibm.rits import RITS, RITSBackend  # type: ignore[import-not-found]
 
     backend = RITSBackend(
@@ -38,7 +52,8 @@ def _make_session() -> MelleaSession:
     return MelleaSession(backend, ctx=ChatContext())
 
 
-def _print_results(result: SamplingResult) -> None:
+def print_results(result: SamplingResult) -> None:
+    """Print detailed results from a SIMBA-UQ sampling run."""
     meta = result.result._meta["simba_uq"]
     confidences = meta["all_confidences"]
     temperatures = meta["temperatures_used"]
@@ -48,10 +63,11 @@ def _print_results(result: SamplingResult) -> None:
     print("=" * 70)
     print("BEST RESPONSE")
     print("=" * 70)
-    print(f"  Index:      {result.result_index}")
-    print(f"  Confidence: {meta['confidence']:.4f}")
-    print(f"  Metric:     {meta['similarity_metric']}")
-    print(f"  Aggregation:{meta['aggregation']}")
+    print(f"  Index:       {result.result_index}")
+    print(f"  Confidence:  {meta['confidence']:.4f}")
+    print(f"  Method:      {meta['confidence_method']}")
+    print(f"  Metric:      {meta['similarity_metric']}")
+    print(f"  Aggregation: {meta['aggregation']}")
     print(f"  Text:\n    {result.result!s}")
     print()
 
@@ -66,7 +82,8 @@ def _print_results(result: SamplingResult) -> None:
         truncated = (text[:100] + "...") if len(text) > 100 else text
         marker = " <-- best" if i == result.result_index else ""
         print(
-            f"{i:>4}  {temperatures[i]:>5.2f}  {confidences[i]:>8.4f}  {truncated}{marker}"
+            f"{i:>4}  {temperatures[i]:>5.2f}  {confidences[i]:>8.4f}  "
+            f"{truncated}{marker}"
         )
     print()
 
@@ -83,14 +100,17 @@ def _print_results(result: SamplingResult) -> None:
     print()
 
 
-def test_simbauq_rits_dummy():
-    """Run SIMBAUQSamplingStrategy with RITSBackend and display results."""
-    m = _make_session()
+def run_aggregation_example() -> None:
+    """Run SIMBA-UQ with data-free similarity aggregation."""
+    print("\n>>> AGGREGATION CONFIDENCE METHOD <<<\n")
+
+    m = make_session()
 
     strategy = SIMBAUQSamplingStrategy(
         temperatures=[0.3, 0.5, 0.7, 1.0],
         n_per_temp=3,
         similarity_metric="rouge",
+        confidence_method="aggregation",
         aggregation="harmonic_mean",
     )
 
@@ -100,17 +120,17 @@ def test_simbauq_rits_dummy():
         return_sampling_results=True,
     )
 
-    assert isinstance(result, SamplingResult)
-    assert len(result.sample_generations) == 12  # 4 temps * 3 per temp
-
-    _print_results(result)
+    print(f"Total samples generated: {len(result.sample_generations)}")
+    print_results(result)
 
     del m
 
 
-def test_simbauq_rits_classifier():
-    """Run SIMBAUQSamplingStrategy with classifier confidence and RITSBackend."""
-    m = _make_session()
+def run_classifier_example() -> None:
+    """Run SIMBA-UQ with a trained random forest classifier."""
+    print("\n>>> CLASSIFIER CONFIDENCE METHOD <<<\n")
+
+    m = make_session()
 
     # Synthetic training data: 3 groups of 12 samples (4 temps * 3 per temp).
     # Each group has mostly "correct" similar answers and a few outliers.
@@ -179,17 +199,18 @@ def test_simbauq_rits_classifier():
         return_sampling_results=True,
     )
 
-    assert isinstance(result, SamplingResult)
-    assert len(result.sample_generations) == 12
-
-    print("\n>>> CLASSIFIER CONFIDENCE METHOD <<<\n")
-    _print_results(result)
+    print(f"Total samples generated: {len(result.sample_generations)}")
+    print_results(result)
 
     del m
 
 
-if __name__ == "__main__":
-    print(">>> AGGREGATION CONFIDENCE METHOD <<<\n")
-    test_simbauq_rits_dummy()
+def main():
+    """Run both SIMBA-UQ confidence estimation examples."""
+    run_aggregation_example()
     print("\n" + "=" * 70 + "\n")
-    test_simbauq_rits_classifier()
+    run_classifier_example()
+
+
+if __name__ == "__main__":
+    main()
