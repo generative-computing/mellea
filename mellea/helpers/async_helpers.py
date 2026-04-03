@@ -25,6 +25,10 @@ async def send_to_queue(
         co: A coroutine or async iterator producing the backend response.
         aqueue: The async queue to send results to. A sentinel ``None`` is appended on
             completion; an exception instance is appended on error.
+
+    Raises:
+        SystemExit: Re-raised if caught during processing.
+        KeyboardInterrupt: Re-raised if caught during processing.
     """
     try:
         if isinstance(co, Coroutine):
