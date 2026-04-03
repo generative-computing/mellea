@@ -271,7 +271,9 @@ class GroundednessRequirement(Requirement):
         try:
             action = CBlock(prompt)
             result, _ = await backend.generate_from_context(
-                action, context, model_options={"temperature": 0.0}
+                action,
+                context,
+                model_options={"temperature": 0.0, "max_new_tokens": 500},
             )
             await result.avalue()
             output_text = result.value
@@ -364,7 +366,9 @@ class GroundednessRequirement(Requirement):
         try:
             action = CBlock(prompt)
             result, _ = await backend.generate_from_context(
-                action, context, model_options={"temperature": 0.0}
+                action,
+                context,
+                model_options={"temperature": 0.0, "max_new_tokens": 500},
             )
             await result.avalue()
             output_text = result.value
