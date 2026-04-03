@@ -296,6 +296,9 @@ class GroundednessRequirement(Requirement):
     ) -> dict[tuple[int, int], str]:
         """Assess level of support for spans that need citations.
 
+        Uses a single batch LLM call to assess all spans requiring support assessment,
+        rather than making individual calls per span. This significantly improves latency.
+
         Args:
             response: The assistant response text
             citations: Citation records from find_citations
@@ -308,8 +311,10 @@ class GroundednessRequirement(Requirement):
             ("FULLY_SUPPORTED", "PARTIALLY_SUPPORTED", or "NOT_SUPPORTED")
         """
         span_support: dict[tuple[int, int], str] = {}
+        spans_to_assess: list[dict] = []  # Spans that need LLM assessment
+        span_key_to_assess_idx: dict[tuple[int, int], int] = {}
 
-        # For each span that needs citations, assess support level
+        # First pass: identify spans needing LLM assessment vs those without citations
         for span_key, needs_citation in span_necessity.items():
             if not needs_citation:
                 # Skip spans that don't need citations
@@ -318,14 +323,10 @@ class GroundednessRequirement(Requirement):
             begin, end = span_key
             span_text = response[begin:end].strip()
 
-            # Find citations that overlap with this span.
-            # Note: We're only assessing spans marked as needing_citation=True.
-            # Such a span may have no overlapping citations (LLM determined it needs
-            # grounding but citations didn't cover it), in which case it gets NOT_SUPPORTED.
-            # Or it may have overlapping citations that we'll assess for support level.
+            # Find citations that overlap with this span
             span_citations = []
             for citation in citations:
-                # Check if citation overlaps with span.
+                # Check if citation overlaps with span
                 # Both use half-open intervals [begin, end), so overlap occurs when:
                 # citation.begin < span.end AND citation.end > span.begin
                 if (
@@ -335,28 +336,57 @@ class GroundednessRequirement(Requirement):
                     span_citations.append(citation)
 
             if not span_citations:
-                # No citations for this span
+                # No citations for this span → NOT_SUPPORTED (no need for LLM)
                 span_support[span_key] = "NOT_SUPPORTED"
             else:
-                # Have citations, assess support level with LLM using prompt as action
-                prompt = self._build_support_prompt(span_text, span_citations)
+                # Has citations → collect for batch assessment
+                idx = len(spans_to_assess)
+                span_key_to_assess_idx[span_key] = idx
+                spans_to_assess.append(
+                    {
+                        "span_key": span_key,
+                        "text": span_text,
+                        "citations": span_citations,
+                    }
+                )
 
-                try:
-                    action = CBlock(prompt)
-                    result, _ = await backend.generate_from_context(
-                        action, context, model_options={"temperature": 0.0}
-                    )
-                    await result.avalue()
-                    output_text = result.value
-                    if output_text is None:
-                        raise ValueError("LLM judgment returned None")
-                except Exception as e:
-                    raise ValueError(f"LLM judgment for support failed: {e}")
+        # If no spans need LLM assessment, return early
+        if not spans_to_assess:
+            logger.debug("No spans requiring LLM assessment for citation support")
+            return span_support
 
-                # Parse support level
-                support_level = self._parse_support_output(output_text)
-                span_support[span_key] = support_level
+        # Single batch LLM call for all spans
+        prompt = self._build_batch_support_prompt(response, spans_to_assess)
+        logger.debug(
+            f"Batch support assessment prompt (spans={len(spans_to_assess)}):\n{prompt}\n"
+        )
 
+        try:
+            action = CBlock(prompt)
+            result, _ = await backend.generate_from_context(
+                action, context, model_options={"temperature": 0.0}
+            )
+            await result.avalue()
+            output_text = result.value
+            if output_text is None:
+                raise ValueError("LLM judgment returned None")
+        except Exception as e:
+            raise ValueError(f"Batch LLM judgment for support failed: {e}")
+
+        # Parse batch results
+        batch_results = self._parse_batch_support_output(
+            output_text, len(spans_to_assess)
+        )
+        logger.debug(f"Batch support assessment results: {batch_results}")
+
+        # Map results back to span_keys
+        for span_key, idx in span_key_to_assess_idx.items():
+            support_level = batch_results.get(idx, "NOT_SUPPORTED")
+            span_support[span_key] = support_level
+
+        logger.debug(
+            f"Citation support assessment complete: {len(span_support)} spans assessed"
+        )
         return span_support
 
     def _extract_response_spans(
@@ -511,6 +541,169 @@ class GroundednessRequirement(Requirement):
             "Respond with ONLY one of these three words: FULLY_SUPPORTED, PARTIALLY_SUPPORTED, or NOT_SUPPORTED."
         )
         return prompt
+
+    def _build_batch_support_prompt(
+        self, response: str, spans_to_assess: list[dict]
+    ) -> str:
+        """Build prompt to assess citation support level for multiple spans at once.
+
+        This batch approach reduces latency by combining all span assessments into a
+        single LLM call instead of making individual calls per span.
+
+        Args:
+            response: The full assistant response text
+            spans_to_assess: List of span dicts with keys:
+                - text: span text
+                - citations: list of citation records for this span
+
+        Returns:
+            Formatted prompt for LLM expecting JSON array output
+        """
+        # Build structured list of spans with their citations
+        span_assessments = []
+        for i, span_info in enumerate(spans_to_assess):
+            span_text = span_info["text"]
+            span_citations = span_info["citations"]
+
+            # Format citations for this span
+            citations_lines = []
+            for j, citation in enumerate(span_citations):
+                citation_text = citation.get("citation_text", "")
+                doc_id = citation.get("citation_doc_id", "unknown")
+                citations_lines.append(
+                    f'    Citation {j} (from doc {doc_id}): "{citation_text}"'
+                )
+
+            citations_formatted = "\n".join(citations_lines)
+
+            # Build span entry
+            span_entry = (
+                f'  {{"span_id": {i}, '
+                f'"text": "{span_text}", '
+                f'"citations": [\n{citations_formatted}\n  ]}}'
+            )
+            span_assessments.append(span_entry)
+
+        spans_formatted = ",\n".join(span_assessments)
+
+        prompt = (
+            "Assess the level of support for each response span based on provided citations.\n\n"
+            "For each span, determine if the citations fully support, partially support, "
+            "or do not support the span.\n\n"
+            "Respond with a JSON array of the form:\n"
+            '[{"span_id": ..., "support_level": ...}, ...]\n\n'
+            "Support levels must be ONLY one of: FULLY_SUPPORTED, PARTIALLY_SUPPORTED, or NOT_SUPPORTED.\n\n"
+            f"Response context:\n{response}\n\n"
+            f"Spans to assess:\n[\n{spans_formatted}\n]\n\n"
+            "JSON Output:\n"
+        )
+        return prompt
+
+    def _parse_batch_support_output(
+        self, output_text: str, expected_count: int
+    ) -> dict[int, str]:
+        """Parse LLM output for batch support level assessments.
+
+        Args:
+            output_text: LLM output text
+            expected_count: Expected number of span assessments
+
+        Returns:
+            Dictionary mapping span assessment index to support level
+            ("FULLY_SUPPORTED", "PARTIALLY_SUPPORTED", or "NOT_SUPPORTED")
+        """
+        result: dict[int, str] = {}
+
+        logger.debug(f"Parsing batch support output (expected {expected_count} spans)")
+
+        try:
+            # Extract JSON array from output
+            json_start = output_text.find("[")
+            if json_start == -1:
+                raise ValueError("No JSON array start found in LLM output")
+
+            # Find matching closing bracket
+            bracket_count = 0
+            json_end = -1
+            for i in range(json_start, len(output_text)):
+                if output_text[i] == "[":
+                    bracket_count += 1
+                elif output_text[i] == "]":
+                    bracket_count -= 1
+                    if bracket_count == 0:
+                        json_end = i + 1
+                        break
+
+            if json_end == -1:
+                logger.debug("No matching closing bracket found, attempting recovery")
+                json_text = output_text[json_start:] + "]"
+            else:
+                json_text = output_text[json_start:json_end]
+
+            logger.debug(f"Extracted JSON text (first 200 chars): {json_text[:200]}")
+
+            # Try to parse
+            try:
+                judgments = json.loads(json_text)
+            except json.JSONDecodeError as e:
+                logger.debug(f"JSON parse error: {e}, attempting repair")
+                # Try to find and close the last object
+                last_brace = json_text.rfind("}")
+                if last_brace != -1:
+                    json_text = json_text[: last_brace + 1] + "]"
+                    judgments = json.loads(json_text)
+                else:
+                    raise
+
+            logger.debug(f"Parsed {len(judgments)} judgments from batch output")
+
+            # Process judgments
+            for judgment in judgments:
+                if not isinstance(judgment, dict):
+                    logger.debug(f"Skipping non-dict judgment: {judgment}")
+                    continue
+
+                span_id = judgment.get("span_id")
+                support_level_raw = judgment.get("support_level", "").upper().strip()
+
+                logger.debug(
+                    f"  Judgment: span_id={span_id}, support_level={support_level_raw}"
+                )
+
+                if span_id is None:
+                    logger.debug("Skipping judgment with no span_id")
+                    continue
+
+                # Normalize support level
+                if "FULLY" in support_level_raw and "SUPPORTED" in support_level_raw:
+                    support_level = "FULLY_SUPPORTED"
+                elif (
+                    "PARTIALLY" in support_level_raw
+                    and "SUPPORTED" in support_level_raw
+                ):
+                    support_level = "PARTIALLY_SUPPORTED"
+                else:
+                    support_level = "NOT_SUPPORTED"
+
+                result[span_id] = support_level
+
+            # Ensure all expected spans have results (default to NOT_SUPPORTED if missing)
+            for i in range(expected_count):
+                if i not in result:
+                    logger.debug(
+                        f"Span {i} not in batch output, defaulting to NOT_SUPPORTED"
+                    )
+                    result[i] = "NOT_SUPPORTED"
+
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.debug(
+                f"Parse error in batch support output: {e}, assuming all NOT_SUPPORTED"
+            )
+            # On parse error, conservatively assume all spans are not supported
+            for i in range(expected_count):
+                result[i] = "NOT_SUPPORTED"
+
+        return result
 
     def _parse_necessity_output(
         self, output_text: str, spans: list[dict]
