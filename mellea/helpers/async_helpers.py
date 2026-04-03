@@ -46,7 +46,12 @@ async def send_to_queue(
     # Typically, nothing awaits this function directly (only through the queue).
     # As a result, we have to be careful about catching all errors and propagating
     # them to the queue.
-    except Exception as e:
+    # Note: We catch BaseException to handle StopAsyncIteration which can leak
+    # from async generators in some Python versions/contexts.
+    except BaseException as e:
+        # Re-raise system-exiting exceptions
+        if isinstance(e, (SystemExit, KeyboardInterrupt)):
+            raise
         await aqueue.put(e)
 
 
