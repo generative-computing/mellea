@@ -42,7 +42,7 @@ class DecompVersion(StrEnum):
     latest = "latest"
     v1 = "v1"
     v2 = "v2"
-    # v3 = "v3"
+    v3 = "v3"
 
 
 this_file_dir = Path(__file__).resolve().parent
