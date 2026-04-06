@@ -9,6 +9,7 @@ import uuid
 import typer
 import uvicorn
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
 from .models import (
     ChatCompletion,
@@ -16,6 +17,8 @@ from .models import (
     ChatCompletionRequest,
     Choice,
     CompletionUsage,
+    OpenAIError,
+    OpenAIErrorResponse,
 )
 
 app = FastAPI(
@@ -35,60 +38,87 @@ def load_module_from_path(path: str):
     return module
 
 
+def create_openai_error_response(
+    status_code: int, message: str, error_type: str, param: str | None = None
+) -> JSONResponse:
+    """Create an OpenAI-compatible error response."""
+    error_response = OpenAIErrorResponse(
+        error=OpenAIError(message=message, type=error_type, param=param)
+    )
+    return JSONResponse(
+        status_code=status_code, content=error_response.model_dump(mode="json")
+    )
+
+
 def make_chat_endpoint(module):
     """Makes a chat endpoint using a custom module."""
 
-    async def endpoint(request: ChatCompletionRequest) -> ChatCompletion:
-        completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
-        created_timestamp = int(time.time())
+    async def endpoint(request: ChatCompletionRequest):
+        try:
+            completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
+            created_timestamp = int(time.time())
 
-        output = module.serve(
-            input=request.messages,
-            requirements=request.requirements,
-            model_options={
-                k: v
-                for k, v in request.model_dump().items()
-                if k not in ["messages", "requirements"]
-            },
-        )
-
-        # Extract usage information from the ModelOutputThunk if available
-        usage = None
-        if hasattr(output, "usage") and output.usage is not None:
-            prompt_tokens = output.usage.get("prompt_tokens", 0)
-            completion_tokens = output.usage.get("completion_tokens", 0)
-            # Calculate total_tokens if not provided
-            total_tokens = output.usage.get(
-                "total_tokens", prompt_tokens + completion_tokens
-            )
-            usage = CompletionUsage(
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
+            output = module.serve(
+                input=request.messages,
+                requirements=request.requirements,
+                model_options={
+                    k: v
+                    for k, v in request.model_dump().items()
+                    if k not in ["messages", "requirements"]
+                },
             )
 
-        # system_fingerprint represents backend config hash, not model name
-        # The model name is already in response.model (line 73)
-        # Leave as None since we don't track backend config fingerprints yet
-        system_fingerprint = None
-
-        return ChatCompletion(
-            id=completion_id,
-            model=request.model,
-            created=created_timestamp,
-            choices=[
-                Choice(
-                    index=0,
-                    message=ChatCompletionMessage(
-                        content=output.value, role="assistant"
-                    ),
-                    finish_reason="stop",
+            # Extract usage information from the ModelOutputThunk if available
+            usage = None
+            if hasattr(output, "usage") and output.usage is not None:
+                prompt_tokens = output.usage.get("prompt_tokens", 0)
+                completion_tokens = output.usage.get("completion_tokens", 0)
+                # Calculate total_tokens if not provided
+                total_tokens = output.usage.get(
+                    "total_tokens", prompt_tokens + completion_tokens
                 )
-            ],
-            object="chat.completion",  # type: ignore
-            system_fingerprint=system_fingerprint,
-            usage=usage,
-        )  # type: ignore
+                usage = CompletionUsage(
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
+                )
+
+            # system_fingerprint represents backend config hash, not model name
+            # The model name is already in response.model (line 73)
+            # Leave as None since we don't track backend config fingerprints yet
+            system_fingerprint = None
+
+            return ChatCompletion(
+                id=completion_id,
+                model=request.model,
+                created=created_timestamp,
+                choices=[
+                    Choice(
+                        index=0,
+                        message=ChatCompletionMessage(
+                            content=output.value, role="assistant"
+                        ),
+                        finish_reason="stop",
+                    )
+                ],
+                object="chat.completion",  # type: ignore
+                system_fingerprint=system_fingerprint,
+                usage=usage,
+            )  # type: ignore
+        except ValueError as e:
+            # Handle validation errors or invalid input
+            return create_openai_error_response(
+                status_code=400,
+                message=f"Invalid request: {e!s}",
+                error_type="invalid_request_error",
+            )
+        except Exception as e:
+            # Catch-all for any unexpected errors (including AttributeError)
+            return create_openai_error_response(
+                status_code=500,
+                message=f"Internal server error: {e!s}",
+                error_type="server_error",
+            )
 
     endpoint.__name__ = f"chat_{module.__name__}_endpoint"
     return endpoint
@@ -110,7 +140,7 @@ def serve(
         route_path,
         make_chat_endpoint(module),
         methods=["POST"],
-        response_model=ChatCompletion,
+        response_model=ChatCompletion | OpenAIErrorResponse,
     )
     typer.echo(f"Serving {route_path} at http://{host}:{port}")
     uvicorn.run(app, host=host, port=port)
