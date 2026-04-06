@@ -54,7 +54,7 @@ if [[ -z "${WITH_VLLM:-}" ]]; then
     fi
 fi
 VLLM_PORT="${VLLM_PORT:-8100}"
-VLLM_MODEL="${VLLM_MODEL:-ibm-granite/granite-3.3-8b-instruct}"
+VLLM_MODEL="${VLLM_MODEL:-ibm-granite/granite-4.0-micro}"
 VLLM_GPU_MEM="${VLLM_GPU_MEM:-0.65}"
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-4096}"
 VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-256}"
