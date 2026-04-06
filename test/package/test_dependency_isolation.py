@@ -35,6 +35,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # NOTE: There's some risk that we hit overlap situations (ie if a group imports another group).
 #       In those cases, special handling is needed (see telemetry).
+#       There's also some risk that a group could unintentionally fully import the dependencies of
+#       another group (without explicitly listing it). That will lead to false positives here on
+#       the should_fail side. This happens with vllm (which imports all the parts of hf) so we just
+#       exclude the hf import statements from that test.
+
 IMPORTS: dict[str, list[str]] = {
     "core": [
         "import mellea",
