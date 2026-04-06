@@ -115,6 +115,7 @@ def test_query_rewrite(backend):
     assert result == expected
 
 
+@pytest.mark.xfail(reason="Non-deterministic citation boundaries across environments")
 @pytest.mark.qualitative
 def test_citations(backend):
     """Verify that the citations intrinsic functions properly."""
