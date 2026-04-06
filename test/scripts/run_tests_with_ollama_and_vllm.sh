@@ -55,8 +55,9 @@ if [[ -z "${WITH_VLLM:-}" ]]; then
 fi
 VLLM_PORT="${VLLM_PORT:-8100}"
 VLLM_MODEL="${VLLM_MODEL:-ibm-granite/granite-3.3-8b-instruct}"
-VLLM_GPU_MEM="${VLLM_GPU_MEM:-0.85}"
+VLLM_GPU_MEM="${VLLM_GPU_MEM:-0.65}"
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-4096}"
+VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-256}"
 VLLM_VENV="${CACHE_DIR:+${CACHE_DIR}/.vllm-venv}"
 VLLM_VENV="${VLLM_VENV:-.vllm-venv}"
 VLLM_PID=""
@@ -228,8 +229,9 @@ if [[ "$WITH_VLLM" == "1" ]]; then
         "$VLLM_VENV/bin/python" -m vllm.entrypoints.openai.api_server \
             --model "$VLLM_MODEL" \
             --port "$VLLM_PORT" \
-            --max-model-len "$VLLM_MAX_MODEL_LEN" \
             --gpu-memory-utilization "$VLLM_GPU_MEM" \
+            --max-num-seqs "$VLLM_MAX_NUM_SEQS" \
+            --max-model-len "$VLLM_MAX_MODEL_LEN" \
             > "$LOGDIR/vllm.log" 2>&1 &
         VLLM_PID=$!
         log "vLLM server PID: $VLLM_PID"

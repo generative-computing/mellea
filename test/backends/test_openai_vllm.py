@@ -82,6 +82,12 @@ def vllm_process():
                 "--max-lora-rank",
                 "64",
                 "--enable-prefix-caching",
+                "--gpu-memory-utilization",
+                "0.65",
+                "--max-num-seqs",
+                "256",
+                "--max-model-len",
+                "4096",
             ],
             # the process will have a new session id, so
             # entire process tree is killable at once
