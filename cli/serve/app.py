@@ -130,14 +130,7 @@ def make_chat_endpoint(module):
     return endpoint
 
 
-def serve(
-    script_path: str = typer.Argument(
-        default="docs/examples/m_serve/example.py",
-        help="Path to the Python script to import and serve",
-    ),
-    host: str = typer.Option("0.0.0.0", help="Host to bind to"),
-    port: int = typer.Option(8080, help="Port to bind to"),
-):
+def run_server(script_path: str, host: str = "0.0.0.0", port: int = 8080):
     """Serve a FastAPI endpoint for a given script."""
     module = load_module_from_path(script_path)
     route_path = "/v1/chat/completions"

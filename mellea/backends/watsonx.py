@@ -10,9 +10,15 @@ from collections.abc import AsyncGenerator, Callable, Coroutine, Sequence
 from dataclasses import fields
 from typing import Any, overload
 
-from ibm_watsonx_ai import APIClient, Credentials
-from ibm_watsonx_ai.foundation_models import ModelInference
-from ibm_watsonx_ai.foundation_models.schema import TextChatParameters
+try:
+    from ibm_watsonx_ai import APIClient, Credentials
+    from ibm_watsonx_ai.foundation_models import ModelInference
+    from ibm_watsonx_ai.foundation_models.schema import TextChatParameters
+except ImportError as e:
+    raise ImportError(
+        "The Watsonx backend requires extra dependencies. "
+        'Please install them with: pip install "mellea[watsonx]"'
+    ) from e
 
 from ..backends import ModelIdentifier, model_ids
 from ..core import (

@@ -14,7 +14,13 @@ from typing import Literal
 
 try:
     import git
-    from huggingface_hub import HfFolder, RepoUrl, create_repo, upload_file, upload_folder
+    from huggingface_hub import (
+        HfFolder,
+        RepoUrl,
+        create_repo,
+        upload_file,
+        upload_folder,
+    )
 except ImportError as e:
     raise ImportError(
         "The 'm alora upload' command requires extra dependencies. "

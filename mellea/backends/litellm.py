@@ -7,9 +7,15 @@ import json
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, overload
 
-import litellm
-import litellm.litellm_core_utils
-import litellm.litellm_core_utils.get_supported_openai_params
+try:
+    import litellm
+    import litellm.litellm_core_utils
+    import litellm.litellm_core_utils.get_supported_openai_params
+except ImportError as e:
+    raise ImportError(
+        "The LiteLLM backend requires extra dependencies. "
+        'Please install them with: pip install "mellea[litellm]"'
+    ) from e
 
 from ..backends import model_ids
 from ..core import (
