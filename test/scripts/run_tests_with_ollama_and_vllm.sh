@@ -255,6 +255,7 @@ if [[ "$WITH_VLLM" == "1" ]]; then
     # Export for pytest fixtures
     export VLLM_TEST_BASE_URL="http://127.0.0.1:${VLLM_PORT}"
     export VLLM_TEST_MODEL="$VLLM_MODEL"
+    export VLLM_VENV_PATH="$VLLM_VENV"
     log "vLLM ready. VLLM_TEST_BASE_URL=$VLLM_TEST_BASE_URL"
 else
     log "vLLM disabled (WITH_VLLM=0). Pass WITH_VLLM=1 to enable, or run on a CUDA host for auto-detection."

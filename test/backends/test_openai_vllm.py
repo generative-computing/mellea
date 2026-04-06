@@ -38,13 +38,41 @@ from mellea.stdlib.context import ChatContext
 
 @pytest.fixture(scope="module")
 def vllm_process():
-    """Shared vllm process for all tests in this module."""
+    """Shared vllm process for all tests in this module.
+
+    If VLLM_TEST_BASE_URL is set (e.g. by run_tests_with_ollama_and_vllm.sh),
+    the server is already running externally — skip subprocess entirely.
+    """
+    if os.environ.get("VLLM_TEST_BASE_URL"):
+        yield None
+        return
+
+    # Skip if no CUDA GPU is available (mirrors auto-detection in the script)
+    try:
+        subprocess.run(["nvidia-smi", "-L"], check=True, capture_output=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pytest.skip(
+            "No CUDA GPU detected — skipping vLLM openai tests", allow_module_level=True
+        )
+
+    # Resolve the vLLM venv — created by run_tests_with_ollama_and_vllm.sh or
+    # bootstrapped here for direct pytest invocations.
+    vllm_venv = os.environ.get("VLLM_VENV_PATH", ".vllm-venv")
+    vllm_python = os.path.join(vllm_venv, "bin", "python")
+    if not os.path.isfile(vllm_python):
+        subprocess.run(["uv", "venv", vllm_venv, "--python", "3.11"], check=True)
+        subprocess.run(
+            ["uv", "pip", "install", "--python", vllm_python, "vllm"], check=True
+        )
+
     process = None
     try:
         process = subprocess.Popen(
             [
-                "vllm",
-                "serve",
+                vllm_python,
+                "-m",
+                "vllm.entrypoints.openai.api_server",
+                "--model",
                 IBM_GRANITE_4_MICRO_3B.hf_model_name,
                 "--served-model-name",
                 IBM_GRANITE_4_MICRO_3B.hf_model_name,
@@ -130,11 +158,12 @@ def vllm_process():
 
 @pytest.fixture(scope="module")
 def backend(gh_run: int, vllm_process: subprocess.Popen):
-    """Shared OpenAI backend configured for Ollama."""
+    """Shared OpenAI backend configured for vLLM."""
+    base_url = os.environ.get("VLLM_TEST_BASE_URL", "http://127.0.0.1:8000") + "/v1"
     return OpenAIBackend(
         model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name,  # type: ignore
         formatter=TemplateFormatter(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name),  # type: ignore
-        base_url="http://0.0.0.0:8000/v1",
+        base_url=base_url,
         api_key="EMPTY",
     )
 
