@@ -6,7 +6,13 @@ Wires together all CLI sub-applications into a single Typer root command: ``m se
 evaluation). Run ``m --help`` to see all available sub-commands.
 """
 
-import typer
+try:
+    import typer
+except ImportError:
+    raise SystemExit(
+        "The 'm' CLI requires extra dependencies. "
+        'Please install them with: pip install "mellea[cli]"'
+    ) from None
 
 from cli.alora.commands import alora_app
 from cli.decompose import app as decompose_app

@@ -63,6 +63,7 @@ IMPORTS: dict[str, list[str]] = {
         "import pyarrow",
         "import elasticsearch",
     ],
+    "cli": ["import typer"],
     "server": ["import uvicorn", "import fastapi"],
     "sandbox": ["import llm_sandbox"],
     "hooks": [
@@ -102,6 +103,7 @@ TESTED_EXTRAS = {
     "server",
     "sandbox",
     "hooks",
+    "cli",
     "backends",
 }
 
@@ -367,6 +369,11 @@ def test_server() -> None:
 def test_sandbox() -> None:
     """mellea[sandbox]: llm_sandbox is available."""
     _run_check(extra="sandbox", should_succeed=[*IMPORTS["core"], *IMPORTS["sandbox"]])
+
+
+def test_cli() -> None:
+    """mellea[cli]: typer is available."""
+    _run_check(extra="cli", should_succeed=[*IMPORTS["core"], *IMPORTS["cli"]])
 
 
 def test_hooks() -> None:
