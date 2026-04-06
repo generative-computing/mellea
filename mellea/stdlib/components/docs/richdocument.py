@@ -13,11 +13,17 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling_core.types.doc.document import DoclingDocument, TableItem
-from docling_core.types.io import DocumentStream
+try:
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+    from docling_core.types.doc.document import DoclingDocument, TableItem
+    from docling_core.types.io import DocumentStream
+except ImportError as e:
+    raise ImportError(
+        "RichDocument requires extra dependencies. "
+        'Please install them with: pip install "mellea[docling]"'
+    ) from e
 
 from ....backends.tools import MelleaTool
 from ....core import CBlock, Component, ModelOutputThunk, TemplateRepresentation

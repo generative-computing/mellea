@@ -14,18 +14,24 @@ import threading
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, overload
 
-import llguidance
-import llguidance.hf
-import llguidance.torch
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.cache_utils import DynamicCache
-from transformers.generation.logits_process import LogitsProcessorList
-from transformers.generation.streamers import AsyncTextIteratorStreamer
-from transformers.generation.utils import GenerateDecoderOnlyOutput
-from transformers.modeling_utils import PreTrainedModel
-from transformers.tokenization_utils import PreTrainedTokenizer
-from transformers.trainer_utils import set_seed
+try:
+    import llguidance
+    import llguidance.hf
+    import llguidance.torch
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers.cache_utils import DynamicCache
+    from transformers.generation.logits_process import LogitsProcessorList
+    from transformers.generation.streamers import AsyncTextIteratorStreamer
+    from transformers.generation.utils import GenerateDecoderOnlyOutput
+    from transformers.modeling_utils import PreTrainedModel
+    from transformers.tokenization_utils import PreTrainedTokenizer
+    from transformers.trainer_utils import set_seed
+except ImportError as e:
+    raise ImportError(
+        "The HuggingFace backend requires extra dependencies. "
+        'Please install them with: pip install "mellea[hf]"'
+    ) from e
 
 from ..backends import kv_block_helpers
 from ..core import (

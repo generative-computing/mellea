@@ -8,7 +8,13 @@ variable or ``huggingface-cli login``.
 
 import os
 
-from huggingface_hub import HfApi, HfFolder, create_repo, upload_folder
+try:
+    from huggingface_hub import HfApi, HfFolder, create_repo, upload_folder
+except ImportError as e:
+    raise ImportError(
+        "The 'm alora upload' command requires extra dependencies. "
+        'Please install them with: pip install "mellea[hf]"'
+    ) from e
 
 
 def upload_model(weight_path: str, model_name: str, private: bool = True):

@@ -6,10 +6,16 @@ import sys
 import time
 import uuid
 
-import typer
-import uvicorn
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+try:
+    import typer
+    import uvicorn
+    from fastapi import FastAPI
+    from fastapi.responses import JSONResponse
+except ImportError as e:
+    raise ImportError(
+        "The 'm serve' command requires extra dependencies. "
+        'Please install them with: pip install "mellea[server]"'
+    ) from e
 
 from .models import (
     ChatCompletion,

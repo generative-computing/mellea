@@ -12,8 +12,14 @@ import shutil
 import tempfile
 from typing import Literal
 
-import git
-from huggingface_hub import HfFolder, RepoUrl, create_repo, upload_file, upload_folder
+try:
+    import git
+    from huggingface_hub import HfFolder, RepoUrl, create_repo, upload_file, upload_folder
+except ImportError as e:
+    raise ImportError(
+        "The 'm alora upload' command requires extra dependencies. "
+        'Please install them with: pip install "mellea[hf]"'
+    ) from e
 
 
 def upload_intrinsic(
