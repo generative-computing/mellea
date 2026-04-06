@@ -83,7 +83,7 @@ def vllm_process():
                 "64",
                 "--enable-prefix-caching",
                 "--gpu-memory-utilization",
-                "0.65",
+                "0.4",
                 "--max-num-seqs",
                 "256",
                 "--max-model-len",

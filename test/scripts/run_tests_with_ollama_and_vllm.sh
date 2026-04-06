@@ -12,6 +12,7 @@
 #   ./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s     # custom pytest args
 #   WITH_VLLM=1 ./run_tests_with_ollama_and_vllm.sh                  # force-enable vLLM
 #   WITH_VLLM=0 ./run_tests_with_ollama_and_vllm.sh                  # force-disable vLLM
+#   SKIP_WARMUP=1 ./run_tests_with_ollama_and_vllm.sh                 # skip ollama model warmup
 #   WITH_VLLM=1 VLLM_MODEL=ibm-granite/granite-3.3-8b-instruct \
 #     ./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s
 #
@@ -55,7 +56,7 @@ if [[ -z "${WITH_VLLM:-}" ]]; then
 fi
 VLLM_PORT="${VLLM_PORT:-8100}"
 VLLM_MODEL="${VLLM_MODEL:-ibm-granite/granite-4.0-micro}"
-VLLM_GPU_MEM="${VLLM_GPU_MEM:-0.65}"
+VLLM_GPU_MEM="${VLLM_GPU_MEM:-0.4}"
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-4096}"
 VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-256}"
 VLLM_VENV="${CACHE_DIR:+${CACHE_DIR}/.vllm-venv}"
@@ -183,8 +184,10 @@ done
 log "All ollama models ready."
 
 # --- Warm up models (first load into memory is slow) ---
-if [[ "${OLLAMA_SKIP_WARMUP:-0}" == "1" ]]; then
-    log "Skipping model warmup (OLLAMA_SKIP_WARMUP=1)"
+# Disable with SKIP_WARMUP=1 (covers all backends) or OLLAMA_SKIP_WARMUP=1 (ollama only).
+# Note: vLLM has no warmup step — it serves immediately after the readiness check.
+if [[ "${SKIP_WARMUP:-0}" == "1" || "${OLLAMA_SKIP_WARMUP:-0}" == "1" ]]; then
+    log "Skipping model warmup"
 else
     log "Warming up models..."
     for model in "${OLLAMA_MODELS[@]}"; do
