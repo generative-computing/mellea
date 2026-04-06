@@ -219,7 +219,7 @@ class TestRunSuccess:
             version=DecompVersion.latest,
         )
 
-        assert requested_templates == ["m_decomp_result_v2.py.jinja2"]
+        assert requested_templates == ["m_decomp_result_v3.py.jinja2"]
 
     def test_successful_run_writes_outputs(
         self,
