@@ -7,6 +7,7 @@ retrieval-augmented generation (RAG) workflows.
 """
 
 from ....core import CBlock, Component, ModelOutputThunk
+from ....security import SecLevel
 
 
 # TODO: Add support for passing in docs as model options.
@@ -28,6 +29,12 @@ class Document(Component[str]):
         self.text = text
         self.title = title
         self.doc_id = doc_id
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component."""
+        return self._sec_level
 
     def parts(self) -> list[Component | CBlock]:
         """Returns the constituent parts of this document.

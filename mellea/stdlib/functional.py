@@ -126,7 +126,7 @@ def act(
 
 @overload
 def instruct(
-    description: str,
+    description: str | CBlock,
     context: Context,
     backend: Backend,
     *,
@@ -147,7 +147,7 @@ def instruct(
 
 @overload
 def instruct(
-    description: str,
+    description: str | CBlock,
     context: Context,
     backend: Backend,
     *,
@@ -167,7 +167,7 @@ def instruct(
 
 
 def instruct(
-    description: str,
+    description: str | CBlock,
     context: Context,
     backend: Backend,
     *,

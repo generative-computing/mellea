@@ -21,6 +21,7 @@ from docling_core.types.io import DocumentStream
 
 from ....backends.tools import MelleaTool
 from ....core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
+from ....security import SecLevel
 from ..mobject import MObject, Query, Transform
 
 
@@ -38,6 +39,16 @@ class RichDocument(Component[str]):
     def __init__(self, doc: DoclingDocument):
         """Initialize RichDocument by wrapping the provided DoclingDocument."""
         self._doc = doc
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     def parts(self) -> list[Component | CBlock]:
         """Return the constituent parts of this document.

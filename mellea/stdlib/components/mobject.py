@@ -16,6 +16,7 @@ from typing import Protocol, runtime_checkable
 
 from ...backends.tools import MelleaTool
 from ...core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
+from ...security import SecLevel
 
 
 class Query(Component[str]):
@@ -34,6 +35,16 @@ class Query(Component[str]):
         """Initialize Query with the object to query and a natural-language question string."""
         self._obj = obj
         self._query = query
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     def parts(self) -> list[Component | CBlock]:
         """Return the constituent parts of this query component.
@@ -92,6 +103,16 @@ class Transform(Component[str]):
         """Initialize Transform with the object to transform and a natural-language description."""
         self._obj = obj
         self._transformation = transformation
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     def parts(self) -> list[Component | CBlock]:
         """Return the constituent parts of this transform component.
@@ -222,6 +243,16 @@ class MObject(Component[str]):
         """Initialize MObject with a query type and transform type for building query/transform components."""
         self._query_type = query_type
         self._transform_type = transform_type
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     def parts(self) -> list[Component | CBlock]:
         """MObject has no parts because of how format_for_llm is defined.

@@ -9,6 +9,7 @@ attached ``IntrinsicAdapter``).
 
 from ....backends.adapters import AdapterType, fetch_intrinsic_metadata
 from ....core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
+from ....security import SecLevel
 
 
 class Intrinsic(Component[str]):
@@ -40,6 +41,16 @@ class Intrinsic(Component[str]):
         if intrinsic_kwargs is None:
             intrinsic_kwargs = {}
         self.intrinsic_kwargs = intrinsic_kwargs
+        self._sec_level: SecLevel | None = None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     @property
     def intrinsic_name(self):

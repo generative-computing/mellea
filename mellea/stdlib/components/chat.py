@@ -20,6 +20,7 @@ from ...core import (
     ModelToolCall,
     TemplateRepresentation,
 )
+from ...security import SecLevel
 from .docs.document import Document
 
 
@@ -59,6 +60,7 @@ class Message(Component["Message"]):
         self._content_cblock = CBlock(self.content)
         self._images = images
         self._docs = documents
+        self._sec_level: SecLevel | None = None
 
     @property
     def images(self) -> None | list[str]:
@@ -66,6 +68,15 @@ class Message(Component["Message"]):
         if self._images is not None:
             return [str(i) for i in self._images]
         return None
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     def parts(self) -> list[Component | CBlock]:
         """Return the constituent parts of this message, including content, documents, and images.

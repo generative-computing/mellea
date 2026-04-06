@@ -12,6 +12,7 @@ import re
 from collections.abc import Callable
 from copy import copy
 
+from ..security import SecLevel
 from .backend import Backend, BaseModelSubclass
 from .base import CBlock, Component, Context, ModelOutputThunk, TemplateRepresentation
 
@@ -139,6 +140,7 @@ class Requirement(Component[str]):
 
         # Used for validation. Do not manually populate.
         self._output: str | None = None
+        self._sec_level: SecLevel | None = None
 
     async def validate(
         self,
@@ -197,6 +199,15 @@ class Requirement(Component[str]):
             to expose their internal structure.
         """
         return []
+
+    @property
+    def sec_level(self) -> SecLevel | None:
+        """Get the security level for this Component.
+
+        Returns:
+            SecLevel if present, None otherwise
+        """
+        return self._sec_level
 
     def format_for_llm(self) -> TemplateRepresentation | str:
         """Returns a ``TemplateRepresentation`` for LLM-as-a-Judge evaluation of this requirement.
