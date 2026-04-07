@@ -1,4 +1,4 @@
-# pytest: huggingface, e2e, requires_heavy_ram
+# pytest: e2e, huggingface
 """Example demonstrating GroundednessRequirement for grounded response validation.
 
 This example shows how to use GroundednessRequirement to validate that
@@ -11,8 +11,8 @@ The validator implements a sophisticated 4-step pipeline:
 4. Groundedness Output - Declare response grounded iff all spans needing
    citations are fully supported
 
-Note: This example requires HuggingFace backend and access to the
-ibm-granite/granite-4.0-micro model.
+Note: This example requires HuggingFace backend with GPU (8GB+ VRAM recommended)
+and access to the ibm-granite/granite-4.0-micro model.
 """
 
 import asyncio
