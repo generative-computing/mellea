@@ -1,7 +1,7 @@
 """SIMBA-UQ Sampling Strategy.
 
 Implements confidence-aware sample selection using the SIMBA-UQ framework
-(Bhattacharjya et al., 2024). Generates multiple samples across a range of
+(Bhattacharjya et al., 2025). Generates multiple samples across a range of
 temperatures and selects the most confident one.
 
 Two confidence estimation methods are supported:
