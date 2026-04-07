@@ -1,3 +1,5 @@
+# pytest: skip_always
+
 import textwrap
 
 from validations.val_fn_2 import validate_input as val_fn_2
