@@ -13,11 +13,10 @@ For related topics, see:
 | Role | Description | Examples |
 |------|-------------|----------|
 | **Contributor** | Anyone who opens issues, submits pull requests, or participates in discussions. No special access required. | External collaborators, first-time contributors |
-| **Committer** | Has merge/write access to the repository. Member of [`@generative-computing/mellea-contributors`](https://github.com/orgs/generative-computing/teams/mellea-contributors). | Team members with commit rights |
+| **Maintainer** | Has merge/write access to the repository and responsible for code review. Member of [`@generative-computing/mellea-maintainers`](https://github.com/orgs/generative-computing/teams/mellea-maintainers). | Team members with maintainer rights |
 | **Code Owner** | Domain expert listed in [`.github/CODEOWNERS`](.github/CODEOWNERS). Automatically requested as a reviewer for PRs touching their area. | Core library owners, intrinsics team |
-| **Maintainer** | Overall project stewardship. Holds release authority and can grant committer access. | Project leads |
 
-New committers are added by invitation from existing maintainers, based on sustained, high-quality contributions.
+New maintainers are added by invitation from existing maintainers, based on sustained, high-quality contributions. Release authority and the ability to grant maintainer access are held by a subset of maintainers with admin privileges.
 
 ## Code Ownership
 
@@ -29,7 +28,7 @@ Current ownership zones:
 |------|--------|
 | `mellea/core/` | @nrfulton, @jakelorocco |
 | `mellea/formatters/granite/`, `test/formatters/granite/` | @generative-computing/mellea-intrinsics |
-| Everything else | @generative-computing/mellea-contributors |
+| Everything else | @generative-computing/mellea-maintainers |
 
 ## PR Review & Merge Policy
 
