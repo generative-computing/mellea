@@ -4,7 +4,7 @@ Confidence-aware sample selection using the SIMBA-UQ framework
 (Bhattacharjya et al., 2025). Generates multiple samples across a range of
 temperatures and selects the one with the highest estimated confidence.
 
-**Paper:** [SIMBA: Similarity-Based Aggregation for Uncertainty Quantification](https://arxiv.org/abs/2510.13836)
+**Paper:** [SIMBA UQ: Similarity-Based Aggregation for Uncertainty Quantification in Large Language Models](https://arxiv.org/abs/2510.13836)
 
 ## Files
 
