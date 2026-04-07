@@ -319,7 +319,7 @@ class TestInit:
 
 
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.qualitative
 class TestSIMBAUQIntegration:
     def test_simbauq_sampling(self):
