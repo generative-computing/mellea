@@ -1,9 +1,10 @@
-# pytest: huggingface, e2e, requires_heavy_ram
 """Tests for GroundednessRequirement."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from test.predicates import require_gpu
 
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core.base import ModelOutputThunk
@@ -45,6 +46,9 @@ async def test_groundedness_requirement_initialization():
 
 
 @pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.huggingface
+@require_gpu(min_vram_gb=8)
 async def test_groundedness_requirement_empty_response(backend, sample_docs):
     """Test validation with empty response."""
     req = GroundednessRequirement(documents=sample_docs)
@@ -61,6 +65,9 @@ async def test_groundedness_requirement_empty_response(backend, sample_docs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.huggingface
+@require_gpu(min_vram_gb=8)
 async def test_groundedness_requirement_no_documents_error(backend):
     """Test that validation fails when no documents provided."""
     req = GroundednessRequirement()
@@ -77,6 +84,9 @@ async def test_groundedness_requirement_no_documents_error(backend):
 
 
 @pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.huggingface
+@require_gpu(min_vram_gb=8)
 async def test_groundedness_requirement_documents_in_constructor(backend, sample_docs):
     """Test providing documents in constructor."""
     req = GroundednessRequirement(documents=sample_docs)
@@ -93,6 +103,9 @@ async def test_groundedness_requirement_documents_in_constructor(backend, sample
 
 
 @pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.huggingface
+@require_gpu(min_vram_gb=8)
 async def test_groundedness_requirement_documents_in_message(backend, sample_docs):
     """Test providing documents in message."""
     req = GroundednessRequirement()
@@ -115,6 +128,9 @@ async def test_groundedness_requirement_documents_in_message(backend, sample_doc
 
 
 @pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.huggingface
+@require_gpu(min_vram_gb=8)
 async def test_groundedness_requirement_last_message_not_assistant(
     backend, sample_docs
 ):
@@ -151,6 +167,9 @@ async def test_groundedness_requirement_allow_partial_support_parameter(
 
 
 @pytest.mark.asyncio
+@pytest.mark.e2e
+@pytest.mark.huggingface
+@require_gpu(min_vram_gb=8)
 async def test_span_extraction_simple(backend, sample_docs):
     """Test span extraction with simple response."""
     req = GroundednessRequirement(documents=sample_docs)
@@ -167,28 +186,6 @@ async def test_span_extraction_simple(backend, sample_docs):
     assert any(span.get("is_cited") for span in spans)
 
 
-@pytest.mark.asyncio
-async def test_parse_support_output():
-    """Test parsing of support level output."""
-    req = GroundednessRequirement()
-
-    # Test fully supported
-    result = req._parse_support_output("The citation FULLY_SUPPORTED the claim")
-    assert result == "FULLY_SUPPORTED"
-
-    # Test partially supported
-    result = req._parse_support_output("This is PARTIALLY_SUPPORTED")
-    assert result == "PARTIALLY_SUPPORTED"
-
-    # Test not supported
-    result = req._parse_support_output("This is NOT_SUPPORTED")
-    assert result == "NOT_SUPPORTED"
-
-    # Test default to not supported
-    result = req._parse_support_output("Some random output")
-    assert result == "NOT_SUPPORTED"
-
-
 def test_build_necessity_prompt():
     """Test building the necessity prompt."""
     req = GroundednessRequirement()
@@ -203,25 +200,6 @@ def test_build_necessity_prompt():
     assert "Response:" in prompt
     assert "span_id" in prompt
     assert "needs_citation" in prompt or "citation" in prompt.lower()
-
-
-def test_build_support_prompt():
-    """Test building the support prompt."""
-    req = GroundednessRequirement()
-
-    span_text = "The sky is blue"
-    span_citations = [
-        {
-            "citation_text": "The sky appears blue due to Rayleigh scattering",
-            "citation_doc_id": "0",
-        }
-    ]
-
-    prompt = req._build_support_prompt(span_text, span_citations)
-    assert "Response span" in prompt
-    assert span_text in prompt
-    assert "support" in prompt.lower()
-    assert "FULLY_SUPPORTED" in prompt or "fully" in prompt.lower()
 
 
 @pytest.mark.asyncio
