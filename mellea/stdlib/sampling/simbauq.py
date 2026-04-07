@@ -14,7 +14,7 @@ Two confidence estimation methods are supported:
 
 Reference:
     Bhattacharjya et al. (2025), "SIMBA UQ: Similarity-Based Aggregation for
-    Uncertainty Quantification", https://arxiv.org/abs/2510.13836
+    Uncertainty Quantification in Large Language Models", https://arxiv.org/abs/2510.13836
 """
 
 import asyncio
