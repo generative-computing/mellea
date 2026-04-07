@@ -4,13 +4,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from test.predicates import require_gpu
-
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.core.base import ModelOutputThunk
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.requirements.rag import GroundednessRequirement
+from test.predicates import require_gpu
 
 
 @pytest.fixture
