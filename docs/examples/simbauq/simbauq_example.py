@@ -1,4 +1,4 @@
-# pytest: openai, llm, qualitative
+# pytest: openai, e2e, qualitative, skip
 
 """SIMBA-UQ Sampling Strategy Example.
 
