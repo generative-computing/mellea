@@ -494,7 +494,7 @@ class GroundednessRequirement(Requirement):
         # Create labeled spans for LLM
         labeled_spans = []
         for i, span in enumerate(spans):
-            labeled_spans.append(f'{{"span_id": {i}, "text": "{span["text"]}"}}')
+            labeled_spans.append(json.dumps({"span_id": i, "text": span["text"]}))
 
         spans_text = ",\n".join(labeled_spans)
 
@@ -514,35 +514,6 @@ class GroundednessRequirement(Requirement):
             f"Response:\n{response}\n\n"
             f"Spans to Evaluate:\n[{spans_text}]\n\n"
             "JSON Output:\n"
-        )
-        return prompt
-
-    def _build_support_prompt(self, span_text: str, span_citations: list[dict]) -> str:
-        """Build prompt to assess citation support level.
-
-        Args:
-            span_text: The response span text
-            span_citations: Citation records for this span
-
-        Returns:
-            Formatted prompt for LLM
-        """
-        citations_text = []
-        for i, citation in enumerate(span_citations):
-            citation_text = citation.get("citation_text", "")
-            doc_id = citation.get("citation_doc_id", "unknown")
-            citations_text.append(
-                f'Citation {i} (from doc {doc_id}): "{citation_text}"'
-            )
-
-        citations_formatted = "\n".join(citations_text)
-
-        prompt = (
-            "Assess the level of support for a response span based on provided citations.\n\n"
-            f"Response span:\n{span_text}\n\n"
-            f"Provided citations:\n{citations_formatted}\n\n"
-            "Determine if the citations fully support, partially support, or do not support the span.\n"
-            "Respond with ONLY one of these three words: FULLY_SUPPORTED, PARTIALLY_SUPPORTED, or NOT_SUPPORTED."
         )
         return prompt
 
@@ -603,6 +574,59 @@ class GroundednessRequirement(Requirement):
         )
         return prompt
 
+    def _extract_and_repair_json_array(self, output_text: str) -> list:
+        """Extract and repair a JSON array from LLM output.
+
+        Handles common issues like missing closing brackets and incomplete JSON.
+
+        Args:
+            output_text: Raw LLM output text
+
+        Returns:
+            Parsed JSON array
+
+        Raises:
+            ValueError: If no JSON array start found
+            json.JSONDecodeError: If JSON cannot be parsed even after repair attempts
+        """
+        # Extract JSON array from output
+        json_start = output_text.find("[")
+        if json_start == -1:
+            raise ValueError("No JSON array start found in LLM output")
+
+        # Find matching closing bracket
+        bracket_count = 0
+        json_end = -1
+        for i in range(json_start, len(output_text)):
+            if output_text[i] == "[":
+                bracket_count += 1
+            elif output_text[i] == "]":
+                bracket_count -= 1
+                if bracket_count == 0:
+                    json_end = i + 1
+                    break
+
+        if json_end == -1:
+            logger.debug("No matching closing bracket found, attempting recovery")
+            json_text = output_text[json_start:] + "]"
+        else:
+            json_text = output_text[json_start:json_end]
+
+        logger.debug(f"Extracted JSON text (first 200 chars): {json_text[:200]}")
+
+        # Try to parse
+        try:
+            return json.loads(json_text)
+        except json.JSONDecodeError as e:
+            logger.debug(f"JSON parse error: {e}, attempting repair")
+            # Try to find and close the last object
+            last_brace = json_text.rfind("}")
+            if last_brace != -1:
+                json_text = json_text[: last_brace + 1] + "]"
+                return json.loads(json_text)
+            else:
+                raise
+
     def _parse_batch_support_output(
         self, output_text: str, expected_count: int
     ) -> dict[int, str]:
@@ -621,44 +645,7 @@ class GroundednessRequirement(Requirement):
         logger.debug(f"Parsing batch support output (expected {expected_count} spans)")
 
         try:
-            # Extract JSON array from output
-            json_start = output_text.find("[")
-            if json_start == -1:
-                raise ValueError("No JSON array start found in LLM output")
-
-            # Find matching closing bracket
-            bracket_count = 0
-            json_end = -1
-            for i in range(json_start, len(output_text)):
-                if output_text[i] == "[":
-                    bracket_count += 1
-                elif output_text[i] == "]":
-                    bracket_count -= 1
-                    if bracket_count == 0:
-                        json_end = i + 1
-                        break
-
-            if json_end == -1:
-                logger.debug("No matching closing bracket found, attempting recovery")
-                json_text = output_text[json_start:] + "]"
-            else:
-                json_text = output_text[json_start:json_end]
-
-            logger.debug(f"Extracted JSON text (first 200 chars): {json_text[:200]}")
-
-            # Try to parse
-            try:
-                judgments = json.loads(json_text)
-            except json.JSONDecodeError as e:
-                logger.debug(f"JSON parse error: {e}, attempting repair")
-                # Try to find and close the last object
-                last_brace = json_text.rfind("}")
-                if last_brace != -1:
-                    json_text = json_text[: last_brace + 1] + "]"
-                    judgments = json.loads(json_text)
-                else:
-                    raise
-
+            judgments = self._extract_and_repair_json_array(output_text)
             logger.debug(f"Parsed {len(judgments)} judgments from batch output")
 
             # Process judgments
@@ -726,45 +713,7 @@ class GroundednessRequirement(Requirement):
         logger.debug(f"Parsing necessity output: {output_text[:300]}")
 
         try:
-            # Try to extract JSON array from output
-            # Use a non-greedy match first to find the start, then look for closing bracket
-            json_start = output_text.find("[")
-            if json_start == -1:
-                raise ValueError("No JSON array start found in LLM output")
-
-            # Find matching closing bracket
-            bracket_count = 0
-            json_end = -1
-            for i in range(json_start, len(output_text)):
-                if output_text[i] == "[":
-                    bracket_count += 1
-                elif output_text[i] == "]":
-                    bracket_count -= 1
-                    if bracket_count == 0:
-                        json_end = i + 1
-                        break
-
-            if json_end == -1:
-                # Didn't find matching bracket, try to recover
-                logger.debug("No matching closing bracket found, attempting recovery")
-                # Take from start to end and close with ]
-                json_text = output_text[json_start:] + "]"
-            else:
-                json_text = output_text[json_start:json_end]
-
-            # Try to parse
-            try:
-                judgments = json.loads(json_text)
-            except json.JSONDecodeError as e:
-                logger.debug(f"JSON parse error: {e}, attempting repair")
-                # Try to find and close the last object
-                last_brace = json_text.rfind("}")
-                if last_brace != -1:
-                    json_text = json_text[: last_brace + 1] + "]"
-                    judgments = json.loads(json_text)
-                else:
-                    raise
-
+            judgments = self._extract_and_repair_json_array(output_text)
             logger.debug(f"Parsed JSON judgments: {len(judgments)} judgments")
 
             # Map judgments to spans
@@ -808,24 +757,6 @@ class GroundednessRequirement(Requirement):
                 span_necessity[(span["begin"], span["end"])] = True
 
         return span_necessity
-
-    def _parse_support_output(self, output_text: str) -> str:
-        """Parse LLM output for support level.
-
-        Args:
-            output_text: LLM output text
-
-        Returns:
-            Support level: "FULLY_SUPPORTED", "PARTIALLY_SUPPORTED", or "NOT_SUPPORTED"
-        """
-        output_upper = output_text.upper()
-
-        if "FULLY" in output_upper and "SUPPORTED" in output_upper:
-            return "FULLY_SUPPORTED"
-        elif "PARTIALLY" in output_upper and "SUPPORTED" in output_upper:
-            return "PARTIALLY_SUPPORTED"
-        else:
-            return "NOT_SUPPORTED"
 
     def _build_groundedness_result(
         self,
