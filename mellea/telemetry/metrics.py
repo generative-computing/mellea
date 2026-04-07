@@ -561,12 +561,9 @@ def record_ttfb(ttfb_s: float, model: str, provider: str) -> None:
 if _OTEL_AVAILABLE and _METRICS_ENABLED:
     try:
         from mellea.plugins.registry import register
-        from mellea.telemetry.metrics_plugins import (
-            LatencyMetricsPlugin,
-            TokenMetricsPlugin,
-        )
+        from mellea.telemetry.metrics_plugins import _METRICS_PLUGIN_CLASSES
 
-        for _plugin_cls in (TokenMetricsPlugin, LatencyMetricsPlugin):
+        for _plugin_cls in _METRICS_PLUGIN_CLASSES:
             try:
                 register(_plugin_cls())
             except ValueError as e:

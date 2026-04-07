@@ -435,6 +435,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
             )
 
         do_set_computed = False
+        # Use string directly to avoid importing ModelOption from backends into core (circular import).
+        # ModelOption.STREAM is defined in mellea/backends/model_options.py.
         self.streaming = bool((self._model_options or {}).get("@@@stream@@@", False))
 
         if not self._generate_type == GenerateType.ASYNC:
@@ -452,6 +454,15 @@ class ModelOutputThunk(CBlock, Generic[S]):
             try:
                 item = self._async_queue.get_nowait()
                 chunks.append(item)
+                if (
+                    self.streaming
+                    and not self._first_chunk_received
+                    and self._start is not None
+                ):
+                    self.ttfb_ms = (
+                        datetime.datetime.now() - self._start
+                    ).total_seconds() * 1000
+                    self._first_chunk_received = True
             except asyncio.QueueEmpty:
                 # We've exhausted the current items in the queue.
                 break
@@ -467,6 +478,15 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
             item = await self._async_queue.get()
             chunks.append(item)
+            if (
+                self.streaming
+                and not self._first_chunk_received
+                and self._start is not None
+            ):
+                self.ttfb_ms = (
+                    datetime.datetime.now() - self._start
+                ).total_seconds() * 1000
+                self._first_chunk_received = True
 
         # Process the sentinel value if it's there.
         if chunks[-1] is None:
@@ -496,18 +516,6 @@ class ModelOutputThunk(CBlock, Generic[S]):
                 end_backend_span(span)
                 del self._meta["_telemetry_span"]
             raise chunks[-1]
-
-        # Track TTFB: capture time to first chunk arrival (streaming only)
-        if (
-            self.streaming
-            and not self._first_chunk_received
-            and chunks
-            and self._start is not None
-        ):
-            self.ttfb_ms = (
-                datetime.datetime.now() - self._start
-            ).total_seconds() * 1000
-            self._first_chunk_received = True
 
         for chunk in chunks:
             assert self._process is not None
