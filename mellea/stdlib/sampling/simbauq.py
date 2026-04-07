@@ -13,7 +13,7 @@ Two confidence estimation methods are supported:
   P(correct) for each sample.
 
 Reference:
-    Bhattacharjya et al. (2024), "SIMBA: Similarity-Based Aggregation for
+    Bhattacharjya et al. (2025), "SIMBA UQ: Similarity-Based Aggregation for
     Uncertainty Quantification", https://arxiv.org/abs/2510.13836
 """
 
