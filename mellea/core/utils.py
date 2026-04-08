@@ -119,6 +119,9 @@ def log_context(**fields: Any) -> Generator[None, None, None]:
             :func:`set_log_context` — reserved ``LogRecord`` attribute names
             are rejected with ``ValueError``.
 
+    Yields:
+        None.  The manager is used only for its enter/exit side effects.
+
     Raises:
         ValueError: If any key clashes with a reserved ``LogRecord`` attribute.
     """
