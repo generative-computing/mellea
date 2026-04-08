@@ -415,10 +415,9 @@ def pytest_collect_file(parent: pytest.Dir, file_path: pathlib.PosixPath):
             # If we can't read markers, continue with other checks
             pass
 
-        # ExampleModule (returned by pytest_pycollect_makemodule) handles
-        # collection for files that should run — return None here to avoid
-        # creating a duplicate collector from this hook.
-        return None
+        # pytest_pycollect_makemodule only fires for files matching python_files
+        # (test_*.py) — examples need an explicit collector for directory traversal.
+        return ExampleModule.from_parent(parent, path=file_path)
 
 
 class SkippedFile(pytest.File):
