@@ -80,7 +80,8 @@ class TestAggregate:
 class TestComputeConfidences:
     def test_single_sample(self):
         strategy = SIMBAUQSamplingStrategy(similarity_metric="jaccard")
-        confs = strategy._compute_confidences(["hello world"])
+        sim_matrix = strategy._compute_similarity_matrix(["hello world"])
+        confs = strategy._compute_confidences(sim_matrix)
         assert len(confs) == 1
         assert confs[0] == pytest.approx(0.5)
 
@@ -89,7 +90,8 @@ class TestComputeConfidences:
             similarity_metric="jaccard", aggregation="mean"
         )
         samples = ["the cat sat on the mat"] * 5
-        confs = strategy._compute_confidences(samples)
+        sim_matrix = strategy._compute_similarity_matrix(samples)
+        confs = strategy._compute_confidences(sim_matrix)
         assert len(confs) == 5
         for c in confs:
             assert c == pytest.approx(1.0)
@@ -104,7 +106,8 @@ class TestComputeConfidences:
             "france capital is paris",
             "bananas are yellow fruit",  # outlier
         ]
-        confs = strategy._compute_confidences(samples)
+        sim_matrix = strategy._compute_similarity_matrix(samples)
+        confs = strategy._compute_confidences(sim_matrix)
         assert len(confs) == 4
         # The outlier (index 3) should have the lowest confidence.
         assert confs[3] < confs[0]
@@ -164,7 +167,8 @@ class TestSBERTSimilarity:
             "France has Paris as its capital.",
             "Bananas are a yellow tropical fruit.",  # outlier
         ]
-        confs = strategy._compute_confidences(samples)
+        sim_matrix = strategy._compute_similarity_matrix(samples)
+        confs = strategy._compute_confidences(sim_matrix)
         assert len(confs) == 4
         assert confs[3] < confs[0]
         assert confs[3] < confs[1]

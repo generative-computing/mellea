@@ -19,7 +19,7 @@ Reference:
 
 import asyncio
 from copy import deepcopy
-from typing import Literal
+from typing import Literal, Protocol, runtime_checkable
 
 import numpy as np
 from rouge_score.rouge_scorer import RougeScorer  # codespell:ignore
@@ -36,6 +36,15 @@ from ...core import (
     ValidationResult,
 )
 from .. import functional as mfuncs
+
+
+@runtime_checkable
+class ProbabilisticClassifier(Protocol):
+    """Protocol for sklearn-compatible probabilistic classifiers."""
+
+    def predict_proba(self, X: list[np.ndarray]) -> np.ndarray:
+        """Return class probability estimates for the given samples."""
+        ...
 
 
 class SIMBAUQSamplingStrategy(SamplingStrategy):
@@ -63,8 +72,9 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         aggregation (Literal['mean', 'geometric_mean', 'harmonic_mean',
             'median', 'max', 'min']): Aggregation function used when
             ``confidence_method='aggregation'``.
-        classifier: Pre-trained sklearn-compatible classifier with a
-            ``predict_proba`` method. Used when
+        classifier (ProbabilisticClassifier | None): Pre-trained
+            sklearn-compatible probabilistic classifier (any estimator with a
+            ``predict_proba`` method). Used when
             ``confidence_method='classifier'``. If not provided, a random
             forest is trained from ``training_samples`` and
             ``training_labels``.
@@ -95,7 +105,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         aggregation: Literal[
             "mean", "geometric_mean", "harmonic_mean", "median", "max", "min"
         ] = "mean",
-        classifier: object | None = None,
+        classifier: ProbabilisticClassifier | None = None,
         training_samples: list[list[str]] | None = None,
         training_labels: list[list[int]] | None = None,
         clf_max_depth: int = 4,
@@ -106,8 +116,11 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         """Initialize SIMBAUQSamplingStrategy with temperature schedule and confidence parameters."""
         if temperatures is None:
             temperatures = [0.3, 0.5, 0.7, 1.0]
-        assert len(temperatures) > 0, "temperatures must be non-empty"
-        assert n_per_temp > 0, "n_per_temp must be > 0"
+
+        if len(temperatures) == 0:
+            raise ValueError("Temperatures must be a non-empty list")
+        if n_per_temp <= 0:
+            raise ValueError("n_per_temp must be > 0")
 
         self.temperatures = temperatures
         self.n_per_temp = n_per_temp
@@ -128,8 +141,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             except ImportError:
                 msg = (
                     "sentence-transformers is required for sbert similarity. "
-                    "Please install mellea[granite_retriever] or run: "
-                    "pip install sentence-transformers"
+                    "Please install with `pip install sentence-transformers`."
                 )
                 raise ImportError(msg)
             self._sbert_model_obj = sentence_transformers.SentenceTransformer(
@@ -137,23 +149,29 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             )
 
         # --- Classifier initialization ---
-        self._classifier: object | None = None
+        self._classifier: ProbabilisticClassifier | None = None
         if confidence_method == "classifier":
             if classifier is not None:
                 self._classifier = classifier
             elif training_samples is not None and training_labels is not None:
                 n_samples = len(temperatures) * n_per_temp
                 for i, group in enumerate(training_samples):
-                    assert len(group) == n_samples, (
+                    msg = (
                         f"Training group {i} has {len(group)} samples, "
                         f"expected {n_samples} "
                         f"(len(temperatures) * n_per_temp)"
                     )
-                    assert len(training_labels[i]) == n_samples, (
+                    if len(group) != n_samples:
+                        raise ValueError(msg)
+
+                    msg = (
                         f"Training labels group {i} has "
                         f"{len(training_labels[i])} labels, "
                         f"expected {n_samples}"
                     )
+                    if len(training_labels[i]) != n_samples:
+                        raise ValueError(msg)
+
                 self._classifier = self._train_classifier(
                     training_samples, training_labels
                 )
@@ -244,10 +262,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             if self.confidence_method == "classifier":
                 confidences = self._compute_confidences_classifier(sim_matrix, n)
             else:
-                confidences = np.zeros(n)
-                for i in range(n):
-                    others = np.concatenate([sim_matrix[i, :i], sim_matrix[i, i + 1 :]])
-                    confidences[i] = self._aggregate(others)
+                confidences = self._compute_confidences(sim_matrix)
 
         # Select the sample with the highest confidence.
         best_index = int(np.argmax(confidences))
@@ -327,7 +342,16 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             return scores[self.rouge_type].fmeasure
 
         if self.similarity_metric == "sbert":
-            from sklearn.metrics.pairwise import cosine_similarity
+            try:
+                from sklearn.metrics.pairwise import (
+                    cosine_similarity,  # type: ignore[import-not-found]
+                )
+            except ImportError:
+                msg = (
+                    "sklearn.metrics.pairwise.cosine_similarity is required for sbert similarity. "
+                    "Please install with `pip install sklearn`."
+                )
+                raise ImportError(msg)
 
             embs = self._sbert_model_obj.encode([text1, text2])
             return float(cosine_similarity([embs[0]], [embs[1]])[0, 0])
@@ -354,7 +378,16 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             Symmetric (N, N) matrix with self-similarity = 1.0.
         """
         if self.similarity_metric == "sbert":
-            from sklearn.metrics.pairwise import cosine_similarity
+            try:
+                from sklearn.metrics.pairwise import (
+                    cosine_similarity,  # type: ignore[import-not-found]
+                )
+            except ImportError:
+                msg = (
+                    "sklearn.metrics.pairwise.cosine_similarity is required for sbert similarity. "
+                    "Please install with `pip install sklearn`."
+                )
+                raise ImportError(msg)
 
             embeddings = self._sbert_model_obj.encode(samples)
             matrix = cosine_similarity(embeddings)
@@ -391,7 +424,14 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             return float(np.exp(np.mean(log_sims)))
 
         if self.aggregation == "harmonic_mean":
-            from scipy import stats as scipy_stats
+            try:
+                from scipy import stats as scipy_stats
+            except ImportError:
+                msg = (
+                    "scipy is required for harmonic mean aggregation. "
+                    "Please install with `pip install scipy`."
+                )
+                raise ImportError(msg)
 
             return float(scipy_stats.hmean(similarities + epsilon))
 
@@ -427,7 +467,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
 
     def _train_classifier(
         self, training_samples: list[list[str]], training_labels: list[list[int]]
-    ) -> object:
+    ) -> ProbabilisticClassifier:
         """Train a random forest classifier on similarity features.
 
         Args:
@@ -440,7 +480,16 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         Returns:
             Trained ``RandomForestClassifier``.
         """
-        from sklearn.ensemble import RandomForestClassifier
+        try:
+            from sklearn.ensemble import (
+                RandomForestClassifier,  # type: ignore[import-not-found]
+            )
+        except ImportError:
+            msg = (
+                "sklearn is required for training a Random Forest classifier. "
+                "Please install with `pip install sklearn`."
+            )
+            raise ImportError(msg)
 
         x_train: list[np.ndarray] = []
         y_train: list[int] = []
@@ -466,26 +515,26 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             Array of P(correct) confidence scores with shape ``(n,)``.
         """
         x_test = [self._extract_features(sim_matrix, i) for i in range(n)]
-        probs = self._classifier.predict_proba(x_test)  # type: ignore[union-attr]
+        assert self._classifier is not None
+        probs = self._classifier.predict_proba(x_test)
         return probs[:, 1]
 
-    def _compute_confidences(self, samples: list[str]) -> np.ndarray:
+    def _compute_confidences(self, sim_matrix: np.ndarray) -> np.ndarray:
         """Compute per-sample confidence using similarity-based aggregation.
 
-        For each sample, computes its similarity to every other sample, then
-        aggregates those similarities into a single confidence score.
+        For each sample, aggregates its similarities to every other sample
+        into a single confidence score.
 
         Args:
-            samples: List of sample strings.
+            sim_matrix: Symmetric (N, N) pairwise similarity matrix.
 
         Returns:
-            Array of confidence scores with shape ``(len(samples),)``.
+            Array of confidence scores with shape ``(N,)``.
         """
-        n = len(samples)
+        n = sim_matrix.shape[0]
         if n == 1:
             return np.array([0.5])
 
-        sim_matrix = self._compute_similarity_matrix(samples)
         confidences = np.zeros(n)
         for i in range(n):
             others = np.concatenate([sim_matrix[i, :i], sim_matrix[i, i + 1 :]])
