@@ -30,7 +30,7 @@ from .base import (
 from .formatter import Formatter
 from .requirement import Requirement, ValidationResult, default_output_to_bool
 from .sampling import SamplingResult, SamplingStrategy
-from .utils import FancyLogger
+from .utils import FancyLogger, clear_log_context, log_context, set_log_context
 
 __all__ = [
     "Backend",
@@ -56,6 +56,9 @@ __all__ = [
     "TemplateRepresentation",
     "ValidationResult",
     "blockify",
+    "clear_log_context",
     "default_output_to_bool",
     "generate_walk",
+    "log_context",
+    "set_log_context",
 ]

@@ -4,14 +4,162 @@ Provides ``FancyLogger``, a singleton logger with colour-coded console output an
 an optional REST handler (``RESTHandler``) that forwards log records to a local
 ``/api/receive`` endpoint when the ``FLOG`` environment variable is set. All
 internal mellea modules obtain their logger via ``FancyLogger.get_logger()``.
+
+Environment variables
+---------------------
+``MELLEA_LOG_LEVEL``
+    Minimum log level name (e.g. ``DEBUG``, ``INFO``, ``WARNING``).  Defaults to
+    ``INFO``.  The legacy ``DEBUG`` variable is still honoured as a fallback.
+``MELLEA_LOG_JSON``
+    Set to any truthy value (``1``, ``true``, ``yes``) to emit structured JSON on
+    the console instead of the colour-coded human-readable format.
+``FLOG``
+    When set, log records are forwarded to a local REST endpoint.
+``DEBUG``
+    Legacy flag — equivalent to ``MELLEA_LOG_LEVEL=DEBUG``.
 """
 
+import contextlib
 import json
 import logging
 import os
 import sys
+import threading
+from collections.abc import Generator
+from typing import Any
 
 import requests
+
+# ---------------------------------------------------------------------------
+# Thread-local storage for per-request context fields
+# ---------------------------------------------------------------------------
+_context_local: threading.local = threading.local()
+
+# Lock used to make FancyLogger singleton initialisation thread-safe.
+_logger_lock: threading.Lock = threading.Lock()
+
+# Standard LogRecord attribute names that must not be overwritten by callers.
+_RESERVED_LOG_RECORD_ATTRS: frozenset[str] = frozenset(
+    (
+        "args",
+        "created",
+        "exc_info",
+        "exc_text",
+        "filename",
+        "funcName",
+        "levelname",
+        "levelno",
+        "lineno",
+        "message",
+        "module",
+        "msecs",
+        "msg",
+        "name",
+        "pathname",
+        "process",
+        "processName",
+        "relativeCreated",
+        "stack_info",
+        "thread",
+        "threadName",
+    )
+)
+
+
+def set_log_context(**fields: Any) -> None:
+    """Inject extra fields into every log record emitted from this thread.
+
+    Call this at the start of a request or task to attach identifiers such as
+    ``trace_id`` or ``request_id`` without modifying individual log calls.
+
+    .. note::
+        Prefer :func:`log_context` as the primary API — it guarantees cleanup
+        (including restoring outer values on same-key nesting) even on
+        exceptions.
+
+    Args:
+        **fields: Arbitrary key-value pairs to include in log records.
+
+    Raises:
+        ValueError: If any key clashes with a standard ``logging.LogRecord``
+            attribute (e.g. ``levelname``, ``module``, ``thread``).
+    """
+    invalid = frozenset(fields) & _RESERVED_LOG_RECORD_ATTRS
+    if invalid:
+        raise ValueError(
+            f"Context field names clash with LogRecord reserved attributes: "
+            f"{sorted(invalid)}.  Choose different names."
+        )
+    existing: dict[str, Any] = getattr(_context_local, "fields", {})
+    existing.update(fields)
+    _context_local.fields = existing
+
+
+def clear_log_context() -> None:
+    """Remove all thread-local log context fields set by :func:`set_log_context`."""
+    _context_local.fields = {}
+
+
+@contextlib.contextmanager
+def log_context(**fields: Any) -> Generator[None, None, None]:
+    """Context manager that injects *fields* for the duration of the block.
+
+    On exit — including on exceptions — removes only the keys that *this*
+    invocation set, leaving any enclosing context intact.  This makes nested
+    and thread-pool usage safe without requiring manual cleanup.
+
+    Example::
+
+        with log_context(trace_id="abc-123", request_id="req-1"):
+            logger.info("Handling request")   # both IDs appear here
+        logger.info("After request")          # IDs are gone
+
+    Args:
+        **fields: Key-value pairs to inject.  Same restrictions as
+            :func:`set_log_context` — reserved ``LogRecord`` attribute names
+            are rejected with ``ValueError``.
+
+    Raises:
+        ValueError: If any key clashes with a reserved ``LogRecord`` attribute.
+    """
+    existing_before: dict[str, Any] = getattr(_context_local, "fields", {})
+    previous: dict[str, Any] = {
+        k: existing_before[k] for k in fields if k in existing_before
+    }
+    set_log_context(**fields)
+    try:
+        yield
+    finally:
+        existing: dict[str, Any] = getattr(_context_local, "fields", {})
+        for key in fields:
+            if key in previous:
+                existing[key] = previous[key]
+            else:
+                existing.pop(key, None)
+        _context_local.fields = existing
+
+
+class ContextFilter(logging.Filter):
+    """Logging filter that injects thread-local context fields into every record.
+
+    Fields registered via :func:`set_log_context` are copied onto the
+    ``logging.LogRecord`` before formatters see it, enabling trace/request IDs
+    to appear in structured output without touching call sites.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Attach thread-local context fields to *record* and allow it through.
+
+        Args:
+            record (logging.LogRecord): The log record being processed.
+
+        Returns:
+            bool: Always ``True`` — the record is never suppressed.
+        """
+        fields: dict[str, Any] = getattr(_context_local, "fields", {})
+        for key, value in fields.items():
+            setattr(record, key, value)
+        return True
 
 
 class RESTHandler(logging.Handler):
@@ -46,14 +194,17 @@ class RESTHandler(logging.Handler):
             record (logging.LogRecord): The log record to forward.
         """
         if os.environ.get("FLOG"):
-            log_data = self.format(record)
+            formatter = self.formatter
+            if isinstance(formatter, JsonFormatter):
+                log_dict = formatter._build_log_dict(record)
+            else:
+                log_dict = {"message": self.format(record)}
             try:
                 response = requests.request(
                     self.method,
                     self.api_url,
                     headers=self.headers,
-                    # data=json.dumps([{"log": log_data}]),
-                    data=json.dumps([log_data]),
+                    data=json.dumps([log_dict]),
                 )
                 response.raise_for_status()
             except requests.exceptions.RequestException as _:
@@ -61,26 +212,73 @@ class RESTHandler(logging.Handler):
 
 
 class JsonFormatter(logging.Formatter):
-    """Logging formatter that serialises log records as structured JSON dicts.
+    """Logging formatter that serialises log records as structured JSON strings.
 
-    Includes timestamp, level, message, module, function name, line number,
-    process ID, thread ID, and (if present) exception information.
+    Produces a consistent JSON schema with a fixed set of core fields.
+    Additional fields can be injected at construction time (``extra_fields``) or
+    dynamically per-thread via :func:`set_log_context` / :class:`ContextFilter`.
+
+    Args:
+        timestamp_format: ``strftime`` format for the ``timestamp`` field.
+            Defaults to ISO-8601 (``"%Y-%m-%dT%H:%M:%S"``).
+        include_fields: Whitelist of core field names to keep.  When ``None``
+            all core fields are included.
+        exclude_fields: Set of core field names to drop.  Applied after
+            *include_fields*.
+        extra_fields: Static key-value pairs merged into every log record.
+
+    Attributes:
+        _DEFAULT_FIELDS (tuple[str, ...]): Canonical ordered list of core field
+            names produced by this formatter.
     """
 
-    def format(self, record: logging.LogRecord) -> dict:  # type: ignore[override]
-        """Formats a log record as a JSON-serialisable dictionary.
+    _DEFAULT_FIELDS: tuple[str, ...] = (
+        "timestamp",
+        "level",
+        "message",
+        "module",
+        "function",
+        "line_number",
+        "process_id",
+        "thread_id",
+    )
 
-        Includes timestamp, level, message, module, function name, line number,
-        process ID, thread ID, and exception info if present.
+    def __init__(
+        self,
+        timestamp_format: str = "%Y-%m-%dT%H:%M:%S",
+        include_fields: list[str] | None = None,
+        exclude_fields: list[str] | None = None,
+        extra_fields: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Initialises the formatter; passes remaining kwargs to ``logging.Formatter``."""
+        super().__init__(datefmt=timestamp_format, **kwargs)
+
+        if include_fields is not None:
+            unknown = set(include_fields) - set(self._DEFAULT_FIELDS)
+            if unknown:
+                raise ValueError(
+                    f"include_fields contains unknown field names: {sorted(unknown)}.  "
+                    f"Valid fields: {list(self._DEFAULT_FIELDS)}"
+                )
+
+        self._include: frozenset[str] | None = (
+            frozenset(include_fields) if include_fields is not None else None
+        )
+        self._exclude: frozenset[str] = frozenset(exclude_fields or [])
+        self._extra: dict[str, Any] = dict(extra_fields or {})
+
+    def _build_log_dict(self, record: logging.LogRecord) -> dict[str, Any]:
+        """Build a log record dictionary with core, extra, and context fields.
 
         Args:
-            record (logging.LogRecord): The log record to format.
+            record: The log record to convert.
 
         Returns:
-            dict: A dictionary containing timestamp, level, message, module, function,
-            line number, process/thread IDs, and optional exception info.
+            A dictionary ready for JSON serialisation.
         """
-        log_record = {
+        # Build the full set of core fields first
+        all_core: dict[str, Any] = {
             "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,
             "message": record.getMessage(),
@@ -90,9 +288,45 @@ class JsonFormatter(logging.Formatter):
             "process_id": record.process,
             "thread_id": record.thread,
         }
+
+        # Apply include/exclude filtering
+        if self._include is not None:
+            log_record: dict[str, Any] = {
+                k: v for k, v in all_core.items() if k in self._include
+            }
+        else:
+            log_record = {k: v for k, v in all_core.items() if k not in self._exclude}
+
+        # Exception info
         if record.exc_info:
             log_record["exception"] = self.formatException(record.exc_info)
+
+        # Static extra fields (constructor-level)
+        log_record.update(self._extra)
+
+        # Dynamic context fields — prefer record attributes (set by
+        # ContextFilter) but fall back to thread-local storage so the
+        # formatter works standalone without a filter attached.
+        context_fields: dict[str, Any] = getattr(_context_local, "fields", {})
+        for key, value in context_fields.items():
+            log_record[key] = getattr(record, key, value)
+
         return log_record
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Formats a log record as a JSON string.
+
+        Core fields are filtered by *include_fields* / *exclude_fields*.
+        Static *extra_fields* and any thread-local context fields (set via
+        :func:`set_log_context`) are merged in after the core fields.
+
+        Args:
+            record (logging.LogRecord): The log record to format.
+
+        Returns:
+            str: A JSON-serialised log record.
+        """
+        return json.dumps(self._build_log_dict(record), default=str)
 
 
 class CustomFormatter(logging.Formatter):
@@ -170,46 +404,75 @@ class FancyLogger:
     NOTSET = 0
 
     @staticmethod
+    def _resolve_log_level() -> int:
+        """Resolves the effective log level from environment variables.
+
+        Checks ``MELLEA_LOG_LEVEL`` first, then falls back to the legacy
+        ``DEBUG`` flag, then defaults to ``INFO``.
+
+        Returns:
+            int: A :mod:`logging` level integer.
+        """
+        level_name = os.environ.get("MELLEA_LOG_LEVEL", "").strip().upper()
+        if level_name:
+            numeric = getattr(logging, level_name, None)
+            if isinstance(numeric, int):
+                return numeric
+        if os.environ.get("DEBUG"):
+            return FancyLogger.DEBUG
+        return FancyLogger.INFO
+
+    @staticmethod
     def get_logger() -> logging.Logger:
         """Returns a FancyLogger.logger and sets level based upon env vars.
+
+        The logger is created once (singleton).  Subsequent calls return the
+        cached instance.  Initialisation is protected by a module-level lock so
+        concurrent callers at startup cannot create duplicate handlers.
 
         Returns:
             Configured logger with REST, stream, and optional OTLP handlers.
         """
         if FancyLogger.logger is None:
-            logger = logging.getLogger("fancy_logger")
-            # Only set default level if user hasn't already configured it
-            if logger.level == logging.NOTSET:
-                if os.environ.get("DEBUG"):
-                    logger.setLevel(FancyLogger.DEBUG)
-                else:
-                    logger.setLevel(FancyLogger.INFO)
+            with _logger_lock:
+                # Second check inside the lock: another thread may have finished
+                # initialisation while we were waiting.
+                if FancyLogger.logger is None:
+                    logger = logging.getLogger("fancy_logger")
 
-            # Define REST API endpoint
-            api_url = "http://localhost:8000/api/receive"
+                    # Attach the context filter so ContextFilter fields reach all handlers
+                    logger.addFilter(ContextFilter())
 
-            # Create REST handler
-            rest_handler = RESTHandler(api_url)
+                    # Only set default level if user hasn't already configured it
+                    if logger.level == logging.NOTSET:
+                        logger.setLevel(FancyLogger._resolve_log_level())
 
-            # Create formatter and set it for the handler
-            # formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-            rest_handler.setFormatter(JsonFormatter())
+                    # --- REST handler ---
+                    api_url = "http://localhost:8000/api/receive"
+                    rest_handler = RESTHandler(api_url)
+                    rest_handler.setFormatter(JsonFormatter())
+                    logger.addHandler(rest_handler)
 
-            # Add handler to the logger
-            logger.addHandler(rest_handler)
+                    # --- Console / stream handler ---
+                    stream_handler = logging.StreamHandler(stream=sys.stdout)
+                    use_json_console = os.environ.get(
+                        "MELLEA_LOG_JSON", ""
+                    ).strip().lower() in ("1", "true", "yes")
+                    if use_json_console:
+                        stream_handler.setFormatter(JsonFormatter())
+                    else:
+                        stream_handler.setFormatter(
+                            CustomFormatter(datefmt="%H:%M:%S,%03d")
+                        )
+                    logger.addHandler(stream_handler)
 
-            stream_handler = logging.StreamHandler(stream=sys.stdout)
-            # stream_handler.setLevel(logging.INFO)
-            stream_handler.setFormatter(CustomFormatter(datefmt="%H:%M:%S,%03d"))
-            logger.addHandler(stream_handler)
+                    # --- Optional OTLP handler ---
+                    from ..telemetry import get_otlp_log_handler
 
-            # Add OTLP handler if enabled
-            from ..telemetry import get_otlp_log_handler
+                    otlp_handler = get_otlp_log_handler()
+                    if otlp_handler:
+                        otlp_handler.setFormatter(JsonFormatter())
+                        logger.addHandler(otlp_handler)
 
-            otlp_handler = get_otlp_log_handler()
-            if otlp_handler:
-                otlp_handler.setFormatter(JsonFormatter())
-                logger.addHandler(otlp_handler)
-
-            FancyLogger.logger = logger
+                    FancyLogger.logger = logger
         return FancyLogger.logger
