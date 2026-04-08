@@ -8,6 +8,7 @@ from .base import (
     RejectionSamplingStrategy,
     RepairTemplateStrategy,
 )
+from .simbauq import SIMBAUQSamplingStrategy
 from .sofai import SOFAISamplingStrategy
 
 __all__ = [
@@ -15,6 +16,7 @@ __all__ = [
     "MultiTurnStrategy",
     "RejectionSamplingStrategy",
     "RepairTemplateStrategy",
+    "SIMBAUQSamplingStrategy",
     "SamplingResult",
     "SamplingStrategy",
 ]
