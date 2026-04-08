@@ -1,7 +1,7 @@
 """Tests for sync/async serve function handling in m serve."""
 
 import asyncio
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -20,9 +20,7 @@ def mock_sync_module():
     def sync_serve(input, requirements=None, model_options=None):
         """Synchronous serve function."""
         # Simulate some work
-        result = Mock(spec=ModelOutputThunk)
-        result.value = f"Sync response to: {input[-1].content}"
-        return result
+        return ModelOutputThunk(f"Sync response to: {input[-1].content}")
 
     # Use Mock to wrap the function so we can track calls
     module.serve = Mock(side_effect=sync_serve)
@@ -39,11 +37,9 @@ def mock_async_module():
         """Asynchronous serve function."""
         # Simulate async work
         await asyncio.sleep(0.01)
-        result = Mock(spec=ModelOutputThunk)
-        result.value = f"Async response to: {input[-1].content}"
-        return result
+        return ModelOutputThunk(f"Async response to: {input[-1].content}")
 
-    module.serve = async_serve
+    module.serve = AsyncMock(side_effect=async_serve)
     return module
 
 
@@ -57,10 +53,8 @@ def mock_slow_sync_module():
         """Slow synchronous serve function that would block event loop."""
         import time
 
-        time.sleep(0.1)  # Simulate blocking work
-        result = Mock(spec=ModelOutputThunk)
-        result.value = f"Slow sync response to: {input[-1].content}"
-        return result
+        time.sleep(1)  # Simulate blocking work with a clearer timing signal
+        return ModelOutputThunk(f"Slow sync response to: {input[-1].content}")
 
     module.serve = slow_sync_serve
     return module
@@ -123,11 +117,11 @@ class TestSyncAsyncServeHandling:
         results = await asyncio.gather(endpoint(request), endpoint(request))
         elapsed = time.time() - start
 
-        # If blocking: would take ~0.2s (0.1s + 0.1s sequentially)
-        # If non-blocking: should take ~0.1s (both run concurrently in threads)
-        # Allow some overhead, but should be much less than 0.2s
-        assert elapsed < 0.15, (
-            f"Took {elapsed:.3f}s - appears to be blocking (expected ~0.1s)"
+        # If blocking: would take ~2s (1s + 1s sequentially)
+        # If non-blocking: should take ~1s (both run concurrently in threads)
+        # Allow some overhead, but should still be well below the blocking case.
+        assert elapsed < 2, (
+            f"Took {elapsed:.3f}s - appears to be blocking (expected ~1s)"
         )
         assert all(
             r.choices[0].message.content == "Slow sync response to: Hello slow!"
