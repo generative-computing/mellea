@@ -1,4 +1,4 @@
-# pytest: openai, e2e, qualitative, skip
+# pytest: ollama, llm, qualitative
 
 """SIMBA-UQ Sampling Strategy Example.
 
@@ -16,39 +16,25 @@ estimation methods:
 Both methods generate multiple samples across different temperature values,
 compute a similarity matrix, and select the most confident response.
 
-The example uses RITSBackend with granite-4.0-micro. To run:
+The example uses OllamaModelBackend with granite4:micro. To run:
 
+    ollama serve
     uv run python docs/examples/simbauq/simbauq_example.py
-
-Requires:
-    RITS_API_KEY environment variable or hardcoded key below.
 """
 
-import os
-
 import numpy as np
-from dotenv import load_dotenv
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
+from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import SamplingResult
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.sampling.simbauq import SIMBAUQSamplingStrategy
 
-load_dotenv()  # Load environment variables from .env file if present
-
-RITS_API_KEY = os.getenv("RITS_API_KEY", None)
-
 
 def make_session() -> MelleaSession:
-    """Create a MelleaSession with RITSBackend."""
-    from mellea_ibm.rits import RITS, RITSBackend  # type: ignore[import-not-found]
-
-    backend = RITSBackend(
-        model_name=RITS.GRANITE_4_MICRO,
-        api_key=RITS_API_KEY,
-        model_options={ModelOption.MAX_NEW_TOKENS: 100},
-    )
+    """Create a MelleaSession with OllamaModelBackend."""
+    backend = OllamaModelBackend(model_options={ModelOption.MAX_NEW_TOKENS: 100})
     return MelleaSession(backend, ctx=ChatContext())
 
 
