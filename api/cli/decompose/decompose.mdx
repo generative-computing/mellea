@@ -1,0 +1,142 @@
+---
+title: "cli.decompose.decompose"
+sidebarTitle: "cli.decompose.decompose"
+description: "Implementation of the `m decompose run` CLI command."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Implementation of the `m decompose run` CLI command.
+
+
+
+
+
+Accepts a task prompt (from a text file or interactive input), calls the multi-step
+LLM decomposition pipeline to produce a structured list of subtasks each with
+constraints and inter-subtask dependencies, then validates and topologically reorders
+the subtasks before writing a JSON result file and a rendered Python script to the
+specified output directory.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `reorder_subtasks` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/decompose/decompose.py#L51" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+reorder_subtasks(subtasks: list[DecompSubtasksResult]) -> list[DecompSubtasksResult]
+```
+
+
+Topologically sort subtasks by their `depends_on` relationships.
+
+**Args:**
+- `subtasks`: List of subtask dicts, each with a `"tag"` and optional
+`"depends_on"` field.
+
+**Returns:**
+- list[DecompSubtasksResult]: The subtasks reordered so that dependencies
+- come before dependents, with numbering prefixes updated.
+
+**Raises:**
+- `ValueError`: If a circular dependency is detected.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `verify_user_variables` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/decompose/decompose.py#L93" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+verify_user_variables(decomp_data: DecompPipelineResult, input_var: list[str] | None) -> DecompPipelineResult
+```
+
+
+Validate that all required input variables and dependencies exist.
+
+**Args:**
+- `decomp_data`: The decomposition pipeline result containing subtasks.
+- `input_var`: User-provided input variable names, or `None` for none.
+
+**Returns:**
+- The (possibly reordered) decomposition data.
+
+**Raises:**
+- `ValueError`: If a subtask requires an input variable that was not
+provided, or depends on a subtask tag that does not exist.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `run` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/decompose/decompose.py#L159" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+run(out_dir: Annotated[Path, typer.Option(help='Path to an existing directory to save the output files.')], out_name: Annotated[str, typer.Option(help='Name for the output files. Defaults to "m_decomp_result".')] = 'm_decomp_result', input_file: Annotated[str | None, typer.Option(help='Path to a text file containing user queries.')] = None, model_id: Annotated[str, typer.Option(help='Model name/id used to run the decomposition pipeline. Defaults to "mistral-small3.2:latest", valid for the "ollama" backend.')] = 'mistral-small3.2:latest', backend: Annotated[DecompBackend, typer.Option(help='Backend used for inference. Options: "ollama", "openai", and "rits".', case_sensitive=False)] = DecompBackend.ollama, backend_req_timeout: Annotated[int, typer.Option(help='Timeout in seconds for backend requests. Defaults to "300".')] = 300, backend_endpoint: Annotated[str | None, typer.Option(help='Backend endpoint / base URL. Required for "openai" and "rits".')] = None, backend_api_key: Annotated[str | None, typer.Option(help='Backend API key. Required for "openai" and "rits".')] = None, version: Annotated[DecompVersion, typer.Option(help='Version of the mellea program generator template to use.', case_sensitive=False)] = DecompVersion.latest, input_var: Annotated[list[str] | None, typer.Option(help='Optional user input variable names. You may pass this option multiple times. Each value must be a valid Python identifier.')] = None, log_mode: Annotated[LogMode, typer.Option(help='Readable logging mode. Options: "demo" or "debug".', case_sensitive=False)] = LogMode.demo) -> None
+```
+
+
+Runs the `m decompose` CLI workflow and writes generated outputs.
+
+Reads user queries from a file or interactive input, runs the decomposition
+pipeline for each task job, and writes one JSON file, one rendered Python
+program, and any generated validation modules under a per-job output
+directory.
+
+**Args:**
+- `out_dir`: Existing directory under which per-job output directories are
+created.
+- `out_name`: Base name used for the per-job output directory and generated
+files.
+- `input_file`: Optional path to a text file containing one or more task
+prompts. Each non-empty line is processed as a separate task job.
+When omitted, the command prompts interactively for one task.
+- `model_id`: Model identifier used for all decomposition pipeline stages.
+- `backend`: Inference backend used to execute model calls.
+- `backend_req_timeout`: Request timeout in seconds for backend inference calls.
+- `backend_endpoint`: Endpoint URL or base URL required by remote backends.
+- `backend_api_key`: API key required by remote backends.
+- `version`: Template version used to render the generated Python program.
+`latest` resolves to the most recently declared concrete version.
+- `input_var`: Optional user input variable names to expose in generated
+prompts and programs. Each name must be a valid non-keyword Python
+identifier.
+- `log_mode`: Logging verbosity for CLI and pipeline execution.
+
+**Raises:**
+- `AssertionError`: If `out_name` is invalid, `out_dir` does not name an
+existing directory, `input_file` does not name an existing file,
+or any declared `input_var` is not a valid Python identifier.
+- `ValueError`: If `input_file` exists but contains no non-empty task
+lines.
+- `Exception`: Propagates pipeline, rendering, parsing, or file-writing
+failures. Any output directories created earlier in the run are
+removed before the exception is re-raised.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `DecompVersion` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/decompose/decompose.py#L29" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Available template versions for generated decomposition programs.
+
+Newer concrete versions must be declared after older ones so that
+`latest` can resolve to the most recently declared template version.
+
+**Attributes:**
+- `latest`: Sentinel value that resolves to the last declared concrete
+template version.
+- `v1`: Version 1 of the decomposition program template.
+- `v2`: Version 2 of the decomposition program template.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

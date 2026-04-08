@@ -1,0 +1,128 @@
+---
+title: "mellea.stdlib.context"
+sidebarTitle: "mellea.stdlib.context"
+description: "Concrete [`Context`](../core/base#class-context) implementations for common conversation patterns."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Concrete [`Context`](../core/base#class-context) implementations for common conversation patterns.
+
+
+
+
+
+Provides `ChatContext`, which accumulates all turns in a sliding-window chat history
+(configurable via `window_size`), and `SimpleContext`, in which each interaction
+is treated as a stateless single-turn exchange (no prior history is passed to the
+model). Import `ChatContext` for multi-turn conversations and `SimpleContext` when
+you want each call to the model to be independent.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ChatContext` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/context.py#L16" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Initializes a chat context with unbounded window_size and is_chat=True by default.
+
+**Args:**
+- `window_size`: Maximum number of context turns to include when
+calling `view_for_generation`. `None` (the default) means the full
+history is always returned.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/context.py#L30" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+add(self, c: Component | CBlock) -> ChatContext
+```
+
+Add a new component or CBlock to the context and return the updated context.
+
+**Args:**
+- `c`: The component or content block to append.
+
+**Returns:**
+- A new `ChatContext` with the added entry, preserving the
+- current `window_size` setting.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `view_for_generation` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/context.py#L44" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+view_for_generation(self) -> list[Component | CBlock] | None
+```
+
+Return the context entries to pass to the model, respecting the configured window.
+
+Uses the `window_size` set during initialisation to limit how many past
+turns are included.  `None` is returned when the underlying history is
+non-linear.
+
+**Returns:**
+- list[Component | CBlock] | None: Ordered list of context entries up to
+- `window_size` turns, or `None` if the history is non-linear.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `SimpleContext` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/context.py#L58" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A `SimpleContext` is a context in which each interaction is a separate and independent turn. The history of all previous turns is NOT saved..
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/context.py#L61" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+add(self, c: Component | CBlock) -> SimpleContext
+```
+
+Add a new component or CBlock to the context and return the updated context.
+
+**Args:**
+- `c`: The component or content block to record.
+
+**Returns:**
+- A new `SimpleContext` containing only the added entry;
+- prior history is not retained.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `view_for_generation` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/context.py#L73" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+view_for_generation(self) -> list[Component | CBlock] | None
+```
+
+Return an empty list, since `SimpleContext` does not pass history to the model.
+
+Each call to the model is treated as a stateless, independent exchange.
+No prior turns are forwarded.
+
+**Returns:**
+- list\[Component | CBlock] | None: Always an empty list.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

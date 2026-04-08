@@ -1,0 +1,67 @@
+---
+title: "cli.alora.intrinsic_uploader"
+sidebarTitle: "cli.alora.intrinsic_uploader"
+description: "Upload a trained adapter to Hugging Face Hub in the intrinsic directory layout."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Upload a trained adapter to Hugging Face Hub in the intrinsic directory layout.
+
+
+
+
+
+Creates or updates a private Hugging Face repository and uploads adapter weights
+into a `<intrinsic_name>/<base_model>/<adapter_type>` sub-directory, together with
+the required `io.yaml` configuration file. If an `INTRINSIC_README.md` exists in
+the weight directory it is also uploaded as the repository's root `README.md`.
+Requires an authenticated Hugging Face token obtained via `huggingface-cli login`.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `upload_intrinsic` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/alora/intrinsic_uploader.py#L19" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+upload_intrinsic(weight_path: str, model_name: str, base_model: str, type: Literal['lora', 'alora'], io_yaml: str, private: bool = True)
+```
+
+
+Upload an adapter to Hugging Face Hub using the intrinsic directory layout.
+
+Creates or updates a private Hugging Face repository and uploads adapter
+weights into a `<intrinsic_name>/<base_model>/<adapter_type>` sub-directory,
+together with the `io.yaml` configuration file. If an
+`INTRINSIC_README.md` exists in the weight directory it is also uploaded
+as the repository root `README.md`.
+
+**Args:**
+- `weight_path`: Local directory containing the adapter weights
+(output of `save_pretrained`).
+- `model_name`: Target Hugging Face repository name in
+`"<userid>/<intrinsic_name>"` format (e.g. `"acme/carbchecker-alora"`).
+- `base_model`: Base model ID or path (e.g.
+`"ibm-granite/granite-3.3-2b-instruct"`). Must contain at most
+one `"/"` separator.
+- `type`: Adapter type, used as the leaf
+directory name in the repository layout.
+- `io_yaml`: Path to the `io.yaml` configuration file for
+intrinsic input/output processing.
+- `private`: Whether the repository should be private. Currently
+only `True` is supported.
+
+**Raises:**
+- `AssertionError`: If `weight_path` or `io_yaml` do not exist, if
+`private` is `False`, if `base_model` contains more than one
+`"/"` separator, or if `model_name` does not contain exactly
+one `"/"` separator.
+- `OSError`: If no Hugging Face authentication token is found.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

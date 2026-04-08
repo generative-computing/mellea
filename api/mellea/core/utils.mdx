@@ -1,0 +1,180 @@
+---
+title: "mellea.core.utils"
+sidebarTitle: "mellea.core.utils"
+description: "Logging utilities for the mellea core library."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Logging utilities for the mellea core library.
+
+
+
+
+
+Provides `FancyLogger`, a singleton logger with colour-coded console output and
+an optional REST handler (`RESTHandler`) that forwards log records to a local
+`/api/receive` endpoint when the `FLOG` environment variable is set. All
+internal mellea modules obtain their logger via `FancyLogger.get_logger()`.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `RESTHandler` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/utils.py#L17" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Logging handler that forwards records to a local REST endpoint.
+
+Sends log records as JSON to `/api/receive` when the `FLOG` environment
+variable is set. Failures are silently suppressed to avoid disrupting the
+application.
+
+**Args:**
+- `api_url`: The URL of the REST endpoint that receives log records.
+- `method`: HTTP method to use when sending records (default `"POST"`).
+- `headers`: HTTP headers to send; defaults to
+`\{"Content-Type"\: "application/json"\}` when `None`.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `emit` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/utils.py#L40" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+emit(self, record: logging.LogRecord) -> None
+```
+
+Forwards a log record to the REST endpoint when the `FLOG` environment variable is set.
+
+Silently suppresses any network or HTTP errors to avoid disrupting the application.
+
+**Args:**
+- `record`: The log record to forward.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `JsonFormatter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/utils.py#L63" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Logging formatter that serialises log records as structured JSON dicts.
+
+Includes timestamp, level, message, module, function name, line number,
+process ID, thread ID, and (if present) exception information.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/utils.py#L70" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format(self, record: logging.LogRecord) -> dict
+```
+
+Formats a log record as a JSON-serialisable dictionary.
+
+Includes timestamp, level, message, module, function name, line number,
+process ID, thread ID, and exception info if present.
+
+**Args:**
+- `record`: The log record to format.
+
+**Returns:**
+- A dictionary containing timestamp, level, message, module, function,
+- line number, process/thread IDs, and optional exception info.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `CustomFormatter` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/utils.py#L98" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A nice custom formatter copied from [Sergey Pleshakov's post on StackOverflow](https://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output).
+
+**Attributes:**
+- `cyan`: ANSI escape code for cyan text, used for DEBUG messages.
+- `grey`: ANSI escape code for grey text, used for INFO messages.
+- `yellow`: ANSI escape code for yellow text, used for WARNING messages.
+- `red`: ANSI escape code for red text, used for ERROR messages.
+- `bold_red`: ANSI escape code for bold red text, used for CRITICAL messages.
+- `reset`: ANSI escape code to reset text colour.
+- `FORMATS`: Mapping from logging level integer to the colour-formatted format string.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/utils.py#L127" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format(self, record: logging.LogRecord) -> str
+```
+
+Formats a log record using a colour-coded ANSI format string based on the record's log level.
+
+**Args:**
+- `record`: The log record to format.
+
+**Returns:**
+- The formatted log record string with ANSI colour codes applied.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `FancyLogger` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/utils.py#L141" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Singleton logger with colour-coded console output and optional REST forwarding.
+
+Obtain the shared logger instance via `FancyLogger.get_logger()`. Log level
+defaults to `INFO` but can be raised to `DEBUG` by setting the `DEBUG`
+environment variable. When the `FLOG` environment variable is set, records are
+also forwarded to a local `/api/receive` REST endpoint via `RESTHandler`.
+
+**Attributes:**
+- `logger`: The shared `logging.Logger` instance; `None` until first call to `get_logger()`.
+- `CRITICAL`: Numeric level for critical log messages (50).
+- `FATAL`: Alias for `CRITICAL` (50).
+- `ERROR`: Numeric level for error log messages (40).
+- `WARNING`: Numeric level for warning log messages (30).
+- `WARN`: Alias for `WARNING` (30).
+- `INFO`: Numeric level for informational log messages (20).
+- `DEBUG`: Numeric level for debug log messages (10).
+- `NOTSET`: Numeric level meaning no level is set (0).
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_logger` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/utils.py#L173" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_logger() -> logging.Logger
+```
+
+Returns a FancyLogger.logger and sets level based upon env vars.
+
+**Returns:**
+- Configured logger with REST, stream, and optional OTLP handlers.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

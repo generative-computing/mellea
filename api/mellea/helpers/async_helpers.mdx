@@ -1,0 +1,150 @@
+---
+title: "mellea.helpers.async_helpers"
+sidebarTitle: "mellea.helpers.async_helpers"
+description: "Async helper functions for managing concurrent model output thunks."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Async helper functions for managing concurrent model output thunks.
+
+
+
+
+
+Provides `send_to_queue`, which feeds a backend response coroutine or async iterator
+into an `asyncio.Queue` (including sentinel and error forwarding); `wait_for_all_mots`,
+which gathers multiple [`ModelOutputThunk`](../core/base#class-modeloutputthunk) computations in a single `asyncio.gather`
+call; and `get_current_event_loop`, a safe wrapper that returns `None` instead of
+raising when no event loop is running. These utilities are used internally by backends
+that operate in async contexts.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `send_to_queue` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/helpers/async_helpers.py#L19" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+send_to_queue(co: Coroutine[Any, Any, AsyncIterator | Any] | AsyncIterator, aqueue: asyncio.Queue) -> None
+```
+
+
+Processes the output of an async chat request by sending the output to an async queue.
+
+**Args:**
+- `co`: A coroutine or async iterator producing the backend response.
+- `aqueue`: The async queue to send results to. A sentinel `None` is appended on
+completion; an exception instance is appended on error.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `wait_for_all_mots` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/helpers/async_helpers.py#L53" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+wait_for_all_mots(mots: list[ModelOutputThunk]) -> None
+```
+
+
+Helper function to make waiting for multiple ModelOutputThunks to be computed easier.
+
+All ModelOutputThunks must be from the same event loop. This should always be the case in sampling
+functions, session functions, and top-level mellea functions.
+
+**Args:**
+- `mots`: List of [`ModelOutputThunk`](../core/base#class-modeloutputthunk) objects to await concurrently.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_current_event_loop` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/helpers/async_helpers.py#L69" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_current_event_loop() -> None | asyncio.AbstractEventLoop
+```
+
+
+Get the current event loop without having to catch exceptions.
+
+**Returns:**
+- The running event loop, or `None` if no loop is running.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ClientCache` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/helpers/async_helpers.py#L83" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A simple [LRU](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_Recently_Used_(LRU)) cache.
+
+Used to keep track of clients for backends where the client is tied to a specific event loop.
+
+**Args:**
+- `capacity`: Maximum number of entries to hold before evicting the least recently used.
+
+**Attributes:**
+- `cache`: Ordered dictionary storing cached key-value pairs in LRU
+order; always initialised empty at construction.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `current_size` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/helpers/async_helpers.py#L101" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+current_size(self) -> int
+```
+
+Just return the size of the key set. This isn't necessarily safe.
+
+**Returns:**
+- Number of entries currently in the cache.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/helpers/async_helpers.py#L109" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get(self, key: int) -> Any | None
+```
+
+Gets a value from the cache.
+
+**Args:**
+- `key`: Integer cache key.
+
+**Returns:**
+- The cached value, or `None` if the key is not present.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `put` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/helpers/async_helpers.py#L126" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+put(self, key: int, value: Any) -> None
+```
+
+Put a value into the cache.
+
+**Args:**
+- `key`: Integer cache key.
+- `value`: Value to store.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

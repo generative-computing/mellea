@@ -1,0 +1,265 @@
+---
+title: "cli.eval.runner"
+sidebarTitle: "cli.eval.runner"
+description: "Execution engine for the test-based LLM evaluation pipeline."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Execution engine for the test-based LLM evaluation pipeline.
+
+
+
+
+
+Loads JSON test files into `TestBasedEval` objects and, for each test, runs a
+generator model to produce responses and a separate judge model to score them. Parses
+the judge output for a `\{"score": ..., "justification": ...\}` JSON fragment,
+aggregates per-input pass/fail counts, and saves the full results to JSON or JSONL.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `create_session` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/eval/runner.py#L122" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+create_session(backend: str, model: str | None, max_tokens: int | None) -> mellea.MelleaSession
+```
+
+
+Create a mellea session with the specified backend and model.
+
+**Args:**
+- `backend`: Backend name\: `"ollama"`, `"openai"`, `"hf"`,
+`"watsonx"`, or `"litellm"`.
+- `model`: Model ID or [`ModelIdentifier`](../../mellea/backends/model_ids#class-modelidentifier) attribute name, or `None`
+to use the default model.
+- `max_tokens`: Maximum number of tokens to generate, or `None` for
+the backend default.
+
+**Returns:**
+- A configured `MelleaSession` ready for generation.
+
+**Raises:**
+- `ValueError`: If `backend` is not one of the supported backend names.
+- `Exception`: Re-raised from backend or session construction if
+initialisation fails.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `run_evaluations` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/eval/runner.py#L217" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+run_evaluations(test_files: list[str], backend: str, model: str | None, max_gen_tokens: int | None, judge_backend: str | None, judge_model: str | None, max_judge_tokens: int | None, output_path: str, output_format: str, continue_on_error: bool)
+```
+
+
+Run all unit-test evaluations against a generation model and a judge model.
+
+**Args:**
+- `test_files`: List of paths to JSON test files. Each file should contain
+`"id"`, `"source"`, `"name"`, `"instructions"`, and
+`"examples"` fields.
+- `backend`: Backend name for the generation model.
+- `model`: Model ID for the generator, or `None` for the default.
+- `max_gen_tokens`: Maximum tokens for the generator, or `None` for the
+backend default.
+- `judge_backend`: Backend name for the judge model, or `None` to reuse
+the generation backend.
+- `judge_model`: Model ID for the judge, or `None` for the default.
+- `max_judge_tokens`: Maximum tokens for the judge, or `None` for the
+backend default.
+- `output_path`: File path prefix for saving results.
+- `output_format`: Output format\: `"json"` or `"jsonl"`.
+- `continue_on_error`: If `True`, skip failed test evaluations instead of
+raising.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `execute_test_eval` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/eval/runner.py#L310" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+execute_test_eval(test_eval: TestBasedEval, generation_session: mellea.MelleaSession, judge_session: mellea.MelleaSession) -> TestEvalResult
+```
+
+
+Execute a single test evaluation.
+
+For each input in the test, generates a response using `generation_session`,
+then validates using `judge_session`.
+
+**Args:**
+- `test_eval`: The `TestBasedEval` object containing inputs and targets.
+- `generation_session`: `MelleaSession` used to produce model responses.
+- `judge_session`: `MelleaSession` used to score model responses.
+
+**Returns:**
+- A `TestEvalResult` with per-input pass/fail outcomes.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parse_judge_output` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/eval/runner.py#L369" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parse_judge_output(judge_output: str) -> tuple[int | None, str]
+```
+
+
+Parse score and justification from a judge model's output string.
+
+**Args:**
+- `judge_output`: Raw text output from the judge model.
+
+**Returns:**
+- A `(score, justification)` tuple where `score` is an integer (or
+- `None` if parsing failed) and `justification` is an explanatory
+- string.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `save_results` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/eval/runner.py#L400" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+save_results(results: list[TestEvalResult], output_path: str, output_format: str)
+```
+
+
+Persist evaluation results to disk in JSON or JSONL format.
+
+**Args:**
+- `results`: List of `TestEvalResult` objects to serialise.
+- `output_path`: Destination file path (extension may be appended if it
+does not match `output_format`).
+- `output_format`: Format string\: `"json"` or `"jsonl"`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `summary_stats` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/eval/runner.py#L440" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+summary_stats(results: list[TestEvalResult])
+```
+
+
+Print aggregated pass-rate statistics for a set of evaluation results.
+
+**Args:**
+- `results`: List of `TestEvalResult` objects to summarise.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `InputEvalResult` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/eval/runner.py#L26" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Store results of a single input evaluation (within a unit test).
+
+**Args:**
+- `input_text`: The raw input text sent to the generation model.
+- `model_output`: The text response produced by the generation model.
+- `validation_passed`: Whether the judge scored this response as passing.
+- `score`: Numeric score assigned by the judge (`1` for pass, `0` for fail).
+- `validation_reason`: Justification text returned by the judge model.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `to_dict` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/eval/runner.py#L52" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+to_dict(self) -> dict
+```
+
+Serialise the input evaluation result to a plain dictionary.
+
+**Returns:**
+- A dictionary with keys `"input"`, `"model_output"`,
+- `"passed"`, `"score"`, and `"justification"`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `TestEvalResult` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/eval/runner.py#L68" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Store results of a single test evaluation.
+
+**Args:**
+- `test_eval`: The unit test specification containing
+the test ID, name, instructions, inputs, and expected targets.
+- `input_results`: Per-input evaluation outcomes
+produced by running the generation and judge models.
+
+**Attributes:**
+- `passed_count`: Number of inputs that received a passing score.
+- `total_count`: Total number of inputs evaluated.
+- `pass_rate`: Fraction of inputs that passed (`passed_count / total_count`).
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `to_dict` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/eval/runner.py#L87" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+to_dict(self) -> dict
+```
+
+Serialise the test evaluation result to a plain dictionary.
+
+**Returns:**
+- A dictionary containing the test metadata (`"test_id"`,
+- `"source"`, `"name"`, `"instructions"`), per-input results
+- under `"input_results"`, expected targets under
+- `"expected_targets"`, and summary counts (`"passed"`,
+- `"total_count"`, `"pass_rate"`).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `passed_count` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/eval/runner.py#L110" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+passed_count(self) -> int
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `total_count` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/eval/runner.py#L114" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+total_count(self) -> int
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `pass_rate` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/eval/runner.py#L118" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+pass_rate(self) -> float
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,812 @@
+---
+title: "mellea.core.base"
+sidebarTitle: "mellea.core.base"
+description: "Foundational data structures for mellea's generative programming model."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Foundational data structures for mellea's generative programming model.
+
+
+
+
+
+Defines the building blocks that flow through every layer of the library: `CBlock`
+(a content block wrapping a string value), `Component` (an abstract composable
+generative unit), `ModelOutputThunk` (a lazily-evaluated model response),
+`Context` and `ContextTurn` (stateful conversation history containers),
+`TemplateRepresentation` (the structured rendering of a component for prompt
+templates), `ImageBlock`, and `ModelToolCall`. Understanding these types is
+the starting point for building custom components or sampling strategies.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `blockify` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L1018" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+blockify(s: str | CBlock | Component) -> CBlock | Component
+```
+
+
+Turn a raw string into a `CBlock`, leaving `CBlock` and `Component` objects unchanged.
+
+**Args:**
+- `s`: A plain string, `CBlock`, or `Component` to normalise.
+
+**Returns:**
+- A `CBlock` wrapping `s` if it was a string; otherwise `s` unchanged.
+
+**Raises:**
+- `Exception`: If `s` is not a `str`, `CBlock`, or `Component`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `get_images_from_component` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L1042" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_images_from_component(c: Component) -> None | list[ImageBlock]
+```
+
+
+Return the images attached to a `Component`, or `None` if absent or empty.
+
+**Args:**
+- `c`: The `Component` whose `images` attribute is inspected.
+
+**Returns:**
+- A non-empty list of `ImageBlock` objects if the component has an
+- `images` attribute with at least one element; `None` otherwise.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `CBlock` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L33" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A `CBlock` is a block of content that can serve as input to or output from an LLM.
+
+**Args:**
+- `value`: The underlying string content of the block.
+- `meta`: Optional metadata about this block (e.g., the inference engine's
+completion object). Defaults to an empty dict.
+- `cache`: If `True`, the inference engine may store the KV cache for this block. Experimental.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `value` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L61" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+value(self) -> str | None
+```
+
+Gets the value of the block.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `value` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L66" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+value(self, v: str) -> None
+```
+
+Sets the value of the block.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ImageBlock` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L79" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A `ImageBlock` represents an image (as base64 PNG).
+
+**Args:**
+- `value`: A valid base64-encoded PNG string (with or without a data URI prefix).
+- `meta`: Optional metadata to associate with this image block.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_valid_base64_png` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L100" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+is_valid_base64_png(s: str) -> bool
+```
+
+Checks whether a string is a valid base64-encoded PNG image.
+
+Strips any data URI prefix before decoding. Adds padding characters if
+necessary to make the base64 string a valid length.
+
+**Args:**
+- `s`: The string to validate, optionally prefixed with a data URI header.
+
+**Returns:**
+- `True` if the string decodes to a PNG image, `False` otherwise.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `pil_to_base64` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L139" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+pil_to_base64(image: PILImage.Image) -> str
+```
+
+Converts a PIL image to a base64-encoded PNG string.
+
+**Args:**
+- `image`: The PIL image to encode.
+
+**Returns:**
+- A base64-encoded string of the image serialised as PNG.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `from_pil_image` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L153" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+from_pil_image(cls, image: PILImage.Image, meta: dict[str, Any] | None = None) -> ImageBlock
+```
+
+Creates an `ImageBlock` from a PIL image object.
+
+Converts the image to a base64-encoded PNG string and wraps it in a new
+`ImageBlock` instance.
+
+**Args:**
+- `image`: The PIL image to encode.
+- `meta`: Optional metadata to associate with the block.
+
+**Returns:**
+- A new `ImageBlock` containing the base64-encoded PNG.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ComponentParseError` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L183" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Raised by `Component.parse()` when the underlying parsing method throws an exception.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Component` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L188" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A `Component` is a composite data structure that is intended to be represented to an LLM.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L191" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parts(self) -> list[Component | CBlock]
+```
+
+Returns the set of all constituent sub-components and content blocks of this `Component`.
+
+**Returns:**
+- list[Component | CBlock]: A list of child `Component` or `CBlock` objects that make
+- up this component. The list may be empty for leaf components.
+
+**Raises:**
+- `NotImplementedError`: If the concrete subclass has not overridden this method.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L203" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format_for_llm(self) -> TemplateRepresentation | str
+```
+
+Formats the `Component` into a `TemplateRepresentation` or plain string for LLM consumption.
+
+**Returns:**
+- TemplateRepresentation | str: A structured `TemplateRepresentation` (for components
+- with tools, fields, or templates) or a plain string for simple components.
+
+**Raises:**
+- `NotImplementedError`: If the concrete subclass has not overridden this method.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parse` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L215" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parse(self, computed: ModelOutputThunk) -> S
+```
+
+Parses the expected type `S` from a given `ModelOutputThunk`.
+
+Delegates to the component's underlying `_parse` method and wraps any
+exception in a `ComponentParseError` for uniform error handling.
+
+**Args:**
+- `computed`: The model output thunk whose value should be parsed.
+
+**Returns:**
+- The parsed result produced by `_parse`, typed according to the component's type parameter.
+
+**Raises:**
+- `ComponentParseError`: If the underlying `_parse` call raises any exception.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `GenerateType` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L240" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Used to track what functions can be used to extract a value from a ModelOutputThunk.
+
+**Attributes:**
+- `NONE`: No generation function has been set; the thunk is either already computed or uninitialized.
+- `ASYNC`: The generation function is async-compatible; `avalue`/`astream` may be used.
+- `SYNC`: The generation function is synchronous only; async extraction methods are unavailable.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ModelOutputThunk` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L254" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A `ModelOutputThunk` is a special type of `CBlock` that we know came from a model's output. It is possible to instantiate one without the output being computed yet.
+
+**Args:**
+- `value`: The raw model output string, or `None` if not yet computed.
+- `meta`: Optional metadata from the inference engine (e.g., completion object).
+- `parsed_repr`: An already-parsed representation to attach; set when re-wrapping existing output.
+- `tool_calls`: Tool calls returned by the model alongside the text output.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_computed` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L350" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+is_computed(self) -> bool
+```
+
+Returns true only if this Thunk has already been filled.
+
+**Returns:**
+- `True` if the thunk value has been set, `False` otherwise.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `value` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L359" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+value(self) -> str | None
+```
+
+Gets the value of the block.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `value` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L366" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+value(self, v: str) -> None
+```
+
+Sets the value of the block.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `avalue` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L370" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+avalue(self) -> str
+```
+
+Returns the fully resolved value of the ModelOutputThunk, awaiting generation if necessary.
+
+Can be used for both async streaming and async non-streaming backends. If the
+thunk is already computed the value is returned immediately.
+
+**Returns:**
+- The complete text output from the model.
+
+**Raises:**
+- `Exception`: Propagates any errors from the underlying inference engine api request.
+- `RuntimeError`: If called when the ModelOutputThunk's generate function is not async compatible.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `astream` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L399" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+astream(self) -> str
+```
+
+Returns the ModelOutputThunk's partial value including the next chunk(s). Can be used for both async streaming and async non-streaming.
+
+Returns the complete value of the ModelOutputThunk if streaming is done.
+
+**Note**: Be careful with calling this function. Only call it from one location at a time. This means you shouldn't pass a ModelOutputThunk to
+multiple coroutines/tasks and call astream from those coroutines/tasks simultaneously. We have considered solutions to this but are waiting until
+we see this error happen in a real use case.
+
+**Returns:**
+- The accumulated output text up to and including the newly received chunk(s).
+
+**Raises:**
+- `Exception`: Propagates any errors from the underlying inference engine api request.
+- `RuntimeError`: If called when the ModelOutputThunk's generate function is not async compatible.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ComputedModelOutputThunk` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L599" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A `ComputedModelOutputThunk` is a `ModelOutputThunk` that is guaranteed to be computed.
+
+This subclass provides a clear type distinction between thunks that may need awaiting
+and those that are already computed. It should be returned from synchronous functions
+and sampling strategies to indicate that no awaiting is needed.
+
+Uses zero-copy class reassignment: calling `ComputedModelOutputThunk(thunk)` reassigns
+the thunk's `__class__` to `ComputedModelOutputThunk` without creating a new object.
+
+**Args:**
+- `thunk`: A fully-computed `ModelOutputThunk` whose class will be reassigned.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `avalue` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L632" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+avalue(self) -> str
+```
+
+Return the value of the thunk. Use .value instead.
+
+**Returns:**
+- The computed string value.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `astream` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L641" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+astream(self) -> str
+```
+
+Cannot astream from ComputedModelOutputThunks. Use .value instead.
+
+**Returns:**
+- Never returns; always raises.
+
+**Raises:**
+- `RuntimeError`: Always, because computed thunks do not support streaming.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `value` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L656" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+value(self) -> str
+```
+
+Gets the value of the block.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `value` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L661" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+value(self, v: str)
+```
+
+Sets the value of the block.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_computed` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L665" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+is_computed(self) -> Literal[True]
+```
+
+Returns `True` since thunk is always computed.
+
+**Returns:**
+- Always `True`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ContextTurn` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L675" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A turn of model input and model output.
+
+**Args:**
+- `model_input`: The input component or content block for this turn,
+or `None` for an output-only partial turn.
+- `output`: The model's output thunk for this turn,
+or `None` for an input-only partial turn.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Context` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L693" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A `Context` is used to track the state of a `MelleaSession`.
+
+A context is immutable. Every alteration leads to a new context.
+
+**Attributes:**
+- `is_root_node`: `True` when this context is the root (empty) node of the linked list.
+- `previous_node`: The context node from which this one was created,
+or `None` for the root node.
+- `node_data`: The data associated with this context node,
+or `None` for the root node.
+- `is_chat_context`: Whether this context operates in chat (multi-turn) mode.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `from_previous` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L721" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+from_previous(cls: type[ContextT], previous: Context, data: Component | CBlock) -> ContextT
+```
+
+Constructs a new context node linked to an existing context node.
+
+**Args:**
+- `previous`: The existing context to extend.
+- `data`: The component or content block to associate with the new node.
+
+**Returns:**
+- A new context instance whose `previous_node` is `previous`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `reset_to_new` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L746" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+reset_to_new(cls: type[ContextT]) -> ContextT
+```
+
+Returns a new empty (root) context.
+
+**Returns:**
+- A freshly initialised root context with no data or history.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_root_node` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L757" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+is_root_node(self) -> bool
+```
+
+Returns whether this context is the root context node.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `previous_node` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L762" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+previous_node(self) -> Context | None
+```
+
+Returns the context node from which this context node was created.
+
+Internal use: Users should not need to use this property.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `node_data` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L770" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+node_data(self) -> Component | CBlock | None
+```
+
+Returns the data associated with this context node.
+
+Internal use: Users should not need to use this property.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `is_chat_context` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L778" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+is_chat_context(self) -> bool
+```
+
+Returns whether this context is a chat context.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `as_list` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L784" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+as_list(self, last_n_components: int | None = None) -> list[Component | CBlock]
+```
+
+Returns a list of context components sorted from earliest (first) to most recent (last).
+
+If `last_n_components` is `None`, then all components are returned.
+
+**Args:**
+- `last_n_components`: Maximum number of most-recent components to include.
+Pass `None` to return the full history.
+
+**Returns:**
+- list\[Component | CBlock]: Components in chronological order (oldest first).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `actions_for_available_tools` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L819" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+actions_for_available_tools(self) -> list[Component | CBlock] | None
+```
+
+Provides a list of actions to extract tools from for use during generation.
+
+Returns `None` if it is not possible to construct such a list. Can be used to make
+the available tools differ from the tools of all the actions in the context. Can be
+overridden by subclasses.
+
+**Returns:**
+- list[Component | CBlock] | None: The list of actions whose tools should be made
+- available during generation, or `None` if unavailable.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `last_output` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L832" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+last_output(self, check_last_n_components: int = 3) -> ModelOutputThunk | None
+```
+
+Returns the most recent `ModelOutputThunk` found within the last N context components.
+
+**Args:**
+- `check_last_n_components`: Number of most-recent components to search through.
+Defaults to 3.
+
+**Returns:**
+- ModelOutputThunk | None: The most recent output thunk, or `None` if none is found
+- within the searched components.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `last_turn` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L848" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+last_turn(self) -> ContextTurn | None
+```
+
+The last input/output turn of the context.
+
+This can be partial. If the last event is an input, then the output is None.
+
+**Returns:**
+- The most recent turn, or `None` if the context is empty.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `add` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L875" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+add(self, c: Component | CBlock) -> Context
+```
+
+Returns a new context obtained by appending `c` to this context.
+
+**Args:**
+- `c`: The component or content block to add to the context.
+
+**Returns:**
+- A new context node with `c` as its data and this context as its previous node.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `view_for_generation` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L888" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+view_for_generation(self) -> list[Component | CBlock] | None
+```
+
+Provides a linear list of context components to use for generation.
+
+Returns `None` if it is not possible to construct such a list (e.g., the context
+is in an inconsistent state). Concrete subclasses define the ordering and filtering logic.
+
+**Returns:**
+- list[Component | CBlock] | None: An ordered list of components suitable for passing
+- to a backend, or `None` if generation is not currently possible.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `AbstractMelleaTool` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L901" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Abstract base class for Mellea Tool.
+
+**Attributes:**
+- `name`: The unique name used to identify the tool in JSON descriptions and tool-call dispatch.
+- `as_json_tool`: A JSON-serialisable description of the tool, compatible with
+the function-calling schemas expected by supported inference backends.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `run` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L914" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+run(self, *args: Any, **kwargs: Any) -> Any
+```
+
+Executes the tool with the provided arguments and returns the result.
+
+**Args:**
+- `*args`: Positional arguments forwarded to the tool implementation.
+- `**kwargs`: Keyword arguments forwarded to the tool implementation.
+
+**Returns:**
+- The result produced by the tool; the concrete type depends on the implementation.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `as_json_tool` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L927" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+as_json_tool(self) -> dict[str, Any]
+```
+
+Provides a JSON description for Mellea Tool.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `TemplateRepresentation` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L932" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Representing a component as a set of important attributes that can be consumed by the formatter.
+
+**Args:**
+- `obj`: The original component object being represented.
+- `args`: Named arguments extracted from the component for template substitution.
+- `tools`: Tools available for this representation,
+keyed by the tool's function name. Defaults to `None`.
+- `fields`: An optional ordered list of field values for positional templates.
+- `template`: An optional Jinja2 template string to use when rendering.
+- `template_order`: An optional ordering hint for template sections/keys.
+- `images`: Optional list of image blocks associated with this representation.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `GenerateLog` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L962" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A dataclass for capturing log entries for a single generation call.
+
+GenerateLog provides a structured way to include various details in log entries, making it useful for maintaining detailed
+records of events or operations where context and additional data are significant.
+
+**Args:**
+- `date`: Timestamp when the generation was logged.
+- `prompt`: The prompt string or chat-message list sent to the model.
+- `backend`: Identifier of the inference backend used for this generation.
+- `model_options`: Model configuration options applied to this call.
+- `model_output`: The raw output returned by the backend API.
+- `action`: The component or block that triggered the generation.
+- `result`: The `ModelOutputThunk` produced by this generation call.
+- `is_final_result`: Whether this log entry corresponds to the definitive final result.
+- `extra`: Arbitrary extra metadata to attach to the log entry.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ModelToolCall` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L993" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A dataclass for capturing the tool calls a model wants to make.
+
+Provides a unified way to call tools post generation.
+
+**Args:**
+- `name`: The name of the tool the model requested to call.
+- `func`: The `AbstractMelleaTool` instance that will be invoked.
+- `args`: The keyword arguments the model supplied for the tool call.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `call_func` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/base.py#L1009" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+call_func(self) -> Any
+```
+
+Invokes the tool represented by this object and returns the result.
+
+**Returns:**
+- The value returned by `func.run(**args)`; the concrete type depends on the tool.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

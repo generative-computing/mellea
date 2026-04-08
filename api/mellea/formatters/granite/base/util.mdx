@@ -1,0 +1,188 @@
+---
+title: "mellea.formatters.granite.base.util"
+sidebarTitle: "mellea.formatters.granite.base.util"
+description: "Common utility functions for the library and tests."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Common utility functions for the library and tests.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `import_optional` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/base/util.py#L36" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+import_optional(extra_name: str)
+```
+
+
+Handle optional imports.
+
+**Args:**
+- `extra_name`: Package extra to suggest in the install hint
+(e.g. `pip install granite_io[extra_name]`).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `nltk_check` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/base/util.py#L56" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+nltk_check(feature_name: str)
+```
+
+
+Variation on import_optional for nltk.
+
+**Args:**
+- `feature_name`: Name of the feature that requires NLTK, used in the error message.
+
+**Raises:**
+- `ImportError`: If the `nltk` package is not installed, re-raised with
+a descriptive message and installation instructions.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `find_substring_in_text` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/base/util.py#L76" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+find_substring_in_text(substring: str, text: str) -> list[dict]
+```
+
+
+Find all substring matches in text.
+
+Given two strings - substring and text - find and return all
+matches of substring within text. For each match return its begin and end index.
+
+**Args:**
+- `substring`: The string to search for.
+- `text`: The string to search within.
+
+**Returns:**
+- List of dicts with `begin_idx` and `end_idx` for each match found.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `random_uuid` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/base/util.py#L98" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+random_uuid() -> str
+```
+
+
+Generate a random UUID string.
+
+**Returns:**
+- Hexadecimal UUID string suitable for use as a unique identifier.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `load_transformers_lora` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/base/util.py#L107" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+load_transformers_lora(local_or_remote_path: str) -> tuple
+```
+
+
+Load transformers LoRA model.
+
+AutoModelForCausalLM.from_pretrained() is supposed to auto-load base models if you
+pass it a LoRA adapter's config, but that auto-loading is very broken as of 8/2025.
+Workaround powers activate!
+
+Only works if `transformers` and `peft` are installed.
+
+**Args:**
+- `local_or_remote_path`: Local directory path of the LoRA adapter.
+
+**Returns:**
+- Tuple of `(model, tokenizer)` where `model` is the loaded LoRA model and
+- `tokenizer` is the corresponding HuggingFace tokenizer.
+
+**Raises:**
+- `ImportError`: If `peft` or `transformers` packages are not installed.
+- `NotImplementedError`: If `local_or_remote_path` does not exist locally
+(remote loading from the Hugging Face Hub is not yet implemented).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `chat_completion_request_to_transformers_inputs` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/base/util.py#L144" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+chat_completion_request_to_transformers_inputs(request: dict, tokenizer: PreTrainedTokenizerBase | None = None, model: PreTrainedModel | None = None, constrained_decoding_prefix: str | None = None) -> tuple[dict, dict]
+```
+
+
+Translate an OpenAI-style chat completion request.
+
+Translate an OpenAI-style chat completion request into an input for a Transformers
+`generate()` call.
+
+**Args:**
+- `request`: Request as parsed JSON or equivalent dataclass.
+- `tokenizer`: HuggingFace tokenizer for the model. Only required if the request
+uses constrained decoding.
+- `model`: HuggingFace model object. Only required if the request uses constrained
+decoding.
+- `constrained_decoding_prefix`: Optional generation prefix to append to the prompt.
+
+**Returns:**
+- Tuple of `(generate_input, other_input)` where `generate_input` contains
+- kwargs to pass directly to `generate()` and `other_input` contains
+- additional parameters for `generate_with_transformers`.
+
+**Raises:**
+- `ImportError`: If `torch`, `transformers`, or `xgrammar` packages
+are not installed (the latter only when constrained decoding is used).
+- `TypeError`: If `tokenizer.apply_chat_template()` returns an unexpected type.
+- `ValueError`: If padding or end-of-sequence token IDs cannot be determined
+from the tokenizer, or if a constrained-decoding request is made
+without passing a `tokenizer` or `model` argument.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `generate_with_transformers` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/formatters/granite/base/util.py#L327" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+generate_with_transformers(tokenizer: PreTrainedTokenizerBase, model: PreTrainedModel, generate_input: dict, other_input: dict) -> ChatCompletionResponse
+```
+
+
+Call Transformers generate and get usable results.
+
+All the extra steps necessary to call the :func:`generate()` method of a
+Transformers model and get back usable results, rolled into a single function.
+
+There are quite a few extra steps.
+
+**Args:**
+- `tokenizer`: HuggingFace tokenizer for the model, required at several stages
+of generation.
+- `model`: Initialized HuggingFace model object.
+- `generate_input`: Parameters to pass to the `generate()` method, usually
+produced by `chat_completion_request_to_transformers_inputs()`.
+- `other_input`: Additional kwargs produced by
+`chat_completion_request_to_transformers_inputs()` for aspects of the
+original request that Transformers APIs don't handle natively.
+
+**Returns:**
+- A chat completion response in OpenAI format.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

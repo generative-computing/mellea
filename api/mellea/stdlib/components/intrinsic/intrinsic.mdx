@@ -1,0 +1,117 @@
+---
+title: "mellea.stdlib.components.intrinsic.intrinsic"
+sidebarTitle: "mellea.stdlib.components.intrinsic.intrinsic"
+description: "`Intrinsic` component for invoking fine-tuned adapter capabilities."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+`Intrinsic` component for invoking fine-tuned adapter capabilities.
+
+
+
+
+
+An `Intrinsic` component references a named adapter from Mellea's intrinsic catalog
+and transforms a chat completion request — typically by injecting new messages,
+modifying model parameters, or applying structured output constraints. It must be
+paired with a backend that supports adapter loading (e.g. `LocalHFBackend` with an
+attached `IntrinsicAdapter`).
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Intrinsic` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/intrinsic/intrinsic.py#L14" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A component representing an intrinsic fine-tuned adapter capability.
+
+Intrinsics transform a chat completion request by injecting messages,
+modifying model parameters, or applying structured output constraints.
+Must be paired with a backend that supports adapter loading.
+
+**Args:**
+- `intrinsic_name`: The user-visible name of the intrinsic; must match
+a known name in Mellea's intrinsics catalog.
+- `intrinsic_kwargs`: Optional keyword arguments required by
+the intrinsic at invocation time.
+
+**Attributes:**
+- `metadata`: The intrinsic metadata fetched from the catalog.
+- `intrinsic_kwargs`: Keyword arguments passed to the intrinsic.
+- `intrinsic_name`: User-visible name of this intrinsic (property).
+- `adapter_types`: Available adapter types that
+implement this intrinsic (property).
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `intrinsic_name` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/intrinsic/intrinsic.py#L45" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+intrinsic_name(self)
+```
+
+User-visible name of this intrinsic.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `adapter_types` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/intrinsic/intrinsic.py#L50" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+adapter_types(self) -> tuple[AdapterType, ...]
+```
+
+Tuple of available adapter types that implement this intrinsic.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `parts` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/intrinsic/intrinsic.py#L54" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+parts(self) -> list[Component | CBlock]
+```
+
+Return the constituent parts of this intrinsic component.
+
+Will need to be implemented by subclasses since not all intrinsics
+produce text or message output.
+
+**Returns:**
+- list\[Component | CBlock]: Always an empty list for the base class.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `format_for_llm` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/components/intrinsic/intrinsic.py#L65" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+format_for_llm(self) -> TemplateRepresentation | str
+```
+
+Not implemented for the base `Intrinsic` class.
+
+`Intrinsic` components are intended to be used as the *action* passed
+directly to the backend, not as a part of the context rendered by the
+formatter.
+
+**Returns:**
+- TemplateRepresentation | str: Never returns; always raises.
+
+**Raises:**
+- `NotImplementedError`: Always, because `Intrinsic` does not
+implement `format_for_llm` by default.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

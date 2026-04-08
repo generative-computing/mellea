@@ -1,0 +1,48 @@
+---
+title: "cli.alora.upload"
+sidebarTitle: "cli.alora.upload"
+description: "Upload a trained LoRA or aLoRA adapter to Hugging Face Hub."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Upload a trained LoRA or aLoRA adapter to Hugging Face Hub.
+
+
+
+
+
+Creates the target repository if it does not already exist and pushes the entire
+adapter weights directory (output of `save_pretrained`) to the repository root.
+Requires an authenticated Hugging Face token set via the `HF_TOKEN` environment
+variable or `huggingface-cli login`.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `upload_model` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/alora/upload.py#L14" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+upload_model(weight_path: str, model_name: str, private: bool = True)
+```
+
+
+Upload a trained adapter (LoRA/aLoRA) to Hugging Face Hub.
+
+**Args:**
+- `weight_path`: Directory containing adapter weights (from save_pretrained).
+- `model_name`: Target model repo name (e.g., "acme/carbchecker-alora").
+- `private`: Whether the repo should be private. Default\: True.
+
+**Raises:**
+- `FileNotFoundError`: If `weight_path` does not exist on disk.
+- `OSError`: If no Hugging Face authentication token is found.
+- `RuntimeError`: If creating or accessing the Hugging Face repository fails.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,68 @@
+---
+title: "cli.fix.commands"
+sidebarTitle: "cli.fix.commands"
+description: "CLI command for `m fix async`."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+CLI command for `m fix async`.
+
+
+
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `fix_async` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/fix/commands.py#L10" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+fix_async(path: str = typer.Argument(..., help='File or directory to scan'), mode: _FixMode = typer.Option(_FixMode.ADD_AWAIT_RESULT, '--mode', '-m', help='Fix strategy to apply'), dry_run: bool = typer.Option(False, '--dry-run', help='Report locations without modifying files'))
+```
+
+
+Fix async calls (aact, ainstruct, aquery) for the await_result default change.
+
+**Args:**
+- `path`: File or directory to scan.
+- `mode`: Fix strategy to apply.
+- `dry_run`: If `True`, report locations without modifying files.
+
+**Raises:**
+- `typer.Exit`: If *path* does not exist.
+
+
+Modes:
+  add-await-result  (default) Adds await_result=True to each call so it
+                    blocks until the result is ready. Use this if you don't
+                    need to stream partial results.
+  add-stream-loop   Inserts a `while not r.is_computed(): await r.astream()`
+                    loop after each call. This only works if you passed a
+                    streaming model option (e.g. stream=True) to the call;
+                    otherwise the loop will finish immediately.
+
+
+Best practices:
+  - Run with --dry-run first to review what will be changed.
+  - Only run a given mode once per file. The tool detects prior fixes and
+    skips calls that already have await_result=True or a stream loop, but
+    it is safest to treat it as a one-shot migration.
+  - Do not run both modes on the same file. If a stream loop is already
+    present, add-await-result will skip that call (and vice versa).
+
+
+Detection notes:
+  - Most import styles are detected: `import mellea`,
+    `from mellea import MelleaSession`,
+    `from mellea.stdlib.functional import aact`, module aliases, etc.
+  - Calls that are already followed by `await r.avalue()`,
+    `await r.astream()`, or a `while not r.is_computed()` loop are
+    automatically skipped, even when nested inside if/try/for blocks.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

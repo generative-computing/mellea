@@ -1,0 +1,44 @@
+---
+title: "mellea.backends.model_ids"
+sidebarTitle: "mellea.backends.model_ids"
+description: "`ModelIdentifier` dataclass and a catalog of pre-defined model IDs."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+`ModelIdentifier` dataclass and a catalog of pre-defined model IDs.
+
+
+
+
+
+`ModelIdentifier` is a frozen dataclass that groups the platform-specific name
+variants for a model (HuggingFace, Ollama, WatsonX, MLX, OpenAI, Bedrock) so that
+a single constant can be passed to any backend without manual string translation.
+The module also ships a curated catalog of ready-to-use constants for popular
+open-weight models including IBM Granite 4, Meta Llama 4, Mistral, and Qwen families.
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ModelIdentifier` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/backends/model_ids.py#L14" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+The `ModelIdentifier` class wraps around model identification strings.
+
+**Args:**
+- `hf_model_name`: HuggingFace Hub model repository ID (e.g. `"ibm-granite/granite-3.3-8b-instruct"`).
+- `ollama_name`: Ollama model tag (e.g. `"granite3.3\:8b"`).
+- `watsonx_name`: WatsonX AI model ID (e.g. `"ibm/granite-3-2b-instruct"`).
+- `mlx_name`: MLX model identifier for Apple Silicon inference.
+- `openai_name`: OpenAI API model name (e.g. `"gpt-5.1"`).
+- `bedrock_name`: AWS Bedrock model ID (e.g. `"openai.gpt-oss-20b"`).
+- `hf_tokenizer_name`: HuggingFace tokenizer ID; defaults to `hf_model_name` if `None`.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

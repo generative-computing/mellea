@@ -1,0 +1,104 @@
+---
+title: "cli.alora.readme_generator"
+sidebarTitle: "cli.alora.readme_generator"
+description: "LLM-assisted generator for adapter intrinsic README files."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+LLM-assisted generator for adapter intrinsic README files.
+
+
+
+
+
+Uses a `MelleaSession` with rejection sampling to derive README template variables
+from a JSONL training dataset — including a high-level description, the inferred
+Python argument list, and Jinja2-renderable sample rows. Validates the generated
+output with deterministic requirements (correct naming conventions, syntactically
+valid argument lists) before rendering the final `INTRINSIC_README.md` via a
+Jinja2 template.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `make_readme_jinja_dict` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/alora/readme_generator.py#L133" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+make_readme_jinja_dict(m: MelleaSession, dataset_path: str, base_model: str, prompt_file: str, name: str, hints: str | None) -> dict[str, Any]
+```
+
+
+Generate all template variables for the intrinsic README using an LLM.
+
+Loads the first five lines of the JSONL dataset, determines the input structure,
+and uses `m.instruct` with deterministic requirements and rejection sampling to
+generate README template variables.
+
+**Args:**
+- `m`: Active `MelleaSession` to use for LLM generation.
+- `dataset_path`: Path to the JSONL training dataset file.
+- `base_model`: Base model ID or path used to train the adapter.
+- `prompt_file`: Path to the prompt format file (empty string if not provided).
+- `name`: Destination model name on Hugging Face Hub
+(e.g. `"acme/carbchecker-alora"`).
+- `hints`: Optional string of additional domain hints to include in the prompt.
+
+**Returns:**
+- Dict of Jinja2 template variables for rendering the `INTRINSIC_README.md`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `generate_readme` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/alora/readme_generator.py#L287" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+generate_readme(dataset_path: str, base_model: str, prompt_file: str | None, output_path: str, name: str, hints: str | None) -> str
+```
+
+
+Generate an INTRINSIC_README.md file from the dataset and template.
+
+Creates a `MelleaSession`, uses the LLM to generate template variables,
+renders the Jinja template, and writes the result to `output_path`.
+
+**Args:**
+- `dataset_path`: Path to the JSONL training dataset file.
+- `base_model`: Base model ID or path used to train the adapter.
+- `prompt_file`: Path to the prompt format file, or `None`.
+- `output_path`: Destination path for the generated README file.
+- `name`: Destination model name on Hugging Face Hub.
+- `hints`: Optional string of additional domain hints for the LLM.
+
+**Returns:**
+- The path to the written output file (same as `output_path`).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `ReadmeTemplateVars` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/alora/readme_generator.py#L24" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Pydantic model holding all variables required to render the intrinsic README template.
+
+**Attributes:**
+- `high_level_description`: A 2-3 sentence description of what the intrinsic adapter does.
+- `dataset_description`: Brief description of the training dataset contents and format.
+- `userid`: HuggingFace user ID (the namespace portion of the model name).
+- `intrinsic_name`: Short snake_case identifier for the intrinsic (e.g. `"carbchecker"`).
+- `intrinsic_name_camelcase`: CamelCase version of `intrinsic_name` (e.g. `"CarbChecker"`).
+- `arglist`: Python function argument list with type hints (e.g. `"description\: str"`).
+- `arglist_without_type_annotations`: Argument list without type hints (e.g. `"description"`).
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

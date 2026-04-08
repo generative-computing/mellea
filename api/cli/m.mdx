@@ -1,0 +1,42 @@
+---
+title: "cli.m"
+sidebarTitle: "cli.m"
+description: "Entrypoint for the `m` command-line tool."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Entrypoint for the `m` command-line tool.
+
+
+
+
+
+Wires together all CLI sub-applications into a single Typer root command: `m serve`
+(start a model-serving endpoint), `m alora` (train and upload LoRA/aLoRA adapters),
+`m decompose` (LLM-driven task decomposition), and `m eval` (test-based model
+evaluation). Run `m --help` to see all available sub-commands.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `callback` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/cli/m.py#L22" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+callback() -> None
+```
+
+
+Mellea command-line tool for LLM-powered workflows.
+
+Provides sub-commands for serving models (`m serve`), training and uploading
+adapters (`m alora`), decomposing tasks into subtasks (`m decompose`), and
+running test-based evaluation pipelines (`m eval`).
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

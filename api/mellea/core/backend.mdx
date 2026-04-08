@@ -1,0 +1,164 @@
+---
+title: "mellea.core.backend"
+sidebarTitle: "mellea.core.backend"
+description: "Abstract `Backend` interface and generation-walk utilities."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Abstract `Backend` interface and generation-walk utilities.
+
+
+
+
+
+Defines the `Backend` abstract base class whose two key abstract methods —
+`generate_from_context` (context-aware single-action generation) and
+`generate_from_raw` (context-free batch generation) — all concrete backends must
+implement. Also provides `generate_walk`, which traverses a [`Component`](base#class-component) tree to
+find un-computed [`ModelOutputThunk`](base#class-modeloutputthunk) leaves that need to be resolved before rendering.
+
+
+## Functions
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `generate_walk` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/backend.py#L211" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputThunk]
+```
+
+
+Return all uncomputed [`ModelOutputThunk`](base#class-modeloutputthunk) leaves reachable from `c`.
+
+**Args:**
+- `c`: A [`CBlock`](base#class-cblock), [`Component`](base#class-component), or [`ModelOutputThunk`](base#class-modeloutputthunk) to traverse.
+
+**Returns:**
+- A flat list of uncomputed [`ModelOutputThunk`](base#class-modeloutputthunk) instances in the order
+- they need to be resolved (depth-first over `Component.parts()`).
+
+**Raises:**
+- `ValueError`: If any element encountered during traversal is not a [`CBlock`](base#class-cblock),
+[`Component`](base#class-component), or [`ModelOutputThunk`](base#class-modeloutputthunk).
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `Backend` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/backend.py#L42" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Abstract base class for all inference backends.
+
+All concrete backends must implement `generate_from_context` (context-aware
+single-action generation) and `generate_from_raw` (context-free batch
+generation). The `do_generate_walk` / `do_generate_walks` helpers can be
+used to pre-compute any unresolved [`ModelOutputThunk`](base#class-modeloutputthunk) leaves before rendering.
+
+
+
+<div className="h-8" />
+**Methods:**
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `generate_from_context` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/backend.py#L52" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+generate_from_context(self, action: Component[C] | CBlock, ctx: Context) -> tuple[ModelOutputThunk[C], Context]
+```
+
+Generates a model output from a context. May not mutate the context. This must be called from a running event loop as it creates a task to run the generation request.
+
+**Args:**
+- `action`: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
+- `ctx`: The rest of the context.
+- `format`: A response format to used for structured outputs / constrained decoding.
+- `model_options`: Any model options to upsert into the defaults for this call.
+- `tool_calls`: If `True`, then tool calls are extracts from the `action` [`Component`](base#class-component). Assumption\: if tool_calls is enabled, then the action [`Component`](base#class-component) has a TemplateRepresentation
+
+**Returns:**
+- a tuple of (ModelOutputThunk, Context) where the Context is the new context after the generation has been completed.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `generate_from_raw` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/backend.py#L124" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+generate_from_raw(self, actions: list[Component[C]], ctx: Context) -> list[ModelOutputThunk[C]]
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `generate_from_raw` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/backend.py#L135" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+generate_from_raw(self, actions: list[Component[C] | CBlock], ctx: Context) -> list[ModelOutputThunk[C | str]]
+```
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `generate_from_raw` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/backend.py#L146" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+generate_from_raw(self, actions: Sequence[Component[C] | CBlock], ctx: Context) -> list[ModelOutputThunk]
+```
+
+Generates a model output from the provided input. Does not use context or templates.
+
+**Args:**
+- `actions`: list of actions to generate responses for. Each action is separate.
+- `ctx`: context passed to generation. Currently not used in generate_from_raw
+- `format`: A response format to used for structured outputs / constrained decoding. Note\: some backends do not support this parameter. They will log warnings and continue to generate.
+- `model_options`: Any model options to upsert into the defaults for this call.
+- `tool_calls`: Always set to false unless supported by backend.
+
+**Returns:**
+- list\[ModelOutputThunk]: A list of output thunks, one per action, in the same order as `actions`.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `do_generate_walk` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/backend.py#L168" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+do_generate_walk(self, action: CBlock | Component | ModelOutputThunk) -> None
+```
+
+Awaits all uncomputed [`ModelOutputThunk`](base#class-modeloutputthunk) leaves reachable from `action`.
+
+Traverses the component tree rooted at `action` via `generate_walk`, collects
+any uncomputed [`ModelOutputThunk`](base#class-modeloutputthunk) nodes, and concurrently awaits them all.
+
+**Args:**
+- `action`: The root node to traverse.
+
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+#### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#3064E3]/20 text-[#1D4ED8]">FUNC</span> `do_generate_walks` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/core/backend.py#L188" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+do_generate_walks(self, actions: list[CBlock | Component | ModelOutputThunk]) -> None
+```
+
+Awaits all uncomputed [`ModelOutputThunk`](base#class-modeloutputthunk) leaves reachable from each action in `actions`.
+
+Traverses the component tree of every action in the list via `generate_walk`, collects
+all uncomputed [`ModelOutputThunk`](base#class-modeloutputthunk) nodes across all actions, and concurrently awaits them.
+
+**Args:**
+- `actions`: The list of root nodes to traverse.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

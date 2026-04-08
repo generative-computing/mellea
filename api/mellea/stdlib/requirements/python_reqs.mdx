@@ -1,0 +1,44 @@
+---
+title: "mellea.stdlib.requirements.python_reqs"
+sidebarTitle: "mellea.stdlib.requirements.python_reqs"
+description: "Requirements for Python code generation validation."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Requirements for Python code generation validation.
+
+
+
+
+
+## Classes
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />
+
+
+### <span className="ml-2 inline-flex items-center rounded-full px-2 py-1 text-[0.7rem] font-bold tracking-wide bg-[#4ADE8033]/20 text-[#15803D]">CLASS</span> `PythonExecutionReq` <sup><a href="https://github.com/generative-computing/mellea/blob/v0.4.2/mellea/stdlib/requirements/python_reqs.py#L142" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Verifies that Python code runs without raising exceptions.
+
+Extracts the highest-scoring Python code block from the model's last output
+and validates or executes it according to the configured execution mode.
+
+**Args:**
+- `timeout`: Maximum seconds to allow code to run. Defaults to `5`.
+- `allow_unsafe_execution`: If `True`, execute code directly with
+subprocess. Use only with trusted sources.
+- `allowed_imports`: Allowlist of importable top-level
+modules. `None` allows any import.
+- `use_sandbox`: If `True`, use `llm-sandbox` for Docker-based
+isolated execution.
+
+**Attributes:**
+- `validation_fn`: The validation
+function attached to this requirement; always non-`None`.
+
+<div className="w-full h-px bg-gray-200 dark:bg-gray-700 my-4" />

@@ -1,0 +1,24 @@
+---
+title: "mellea.core"
+sidebarTitle: "mellea.core"
+description: "Core abstractions for the mellea library."
+---
+
+
+import { SidebarFix } from "/snippets/SidebarFix.mdx";
+
+<SidebarFix />
+
+Core abstractions for the mellea library.
+
+
+
+
+
+This package defines the fundamental interfaces and data structures on which every
+other layer of mellea is built: the [`Backend`](backend#class-backend), [`Formatter`](formatter#class-formatter), and
+[`SamplingStrategy`](sampling#class-samplingstrategy) protocols; the [`Component`](base#class-component), [`CBlock`](base#class-cblock), [`Context`](base#class-context), and
+[`ModelOutputThunk`](base#class-modeloutputthunk) data types that flow through the inference pipeline; and
+[`Requirement`](requirement#class-requirement) / [`ValidationResult`](requirement#class-validationresult) for constrained generation. Start here when
+building a new backend, formatter, or sampling strategy, or when you need the type
+definitions shared across the library.
