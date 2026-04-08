@@ -1,6 +1,6 @@
 # Mellea CLI — Train & Upload LoRA/aLoRA Adapters
 
-Mellea provides a command-line interface for training and uploading [LoRA](https://arxiv.org/abs/2106.09685) or [aLoRA](https://github.com/IBM/alora) adapters for causal language models. This tool is useful for adapting base models like IBM Granite to custom tasks using prompt-based classification. The major goal is to help customer train a requirement validator.
+Mellea provides a command-line interface for training and uploading [LoRA](https://arxiv.org/abs/2106.09685) or [aLoRA](https://huggingface.co/docs/peft/main/en/package_reference/lora#alora) adapters for causal language models. This tool is useful for adapting base models like IBM Granite to custom tasks using prompt-based classification. The major goal is to help customer train a requirement validator.
 
 ---
 
@@ -37,15 +37,21 @@ Use the `m alora train` command to fine-tune a LoRA or aLoRA adapter requirement
 
 ```bash
 m alora train path/to/data.jsonl \
-  --basemodel ibm-granite/granite-3.2-8b-instruct \
+  --basemodel ibm-granite/granite-4.0-micro \
   --outfile ./checkpoints/alora_adapter \
   --adapter alora \
+  --device auto \
   --epochs 6 \
   --learning-rate 6e-6 \
   --batch-size 2 \
   --max-length 1024 \
   --grad-accum 4
 ```
+
+> **Note on Model Selection**: Only non-hybrid models (e.g., `granite-4.0-micro`) are 
+> currently supported for LoRA or aLoRA training.
+> Mamba/Transformers hybrid models like `granite-4.0-h-micro` will produce low-quality 
+> results with Mellea's current hard-coded settings for parameter-efficient fine tuning.
 
 ### 📌 Parameters
 
@@ -54,6 +60,7 @@ m alora train path/to/data.jsonl \
 | `--basemodel`     | `str`   | *required*| Hugging Face model ID or local path              |
 | `--outfile`       | `str`   | *required*| Directory to save the adapter weights            |
 | `--adapter`       | `str`   | `"alora"` | Choose between `alora` or standard `lora`        |
+| `--device`        | `str`   | `"auto"`  | Device: `auto`, `cpu`, `cuda`, or `mps`          |
 | `--epochs`        | `int`   | `6`       | Number of training epochs                        |
 | `--learning-rate` | `float` | `6e-6`    | Learning rate                                    |
 | `--batch-size`    | `int`   | `2`       | Per-device batch size                            |
@@ -81,14 +88,13 @@ This will:
 
 ## 🛠 Requirements
 
-- Python 3.8+
-- Install the following dependencies manually or via `pip install mellea`:
+- Python 3.11+
+- Install the following dependencies manually or via `pip install mellea[hf]`:
   - `transformers`
   - `trl`
-  - `peft`
+  - `peft>=0.18.1` (native aLoRA support)
   - `datasets`
   - `huggingface_hub`
-  - `alora`
 
 
 ---

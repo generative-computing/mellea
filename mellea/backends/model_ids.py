@@ -1,4 +1,11 @@
-"""Dataclasses for ModelIdentifiers."""
+"""``ModelIdentifier`` dataclass and a catalog of pre-defined model IDs.
+
+``ModelIdentifier`` is a frozen dataclass that groups the platform-specific name
+variants for a model (HuggingFace, Ollama, WatsonX, MLX, OpenAI, Bedrock) so that
+a single constant can be passed to any backend without manual string translation.
+The module also ships a curated catalog of ready-to-use constants for popular
+open-weight models including IBM Granite 4, Meta Llama 4, Mistral, and Qwen families.
+"""
 
 import dataclasses
 
@@ -10,6 +17,16 @@ class ModelIdentifier:
     Using model strings is messy:
         1. Different platforms use variations on model id strings.
         2. Using raw strings is annoying because: no autocomplete, typos, hallucinated names, mismatched model and tokenizer names, etc.
+
+    Args:
+        hf_model_name (str | None): HuggingFace Hub model repository ID (e.g. ``"ibm-granite/granite-3.3-8b-instruct"``).
+        ollama_name (str | None): Ollama model tag (e.g. ``"granite3.3:8b"``).
+        watsonx_name (str | None): WatsonX AI model ID (e.g. ``"ibm/granite-3-2b-instruct"``).
+        mlx_name (str | None): MLX model identifier for Apple Silicon inference.
+        openai_name (str | None): OpenAI API model name (e.g. ``"gpt-5.1"``).
+        bedrock_name (str | None): AWS Bedrock model ID (e.g. ``"openai.gpt-oss-20b"``).
+        hf_tokenizer_name (str | None): HuggingFace tokenizer ID; defaults to ``hf_model_name`` if ``None``.
+
     """
 
     hf_model_name: str | None = None
@@ -17,6 +34,7 @@ class ModelIdentifier:
     watsonx_name: str | None = None
     mlx_name: str | None = None
     openai_name: str | None = None
+    bedrock_name: str | None = None
 
     hf_tokenizer_name: str | None = None  # if None, is the same as hf_model_name
 
@@ -25,14 +43,40 @@ class ModelIdentifier:
 #### IBM models ####
 ####################
 
-IBM_GRANITE_4_MICRO_3B = ModelIdentifier(
-    hf_model_name="ibm-granite/granite-4.0-micro",
-    ollama_name="granite4:micro",
+# Granite 4 Hybrid Models (Recommended for general use)
+IBM_GRANITE_4_HYBRID_MICRO = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.0-h-micro",
+    ollama_name="granite4:micro-h",
+    watsonx_name=None,  # Only h-small available on Watsonx
+)
+
+IBM_GRANITE_4_HYBRID_TINY = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.0-h-tiny",
+    ollama_name="granite4:tiny-h",
+    watsonx_name=None,  # Only h-small available on Watsonx
+)
+
+IBM_GRANITE_4_HYBRID_SMALL = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.0-h-small",
+    ollama_name="granite4:small-h",
     watsonx_name="ibm/granite-4-h-small",
 )
-# todo: watsonx model is different from ollama model - should be same.
+
+IBM_GRANITE_4_HYBRID_1B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.0-h-1b",
+    ollama_name="granite4:1b-h",
+    watsonx_name=None,
+)
+
+IBM_GRANITE_4_HYBRID_350m = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.0-h-350m",
+    ollama_name="granite4:350m-h",
+    watsonx_name=None,
+)
 
 
+# Deprecated Granite 3 models - kept for backward compatibility
+# These maintain their original model references (not upgraded to Granite 4)
 IBM_GRANITE_3_2_8B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-3.2-8b-instruct",
     ollama_name="granite3.2:8b",
@@ -43,6 +87,23 @@ IBM_GRANITE_3_3_8B = ModelIdentifier(
     hf_model_name="ibm-granite/granite-3.3-8b-instruct",
     ollama_name="granite3.3:8b",
     watsonx_name="ibm/granite-3-3-8b-instruct",
+)
+
+# Deprecated: Use IBM_GRANITE_4_HYBRID_MICRO or IBM_GRANITE_4_HYBRID_SMALL instead
+# Kept for backward compatibility with per-backend model selection:
+# - Ollama/HF: Uses MICRO (fits in CI memory constraints)
+# - Watsonx: Uses SMALL (required for watsonx support)
+IBM_GRANITE_4_MICRO_3B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-4.0-micro",
+    ollama_name="granite4:micro",
+    watsonx_name="ibm/granite-4-h-small",  # Keeping hybrid version here for backwards compatibility.
+)
+
+# Granite 3.3 Vision Model (2B)
+IBM_GRANITE_3_3_VISION_2B = ModelIdentifier(
+    hf_model_name="ibm-granite/granite-vision-3.3-2b",
+    ollama_name="ibm/granite3.3-vision:2b",
+    watsonx_name=None,
 )
 
 IBM_GRANITE_GUARDIAN_3_0_2B = ModelIdentifier(
@@ -106,7 +167,8 @@ META_LLAMA_3_2_1B = ModelIdentifier(
 ########################
 
 MISTRALAI_MISTRAL_0_3_7B = ModelIdentifier(
-    hf_model_name="mistralai/Mistral-7B-Instruct-v0.3", ollama_name="mistral:7b"
+    hf_model_name="mistralai/Mistral-7B-Instruct-v0.3",  # Mistral 7B v0.3
+    ollama_name="mistral:7b",  # Ollama
 )
 
 MISTRALAI_MISTRAL_SMALL_24B = ModelIdentifier(
@@ -126,40 +188,62 @@ MISTRALAI_MISTRAL_LARGE_123B = ModelIdentifier(
 #### Qwen models ####
 #####################
 
-QWEN3_0_6B = ModelIdentifier(hf_model_name="Qwen/Qwen3-0.6B", ollama_name="qwen3:0.6b")
+QWEN3_0_6B = ModelIdentifier(
+    hf_model_name="Qwen/Qwen3-0.6B",  # Qwen 0.6B
+    ollama_name="qwen3:0.6b",  # Ollama
+)
 
-QWEN3_1_7B = ModelIdentifier(hf_model_name="Qwen/Qwen3-1.7B", ollama_name="qwen3:1.7b")
+QWEN3_1_7B = ModelIdentifier(
+    hf_model_name="Qwen/Qwen3-1.7B",  # Qwen 1.7B
+    ollama_name="qwen3:1.7b",  # Ollama
+)
 
-QWEN3_8B = ModelIdentifier(hf_model_name="Qwen/Qwen3-8B", ollama_name="qwen3:8b")
+QWEN3_8B = ModelIdentifier(
+    hf_model_name="Qwen/Qwen3-8B",  # Qwen 8B
+    ollama_name="qwen3:8b",  # Ollama
+)
 
-QWEN3_14B = ModelIdentifier(hf_model_name="Qwen/Qwen3-14B", ollama_name="qwen3:14b")
+QWEN3_14B = ModelIdentifier(
+    hf_model_name="Qwen/Qwen3-14B",  # Qwen 14B
+    ollama_name="qwen3:14b",  # Ollama
+)
 
 ###########################
 #### OpenAI open models ###
 ###########################
 
 OPENAI_GPT_OSS_20B = ModelIdentifier(
-    hf_model_name="openai/gpt-oss-20b", ollama_name="gpt-oss:20b"
+    hf_model_name="openai/gpt-oss-20b",  # OpenAI GPT-OSS 20B
+    ollama_name="gpt-oss:20b",  # Ollama
+    bedrock_name="openai.gpt-oss-20b",
 )
 OPENAI_GPT_OSS_120B = ModelIdentifier(
-    hf_model_name="openai/gpt-oss-120b", ollama_name="gpt-oss:120b"
+    hf_model_name="openai/gpt-oss-120b",  # OpenAI GPT-OSS 120B
+    ollama_name="gpt-oss:120b",  # Ollama
+    bedrock_name="openai.gpt-oss-120b",
 )
 
 ###########################
 #### OpenAI prop models ###
 ###########################
 
-OPENAI_GPT_5_1 = ModelIdentifier(openai_name="gpt-5.1")
+OPENAI_GPT_5_1 = ModelIdentifier(
+    openai_name="gpt-5.1"  # OpenAI GPT-5.1
+)
 
 #####################
 #### Misc models ####
 #####################
 
 GOOGLE_GEMMA_3N_E4B = ModelIdentifier(
-    hf_model_name="google/gemma-3n-e4b-it", ollama_name="gemma3n:e4b"
+    hf_model_name="google/gemma-3n-e4b-it",  # Google Gemma 3N E4B
+    ollama_name="gemma3n:e4b",  # Ollama
 )
 
-MS_PHI_4_14B = ModelIdentifier(hf_model_name="microsoft/phi-4", ollama_name="phi4:14b")
+MS_PHI_4_14B = ModelIdentifier(
+    hf_model_name="microsoft/phi-4",  # Microsoft Phi-4 14B
+    ollama_name="phi4:14b",  # Ollama
+)
 
 MS_PHI_4_MINI_REASONING_4B = ModelIdentifier(
     hf_model_name="microsoft/Phi-4-mini-flash-reasoning",

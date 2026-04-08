@@ -13,7 +13,7 @@ from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.requirements import simple_validate
 
 # Mark all tests in this module as requiring Ollama
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 
 @pytest.fixture(scope="function")
@@ -25,7 +25,7 @@ def session():
 
 
 @pytest.mark.qualitative
-def test_simple_instruct(session):
+def test_simple_instruct(session) -> None:
     result = session.instruct(
         "Write an email to Hendrik trying to sell him self-sealing stembolts."
     )
@@ -37,8 +37,8 @@ def test_simple_instruct(session):
 
 
 @pytest.mark.qualitative
-def test_instruct_with_requirement(session):
-    response = session.instruct(
+def test_instruct_with_requirement(session) -> None:
+    session.instruct(
         "Write an email to Hendrik convincing him to buy some self-sealing stembolts."
     )
 
@@ -61,7 +61,7 @@ def test_instruct_with_requirement(session):
 
 
 @pytest.mark.qualitative
-def test_chat(session):
+def test_chat(session) -> None:
     output_message = session.chat("What is 1+1?")
     assert "2" in output_message.content, (
         f"Expected a message with content containing 2 but found {output_message}"
@@ -69,7 +69,7 @@ def test_chat(session):
 
 
 @pytest.mark.qualitative
-def test_format(session):
+def test_format(session) -> None:
     class Person(pydantic.BaseModel):
         name: str
         # it does not support regex patterns in json schema
@@ -87,7 +87,7 @@ def test_format(session):
     output = session.instruct(
         "Write a short email to Olivia, thanking her for organizing a sailing activity. Her email server is example.com. No more than two sentences. ",
         format=Email,
-        model_options={ModelOption.MAX_NEW_TOKENS: 2**8},
+        model_options={ModelOption.MAX_NEW_TOKENS: 2**10},
     )
     print("Formatted output:")
     email = Email.model_validate_json(
@@ -102,19 +102,32 @@ def test_format(session):
 
 
 @pytest.mark.qualitative
-async def test_generate_from_raw(session):
-    prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
+@pytest.mark.timeout(150)
+async def test_generate_from_raw(session) -> None:
+    # Note capital letter "W" at the beginning of each prompt. This capital letter is
+    # very important to the ollama version of Granite 4.0 micro, the current default
+    # model for Mellea.
+    prompts = ["What is 1+1?", "What is 2+2?", "What is 3+3?", "What is 4+4?"]
 
     results = await session.backend.generate_from_raw(
-        actions=[CBlock(value=prompt) for prompt in prompts], ctx=session.ctx
+        actions=[CBlock(value=prompt) for prompt in prompts],
+        ctx=session.ctx,
+        model_options={
+            ModelOption.CONTEXT_WINDOW: 2048,
+            # With raw prompts and high temperature, a response of arbitrary
+            # length is normal operation.
+            ModelOption.MAX_NEW_TOKENS: 100,
+        },
     )
 
     assert len(results) == len(prompts)
-    assert results[0].value is not None
+    assert all(r.value for r in results), (
+        f"One or more requests returned empty (possible backend timeout): {[r.value for r in results]}"
+    )
 
 
 @pytest.mark.xfail(reason="ollama sometimes fails generated structured outputs")
-async def test_generate_from_raw_with_format(session):
+async def test_generate_from_raw_with_format(session) -> None:
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
     class Answer(pydantic.BaseModel):
@@ -125,20 +138,22 @@ async def test_generate_from_raw_with_format(session):
         actions=[CBlock(value=prompt) for prompt in prompts],
         ctx=session.ctx,
         format=Answer,
+        model_options={ModelOption.CONTEXT_WINDOW: 2048},
     )
 
     assert len(results) == len(prompts)
+    assert all(r.value for r in results), (
+        f"One or more requests returned empty (possible backend timeout): {[r.value for r in results]}"
+    )
 
-    random_result = results[0]
-    try:
-        answer = Answer.model_validate_json(random_result.value)
-    except pydantic.ValidationError as e:
-        assert False, (
-            f"formatting directive failed for {random_result.value}: {e.json()}"
-        )
+    for result in results:
+        try:
+            Answer.model_validate_json(result.value)
+        except pydantic.ValidationError as e:
+            assert False, f"formatting directive failed for {result.value}: {e.json()}"
 
 
-async def test_async_parallel_requests(session):
+async def test_async_parallel_requests(session) -> None:
     model_opts = {ModelOption.STREAM: True}
     mot1, _ = await session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext(), model_options=model_opts
@@ -173,7 +188,7 @@ async def test_async_parallel_requests(session):
     assert m2_final_val == mot2.value
 
 
-async def test_async_avalue(session):
+async def test_async_avalue(session) -> None:
     mot1, _ = await session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext()
     )
@@ -181,8 +196,16 @@ async def test_async_avalue(session):
     assert m1_final_val is not None
     assert m1_final_val == mot1.value
 
+    # Verify telemetry fields are populated
+    assert mot1.usage is not None
+    assert mot1.usage["prompt_tokens"] >= 0
+    assert mot1.usage["completion_tokens"] > 0
+    assert mot1.usage["total_tokens"] > 0
+    assert isinstance(mot1.model, str)
+    assert mot1.provider == "ollama"
 
-def test_multiple_asyncio_runs(session):
+
+def test_multiple_asyncio_runs(session) -> None:
     async def test():
         result = await session.achat("hello")
         assert result is not None
@@ -191,7 +214,7 @@ def test_multiple_asyncio_runs(session):
     asyncio.run(test())
 
 
-def test_client_cache(session):
+def test_client_cache(session) -> None:
     backend: OllamaModelBackend = session.backend
     first_client = backend._async_client
 

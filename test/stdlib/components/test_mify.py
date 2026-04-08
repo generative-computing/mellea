@@ -1,9 +1,9 @@
 import pytest
 
-from mellea.formatters import TemplateFormatter
 from mellea.core import Component, TemplateRepresentation
-from mellea.stdlib.components.mobject import Query, MObjectProtocol, MObject
-from mellea.stdlib.components.mify import mify, MifiedProtocol
+from mellea.formatters import TemplateFormatter
+from mellea.stdlib.components.mify import MifiedProtocol, mify
+from mellea.stdlib.components.mobject import MObject, MObjectProtocol, Query
 
 
 def test_protocol_adherence():
@@ -136,7 +136,7 @@ class Customer:
         return f"{self.name}, {self.age}"
 
     def extraneous_func(self):
-        """this function does nothing."""
+        """This function does nothing."""
         return
 
 

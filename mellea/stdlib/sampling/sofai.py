@@ -18,9 +18,9 @@ from ...core import (
     Backend,
     BaseModelSubclass,
     Component,
+    ComputedModelOutputThunk,
     Context,
     FancyLogger,
-    ModelOutputThunk,
     Requirement,
     S,
     SamplingResult,
@@ -34,14 +34,29 @@ from ..context import ChatContext
 
 
 class SOFAISamplingStrategy(SamplingStrategy):
-    """SOFAI sampling strategy.
+    """SOFAI (Slow and Fast AI) two-solver sampling strategy.
 
-    Uses S1 Solver (fast model) in a loop with targeted feedback from validation results.
-    If S1 Solver fails after exhausting the budget or shows no improvement,
-    escalates to a single attempt with S2 Solver (slow model).
+    Uses S1 Solver (fast model) in a loop with targeted feedback from validation
+    results. If S1 Solver fails after exhausting the budget or shows no
+    improvement, escalates to a single attempt with S2 Solver (slow model).
 
-    The strategy leverages ValidationResult.reason fields to provide targeted
+    The strategy leverages ``ValidationResult.reason`` fields to provide targeted
     feedback for repair, enabling more effective iterative improvement.
+
+    Args:
+        s1_solver_backend (Backend): Backend for the fast S1 solver used in the
+            iterative repair loop.
+        s2_solver_backend (Backend): Backend for the slow S2 solver used as a
+            final escalation step.
+        s2_solver_mode (Literal["fresh_start", "continue_chat", "best_attempt"]):
+            How to invoke the S2 solver when S1 fails.
+        loop_budget (int): Maximum number of S1 repair attempts before escalating
+            to S2. Must be greater than 0. Defaults to ``3``.
+        judge_backend (Backend | None): Optional backend for LLM-as-Judge
+            validation. If ``None``, falls back to the session backend.
+        feedback_strategy (Literal["simple", "first_error", "all_errors"]):
+            Detail level of repair feedback provided to the S1 solver.
+
     """
 
     def __init__(
@@ -56,24 +71,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         judge_backend: Backend | None = None,
         feedback_strategy: Literal["simple", "first_error", "all_errors"] = "simple",
     ):
-        """Initialize SOFAI sampling strategy with two solvers.
-
-        Args:
-            s1_solver_backend: Backend for S1 Solver (fast model for iterative solving).
-            s2_solver_backend: Backend for S2 Solver (slow model for escalation).
-            s2_solver_mode: How to invoke S2 Solver:
-                - "fresh_start": Same prompt as S1 solver (clean slate)
-                - "continue_chat": Fresh start input + S1 iteration/feedback history
-                - "best_attempt": Fresh start input + best S1 attempt + its feedback
-            loop_budget: Maximum attempts for S1 Solver before falling back to S2 Solver.
-            judge_backend: Optional third backend for LLM-as-Judge validation.
-                If provided, this backend will be used for validation when no custom
-                validation_fn is provided. Priority: validation_fn > judge_backend > session backend.
-            feedback_strategy: Control detail level of LLM-as-Judge feedback:
-                - "simple": Binary yes/no validation, no detailed feedback (default)
-                - "first_error": Provide only the first mistake found with detailed feedback
-                - "all_errors": Provide comprehensive feedback about all mistakes
-                Note: Only used when judge_backend is provided and requirement has no validation_fn.
+        """Initialize SOFAISamplingStrategy with S1/S2 solver backends, loop budget, and feedback settings.
 
         Raises:
             TypeError: If backends are not Backend instances.
@@ -107,7 +105,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: list[Component],
-        past_results: list[ModelOutputThunk],
+        past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
         """Create targeted feedback message from validation results.
@@ -153,7 +151,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
     @staticmethod
     def select_from_failure(
         sampled_actions: list[Component],
-        sampled_results: list[ModelOutputThunk],
+        sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
         """Select the most informed attempt (last) when all fail.
@@ -414,7 +412,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         original_context: Context,
         last_result_ctx: Context,
         last_action: Component,
-        sampled_results: list[ModelOutputThunk],
+        sampled_results: list[ComputedModelOutputThunk],
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]],
         loop_count: int,
     ) -> tuple[Component, Context]:
@@ -502,7 +500,9 @@ class SOFAISamplingStrategy(SamplingStrategy):
         format: type[BaseModelSubclass] | None,
         model_options: dict | None,
         tool_calls: bool,
-    ) -> tuple[ModelOutputThunk, Context, list[tuple[Requirement, ValidationResult]]]:
+    ) -> tuple[
+        ComputedModelOutputThunk, Context, list[tuple[Requirement, ValidationResult]]
+    ]:
         """Generate with a solver and validate the result.
 
         Args:
@@ -527,6 +527,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
             tool_calls=tool_calls,
         )
         await result.avalue()
+        computed_result = ComputedModelOutputThunk(result)
 
         # Note: Unlike base.py which sets result.parsed_repr = action.parse(result),
         # we skip this because MOTs are immutable. The parsed_repr was set by the
@@ -541,13 +542,13 @@ class SOFAISamplingStrategy(SamplingStrategy):
             reqs=reqs_for_validation,
             context=result_ctx,
             backend=session_backend,
-            output=result,
+            output=computed_result,
             format=None,
             model_options=model_options,
         )
         constraint_scores = list(zip(reqs, val_scores))
 
-        return result, result_ctx, constraint_scores
+        return computed_result, result_ctx, constraint_scores
 
     # =========================================================================
     # Main Sample Method
@@ -608,7 +609,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         reqs: list[Requirement] = list(requirements) if requirements else []
 
         # State tracking for all attempts
-        sampled_results: list[ModelOutputThunk] = []
+        sampled_results: list[ComputedModelOutputThunk] = []
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         sampled_actions: list[Component] = []
         sample_contexts: list[Context] = []

@@ -1,31 +1,18 @@
-from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.openai import OpenAIBackend, _ServerType
-from mellea.backends.adapters.adapter import AdapterType, GraniteCommonAdapter
-from mellea.stdlib.context import ChatContext
-from mellea.stdlib.components import Message
+# pytest: huggingface, e2e
+
 import mellea.stdlib.functional as mfuncs
-from mellea.stdlib.components import Intrinsic
+from mellea.backends.adapters.adapter import AdapterType, IntrinsicAdapter
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components import Intrinsic, Message
+from mellea.stdlib.context import ChatContext
 
 # This is an example for how you would directly use intrinsics. See `mellea/stdlib/intrinsics/rag.py`
 # for helper functions.
 
-# Create the backend. Example for a VLLM Server. Commented out in favor of the hugging face code for now.
-# # Assumes a locally running VLLM server.
-# backend = OpenAIBackend(
-#     model_id="ibm-granite/granite-3.3-8b-instruct",
-#     base_url="http://0.0.0.0:8000/v1",
-#     api_key="EMPTY",
-# )
-
-# # If using a remote VLLM server, utilize the `test/backends/test_openai_vllm/serve.sh`
-# # script with `export VLLM_DOWNLOAD_RAG_INTRINSICS=True`. This will download the granite_common
-# # adapters on the server.
-# backend._server_type = _ServerType.REMOTE_VLLM
-
 backend = LocalHFBackend(model_id="ibm-granite/granite-3.3-8b-instruct")
 
-# Create the Adapter. GraniteCommonAdapter's default to ALORAs.
-req_adapter = GraniteCommonAdapter(
+# Create the Adapter. IntrinsicAdapter's default to ALORAs.
+req_adapter = IntrinsicAdapter(
     "requirement_check", base_model_name=backend.base_model_name
 )
 

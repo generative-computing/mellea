@@ -38,23 +38,52 @@ from ..helpers import (
 )
 from ..stdlib.components import Message
 from ..stdlib.requirements import ALoraRequirement
+from ..telemetry.backend_instrumentation import (
+    instrument_generate_from_raw,
+    start_generate_span,
+)
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import (
     add_tools_from_context_actions,
     add_tools_from_model_options,
     convert_tools_to_json,
+    validate_tool_arguments,
 )
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
 
 class WatsonxAIBackend(FormatterBackend):
-    """A generic backend class for watsonx SDK."""
+    """A generic backend class for watsonx SDK.
+
+    Args:
+        model_id (str | ModelIdentifier): WatsonX model identifier. Defaults to
+            ``model_ids.IBM_GRANITE_4_HYBRID_SMALL``.
+        formatter (ChatFormatter | None): Formatter for rendering components.
+            Defaults to ``TemplateFormatter``.
+        base_url (str | None): URL for the WatsonX ML deployment endpoint;
+            defaults to the ``WATSONX_URL`` environment variable.
+        model_options (dict | None): Default model options for generation requests.
+        api_key (str | None): WatsonX API key; defaults to the
+            ``WATSONX_API_KEY`` environment variable.
+        project_id (str | None): WatsonX project ID; defaults to the
+            ``WATSONX_PROJECT_ID`` environment variable.
+
+    Attributes:
+        to_mellea_model_opts_map_chats (dict): Mapping from chat-endpoint option names
+            to Mellea ``ModelOption`` sentinel keys.
+        from_mellea_model_opts_map_chats (dict): Mapping from Mellea sentinel keys to
+            chat-endpoint option names.
+        to_mellea_model_opts_map_completions (dict): Mapping from completions-endpoint
+            option names to Mellea ``ModelOption`` sentinel keys.
+        from_mellea_model_opts_map_completions (dict): Mapping from Mellea sentinel
+            keys to completions-endpoint option names.
+    """
 
     def __init__(
         self,
-        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_3_3_8B,
+        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_HYBRID_SMALL,
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
@@ -63,17 +92,7 @@ class WatsonxAIBackend(FormatterBackend):
         project_id: str | None = None,
         **kwargs,
     ):
-        """A generic watsonx backend that wraps around the ibm_watsonx_ai sdk.
-
-        Args:
-            model_id  : Model id. Defaults to model_ids.IBM_GRANITE_3_3_8B.
-            formatter : input formatter. Defaults to TemplateFormatter in __init__.
-            base_url  : url for watson ML deployment. Defaults to env(WATSONX_URL).
-            model_options : Global model options to pass to the model. Defaults to None.
-            api_key : watsonx API key. Defaults to None.
-            project_id : watsonx project ID. Defaults to None.
-            kwargs : extra kwargs passed to model inference creation.
-        """
+        """Initialize a WatsonX AI backend using the ibm_watsonx_ai SDK."""
         # There are bugs with the Watsonx python sdk related to async event loops;
         # using the same watsonx backend across multiple event loops causes errors.
         warnings.warn(
@@ -94,7 +113,7 @@ class WatsonxAIBackend(FormatterBackend):
         self._model_id = model_id
 
         if base_url is None:
-            base_url = f"{os.environ.get('WATSONX_URL')}"
+            base_url = os.environ.get("WATSONX_URL")
         if api_key is None:
             api_key = os.environ.get("WATSONX_API_KEY")
 
@@ -172,7 +191,14 @@ class WatsonxAIBackend(FormatterBackend):
         return watsonx_model_id
 
     def filter_chat_completions_kwargs(self, model_options: dict) -> dict:
-        """Filter kwargs to only include valid watsonx chat.completions.create parameters."""
+        """Filter kwargs to only include valid watsonx chat.completions.create parameters.
+
+        Args:
+            model_options (dict): Model options dict that may contain non-chat keys.
+
+        Returns:
+            dict: A dict containing only keys accepted by the WatsonX chat endpoint.
+        """
         # TextChatParameters.get_sample_params().keys() can't be completely trusted. It doesn't always contain all
         # all of the accepted keys. In version 1.3.39, max_tokens was removed even though it's still accepted.
         # It's a dataclass so use the fields function to get the names.
@@ -237,7 +263,7 @@ class WatsonxAIBackend(FormatterBackend):
 
         return model_opts
 
-    async def generate_from_context(
+    async def _generate_from_context(
         self,
         action: Component[C] | CBlock,
         ctx: Context,
@@ -246,9 +272,31 @@ class WatsonxAIBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """See `generate_from_chat_context`."""
+        """Generate a completion for ``action`` given ``ctx`` via the WatsonX chat API.
+
+        Delegates to ``generate_from_chat_context``. Only chat contexts are
+        supported; raises ``NotImplementedError`` otherwise.
+
+        Args:
+            action (Component[C] | CBlock): The component or content block to generate
+                a completion for.
+            ctx (Context): The current generation context (must be a chat context).
+            format (type[BaseModelSubclass] | None): Optional Pydantic model class for
+                structured/constrained output decoding.
+            model_options (dict | None): Per-call model options that override the
+                backend's defaults.
+            tool_calls (bool): If ``True``, expose available tools to the model and
+                parse tool-call responses.
+
+        Returns:
+            tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
+                and an updated context that includes ``action`` and the new output.
+        """
         assert ctx.is_chat_context, NotImplementedError(
             "The watsonx.ai backend only supports chat-like contexts."
+        )
+        span = start_generate_span(
+            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         )
         mot = await self.generate_from_chat_context(
             action,
@@ -257,6 +305,11 @@ class WatsonxAIBackend(FormatterBackend):
             model_options=model_options,
             tool_calls=tool_calls,
         )
+
+        # Store span in metadata for post_processing to record telemetry
+        if span is not None:
+            mot._meta["_telemetry_span"] = span
+
         return mot, ctx.add(action).add(mot)
 
     async def generate_from_chat_context(
@@ -269,7 +322,28 @@ class WatsonxAIBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk[C]:
-        """Generates a new completion from the provided Context using this backend's `Formatter`."""
+        """Generate a new completion from the provided context using this backend's formatter.
+
+        Formats the context and action into WatsonX-compatible chat messages, submits
+        the request asynchronously, and returns a thunk that lazily resolves the output.
+
+        Args:
+            action (Component[C] | CBlock): The component or content block to generate
+                a completion for.
+            ctx (Context): The current generation context.
+            _format (type[BaseModelSubclass] | None): Optional Pydantic model class for
+                structured output decoding.
+            model_options (dict | None): Per-call model options.
+            tool_calls (bool): If ``True``, expose available tools and parse responses.
+
+        Returns:
+            ModelOutputThunk[C]: A thunk holding the (lazy) model output.
+
+        Raises:
+            Exception: If ``action`` is an ``ALoraRequirement``, which is not
+                supported by this backend.
+            RuntimeError: If not called from a thread with a running event loop.
+        """
         await self.do_generate_walk(action)
 
         model_opts = self._simplify_and_merge(
@@ -356,6 +430,7 @@ class WatsonxAIBackend(FormatterBackend):
             )
 
         output = ModelOutputThunk(None)
+        output._start = datetime.datetime.now()
         output._context = linearized_context
         output._action = action
         output._model_options = model_opts
@@ -388,9 +463,15 @@ class WatsonxAIBackend(FormatterBackend):
         return output
 
     async def processing(self, mot: ModelOutputThunk, chunk: dict):
-        """Called during generation to add information from a single ChatCompletion or ChatCompletionChunk to the ModelOutputThunk.
+        """Accumulate content from a single WatsonX response dict into the output thunk.
 
-        For OpenAI-like APIs, tool call parsing is handled in the post processing step.
+        Called for each non-streaming chat dict (with a ``"message"`` key) or
+        streaming delta dict (with a ``"delta"`` key). Tool call parsing is
+        handled in the post-processing step.
+
+        Args:
+            mot (ModelOutputThunk): The output thunk being populated.
+            chunk (dict): A single response dict or streaming delta from the WatsonX API.
         """
         if mot._thinking is None:
             mot._thinking = ""
@@ -413,7 +494,10 @@ class WatsonxAIBackend(FormatterBackend):
             if content_chunk is not None:
                 mot._underlying_value += content_chunk
 
-            mot._meta["oai_chat_response"] = chunk["choices"][0]
+            # Store full chunk (includes usage information)
+            mot._meta["oai_chat_response"] = chunk
+            # Store choice separately for tool extraction
+            mot._meta["oai_chat_response_choice"] = chunk["choices"][0]
 
         else:  # Streaming.
             message_delta: dict = chunk["choices"][0].get("delta", dict())
@@ -438,7 +522,20 @@ class WatsonxAIBackend(FormatterBackend):
         seed,
         _format,
     ):
-        """Called when generation is done."""
+        """Finalize the output thunk after WatsonX generation completes.
+
+        Reconstructs a merged chat response from streaming chunks if applicable,
+        extracts any tool call requests, records token usage metrics, emits telemetry,
+        and attaches the generate log.
+
+        Args:
+            mot (ModelOutputThunk): The output thunk to finalize.
+            conversation (list[dict]): The chat conversation sent to the model,
+                used for logging.
+            tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
+            seed: The random seed used during generation, or ``None``.
+            _format: The structured output format class used during generation, if any.
+        """
         # Reconstruct the chat_response from chunks if streamed.
         streamed_chunks = mot._meta.get("oai_chat_response_streamed", None)
         if streamed_chunks is not None:
@@ -456,13 +553,59 @@ class WatsonxAIBackend(FormatterBackend):
         # OpenAI streamed responses give you chunks of tool calls.
         # As a result, we have to store data between calls and only then
         # check for complete tool calls in the post_processing step.
-        tool_chunk = extract_model_tool_requests(tools, mot._meta["oai_chat_response"])
+        # Use choice for tool extraction (streaming returns choice, not full response)
+        choice_response = mot._meta.get(
+            "oai_chat_response_choice", mot._meta["oai_chat_response"]
+        )
+        tool_chunk = extract_model_tool_requests(tools, choice_response)
         if tool_chunk is not None:
             if mot.tool_calls is None:
                 mot.tool_calls = {}
             # Merge the tool_chunk dict.
             for key, val in tool_chunk.items():
                 mot.tool_calls[key] = val
+
+        # Extract token usage from response
+        response = mot._meta.get("oai_chat_response")
+        usage = None
+        if response is not None:
+            # Watsonx responses may have usage information
+            usage = (
+                response.get("usage")
+                if isinstance(response, dict)
+                else getattr(response, "usage", None)
+            )
+
+        # Populate standardized usage field (WatsonX uses OpenAI format)
+        if usage:
+            mot.usage = usage
+
+        # Populate model and provider metadata
+        mot.model = (
+            self.model_id.watsonx_name
+            if isinstance(self.model_id, ModelIdentifier)
+            else str(self.model_id)
+        )
+        mot.provider = "watsonx"
+
+        # Record tracing if span exists
+        span = mot._meta.get("_telemetry_span")
+        if span is not None:
+            from ..telemetry import end_backend_span
+            from ..telemetry.backend_instrumentation import (
+                record_response_metadata,
+                record_token_usage,
+            )
+
+            if usage:
+                record_token_usage(span, usage)
+            if response is not None:
+                record_response_metadata(span, response)
+
+            # Close the span now that async operation is complete
+            end_backend_span(span)
+            # Clean up span reference
+            del mot._meta["_telemetry_span"]
 
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
@@ -512,25 +655,42 @@ class WatsonxAIBackend(FormatterBackend):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
-        """Generates a completion text. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(list(actions))
+        """Generate completions for multiple actions without chat templating via WatsonX.
 
-        if format is not None:
-            FancyLogger.get_logger().warning(
-                "WatsonxAI completion api does not accept response format, ignoring it for this request."
+        Passes formatted prompt strings directly to WatsonX's generate endpoint.
+        The ``format`` parameter is not supported and will be ignored with a warning.
+
+        Args:
+            actions (Sequence[Component[C] | CBlock]): Actions to generate completions for.
+            ctx (Context): The current generation context.
+            format (type[BaseModelSubclass] | None): Not supported; ignored with a warning.
+            model_options (dict | None): Per-call model options.
+            tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
+
+        Returns:
+            list[ModelOutputThunk]: A list of model output thunks, one per action.
+        """
+        with instrument_generate_from_raw(
+            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
+        ):
+            await self.do_generate_walks(list(actions))
+
+            if format is not None:
+                FancyLogger.get_logger().warning(
+                    "WatsonxAI completion api does not accept response format, ignoring it for this request."
+                )
+
+            model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
+
+            prompts = [self.formatter.print(action) for action in actions]
+
+            responses = await asyncio.to_thread(
+                self._model.generate,
+                prompt=prompts,
+                params=self._make_backend_specific_and_remove(
+                    model_opts, is_chat_context=False
+                ),
             )
-
-        model_opts = self._simplify_and_merge(model_options, is_chat_context=False)
-
-        prompts = [self.formatter.print(action) for action in actions]
-
-        responses = await asyncio.to_thread(
-            self._model.generate,
-            prompt=prompts,
-            params=self._make_backend_specific_and_remove(
-                model_opts, is_chat_context=False
-            ),
-        )
 
         results = []
         date = datetime.datetime.now()
@@ -590,7 +750,10 @@ class WatsonxAIBackend(FormatterBackend):
 
             # Watsonx returns the args as a string. Parse it here.
             args = json.loads(tool_args)
-            model_tool_calls[tool_name] = ModelToolCall(tool_name, func, args)
+
+            # Validate and coerce argument types
+            validated_args = validate_tool_arguments(func, args, strict=False)
+            model_tool_calls[tool_name] = ModelToolCall(tool_name, func, validated_args)
 
         if len(model_tool_calls) > 0:
             return model_tool_calls

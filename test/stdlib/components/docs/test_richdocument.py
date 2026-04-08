@@ -1,10 +1,19 @@
 import os
+import tempfile
+
+import pytest
+
+pytest.importorskip(
+    "docling_core", reason="docling_core not installed — install mellea[docling]"
+)
+from docling_core.types.doc.document import DoclingDocument
+
+import mellea
 from mellea.core import TemplateRepresentation
 from mellea.stdlib.components.docs.richdocument import RichDocument, Table
-import mellea
-from docling_core.types.doc.document import DoclingDocument
-import tempfile
-import pytest
+from test.predicates import require_gpu
+
+pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(scope="module")
@@ -22,12 +31,12 @@ def test_richdocument_basics(rd: RichDocument):
     )
 
     repr = rd.format_for_llm()
-    assert type(repr) == str, "rich document template args should be a dict"
+    assert isinstance(repr, str), "rich document template args should be a dict"
 
 
 def test_richdocument_markdown(rd: RichDocument):
     mkd = rd.to_markdown()
-    assert type(mkd) == str, "rich document `to_markdown` should be a string"
+    assert isinstance(mkd, str), "rich document `to_markdown` should be a string"
     assert "Bag of Words" in mkd, "expected string not in rd `to_markdown` output"
 
 
@@ -48,7 +57,7 @@ def test_table(rd: RichDocument):
     # Getting the tables technically tests the functionality of richdocument,
     # but we do it here to make it easier. The provided document has one table.
     tables = rd.get_tables()
-    assert all(type(t) == Table for t in tables), (
+    assert all(isinstance(t, Table) for t in tables), (
         f"rich document `get_tables` returned a non-table value: {tables}"
     )
     assert len(tables) > 0, (
@@ -57,13 +66,15 @@ def test_table(rd: RichDocument):
 
     table = tables[0]
     repr = table.format_for_llm()
-    assert type(repr) == TemplateRepresentation, "table template args should be a dict"
+    assert isinstance(repr, TemplateRepresentation), (
+        "table template args should be a dict"
+    )
     assert "table" in repr.args.keys() and len(repr.args.keys()) == 1, (
         "table's should have a single `as_markdown` key"
     )
 
     mkd_table = table.to_markdown()
-    assert type(mkd_table) == str, "table `to_markdown` should return a string"
+    assert isinstance(mkd_table, str), "table `to_markdown` should return a string"
 
     loaded_table = Table.from_markdown(mkd_table)
     assert loaded_table is not None, (
@@ -94,10 +105,14 @@ def test_empty_table():
 
 
 @pytest.mark.skip  # Test requires too much memory for smaller machines.
+@pytest.mark.e2e
+@pytest.mark.huggingface
+@pytest.mark.qualitative
+@require_gpu(min_vram_gb=16)
 def test_richdocument_generation(rd: RichDocument):
     m = mellea.start_session(backend_name="hf")
     response = m.chat(rd.to_markdown()[:500] + "\nSummarize the provided document.")
-    assert response.content is not "", (
+    assert response.content != "", (
         "response content should not be empty when summarizing a rich document"
     )
     assert "paper" in response.content.lower() or "gltr" in response.content.lower(), (

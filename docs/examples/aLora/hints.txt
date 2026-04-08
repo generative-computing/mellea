@@ -1,0 +1,3 @@
+This dataset is a collection of mechanics' notes from proprietary repair workshop for self-sealing stembolts.
+
+The subject of the dataset is self-sealing stembolts, which are a very unique and esoteric piece of hardware.

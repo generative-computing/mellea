@@ -1,0 +1,20 @@
+{
+  "messages": [
+    {
+      "role": "assistant",
+      "content": "Hello there, how can I help you?"
+    },
+    {
+      "content": "What is the square root of 4?",
+      "role": "user"
+    }
+  ],
+  "extra_body": {
+    "documents": [
+      {
+          "doc_id": "1",
+          "text": "The square root of 4 is 2."
+      }
+    ]
+  }
+}

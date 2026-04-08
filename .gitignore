@@ -8,6 +8,13 @@ scratchpad/
 *.egg-info
 .vscode/
 
+# HPC job logs directory (synced from remote)
+logs/
+
+# Test output files
+pytest_*.stdout
+pytest_*.stderr
+
 # IDE
 .idea
 
@@ -441,3 +448,13 @@ pyrightconfig.json
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/python,direnv,visualstudiocode,pycharm,macos,jetbrains
+
+# AI agent configs
+.bob/
+.claude/*
+!.claude/settings.json
+
+# Generated API documentation (built by tooling/docs-autogen/)
+docs/docs/api/
+docs/docs/api-reference.mdx
+.venv-docs-autogen/

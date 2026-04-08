@@ -3,7 +3,7 @@
 Use this template when adding or modifying components in `mellea/stdlib/components/`.
 
 ## Description
-- [ ] Link to Issue: 
+- [ ] Link to Issue: Fixes <!-- issue number -->
 
 <!-- Brief description of the component being added/modified along with an explanation for why it should be in the standard library. -->
 

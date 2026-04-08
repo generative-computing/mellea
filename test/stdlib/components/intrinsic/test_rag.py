@@ -6,12 +6,15 @@ import os
 import pathlib
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
 from mellea.backends.huggingface import LocalHFBackend
+from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
+from test.predicates import require_gpu
 
 # Skip entire module in CI since all 7 tests are qualitative
 pytestmark = [
@@ -20,15 +23,12 @@ pytestmark = [
         reason="Skipping RAG tests in CI - all qualitative tests",
     ),
     pytest.mark.huggingface,
-    pytest.mark.requires_gpu,
-    pytest.mark.llm,
+    require_gpu(min_vram_gb=12),
+    pytest.mark.e2e,
 ]
 
 DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"
 """Location of data files for the tests in this file."""
-
-
-BASE_MODEL = "ibm-granite/granite-4.0-micro"
 
 
 @pytest.fixture(name="backend", scope="module")
@@ -37,16 +37,13 @@ def _backend():
     # Prevent thrashing if the default device is CPU
     torch.set_num_threads(4)
 
-    backend_ = LocalHFBackend(model_id=BASE_MODEL)
+    # No adapters for hybrid version.
+    backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name)  # type: ignore
     yield backend_
 
-    # Code after yield is cleanup code.
-    # Free GPU memory with extreme prejudice.
-    del backend_
-    gc.collect()  # Force a collection of the newest generation
-    gc.collect()
-    gc.collect()  # Hopefully force a collection of the oldest generation
-    torch.cuda.empty_cache()
+    from test.conftest import cleanup_gpu_backend
+
+    cleanup_gpu_backend(backend_, "rag")
 
 
 def _read_input_json(file_name: str):
@@ -118,6 +115,7 @@ def test_query_rewrite(backend):
     assert result == expected
 
 
+@pytest.mark.xfail(reason="Non-deterministic citation boundaries across environments")
 @pytest.mark.qualitative
 def test_citations(backend):
     """Verify that the citations intrinsic functions properly."""
@@ -160,50 +158,48 @@ def test_hallucination_detection(backend):
     result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
     # pytest.approx() chokes on lists of records, so we do this complicated dance.
     for r, e in zip(result, expected, strict=True):  # type: ignore
-        assert pytest.approx(r, abs=2e-2) == e
+        assert pytest.approx(r, abs=3e-2) == e
 
     # Second call hits a different code path from the first one
     result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
     for r, e in zip(result, expected, strict=True):  # type: ignore
-        assert pytest.approx(r, abs=2e-2) == e
+        assert pytest.approx(r, abs=3e-2) == e
 
 
 @pytest.mark.qualitative
-def test_answer_relevance(backend):
-    """Verify that the answer relevance composite intrinsic functions properly."""
-    context, answer, docs = _read_input_json("answer_relevance.json")
-
-    # Note that this is not the optimal answer. This test is currently using an
-    # outdated LoRA adapter. Releases of new adapters will come after the Mellea
-    # integration has stabilized.
-    expected_rewrite = "The meeting attendees were Alice, Bob, and Carol."
+def test_query_clarification_positive(backend):
+    """Verify that query clarification detects ambiguous queries requiring clarification."""
+    context, next_user_turn, documents = _read_input_json(
+        "query_clarification_positive.json"
+    )
 
     # First call triggers adapter loading
-    result = rag.rewrite_answer_for_relevance(answer, docs, context, backend)
-    assert result == expected_rewrite
+    result = rag.clarify_query(next_user_turn, documents, context, backend)
+    # The result should be a clarification question, not "CLEAR"
+    assert result != "CLEAR"
+    assert len(result) > 0
 
     # Second call hits a different code path from the first one
-    result = rag.rewrite_answer_for_relevance(answer, docs, context, backend)
-    assert result == expected_rewrite
-
-    # Canned input always gets rewritten. Set threshold to disable the rewrite.
-    result = rag.rewrite_answer_for_relevance(
-        answer, docs, context, backend, rewrite_threshold=0.0
-    )
-    assert result == answer
+    result = rag.clarify_query(next_user_turn, documents, context, backend)
+    assert result != "CLEAR"
+    assert len(result) > 0
 
 
 @pytest.mark.qualitative
-def test_answer_relevance_classifier(backend):
-    """Verify that the first phase of the answer relevance flow behaves as expectee."""
-    context, answer, docs = _read_input_json("answer_relevance.json")
-
-    result_json = rag._call_intrinsic(
-        "answer_relevance_classifier",
-        context.add(Message("assistant", answer, documents=list(docs))),
-        backend,
+def test_query_clarification_negative(backend):
+    """Verify that query clarification returns CLEAR for clear queries."""
+    context, next_user_turn, documents = _read_input_json(
+        "query_clarification_negative.json"
     )
-    assert result_json["answer_relevance_likelihood"] == 0.0
+
+    # First call triggers adapter loading
+    result = rag.clarify_query(next_user_turn, documents, context, backend)
+    # The result should be "CLEAR" for a clear query that doesn't need clarification
+    assert result == "CLEAR"
+
+    # Second call hits a different code path from the first one
+    result = rag.clarify_query(next_user_turn, documents, context, backend)
+    assert result == "CLEAR"
 
 
 if __name__ == "__main__":

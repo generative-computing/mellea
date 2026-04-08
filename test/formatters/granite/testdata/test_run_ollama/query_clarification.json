@@ -1,0 +1,11 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "{\"clarification\": \"There are many languages that descended from Common Brittonic, like Welsh, Breton, and Cornish. Which one are you referring to?\"}",
+                "role": "assistant"
+            }
+        }
+    ]
+}

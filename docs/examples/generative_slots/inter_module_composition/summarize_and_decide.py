@@ -1,3 +1,5 @@
+# pytest: ollama, e2e
+
 from typing import Literal
 
 from decision_aides import (

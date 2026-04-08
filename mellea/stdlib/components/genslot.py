@@ -32,7 +32,11 @@ R = TypeVar("R")
 
 
 class FunctionResponse(BaseModel, Generic[R]):
-    """Generic base class for function response formats."""
+    """Generic base class for function response formats.
+
+    Attributes:
+        result (R): The value returned by the generative function.
+    """
 
     result: R = Field(description="The function result")
 
@@ -61,7 +65,13 @@ def create_response_format(func: Callable[..., R]) -> type[FunctionResponse[R]]:
 
 
 class FunctionDict(TypedDict):
-    """Return Type for a Function Component."""
+    """Return Type for a Function Component.
+
+    Attributes:
+        name (str): The function's ``__name__``.
+        signature (str): The function's parameter signature as a string.
+        docstring (str | None): The function's docstring, or ``None`` if absent.
+    """
 
     name: str
     signature: str
@@ -69,7 +79,13 @@ class FunctionDict(TypedDict):
 
 
 class ArgumentDict(TypedDict):
-    """Return Type for a Argument Component."""
+    """Return Type for an Argument Component.
+
+    Attributes:
+        name (str | None): The parameter name.
+        annotation (str | None): The parameter's type annotation as a string.
+        value (str | None): The bound value for this parameter as a string.
+    """
 
     name: str | None
     annotation: str | None
@@ -77,7 +93,13 @@ class ArgumentDict(TypedDict):
 
 
 class Argument:
-    """An Argument."""
+    """A single function argument with its name, type annotation, and value.
+
+    Args:
+        annotation (str | None): The parameter's type annotation as a string.
+        name (str | None): The parameter name.
+        value (str | None): The bound value for this parameter as a string.
+    """
 
     def __init__(
         self,
@@ -85,7 +107,7 @@ class Argument:
         name: str | None = None,
         value: str | None = None,
     ):
-        """An Argument."""
+        """Initialize Argument with optional name, type annotation, and bound value."""
         self._argument_dict: ArgumentDict = {
             "name": name,
             "annotation": annotation,
@@ -94,8 +116,17 @@ class Argument:
 
 
 class Arguments(CBlock):
+    """A ``CBlock`` that renders a list of ``Argument`` objects as human-readable text.
+
+    Each argument is formatted as ``"- name: value  (type: annotation)"`` and the
+    items are newline-joined into a single string suitable for inclusion in a prompt.
+
+    Args:
+        arguments (list[Argument]): The list of bound function arguments to render.
+    """
+
     def __init__(self, arguments: list[Argument]):
-        """Create a textual representation of a list of arguments."""
+        """Initialize Arguments by rendering a list of Argument objects as a formatted string."""
         # Make meta the original list of arguments and create a list of textual representations.
         meta: dict[str, Any] = {}
         text_args = []
@@ -110,10 +141,16 @@ class Arguments(CBlock):
 
 
 class ArgPreconditionRequirement(Requirement):
-    """Specific requirement with template for validating precondition requirements against a set of args."""
+    """Specific requirement with template for validating precondition requirements against a set of args.
+
+    Args:
+        req (Requirement): The underlying requirement to wrap. All method calls
+            are delegated to this requirement.
+
+    """
 
     def __init__(self, req: Requirement):
-        """Can only be instantiated from existing requirements. All function calls are delegated to the underlying requirement."""
+        """Initialize ArgPreconditionRequirement by wrapping an existing Requirement."""
         self.req = req
 
     def __getattr__(self, name):
@@ -127,26 +164,39 @@ class ArgPreconditionRequirement(Requirement):
 
 
 class PreconditionException(Exception):
-    """Exception raised when validation fails for a generative slot's arguments."""
+    """Exception raised when validation fails for a generative slot's arguments.
+
+    Args:
+        message (str): Human-readable description of the failure.
+        validation_results (list[ValidationResult]): The individual validation
+            results from the failed precondition checks.
+
+    Attributes:
+        validation (list[ValidationResult]): The validation results from the
+            failed precondition checks.
+    """
 
     def __init__(
         self, message: str, validation_results: list[ValidationResult]
     ) -> None:
-        """Exception raised when validation fails for a generative slot's arguments.
-
-        Args:
-            message: the error message
-            validation_results: the list of validation results from the failed preconditions
-        """
+        """Initialize PreconditionException with a message and the list of failed validation results."""
         super().__init__(message)
         self.validation = validation_results
 
 
 class Function(Generic[P, R]):
-    """A Function."""
+    """Wraps a callable with its introspected ``FunctionDict`` metadata.
+
+    Stores the original callable alongside its name, signature, and docstring
+    as produced by ``describe_function``, so generative slots can render them
+    into prompts without re-inspecting the function each time.
+
+    Args:
+        func (Callable): The callable to wrap and introspect.
+    """
 
     def __init__(self, func: Callable[P, R]):
-        """A Function."""
+        """Initialize Function by wrapping a callable and capturing its metadata."""
         self._func: Callable[P, R] = func
         self._function_dict: FunctionDict = describe_function(func)
 
@@ -205,6 +255,10 @@ def bind_function_arguments(
 
     Returns:
         Dictionary mapping parameter names to bound values with defaults applied.
+
+    Raises:
+        TypeError: If required parameters from the original function are missing
+            from the provided arguments.
     """
     signature = inspect.signature(func)
     try:
@@ -227,6 +281,12 @@ class ExtractedArgs:
     """Used to extract the mellea args and original function args. See @generative decorator for additional notes on these fields.
 
     These args must match those allowed by any overload of GenerativeSlot.__call__.
+
+    Attributes:
+        f_args (tuple[Any, ...]): Positional args from the original function call;
+            used to detect incorrectly passed args to generative slots.
+        f_kwargs (dict[str, Any]): Keyword args intended for the original function.
+        m (MelleaSession | None): The active Mellea session, if provided.
     """
 
     f_args: tuple[Any, ...]
@@ -258,13 +318,26 @@ _disallowed_param_names = [field.name for field in fields(ExtractedArgs())]
 
 
 class GenerativeSlot(Component[R], Generic[P, R]):
-    """A generative slot component."""
+    """Abstract base class for AI-powered function wrappers produced by ``@generative``.
+
+    A ``GenerativeSlot`` wraps a callable and uses an LLM to generate its output.
+    Subclasses (``SyncGenerativeSlot``, ``AsyncGenerativeSlot``) implement
+    ``__call__`` for synchronous and asynchronous invocation respectively.
+    The function's signature, docstring, and type hints are rendered into a prompt
+    so the LLM can imitate the function's intended behaviour.
+
+    Args:
+        func (Callable): The function whose behaviour the LLM should imitate.
+
+    Attributes:
+        precondition_requirements (list[Requirement]): Requirements validated
+            against the function's input arguments before generation.
+        requirements (list[Requirement]): Requirements validated against the
+            LLM's generated output.
+    """
 
     def __init__(self, func: Callable[P, R]):
-        """A generative slot function that converts a given `func` to a generative slot.
-
-        Args:
-            func: A callable function
+        """Initialize GenerativeSlot by wrapping the given callable and validating its parameter names.
 
         Raises:
             ValueError: if the decorated function has a parameter name used by generative slots
@@ -297,14 +370,23 @@ class GenerativeSlot(Component[R], Generic[P, R]):
 
     @staticmethod
     def extract_args_and_kwargs(*args, **kwargs) -> ExtractedArgs:
-        """Takes a mix of args and kwargs for both the generative slot and the original function and extracts them. Ensures the original function's args are all kwargs.
+        """Take a mix of args and kwargs for both the generative slot and the original function and extract them. Ensures the original function's args are all kwargs.
+
+        Args:
+            args: Positional arguments; the first must be either a
+                ``MelleaSession`` or a ``Context`` instance.
+            kwargs: Keyword arguments for both the generative slot machinery
+                (e.g. ``m``, ``context``, ``backend``, ``requirements``) and the
+                wrapped function's own parameters.
 
         Returns:
-            ExtractedArgs: a dataclass of the required args for mellea and the original function.
-            Either session or (backend, context) will be non-None.
+            ExtractedArgs: A dataclass of the required args for mellea and the
+            original function. Either session or (backend, context) will be
+            non-None.
 
         Raises:
-            TypeError: if any of the original function's parameters were passed as positional args
+            TypeError: If any of the original function's parameters were passed
+                as positional args or if required mellea parameters are missing.
         """
 
         def _session_extract_args_and_kwargs(
@@ -386,7 +468,14 @@ class GenerativeSlot(Component[R], Generic[P, R]):
         return extracted
 
     def parts(self) -> list[Component | CBlock]:
-        """Parts of Genslot."""
+        """Return the constituent parts of this generative slot component.
+
+        Includes the rendered arguments block (if arguments have been bound)
+        and any requirements attached to this slot.
+
+        Returns:
+            list[Component | CBlock]: List of argument blocks and requirements.
+        """
         cs: list = []
         if self._arguments is not None:
             cs.append(self._arguments)
@@ -394,7 +483,16 @@ class GenerativeSlot(Component[R], Generic[P, R]):
         return cs
 
     def format_for_llm(self) -> TemplateRepresentation:
-        """Formats the instruction for Formatter use."""
+        """Format this generative slot for the language model.
+
+        Builds a ``TemplateRepresentation`` containing the function metadata
+        (name, signature, docstring), the bound arguments, and any requirement
+        descriptions.
+
+        Returns:
+            TemplateRepresentation: The formatted representation ready for the
+            ``Formatter`` to render into a prompt.
+        """
         return TemplateRepresentation(
             obj=self,
             args={
@@ -424,6 +522,13 @@ class GenerativeSlot(Component[R], Generic[P, R]):
 
 
 class SyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
+    """A synchronous generative slot that blocks until the LLM response is ready.
+
+    Returned by ``@generative`` when the decorated function is not a coroutine.
+    ``__call__`` returns the parsed result directly (when a session is passed) or a
+    ``(result, context)`` tuple (when a context and backend are passed).
+    """
+
     @overload
     def __call__(
         self,
@@ -670,6 +775,7 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                     strategy=extracted.strategy,
                     format=self._response_model,
                     model_options=extracted.model_options,
+                    await_result=True,
                 )
             else:
                 # We know these aren't None from the `extract_args_and_kwargs` function.
@@ -683,8 +789,12 @@ class AsyncGenerativeSlot(GenerativeSlot, Generic[P, R]):
                     strategy=extracted.strategy,
                     format=self._response_model,
                     model_options=extracted.model_options,
+                    await_result=True,
                 )
 
+            assert response.is_computed(), (
+                "unexpectedly received uncomputed model output thunk in async generative slot"
+            )
             assert response.parsed_repr is not None
             if context is None:
                 return response.parsed_repr

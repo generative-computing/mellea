@@ -55,9 +55,18 @@ response = m.chat(
 
 ## Supported Models
 
-- **Ollama**: llava, bakllava, llava-phi3, moondream
+- **Ollama**: granite3.2-vision, llava, bakllava, llava-phi3, moondream, qwen2.5vl:7b
 - **OpenAI**: gpt-4-vision-preview, gpt-4o
 - **LiteLLM**: Various vision models through unified interface
+
+## Prerequisites
+
+Pull a vision-capable model before running these examples:
+
+```bash
+ollama pull granite3.2-vision    # ~2.4 GB — primary recommended model
+ollama pull qwen2.5vl:7b         # ~4.7 GB — used in vision_openai_examples.py
+```
 
 ## Related Documentation
 

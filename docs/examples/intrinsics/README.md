@@ -13,9 +13,6 @@ Core example showing how to directly use intrinsics with adapters.
 - Working with Granite Common adapters (aLoRA-based)
 - Understanding adapter output formats
 
-### answer_relevance.py
-Evaluates whether an answer is relevant to a question.
-
 ### answerability.py
 Checks if a question can be answered given the context.
 
@@ -31,6 +28,28 @@ Detects when model outputs contain hallucinated information.
 ### query_rewrite.py
 Rewrites queries for better retrieval or understanding.
 
+### uncertainty.py
+Estimates the model's certainty about answering a question.
+
+### requirement_check.py
+Detect if text adheres to provided requirements.
+
+### policy_guardrails.py
+Checks if a scenario is compliant/non-compliant/ambiguous with respect to a given policy,
+
+### guardian_core.py
+Uses the guardian-core LoRA adapter for safety risk detection, including prompt-level harm, response-level social bias, RAG groundedness, and custom criteria.
+
+### factuality_detection.py
+Detects if the the model's output is factually incorrect relative to context.
+
+### factuality_correction.py
+Corrects a factually incorrect response relative to context.
+
+### context_attribution.py
+Identifies sentences in conversation history and documents that most influenced the response.
+
+
 ## Concepts Demonstrated
 
 - **Intrinsic Functions**: Specialized model capabilities beyond text generation
@@ -43,13 +62,13 @@ Rewrites queries for better retrieval or understanding.
 
 ```python
 from mellea.backends.huggingface import LocalHFBackend
-from mellea.backends.adapters.adapter import GraniteCommonAdapter
+from mellea.backends.adapters.adapter import IntrinsicAdapter
 from mellea.stdlib.components import Intrinsic
 import mellea.stdlib.functional as mfuncs
 
 # Create backend and adapter
-backend = LocalHFBackend(model_id="ibm-granite/granite-3.3-8b-instruct")
-adapter = GraniteCommonAdapter("requirement_check", 
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")
+adapter = IntrinsicAdapter("requirement_check",
                                base_model_name=backend.base_model_name)
 backend.add_adapter(adapter)
 
@@ -65,12 +84,17 @@ out, new_ctx = mfuncs.act(
 ## Available Intrinsics
 
 - **requirement_check**: Validate requirements (used by ALoraRequirement)
-- **answer_relevance**: Check answer-question relevance
 - **answerability**: Determine if question is answerable
 - **citations**: Extract and validate citations
 - **context_relevance**: Assess context-query relevance
 - **hallucination_detection**: Detect hallucinated content
 - **query_rewrite**: Improve query formulation
+- **uncertainty**: Estimate certainty about answering a question
+- **policy_guardrails**: Determine if scenario complies with policy
+- **guardian-core**: Safety risk detection (harm, bias, groundedness, custom criteria)
+- **factuality_detection**: Detect factually incorrect responses
+- **factuality_correction**: Correct factually incorrect responses
+- **context-attribution**: Identify context sentences that most influenced response
 
 ## Related Documentation
 

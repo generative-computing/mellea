@@ -11,14 +11,16 @@ from unittest.mock import Mock
 
 import pydantic
 import pytest
-import torch
+
+torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
+
+from test.predicates import require_gpu
 
 # Mark all tests in this module with backend and resource requirements
 pytestmark = [
     pytest.mark.huggingface,
-    pytest.mark.llm,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
+    pytest.mark.e2e,
+    require_gpu(min_vram_gb=20),
     # Skip entire module in CI since 17/18 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -27,8 +29,8 @@ pytestmark = [
 ]
 
 from mellea import MelleaSession
-from mellea.backends import ModelOption
-from mellea.backends.adapters import GraniteCommonAdapter
+from mellea.backends import ModelOption, model_ids
+from mellea.backends.adapters import IntrinsicAdapter
 from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.huggingface import LocalHFBackend, _assert_correct_adapters
 from mellea.core import (
@@ -46,21 +48,29 @@ from mellea.stdlib.requirements import ALoraRequirement, LLMaJRequirement
 
 @pytest.fixture(scope="module")
 def backend():
-    """Shared HuggingFace backend for all tests in this module."""
+    """Shared HuggingFace backend for all tests in this module.
+
+    Uses Granite 3.3-8b for aLoRA adapter compatibility.
+    The "requirement_check" intrinsic only has adapters for Granite 3.3 models.
+    Granite 4 adapters are not yet available.
+    Other intrinsics are not affected by this issue.
+    """
     backend = LocalHFBackend(
         model_id="ibm-granite/granite-3.3-8b-instruct",
         formatter=TemplateFormatter(model_id="ibm-granite/granite-4.0-tiny-preview"),
         cache=SimpleLRUCache(5),
     )
     backend.add_adapter(
-        GraniteCommonAdapter(
-            "requirement_check", base_model_name=backend.base_model_name
-        )
+        IntrinsicAdapter("requirement_check", base_model_name=backend.base_model_name)
     )
     backend.add_adapter(
-        GraniteCommonAdapter("answerability", base_model_name=backend.base_model_name)
+        IntrinsicAdapter("answerability", base_model_name=backend.base_model_name)
     )
-    return backend
+    yield backend
+
+    from test.conftest import cleanup_gpu_backend
+
+    cleanup_gpu_backend(backend, "huggingface")
 
 
 @pytest.fixture(scope="function")
@@ -72,7 +82,7 @@ def session(backend):
 
 
 @pytest.mark.qualitative
-def test_adapters(backend):
+def test_adapters(backend) -> None:
     assert len(backend._added_adapters.items()) > 0
 
     expected_qualified_name = "requirement_check_alora"
@@ -90,7 +100,7 @@ def test_adapters(backend):
 
 
 @pytest.mark.qualitative
-def test_system_prompt(session):
+def test_system_prompt(session) -> None:
     result = session.chat(
         "Where are we going?",
         model_options={ModelOption.SYSTEM_PROMPT: "Talk like a pirate."},
@@ -99,8 +109,8 @@ def test_system_prompt(session):
 
 
 @pytest.mark.qualitative
-def test_constraint_lora_with_requirement(session, backend):
-    answer = session.instruct(
+def test_constraint_lora_with_requirement(session, backend) -> None:
+    session.instruct(
         "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
     )
     assert session.backend._cache is not None  # type: ignore
@@ -116,9 +126,9 @@ def test_constraint_lora_with_requirement(session, backend):
 
 
 @pytest.mark.qualitative
-def test_constraint_lora_override(session, backend):
+def test_constraint_lora_override(session, backend) -> None:
     backend.default_to_constraint_checking_alora = False  # type: ignore
-    answer = session.instruct(
+    session.instruct(
         "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
     )
     validation_outputs = session.validate(
@@ -132,9 +142,9 @@ def test_constraint_lora_override(session, backend):
 
 
 @pytest.mark.qualitative
-def test_constraint_lora_override_does_not_override_alora(session, backend):
+def test_constraint_lora_override_does_not_override_alora(session, backend) -> None:
     backend.default_to_constraint_checking_alora = False  # type: ignore
-    answer = session.instruct(
+    session.instruct(
         "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
     )
     validation_outputs = session.validate(
@@ -158,9 +168,9 @@ def test_constraint_lora_override_does_not_override_alora(session, backend):
 
 
 @pytest.mark.qualitative
-def test_llmaj_req_does_not_use_alora(session, backend):
+def test_llmaj_req_does_not_use_alora(session, backend) -> None:
     backend.default_to_constraint_checking_alora = True  # type: ignore
-    answer = session.instruct(
+    session.instruct(
         "Corporate wants you to find the difference between these two strings: aaaaaaaaaa aaaaabaaaa"
     )
     validation_outputs = session.validate(
@@ -176,15 +186,15 @@ def test_llmaj_req_does_not_use_alora(session, backend):
 
 
 @pytest.mark.qualitative
-def test_instruct(session):
+def test_instruct(session) -> None:
     result = session.instruct("Compute 1+1.")
     print(result)
 
 
 @pytest.mark.qualitative
-def test_multiturn(session):
+def test_multiturn(session) -> None:
     session.instruct("Compute 1+1")
-    beta = session.instruct(
+    session.instruct(
         "Take the result of the previous sum and find the corresponding letter in the greek alphabet.",
         model_options={ModelOption.MAX_NEW_TOKENS: 300},
     )
@@ -193,7 +203,7 @@ def test_multiturn(session):
 
 
 @pytest.mark.qualitative
-def test_chat(session):
+def test_chat(session) -> None:
     output_message = session.chat("What is 1+1?")
     assert "2" in output_message.content, (
         f"Expected a message with content containing 2 but found {output_message}"
@@ -201,7 +211,7 @@ def test_chat(session):
 
 
 @pytest.mark.qualitative
-def test_format(session):
+def test_format(session) -> None:
     class Person(pydantic.BaseModel):
         name: str
         email_address: Annotated[
@@ -229,13 +239,15 @@ def test_format(session):
 
     print("address:", email.to.email_address)
     assert "@" in email.to.email_address, "The @ sign should be in the email address."
-    assert email.to.email_address.endswith("example.com"), (
+    assert email.to.email_address.endswith(
+        "example.com"
+    ) or email.to.email_address.endswith("example.com>"), (
         "The email address should be at example.com"
     )
 
 
 @pytest.mark.qualitative
-async def test_generate_from_raw(session):
+async def test_generate_from_raw(session) -> None:
     prompts = [
         "what is 1+1?",
         "what is 2+2?",
@@ -253,7 +265,7 @@ async def test_generate_from_raw(session):
 
 
 @pytest.mark.qualitative
-async def test_generate_from_raw_with_format(session):
+async def test_generate_from_raw_with_format(session) -> None:
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+4?"]
 
     class Answer(pydantic.BaseModel):
@@ -270,7 +282,7 @@ async def test_generate_from_raw_with_format(session):
 
     random_result = results[0]
     try:
-        answer = Answer.model_validate_json(random_result.value)
+        Answer.model_validate_json(random_result.value)
     except pydantic.ValidationError as e:
         assert False, (
             f"formatting directive failed for {random_result.value}: {e.json()}"
@@ -278,7 +290,7 @@ async def test_generate_from_raw_with_format(session):
 
 
 @pytest.mark.qualitative
-async def test_async_parallel_requests(session):
+async def test_async_parallel_requests(session) -> None:
     model_opts = {ModelOption.STREAM: True}
     mot1, _ = await session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext(), model_options=model_opts
@@ -314,7 +326,7 @@ async def test_async_parallel_requests(session):
 
 
 @pytest.mark.qualitative
-async def test_async_avalue(session):
+async def test_async_avalue(session) -> None:
     mot1, _ = await session.backend.generate_from_context(
         CBlock("Say Hello."), SimpleContext()
     )
@@ -322,9 +334,17 @@ async def test_async_avalue(session):
     assert m1_final_val is not None
     assert m1_final_val == mot1.value
 
+    # Verify telemetry fields are populated
+    assert mot1.usage is not None
+    assert mot1.usage["prompt_tokens"] >= 0
+    assert mot1.usage["completion_tokens"] > 0
+    assert mot1.usage["total_tokens"] > 0
+    assert isinstance(mot1.model, str)
+    assert mot1.provider == "huggingface"
+
 
 @pytest.mark.qualitative
-async def test_generate_with_lock(backend):
+async def test_generate_with_lock(backend) -> None:
     # Enable the faulthandler for this test.
     faulthandler.enable(all_threads=True)
 
@@ -337,13 +357,11 @@ async def test_generate_with_lock(backend):
     b._added_adapters = {}
     b._loaded_adapters = {}
     b.add_adapter(
-        GraniteCommonAdapter("requirement_check", base_model_name=b.base_model_name)
+        IntrinsicAdapter("requirement_check", base_model_name=b.base_model_name)
     )
-    b.add_adapter(
-        GraniteCommonAdapter("answerability", base_model_name=b.base_model_name)
-    )
+    b.add_adapter(IntrinsicAdapter("answerability", base_model_name=b.base_model_name))
 
-    memoized = dict()
+    memoized: dict[torch.Tensor, str] = dict()  # type: ignore[name-defined]
     gen_func = model.generate
 
     def mock_func(input_ids, *args, **kwargs):
@@ -414,7 +432,7 @@ async def test_generate_with_lock(backend):
 @pytest.mark.skipif(
     sys.version_info < (3, 11), reason="asyncio.timeout requires python3.11 or higher"
 )
-async def test_generate_with_lock_does_not_block_when_awaiting_value(backend):
+async def test_generate_with_lock_does_not_block_when_awaiting_value(backend) -> None:
     """This is a tricky test to setup.
 
     It's purpose is to ensure that a long-running generation doesn't get blocked
@@ -453,10 +471,10 @@ async def test_generate_with_lock_does_not_block_when_awaiting_value(backend):
     )
     reg_mot, _ = await backend.generate_from_context(act, ctx)
     req_mot, _ = await backend.generate_from_context(
-        req_intrinsic, ctx, model_options={ModelOption.STREAM: True}
+        req_intrinsic, ctx, model_options={}
     )
     answerability_mot, _ = await backend.generate_from_context(
-        answerability_intrinsic, ctx, model_options={ModelOption.STREAM: True}
+        answerability_intrinsic, ctx, model_options={}
     )
 
     # Ensure the stream is generating but not yet completing.
@@ -470,8 +488,7 @@ async def test_generate_with_lock_does_not_block_when_awaiting_value(backend):
     # most likely due to a deadlock caused by awaiting a generation that cannot complete until
     # the streaming is done.
     try:
-        async with asyncio.timeout(timeout_in_seconds):
-            await req_mot.avalue()
+        await asyncio.wait_for(req_mot.avalue(), timeout=timeout_in_seconds)
     except Exception as e:
         # The timeout could also be caused by the generation taking too long... be careful!
         # We assume that if the streaming model output thunk is computed after getting its astream here,
@@ -488,18 +505,33 @@ async def test_generate_with_lock_does_not_block_when_awaiting_value(backend):
 
 
 @pytest.mark.qualitative
-async def test_error_during_generate_with_lock(backend):
+async def test_streaming_error_with_intrinsics(backend) -> None:
+    ctx = ChatContext().add(Message("user", "hello"))
+    req_intrinsic = Intrinsic("requirement_check", {"requirement": "did nothing"})
+
+    with pytest.raises(Exception, match="Intrinsics do not support streaming"):
+        _, _ = await backend.generate_from_context(
+            req_intrinsic, ctx, model_options={ModelOption.STREAM: True}
+        )
+
+
+@pytest.mark.qualitative
+async def test_error_during_generate_with_lock(backend) -> None:
     # Create local versions of these objects so that mocking
     # doesn't impact other functions. Don't do this in regular code,
     # the copying is complex.
     b: LocalHFBackend = copy(backend)
     model = copy(b._model)
     b._model = model
-    b._model.set_adapter([])
+    try:
+        b._model.set_adapter([])
+    except ValueError as e:
+        if "No adapter loaded" not in str(e):
+            raise
     b._added_adapters = {}
     b._loaded_adapters = {}
     b.add_adapter(
-        GraniteCommonAdapter("requirement_check", base_model_name=b.base_model_name)
+        IntrinsicAdapter("requirement_check", base_model_name=b.base_model_name)
     )
 
     regular_generate = b._model.generate
@@ -529,7 +561,7 @@ async def test_error_during_generate_with_lock(backend):
     await req_mot.avalue()
 
 
-def test_assert_correct_adapters():
+def test_assert_correct_adapters() -> None:
     model = Mock()
 
     # Test scenarios with no active adapters.

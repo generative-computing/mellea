@@ -1,0 +1,11 @@
+{
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "content": "{\"requirement_likelihood\": 0.0}",
+                "role": "assistant"
+            }
+        }
+    ]
+}

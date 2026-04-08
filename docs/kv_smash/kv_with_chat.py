@@ -2,9 +2,9 @@ import torch
 
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.kv_block_helpers import DynamicCache, merge_dynamic_caches
-from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
+from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 
-backend = LocalHFBackend(model_id=IBM_GRANITE_3_3_8B)
+backend = LocalHFBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO)
 
 model = backend._model
 tokenizer = backend._tokenizer
@@ -49,7 +49,9 @@ messages = [
     {"role": "user", "content": c_blocks[1]},
     {"role": "user", "content": "Also no cash"},
 ]
-templatized_input = tokenizer.apply_chat_template(conversation=messages, tokenize=False)
+templatized_input: str = tokenizer.apply_chat_template(  # type: ignore[assignment]
+    conversation=messages, tokenize=False
+)
 
 str_parts = []
 tok_parts = []
@@ -93,7 +95,7 @@ merged_dcs = merge_dynamic_caches(dc_parts)
 merged_dcs.crop(-1)
 
 # generate and print result.
-result = model.generate(
+result = model.generate(  # type: ignore[operator]
     merged_toks.to(device),
     attention_mask=merged_masks.to(device),
     past_key_values=merged_dcs,

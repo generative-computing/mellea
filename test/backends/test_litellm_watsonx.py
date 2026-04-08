@@ -2,14 +2,17 @@ import asyncio
 
 import pytest
 
+from test.predicates import require_api_key
+
 # Mark all tests in this module as requiring Watsonx via LiteLLM
 pytestmark = [
     pytest.mark.litellm,
     pytest.mark.watsonx,
-    pytest.mark.llm,
-    pytest.mark.requires_api_key,
+    pytest.mark.e2e,
+    require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID"),
 ]
 
+pytest.importorskip("litellm", reason="litellm not installed — install mellea[litellm]")
 from mellea import MelleaSession
 from mellea.backends.litellm import LiteLLMBackend
 from mellea.core import CBlock
@@ -23,7 +26,7 @@ def session():
     session.reset()
 
 
-def test_has_potential_event_loop_errors(session):
+def test_has_potential_event_loop_errors(session) -> None:
     """This test is specific to litellm backends that use watsonx/. It can be removed once that bug is fixed."""
     backend: LiteLLMBackend = session.backend
     potential_err = backend._has_potential_event_loop_errors()
@@ -42,13 +45,13 @@ def test_has_potential_event_loop_errors(session):
 
 
 @pytest.mark.qualitative
-def test_multiple_sync_funcs(session):
+def test_multiple_sync_funcs(session) -> None:
     session.chat("first")
     session.chat("second")
 
 
 @pytest.mark.qualitative
-async def test_generate_from_raw(session):
+async def test_generate_from_raw(session) -> None:
     prompts = ["what is 1+1?", "what is 2+2?", "what is 3+3?", "what is 4+2+2?"]
 
     results = await session.backend.generate_from_raw(
@@ -65,7 +68,7 @@ async def test_generate_from_raw(session):
 @pytest.mark.xfail(
     reason="litellm has a bug with watsonx; once that is fixed, this should pass."
 )
-async def test_multiple_async_funcs(session):
+async def test_multiple_async_funcs(session) -> None:
     """If this test passes, remove the _has_potential_event_loop_errors func from litellm."""
     session.chat(
         "first sync"

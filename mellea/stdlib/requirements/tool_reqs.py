@@ -1,4 +1,12 @@
-"""Requirements for tool-use workflows."""
+"""``Requirement`` factories for tool-use validation.
+
+Provides ``uses_tool``, a ``Requirement`` factory that validates whether a model
+response includes a call to a specified tool — useful when you need to enforce tool
+invocation via rejection sampling rather than relying solely on the model's
+``tool_choice`` setting. Also provides ``tool_arg_validator``, which validates the
+value of a specific argument to a named tool. Both accept either the tool's string
+name or its callable.
+"""
 
 from collections.abc import Callable
 
@@ -15,18 +23,21 @@ def _name2str(tool_name: str | Callable) -> str:
             raise TypeError(f"Expected Callable or str but found: {type(tool_name)}")
 
 
-def uses_tool(tool_name: str | Callable, check_only=False):
+def uses_tool(tool_name: str | Callable, check_only: bool = False) -> Requirement:
     """Forces the model to call a given tool.
 
     Args:
         tool_name: The tool that must be called; this can be either the name of the tool or the Callable for the tool.
         check_only: Propagates to the Requirement.
 
-    Use `tool_choice` if the OpenAI `tool_choice` model option is supported by your model and inference engine.
+    Use ``tool_choice`` if the OpenAI ``tool_choice`` model option is supported by your model and inference engine.
+
+    Returns:
+        A ``Requirement`` that validates whether the specified tool was called.
     """
     tool_name = _name2str(tool_name)
 
-    def _validate(ctx: Context):
+    def _validate(ctx: Context) -> ValidationResult:
         output = ctx.last_output()
         assert output is not None
         if output.tool_calls is None:
@@ -61,11 +72,14 @@ def tool_arg_validator(
     Todo:
         1. should this be a requirement?
         2. should this be done automatically when the user provides asserts in their function body?
+
+    Returns:
+        A ``Requirement`` that validates the specified tool argument.
     """
     if tool_name:
         tool_name = _name2str(tool_name)
 
-    def _validate(ctx: Context):
+    def _validate(ctx: Context) -> ValidationResult:
         output = ctx.last_output()
         assert output is not None
 

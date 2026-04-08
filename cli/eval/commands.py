@@ -1,5 +1,6 @@
 """Use the eval command for LLM-as-a-judge evaluation, given a (set of) test file(s) consisting of prompts, instructions, and optionally, targets.
-Instantiate a generator model to produce candidate responses, and a judge model to determine whether the instructions have been followed."""
+Instantiate a generator model to produce candidate responses, and a judge model to determine whether the instructions have been followed.
+"""
 
 import typer
 
@@ -30,6 +31,25 @@ def eval_run(
     ),
     continue_on_error: bool = typer.Option(True, "--continue-on-error"),
 ):
+    """Run LLM-as-a-judge evaluation on one or more test files.
+
+    Loads test cases from JSON/JSONL files, generates candidate responses using
+    the specified generation backend, scores them with a judge model, and writes
+    aggregated results to a file.
+
+    Args:
+        test_files: Paths to JSON/JSONL files containing test cases.
+        backend: Generation backend name.
+        model: Generation model name, or ``None`` for the default.
+        max_gen_tokens: Maximum tokens to generate for each response.
+        judge_backend: Judge backend name, or ``None`` to reuse the generation
+            backend.
+        judge_model: Judge model name, or ``None`` for the default.
+        max_judge_tokens: Maximum tokens for the judge model's output.
+        output_path: File path prefix for the results file.
+        output_format: Output format -- ``"json"`` or ``"jsonl"``.
+        continue_on_error: If ``True``, skip failed tests instead of raising.
+    """
     from cli.eval.runner import run_evaluations
 
     run_evaluations(

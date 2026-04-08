@@ -1,0 +1,9 @@
+# Default: request review from maintainers
+* @generative-computing/mellea-maintainers
+
+# Mellea Core requires special review
+/mellea/core/ @nrfulton @jakelorocco
+
+# Mellea Intrinsics
+/mellea/formatters/granite @generative-computing/mellea-intrinsics
+/test/formatters/granite @generative-computing/mellea-intrinsics

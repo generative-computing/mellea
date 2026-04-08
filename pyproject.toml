@@ -4,21 +4,13 @@ build-backend = "pdm.backend"
 
 [project]
 name = "mellea"
-version = "0.3.0"
+version = "0.4.1"
 authors = [
-    { name = "Nathan Fulton", email = "nathan@ibm.com" },
-    { name = "Hendrik Strobelt", email = "hendrik.strobelt@ibm.com" },
-    { name = "Avinash Balakrishnan", email = "avinash.bala@us.ibm.com" },
-    { name = "Elron Bandel", email = "elron.bandel@ibm.com" },
-    { name = "Masataro Asai", email = "masataro.asai@ibm.com" },
-    { name = "Supriya Lall", email = "supriya.lall@partner.ibm.com" },
-    { name = "Xiaojie Guo", email = "xiaojie.guo@ibm.com" },
-    { name = "Jake LoRocco", email = "jake.lorocco@ibm.com" },
-    { name = "Ja Young Lee", email = "Ja.Young.Lee@ibm.com" },
+    { name = "Mellea Contributors", email = "melleaadmin@ibm.com" },
 ]
 description = "mellea is a library for writing generative programs"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
@@ -29,99 +21,146 @@ dependencies = [
     "pydantic",
     "openai",
     "jinja2",
-    "json5",
     "ollama>=0.5.1",
-    "ansicolors",
     "requests>=2.32.3",
-    "uvicorn",
-    "fastapi",
-    "types-requests",
-    "types-tqdm",
     "typer",
     "click<8.2.0", # Newer versions will cause errors with --help in typer CLIs.
     "mistletoe>=1.4.0",
-    "huggingface-hub>=0.33.4",
-    "pillow",
-    "granite-common>=0.3.6", # Needed for Intrinsics (HF and OpenAI Backends).
+    "pillow", # Needed for Intrinsics (HF and OpenAI Backends).
     "math_verify", # Needed for Majority Voting Sampling Strategies.
     "rouge_score", # Needed for Majority Voting Sampling Strategies.
-    "llm-sandbox[docker]>=0.3.23",
+    "PyYAML", # Needed for backends/adapters and granite formatters.
+    "packaging", # Needed for server type helpers.
 ]
 
 [project.scripts]
 m = "cli.m:cli"
 
 [project.optional-dependencies]
-# Use these like:
-# uv pip install "mellea[hf]"
-# uv pip install -e ".[hf, watsonx]"
-# if you want to install all dependencies, use uv sync --all-extras
+# Install optional features: pip install "mellea[all]" or uv sync --all-extras
 
-
-# note on outlines versions:
-# outlines>=1.2.0 requires outlines-core==0.2.11
-# outlines<=1.1.* requires outlines-core==0.1.26
-# vllm==0.10.0    requires outlines-core==0.2.10
-# vllm==0.9.*     requires outlines-core==0.1.26
-#
-# thus the following version combination allows installing vllm and outlines
-# (main library) at the same time.
-
+# Backend integrations
 hf = [
     "accelerate>=1.9.0",
-    "alora==0.2.0",
     "datasets>=4.0.0",
-    "outlines-core==0.1.26",
-    "outlines",                 # intentionally un-versioned, expecting a minor update. coutlines-core version should be enough to specify it
-    "peft>=0.18.0", # aLoRA support was added in Peft 0.18.0
-    "transformers==5.0.0",
+    "llguidance",
+    "peft>=0.18.1", # Native aLoRA support added in PEFT 0.18.0
+    "transformers>=4.53.2,<5",
     "trl==0.19.1",
-    "granite-common[transformers]",
+    "xgrammar", # Necessary for granite_common intrinsics.
+    "huggingface-hub>=0.33.4",
 ]
 
-vllm = [
-    "transformers", # Removing the <4.54.0 pin; need to figure out if this breaks anything. - TODO-nrf
-    # "transformers<4.54.0",
-    # see https://github.com/vllm-project/vllm-ascend/issues/2046
-    "numpy<2.0.0",              # patching incorrect dependencies in vllm and outlines.
-    # see https://github.com/vllm-project/vllm/issues/5587
-    "outlines-core==0.1.26",
-    "vllm>=0.9.1",
-]
 
 litellm = [
-    "litellm>=1.76"
+    "litellm>=1.76",
+    "boto3", # for Bedrock support.
 ]
 
 watsonx = [
     "ibm-watsonx-ai>=1.3.31",
 ]
-docling = [
-    # TODO-nrf re-enable this "docling>=2.45.0",
+
+# Feature integrations
+tools = [
+    "smolagents>=1.0.0",
+    "langchain-core>=1.2.7",
 ]
 
-all = ["mellea[watsonx,docling,hf,vllm,litellm]"]
+telemetry = [
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp>=1.20.0",
+    "opentelemetry-exporter-prometheus>=0.40b0",
+    "opentelemetry-distro>=0.59b0",
+    "mellea[hooks]",
+]
+
+docling = [
+    "docling>=2.45.0",
+    "opencv-python-headless",  # workaround: docling-ibm-models uses cv2 but omits it from its declared dependencies; headless variant required on Apple Silicon
+]
+
+granite_retriever = [
+    "sentence-transformers",
+    "pyarrow",
+    "elasticsearch>=8.0.0,<9.0.0",
+]
+
+# Infrastructure
+server = [
+    "uvicorn",
+    "fastapi",
+]
+
+sandbox = [
+    "llm-sandbox[docker]>=0.3.23",
+]
+
+backends = ["mellea[watsonx,hf,litellm]"]
+
+hooks = [
+    "cpex>=0.1.0.dev10; python_version >= '3.11'",
+    "grpcio>=1.78.0",
+]
+
+all = ["mellea[backends,docling,tools,telemetry,server,sandbox,granite_retriever,hooks]"]
 
 [dependency-groups]
-# Use these like:
-# pip install -e . --group dev
-# pip install mellea --group dev
-dev = [
+# Development groups: uv sync --all-groups
+
+# Code quality
+lint = [
+    "ruff>=0.15.5",
     "isort>=6.0.0",
     "pre-commit>=4.2.0",
     "pylint>=3.3.4",
-    "ruff>=0.11.6",
-    "pdm>=2.24.0",
+]
+
+test = [
     "pytest",
     "pytest-asyncio",
     "pytest-cov>=6.0.0",
+    "pytest-timeout",  # For test suite timeout configuration
+    "pytest-recording",  # For blocking network access and using canned server responses
+    "pytest-xdist>=3.8.0", # For concurrent test execution (uv run pytest -n auto test/)
+    "pytest-json-report",  # For JSON test reports in nightly CI
     "psutil",  # For test infrastructure: RAM detection in conftest.py
-    "mypy>=1.17.0",
-    "python-semantic-release~=7.32",
-    "nbmake>=1.5.5",
-    "langchain-core>=1.2.7", # Necessary for mypy and some tool tests
+    "nbmake>=1.5.5",  # Notebook testing
+    "sentencepiece==0.2.1",  # Necessary for test_huggingface_tools test because of Mistral model
+    "jsonschema",
+    # Example-only dependencies (run via pytest)
+    "langchain-community>=0.3.0",
+    "ddgs>=9.0.0",  # Required by DuckDuckGoSearchResults in langchain-community
 ]
 
+typecheck = [
+    "mypy>=1.17.0",
+    "types-requests",
+    "types-tqdm",
+]
+
+build = [
+    "pdm>=2.24.0",
+]
+
+release = [
+    "python-semantic-release~=7.32",
+]
+
+# Convenience: includes all dev dependencies (used by default with uv run)
+dev = [
+    {include-group = "lint"},
+    {include-group = "test"},
+    {include-group = "typecheck"},
+    {include-group = "build"},
+    {include-group = "release"},
+    "griffe>=2.0.0",
+    "mdxify>=0.2.37",
+    "poethepoet>=0.42.1",
+]
+
+# Documentation and notebooks
 notebook = [
     "ipykernel>=6.29.5",
     "ipython>=8.36.0",
@@ -134,8 +173,53 @@ docs = [
     "sphinx_mdinclude",
 ]
 
+# -----------------------------
+# poethepoet - Task Runner
+# -----------------------------
+# Run tasks with: uv run poe <task>
+
+[tool.poe.tasks]
+
+[tool.poe.tasks.apidocs]
+cmd = "python tooling/docs-autogen/build.py"
+help = "Generate + decorate API docs (version auto-detected from pyproject.toml)"
+
+[tool.poe.tasks.apidocs-clean]
+shell = "rm -rf docs/docs/api docs/docs/api-reference.mdx .venv-docs-autogen"
+help = "Remove all generated API docs and build artefacts"
+
+[tool.poe.tasks.apidocs-validate]
+cmd = "python tooling/docs-autogen/validate.py docs/docs/api --coverage-threshold 80"
+help = "Validate generated API docs (coverage, MDX syntax, links)"
+
+[tool.poe.tasks.apidocs-test]
+cmd = "pytest tooling/docs-autogen/"
+help = "Run docs tooling unit tests"
+
+[tool.poe.tasks.apidocs-orphans]
+cmd = "python tooling/docs-autogen/audit_coverage.py --orphans"
+help = "Find MDX files not referenced in docs/mint.json navigation"
+
+[tool.poe.tasks.apidocs-quality]
+cmd = "python tooling/docs-autogen/audit_coverage.py --quality"
+help = "Audit docstring quality for documented public symbols including methods (use --no-methods to skip class methods)"
+
+[tool.poe.tasks.apidocs-preview]
+shell = """
+set -e
+PREVIEW_DIR=/tmp/mellea-preview
+python tooling/docs-autogen/build.py --output-dir "$PREVIEW_DIR/api"
+python tooling/docs-autogen/audit_coverage.py --quality \
+  --docs-dir "$PREVIEW_DIR/api"
+"""
+help = "Generate fresh API docs to /tmp/mellea-preview and audit quality."
+
+# -----------------------------
+# Ruff - Linting and Formatting
+# -----------------------------
+
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 respect-gitignore = true
 
 [tool.ruff.format]
@@ -143,41 +227,32 @@ skip-magic-trailing-comma = true
 
 [tool.ruff.lint]
 select = [
-  # "B",  # flake8-bugbear
-  "C",  # flake8-comprehensions
-  "C9", # mccabe
-  "D",  # flake8-docstrings
-  "E",   # pycodestyle errors (default)
-  "F",   # pyflakes (default)
-  "I",   # isort
-  "PD",  # pandas-vet
-  "PIE", # pie
-  # "PTH", # pathlib
-  "Q", # flake8-quotes
-  # "RET", # return
-  "RUF", # Enable all ruff-specific checks
-  # "SIM", # simplify
-  "S307", # eval
+  "C",      # flake8-comprehensions
+  "C9",     # mccabe
+  "D",      # flake8-docstrings
+  "E",      # pycodestyle errors (default)
+  "F",      # pyflakes (default)
+  "I",      # isort
+  "PD",     # pandas-vet
+  "PIE",    # pie
+  "Q",      # flake8-quotes
+  "RUF",    # Enable all ruff-specific checks
+  "S307",   # eval
+  "W",      # pycodestyle warnings
+  "ASYNC",  # async
+  "UP",     # pyupgrade
   # "T20",  # (disallow print statements) keep debugging statements out of the codebase
-  "W",     # pycodestyle warnings
-  "ASYNC", # async
-  "UP",    # pyupgrade
 ]
 
 ignore = [
-  "RUF001", # ambiguous unicode characters (these occur in examples).
-  "C408",   # Unnecessary `dict()` call (rewrite as a literal)
-  "E501",   # Line too long, handled by ruff formatter
-  # "D107",   # "Missing docstring in __init__",
-  "F401",   # imported but unused; consider using `importlib.util.find_spec` to test for "
-  "F811",   # "redefinition of the same function"
-  "PL",     # Pylint
-  "RUF012", # Mutable Class Attributes
-#   "UP006",  # List vs list, etc
-#   "UP007",  # Option and Union
-#   "UP035",  # `typing.Set` is deprecated, use `set` instead"
-  "PD901",  # Avoid using the generic variable name `df` for DataFrames
-  "C901", # Complexity warnings
+  "RUF001",  # ambiguous unicode characters (these occur in examples)
+  "C408",    # Unnecessary `dict()` call (rewrite as a literal)
+  "E501",    # Line too long, handled by ruff formatter
+  "F401",    # imported but unused; consider using `importlib.util.find_spec` to test for
+  "F811",    # redefinition of the same function
+  "PL",      # Pylint
+  "RUF012",  # Mutable Class Attributes
+  "C901",    # Complexity warnings
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -190,55 +265,106 @@ max-complexity = 20
 combine-as-imports = true
 split-on-trailing-comma = false
 
+[tool.ruff.lint.per-file-ignores]
+# E402: Module level import not at top of file
+# Intentional in examples (pedagogical structure) and tests (pytestmark before imports)
+# D: Docstring errors
+# Not required in examples, tests, and notebooks (core mellea/ has complete docstrings)
+"docs/**/*.py" = ["E402", "D"]
+"docs/**/*.ipynb" = ["D"]
+"test/**/*.py" = ["E402", "D"]
+"cli/**/*.py" = ["D"]
+"tooling/**/*.py" = ["D"]
+
+# -----------------------------
+# MyPy - Type Checking
+# -----------------------------
+
+[tool.mypy]
+install_types = true
+non_interactive = true
+disable_error_code = ["empty-body", "import-untyped"]
+python_version = "3.11"
+exclude = [
+"^tooling/",
+"^scratchpad/",
+"^tmp/"
+]
+
+[[tool.mypy.overrides]]
+# Keep import-not-found suppressed for optional dependencies
+module = "docs.*"
+disable_error_code = [
+    "import-not-found",
+]
+
+
+# -----------------------------
+# Codespell - Spell Checking
+# -----------------------------
+
 [tool.codespell]
-ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat'
+ignore-words-list = 'mellea,hashi,noo,Asai,asai,nd,mot,rouge,Rouge,Strat,strat,Wight,Aer,aer,preemptable'
 check-filenames = true
 check-hidden = false
 regex = "(?<![a-z])[a-z'`]+|[A-Z][a-z'`]*|[a-z]+'[a-z]*|[a-z]+(?=[_-])|[a-z]+(?=[A-Z])|\\d+"
-skip = 'requirements.txt,uv.lock,CHANGELOG.md'
+skip = 'requirements.txt,uv.lock,CHANGELOG.md,test/formatters/granite/testdata/test_canned_output/model_output/*.json'
 
-[tool.mypy]
-disable_error_code = ["empty-body", "import-untyped"]
-python_version = "3.10"
+# -----------------------------
+# Pytest - Testing Framework
+# -----------------------------
 
 [tool.pytest.ini_options]
+testpaths = ["test", "docs"]  # Run test/ first (fail fast), then docs/
 markers = [
+    # Granularity markers
+    "unit: Self-contained tests — no services, no I/O (auto-applied when no other granularity marker present)",
+    "integration: Tests needing additional services or multi-component wiring (may use fixture-managed dependencies)",
+    "e2e: Tests against real backends — cloud APIs, local servers, or GPU-loaded models",
+
     # Backend markers
     "ollama: Tests requiring Ollama backend (local, light)",
     "openai: Tests requiring OpenAI API (requires API key)",
     "watsonx: Tests requiring Watsonx API (requires API key)",
     "huggingface: Tests requiring HuggingFace backend (local, heavy)",
-    "vllm: Tests requiring vLLM backend (local, GPU required)",
     "litellm: Tests requiring LiteLLM backend",
-    
+    "bedrock: Tests requiring AWS Bedrock backend (requires credentials)",
+
     # Capability markers
-    "requires_api_key: Tests requiring external API keys",
-    "requires_gpu: Tests requiring GPU",
-    "requires_heavy_ram: Tests requiring 48GB+ RAM",
     "qualitative: Non-deterministic quality tests",
-    
-    # Composite markers
-    "llm: Tests that make LLM calls (needs at least Ollama)",
+    "slow: Tests taking >1 minute (e.g., multi-step pipelines like researcher)",
+
+    # Composite markers (llm is deprecated — use e2e instead)
+    "llm: Tests that make LLM calls (deprecated — use e2e instead)",
 ]
 asyncio_mode = "auto"  # Don't require explicitly marking async tests.
 addopts = [
+    # Skip slow tests by default (use pytest without -m to include them)
+    "-m", "not slow",
+    # Run qualitative tests by default (use -m "not qualitative" for fast tests)
     "--cov=mellea",
     "--cov=cli",
-    "--cov-report=term",
     "--cov-report=html",
     "--cov-report=json",
+    # Set timeout to 15 minutes for full test suite
+    "--timeout=900",
 ]
 filterwarnings = [
     # Show each deprecation warning only once per session
     "once::DeprecationWarning",
     "once::PendingDeprecationWarning",
-    
+
     # Deduplicate noisy Pydantic serialization warnings
     "once:.*PydanticSerializationUnexpectedValue.*:UserWarning",
-    
+
+
     # Keep Watsonx deprecation visible (important for migration)
     "default:.*Watsonx Backend is deprecated.*:DeprecationWarning",
 ]
+
+# -----------------------------
+# Coverage - Code Coverage
+# -----------------------------
 
 [tool.coverage.run]
 branch = true  # Measure branch coverage, not just line coverage
@@ -266,6 +392,10 @@ exclude_lines = [
 
 [tool.coverage.html]
 directory = "htmlcov"
+
+# -----------------------------
+# Semantic Release - Versioning
+# -----------------------------
 
 [tool.semantic_release]
 # for default values check:

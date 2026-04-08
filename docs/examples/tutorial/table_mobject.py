@@ -1,3 +1,5 @@
+# pytest: ollama, e2e
+
 from io import StringIO
 
 import pandas

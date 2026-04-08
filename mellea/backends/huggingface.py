@@ -14,13 +14,13 @@ import threading
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, overload
 
-import granite_common
-import outlines
-import outlines_core
-import peft
+import llguidance
+import llguidance.hf
+import llguidance.torch
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.cache_utils import DynamicCache
+from transformers.generation.logits_process import LogitsProcessorList
 from transformers.generation.streamers import AsyncTextIteratorStreamer
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 from transformers.modeling_utils import PreTrainedModel
@@ -41,14 +41,18 @@ from ..core import (
     Requirement,
 )
 from ..core.base import AbstractMelleaTool
-from ..formatters import ChatFormatter, TemplateFormatter
+from ..formatters import ChatFormatter, TemplateFormatter, granite as granite_formatters
 from ..helpers import message_to_openai_message, messages_to_docs, send_to_queue
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
+from ..telemetry.backend_instrumentation import (
+    instrument_generate_from_raw,
+    start_generate_span,
+)
 from .adapters import (
     AdapterMixin,
     AdapterType,
-    GraniteCommonAdapter,
+    IntrinsicAdapter,
     LocalHFAdapter,
     get_adapter_for_intrinsic,
 )
@@ -63,8 +67,6 @@ from .tools import (
 )
 from .utils import to_chat, to_tool_calls
 
-assert outlines, "outlines needs to be present to make outlines_core work"
-
 """A configuration type for the unhappy path: Tokenizer * Model * torch device string
 
 Huggingface backends can initialize themselves from a model string if the transformers `Auto*` classes can be used. Therefore, a TransformersTorchConfig usually isn't required. However, sometimes a model needs special care to instantiate properly, or a custom device type needs to bse used. Instead of trying to do a lot of partial magic, we basically have two modaliites: either the constructor can figure out everything from the model_id, or the user has to provide an entire config.
@@ -76,12 +78,137 @@ format: None = None  # typing this variable in order to shadow the global format
 
 @dataclasses.dataclass
 class HFAloraCacheInfo:
-    """A dataclass for holding some KV cache and associated information."""
+    """A dataclass for holding a KV cache and associated generation metadata.
 
-    kv_cache: DynamicCache
+    Used by ``LocalHFBackend`` to store intermediate model state that can be
+    reused across generation requests via an LRU cache.
+
+    Args:
+        kv_cache (DynamicCache | None): The HuggingFace ``DynamicCache`` holding
+            precomputed key/value tensors, or ``None`` if not available.
+        merged_token_ids (Any): Token IDs corresponding to the cached prefix.
+        merged_attention (Any): Attention mask for the cached prefix tokens.
+        q_end (int): Index of the last prompt token in the merged token sequence;
+            defaults to ``-1``.
+        scores (Any): Optional logit scores from the generation step; defaults to
+            ``None``.
+
+    Attributes:
+        kv_cache (DynamicCache | None): The cached key/value tensors.
+        merged_token_ids (Any): Token IDs for the cached prefix.
+        merged_attention (Any): Attention mask for the cached prefix.
+        q_end (int): End index of the prompt portion in merged token IDs.
+        scores (Any): Logit scores from generation, or ``None``.
+    """
+
+    kv_cache: DynamicCache | None
     merged_token_ids: Any
     merged_attention: Any
     q_end: int = -1
+    scores: Any = None
+
+
+def _cleanup_kv_cache(cache_info: HFAloraCacheInfo) -> None:
+    """Free GPU memory when KV cache is evicted from LRU.
+
+    This function is called by SimpleLRUCache when an entry is evicted.
+    It explicitly deletes tensor references and calls torch.cuda.empty_cache()
+    to return pooled CUDA memory to the device.
+
+    Args:
+        cache_info: The HFAloraCacheInfo being evicted from cache.
+    """
+    import gc
+
+    if cache_info is None:
+        return
+
+    kv = cache_info.kv_cache
+    if kv is not None:
+        # Delete individual tensors from each layer
+        if hasattr(kv, "key_cache"):
+            for tensor in kv.key_cache:
+                del tensor
+            kv.key_cache.clear()
+        if hasattr(kv, "value_cache"):
+            for tensor in kv.value_cache:
+                del tensor
+            kv.value_cache.clear()
+        del cache_info.kv_cache
+
+    # Delete other tensors
+    if cache_info.merged_attention is not None:
+        del cache_info.merged_attention
+
+    # Delete score tensors if present
+    if cache_info.scores is not None:
+        for tensor in cache_info.scores:
+            del tensor
+        del cache_info.scores
+
+    # Force Python garbage collection and return CUDA memory to device
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+# modified from VLLM v0.9.2 code base
+# https://github.com/vllm-project/vllm/blob/v0.9.2/vllm/model_executor/guided_decoding/guidance_logits_processors.py
+class _GuidanceLogitsProcessor:
+    def __init__(self, grammar: str, ll_tokenizer: llguidance.LLTokenizer) -> None:
+        self.grammar = grammar
+        self.vocab_size: int = ll_tokenizer.vocab_size
+        self.ll_tokenizer: llguidance.LLTokenizer = ll_tokenizer
+        self.ll_matchers: list[llguidance.LLMatcher] = []
+        self.bitmasks: list[torch.Tensor] = []
+        self.new_sampling: bool = False
+        self.batch_size: int = -1
+
+    def __call__(
+        self, batch_input_ids: torch.Tensor, batch_scores: torch.Tensor
+    ) -> torch.Tensor:
+        i_batch, _ = batch_input_ids.shape
+        s_batch, _ = batch_scores.shape
+        assert i_batch == s_batch
+
+        # s_batch, s_vocab = batch_scores.shape
+        # assert s_vocab == self.vocab_size
+        #
+        # NOTE: somehow, this does not hold. s_vocab is not same as either of
+        # * self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=True) == self.vocab_size == ll_tokenizer.vocab_size
+        # * self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=False)
+
+        if self.batch_size != i_batch:
+            self.batch_size = i_batch
+            self.bitmasks = [
+                llguidance.torch.allocate_token_bitmask(1, self.vocab_size)  # type: ignore[attr-defined]
+                for _ in range(self.batch_size)
+            ]
+
+            self.ll_matchers = [
+                llguidance.LLMatcher(self.ll_tokenizer, self.grammar)
+                for _ in range(self.batch_size)
+            ]
+
+        for input_ids, scores, ll_matcher, bitmask in zip(
+            batch_input_ids, batch_scores, self.ll_matchers, self.bitmasks
+        ):
+            if self.new_sampling and len(input_ids) > 0:
+                ll_matcher.consume_token(  # type: ignore[attr-defined]
+                    input_ids.tolist()[-1]
+                )
+                err = ll_matcher.get_error()  # type: ignore[attr-defined]
+                if err:
+                    FancyLogger.get_logger().warning("Error in LLMatcher: %s", err)
+
+            llguidance.torch.fill_next_token_bitmask(ll_matcher, bitmask, 0)
+            llguidance.torch.apply_token_bitmask_inplace(
+                scores, bitmask.to(scores.device)
+            )  # type: ignore[attr-defined]
+
+        self.new_sampling = True
+
+        return batch_scores
 
 
 class LocalHFBackend(FormatterBackend, AdapterMixin):
@@ -90,6 +217,27 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     This backend is designed for running an HF model for small-scale inference locally on your machine.
 
     This backend is NOT designed for inference scaling on CUDA-enabled hardware.
+
+    Args:
+        model_id (str | ModelIdentifier): Used to load the model and tokenizer via
+            HuggingFace ``Auto*`` classes.
+        formatter (ChatFormatter | None): Formatter for rendering components into
+            prompts. Defaults to ``TemplateFormatter``.
+        use_caches (bool): If ``False``, KV caching is disabled even if a ``Cache``
+            is provided.
+        cache (Cache | None): Caching strategy; defaults to
+            ``SimpleLRUCache(0, on_evict=_cleanup_kv_cache)``.
+        custom_config (TransformersTorchConfig | None): Override for
+            tokenizer/model/device; if provided, ``model_id`` is not used for loading.
+        default_to_constraint_checking_alora (bool): If ``False``, aLoRA constraint
+            checking is deactivated; mainly for benchmarking and debugging.
+        model_options (dict | None): Default model options for generation requests.
+
+    Attributes:
+        to_mellea_model_opts_map (dict): Mapping from HF-specific option names to
+            Mellea ``ModelOption`` sentinel keys.
+        from_mellea_model_opts_map (dict): Mapping from Mellea sentinel keys to
+            HF-specific option names.
     """
 
     _cached_blocks: dict[str, DynamicCache] = dict()
@@ -105,19 +253,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         default_to_constraint_checking_alora: bool = True,
         model_options: dict | None = None,
     ):
-        """Attempt to load model weights using the model_id by default, or using `custom_config` if provided.
-
-        WARNING: initializing a `LocalHFBackend` will download and load the model on your *local* machine.
-
-        Args:
-            model_id (str | ModelIdentifier): Used to load the model *and tokenizer* via transformers Auto* classes, and then moves the model to the best available device (cuda > mps > cpu). If loading the model and/or tokenizer from a string will not work, or if you want to use a different device string, then you can use custom_config.
-            formatter (Formatter): A mechanism for turning `stdlib` stuff into strings. Experimental Span-based models should use `mellea.backends.span.*` backends.
-            use_caches (bool): If set to False, then caching will not be used even if a Cache is provided.
-            cache (Optional[Cache]): The caching strategy to use. If None, `LRUCache(3)` will be used.
-            custom_config (Optional[TransformersTorchConfig]): Overrides loading from the `model_id`. If set, then the specified tokenizer/model/device will be used instead of auto-loading from the model_id.
-            default_to_constraint_checking_alora: If set to False then aloras will be deactivated. This is primarily for performance benchmarking and debugging.
-            model_options (Optional[dict]): Default model options.
-        """
+        """Load model weights from the given model ID, or from a custom config if provided."""
         formatter = (
             formatter if formatter is not None else TemplateFormatter(model_id=model_id)
         )
@@ -164,16 +300,28 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
                 # Get the model and tokenizer.
                 self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-                    self._hf_model_id
-                ).to(self._device)  # type: ignore
+                    self._hf_model_id, device_map=str(self._device), torch_dtype="auto"
+                )
                 self._tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
                     self._hf_model_id
                 )
             case _:
                 self._tokenizer, self._model, self._device = custom_config
 
+        self._llguidance_tokenizer: llguidance.LLTokenizer = (
+            llguidance.hf.from_tokenizer(self._tokenizer)  # type:ignore
+        )
+        assert (
+            self._llguidance_tokenizer.vocab_size
+            == self._tokenizer._tokenizer.get_vocab_size(with_added_tokens=True)
+        ), "vocab size mismatch between llguidance and huggingface tokenizers ... wtf?"
+
         self._use_caches = use_caches
-        self._cache = cache if cache is not None else SimpleLRUCache(3)
+        self._cache = (
+            cache
+            if cache is not None
+            else SimpleLRUCache(0, on_evict=_cleanup_kv_cache)
+        )
 
         # Adapters can be made known to the backend (added) and loaded.
         self._added_adapters: dict[str, LocalHFAdapter] = {}
@@ -193,7 +341,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             ).past_key_values
         return dc
 
-    async def generate_from_context(
+    async def _generate_from_context(
         self,
         action: Component[C] | CBlock,
         ctx: Context,
@@ -202,7 +350,29 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
-        """Generate using the huggingface model."""
+        """Generate a completion for ``action`` given ``ctx`` using the HuggingFace model.
+
+        Automatically routes ``Requirement`` and ``Intrinsic`` actions to their
+        corresponding aLoRA adapters when available.
+
+        Args:
+            action (Component[C] | CBlock): The component or content block to generate
+                a completion for.
+            ctx (Context): The current generation context (must be a chat context).
+            format (type[BaseModelSubclass] | None): Optional Pydantic model class for
+                structured/constrained output decoding via llguidance.
+            model_options (dict | None): Per-call model options that override the
+                backend's defaults.
+            tool_calls (bool): If ``True``, expose available tools to the model and
+                parse tool-call responses.
+
+        Returns:
+            tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
+                and an updated context that includes ``action`` and the new output.
+        """
+        span = start_generate_span(
+            backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
+        )
         await self.do_generate_walk(action)
 
         # Upsert model options.
@@ -245,17 +415,28 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 mot = await self._generate_from_intrinsic(
                     alora_action, ctx, model_options=model_opts
                 )
+                # Store span for telemetry
+                if span is not None:
+                    mot._meta["_telemetry_span"] = span
                 return mot, ctx.add(alora_action).add(mot)
 
         elif isinstance(action, Intrinsic):
             mot = await self._generate_from_intrinsic(
                 action, ctx, model_options=model_opts
             )
+            # Store span for telemetry
+            if span is not None:
+                mot._meta["_telemetry_span"] = span
             return mot, ctx.add(action).add(mot)
 
         mot = await self._generate_from_context_standard(
             action, ctx, _format=format, model_options=model_opts, tool_calls=tool_calls
         )
+
+        # Store span in metadata for post_processing to record telemetry
+        if span is not None:
+            mot._meta["_telemetry_span"] = span
+
         return mot, ctx.add(action).add(mot)
 
     def _generate_with_adapter_lock(
@@ -303,6 +484,9 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             linearized_ctx
         )
 
+        # NOTE: Explicitly do not add the action to the context here. Intrinsics modify the context
+        #       through their rewriters.
+
         conversation: list[dict] = []
         system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
         if system_prompt != "":
@@ -318,10 +502,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         if model_options.get(ModelOption.STREAM, None) is not None:
             # Intrinsics don't support streaming because of their post-processing step.
-            FancyLogger.get_logger().warning(
-                "intrinsics cannot use streaming; removing model option"
-            )
-            del model_options[ModelOption.STREAM]
+            raise Exception("Intrinsics do not support streaming.")
 
         adapter = get_adapter_for_intrinsic(
             action.intrinsic_name, action.adapter_types, self._added_adapters
@@ -331,19 +512,19 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 f"backend ({self}) has no adapter for processing intrinsic: {action.intrinsic_name}"
             )
 
-        # TODO: Code below this point is mostly specific to RagIntrinsics (and granite_common).
+        # TODO: Code below this point is mostly specific to RagIntrinsics
         #       It should be refactored into a specific adapter.transform() function.
-        assert isinstance(adapter, GraniteCommonAdapter), (
-            "currently Mellea only supports GraniteCommonAdapters and Intrinsics"
+        assert isinstance(adapter, IntrinsicAdapter), (
+            "currently Mellea only supports IntrinsicAdapters and Intrinsics"
         )
 
         intrinsic_config = adapter.config
         assert intrinsic_config is not None
 
-        rewriter = granite_common.IntrinsicsRewriter(
+        rewriter = granite_formatters.IntrinsicsRewriter(
             config_dict=intrinsic_config, model_name=adapter.name
         )
-        result_processor = granite_common.IntrinsicsResultProcessor(
+        result_processor = granite_formatters.IntrinsicsResultProcessor(
             config_dict=intrinsic_config
         )
 
@@ -361,12 +542,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
         rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
 
-        # TODO: Handle caching here. granite_common doesn't tell us what changed,
+        # TODO: Handle caching here. granite_formatters doesn't tell us what changed,
         #       so we will have to invalidate the cache on our side. This requires
         #       us having specific caching for each Component/Message.
 
         generate_input, other_input = (
-            granite_common.util.chat_completion_request_to_transformers_inputs(  # type: ignore
+            granite_formatters.base.util.chat_completion_request_to_transformers_inputs(  # type: ignore
                 rewritten, self._tokenizer, self._model
             )
         )
@@ -374,7 +555,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         chat_response = asyncio.to_thread(
             self._generate_with_adapter_lock,
             adapter.qualified_name,
-            granite_common.util.generate_with_transformers,  # type: ignore
+            granite_formatters.base.util.generate_with_transformers,  # type: ignore
             # Passed as args/kwargs to generate.
             self._tokenizer,
             self._model,
@@ -383,19 +564,23 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         )
 
         output = ModelOutputThunk(None)
+        output._start = datetime.datetime.now()
         output._context = ctx.view_for_generation()
         output._action = action
         output._model_options = model_options
 
         # Add another step to the processing function.
-        async def granite_common_processing(
+        async def granite_formatters_processing(
             mot: ModelOutputThunk,
-            chunk: granite_common.ChatCompletionResponse,
-            rewritten: granite_common.ChatCompletion,
-            result_processor: granite_common.IntrinsicsResultProcessor,
+            chunk: granite_formatters.ChatCompletionResponse,
+            rewritten: granite_formatters.ChatCompletion,
+            result_processor: granite_formatters.IntrinsicsResultProcessor,
             input_ids,
         ):
-            res = result_processor.transform(chunk, rewritten)  # type: ignore
+            try:
+                res = result_processor.transform(chunk, rewritten)  # type: ignore
+            except json.JSONDecodeError as e:
+                raise Exception(f"Intrinsic did not return a JSON: {chunk}") from e
 
             # TODO: If we want to support caches, we need to get the GenerateDecoderOnlyOutput. This means we
             #       probably need to break out the pieces from `generate_with_transformers`.
@@ -405,7 +590,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
         output._process = functools.partial(
-            granite_common_processing,
+            granite_formatters_processing,
             rewritten=rewritten,
             result_processor=result_processor,
             input_ids=generate_input["input_tokens"],
@@ -588,24 +773,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             format_kwargs = {}
             if _format:
-                # outlines.generate.json always parses the resulting json into a python dict.
-                # We however want to keep it as a json string for later storing it in ModelOutputThunk
-                schema: dict[str, Any] = _format.model_json_schema()  # type: ignore
-                schema_json: str = json.dumps(schema)
-                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
-                    schema_json
+                schema: dict[str, Any] = _format.model_json_schema()
+                grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
+                    schema, defaults={"whitespace_flexible": False}
                 )
-
-                from outlines.models.transformers import TransformerTokenizer
-                from outlines.processors.structured import RegexLogitsProcessor
-                from transformers import LogitsProcessorList  # type: ignore
-
+                logits_processor = _GuidanceLogitsProcessor(
+                    grammar, self._llguidance_tokenizer
+                )
                 format_kwargs["logits_processor"] = LogitsProcessorList(
-                    [
-                        RegexLogitsProcessor(
-                            regex_str, tokenizer=TransformerTokenizer(self._tokenizer)
-                        )
-                    ]
+                    [logits_processor]
                 )
 
             streaming_kwargs = {}
@@ -635,7 +811,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             linearized_ctx = ctx.view_for_generation()
             assert linearized_ctx is not None
-            input_text, input_ids, merged_cache, attention_mask = (
+            _input_text, input_ids, merged_cache, attention_mask = (
                 self._make_merged_kv_cache(
                     linearized_ctx=linearized_ctx,
                     ctx_as_conversation=ctx_as_chat,
@@ -661,6 +837,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             )
 
             output = ModelOutputThunk(None)
+            output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action
             output._model_options = model_options
@@ -755,24 +932,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             format_kwargs = {}
             if _format:
-                # outlines.generate.json always parses the resulting json into a python dict.
-                # We however want to keep it as a json string for later storing it in ModelOutputThunk
-                schema: dict[str, Any] = _format.model_json_schema()  # type: ignore
-                schema_json: str = json.dumps(schema)
-                regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
-                    schema_json
+                schema: dict[str, Any] = _format.model_json_schema()
+                grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
+                    schema, defaults={"whitespace_flexible": False}
                 )
-
-                from outlines.models.transformers import TransformerTokenizer
-                from outlines.processors.structured import RegexLogitsProcessor
-                from transformers import LogitsProcessorList  # type: ignore
-
+                logits_processor = _GuidanceLogitsProcessor(
+                    grammar, self._llguidance_tokenizer
+                )
                 format_kwargs["logits_processor"] = LogitsProcessorList(
-                    [
-                        RegexLogitsProcessor(
-                            regex_str, tokenizer=TransformerTokenizer(self._tokenizer)
-                        )
-                    ]
+                    [logits_processor]
                 )
 
             streaming_kwargs = {}
@@ -807,13 +975,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # Passed as args/kwargs to generate.
                 input_ids,
                 return_dict_in_generate=True,
-                output_scores=True,
+                use_cache=self._use_caches,  # Only create KV cache if caching is enabled
                 **self._make_backend_specific_and_remove(generate_options),
                 **streaming_kwargs,  # type: ignore
                 **format_kwargs,  # type: ignore
             )
 
             output = ModelOutputThunk(None)
+            output._start = datetime.datetime.now()
             output._context = ctx.view_for_generation()
             output._action = action
             output._model_options = model_options
@@ -863,7 +1032,19 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
     async def processing(
         self, mot: ModelOutputThunk, chunk: str | GenerateDecoderOnlyOutput, input_ids
     ):
-        """Process the returned chunks or the complete response."""
+        """Accumulate decoded text from a streaming chunk or full generation output.
+
+        For streaming responses the chunk is an already-decoded string from
+        ``AsyncTextIteratorStreamer``; for non-streaming it is a
+        ``GenerateDecoderOnlyOutput`` that is decoded here.
+
+        Args:
+            mot (ModelOutputThunk): The output thunk being populated.
+            chunk (str | GenerateDecoderOnlyOutput): A decoded text chunk (streaming)
+                or a full HuggingFace generation output object (non-streaming).
+            input_ids: The prompt token IDs used for decoding; required to slice off
+                the prompt portion from the generated sequences.
+        """
         if mot._underlying_value is None:
             mot._underlying_value = ""
 
@@ -871,7 +1052,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # and already decoded.
         if isinstance(chunk, str):
             mot._underlying_value += chunk
-        else:
+        elif isinstance(chunk, GenerateDecoderOnlyOutput):
             # Otherwise, it's a non-streaming request. Decode it here.
             mot._meta["hf_output"] = chunk
             mot._underlying_value += self._tokenizer.decode(
@@ -888,7 +1069,23 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         seed,
         input_ids,
     ):
-        """Called when generation is done."""
+        """Finalize the output thunk after HuggingFace generation completes.
+
+        Stores the KV cache for future reuse, parses tool calls if applicable,
+        records token usage metrics, emits telemetry, and attaches the generate log.
+
+        Args:
+            mot (ModelOutputThunk): The output thunk to finalize.
+            conversation (list[dict]): The chat conversation sent to the model,
+                used for logging.
+            _format (type[BaseModelSubclass] | None): The structured output format
+                class used during generation, if any.
+            tool_calls (bool): Whether tool calling was enabled for this request.
+            tools (dict[str, AbstractMelleaTool]): Available tools, keyed by name.
+            seed: The random seed used during generation, or ``None``.
+            input_ids: The prompt token IDs; used to compute token counts and for
+                KV cache bookkeeping.
+        """
         if mot._meta.get("hf_output", None) is None:
             if mot._generate_extra is not None:
                 full_output = await mot._generate_extra
@@ -898,19 +1095,31 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # The ModelOutputThunk must be computed by this point.
         assert mot.value is not None
 
-        # Add an entry to the cache for ALora reuse.
-        if self._use_caches and mot._meta.get("hf_output", None) is not None:
-            output_complete = mot._meta["hf_output"].sequences[0]
-            cache: DynamicCache = mot._meta["hf_output"].past_key_values  # type: ignore
+        # Store KV cache in LRU separately (not in mot._meta) to enable proper cleanup on eviction.
+        # This prevents GPU memory from being held by ModelOutputThunk references.
+        hf_output = mot._meta.get("hf_output", None)
+        if (
+            self._use_caches
+            and isinstance(hf_output, GenerateDecoderOnlyOutput)
+            and (hf_output.past_key_values is not None or hf_output.scores is not None)
+        ):
+            output_complete = hf_output.sequences[0]
+            kv_cache: DynamicCache | None = hf_output.past_key_values  # type: ignore
 
             cache_info = HFAloraCacheInfo(
-                kv_cache=cache,
+                kv_cache=kv_cache,
                 merged_token_ids=output_complete,
                 merged_attention=torch.ones_like(output_complete).to(self._device),
                 q_end=len(input_ids[0]),  # type: ignore
+                scores=hf_output.scores,
             )
 
-            self.cache_put(mot.value, cache_info)
+            cache_key = id(mot.value)
+            self.cache_put(cache_key, cache_info)
+
+            # Clear KV cache and scores from HF output - they're now owned by the LRU cache
+            hf_output.past_key_values = None
+            hf_output.scores = None
 
         # Only scan for tools if we are not doing structured output and tool calls were provided to the model.
         if _format is None and tool_calls:
@@ -922,6 +1131,69 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         assert mot._model_options is not None, (
             "ModelOutputThunks should have their model_opts assigned during generation"
         )
+
+        span = mot._meta.get("_telemetry_span")
+
+        # Derive token counts from the output sequences (HF models have no usage object).
+        hf_output = mot._meta.get("hf_output")
+        n_prompt, n_completion = None, None
+        if isinstance(hf_output, GenerateDecoderOnlyOutput):
+            try:
+                if input_ids is not None and hf_output.sequences is not None:
+                    n_prompt = input_ids.shape[1]
+                    n_completion = hf_output.sequences[0].shape[0] - n_prompt
+            except Exception:
+                pass
+
+        if n_prompt is not None and n_completion is not None:
+            mot.usage = {
+                "prompt_tokens": n_prompt,
+                "completion_tokens": n_completion,
+                "total_tokens": n_prompt + n_completion,
+            }
+
+        # Populate model and provider metadata
+        if hasattr(self.model_id, "hf_model_name"):
+            mot.model = str(self.model_id.hf_model_name)  # type: ignore
+        else:
+            mot.model = str(self.model_id)
+        mot.provider = "huggingface"
+
+        # Record tracing if span exists
+        if span is not None:
+            from ..telemetry import end_backend_span
+            from ..telemetry.backend_instrumentation import (
+                record_response_metadata,
+                record_token_usage,
+            )
+
+            if isinstance(hf_output, GenerateDecoderOnlyOutput):
+                record_response_metadata(span, hf_output)
+                if mot.usage:
+                    record_token_usage(span, mot.usage)
+
+            # Close the span now that async operation is complete
+            end_backend_span(span)
+            # Clean up span reference
+            del mot._meta["_telemetry_span"]
+
+        # When caching is disabled, clear hf_output from meta to free GPU memory.
+        # The sequences tensor is on GPU and accumulates if not cleared.
+        if not self._use_caches and isinstance(
+            mot._meta.get("hf_output"), GenerateDecoderOnlyOutput
+        ):
+            import gc
+
+            hf_out = mot._meta["hf_output"]
+            if hasattr(hf_out, "sequences") and hf_out.sequences is not None:
+                del hf_out.sequences
+            if hasattr(hf_out, "scores") and hf_out.scores is not None:
+                del hf_out.scores
+            del mot._meta["hf_output"]
+
+            # Force Python GC and return CUDA memory to device
+            gc.collect()
+            torch.cuda.empty_cache()
 
         # Generate the log for this ModelOutputThunk.
         generate_log = GenerateLog()
@@ -972,68 +1244,77 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> list[ModelOutputThunk]:
-        """Generate using the completions api. Gives the input provided to the model without templating."""
-        await self.do_generate_walks(list(actions))
+        """Generate completions for multiple actions without chat templating.
 
-        if tool_calls:
-            FancyLogger.get_logger().warning(
-                "The raw endpoint does not support tool calling at the moment."
+        Passes formatted prompt strings directly to the HuggingFace model's
+        ``generate`` method as a batch. Tool calling is not supported.
+
+        Args:
+            actions (Sequence[Component[C] | CBlock]): Actions to generate completions for.
+            ctx (Context): The current generation context.
+            format (type[BaseModelSubclass] | None): Optional Pydantic model for
+                structured output decoding via llguidance.
+            model_options (dict | None): Per-call model options.
+            tool_calls (bool): Ignored; tool calling is not supported on this endpoint.
+
+        Returns:
+            list[ModelOutputThunk]: A list of model output thunks, one per action.
+        """
+        with instrument_generate_from_raw(
+            backend=self, num_actions=len(actions), format=format, tool_calls=tool_calls
+        ):
+            await self.do_generate_walks(list(actions))
+
+            if tool_calls:
+                FancyLogger.get_logger().warning(
+                    "The raw endpoint does not support tool calling at the moment."
+                )
+
+            if self._model.device.type == "mps":
+                # TODO: Remove this when we are able to update the torch package.
+                #       Test this by ensuring all outputs from this call are populated when running on mps.
+                #       https://github.com/pytorch/pytorch/pull/157727
+                FancyLogger.get_logger().warning(
+                    "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a huggingface backend; ensure all ModelOutputThunks have non-empty values."
+                )
+
+            model_opts = self._simplify_and_merge(model_options)
+            seed = model_opts.get(ModelOption.SEED, None)
+            if seed is not None:
+                set_seed(seed)
+
+            prompts = [self.formatter.print(action) for action in actions]
+
+            # batch-encoding call is deprecated in favor of this
+            inputs = self._tokenizer(prompts, return_tensors="pt", padding=True).to(
+                self._device
             )
 
-        if self._model.device.type == "mps":
-            # TODO: Remove this when we are able to update the torch package.
-            #       Test this by ensuring all outputs from this call are populated when running on mps.
-            #       https://github.com/pytorch/pytorch/pull/157727
-            FancyLogger.get_logger().warning(
-                "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a huggingface backend; ensure all ModelOutputThunks have non-empty values."
+            format_kwargs = {}
+            if format:
+                schema: dict[str, Any] = format.model_json_schema()
+                grammar: str = llguidance.LLMatcher.grammar_from_json_schema(
+                    schema, defaults={"whitespace_flexible": False}
+                )
+                logits_processor = _GuidanceLogitsProcessor(
+                    grammar, self._llguidance_tokenizer
+                )
+                format_kwargs["logits_processor"] = LogitsProcessorList(
+                    [logits_processor]
+                )
+
+            outputs = await asyncio.to_thread(
+                self._generate_with_adapter_lock,
+                "",  # Empty for no adapter.
+                self._model.generate,  # type: ignore
+                # Passed as args/kwargs to generate.
+                input_ids=inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                return_dict_in_generate=True,
+                output_scores=True,
+                **self._make_backend_specific_and_remove(model_opts),
+                **format_kwargs,
             )
-
-        model_opts = self._simplify_and_merge(model_options)
-        seed = model_opts.get(ModelOption.SEED, None)
-        if seed is not None:
-            set_seed(seed)
-
-        prompts = [self.formatter.print(action) for action in actions]
-
-        # batch-encoding call is deprecated in favor of this
-        inputs = self._tokenizer(prompts, return_tensors="pt", padding=True).to(
-            self._device
-        )
-
-        format_kwargs = {}
-        if format:
-            # outlines.generate.json always parses the resulting json into a python dict.
-            # We however want to keep it as a json string for later storing it in ModelOutputThunk
-            schema: dict[str, Any] = format.model_json_schema()  # type: ignore
-            schema_json: str = json.dumps(schema)
-            regex_str: str = outlines_core.fsm.json_schema.build_regex_from_schema(  # type: ignore
-                schema_json
-            )
-
-            from outlines.models.transformers import TransformerTokenizer
-            from outlines.processors.structured import RegexLogitsProcessor
-            from transformers import LogitsProcessorList  # type: ignore
-
-            format_kwargs["logits_processor"] = LogitsProcessorList(
-                [
-                    RegexLogitsProcessor(
-                        regex_str, tokenizer=TransformerTokenizer(self._tokenizer)
-                    )
-                ]
-            )
-
-        outputs = await asyncio.to_thread(
-            self._generate_with_adapter_lock,
-            "",  # Empty for no adapter.
-            self._model.generate,  # type: ignore
-            # Passed as args/kwargs to generate.
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            return_dict_in_generate=True,
-            output_scores=True,
-            **self._make_backend_specific_and_remove(model_opts),
-            **format_kwargs,
-        )
 
         sequences_to_decode = [
             sequence[inputs["input_ids"][i].size(0) :]  # type: ignore
@@ -1078,14 +1359,27 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         return results
 
     # region cache management
-    def cache_get(self, id: str) -> HFAloraCacheInfo | None:
-        """Retrieve from cache."""
+    def cache_get(self, id: str | int) -> HFAloraCacheInfo | None:
+        """Retrieve a cached ``HFAloraCacheInfo`` entry by its key.
+
+        Args:
+            id (str | int): The cache key to look up.
+
+        Returns:
+            HFAloraCacheInfo | None: The cached entry, or ``None`` if not found.
+        """
         v = self._cache.get(id)
         assert v is None or type(v) is HFAloraCacheInfo
         return v
 
-    def cache_put(self, id: str, v: HFAloraCacheInfo):
-        """Put into cache."""
+    def cache_put(self, id: str | int, v: HFAloraCacheInfo):
+        """Store an ``HFAloraCacheInfo`` entry in the cache under the given key.
+
+        Args:
+            id (str | int): The cache key to store the entry under.
+            v (HFAloraCacheInfo): The cache entry containing KV cache state
+                and associated generation metadata.
+        """
         self._cache.put(id, v)
 
     # endregion
@@ -1167,7 +1461,18 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         return self._hf_model_id.split("/")[1]
 
     def add_adapter(self, adapter: LocalHFAdapter):
-        """Adds the given adapter to the backend. Must not have been added to a different backend."""
+        """Register a LoRA/aLoRA adapter with this backend so it can be loaded later.
+
+        Downloads the adapter weights (via ``adapter.get_local_hf_path``) and records
+        the adapter in the backend's registry. The adapter must not already be
+        registered with a different backend.
+
+        Args:
+            adapter (LocalHFAdapter): The adapter to register with this backend.
+
+        Raises:
+            Exception: If ``adapter`` has already been added to a different backend.
+        """
         if adapter.backend is not None:
             if adapter.backend is self:
                 FancyLogger.get_logger().warning(
@@ -1190,7 +1495,19 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._added_adapters[adapter.qualified_name] = adapter
 
     def load_adapter(self, adapter_qualified_name: str):
-        """Loads the given adapter for the backend. Must have previously been added. Do not call when generation requests are happening."""
+        """Load a previously registered adapter into the underlying HuggingFace model.
+
+        The adapter must have been registered via ``add_adapter`` first. Do not call
+        this method while generation requests are in progress.
+
+        Args:
+            adapter_qualified_name (str): The ``adapter.qualified_name`` of the adapter
+                to load (i.e. ``"<name>_<adapter_type>"``)
+
+        Raises:
+            ValueError: If no adapter with the given qualified name has been added to
+                this backend.
+        """
         adapter = self._added_adapters.get(adapter_qualified_name, None)
         if adapter is None:
             raise ValueError(
@@ -1222,7 +1539,15 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         self._loaded_adapters[adapter.qualified_name] = adapter
 
     def unload_adapter(self, adapter_qualified_name: str):
-        """Unloads the given adapter from the backend."""
+        """Unload a previously loaded adapter from the underlying HuggingFace model.
+
+        If the adapter is not currently loaded, a log message is emitted and the
+        method returns without error.
+
+        Args:
+            adapter_qualified_name (str): The ``adapter.qualified_name`` of the adapter
+                to unload.
+        """
         # Check if the backend knows about this adapter.
         adapter = self._loaded_adapters.get(adapter_qualified_name, None)
         if adapter is None:
@@ -1237,9 +1562,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         del self._loaded_adapters[adapter.qualified_name]
 
     def list_adapters(self) -> list[str]:
-        """Lists the adapters added via add_adapter().
+        """List the qualified names of all adapters currently loaded in this backend.
 
-        :returns: list of adapter names that are currently registered with this backend
+        Returns:
+            list[str]: Qualified adapter names (i.e. ``adapter.qualified_name``) for
+                all adapters that have been loaded via ``load_adapter``.
         """
         return list(self._loaded_adapters.keys())
 

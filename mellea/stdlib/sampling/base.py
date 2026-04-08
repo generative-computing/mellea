@@ -1,4 +1,18 @@
-"""Base Sampling Strategies."""
+"""Base Sampling Strategies.
+
+Sampling strategies control how Mellea handles validation failures during generation:
+
+- **RejectionSamplingStrategy**: Simple retry with the same prompt. Best for non-deterministic
+  failures where the same instruction might succeed on retry.
+
+- **RepairTemplateStrategy**: Single-turn repair by modifying the instruction with validation
+  feedback. Adds failure reasons to the instruction and retries. Best for simple tasks where
+  feedback can be incorporated into the instruction.
+
+- **MultiTurnStrategy**: Multi-turn conversational repair (requires ChatContext). Adds validation
+  failure reasons as new user messages in the conversation, allowing iterative improvement through
+  dialogue. Best for complex tasks and agentic workflows.
+"""
 
 import abc
 from copy import deepcopy
@@ -9,35 +23,39 @@ from ...core import (
     Backend,
     BaseModelSubclass,
     Component,
+    ComputedModelOutputThunk,
     Context,
     FancyLogger,
-    ModelOutputThunk,
     Requirement,
     S,
     SamplingResult,
     SamplingStrategy,
     ValidationResult,
 )
+from ...plugins.manager import has_plugins, invoke_hook
+from ...plugins.types import HookType
 from ...stdlib import functional as mfuncs
 from ..components import Instruction, Message
 from ..context import ChatContext
 
 
 class BaseSamplingStrategy(SamplingStrategy):
-    """Base class for multiple strategies that rejects samples based on given instructions."""
+    """Base class for multiple strategies that reject samples based on given instructions.
+
+    Args:
+        loop_budget (int): Maximum number of generate/validate cycles. Must be
+            greater than 0. Defaults to ``1``.
+        requirements (list[Requirement] | None): Global requirements evaluated
+            on every sample. When set, overrides per-call requirements.
+
+    """
 
     loop_budget: int
 
     def __init__(
         self, *, loop_budget: int = 1, requirements: list[Requirement] | None = None
     ):
-        """Initialize a new instance of the class with default parameters.
-
-        Args:
-            loop_budget: Number of times to iterate through the process. Must be greater than 0.
-            validate: Function to validate the results against requirements. If None, validation is provided later through setter.
-            generate: Function to generate new model output thunks. If None, generate is provided later through setter.
-            requirements: List of requirements to test against. If None, test all requirements attached to the given instruction.
+        """Initialize BaseSamplingStrategy with a loop budget and optional global requirements.
 
         Raises:
             AssertionError: If loop_budget is not greater than 0.
@@ -53,7 +71,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: list[Component],
-        past_results: list[ModelOutputThunk],
+        past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
         """Repair function that is being invoked if not all requirements are fulfilled. It should return a next action component.
@@ -76,7 +94,7 @@ class BaseSamplingStrategy(SamplingStrategy):
     @abc.abstractmethod
     def select_from_failure(
         sampled_actions: list[Component],
-        sampled_results: list[ModelOutputThunk],
+        sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
         """This function returns the index of the result that should be selected as `.value` iff the loop budget is exhausted and no success.
@@ -118,7 +136,7 @@ class BaseSamplingStrategy(SamplingStrategy):
             show_progress: if true, a tqdm progress bar is used. Otherwise, messages will still be sent to flog.
 
         Returns:
-            SamplingResult: A result object indicating the success or failure of the sampling process.
+            SamplingResult[S]: A result object indicating the success or failure of the sampling process.
 
         Raises:
             AssertionError: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
@@ -127,7 +145,7 @@ class BaseSamplingStrategy(SamplingStrategy):
 
         flog = FancyLogger.get_logger()
 
-        sampled_results: list[ModelOutputThunk] = []
+        sampled_results: list[ComputedModelOutputThunk] = []
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         sampled_actions: list[Component] = []
         sample_contexts: list[Context] = []
@@ -146,10 +164,28 @@ class BaseSamplingStrategy(SamplingStrategy):
         reqs = list(set(reqs))
 
         loop_count = 0
+
+        # --- sampling_loop_start hook ---
+        effective_loop_budget = self.loop_budget
+        if has_plugins(HookType.SAMPLING_LOOP_START):
+            from ...plugins.hooks.sampling import SamplingLoopStartPayload
+
+            start_payload = SamplingLoopStartPayload(
+                strategy_name=type(self).__name__,
+                action=action,
+                context=context,
+                requirements=reqs,
+                loop_budget=self.loop_budget,
+            )
+            _, start_payload = await invoke_hook(
+                HookType.SAMPLING_LOOP_START, start_payload, backend=backend
+            )
+            effective_loop_budget = start_payload.loop_budget
+
         loop_budget_range_iterator = (
-            tqdm.tqdm(range(self.loop_budget))  # type: ignore
+            tqdm.tqdm(range(effective_loop_budget))  # type: ignore
             if show_progress
-            else range(self.loop_budget)  # type: ignore
+            else range(effective_loop_budget)  # type: ignore
         )
 
         next_action = deepcopy(action)
@@ -168,6 +204,7 @@ class BaseSamplingStrategy(SamplingStrategy):
                 tool_calls=tool_calls,
             )
             await result.avalue()
+            result = ComputedModelOutputThunk(result)
 
             # Sampling strategies may use different components from the original
             # action. This might cause discrepancies in the expected parsed_repr
@@ -197,13 +234,49 @@ class BaseSamplingStrategy(SamplingStrategy):
             sampled_actions.append(next_action)
             sample_contexts.append(result_ctx)
 
+            all_validations_passed = all(bool(s[1]) for s in constraint_scores)
+
+            # --- sampling_iteration hook ---
+            if has_plugins(HookType.SAMPLING_ITERATION):
+                from ...plugins.hooks.sampling import SamplingIterationPayload
+
+                iter_payload = SamplingIterationPayload(
+                    iteration=loop_count,
+                    action=next_action,
+                    result=result,
+                    validation_results=constraint_scores,
+                    all_validations_passed=all_validations_passed,
+                    valid_count=sum(1 for s in constraint_scores if bool(s[1])),
+                    total_count=len(constraint_scores),
+                )
+                await invoke_hook(
+                    HookType.SAMPLING_ITERATION, iter_payload, backend=backend
+                )
+
             # if all vals are true -- break and return success
-            if all(bool(s[1]) for s in constraint_scores):
+            if all_validations_passed:
                 flog.info("SUCCESS")
                 assert (
                     result._generate_log is not None
                 )  # Cannot be None after generation.
                 result._generate_log.is_final_result = True
+
+                # --- sampling_loop_end hook (success) ---
+                if has_plugins(HookType.SAMPLING_LOOP_END):
+                    from ...plugins.hooks.sampling import SamplingLoopEndPayload
+
+                    end_payload = SamplingLoopEndPayload(
+                        success=True,
+                        iterations_used=loop_count,
+                        final_result=result,
+                        final_action=next_action,
+                        final_context=result_ctx,
+                        all_results=sampled_results,
+                        all_validations=sampled_scores,
+                    )
+                    await invoke_hook(
+                        HookType.SAMPLING_LOOP_END, end_payload, backend=backend
+                    )
 
                 # SUCCESS !!!!
                 return SamplingResult(
@@ -217,8 +290,18 @@ class BaseSamplingStrategy(SamplingStrategy):
 
             else:
                 # log partial success and continue
-                count_valid = len([s for s in constraint_scores if bool(s[1])])
-                flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}")
+                failed = [s for s in constraint_scores if not bool(s[1])]
+                count_failed = len(failed)
+                failed_reqs = [
+                    r[0].description
+                    if r[0].description is not None
+                    else "[no description]"
+                    for r in failed
+                ]
+                stringify_failed = "\n\t - " + "\n\t - ".join(failed_reqs)
+                flog.info(
+                    f"FAILED. Valid: {len(constraint_scores) - count_failed}/{len(constraint_scores)}. Failed: {stringify_failed}"
+                )
 
             # If we did not pass all constraints, update the instruction and try again.
             next_action, next_context = self.repair(
@@ -228,6 +311,23 @@ class BaseSamplingStrategy(SamplingStrategy):
                 sampled_results,
                 sampled_scores,
             )
+
+            # --- sampling_repair hook ---
+            if has_plugins(HookType.SAMPLING_REPAIR):
+                from ...plugins.hooks.sampling import SamplingRepairPayload
+
+                repair_payload = SamplingRepairPayload(
+                    repair_type=getattr(self, "_get_repair_type", lambda: "unknown")(),
+                    failed_action=sampled_actions[-1],
+                    failed_result=sampled_results[-1],
+                    failed_validations=sampled_scores[-1],
+                    repair_action=next_action,
+                    repair_context=next_context,
+                    repair_iteration=loop_count,
+                )
+                await invoke_hook(
+                    HookType.SAMPLING_REPAIR, repair_payload, backend=backend
+                )
 
         flog.info(
             f"Invoking select_from_failure after {len(sampled_results)} failed attempts."
@@ -246,6 +346,25 @@ class BaseSamplingStrategy(SamplingStrategy):
         )  # Cannot be None after generation.
         sampled_results[best_failed_index]._generate_log.is_final_result = True  # type: ignore
 
+        # --- sampling_loop_end hook (failure) ---
+        if has_plugins(HookType.SAMPLING_LOOP_END):
+            from ...plugins.hooks.sampling import SamplingLoopEndPayload
+
+            _final_ctx = (
+                sample_contexts[best_failed_index] if sample_contexts else context
+            )
+            end_payload = SamplingLoopEndPayload(
+                success=False,
+                iterations_used=loop_count,
+                final_result=sampled_results[best_failed_index],
+                final_action=sampled_actions[best_failed_index],
+                final_context=_final_ctx,
+                failure_reason=f"Budget exhausted after {loop_count} iterations",
+                all_results=sampled_results,
+                all_validations=sampled_scores,
+            )
+            await invoke_hook(HookType.SAMPLING_LOOP_END, end_payload, backend=backend)
+
         return SamplingResult(
             result_index=best_failed_index,
             success=False,
@@ -262,7 +381,7 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
     @staticmethod
     def select_from_failure(
         sampled_actions: list[Component],
-        sampled_results: list[ModelOutputThunk],
+        sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
         """Always returns the 0th index.
@@ -282,7 +401,7 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: list[Component],
-        past_results: list[ModelOutputThunk],
+        past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
         """Always returns the unedited, last action.
@@ -306,7 +425,7 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
     @staticmethod
     def select_from_failure(
         sampled_actions: list[Component],
-        sampled_results: list[ModelOutputThunk],
+        sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> int:
         """Always returns the 0th index.
@@ -326,7 +445,7 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: list[Component],
-        past_results: list[ModelOutputThunk],
+        past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
         """Adds a description of the requirements that failed to a copy of the original instruction.
@@ -371,9 +490,9 @@ class MultiTurnStrategy(BaseSamplingStrategy):
     @staticmethod
     def select_from_failure(
         sampled_actions: list[Component],
-        sampled_results: list[ModelOutputThunk],
+        sampled_results: list[ComputedModelOutputThunk],
         sampled_val: list[list[tuple[Requirement, ValidationResult]]],
-    ):
+    ) -> int:
         """Always returns the last index. The last message from the model will always be returned if all results are failures.
 
         Args:
@@ -391,10 +510,10 @@ class MultiTurnStrategy(BaseSamplingStrategy):
         old_ctx: Context,
         new_ctx: Context,
         past_actions: list[Component],
-        past_results: list[ModelOutputThunk],
+        past_results: list[ComputedModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
     ) -> tuple[Component, Context]:
-        """Returns a Message with a description of the failed requirements.
+        """Returns a Message with a description (and validation reasons) of the failed requirements.
 
         Args:
             old_ctx: The context WITHOUT the last action + output.
@@ -410,15 +529,25 @@ class MultiTurnStrategy(BaseSamplingStrategy):
             " Need chat context to run agentic sampling."
         )
 
-        last_failed_reqs: list[Requirement] = [s[0] for s in past_val[-1] if not s[1]]
-        last_failed_reqs_str = "* " + "\n* ".join(
-            [str(r.description) for r in last_failed_reqs]
-        )
-        # TODO: what to do with checks ??
+        # Get failed requirements and their detailed validation reasons
+        failed_items = [(req, val) for req, val in past_val[-1] if not val.as_bool()]
 
+        # Build repair feedback using ValidationResult.reason when available
+        repair_lines = []
+        for req, validation in failed_items:
+            if validation.reason:
+                repair_lines.append(f"* {validation.reason}")
+            else:
+                # Fallback to requirement description if no reason
+                repair_lines.append(f"* {req.description}")
+
+        feedback = "\n".join(repair_lines)
         next_action = Message(
             role="user",
-            content=f"The following requirements have not been met: \n{last_failed_reqs_str}\n Please try again to fulfill the requirements.",
+            content=(
+                f"The following requirements have not been met:\n{feedback}\n"
+                f"Please try again to fulfill the requirements."
+            ),
         )
 
         return next_action, new_ctx

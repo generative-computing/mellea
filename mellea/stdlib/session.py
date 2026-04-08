@@ -1,4 +1,12 @@
-"""Mellea Sessions."""
+"""``MelleaSession``: the primary entry point for running generative programs.
+
+``MelleaSession`` wraps a ``Backend`` and a ``Context`` and exposes high-level methods
+(``act``, ``instruct``, ``sample``) that drive the generate-validate-repair loop. It
+also manages a global context variable (accessible via ``get_session()``) so that
+nested components can reach the current session without explicit threading. Use
+``start_session(...)`` as a context manager to create and automatically clean up a
+session.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +23,7 @@ from ..core import (
     BaseModelSubclass,
     CBlock,
     Component,
+    ComputedModelOutputThunk,
     Context,
     FancyLogger,
     GenerateLog,
@@ -26,7 +35,11 @@ from ..core import (
     SamplingStrategy,
     ValidationResult,
 )
+from ..helpers import _run_async_in_thread
+from ..plugins.manager import has_plugins, invoke_hook
+from ..plugins.types import HookType
 from ..stdlib import functional as mfuncs
+from ..telemetry import set_span_attribute, trace_application
 from .components import Message
 from .context import SimpleContext
 from .sampling import RejectionSamplingStrategy
@@ -40,6 +53,9 @@ _context_session: contextvars.ContextVar[MelleaSession | None] = contextvars.Con
 def get_session() -> MelleaSession:
     """Get the current session from context.
 
+    Returns:
+        The currently active ``MelleaSession``.
+
     Raises:
         RuntimeError: If no session is currently active.
     """
@@ -52,7 +68,20 @@ def get_session() -> MelleaSession:
 
 
 def backend_name_to_class(name: str) -> Any:
-    """Resolves backend names to Backend classes."""
+    """Resolves backend names to Backend classes.
+
+    Args:
+        name: Short backend name, e.g. ``"ollama"``, ``"hf"``, ``"openai"``,
+            ``"watsonx"``, or ``"litellm"``.
+
+    Returns:
+        The corresponding ``Backend`` class, or ``None`` if the name is unrecognised.
+
+    Raises:
+        ImportError: If the requested backend has optional dependencies that are
+            not installed (e.g. ``mellea[hf]``, ``mellea[watsonx]``, or
+            ``mellea[litellm]``).
+    """
     if name == "ollama":
         from ..backends.ollama import OllamaModelBackend
 
@@ -101,6 +130,7 @@ def start_session(
     ctx: Context | None = None,
     *,
     model_options: dict | None = None,
+    plugins: list[Any] | None = None,
     **backend_kwargs,
 ) -> MelleaSession:
     """Start a new Mellea session. Can be used as a context manager or called directly.
@@ -124,11 +154,20 @@ def start_session(
             Use ChatContext() for chat-style conversations.
         model_options: Additional model configuration options that will be passed
             to the backend (e.g., temperature, max_tokens, etc.).
+        plugins: Optional list of plugins scoped to this session. Accepts
+            ``@hook``-decorated functions, ``@plugin``-decorated class instances,
+            ``MelleaPlugin`` instances, or ``PluginSet`` instances.
         **backend_kwargs: Additional keyword arguments passed to the backend constructor.
 
     Returns:
         MelleaSession: A session object that can be used as a context manager
         or called directly with session methods.
+
+    Raises:
+        Exception: If ``backend_name`` is not one of the recognised backend
+            identifiers.
+        ImportError: If the requested backend requires optional dependencies
+            that are not installed.
 
     Examples:
         ```python
@@ -154,20 +193,8 @@ def start_session(
     """
     logger = FancyLogger.get_logger()
 
-    backend_class = backend_name_to_class(backend_name)
-    if backend_class is None:
-        raise Exception(
-            f"Backend name {backend_name} unknown. Please see the docstring for `mellea.stdlib.session.start_session` for a list of options."
-        )
-    assert backend_class is not None
-    backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
-
-    if ctx is None:
-        ctx = SimpleContext()
-
-    # Log session configuration
+    # Get model_id string for logging and tracing
     if isinstance(model_id, ModelIdentifier):
-        # Get the backend-specific model name
         backend_to_attr = {
             "ollama": "ollama_name",
             "hf": "hf_model_name",
@@ -181,14 +208,68 @@ def start_session(
             getattr(model_id, attr, None) or model_id.hf_model_name or str(model_id)
         )
     else:
-        model_id_str = model_id
-    logger.info(
-        f"Starting Mellea session: backend={backend_name}, model={model_id_str}, "
-        f"context={ctx.__class__.__name__}"
-        + (f", model_options={model_options}" if model_options else "")
-    )
+        model_id_str = str(model_id)
 
-    return MelleaSession(backend, ctx)
+    with trace_application(
+        "start_session",
+        backend=backend_name,
+        model_id=model_id_str,
+        context_type=ctx.__class__.__name__ if ctx else "SimpleContext",
+    ):
+        # --- session_pre_init hook ---
+        if has_plugins(HookType.SESSION_PRE_INIT):
+            from ..plugins.hooks.session import SessionPreInitPayload
+
+            pre_payload = SessionPreInitPayload(
+                backend_name=backend_name,
+                model_id=model_id_str,
+                model_options=model_options,
+                context_type=ctx.__class__.__name__ if ctx else "SimpleContext",
+            )
+            _, pre_payload = _run_async_in_thread(
+                invoke_hook(HookType.SESSION_PRE_INIT, pre_payload)
+            )
+            # Apply writable field modifications
+            model_id_str = pre_payload.model_id
+            model_options = pre_payload.model_options
+
+        backend_class = backend_name_to_class(backend_name)
+        if backend_class is None:
+            raise Exception(
+                f"Backend name {backend_name} unknown. Please see the docstring for `mellea.stdlib.session.start_session` for a list of options."
+            )
+        assert backend_class is not None
+        backend = backend_class(model_id, model_options=model_options, **backend_kwargs)
+
+        if ctx is None:
+            ctx = SimpleContext()
+
+        logger.info(
+            f"Starting Mellea session: backend={backend_name}, model={model_id_str}, "
+            f"context={ctx.__class__.__name__}"
+            + (f", model_options={model_options}" if model_options else "")
+        )
+
+        session = MelleaSession(backend, ctx)
+
+        # Register session-scoped plugins
+        if plugins:
+            from ..plugins.registry import register as register_plugins
+
+            register_plugins(plugins, session_id=session.id)
+
+        # --- session_post_init hook ---
+        if has_plugins(HookType.SESSION_POST_INIT):
+            from ..plugins.hooks.session import SessionPostInitPayload
+
+            post_payload = SessionPostInitPayload(
+                session_id=session.id, model_id=model_id_str, context=session.ctx
+            )
+            _run_async_in_thread(
+                invoke_hook(HookType.SESSION_POST_INIT, post_payload, backend=backend)
+            )
+
+        return session
 
 
 class MelleaSession:
@@ -203,24 +284,41 @@ class MelleaSession:
     If you are doing complicating programming (e.g., non-trivial inference scaling) then you might be better off forgoing `MelleaSession`s and managing your Context and Backend directly.
 
     Note: we put the `instruct`, `validate`, and other convenience functions here instead of in `Context` or `Backend` to avoid import resolution issues.
+
+    Args:
+        backend (Backend): The backend to use for all model inference in this
+            session.
+        ctx (Context | None): The conversation context. Defaults to a new
+            ``SimpleContext`` if ``None``.
+
+    Attributes:
+        ctx (Context): The active conversation context; never ``None`` (defaults
+            to a fresh ``SimpleContext`` when ``None`` is passed). Updated after
+            every call that produces model output.
+        id (str): Unique session UUID assigned at construction.
     """
 
     ctx: Context
 
     def __init__(self, backend: Backend, ctx: Context | None = None):
-        """Initializes a new Mellea session with the provided backend and context.
+        """Initialize MelleaSession with a backend and optional conversation context."""
+        import uuid
 
-        Args:
-            backend (Backend): This is always required.
-            ctx (Context): The way in which the model's context will be managed. By default, each interaction with the model is a stand-alone interaction, so we use SimpleContext as the default.
-        """
+        self.id = str(uuid.uuid4())
         self.backend = backend
         self.ctx: Context = ctx if ctx is not None else SimpleContext()
         self._session_logger = FancyLogger.get_logger()
         self._context_token = None
+        self._session_span = None
 
     def __enter__(self):
         """Enter context manager and set this session as the current global session."""
+        # Start a session span that will last for the entire context manager lifetime
+        self._session_span = trace_application(
+            "session_context",
+            backend=self.backend.__class__.__name__,
+            context_type=self.ctx.__class__.__name__,
+        ).__enter__()
         self._context_token = _context_session.set(self)
         return self
 
@@ -230,6 +328,9 @@ class MelleaSession:
         if self._context_token is not None:
             _context_session.reset(self._context_token)
             self._context_token = None
+        if self._session_span is not None:
+            self._session_span.__exit__(exc_type, exc_val, exc_tb)
+            self._session_span = None
 
     def __copy__(self):
         """Use self.clone. Copies the current session but keeps references to the backend and context."""
@@ -239,7 +340,7 @@ class MelleaSession:
 
         return new
 
-    def clone(self):
+    def clone(self) -> MelleaSession:
         """Useful for running multiple generation requests while keeping the context at a given point in time.
 
         Returns:
@@ -265,14 +366,39 @@ class MelleaSession:
         return copy(self)
 
     def reset(self):
-        """Reset the context state."""
+        """Reset the context state to a fresh, empty context of the same type.
+
+        Fires the ``SESSION_RESET`` plugin hook if any plugins are registered, then
+        replaces ``self.ctx`` with the result of ``ctx.reset_to_new()``, discarding
+        all accumulated conversation history.
+        """
+        if has_plugins(HookType.SESSION_RESET):
+            from ..plugins.hooks.session import SessionResetPayload
+
+            payload = SessionResetPayload(previous_context=self.ctx)
+            _run_async_in_thread(
+                invoke_hook(HookType.SESSION_RESET, payload, backend=self.backend)
+            )
         self.ctx = self.ctx.reset_to_new()
 
     def cleanup(self) -> None:
-        """Clean up session resources."""
-        self.reset()
-        if hasattr(self.backend, "close"):
-            self.backend.close()  # type: ignore
+        """Clean up session resources and deregister session-scoped plugins."""
+        if has_plugins(HookType.SESSION_CLEANUP):
+            from ..plugins.hooks.session import SessionCleanupPayload
+
+            payload = SessionCleanupPayload(
+                context=self.ctx, interaction_count=len(self.ctx.as_list())
+            )
+            _run_async_in_thread(
+                invoke_hook(HookType.SESSION_CLEANUP, payload, backend=self.backend)
+            )
+
+        # Deregister session-scoped plugins — must run whenever plugins are
+        # enabled, regardless of whether any plugin subscribes to SESSION_CLEANUP.
+        if has_plugins():
+            from ..plugins.manager import deregister_session_plugins
+
+            deregister_session_plugins(self.id)
 
     @overload
     def act(
@@ -285,7 +411,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk[S]: ...
+    ) -> ComputedModelOutputThunk[S]: ...
 
     @overload
     def act(
@@ -362,7 +488,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk[str]: ...
+    ) -> ComputedModelOutputThunk[str]: ...
 
     @overload
     def instruct(
@@ -406,7 +532,7 @@ class MelleaSession:
             description: The description of the instruction.
             requirements: A list of requirements that the instruction can be validated against.
             icl_examples: A list of in-context-learning examples that the instruction can be validated against.
-            grounding_context: A list of grounding contexts that the instruction can use. They can bind as variables using a (key: str, value: str | ContentBlock) tuple.
+            grounding_context: A list of grounding contexts that the instruction can use. They can bind as variables using a (key: str, value: str | CBlock | Component) tuple.
             user_variables: A dict of user-defined variables used to fill in Jinja placeholders in other parameters. This requires that all other provided parameters are provided as strings.
             prefix: A prefix string or ContentBlock to use when generating the instruction.
             output_prefix: A string or ContentBlock that defines a prefix for the output generation. Usually you do not need this.
@@ -416,6 +542,10 @@ class MelleaSession:
             model_options: Additional model options, which will upsert into the model/backend's defaults.
             tool_calls: If true, tool calling is enabled.
             images: A list of images to be used in the instruction or None if none.
+
+        Returns:
+            A ``ModelOutputThunk`` if ``return_sampling_results`` is ``False``,
+            else a ``SamplingResult``.
         """
         r = mfuncs.instruct(
             description,
@@ -455,7 +585,20 @@ class MelleaSession:
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> Message:
-        """Sends a simple chat message and returns the response. Adds both messages to the Context."""
+        """Sends a simple chat message and returns the response. Adds both messages to the Context.
+
+        Args:
+            content: The message text to send.
+            role: The role for the outgoing message (default ``"user"``).
+            images: Optional list of images to include in the message.
+            user_variables: Optional Jinja variable substitutions applied to ``content``.
+            format: Optional Pydantic model for constrained decoding of the response.
+            model_options: Additional model options to merge with backend defaults.
+            tool_calls: If true, tool calling is enabled.
+
+        Returns:
+            The assistant ``Message`` response.
+        """
         result, context = mfuncs.chat(
             content=content,
             context=self.ctx,
@@ -481,7 +624,19 @@ class MelleaSession:
         generate_logs: list[GenerateLog] | None = None,
         input: CBlock | None = None,
     ) -> list[ValidationResult]:
-        """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
+        """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
+
+        Args:
+            reqs: A single ``Requirement`` or a list of them to validate.
+            output: Optional model output ``CBlock`` to validate against instead of the context.
+            format: Optional Pydantic model for constrained decoding.
+            model_options: Additional model options to merge with backend defaults.
+            generate_logs: Optional list to append generation logs to.
+            input: Optional input ``CBlock`` to include alongside ``output`` when validating.
+
+        Returns:
+            List of ``ValidationResult`` objects, one per requirement.
+        """
         return mfuncs.validate(
             reqs=reqs,
             context=self.ctx,
@@ -501,7 +656,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
-    ) -> ModelOutputThunk:
+    ) -> ComputedModelOutputThunk:
         """Query method for retrieving information from an object.
 
         Args:
@@ -512,7 +667,7 @@ class MelleaSession:
             tool_calls: If true, the model may make tool calls. Defaults to False.
 
         Returns:
-            ModelOutputThunk: The result of the query as processed by the backend.
+            ComputedModelOutputThunk: The result of the query as processed by the backend.
         """
         result, context = mfuncs.query(
             obj=obj,
@@ -564,11 +719,40 @@ class MelleaSession:
         action: Component[S],
         *,
         requirements: list[Requirement] | None = None,
-        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        strategy: None = None,
         return_sampling_results: Literal[False] = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: Literal[True],
+    ) -> ComputedModelOutputThunk[S]: ...
+
+    @overload
+    async def aact(
+        self,
+        action: Component[S],
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: SamplingStrategy,
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: bool = False,
+    ) -> ComputedModelOutputThunk[S]: ...
+
+    @overload
+    async def aact(
+        self,
+        action: Component[S],
+        *,
+        requirements: list[Requirement] | None = None,
+        strategy: None = None,
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: Literal[False] = False,
     ) -> ModelOutputThunk[S]: ...
 
     @overload
@@ -582,6 +766,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: bool = False,
     ) -> SamplingResult[S]: ...
 
     async def aact(
@@ -594,6 +779,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: bool = False,
     ) -> ModelOutputThunk[S] | SamplingResult:
         """Runs a generic action, and adds both the action and the result to the context.
 
@@ -605,9 +791,11 @@ class MelleaSession:
             format: if set, the BaseModel to use for constrained decoding.
             model_options: additional model options, which will upsert into the model/backend's defaults.
             tool_calls: if true, tool calling is enabled.
+            await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. Default is False.
 
         Returns:
             A ModelOutputThunk if `return_sampling_results` is `False`, else returns a `SamplingResult`.
+            When await_result=False and strategy=None, returns uncomputed ModelOutputThunk that can be streamed.
         """
         r = await mfuncs.aact(
             action,
@@ -619,6 +807,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            await_result=await_result,
         )  # type: ignore
 
         if isinstance(r, SamplingResult):
@@ -641,11 +830,52 @@ class MelleaSession:
         user_variables: dict[str, str] | None = None,
         prefix: str | CBlock | None = None,
         output_prefix: str | CBlock | None = None,
-        strategy: SamplingStrategy | None = RejectionSamplingStrategy(loop_budget=2),
+        strategy: None = None,
         return_sampling_results: Literal[False] = False,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: Literal[True],
+    ) -> ComputedModelOutputThunk[str]: ...
+
+    @overload
+    async def ainstruct(
+        self,
+        description: str,
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: SamplingStrategy,
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: bool = False,
+    ) -> ComputedModelOutputThunk[str]: ...
+
+    @overload
+    async def ainstruct(
+        self,
+        description: str,
+        *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
+        requirements: list[Requirement | str] | None = None,
+        icl_examples: list[str | CBlock] | None = None,
+        grounding_context: dict[str, str | CBlock | Component] | None = None,
+        user_variables: dict[str, str] | None = None,
+        prefix: str | CBlock | None = None,
+        output_prefix: str | CBlock | None = None,
+        strategy: None = None,
+        return_sampling_results: Literal[False] = False,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: Literal[False] = False,
     ) -> ModelOutputThunk[str]: ...
 
     @overload
@@ -665,6 +895,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: bool = False,
     ) -> SamplingResult[str]: ...
 
     async def ainstruct(
@@ -683,6 +914,7 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: bool = False,
     ) -> ModelOutputThunk[str] | SamplingResult[str]:
         """Generates from an instruction.
 
@@ -700,6 +932,12 @@ class MelleaSession:
             model_options: Additional model options, which will upsert into the model/backend's defaults.
             tool_calls: If true, tool calling is enabled.
             images: A list of images to be used in the instruction or None if none.
+            await_result: if False and strategy is None, returns uncomputed ModelOutputThunk for streaming. Default is False.
+
+        Returns:
+            A ``ComputedModelOutputThunk`` if ``strategy`` is ``None`` and ``await_results`` is ``False``,
+            else returns a ``ModelOutputThunk`` if return_sampling_results`` is ``False``,
+            else a ``SamplingResult``.
         """
         r = await mfuncs.ainstruct(
             description,
@@ -717,6 +955,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            await_result=await_result,
         )
 
         if isinstance(r, SamplingResult):
@@ -739,7 +978,20 @@ class MelleaSession:
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> Message:
-        """Sends a simple chat message and returns the response. Adds both messages to the Context."""
+        """Sends a simple chat message and returns the response. Adds both messages to the Context.
+
+        Args:
+            content: The message text to send.
+            role: The role for the outgoing message (default ``"user"``).
+            images: Optional list of images to include in the message.
+            user_variables: Optional Jinja variable substitutions applied to ``content``.
+            format: Optional Pydantic model for constrained decoding of the response.
+            model_options: Additional model options to merge with backend defaults.
+            tool_calls: If true, tool calling is enabled.
+
+        Returns:
+            The assistant ``Message`` response.
+        """
         result, context = await mfuncs.achat(
             content=content,
             context=self.ctx,
@@ -765,7 +1017,19 @@ class MelleaSession:
         generate_logs: list[GenerateLog] | None = None,
         input: CBlock | None = None,
     ) -> list[ValidationResult]:
-        """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided)."""
+        """Validates a set of requirements over the output (if provided) or the current context (if the output is not provided).
+
+        Args:
+            reqs: A single ``Requirement`` or a list of them to validate.
+            output: Optional model output ``CBlock`` to validate against instead of the context.
+            format: Optional Pydantic model for constrained decoding.
+            model_options: Additional model options to merge with backend defaults.
+            generate_logs: Optional list to append generation logs to.
+            input: Optional input ``CBlock`` to include alongside ``output`` when validating.
+
+        Returns:
+            List of ``ValidationResult`` objects, one per requirement.
+        """
         return await mfuncs.avalidate(
             reqs=reqs,
             context=self.ctx,
@@ -777,6 +1041,7 @@ class MelleaSession:
             input=input,
         )
 
+    @overload
     async def aquery(
         self,
         obj: Any,
@@ -785,6 +1050,30 @@ class MelleaSession:
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
         tool_calls: bool = False,
+        await_result: Literal[True],
+    ) -> ComputedModelOutputThunk: ...
+
+    @overload
+    async def aquery(
+        self,
+        obj: Any,
+        query: str,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: Literal[False] = False,
+    ) -> ModelOutputThunk: ...
+
+    async def aquery(
+        self,
+        obj: Any,
+        query: str,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        await_result: bool = False,
     ) -> ModelOutputThunk:
         """Query method for retrieving information from an object.
 
@@ -794,6 +1083,7 @@ class MelleaSession:
             format:  format for output parsing.
             model_options: Model options to pass to the backend.
             tool_calls: If true, the model may make tool calls. Defaults to False.
+            await_result: if False (default), returns uncomputed ModelOutputThunk. If True, awaits and returns ComputedModelOutputThunk.
 
         Returns:
             ModelOutputThunk: The result of the query as processed by the backend.
@@ -806,6 +1096,7 @@ class MelleaSession:
             format=format,
             model_options=model_options,
             tool_calls=tool_calls,
+            await_result=await_result,  # type: ignore[call-overload]
         )
         self.ctx = context
         return result
@@ -844,7 +1135,16 @@ class MelleaSession:
 
     @classmethod
     def powerup(cls, powerup_cls: type):
-        """Appends methods in a class object `powerup_cls` to MelleaSession."""
+        """Appends methods in a class object `powerup_cls` to MelleaSession.
+
+        Iterates over all functions defined on ``powerup_cls`` and attaches each
+        one as a method on the ``MelleaSession`` class, effectively extending
+        the session with domain-specific helpers at runtime.
+
+        Args:
+            powerup_cls (type): A class whose functions should be added to
+                ``MelleaSession`` as instance methods.
+        """
         for name, fn in inspect.getmembers(powerup_cls, predicate=inspect.isfunction):
             setattr(cls, name, fn)
 

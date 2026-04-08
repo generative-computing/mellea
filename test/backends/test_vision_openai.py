@@ -7,11 +7,11 @@ import pytest
 from PIL import Image
 
 # Mark all tests in this module as requiring OpenAI API with vision support
-pytestmark = [pytest.mark.openai, pytest.mark.llm, pytest.mark.ollama]
+pytestmark = [pytest.mark.openai, pytest.mark.e2e, pytest.mark.ollama]
 
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
-from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
+from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.core import ImageBlock, ModelOutputThunk
 from mellea.stdlib.components import Instruction, Message
 
@@ -21,7 +21,7 @@ def m_session(gh_run):
     if gh_run == 1:
         m = start_session(
             "openai",
-            model_id=IBM_GRANITE_4_MICRO_3B.ollama_name,  # type: ignore
+            model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name,  # type: ignore
             base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
             api_key="ollama",
             model_options={ModelOption.MAX_NEW_TOKENS: 5},
@@ -68,6 +68,7 @@ def test_image_block_construction_from_pil(pil_image: Image.Image):
     assert ImageBlock.is_valid_base64_png(str(image_block))
 
 
+@pytest.mark.qualitative
 def test_image_block_in_instruction(
     m_session: MelleaSession, pil_image: Image.Image, gh_run: int
 ):
@@ -121,11 +122,16 @@ def test_image_block_in_instruction(
     image_url = content_img.get("image_url")
     assert image_url is not None
     assert "url" in image_url
+    assert isinstance(image_url, dict)
 
     # check that the image is in the url content
-    assert image_block.value[:100] in image_url["url"]
+    url_value = image_url["url"]
+    assert isinstance(url_value, str)
+    assert image_block.value is not None
+    assert image_block.value[:100] in url_value
 
 
+@pytest.mark.qualitative
 def test_image_block_in_chat(
     m_session: MelleaSession, pil_image: Image.Image, gh_run: int
 ):
@@ -174,9 +180,14 @@ def test_image_block_in_chat(
     image_url = content_img.get("image_url")
     assert image_url is not None
     assert "url" in image_url
+    assert isinstance(image_url, dict)
 
     # check that the image is in the url content
-    assert ImageBlock.from_pil_image(pil_image).value[:100] in image_url["url"]
+    image_value = ImageBlock.from_pil_image(pil_image).value
+    assert image_value is not None
+    url_value = image_url["url"]
+    assert isinstance(url_value, str)
+    assert image_value[:100] in url_value
 
 
 if __name__ == "__main__":

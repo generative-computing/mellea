@@ -1,26 +1,28 @@
 exclude: ^(scratchpad/)
 
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.5
+  - repo: local
     hooks:
+      # Moving ruff hooks to the local version allows for different behavior locally and in ci/cd pipelines.
       - id: ruff-format
         name: "Ruff formatter"
-        args: [--config=pyproject.toml]
-        files: '^(mellea|test|cli|docs).*\.(py|ipynb)$'
+        entry: bash -c 'if [ "$CICD" = "1" ]; then ruff format --check --diff --quiet --config=pyproject.toml "$@"; else ruff format --quiet --config=pyproject.toml "$@"; fi' --
+        language: system
+        types_or: [python, jupyter]
       - id: ruff
         name: "Ruff linter"
-        args: [--exit-non-zero-on-fix, --fix, --config=pyproject.toml]
-        files: '^(mellea).*\.(py|ipynb)$'
+        entry: bash -c 'if [ "$CICD" = "1" ]; then ruff check --no-fix --show-fixes --quiet --config=pyproject.toml "$@"; else ruff check --exit-non-zero-on-fix --fix --quiet --config=pyproject.toml "$@"; fi' --
+        language: system
+        types_or: [python, jupyter]
 
   - repo: local
     hooks:
       - id: mypy
         name: MyPy
-        entry: uv run --no-sync mypy mellea
+        entry: uv run --no-sync mypy --install-types --non-interactive . 
         pass_filenames: false
         language: system
-        files: '^(mellea|test|cli|docs).*\.(py|ipynb)$'
+        types_or: [python, jupyter]
 
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.7.8
@@ -34,4 +36,30 @@ repos:
         additional_dependencies:
           - tomli
 
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.44.0
+    hooks:
+      - id: markdownlint
+        name: markdownlint (docs)
+        args: [--config, docs/docs/.markdownlint.json]
+        files: ^docs/docs/.*\.md$
 
+  # Docs validation hooks — skip gracefully when generated docs are not present
+  - repo: local
+    hooks:
+      - id: docs-mdx-validate
+        name: Validate generated MDX docs
+        entry: bash -c 'test -d docs/docs/api && uv run --no-sync python tooling/docs-autogen/validate.py docs/docs/api --skip-coverage --warn-only || true'
+        language: system
+        pass_filenames: false
+        files: (docs/docs/.*\.mdx$|tooling/docs-autogen/)
+      # Docstring quality gate — manual only (CI is the hard gate via docs-publish.yml).
+      # Run locally with: pre-commit run docs-docstring-quality --hook-stage manual
+      # Requires generated API docs (run `uv run python tooling/docs-autogen/build.py` first).
+      - id: docs-docstring-quality
+        name: Audit docstring quality
+        entry: uv run --no-sync python tooling/docs-autogen/audit_coverage.py --quality --fail-on-quality --threshold 0 --docs-dir docs/docs/api
+        language: system
+        pass_filenames: false
+        files: (mellea/.*\.py$|cli/.*\.py$)
+        stages: [manual]

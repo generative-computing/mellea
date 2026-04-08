@@ -1,7 +1,10 @@
-from mellea.stdlib.tools import code_interpreter, local_code_interpreter
-from mellea import start_session, MelleaSession
+# pytest: ollama, e2e
+
+from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
-from mellea.stdlib.requirements import uses_tool, tool_arg_validator
+from mellea.backends.tools import MelleaTool
+from mellea.stdlib.requirements import tool_arg_validator, uses_tool
+from mellea.stdlib.tools import code_interpreter, local_code_interpreter
 
 
 def example_1(m: MelleaSession):
@@ -16,7 +19,9 @@ def example_1(m: MelleaSession):
 def example_2(m: MelleaSession):
     plot_output = m.instruct(
         description="Make a plot of y=x^2",
-        model_options={ModelOption.TOOLS: [local_code_interpreter]},
+        model_options={
+            ModelOption.TOOLS: [MelleaTool.from_callable(local_code_interpreter)]
+        },
     )
     print(plot_output)
 
@@ -28,9 +33,14 @@ def example_3(m: MelleaSession):
     plot_output = m.instruct(
         description="Use the code interpreter tool to make a plot of y=x^2.",
         requirements=[uses_tool(local_code_interpreter)],
-        model_options={ModelOption.TOOLS: [local_code_interpreter]},
+        model_options={
+            ModelOption.TOOLS: [MelleaTool.from_callable(local_code_interpreter)]
+        },
         tool_calls=True,
     )
+
+    if plot_output.tool_calls is None:
+        raise ValueError("Expected tool_calls but got None")
 
     code = plot_output.tool_calls["local_code_interpreter"].args["code"]
     print(f"Going to execute the following code:\n```python\n{code}\n```")
@@ -54,13 +64,20 @@ def example_4(m: MelleaSession):
                 "The plot should be written to /tmp/output.png",
                 tool_name=local_code_interpreter,
                 arg_name="code",
-                validation_fn=lambda code_snippet: "/tmp/output.png" in code_snippet
-                and "plt.show()" not in code_snippet,
+                validation_fn=lambda code_snippet: (
+                    "/tmp/output.png" in code_snippet
+                    and "plt.show()" not in code_snippet
+                ),
             ),
         ],
-        model_options={ModelOption.TOOLS: [local_code_interpreter]},
+        model_options={
+            ModelOption.TOOLS: [MelleaTool.from_callable(local_code_interpreter)]
+        },
         tool_calls=True,
     )
+
+    if plot_output.tool_calls is None:
+        raise ValueError("Expected tool_calls but got None")
 
     code = plot_output.tool_calls["local_code_interpreter"].args["code"]
     print(f"Going to execute the following code:\n```python\n{code}\n```")

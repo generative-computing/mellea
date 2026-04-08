@@ -8,6 +8,10 @@ from mellea.core import ModelOutputThunk
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import ChatContext
 from mellea.stdlib.session import MelleaSession, start_session
+from test.predicates import require_api_key
+
+# Mark all tests as requiring Ollama (start_session defaults to Ollama)
+pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 
 # We edit the context type in the async tests below. Don't change the scope here.
@@ -18,6 +22,8 @@ def m_session(gh_run):
     del m
 
 
+@pytest.mark.watsonx
+@require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")
 def test_start_session_watsonx(gh_run):
     if gh_run == 1:
         pytest.skip("Skipping watsonx tests.")
@@ -55,8 +61,8 @@ async def test_async_await_with_chat_context(m_session):
 
     m1 = Message(role="user", content="1")
     m2 = Message(role="user", content="2")
-    r1 = await m_session.aact(m1, strategy=None)
-    r2 = await m_session.aact(m2, strategy=None)
+    r1 = await m_session.aact(m1, strategy=None, await_result=True)
+    r2 = await m_session.aact(m2, strategy=None, await_result=True)
 
     # This should be the order of these items in the session's context.
     history = [r2, m2, r1, m1]
@@ -67,7 +73,7 @@ async def test_async_await_with_chat_context(m_session):
         ctx = ctx.previous_node  # type: ignore
 
     # Ensure we made it back to the root.
-    assert ctx.is_root_node == True  # type: ignore
+    assert ctx.is_root_node  # type: ignore
 
 
 async def test_async_without_waiting_with_chat_context(m_session):

@@ -4,8 +4,9 @@ import os
 import pytest
 
 # Mark all tests in this module as requiring Ollama via LiteLLM
-pytestmark = [pytest.mark.litellm, pytest.mark.ollama, pytest.mark.llm]
+pytestmark = [pytest.mark.litellm, pytest.mark.ollama, pytest.mark.e2e]
 
+pytest.importorskip("litellm", reason="litellm not installed — install mellea[litellm]")
 from mellea import MelleaSession, generative
 from mellea.backends import ModelOption, model_ids
 from mellea.backends.litellm import LiteLLMBackend
@@ -14,7 +15,7 @@ from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 
-_MODEL_ID = f"ollama_chat/{model_ids.IBM_GRANITE_4_MICRO_3B.ollama_name}"
+_MODEL_ID = f"ollama_chat/{model_ids.IBM_GRANITE_4_HYBRID_MICRO.ollama_name}"
 
 
 @pytest.fixture(scope="function")
@@ -132,7 +133,6 @@ def test_gen_slot(session):
     @generative
     def is_happy(text: str) -> bool:
         """Determine if text is of happy mood."""
-        ...
 
     h = is_happy(session, text="I'm enjoying life.")
 
@@ -202,6 +202,14 @@ async def test_async_avalue(session):
     m1_final_val = await mot1.avalue()
     assert m1_final_val is not None
     assert m1_final_val == mot1.value
+
+    # Verify telemetry fields are populated
+    assert mot1.usage is not None
+    assert mot1.usage["prompt_tokens"] >= 0
+    assert mot1.usage["completion_tokens"] > 0
+    assert mot1.usage["total_tokens"] > 0
+    assert isinstance(mot1.model, str)
+    assert mot1.provider == "litellm"
 
 
 if __name__ == "__main__":

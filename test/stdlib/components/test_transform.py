@@ -1,8 +1,10 @@
 import pytest
 
 from mellea.core import TemplateRepresentation
-from mellea.stdlib.components.docs.richdocument import TableTransform
 from mellea.stdlib.components import MObject, Query, Transform
+
+pytest.importorskip("docling", reason="docling not installed — install mellea[docling]")
+from mellea.stdlib.components.docs.richdocument import TableTransform
 
 custom_mobject_description = "custom mobject description"
 
@@ -53,7 +55,7 @@ def test_get_transform_object_custom():
     assert isinstance(transform, TableTransform)
 
     with pytest.raises(AssertionError):
-        tr = transform.format_for_llm()
+        transform.format_for_llm()
 
 
 if __name__ == "__main__":

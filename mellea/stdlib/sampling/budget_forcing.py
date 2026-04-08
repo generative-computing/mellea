@@ -9,9 +9,9 @@ from ...core import (
     Backend,
     BaseModelSubclass,
     Component,
+    ComputedModelOutputThunk,
     Context,
     FancyLogger,
-    ModelOutputThunk,
     Requirement,
     S,
     SamplingResult,
@@ -23,7 +23,35 @@ from .sampling_algos import think_budget_forcing
 
 
 class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
-    """Budget forcing sampling class."""
+    """Sampling strategy that enforces a token budget for chain-of-thought reasoning.
+
+    Extends ``RejectionSamplingStrategy`` with explicit control over the ``<think>``
+    block size and the answer block size. On each loop iteration,
+    ``think_budget_forcing`` interleaves forced-thinking and final-answer generation,
+    after which the standard rejection-sampling validation pass determines whether to
+    accept or retry.
+
+    Currently only supports the ``OllamaModelBackend``.
+
+    Args:
+        think_max_tokens (int | None): Tokens allocated for the thinking block.
+            Defaults to ``4096``.
+        answer_max_tokens (int | None): Tokens allocated for the answer block.
+            ``None`` means unbounded.
+        start_think_token (str | None): Token opening the thinking block.
+            Defaults to ``"<think>"``.
+        end_think_token (str | None): Token closing the thinking block.
+            Defaults to ``"</think>"``.
+        begin_response_token (str | None): Optional token opening the response
+            block. Defaults to ``""``.
+        end_response_token (str): Token closing the response block.
+        think_more_suffix (str | None): Suffix to force continued thinking.
+            Empty string disables forcing.
+        answer_suffix (str | None): Suffix to elicit a final answer.
+        loop_budget (int): Rejection-sampling loop count. Must be > 0.
+        requirements (list[Requirement] | None): Requirements to validate against.
+
+    """
 
     think_max_tokens: int | None
     answer_max_tokens: int | None
@@ -48,21 +76,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
         loop_budget: int = 1,
         requirements: list[Requirement] | None,
     ):
-        r"""Initialize class.
-
-        Inherits from RejectionSamplingStrategy.
-
-        Args:
-            think_max_tokens: Number of tokens for think block
-            answer_max_tokens: Number of tokens allocated for answer portion, if set to None answer tokens will be unlimited
-            start_think_token: Special start of think block token defaults to '<think>'
-            end_think_token: Special end of think block token defaults to '</think>'
-            begin_response_token: Special begin of response block token e.g. '<response>' defaults to ""
-            end_response_token: Special end of response block token e.g. '</response>' defaults to ""
-            think_more_suffix: Suffix for continue thinking e.g. "\nWait let's think more carefully" to force the model to think more, defaults to "".  If set to "", no force thinking will be applied, the token budget will be become an upper bound.
-            answer_suffix: Suffix to obtain final answer, default to "\nThe final answer is:"
-            loop_budget: Number of times to iterate through the process. Must be greater than 0.
-            requirements: List of requirements to test against. If None, test all requirements attached to the given instruction.
+        r"""Initialize BudgetForcingSamplingStrategy with token budget parameters and rejection-sampling settings.
 
         Raises:
             AssertionError: If loop_budget is not greater than 0.
@@ -113,7 +127,7 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
 
         flog = FancyLogger.get_logger()
 
-        sampled_results: list[ModelOutputThunk] = []
+        sampled_results: list[ComputedModelOutputThunk] = []
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         sampled_actions: list[Component] = []
         sample_contexts: list[Context] = []
@@ -170,6 +184,8 @@ class BudgetForcingSamplingStrategy(RejectionSamplingStrategy):
                 model_options=model_options,
             )
             result_ctx = next_context
+            await result.avalue()
+            result = ComputedModelOutputThunk(result)
 
             # Sampling strategies may use different components from the original
             # action. This might cause discrepancies in the expected parsed_repr

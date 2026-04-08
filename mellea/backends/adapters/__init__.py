@@ -3,9 +3,8 @@
 from .adapter import (
     AdapterMixin,
     AdapterType,
-    GraniteCommonAdapter,
+    IntrinsicAdapter,
     LocalHFAdapter,
-    OpenAIAdapter,
     fetch_intrinsic_metadata,
     get_adapter_for_intrinsic,
 )
@@ -13,9 +12,8 @@ from .adapter import (
 __all__ = [
     "AdapterMixin",
     "AdapterType",
-    "GraniteCommonAdapter",
+    "IntrinsicAdapter",
     "LocalHFAdapter",
-    "OpenAIAdapter",
     "fetch_intrinsic_metadata",
     "get_adapter_for_intrinsic",
 ]

@@ -53,20 +53,27 @@ class _ConstraintExtractor(PromptModule):
                 'LLM failed to generate correct tags for extraction: "<constraints_and_requirements>"'
             )
 
-        # TODO: Maybe replace this logic with a RegEx?
-        constraint_extractor_str_upper = constraint_extractor_str.upper()
-        if (
-            "N/A" in constraint_extractor_str_upper
-            or "N / A" in constraint_extractor_str_upper
-            or "N/ A" in constraint_extractor_str_upper
-            or "N /A" in constraint_extractor_str_upper
-        ):
+        s = constraint_extractor_str.strip()
+        s_norm = s.strip().upper().replace(" ", "")
+        if s_norm == "N/A":
             return []
 
-        return [
-            line.strip()[2:] if line.strip()[:2] == "- " else line.strip()
-            for line in constraint_extractor_str.splitlines()
-        ]
+        results: list[str] = []
+
+        for line in s.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+
+            # remove bullet / numbering
+            line = re.sub(r"^\s*(?:[-*•]|\d+[\.\)])\s+", "", line)
+
+            # split inline multi-constraints
+            parts = re.split(r"\s*(?:;|\s-\s|\s—\s|\s–\s)\s*", line)
+
+            results.extend(p.strip() for p in parts if p.strip())
+
+        return results
 
     def generate(  # type: ignore[override]
         # About the mypy ignore above:

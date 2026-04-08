@@ -1,31 +1,54 @@
-"""Interfaces for Backends and Generation."""
+"""Abstract ``Backend`` interface and generation-walk utilities.
+
+Defines the ``Backend`` abstract base class whose two key abstract methods —
+``generate_from_context`` (context-aware single-action generation) and
+``generate_from_raw`` (context-free batch generation) — all concrete backends must
+implement. Also provides ``generate_walk``, which traverses a ``Component`` tree to
+find un-computed ``ModelOutputThunk`` leaves that need to be resolved before rendering.
+"""
 
 import abc
 import asyncio
+import functools
 import itertools
+import time
 from collections.abc import Sequence
-from typing import overload
+from typing import final, overload
 
 import pydantic
 import typing_extensions
 
+from ..plugins.manager import has_plugins, invoke_hook
+from ..plugins.types import HookType
 from .base import C, CBlock, Component, Context, ModelOutputThunk
 from .utils import FancyLogger
 
-# Necessary to define a type that supports `None` so that the BaseModelSubclass
-# can have a default value. Otherwise, Python complains about typed-components
-# since types with default values must come after those without default values in
-# function signatures (which is incompatible with our function parameter formatting).
-pydantic_model_or_none = pydantic.BaseModel | None
+# Necessary to define a type variable that has a default value.
+# This is because VSCode's pyright static type checker instantiates
+# all type parameters, order them in a specific order, and checks
+# that a type parameter with a default is not followed by a type parameter without a default.
+# This was originally specified in PEP 696 (Type Defaults for Type Parameters) and
+# is now part of official spec https://typing.python.org/en/latest/spec/generics.html#type-parameter-defaults .
+# For example, in mellea/stdlib/functional.py ,
+#    def act(action: Component[S], ... format: type[BaseModelSubclass] | None = None, ...)
+# gets instantiated as act[S, BaseModelSubclass].
+# S is TypeVar("S", default=Any, covariant=True) which has a default.
+#
 BaseModelSubclass = typing_extensions.TypeVar(
-    "BaseModelSubclass", bound=pydantic_model_or_none, default=None
+    "BaseModelSubclass", bound=pydantic.BaseModel, default=pydantic.BaseModel
 )  # must be a subclass of BaseModel
 
 
 class Backend(abc.ABC):
-    """An abstract `Backend`."""
+    """Abstract base class for all inference backends.
 
-    @abc.abstractmethod
+    All concrete backends must implement ``generate_from_context`` (context-aware
+    single-action generation) and ``generate_from_raw`` (context-free batch
+    generation). The ``do_generate_walk`` / ``do_generate_walks`` helpers can be
+    used to pre-compute any unresolved ``ModelOutputThunk`` leaves before rendering.
+    """
+
+    @final
     async def generate_from_context(
         self,
         action: Component[C] | CBlock,
@@ -36,6 +59,54 @@ class Backend(abc.ABC):
         tool_calls: bool = False,
     ) -> tuple[ModelOutputThunk[C], Context]:
         """Generates a model output from a context. May not mutate the context. This must be called from a running event loop as it creates a task to run the generation request.
+
+        Args:
+            action: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
+            ctx: The rest of the context.
+            format: A response format to used for structured outputs / constrained decoding.
+            model_options: Any model options to upsert into the defaults for this call.
+            tool_calls: If `True`, then tool calls are extracts from the `action` `Component`. Assumption: if tool_calls is enabled, then the action `Component` has a TemplateRepresentation
+
+        Returns:
+            a tuple of (ModelOutputThunk, Context) where the Context is the new context after the generation has been completed.
+        """
+        # --- generation_pre_call hook ---
+        if has_plugins(HookType.GENERATION_PRE_CALL):
+            from ..plugins.hooks.generation import GenerationPreCallPayload
+
+            pre_payload = GenerationPreCallPayload(
+                action=action,
+                context=ctx,
+                format=format,
+                model_options=model_options or {},
+                tool_calls=tool_calls,
+            )
+            _, pre_payload = await invoke_hook(
+                HookType.GENERATION_PRE_CALL, pre_payload, backend=self
+            )
+            model_options = pre_payload.model_options
+            format = pre_payload.format
+            tool_calls = pre_payload.tool_calls
+
+        return await self._generate_from_context(
+            action,
+            ctx,
+            format=format,
+            model_options=model_options,
+            tool_calls=tool_calls,
+        )
+
+    @abc.abstractmethod
+    async def _generate_from_context(
+        self,
+        action: Component[C] | CBlock,
+        ctx: Context,
+        *,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+    ) -> tuple[ModelOutputThunk[C], Context]:
+        """Backend implementers should override this method to generate the actual response.
 
         Args:
             action: The last item of the context should be passed in as an `action` instead of as part of the `ctx`. See `docs/dev/generate_signature_decisions.md`.
@@ -89,12 +160,22 @@ class Backend(abc.ABC):
             format: A response format to used for structured outputs / constrained decoding. Note: some backends do not support this parameter. They will log warnings and continue to generate.
             model_options: Any model options to upsert into the defaults for this call.
             tool_calls: Always set to false unless supported by backend.
+
+        Returns:
+            list[ModelOutputThunk]: A list of output thunks, one per action, in the same order as ``actions``.
         """
 
     async def do_generate_walk(
         self, action: CBlock | Component | ModelOutputThunk
     ) -> None:
-        """Does the generation walk."""
+        """Awaits all uncomputed ``ModelOutputThunk`` leaves reachable from ``action``.
+
+        Traverses the component tree rooted at ``action`` via ``generate_walk``, collects
+        any uncomputed ``ModelOutputThunk`` nodes, and concurrently awaits them all.
+
+        Args:
+            action (CBlock | Component | ModelOutputThunk): The root node to traverse.
+        """
         _to_compute = list(generate_walk(action))
         coroutines = [x.avalue() for x in _to_compute]
         # The following log message might get noisy. Feel free to remove if so.
@@ -107,7 +188,14 @@ class Backend(abc.ABC):
     async def do_generate_walks(
         self, actions: list[CBlock | Component | ModelOutputThunk]
     ) -> None:
-        """Does the generation walk."""
+        """Awaits all uncomputed ``ModelOutputThunk`` leaves reachable from each action in ``actions``.
+
+        Traverses the component tree of every action in the list via ``generate_walk``, collects
+        all uncomputed ``ModelOutputThunk`` nodes across all actions, and concurrently awaits them.
+
+        Args:
+            actions (list[CBlock | Component | ModelOutputThunk]): The list of root nodes to traverse.
+        """
         _to_compute = []
         for action in actions:
             _to_compute.extend(list(generate_walk(action)))
@@ -121,7 +209,19 @@ class Backend(abc.ABC):
 
 
 def generate_walk(c: CBlock | Component | ModelOutputThunk) -> list[ModelOutputThunk]:
-    """Returns the generation walk ordering for a Span."""
+    """Return all uncomputed ``ModelOutputThunk`` leaves reachable from ``c``.
+
+    Args:
+        c: A ``CBlock``, ``Component``, or ``ModelOutputThunk`` to traverse.
+
+    Returns:
+        A flat list of uncomputed ``ModelOutputThunk`` instances in the order
+        they need to be resolved (depth-first over ``Component.parts()``).
+
+    Raises:
+        ValueError: If any element encountered during traversal is not a ``CBlock``,
+            ``Component``, or ``ModelOutputThunk``.
+    """
     match c:
         case ModelOutputThunk() if not c.is_computed():
             return [c]

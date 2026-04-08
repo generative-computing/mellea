@@ -6,10 +6,10 @@ import pytest
 from PIL import Image
 
 # Mark all tests in this module as requiring Ollama with vision support
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 from mellea import MelleaSession, start_session
-from mellea.backends import ModelOption
+from mellea.backends import ModelOption, model_ids
 from mellea.core import ImageBlock, ModelOutputThunk
 from mellea.stdlib.components import Instruction, Message
 

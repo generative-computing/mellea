@@ -1,3 +1,5 @@
+# pytest: ollama, e2e
+
 from typing import Literal
 
 from mellea import generative, start_session
