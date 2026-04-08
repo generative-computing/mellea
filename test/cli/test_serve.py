@@ -136,7 +136,8 @@ class TestChatEndpoint:
         assert "model_options" in call_args.kwargs
         model_options = call_args.kwargs["model_options"]
 
-        # Should include ModelOption sentinels for temperature and max_tokens
+        # Should include ModelOption keys for temperature and max_tokens
+        # Note: TEMPERATURE is just "temperature" (not a sentinel), so it stays as-is
         assert ModelOption.TEMPERATURE in model_options
         assert model_options[ModelOption.TEMPERATURE] == 0.7
         assert ModelOption.MAX_NEW_TOKENS in model_options

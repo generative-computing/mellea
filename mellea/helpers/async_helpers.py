@@ -25,10 +25,6 @@ async def send_to_queue(
         co: A coroutine or async iterator producing the backend response.
         aqueue: The async queue to send results to. A sentinel ``None`` is appended on
             completion; an exception instance is appended on error.
-
-    Raises:
-        SystemExit: Re-raised if caught during processing.
-        KeyboardInterrupt: Re-raised if caught during processing.
     """
     try:
         if isinstance(co, Coroutine):
@@ -50,12 +46,7 @@ async def send_to_queue(
     # Typically, nothing awaits this function directly (only through the queue).
     # As a result, we have to be careful about catching all errors and propagating
     # them to the queue.
-    # Note: We catch BaseException to handle StopAsyncIteration which can leak
-    # from async generators in some Python versions/contexts.
-    except BaseException as e:
-        # Re-raise system-exiting exceptions
-        if isinstance(e, (SystemExit, KeyboardInterrupt)):
-            raise
+    except Exception as e:
         await aqueue.put(e)
 
 
