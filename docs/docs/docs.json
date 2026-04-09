@@ -33,7 +33,7 @@
             "pages": [
               "tutorials/01-your-first-generative-program",
               "tutorials/02-streaming-and-async",
-              "tutorials/03-using-generative-slots",
+              "tutorials/03-using-generative-stubs",
               "tutorials/04-making-agents-reliable",
               "tutorials/05-mifying-legacy-code"
             ]

@@ -4,7 +4,7 @@ from typing import Literal
 
 from mellea import generative, start_session
 from mellea.core import Requirement
-from mellea.stdlib.components.genslot import PreconditionException
+from mellea.stdlib.components.genstub import PreconditionException
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling.base import RejectionSamplingStrategy
 
@@ -25,7 +25,7 @@ if __name__ == "__main__":
         precondition_requirements=["the text arg should be less than 100 words"],
         # Reqs to use with the strategy. You could also just remove "unknown" from the structured output for this.
         requirements=["avoid classifying the sentiment as unknown"],
-        strategy=RejectionSamplingStrategy(),  # Must specify a strategy for gen slots
+        strategy=RejectionSamplingStrategy(),  # Must specify a strategy for gen stubs
     )
 
     print(

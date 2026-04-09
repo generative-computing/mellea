@@ -7,7 +7,7 @@ This directory contains interactive Jupyter notebooks demonstrating various Mell
 ### example.ipynb
 General introduction to Mellea with basic examples.
 
-### compositionality_with_generative_slots.ipynb
+### compositionality_with_generative_stubs.ipynb
 Interactive tutorial on composing generative functions.
 
 ### context_example.ipynb

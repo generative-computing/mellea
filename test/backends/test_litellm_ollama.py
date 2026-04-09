@@ -129,7 +129,7 @@ def test_litellm_ollama_instruct_options(session):
 
 
 @pytest.mark.qualitative
-def test_gen_slot(session):
+def test_gen_stub(session):
     @generative
     def is_happy(text: str) -> bool:
         """Determine if text is of happy mood."""

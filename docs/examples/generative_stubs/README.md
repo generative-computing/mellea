@@ -1,11 +1,11 @@
-# Generative Slots Examples
+# Generative Stubs Examples
 
 This directory contains examples demonstrating the `@generative` decorator for creating type-safe, composable LLM functions.
 
 ## Files
 
-### generative_slots.py
-Basic introduction to generative slots with sentiment classification and text summarization.
+### generative_stubs.py
+Basic introduction to generative stubs with sentiment classification and text summarization.
 
 **Key Features:**
 - Using `@generative` decorator for type-safe LLM functions
@@ -14,16 +14,16 @@ Basic introduction to generative slots with sentiment classification and text su
 - Simple function composition
 
 ### generate_with_context.py
-Shows how to use generative slots with custom context and grounding information.
+Shows how to use generative stubs with custom context and grounding information.
 
 ### generative_gsm8k.py
-Demonstrates using generative slots for mathematical reasoning tasks (GSM8K dataset).
+Demonstrates using generative stubs for mathematical reasoning tasks (GSM8K dataset).
 
-### generative_slots_with_requirements.py
-Combines generative slots with requirements for validated outputs.
+### generative_stubs_with_requirements.py
+Combines generative stubs with requirements for validated outputs.
 
 ### investment_advice.py
-A more complex example using generative slots for financial analysis.
+A more complex example using generative stubs for financial analysis.
 
 ### inter_module_composition/
 Subdirectory with examples of composing multiple generative functions together.
@@ -34,7 +34,7 @@ Subdirectory with examples of composing multiple generative functions together.
 - **Docstring Prompts**: Leveraging docstrings as instructions to the LLM
 - **Composition**: Building complex workflows from simple generative functions
 - **Requirements**: Adding validation to generative functions
-- **Context Management**: Using grounding context with generative slots
+- **Context Management**: Using grounding context with generative stubs
 
 ## Basic Usage
 
@@ -57,5 +57,5 @@ with start_session() as m:
 
 ## Related Documentation
 
-- See `mellea/stdlib/components/genslot.py` for implementation
+- See `mellea/stdlib/components/genstub.py` for implementation
 - See `docs/dev/mellea_library.md` for design philosophy

@@ -148,7 +148,7 @@ The model failed all `loop_budget` attempts. Options:
 ### `PreconditionException` from `@generative`
 
 ```text
-mellea.stdlib.components.genslot.PreconditionException
+mellea.stdlib.components.genstub.PreconditionException
 ```
 
 A precondition check in a `@generative` function failed before generation. This is

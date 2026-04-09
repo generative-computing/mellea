@@ -528,7 +528,7 @@ fails — i.e., before the LLM call is made. Catch it to handle pre-call validat
 failures gracefully.
 
 ```python
-from mellea.stdlib.components.genslot import PreconditionException
+from mellea.stdlib.components.genstub import PreconditionException
 
 try:
     result = my_generative_fn(m, ...)

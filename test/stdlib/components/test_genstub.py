@@ -7,11 +7,11 @@ from mellea import MelleaSession, generative, start_session
 from mellea.backends.model_ids import IBM_GRANITE_4_HYBRID_MICRO
 from mellea.backends.ollama import OllamaModelBackend
 from mellea.core import Requirement
-from mellea.stdlib.components.genslot import (
-    AsyncGenerativeSlot,
-    GenerativeSlot,
+from mellea.stdlib.components.genstub import (
+    AsyncGenerativeStub,
+    GenerativeStub,
     PreconditionException,
-    SyncGenerativeSlot,
+    SyncGenerativeStub,
 )
 from mellea.stdlib.context import ChatContext, Context
 from mellea.stdlib.requirements import simple_validate
@@ -57,12 +57,12 @@ def classify_sentiment_output(session):
     return classify_sentiment(session, text="I love this!")
 
 
-def test_gen_slot_output(classify_sentiment_output):
+def test_gen_stub_output(classify_sentiment_output):
     assert isinstance(classify_sentiment_output, str)
 
 
 def test_func(session):
-    assert isinstance(write_me_an_email, SyncGenerativeSlot)
+    assert isinstance(write_me_an_email, SyncGenerativeStub)
     write_email_component = write_me_an_email(session)
     assert isinstance(write_email_component, str)
 
@@ -72,20 +72,20 @@ def test_sentiment_output(classify_sentiment_output):
     assert classify_sentiment_output in ["positive", "negative"]
 
 
-def test_gen_slot_logs(classify_sentiment_output, session):
+def test_gen_stub_logs(classify_sentiment_output, session):
     last_prompt = session.last_prompt()[-1]
     assert isinstance(last_prompt, dict)
     assert set(last_prompt.keys()) == {"role", "content", "images"}
 
 
-def test_gen_slot_with_context_and_backend(session):
+def test_gen_stub_with_context_and_backend(session):
     email, context = write_me_an_email(context=session.ctx, backend=session.backend)
     assert isinstance(email, str)
     assert isinstance(context, Context)
 
 
-async def test_async_gen_slot(session):
-    assert isinstance(async_write_short_sentence, AsyncGenerativeSlot)
+async def test_async_gen_stub(session):
+    assert isinstance(async_write_short_sentence, AsyncGenerativeStub)
 
     r1 = async_write_short_sentence(session, topic="cats")
     r2 = async_write_short_sentence(session, topic="dogs")
@@ -200,7 +200,7 @@ def test_arg_extraction(backend, arg_choices, kwarg_choices, errs):
     found_err = False
     err = None
     try:
-        GenerativeSlot.extract_args_and_kwargs(*args, **kwargs)
+        GenerativeStub.extract_args_and_kwargs(*args, **kwargs)
     except Exception as e:
         found_err = True
         err = e
