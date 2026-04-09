@@ -292,9 +292,7 @@ class TestRunSuccess:
 
         program = program_path.read_text(encoding="utf-8")
         assert "from mellea.stdlib.requirements import req" in program
-        assert (
-            "from validations.val_fn_1 import validate_input as val_fn_1" in program
-        )
+        assert "from validations.val_fn_1 import validate_input as val_fn_1" in program
         assert "Keep the answer concise." in program
 
     def test_multi_line_input_file_creates_numbered_jobs(
