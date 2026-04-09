@@ -549,6 +549,20 @@ def pytest_runtest_setup(item):
     # to prevent fixture setup errors
 
 
+def pytest_runtest_teardown(item, nextitem):
+    """Evict Ollama models when crossing a module boundary.
+
+    Prevents models from accumulating across test files while avoiding
+    redundant unload/reload within a single module (where tests typically
+    share a model). Also evicts after the very last test.
+    """
+    if not item.get_closest_marker("ollama"):
+        return
+
+    if nextitem is None or nextitem.path != item.path:
+        evict_ollama_models()
+
+
 def memory_cleaner():
     """Lightweight memory cleanup — safety net for per-test GPU leaks."""
     yield
@@ -564,6 +578,53 @@ def memory_cleaner():
             torch.cuda.synchronize()
     except ImportError:
         pass
+
+
+def evict_ollama_models() -> None:
+    """Evict all currently loaded Ollama models to free memory.
+
+    Queries /api/ps to discover loaded models, then sends keep_alive=0
+    to each via /api/generate. Prevents heavyweight models from starving
+    subsequent tests of memory (see #798).
+
+    Best-effort: errors are logged but never raised.
+    """
+    logger = FancyLogger.get_logger()
+
+    # Parse OLLAMA_HOST which may be "host", "host:port", or absent.
+    host = os.environ.get("OLLAMA_HOST", "127.0.0.1")
+    if ":" in host:
+        host, port = host.rsplit(":", 1)
+    else:
+        port = os.environ.get("OLLAMA_PORT", "11434")
+
+    if host == "0.0.0.0":
+        host = "127.0.0.1"
+
+    base_url = f"http://{host}:{port}"
+
+    try:
+        resp = requests.get(f"{base_url}/api/ps", timeout=5)
+        resp.raise_for_status()
+        loaded = resp.json().get("models", [])
+    except Exception as e:
+        logger.warning("ollama-evict: could not query loaded models: %s", e)
+        return
+
+    if not loaded:
+        return
+
+    for entry in loaded:
+        model_name = entry.get("name") or entry.get("model", "unknown")
+        try:
+            requests.post(
+                f"{base_url}/api/generate",
+                json={"model": model_name, "keep_alive": 0},
+                timeout=10,
+            )
+            logger.info("ollama-evict: evicted %s", model_name)
+        except Exception as e:
+            logger.warning("ollama-evict: failed to evict %s: %s", model_name, e)
 
 
 @pytest.fixture(autouse=True, scope="session")
