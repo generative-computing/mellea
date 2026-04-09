@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 #
 # Session-scoped plugins — plugins that fire only within a specific session.
 #

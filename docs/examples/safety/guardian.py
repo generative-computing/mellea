@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 
 """Example of using the Enhanced Guardian Requirement with Granite Guardian 3.3 8B"""
 

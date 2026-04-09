@@ -1,447 +1,322 @@
-# Pytest Markers Guide for Mellea Tests
+# Pytest Markers Guide
 
-## Overview
-
-This guide explains the pytest marker system for categorizing and running mellea tests based on backend requirements, resource availability, and test characteristics.
-
-## 🎯 What's Automatic vs Manual
-
-### ✅ Automatic (No Configuration Needed)
-When you run `pytest`, the system **automatically detects** and skips tests based on:
-- **Ollama availability** - Checks if port 11434 is listening
-- **API keys** - Checks environment variables (`OPENAI_API_KEY`, `WATSONX_API_KEY`, etc.)
-- **GPU availability** - Checks for CUDA (NVIDIA) or MPS (Apple Silicon) via torch
-- **System RAM** - Checks via `psutil.virtual_memory()` (if psutil installed)
-
-**You don't need to configure anything!** Just run `pytest` and tests will automatically skip with helpful messages if requirements aren't met.
-
-**Note:**
-- GPU detection requires `torch` (included in `mellea[hf]` and `mellea[vllm]`)
-- RAM detection requires `psutil` (included in dev dependencies)
-- If you're not using dev dependencies, install with: `pip install psutil`
-
-### ⚠️ Manual (Developer Adds to Test Files)
-Developers must **add markers** to test files to indicate what each test needs:
-```python
-# Developer adds these markers once per test file
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
-```
-
-**Summary:** Markers are manual (one-time setup per test file), detection is automatic (every test run).
-
-### 🔧 Override Auto-Detection (Advanced)
-Want to try running tests even when requirements aren't met? Use these pytest options:
+## Quick Reference
 
 ```bash
-# Try GPU tests without GPU (will use CPU, may be slow/fail)
-pytest --ignore-gpu-check test/backends/test_vllm.py
+# By granularity tier
+pytest -m unit                          # Self-contained, no services (fast)
+pytest -m integration                   # Real SDK/library boundary or multi-component wiring
+pytest -m e2e                           # Real backends (ollama, APIs, GPU models)
+pytest -m "e2e and not qualitative"     # Deterministic real-backend tests only
 
-# Try with less RAM than recommended
-pytest --ignore-ram-check test/backends/test_huggingface.py
+# By backend
+pytest -m ollama                        # Ollama tests
+pytest -m huggingface                   # HuggingFace tests
+pytest -m "openai or watsonx"           # Cloud API tests
 
-# Try without Ollama running
-pytest --ignore-ollama-check test/backends/test_ollama.py
+# By characteristics
+pytest -m "not qualitative"             # Fast, deterministic tests (~2 min)
+pytest -m qualitative                   # Non-deterministic output quality tests
+pytest -m slow                          # Long-running tests (>1 min)
 
-# Try without API keys (will fail at API call)
-pytest --ignore-api-key-check test/backends/test_openai.py
-
-# Ignore all checks at once (convenience flag)
-pytest --ignore-all-checks
-
-# Enable GPU process isolation (opt-in, slower but guarantees CUDA memory release)
-pytest --isolate-heavy test/backends/test_vllm.py test/backends/test_huggingface.py
-
-# Combine multiple overrides
-pytest --ignore-gpu-check --ignore-ram-check -m "huggingface"
-```
-
-**Use Cases:**
-- Testing with CPU when GPU tests might work (slower but functional)
-- Trying with less RAM (might work for smaller models)
-- Debugging test infrastructure
-
-**Warning:** Tests will likely fail if requirements aren't actually met!
-
-## Quick Start
-
-```bash
-# Default: qualitative tests, skip slow tests
+# Default (configured in pyproject.toml): skips slow, includes qualitative
 pytest
-
-# Fast tests only (no qualitative, no slow)
-pytest -m "not qualitative"
-
-# Run only slow tests
-pytest -m "slow"
-
-# Run ALL tests including slow (bypass config)
-pytest --co -q
-
-# Run only fast unit tests (no LLM calls)
-pytest -m "not llm"
-
-# Run Ollama tests only (local, light resources)
-pytest -m "ollama"
-
-# Run tests that don't require API keys
-pytest -m "not requires_api_key"
-
-# Run quality tests for Ollama
-pytest -m "ollama and qualitative"
 ```
 
-**Note:** By default, `pytest` excludes slow tests (>5 min) but includes qualitative tests (configured in `pyproject.toml`). Use `pytest --co -q` to run all tests including slow ones.
+## Granularity Tiers
 
-## Marker Categories
+Every test belongs to exactly one tier. The tier determines what infrastructure
+the test needs and how fast/heavy it is to run.
 
-### Backend Markers
+### Unit (auto-applied)
 
-Specify which backend the test uses:
+**Entirely self-contained** — no services, no I/O, no fixtures that connect
+to anything external. Pure logic testing.
 
-- **`@pytest.mark.ollama`**: Tests requiring Ollama backend
-  - Local execution
-  - Light resources (CPU, ~2-4GB RAM)
-  - No API key required
-  - Example: `test/backends/test_ollama.py`
+- Auto-applied by conftest hook when no other granularity marker is present
+- **Never write `@pytest.mark.unit` on files** — it is implicit
+- Runs in milliseconds to low seconds, minimal memory
+- Would pass on any machine with just Python and project deps
 
-- **`@pytest.mark.openai`**: Tests requiring OpenAI API
-  - Requires `OPENAI_API_KEY` environment variable
-  - Light resources (API calls only)
-  - Incurs API costs
-  - Example: `test/backends/test_vision_openai.py`
-
-- **`@pytest.mark.watsonx`**: Tests requiring Watsonx API
-  - Requires `WATSONX_API_KEY`, `WATSONX_URL`, and `WATSONX_PROJECT_ID` environment variables
-  - Light resources (API calls only)
-  - Incurs API costs
-  - Example: `test/backends/test_watsonx.py`
-
-- **`@pytest.mark.huggingface`**: Tests requiring HuggingFace backend
-  - Local execution
-  - Heavy resources (GPU recommended, 16-32GB RAM, ~8GB VRAM)
-  - Downloads models (~3-8GB)
-  - No API key required
-  - Example: `test/backends/test_huggingface.py`
-
-- **`@pytest.mark.vllm`**: Tests requiring vLLM backend
-  - Local execution
-  - Heavy resources (GPU required, 16-32GB RAM, 8GB+ VRAM)
-  - Example: `test/backends/test_vllm.py`
-
-- **`@pytest.mark.litellm`**: Tests requiring LiteLLM backend
-  - Requirements depend on underlying backend
-  - Example: `test/backends/test_litellm_ollama.py`
-
-### Capability Markers
-
-Specify resource or authentication requirements:
-
-- **`@pytest.mark.requires_api_key`**: Tests requiring external API keys
-  - Auto-skipped if required API key not found
-  - Use with backend markers (openai, watsonx)
-
-- **`@pytest.mark.requires_gpu`**: Tests requiring GPU
-  - Auto-skipped if no GPU detected
-  - Typically used with huggingface, vllm
-
-- **`@pytest.mark.requires_heavy_ram`**: Tests requiring 48GB+ RAM
-  - Auto-skipped if insufficient RAM detected
-  - Typically used with huggingface, vllm
-
-- **`@pytest.mark.qualitative`**: Non-deterministic quality tests
-  - Tests LLM output quality rather than infrastructure
-  - **Included by default** (run with standard `pytest`)
-  - Skipped in CI (when `CICD=1`)
-  - May be flaky due to model variability
-  - Use `pytest -m "not qualitative"` to exclude these tests
-
-- **`@pytest.mark.slow`**: Tests taking >5 minutes
-  - Tests that load large datasets, run extensive evaluations, etc.
-  - **Excluded by default** (configured in `pyproject.toml` addopts)
-  - Use `pytest -m slow` or `pytest --co -q` to include these tests
-
-### Execution Strategy Markers
-
-- **`@pytest.mark.requires_gpu_isolation`**: Tests requiring OS-level process isolation
-  - Used for heavy GPU tests (vLLM, HuggingFace) that need CUDA memory fully released between modules
-  - Only activates when `--isolate-heavy` flag is used or `CICD=1` is set
-  - Runs each marked module in a separate subprocess to guarantee GPU memory release
-  - **Not a capability check** - this is an execution strategy, not a resource requirement
-  - Separate from `requires_gpu` (which checks if GPU exists)
-  - Example: `test/backends/test_vllm.py`, `test/backends/test_huggingface.py`
-
-### Composite Markers
-
-- **`@pytest.mark.llm`**: Tests that make LLM calls
-  - Requires at least Ollama to be available
-  - Use to distinguish from pure unit tests
-
-## Auto-Detection and Skipping
-
-The test suite automatically detects your system capabilities and skips tests that cannot run:
-
-### API Key Detection
 ```python
-# Automatically checks for:
-OPENAI_API_KEY          # For OpenAI tests
-WATSONX_API_KEY         # For Watsonx tests
-WATSONX_URL             # For Watsonx tests
-WATSONX_PROJECT_ID      # For Watsonx tests
+# No markers needed — auto-applied as unit
+def test_cblock_repr():
+    assert str(CBlock(value="hi")) == "hi"
 ```
 
-### Backend Availability Detection
+### Integration (explicit)
+
+**Verifies that your code correctly communicates across a real boundary.**
+The boundary may be a third-party SDK/library whose API contract you are
+asserting against, multiple internal components wired together, or a
+fixture-managed local service. What distinguishes integration from unit is
+that at least one real external component — not a mock or stub — is on the
+other side of the boundary being tested.
+
+- Add `@pytest.mark.integration` explicitly
+- No backend markers needed — integration tests do not use real LLM backends
+- Slower than unit (fixture setup, real SDK objects), but faster than e2e
+
+**Positive indicators:**
+
+- Uses a real third-party SDK object to *capture and assert* on output —
+  e.g. `InMemoryMetricReader`, `InMemorySpanExporter`, `LoggingHandler` —
+  rather than patching the SDK away
+- Asserts on the format or content of data as received by an external
+  component (semantic conventions, attribute names, accumulated values)
+- Wires multiple real project components together and mocks only at the
+  outermost boundary
+- Breaking the interface between your code and the external component
+  (e.g. a changed attribute name, a missing SDK call) would cause the test
+  to fail
+
+**Negative indicators (likely unit instead):**
+
+- All external boundaries replaced with `MagicMock`, `patch`, or `AsyncMock`
+- Third-party library imported only as a type or helper, not as a real
+  collaborator being asserted against
+- Toggles env vars and checks booleans or config state with no real SDK
+  objects instantiated
+
+**Tie-breaker:** If you changed the contract between your code and the
+external component, would this test catch it? If yes → integration. If no
+→ unit.
+
 ```python
-# Automatically detects:
-- Ollama availability (checks if port 11434 is listening)
+@pytest.mark.integration
+def test_token_metrics_format(clean_metrics_env):
+    # Real InMemoryMetricReader — asserting against the OTel SDK contract
+    reader = InMemoryMetricReader()
+    provider = MeterProvider(metric_readers=[reader])
+    record_token_usage_metrics(input_tokens=10, output_tokens=5, ...)
+    metrics_data = reader.get_metrics_data()
+    assert metrics_data.resource_metrics[0]...name == "mellea.llm.tokens.input"
+
+@pytest.mark.integration
+def test_session_chains_components(mock_backend):
+    # Multiple real project components wired together; only LLM call mocked
+    session = start_session(backend=mock_backend)
+    result = session.instruct("hello")
+    assert mock_backend.generate.called
 ```
 
-### Resource Detection
+### E2E (explicit)
+
+**Tests against real backends** — cloud APIs, local servers (ollama), or
+GPU-loaded models (huggingface, vllm). No mocks on the critical path.
+
+- Add `@pytest.mark.e2e` explicitly, always combined with backend marker(s)
+- Resource predicates (`require_gpu()`, `require_ram()`, etc.) only apply to
+  e2e and qualitative tests — see "Resource Gating" section below
+- Assertions are **deterministic** — structural, type-based, or functional
+
 ```python
-# Automatically detects:
-- GPU availability (via torch.cuda.is_available())
-- GPU memory (via torch.cuda.get_device_properties())
-- System RAM (via psutil.virtual_memory())
+pytestmark = [pytest.mark.e2e, pytest.mark.ollama]
+
+def test_structured_output(session):
+    result = session.format(Person, "Make up a person")
+    assert isinstance(json.loads(result.value), dict)
 ```
 
-### Skip Messages
-When a test is skipped, you'll see helpful messages (use `-rs` flag to show skip reasons):
+### Qualitative (explicit, per-function)
+
+**Subset of e2e.** Same infrastructure requirements, but assertions check
+**non-deterministic output content** that may vary across model versions or runs.
+
+- Add `@pytest.mark.qualitative` per-function (not module-level)
+- Module must also carry `e2e` + backend markers at module level
+- Skipped in CI when `CICD=1`
+- Included by default in local runs
+
+```python
+pytestmark = [pytest.mark.e2e, pytest.mark.ollama]
+
+@pytest.mark.qualitative
+def test_greeting_content(session):
+    result = session.instruct("Write a greeting")
+    assert "hello" in result.value.lower()
+```
+
+**Decision rule:** If swapping the model version could break the assertion
+despite the system working correctly, it is `qualitative`. If the assertion
+checks structure, types, or functional correctness, it is `e2e`.
+
+### The `llm` marker (deprecated)
+
+`llm` is a legacy marker equivalent to `e2e`. It remains registered for
+backward compatibility but should not be used in new tests. Use `e2e` instead.
+
+The conftest auto-apply hook treats `llm` the same as `e2e` — tests marked
+`llm` will not receive the `unit` marker.
+
+## Backend Markers
+
+Backend markers identify which backend a test needs. They enable selective
+test runs (`pytest -m ollama`) and drive auto-skip logic.
+
+**Backend markers only go on e2e and qualitative tests.** Unit and integration
+tests don't need real backends.
+
+| Marker         | Backend                       | Resources                             |
+| -------------- | ----------------------------- | ------------------------------------- |
+| `ollama`       | Ollama (port 11434)           | Local, light (~2-4GB RAM)             |
+| `openai`       | OpenAI API or compatible      | API calls (may use Ollama `/v1`)      |
+| `watsonx`      | Watsonx API                   | API calls, requires credentials       |
+| `huggingface`  | HuggingFace transformers      | Local, GPU required                   |
+| `vllm`         | vLLM                          | Local, GPU required                   |
+| `litellm`      | LiteLLM (wraps other backends)| Depends on underlying backend         |
+| `bedrock`      | AWS Bedrock                   | API calls, requires credentials       |
+
+### OpenAI-via-Ollama pattern
+
+Some tests use the OpenAI client pointed at Ollama's `/v1` endpoint. Mark
+these with **both** `openai` and `ollama`, but do **not** add `require_api_key`:
+
+```python
+pytestmark = [pytest.mark.e2e, pytest.mark.openai, pytest.mark.ollama]
+```
+
+## Resource Gating (Predicates)
+
+E2E and qualitative tests need gating so they skip cleanly when required
+infrastructure is absent. Use **predicate decorators** from `test/predicates.py`
+— they give test authors precise control over skip conditions.
+
+```python
+from test.predicates import require_gpu, require_api_key
+```
+
+| Predicate | Use when test needs |
+| --------- | ------------------- |
+| `require_gpu()` | Any GPU (CUDA or MPS) |
+| `require_gpu(min_vram_gb=N)` | GPU with at least N GB VRAM |
+| `require_ram(min_gb=N)` | N GB+ system RAM (genuinely RAM-bound tests only) |
+| `require_api_key("ENV_VAR")` | Specific API credentials |
+| `require_package("pkg")` | Optional dependency |
+| `require_python((3, 11))` | Minimum Python version |
+
+### Typical combinations
+
+- `huggingface` → `require_gpu(min_vram_gb=N)` (compute N from model params)
+- `vllm` → `require_gpu(min_vram_gb=N)` (compute N from model params)
+- `watsonx` → `require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")`
+- `openai` → `require_api_key("OPENAI_API_KEY")` only for real OpenAI (not Ollama-compat)
+
+### Other gating markers
+
+These are not resource predicates but still control test selection:
+
+| Marker         | Gate                             | Auto-skip when                                   |
+| -------------- | -------------------------------- | ------------------------------------------------ |
+| `slow`         | Tests taking >1 minute           | Excluded by default via `pyproject.toml` addopts |
+| `qualitative`  | Non-deterministic output         | Skipped when `CICD=1`                            |
+
+### Removed markers
+
+`requires_gpu`, `requires_heavy_ram`, and `requires_gpu_isolation` have been
+removed. Use `require_gpu(min_vram_gb=N)` from `test.predicates` instead.
+`requires_api_key` is still active — see below.
+
+## Auto-Detection
+
+The test suite automatically detects system capabilities and skips tests
+whose requirements are not met. No configuration needed.
+
+| Capability | How detected                  |
+| ---------- | ----------------------------- |
+| Ollama     | Port 11434 check              |
+| GPU/VRAM   | `torch` + `sysctl hw.memsize` |
+| API keys   | Environment variable check    |
+
+Use `-rs` with pytest to see skip reasons:
+
 ```bash
 pytest -rs
-
-# Output:
-SKIPPED [1] test/conftest.py:120: Skipping test: OPENAI_API_KEY not found in environment
-SKIPPED [1] test/conftest.py:125: Skipping test: GPU not available
-SKIPPED [1] test/conftest.py:130: Skipping test: Insufficient RAM (16.0GB < 32GB)
-SKIPPED [1] test/conftest.py:165: Skipping test: Ollama not available (port 11434 not listening)
 ```
 
-## Usage Examples
-
-### Module-Level Markers
-
-Apply markers to all tests in a module using `pytestmark`:
+## Common Marker Patterns
 
 ```python
-# test/backends/test_ollama.py
-import pytest
+# Unit — no markers needed (auto-applied by conftest)
+def test_cblock_repr():
+    assert str(CBlock(value="hi")) == "hi"
 
-# All tests in this module require Ollama and make LLM calls
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+# Integration — mocked backend
+@pytest.mark.integration
+def test_session_with_mock(mock_backend):
+    session = start_session(backend=mock_backend)
+    result = session.instruct("hello")
+    assert mock_backend.generate.called
 
-def test_simple_instruct(session):
-    # This test inherits ollama and llm markers
-    ...
-```
+# E2E — real Ollama backend, deterministic
+pytestmark = [pytest.mark.e2e, pytest.mark.ollama]
+def test_structured_output(session):
+    result = session.format(Person, "Make up a person")
+    assert isinstance(json.loads(result.value), dict)
 
-### Multiple Markers
-
-Combine markers for complex requirements:
-
-```python
-# test/backends/test_huggingface.py
-pytestmark = [
-    pytest.mark.huggingface,
-    pytest.mark.llm,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.requires_gpu_isolation,  # Needs process isolation for GPU memory
-]
-```
-
-### Individual Test Markers
-
-Add markers to specific tests:
-
-```python
+# E2E + qualitative — real backend, non-deterministic
+pytestmark = [pytest.mark.e2e, pytest.mark.ollama]
 @pytest.mark.qualitative
-def test_output_quality(session):
-    # This test checks LLM output quality
-    result = session.instruct("Write a poem")
-    assert "poem" in result.value.lower()
+def test_greeting_content(session):
+    result = session.instruct("Write a greeting")
+    assert "hello" in result.value.lower()
+
+# Heavy GPU e2e (predicates for resource gating)
+from test.predicates import require_gpu
+
+pytestmark = [pytest.mark.e2e, pytest.mark.huggingface,
+              require_gpu(min_vram_gb=20)]
 ```
 
-## Running Tests by Category
+## Example Files (`docs/examples/`)
 
-### By Backend
-```bash
-# Ollama only
-pytest -m "ollama"
+Unlike `test/` files (which are auto-collected and default to `unit`), examples
+require an explicit `# pytest:` comment to be collected. This opt-in approach
+reflects that examples often have variable dependencies and limited setup, so
+only files that declare themselves runnable should be executed.
 
-# HuggingFace only
-pytest -m "huggingface"
-
-# All API-based backends
-pytest -m "openai or watsonx"
+```python
+# pytest: e2e, ollama, qualitative
+"""Example description..."""
 ```
 
-### By Resource Requirements
-```bash
-# Light tests only (no GPU, no heavy RAM)
-pytest -m "not (requires_gpu or requires_heavy_ram)"
+Same classification rules apply. The comment must appear in the first few
+lines before non-comment code. Files without this comment are silently
+ignored — they won't appear in skip summaries or collection output.
+Parser: `docs/examples/conftest.py` (`_extract_markers_from_file`).
 
-# Tests that work without API keys
-pytest -m "not requires_api_key"
+## Adding Markers to New Tests
 
-# GPU tests only
-pytest -m "requires_gpu"
-```
+1. **Classify the test** — unit, integration, e2e, or qualitative?
+2. **Add granularity marker** — integration and e2e are explicit; unit is auto-applied
+3. **Add backend marker(s)** — only for e2e/qualitative
+4. **Add resource predicates** — only for e2e/qualitative, use `test/predicates.py`
+5. **Verify** — `pytest --collect-only -m "your_marker"` to check
 
-### By Test Type
-```bash
-# Infrastructure tests only (deterministic)
-pytest -m "not qualitative"
-
-# Quality tests only (non-deterministic)
-pytest -m "qualitative"
-
-# Fast unit tests (no LLM calls)
-pytest -m "not llm"
-```
-
-### Complex Combinations
-```bash
-# Ollama infrastructure tests
-pytest -m "ollama and not qualitative"
-
-# All tests that work with just Ollama (no API keys, no GPU)
-pytest -m "not (requires_api_key or requires_gpu or requires_heavy_ram)"
-
-# Quality tests for local backends only
-pytest -m "qualitative and (ollama or huggingface or vllm)"
-```
+Use the `/audit-markers` skill to validate markers on existing or new test files.
 
 ## CI/CD Integration
 
-### Current Behavior
-- `CICD=1` environment variable skips all qualitative tests
-- Module-level skips for heavy backends (huggingface, vllm, watsonx)
-
-### Recommended CI Matrix
 ```yaml
-# .github/workflows/test.yml
 jobs:
   unit-tests:
-    # Fast unit tests, no LLM
-    run: pytest -m "not llm"
+    run: pytest -m unit              # Fast, no services needed
 
   ollama-tests:
-    # Ollama infrastructure tests
-    run: pytest -m "ollama and not qualitative"
+    run: pytest -m "e2e and ollama and not qualitative"
 
   quality-tests:
-    # Optional: Run quality tests on schedule
     if: github.event_name == 'schedule'
     run: pytest -m "qualitative and ollama"
 ```
 
-## Adding Markers to New Tests
-
-### Step 1: Identify Requirements
-Ask yourself:
-1. Which backend does this test use?
-2. Does it require an API key?
-3. Does it need a GPU?
-4. Does it need heavy RAM (48GB+)?
-5. Is it testing output quality (qualitative) or infrastructure?
-
-### Step 2: Add Appropriate Markers
-
-For a new Ollama test:
-```python
-# Use module-level marker if all tests use same backend
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
-
-@pytest.mark.qualitative  # Add if testing output quality
-def test_my_new_feature(session):
-    ...
-```
-
-For a new HuggingFace test:
-```python
-pytestmark = [
-    pytest.mark.huggingface,
-    pytest.mark.llm,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.requires_gpu_isolation,  # Add if needs GPU memory isolation
-]
-
-@pytest.mark.qualitative
-def test_my_new_feature(session):
-    ...
-```
-
-### Step 3: Test Your Markers
-```bash
-# Verify your test is properly marked
-pytest --collect-only -m "your_marker"
-
-# Run just your test
-pytest -k "test_my_new_feature"
-```
-
-## Troubleshooting
-
-### Test Not Running
-```bash
-# Check which markers are applied
-pytest --collect-only test/path/to/test.py
-
-# Check why test is being skipped
-pytest -v test/path/to/test.py
-
-# Force run despite auto-skip (will likely fail if requirements not met)
-pytest test/path/to/test.py --runxfail
-```
-
-### Marker Not Recognized
-```bash
-# List all registered markers
-pytest --markers
-
-# Check pytest.ini configuration
-cat pytest.ini
-```
-
-### Auto-Skip Not Working
-```bash
-# Debug system capabilities
-pytest --setup-show test/path/to/test.py
-
-# Check conftest.py detection logic
-# See test/conftest.py:get_system_capabilities()
-
-# Run with verbose output to see skip reasons
-pytest -v -s test/path/to/test.py
-```
-
-### Force Run Tests (Override Auto-Skip)
-```bash
-# Run specific test ignoring auto-skip (useful for debugging)
-pytest test/backends/test_ollama.py --runxfail
-
-# Run with specific marker, will fail if requirements not met
-pytest -m "ollama" -v
-
-# Note: Tests will fail if actual requirements (Ollama, GPU, etc.) aren't met
-# This is useful for testing the test infrastructure itself
-```
-
-## Best Practices
-
-1. **Use module-level markers** for consistent backend requirements
-2. **Combine markers** to accurately describe test requirements
-3. **Keep qualitative marker** for non-deterministic tests
-4. **Test locally** before pushing to ensure markers work correctly
-5. **Document special requirements** in test docstrings
+- `CICD=1` skips qualitative tests
+- `slow` tests excluded by default (add `-m slow` to include)
 
 ## Related Files
 
-- `test/conftest.py`: Auto-detection and skip logic
-- `pyproject.toml`: Marker definitions and pytest configuration
-
-## Questions?
-
-For questions or issues with the marker system:
-1. Check this guide first
-2. Open an issue on GitHub with the `testing` label
+- `test/conftest.py` — marker registration, auto-detection, skip logic, unit auto-apply hook
+- `test/predicates.py` — resource gating predicates (`require_gpu`, `require_ram`, etc.)
+- `docs/examples/conftest.py` — example marker parser (`_extract_markers_from_file`)
+- `pyproject.toml` — marker definitions and pytest configuration
+- `.agents/skills/audit-markers/SKILL.md` — skill for auditing and fixing markers

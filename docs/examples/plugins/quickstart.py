@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 #
 # Quick Start — your first Mellea plugin in under 30 lines.
 #

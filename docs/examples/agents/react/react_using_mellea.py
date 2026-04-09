@@ -1,4 +1,4 @@
-# pytest: ollama, llm, qualitative, slow
+# pytest: ollama, e2e, qualitative, slow
 
 """React examples using the Mellea library's framework."""
 

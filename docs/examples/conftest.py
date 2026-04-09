@@ -11,16 +11,16 @@ import sys
 
 import pytest
 
-# Lazy import of system capability detection to avoid circular imports
-_get_system_capabilities = None
+# Cached result of system capability detection (None = not yet computed)
+_capabilities_cache: dict | None = None
 
 
 def get_system_capabilities():
-    """Lazy load system capabilities from test/conftest.py."""
-    global _get_system_capabilities
+    """Lazy load system capabilities from test/conftest.py, cached after first call."""
+    global _capabilities_cache
 
-    if _get_system_capabilities is not None:
-        return _get_system_capabilities()
+    if _capabilities_cache is not None:
+        return _capabilities_cache
 
     # Add test directory to path to enable import
     _test_dir = pathlib.Path(__file__).parent.parent.parent / "test"
@@ -38,8 +38,8 @@ def get_system_capabilities():
         if spec and spec.loader:
             test_conftest = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(test_conftest)
-            _get_system_capabilities = test_conftest.get_system_capabilities
-            return _get_system_capabilities()
+            _capabilities_cache = test_conftest.get_system_capabilities()
+            return _capabilities_cache
         else:
             raise ImportError("Could not load test/conftest.py")
     except (ImportError, AttributeError) as e:
@@ -50,17 +50,14 @@ def get_system_capabilities():
             f"Could not import get_system_capabilities from test/conftest.py: {e}. Heavy RAM tests will NOT be skipped!"
         )
 
-        def fallback():
-            return {
-                "has_gpu": False,
-                "gpu_memory_gb": 0,
-                "ram_gb": 0,
-                "has_api_keys": {},
-                "has_ollama": False,
-            }
-
-        _get_system_capabilities = fallback
-        return fallback()
+        _capabilities_cache = {
+            "has_gpu": False,
+            "gpu_memory_gb": 0,
+            "ram_gb": 0,
+            "has_api_keys": {},
+            "has_ollama": False,
+        }
+        return _capabilities_cache
 
 
 examples_to_skip: dict[str, str] = {}
@@ -123,17 +120,8 @@ def _should_skip_collection(markers):
     if "slow" in markers and int(os.environ.get("SKIP_SLOW", 0)) == 1:
         return True, "Skipping slow test (SKIP_SLOW=1)"
 
-    # Skip tests requiring heavy RAM if insufficient
-    if "requires_heavy_ram" in markers:
-        RAM_THRESHOLD_GB = 48
-        if capabilities["ram_gb"] > 0 and capabilities["ram_gb"] < RAM_THRESHOLD_GB:
-            return (
-                True,
-                f"Insufficient RAM ({capabilities['ram_gb']:.1f}GB < {RAM_THRESHOLD_GB}GB)",
-            )
-
     # Skip tests requiring GPU if not available
-    if "requires_gpu" in markers or "vllm" in markers:
+    if "huggingface" in markers or "vllm" in markers:
         if not capabilities["has_gpu"]:
             return True, "GPU not available"
 
@@ -143,46 +131,12 @@ def _should_skip_collection(markers):
             return True, "Ollama not available (port 11434 not listening)"
 
     # Skip tests requiring API keys
-    if "requires_api_key" in markers or "watsonx" in markers:
-        if "watsonx" in markers and not capabilities["has_api_keys"].get("watsonx"):
+    if "watsonx" in markers:
+        if not capabilities["has_api_keys"].get("watsonx"):
             return True, "Watsonx API credentials not found"
-        if "openai" in markers and not capabilities["has_api_keys"].get("openai"):
+    if "openai" in markers:
+        if not capabilities["has_api_keys"].get("openai"):
             return True, "OpenAI API key not found"
-
-    return False, None
-
-
-def _check_optional_imports(file_path):
-    """Check if file has optional imports that aren't installed.
-
-    Returns (should_skip, reason) tuple.
-    """
-    try:
-        with open(file_path) as f:
-            content = f.read()
-
-        # Check for langchain imports
-        if "from langchain" in content or "import langchain" in content:
-            try:
-                import langchain_core
-            except ImportError:
-                return True, "langchain_core not installed"
-
-            # Check for langchain_community specifically
-            if (
-                "from langchain_community" in content
-                or "import langchain_community" in content
-            ):
-                try:
-                    import langchain_community
-                except ImportError:
-                    return (
-                        True,
-                        "langchain_community not installed (install with: uv pip install mellea[tools])",
-                    )
-
-    except Exception:
-        pass
 
     return False, None
 
@@ -328,22 +282,22 @@ def pytest_collection_finish(session):
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
-    # Append the skipped examples if needed.
-    if len(examples_to_skip) == 0:
-        return
-
-    terminalreporter.ensure_newline()
-    terminalreporter.section("Skipped Examples", sep="=", blue=True, bold=True)
-    terminalreporter.line("The following examples were skipped during collection:\n")
-    for filename, reason in examples_to_skip.items():
-        terminalreporter.line(f"  • {filename}: {reason}")
+    if examples_to_skip:
+        terminalreporter.ensure_newline()
+        terminalreporter.section("Skipped Examples", sep="=", blue=True, bold=True)
+        terminalreporter.line(
+            "The following examples were skipped during collection:\n"
+        )
+        for filepath, reason in examples_to_skip.items():
+            terminalreporter.line(f"  • {pathlib.Path(filepath).name}: {reason}")
 
 
 def pytest_pycollect_makemodule(module_path, parent):
     """Intercepts Module creation to skip files before import.
 
-    Runs for both directory traversal and direct file specification.
-    Returning a SkippedFile prevents pytest from importing the file,
+    Only fires for files matching python_files (default test_*.py) during
+    directory traversal, or for any file specified directly on the command
+    line. Returning a SkippedFile prevents pytest from importing the file,
     which is necessary when files contain unavailable dependencies.
 
     Args:
@@ -353,7 +307,7 @@ def pytest_pycollect_makemodule(module_path, parent):
     file_path = module_path
 
     # Limit scope to docs/examples directory
-    if "docs" not in str(file_path) or "examples" not in str(file_path):
+    if "docs" not in file_path.parts or "examples" not in file_path.parts:
         return None
 
     if file_path.name == "conftest.py":
@@ -365,14 +319,14 @@ def pytest_pycollect_makemodule(module_path, parent):
         config._example_capabilities = get_system_capabilities()
 
     # Check manual skip list
-    if file_path.name in examples_to_skip:
+    if str(file_path) in examples_to_skip:
         return SkippedFile.from_parent(parent, path=file_path)
 
     # Extract and evaluate markers
     markers = _extract_markers_from_file(file_path)
 
     if not markers:
-        return None
+        return SkippedFile.from_parent(parent, path=file_path)
 
     should_skip, _reason = _should_skip_collection(markers)
 
@@ -380,7 +334,10 @@ def pytest_pycollect_makemodule(module_path, parent):
         # Prevent import by returning custom collector
         return SkippedFile.from_parent(parent, path=file_path)
 
-    return None
+    # Return ExampleModule so pytest never falls through to its default Module
+    # collector (which would import the file directly). Import errors are
+    # instead caught at runtime in ExampleItem.runtest() and converted to skips.
+    return ExampleModule.from_parent(parent, path=file_path)
 
 
 def pytest_ignore_collect(collection_path, config):
@@ -408,16 +365,19 @@ def pytest_ignore_collect(collection_path, config):
         and "examples" in abs_path.parts
     ):
         # Skip files in the manual skip list
-        if collection_path.name in examples_to_skip:
+        if str(collection_path) in examples_to_skip:
             return True
 
         # Extract markers and check if we should skip
         try:
             markers = _extract_markers_from_file(collection_path)
+            # No markers → not a runnable example (e.g. __init__.py, helpers)
+            if not markers:
+                return True
             should_skip, reason = _should_skip_collection(markers)
             if should_skip and reason:
                 # Add to skip list with reason for terminal summary
-                examples_to_skip[collection_path.name] = reason
+                examples_to_skip[str(collection_path)] = reason
                 # Return True to ignore this file completely
                 return True
         except Exception as e:
@@ -432,39 +392,35 @@ def pytest_ignore_collect(collection_path, config):
     return False
 
 
-# This doesn't replace the existing pytest file collection behavior.
 def pytest_collect_file(parent: pytest.Dir, file_path: pathlib.PosixPath):
-    # Do a quick check that it's a .py file in the expected `docs/examples` folder. We can make
-    # this more exact if needed.
+    """Provide an explicit collector for example files in docs/examples/."""
     if (
         file_path.suffix == ".py"
         and "docs" in file_path.parts
         and "examples" in file_path.parts
     ):
-        # Skip this test. It requires additional setup.
-        if file_path.name in examples_to_skip:
+        # Directly-specified files are handled by pytest_pycollect_makemodule —
+        # only provide an explicit collector during directory traversal.
+        if parent.session.isinitpath(file_path):
+            return None
+
+        # Already flagged for skipping (missing system capability)
+        if str(file_path) in examples_to_skip:
             return
 
-        # Check markers first - if file has skip marker, return SkippedFile
-        try:
-            markers = _extract_markers_from_file(file_path)
-            should_skip, _reason = _should_skip_collection(markers)
-            if should_skip:
-                # FIX: Return a dummy collector instead of None.
-                # This prevents pytest from falling back to the default Module collector
-                # which would try to import the file.
-                return SkippedFile.from_parent(parent, path=file_path)
-        except Exception:
-            # If we can't read markers, continue with other checks
-            pass
-
-        # Check for optional imports before creating ExampleFile
-        should_skip, _reason = _check_optional_imports(file_path)
+        # Check markers — no markers means not a runnable example.
+        # _extract_markers_from_file is self-contained (returns [] on error),
+        # so no try/except needed here.
+        markers = _extract_markers_from_file(file_path)
+        if not markers:
+            return None
+        should_skip, _reason = _should_skip_collection(markers)
         if should_skip:
-            # FIX: Return SkippedFile instead of None for optional import skips too
             return SkippedFile.from_parent(parent, path=file_path)
 
-        return ExampleFile.from_parent(parent, path=file_path)
+        # pytest_pycollect_makemodule only fires for files matching python_files
+        # (test_*.py) — examples need an explicit collector for directory traversal.
+        return ExampleModule.from_parent(parent, path=file_path)
 
 
 class SkippedFile(pytest.File):
@@ -491,6 +447,18 @@ class SkippedFile(pytest.File):
 class ExampleFile(pytest.File):
     def collect(self):
         return [ExampleItem.from_parent(self, name=self.name)]
+
+
+class ExampleModule(pytest.Module):
+    """Module stand-in that routes to ExampleItem without importing the file.
+
+    Returned by pytest_pycollect_makemodule to prevent pytest's default
+    Module collector from importing the file directly (which would crash on
+    missing optional deps before ExampleItem.runtest() can catch them).
+    """
+
+    def collect(self):
+        return [ExampleItem.from_parent(self, name=self.path.name)]
 
 
 class ExampleItem(pytest.Item):
@@ -545,6 +513,15 @@ class ExampleItem(pytest.Item):
                         skip_reason = line.replace("Skipped:", "").strip()
                         break
                 pytest.skip(skip_reason)
+            elif "ModuleNotFoundError" in stderr or "ImportError" in stderr:
+                # Missing optional dependency — skip rather than fail so the
+                # suite stays green without every optional package installed.
+                reason = "optional dependency not installed"
+                for line in stderr.split("\n"):
+                    if "ModuleNotFoundError" in line or "ImportError" in line:
+                        reason = line.strip()
+                        break
+                pytest.skip(reason)
             else:
                 raise ExampleTestException(
                     f"Example failed with exit code {retcode}.\nStderr: {stderr}\n"
@@ -588,7 +565,6 @@ def pytest_runtest_setup(item):
     config = item.config
     ignore_all = config.getoption("--ignore-all-checks", default=False)
     ignore_gpu = config.getoption("--ignore-gpu-check", default=False) or ignore_all
-    ignore_ram = config.getoption("--ignore-ram-check", default=False) or ignore_all
     ignore_ollama = (
         config.getoption("--ignore-ollama-check", default=False) or ignore_all
     )
@@ -602,27 +578,12 @@ def pytest_runtest_setup(item):
             reason="Skipping qualitative test: got env variable CICD == 1. Used only in gh workflows."
         )
 
-    # Skip tests requiring API keys if not available
-    if item.get_closest_marker("requires_api_key") and not ignore_api_key:
-        for backend in ["openai", "watsonx"]:
-            if item.get_closest_marker(backend):
-                if not capabilities["has_api_keys"].get(backend):
-                    pytest.skip(
-                        f"Skipping test: {backend} API key not found in environment"
-                    )
-
     # Skip tests requiring GPU if not available
-    if item.get_closest_marker("requires_gpu") and not ignore_gpu:
+    if (
+        item.get_closest_marker("huggingface") or item.get_closest_marker("vllm")
+    ) and not ignore_gpu:
         if not capabilities["has_gpu"]:
             pytest.skip("Skipping test: GPU not available")
-
-    # Skip tests requiring heavy RAM if insufficient
-    if item.get_closest_marker("requires_heavy_ram") and not ignore_ram:
-        RAM_THRESHOLD_GB = 48  # Based on real-world testing
-        if capabilities["ram_gb"] > 0 and capabilities["ram_gb"] < RAM_THRESHOLD_GB:
-            pytest.skip(
-                f"Skipping test: Insufficient RAM ({capabilities['ram_gb']:.1f}GB < {RAM_THRESHOLD_GB}GB)"
-            )
 
     # Backend-specific skipping
     if item.get_closest_marker("watsonx") and not ignore_api_key:

@@ -7,7 +7,7 @@ from mellea.stdlib.functional import aact, ainstruct, avalidate, instruct
 from mellea.stdlib.requirements import req
 from mellea.stdlib.session import start_session
 
-pytestmark = [pytest.mark.ollama, pytest.mark.llm]
+pytestmark = [pytest.mark.ollama, pytest.mark.e2e]
 
 
 @pytest.fixture(scope="module")

@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 
 """Example of using Ollama with vision models with linear context."""
 

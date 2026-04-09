@@ -31,6 +31,7 @@ to run.
 | `generative_slots/` | `@generative` functions with typed returns, pipeline composition, `ChatContext` persona injection, pre/postcondition checks |
 | `context/` | Context inspection, sampling with context trees, parallel context branches |
 | `sessions/` | Custom session types and backend selection |
+| `async/` | How to utilize basic async capabilities |
 
 ### Data and documents
 

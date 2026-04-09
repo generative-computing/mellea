@@ -268,7 +268,7 @@ Error 2: Y
 
 @pytest.mark.qualitative
 @pytest.mark.ollama
-@pytest.mark.llm
+@pytest.mark.e2e
 class TestSOFAIIntegration:
     """Integration tests for SOFAISamplingStrategy.
 

@@ -17,61 +17,12 @@ uv run pytest -m slow
 
 ## Environment Variables
 
-- `CICD=1` - Enable CI mode (skips qualitative tests, enables GPU process isolation)
+- `CICD=1` - Enable CI mode (skips qualitative tests)
 - `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` - Helps with GPU memory fragmentation
-
-## Heavy GPU Tests - Process Isolation
-
-**Heavy GPU tests (HuggingFace, vLLM) can use process isolation to guarantee GPU memory release between test modules.**
-
-### Why Process Isolation?
-
-Heavy GPU backends (HuggingFace, vLLM) hold GPU memory at the process level. Even with aggressive cleanup (garbage collection, CUDA cache clearing, etc.), GPU memory remains locked by the CUDA driver until the process exits. When running multiple heavy GPU test modules in sequence, this can cause OOM errors.
-
-### How It Works
-
-Process isolation is **opt-in** via the `--isolate-heavy` flag or `CICD=1` environment variable. When enabled, the collection hook in `test/conftest.py`:
-
-1. Detects modules marked with `@pytest.mark.requires_gpu_isolation`
-2. Runs each marked module in a separate subprocess
-3. Sets required environment variables (`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`)
-4. Ensures full GPU memory release between modules
-5. Reports results from all modules
-
-### Usage
-
-```bash
-# Normal execution (no isolation) - fast, but may hit GPU OOM with multiple heavy modules
-uv run pytest test/backends/test_vllm.py test/backends/test_huggingface.py
-
-# With isolation (opt-in) - slower, but guarantees GPU memory release
-uv run pytest test/backends/test_vllm.py test/backends/test_huggingface.py --isolate-heavy
-
-# Run all heavy GPU tests with isolation
-uv run pytest -m requires_gpu_isolation --isolate-heavy
-
-# CI automatically enables isolation (via CICD=1)
-CICD=1 uv run pytest test/backends/
-
-# Single module runs normally (no isolation needed even with flag)
-uv run pytest test/backends/test_vllm.py --isolate-heavy
-```
-
-### Affected Tests
-
-Tests marked with `@pytest.mark.requires_gpu_isolation`:
-- `test/backends/test_huggingface.py` - HuggingFace backend tests
-- `test/backends/test_huggingface_tools.py` - HuggingFace tool calling tests
-- `test/backends/test_vllm.py` - vLLM backend tests
-- `test/backends/test_vllm_tools.py` - vLLM tool calling tests
-
-### Technical Details
-
-- **Opt-in by default**: Use `--isolate-heavy` flag or set `CICD=1`
-- **Single module**: Runs normally even with isolation flag (no subprocess overhead)
-- **Multiple modules**: Each runs in its own subprocess with full GPU memory isolation
-- **Test discovery**: Works normally (`pytest --collect-only`) - isolation only happens during execution
-- **Marker-based**: Only modules with `@pytest.mark.requires_gpu_isolation` are isolated
+- `OLLAMA_KEEP_ALIVE=1m` - Reduce Ollama model idle window from the default 5 minutes to 1 minute.
+  Useful when running without `--group-by-backend`: limits how long a loaded Ollama model occupies
+  unified memory while HF/torch tests are running. Has no effect mid-run (timer resets per request),
+  but reduces the overlap window when switching between backend groups.
 
 ## GPU Testing on CUDA Systems
 
@@ -145,10 +96,30 @@ See [`MARKERS_GUIDE.md`](MARKERS_GUIDE.md) for complete marker documentation.
 Key markers for GPU testing:
 - `@pytest.mark.vllm` - Requires vLLM backend (local, GPU required)
 - `@pytest.mark.huggingface` - Requires HuggingFace backend (local, GPU-heavy)
-- `@pytest.mark.requires_gpu` - Requires GPU hardware (capability check)
-- `@pytest.mark.requires_gpu_isolation` - Requires OS-level process isolation for GPU memory (execution strategy)
-- `@pytest.mark.requires_heavy_ram` - Requires 48GB+ RAM
 - `@pytest.mark.slow` - Tests taking >5 minutes
+
+### Resource gating (predicates)
+
+Use predicate functions from `test/predicates.py` for resource gating:
+
+```python
+from test.predicates import require_gpu, require_ram
+
+pytestmark = [pytest.mark.e2e, pytest.mark.huggingface, require_gpu(), require_ram(min_gb=48)]
+```
+
+| Predicate | Use when test needs |
+| --------- | ------------------- |
+| `require_gpu()` | Any GPU (CUDA or MPS) |
+| `require_gpu(min_vram_gb=N)` | GPU with at least N GB VRAM |
+| `require_ram(min_gb=N)` | N GB+ system RAM |
+| `require_api_key("ENV_VAR")` | Specific API credentials |
+
+> **Deprecated:** The markers `requires_gpu`, `requires_heavy_ram`, `requires_api_key`,
+> and `requires_gpu_isolation` are deprecated. Existing tests using them still work
+> (conftest auto-skip handles them) but new tests must use predicates. Migrate legacy
+> markers to predicates when touching those files. `require_gpu_isolation()` has been
+> removed — use `--group-by-backend` for backend grouping instead.
 
 ## Coverage
 

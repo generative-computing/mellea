@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 
 from mellea.stdlib.components.docs.richdocument import TableQuery
 from mellea.stdlib.components.mify import MifiedProtocol, mify

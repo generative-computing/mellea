@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 pytestmark = [
+    pytest.mark.integration,
     pytest.mark.slow,  # Very slow on the first run.
     pytest.mark.timeout(600),
 ]
@@ -28,8 +29,6 @@ if UV_BIN is None:
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-IS_MACOS = sys.platform == "darwin"
-
 # ---------------------------------------------------------------------------
 # Import statements keyed by extra name ("core" for base dependencies)
 # ---------------------------------------------------------------------------
@@ -40,6 +39,7 @@ IS_MACOS = sys.platform == "darwin"
 #       another group (without explicitly listing it). That will lead to false positives here on
 #       the should_fail side. This happens with vllm (which imports all the parts of hf) so we just
 #       exclude the hf import statements from that test.
+
 IMPORTS: dict[str, list[str]] = {
     "core": [
         "import mellea",
@@ -49,7 +49,6 @@ IMPORTS: dict[str, list[str]] = {
         "from mellea.core import Backend",
     ],
     "hf": ["from mellea.backends.huggingface import LocalHFBackend"],
-    "vllm": ["from mellea.backends.vllm import LocalVLLMBackend"],
     "litellm": ["from mellea.backends.litellm import LiteLLMBackend"],
     "watsonx": ["from mellea.backends.watsonx import WatsonxAIBackend"],
     "tools": ["import langchain_core", "import smolagents"],
@@ -82,7 +81,7 @@ FLAG_CHECKS: dict[str, list[tuple[str, str, bool]]] = {
 }
 
 # There are a few special tests for backends.
-BACKEND_EXTRAS = {"hf", "vllm", "litellm", "watsonx"}
+BACKEND_EXTRAS = {"hf", "litellm", "watsonx"}
 
 # Meta-groups that compose other extras (no dedicated isolation test needed).
 META_GROUPS = {"backends", "all"}
@@ -91,7 +90,6 @@ META_GROUPS = {"backends", "all"}
 # Used to determine if we are missing tests for a given optional-dependency group.
 TESTED_EXTRAS = {
     "hf",
-    "vllm",
     "litellm",
     "watsonx",
     "tools",
@@ -140,8 +138,6 @@ def _backend_fail_imports(exclude: set[str] | str = "") -> list[str]:
     if isinstance(exclude, str):
         exclude = {exclude} if exclude else set()
     extras = BACKEND_EXTRAS - exclude
-    if IS_MACOS:
-        extras -= {"vllm"}
     return [stmt for name in sorted(extras) for stmt in IMPORTS[name]]
 
 
@@ -303,16 +299,6 @@ def test_hf() -> None:
     )
 
 
-@pytest.mark.skipif(IS_MACOS, reason="vllm is not supported on macOS")
-def test_vllm() -> None:
-    """mellea[vllm]: vLLM backend imports succeed, others fail."""
-    _run_check(
-        extra="vllm",
-        should_succeed=[*IMPORTS["core"], *IMPORTS["vllm"]],
-        should_fail=_backend_fail_imports(exclude={"vllm", "hf"}),
-    )
-
-
 def test_litellm() -> None:
     """mellea[litellm]: LiteLLM backend imports succeed, others fail."""
     _run_check(
@@ -379,7 +365,7 @@ def test_hooks() -> None:
 
 def test_backends_meta() -> None:
     """mellea[backends]: all backend imports work."""
-    extras = BACKEND_EXTRAS - ({"vllm"} if IS_MACOS else set())
+    extras = BACKEND_EXTRAS
     should_succeed = [*IMPORTS["core"]]
     for name in sorted(extras):
         should_succeed.extend(IMPORTS[name])

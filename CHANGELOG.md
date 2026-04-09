@@ -1,3 +1,50 @@
+## [v0.4.2](https://github.com/generative-computing/mellea/releases/tag/v0.4.2) - 2026-04-08
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### New Features
+* feat: add tests for mellea optional dependencies by @jakelorocco in https://github.com/generative-computing/mellea/pull/724
+* feat: further vram optimizations by @avinash2692 in https://github.com/generative-computing/mellea/pull/765
+* feat: (m decomp) M Decompose Readme and Docstring Updates by @csbobby in https://github.com/generative-computing/mellea/pull/767
+* feat: add top level async streaming by @jakelorocco in https://github.com/generative-computing/mellea/pull/655
+* feat(serve): improve OpenAI API compatibility with usage, finish_reas… by @markstur in https://github.com/generative-computing/mellea/pull/771
+* feat: removing vllm backend by @avinash2692 in https://github.com/generative-computing/mellea/pull/781
+### Bug Fixes
+* fix: modifications to granite formatter tests by @jakelorocco in https://github.com/generative-computing/mellea/pull/703
+* fix: exclude tooling from mypy check by @planetf1 in https://github.com/generative-computing/mellea/pull/748
+* fix: setting ollama host in conftest by @avinash2692 in https://github.com/generative-computing/mellea/pull/751
+* fix: Add qualitative and slow markers so the example is skipped by @markstur in https://github.com/generative-computing/mellea/pull/764
+* fix(tools): correct args validation in langchain tool wrapper by @markstur in https://github.com/generative-computing/mellea/pull/761
+* fix: remove references to old pytest markers by @jakelorocco in https://github.com/generative-computing/mellea/pull/776
+* fix: add error handling to OpenAI-compatible serve endpoint by @markstur in https://github.com/generative-computing/mellea/pull/774
+* fix: assertion for test_find_context_attributions and range for hallucination detection by @jakelorocco in https://github.com/generative-computing/mellea/pull/779
+* fix: add xfail to citation test; functionality is tested elsewhere by @jakelorocco in https://github.com/generative-computing/mellea/pull/787
+### Documentation
+* docs: remove discord link in main readme by @AngeloDanducci in https://github.com/generative-computing/mellea/pull/720
+* docs: note virtual environment requirement for pre-commit hooks by @ajbozarth in https://github.com/generative-computing/mellea/pull/745
+* docs: condense README to elevator pitch (#478) by @planetf1 in https://github.com/generative-computing/mellea/pull/688
+* docs: update qiskit_code_validation example defaults by @ajbozarth in https://github.com/generative-computing/mellea/pull/743
+* docs: remove pre-IVR validation and update readme with v2 benchmark results by @ajbozarth in https://github.com/generative-computing/mellea/pull/769
+### Other Changes
+* docs: add multi-turn strategy option to Qiskit code validation example by @vabarbosa in https://github.com/generative-computing/mellea/pull/717
+* chore: use github tooling to build release notes by @psschwei in https://github.com/generative-computing/mellea/pull/710
+* docs: add release.md by @psschwei in https://github.com/generative-computing/mellea/pull/723
+* fix: proper permissions on pr labeling job by @psschwei in https://github.com/generative-computing/mellea/pull/741
+* ci: memory management in tests by @avinash2692 in https://github.com/generative-computing/mellea/pull/721
+* chore: enforce commit formatting on PR titles by @psschwei in https://github.com/generative-computing/mellea/pull/750
+* chore: Update HF repo names by @frreiss in https://github.com/generative-computing/mellea/pull/753
+* ci: drop mergify, add release entry to pr-labels action by @psschwei in https://github.com/generative-computing/mellea/pull/752
+* ci: fix to make pr label job required check by @psschwei in https://github.com/generative-computing/mellea/pull/756
+* test: agent skills infrastructure and marker taxonomy audit (#727, #728) by @planetf1 in https://github.com/generative-computing/mellea/pull/742
+* chore: add governance doc by @psschwei in https://github.com/generative-computing/mellea/pull/786
+* chore: updating governance doc to use maintainers by @psschwei in https://github.com/generative-computing/mellea/pull/791
+
+## New Contributors
+* @markstur made their first contribution in https://github.com/generative-computing/mellea/pull/764
+
+**Full Changelog**: https://github.com/generative-computing/mellea/compare/v0.4.1...v0.4.2
+
 ## [v0.4.1](https://github.com/generative-computing/mellea/releases/tag/v0.4.1) - 2026-03-23
 
 ### Feature

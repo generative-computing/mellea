@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 """Example showing how to use pre-built HuggingFace smolagents tools with Mellea.
 
 This demonstrates loading existing tools from the smolagents ecosystem,

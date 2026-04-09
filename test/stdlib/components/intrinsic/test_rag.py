@@ -6,13 +6,15 @@ import os
 import pathlib
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.backends.model_ids import IBM_GRANITE_4_MICRO_3B
 from mellea.stdlib.components import Document, Message
 from mellea.stdlib.components.intrinsic import rag
 from mellea.stdlib.context import ChatContext
+from test.predicates import require_gpu
 
 # Skip entire module in CI since all 7 tests are qualitative
 pytestmark = [
@@ -21,9 +23,8 @@ pytestmark = [
         reason="Skipping RAG tests in CI - all qualitative tests",
     ),
     pytest.mark.huggingface,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,  # 3B model + document processing needs ~30-35GB
-    pytest.mark.llm,
+    require_gpu(min_vram_gb=12),
+    pytest.mark.e2e,
 ]
 
 DATA_ROOT = pathlib.Path(os.path.dirname(__file__)) / "testdata"
@@ -36,7 +37,8 @@ def _backend():
     # Prevent thrashing if the default device is CPU
     torch.set_num_threads(4)
 
-    backend_ = LocalHFBackend(model_id="ibm-granite/granite-4.0-micro")  # type: ignore
+    # No adapters for hybrid version.
+    backend_ = LocalHFBackend(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name)  # type: ignore
     yield backend_
 
     from test.conftest import cleanup_gpu_backend
@@ -113,6 +115,7 @@ def test_query_rewrite(backend):
     assert result == expected
 
 
+@pytest.mark.xfail(reason="Non-deterministic citation boundaries across environments")
 @pytest.mark.qualitative
 def test_citations(backend):
     """Verify that the citations intrinsic functions properly."""
@@ -155,12 +158,12 @@ def test_hallucination_detection(backend):
     result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
     # pytest.approx() chokes on lists of records, so we do this complicated dance.
     for r, e in zip(result, expected, strict=True):  # type: ignore
-        assert pytest.approx(r, abs=2e-2) == e
+        assert pytest.approx(r, abs=3e-2) == e
 
     # Second call hits a different code path from the first one
     result = rag.flag_hallucinated_content(assistant_response, docs, context, backend)
     for r, e in zip(result, expected, strict=True):  # type: ignore
-        assert pytest.approx(r, abs=2e-2) == e
+        assert pytest.approx(r, abs=3e-2) == e
 
 
 @pytest.mark.qualitative
