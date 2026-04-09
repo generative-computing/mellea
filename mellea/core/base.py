@@ -345,6 +345,18 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._first_chunk_received: bool = False
         self._generate_log: GenerateLog | None = None
 
+    def _record_ttfb(self) -> None:
+        """Record time-to-first-byte if streaming and not yet recorded."""
+        if (
+            self.streaming
+            and not self._first_chunk_received
+            and self._start is not None
+        ):
+            self.ttfb_ms = (
+                datetime.datetime.now() - self._start
+            ).total_seconds() * 1000
+            self._first_chunk_received = True
+
     def _copy_from(self, other: ModelOutputThunk) -> None:
         """Copy computed-output fields from *other* into *self*.
 
@@ -454,15 +466,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             try:
                 item = self._async_queue.get_nowait()
                 chunks.append(item)
-                if (
-                    self.streaming
-                    and not self._first_chunk_received
-                    and self._start is not None
-                ):
-                    self.ttfb_ms = (
-                        datetime.datetime.now() - self._start
-                    ).total_seconds() * 1000
-                    self._first_chunk_received = True
+                self._record_ttfb()
             except asyncio.QueueEmpty:
                 # We've exhausted the current items in the queue.
                 break
@@ -478,15 +482,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
             item = await self._async_queue.get()
             chunks.append(item)
-            if (
-                self.streaming
-                and not self._first_chunk_received
-                and self._start is not None
-            ):
-                self.ttfb_ms = (
-                    datetime.datetime.now() - self._start
-                ).total_seconds() * 1000
-                self._first_chunk_received = True
+            self._record_ttfb()
 
         # Process the sentinel value if it's there.
         if chunks[-1] is None:
