@@ -5,10 +5,9 @@ This example demonstrates using Mellea's Instruct-Validate-Repair (IVR) pattern 
 ## What This Example Does
 
 Takes a prompt containing deprecated Qiskit code and:
-1. Detects QKT violations in the input code
-2. Passes those violations to the LLM as context
-3. Generates corrected code that passes QKT validation
-4. Automatically repairs the code if validation fails (up to 5 attempts)
+1. Generates corrected code using the LLM
+2. Validates the output against QKT rules
+3. Automatically repairs the code if validation fails (up to 10 attempts)
 
 ## Quick Start
 
@@ -22,17 +21,16 @@ Dependencies (`mellea`, `flake8-qiskit-migration`) are automatically installed.
 ## Requirements
 
 - **Ollama backend** running locally (`ollama serve`)
-- **Compatible model**: e.g., `hf.co/Qiskit/mistral-small-3.2-24b-qiskit-GGUF:latest` or `granite4:small-h`
+- **Compatible model**: `hf.co/Qiskit/mistral-small-3.2-24b-qiskit-GGUF:latest` (recommended — domain-specialized; see [Changing the Model](#changing-the-model))
 - **flake8-qiskit-migration**: Automatically installed when using `uv run`
 
 ## How It Works
 
 ### The IVR Pipeline
 
-1. **Pre-condition validation**: Validates the input prompt and any code it contains
-2. **Instruction**: LLM generates code following structured requirements
-3. **Post-condition validation**: Validates generated code against QKT rules (see [Qiskit Migration Guide](https://docs.quantum.ibm.com/api/migration-guides))
-4. **Repair loop**: Automatically repairs code that fails validation (up to 5 attempts)
+1. **Instruction**: LLM generates code following structured requirements
+2. **Post-condition validation**: Validates generated code against QKT rules (see [Qiskit Migration Guide](https://docs.quantum.ibm.com/api/migration-guides))
+3. **Repair loop**: Automatically repairs code that fails validation (up to 10 attempts)
 
 ### Sampling Strategies
 
@@ -47,20 +45,20 @@ To switch strategies, edit the `use_multiturn_strategy` variable in `test_qiskit
 
 #### Strategy Performance Comparison
 
-Benchmarks on `mistral-small-3.2-24b-qiskit` model (pass rates measure QKT validation only, not correctness):
+Benchmarks on `mistral-small-3.2-24b-qiskit` model:
 
-| Dataset | Strategy | First Pass | Post-Repair |
+| Dataset | Strategy | First Pass (QKT) | Post-Repair (QKT) |
 |---------|----------|------------|-------------|
-| **QHE** | RepairTemplate | 78.2% | **99.3%** |
-|         | MultiTurn | 77.5% | 96.7% |
-| **QKT** | RepairTemplate | 54.1% | **83.8%** |
-|         | MultiTurn | 37.8% | 70.3% |
+| **QHE** | RepairTemplate | 97.4% | **100%** |
+|         | MultiTurn | 95.4% | **100%** |
+| **QKT** | RepairTemplate | 88.9% | **100%** |
+|         | MultiTurn | **97.8%** | **100%** |
 
 **Datasets:**
-- **QHE** (QiskitHumanEval): Code generation tasks testing general Qiskit programming
-- **QKT**: Qiskit version migration tasks requiring fixes to deprecated APIs
+- **QHE** (QiskitHumanEval): 151 general Qiskit code generation tasks
+- **QKT**: 45 Qiskit version migration tasks requiring fixes to deprecated APIs
 
-**Note:** These benchmarks measure whether generated code passes QKT validation rules, not whether the code correctly solves the prompt. Both aspects are important for production use.
+**Note:** Pass rates measure whether generated code passes QKT validation rules, not whether the code correctly solves the prompt. On QHE, the model achieves ~27.8% correctness when running the QHE check() test suite against the generated code. Full benchmark data and analysis are available in @ajbozarth's [toolbox repo](https://github.com/ajbozarth/toolbox/tree/main/mellea/qiskit_code_validation/benchmarking).
 
 ### Code Structure
 
@@ -183,22 +181,17 @@ qc.measure_all()
 Validation failed with 1 error(s):
 QKT101: QuantumCircuit.cnot() has been removed in Qiskit 1.0; use `.cx()` instead
 
-====== Result (83.5s) ======
+====== Result (23.1s, 2 attempt(s)) ======
 ```python
-from qiskit_aer import AerSimulator
-from qiskit import QuantumCircuit
+from qiskit_aer import AerSimulator, QuantumCircuit
 
 backend = AerSimulator()
 
 qc = QuantumCircuit(5, 5)
 qc.h(0)
-qc.cx(0, range(1, 5))  # Fixed: use .cx() instead of .cnot()
+qc.cx(0, range(1, 5))
 qc.measure_all()
-
-job = backend.run(qc)
-result = job.result()
 ```
-I fixed the code by replacing `QuantumCircuit.cnot()` with `QuantumCircuit.cx()` as required by Qiskit 1.0. I also replaced the deprecated `BasicAer.get_backend('qasm_simulator')` with `AerSimulator()`. This code should now pass Qiskit migration validation (QKT rules).
 ======================
 
 ✓ Code passes Qiskit migration validation
@@ -211,13 +204,35 @@ I fixed the code by replacing `QuantumCircuit.cnot()` with `QuantumCircuit.cx()`
 To try a different model, edit the `model_id` variable in the `test_qiskit_code_validation()` function:
 
 ```python
-# Uncomment one to try different models
-# model_id = "granite4:micro-h"
-# model_id = "granite4:small-h"
 model_id = "hf.co/Qiskit/mistral-small-3.2-24b-qiskit-GGUF:latest"
 ```
 
-**Note**: Smaller models (like `granite4:micro-h`) may not have enough Qiskit knowledge to pass validation consistently. The Qiskit-specific model or `granite4:small-h` work best.
+The default model is a Qiskit-specialized fine-tune of Mistral Small. It requires a large initial download (~15GB) but produces reliable results without a system prompt.
+
+General-purpose models (e.g. `granite4:micro-h`) can be used as a lighter alternative but have significantly lower correctness on Qiskit tasks. When using a non-specialized model, set `system_prompt = QISKIT_SYSTEM_PROMPT` to improve results.
+
+## Using Grounding Context
+
+The `grounding_context` parameter accepts a `dict[str, str]` of additional context passed to the LLM alongside the prompt. Keys act as section labels and values are the content. This is useful for injecting relevant documentation snippets, RAG results, or API references at inference time.
+
+**Example — injecting migration guide excerpts:**
+
+```python
+grounding_context = {
+    "primitives_migration": (
+        "SamplerV2 replaces the legacy execute() function. "
+        "Use: sampler = SamplerV2(backend); job = sampler.run([circuit]); result = job.result()"
+    ),
+    "transpilation": (
+        "Use generate_preset_pass_manager() instead of transpile(). "
+        "Example: pm = generate_preset_pass_manager(optimization_level=1, backend=backend); isa_circuit = pm.run(circuit)"
+    ),
+}
+
+code, success, attempts = generate_validated_qiskit_code(
+    m, prompt, strategy, grounding_context=grounding_context
+)
+```
 
 ## Troubleshooting
 
@@ -237,9 +252,9 @@ ollama pull hf.co/Qiskit/mistral-small-3.2-24b-qiskit-GGUF:latest
 ```
 
 ### Validation Always Fails
-If using smaller models (e.g., `granite4:micro-h`), they may not have enough Qiskit knowledge. Try:
-- Using a larger model (`granite4:small-h` or the Qiskit-specific model)
-- Reducing prompt complexity
+If using a general-purpose model, it may not have enough Qiskit knowledge to pass validation consistently. Try:
+- Switching to the Qiskit-specialized model (`hf.co/Qiskit/mistral-small-3.2-24b-qiskit-GGUF:latest`)
+- Setting `system_prompt = QISKIT_SYSTEM_PROMPT` to guide the model toward modern Qiskit APIs
 - Using simpler prompts
 
 ### Import Error: flake8-qiskit-migration
@@ -248,8 +263,3 @@ ModuleNotFoundError: No module named 'flake8_qiskit_migration'
 ```
 **Solution**: Use `uv run` which auto-installs dependencies
 
-## Future Work
-
-The following enhancements are planned for future iterations:
-
-1. **Enable Smaller Models** - Add system prompt or grounding context with Qiskit API documentation to help smaller models perform accurate migrations. This would allow removing the `pytest.mark.skip` marker and make the example run in standard test suites.

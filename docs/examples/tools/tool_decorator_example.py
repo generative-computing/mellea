@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 """Example demonstrating the @tool decorator for cleaner tool definitions."""
 
 import ast

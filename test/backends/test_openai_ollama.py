@@ -8,7 +8,10 @@ import pydantic
 import pytest
 
 # Mark all tests in this module as requiring Ollama via OpenAI-compatible API
-pytestmark = [pytest.mark.openai, pytest.mark.ollama, pytest.mark.llm]
+pytestmark = [pytest.mark.openai, pytest.mark.ollama, pytest.mark.e2e]
+# NOTE: test_api_key_and_base_url_from_parameters, test_parameter_overrides_env_variable,
+# and test_missing_api_key_raises_error are constructor-only unit tests that don't need
+# Ollama, but pytest has no mechanism to remove inherited module markers per-function.
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption

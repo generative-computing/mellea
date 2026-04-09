@@ -17,12 +17,11 @@ import base64
 import binascii
 import datetime
 import enum
-import time
 from collections.abc import Callable, Coroutine, Iterable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
+from typing import Any, Generic, Literal, Protocol, TypeVar, runtime_checkable
 
 import typing_extensions
 from PIL import Image as PILImage
@@ -595,6 +594,81 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied.model = self.model
         deepcopied.provider = self.provider
         return deepcopied
+
+
+class ComputedModelOutputThunk(ModelOutputThunk[S]):
+    """A `ComputedModelOutputThunk` is a `ModelOutputThunk` that is guaranteed to be computed.
+
+    This subclass provides a clear type distinction between thunks that may need awaiting
+    and those that are already computed. It should be returned from synchronous functions
+    and sampling strategies to indicate that no awaiting is needed.
+
+    Uses zero-copy class reassignment: calling `ComputedModelOutputThunk(thunk)` reassigns
+    the thunk's `__class__` to `ComputedModelOutputThunk` without creating a new object.
+
+    Args:
+        thunk: A fully-computed ``ModelOutputThunk`` whose class will be reassigned.
+    """
+
+    def __new__(cls, thunk: ModelOutputThunk[S]) -> ComputedModelOutputThunk[S]:
+        """Convert the ModelOutputThunk into a ComputedModelOutputThunk."""
+        thunk.__class__ = cls
+        return thunk  # type: ignore[return-value]
+
+    def __init__(self, thunk: ModelOutputThunk[S]) -> None:
+        """A `ComputedModelOutputThunk` is a `ModelOutputThunk` that is guaranteed to be computed.
+
+        Uses zero-copy class reassignment: calling `ComputedModelOutputThunk(thunk)` reassigns
+        the thunk's `__class__` to `ComputedModelOutputThunk` without creating a new object.
+        """
+        # Call the underlying value. It's already been cast as a ComputedModelOutputThunk, so it's .is_computed() value is always True.
+        if not self._computed:
+            raise ValueError(
+                "ComputedModelOutputThunk requires a computed ModelOutputThunk; but ._computed is False."
+            )
+        if self.value is None:
+            raise ValueError("ComputedModelOutputThunk requires a non-None value.")
+
+    async def avalue(self) -> str:
+        """Return the value of the thunk. Use .value instead.
+
+        Returns:
+            The computed string value.
+        """
+        assert self.value is not None, "ComputedModelOutputThunk value cannot be None"
+        return self.value
+
+    async def astream(self) -> str:
+        """Cannot astream from ComputedModelOutputThunks. Use .value instead.
+
+        Returns:
+            Never returns; always raises.
+
+        Raises:
+            RuntimeError: Always, because computed thunks do not support streaming.
+        """
+        raise RuntimeError(
+            "Cannot stream from a ComputedModelOutputThunk. "
+            "This thunk is already fully computed and does not support streaming."
+        )
+
+    @property
+    def value(self) -> str:
+        """Gets the value of the block."""
+        return self._underlying_value  # type: ignore
+
+    @value.setter
+    def value(self, v: str):
+        """Sets the value of the block."""
+        self._underlying_value = v
+
+    def is_computed(self) -> Literal[True]:
+        """Returns `True` since thunk is always computed.
+
+        Returns:
+            Always ``True``.
+        """
+        return True
 
 
 @dataclass

@@ -5,11 +5,13 @@ import os
 import pydantic
 import pytest
 
+from test.predicates import require_api_key
+
 # Mark all tests in this module with backend and auth requirements
 pytestmark = [
     pytest.mark.watsonx,
-    pytest.mark.llm,
-    pytest.mark.requires_api_key,
+    pytest.mark.e2e,
+    require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID"),
     # Skip entire module in CI since 8/9 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -17,6 +19,9 @@ pytestmark = [
     ),
 ]
 
+pytest.importorskip(
+    "ibm_watsonx_ai", reason="ibm_watsonx_ai not installed — install mellea[watsonx]"
+)
 from mellea import MelleaSession
 from mellea.backends import ModelOption, model_ids
 from mellea.backends.watsonx import WatsonxAIBackend

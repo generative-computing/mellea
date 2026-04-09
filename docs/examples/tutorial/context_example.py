@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 
 from mellea import start_session
 from mellea.stdlib.context import ChatContext

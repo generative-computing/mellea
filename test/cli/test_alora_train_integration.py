@@ -11,14 +11,18 @@ import tempfile
 from pathlib import Path
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 from transformers import AutoTokenizer
+
+from test.predicates import require_gpu
 
 pytestmark = [
     pytest.mark.huggingface,
-    pytest.mark.llm,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
+    pytest.mark.e2e,
+    require_gpu(
+        min_vram_gb=20
+    ),  # 3B bfloat16: ~6 GB inference, ~12 GB training peak + headroom
     # Skip entire module in CI since 17/18 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -287,6 +291,32 @@ def test_alora_training_integration():
             "✅ Verified adapter activation: both with/without invocation tokens generate successfully"
         )
 
+        # Cleanup GPU memory
+        import gc
+
+        # 1. Remove accelerate dispatch hooks before moving to CPU.
+        #    device_map="auto" installs hooks that prevent full VRAM release otherwise.
+        try:
+            from accelerate.hooks import remove_hook_from_module
+
+            remove_hook_from_module(base_model, recurse=True)
+        except (ImportError, Exception):
+            pass
+
+        # 2. Delete the PeftModel wrapper first — it holds internal refs to base_model.
+        del model_with_adapter
+
+        # 3. Now move base_model to CPU and delete it.
+        base_model.cpu()
+        del base_model
+
+        # 4. Force GC and flush CUDA cache synchronously.
+        gc.collect()
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+
 
 def test_lora_training_integration():
     """Integration test: Train a tiny standard LoRA adapter and verify it works.
@@ -359,3 +389,12 @@ def test_lora_training_integration():
         print(
             f"✅ Config format verified: {config.get('peft_type')} without alora_invocation_tokens"
         )
+
+        # Cleanup GPU memory after training
+        import gc
+
+        gc.collect()
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()

@@ -71,6 +71,10 @@ to melleaadmin@ibm.com.
    ```bash
    pre-commit install
    ```
+   > **Note:** Some hooks require tools in dev dependency groups to be on your PATH. Activate the virtual environment before committing to ensure they are available:
+   > ```bash
+   > source .venv/bin/activate
+   > ```
 
 ### Installation with `conda`/`mamba`
 
@@ -329,18 +333,15 @@ uv run pytest
 # Fast tests only (no qualitative, ~2 min)
 uv run pytest -m "not qualitative"
 
-# Run only slow tests (>5 min)
-uv run pytest -m slow
+# Unit tests only (self-contained, no services)
+uv run pytest -m unit
 
-# Run ALL tests including slow (bypass config)
-uv run pytest --co -q
+# Run only slow tests (>1 min)
+uv run pytest -m slow
 
 # Run specific backend tests
 uv run pytest -m "ollama"
 uv run pytest -m "openai"
-
-# Run tests without LLM calls (unit tests only)
-uv run pytest -m "not llm"
 
 # CI/CD mode (skips qualitative tests)
 CICD=1 uv run pytest
@@ -353,46 +354,50 @@ uv run ruff check .
 ### Required Models
 
 #### Ollama
-- `granite4:micro-h`
-- `granite3.2-vision`
-- `granite4:micro`
-- `qwen2.5vl:7b`
 
-_Note: ollama models can be obtained by running `ollama pull <model>`_
+HuggingFace and cloud backends download or host models automatically. Ollama
+models must be pulled locally before running the tests that need them.
+
+**CI (unit + integration tests):**
+
+- `granite4:micro` — default model for `start_session()` and most examples
+- `granite4:micro-h` — hybrid variant used by conftest fixtures
+
+**Examples (`docs/examples/`):**
+
+- `deepseek-r1:8b` — safety / guardian examples
+- `granite3-guardian:2b` — mini-researcher guardian backend
+- `granite3.2-vision` — vision (Ollama chat) example
+- `granite3.3:8b` — m\_decompose example
+- `granite4:latest` — melp examples
+- `llama3.2` — repair-with-guardian example
+- `llama3.2:3b` — tutorial / mify examples (via `META_LLAMA_3_2_3B`)
+- `phi:2.7b` — SOFAI graph-colouring example
+- `pielee/qwen3-4b-thinking-2507_q8:latest` — SOFAI S2 solver
+- `qwen2.5vl:7b` — vision (OpenAI-via-Ollama) example
+
+**Additional test models (`test/`):**
+
+- `granite4:small-h` — hybrid-small tests
+- `llama3.2:1b` — lightweight inference tests
+- `llama3:8b` — legacy Llama 3 tests
+- `llava` — multimodal tests
+- `mistral:7b` — Mistral backend tests
+- `smollm2:1.7b` — SmolLM tests
+
+Pull everything:
+
+```bash
+for m in granite4:micro granite4:micro-h deepseek-r1:8b \
+  granite3-guardian:2b granite3.2-vision granite3.3:8b granite4:latest \
+  llama3.2 llama3.2:3b phi:2.7b pielee/qwen3-4b-thinking-2507_q8:latest \
+  qwen2.5vl:7b granite4:small-h llama3.2:1b llama3:8b llava mistral:7b \
+  smollm2:1.7b; do ollama pull "$m"; done
+```
 
 ### Test Markers
 
-Tests are categorized using pytest markers:
-
-**Backend Markers:**
-- `@pytest.mark.ollama` - Requires Ollama running (local, lightweight)
-- `@pytest.mark.huggingface` - Requires HuggingFace backend (local, heavy)
-- `@pytest.mark.vllm` - Requires vLLM backend (local, GPU required)
-- `@pytest.mark.openai` - Requires OpenAI API (requires API key)
-- `@pytest.mark.watsonx` - Requires Watsonx API (requires API key)
-- `@pytest.mark.litellm` - Requires LiteLLM backend
-
-**Capability Markers:**
-- `@pytest.mark.requires_gpu` - Requires GPU
-- `@pytest.mark.requires_heavy_ram` - Requires 48GB+ RAM
-- `@pytest.mark.requires_api_key` - Requires external API keys
-- `@pytest.mark.qualitative` - LLM output quality tests (skipped in CI via `CICD=1`)
-- `@pytest.mark.llm` - Makes LLM calls (needs at least Ollama)
-- `@pytest.mark.slow` - Tests taking >5 minutes (skipped via `SKIP_SLOW=1`)
-
-**Execution Strategy Markers:**
-- `@pytest.mark.requires_gpu_isolation` - Requires OS-level process isolation to clear CUDA memory (use with `--isolate-heavy` or `CICD=1`)
-
-**Default behavior:**
-- `uv run pytest` skips slow tests (>5 min) but runs qualitative tests
-- Use `pytest -m "not qualitative"` for fast tests only (~2 min)
-- Use `pytest -m slow` or `pytest --co -q` to include slow tests
-
-⚠️ **Don't add `qualitative` to trivial tests** - keep the fast loop fast.
-⚠️ **Mark tests taking >5 minutes with `slow`** (e.g., dataset loading, extensive evaluations).
-
-For detailed information about test markers, resource requirements, and running specific
-test categories, see [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md).
+Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualitative`) plus backend and resource markers. See [test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md) for the full marker reference, including tier definitions, backend markers, resource gates, and auto-skip logic.
 
 ### CI/CD Tests
 
@@ -413,7 +418,7 @@ CICD=1 uv run pytest
 
 - Fast tests (`-m "not qualitative"`): ~2 minutes
 - Default tests (qualitative, no slow): Several minutes
-- Slow tests (`-m slow`): >5 minutes
+- Slow tests (`-m slow`): >1 minute each
 - Pre-commit hooks: 1-5 minutes
 
 ⚠️ **Don't cancel mid-run** - canceling `pytest` or `pre-commit` can corrupt state.
@@ -430,7 +435,7 @@ CICD=1 uv run pytest
 | Output is wrong/None | Model too small or needs better prompt. Try larger model or add `reasoning` field. |
 | `error: can't find Rust compiler` | Python 3.13+ requires Rust for outlines. Install [Rust](https://www.rust-lang.org/tools/install) or use Python 3.12. |
 | Tests fail on Intel Mac | Use conda: `conda install 'torchvision>=0.22.0'` then `uv pip install mellea`. |
-| Pre-commit hooks fail | Run `pre-commit run --all-files` to see specific issues. Fix or use `git commit -n` to bypass. |
+| Pre-commit hooks fail | Run `pre-commit run --all-files` to see specific issues. Fix or use `git commit -n` to bypass. If a tool reports `command not found`, activate the virtual environment before committing: `source .venv/bin/activate`. |
 
 ### Debugging Tips
 

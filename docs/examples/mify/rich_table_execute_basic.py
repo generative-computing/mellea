@@ -1,4 +1,4 @@
-# pytest: ollama, qualitative, llm
+# pytest: ollama, qualitative, e2e
 
 # This is an example of using the RichDocument class.
 import os

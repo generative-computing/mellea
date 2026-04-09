@@ -1,4 +1,4 @@
-# pytest: skip, huggingface, requires_heavy_ram, llm
+# pytest: skip, huggingface, e2e
 # SKIP REASON: CXXABI_1.3.15 not found - conda environment issue on HPC systems with old glibc
 
 # ruff: noqa E402

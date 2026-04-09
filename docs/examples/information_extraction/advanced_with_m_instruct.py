@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 
 """Advanced Example of information extraction with Mellea using m.instruct() and constraints."""
 

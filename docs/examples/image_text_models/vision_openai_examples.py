@@ -1,4 +1,4 @@
-# pytest: ollama, llm, requires_heavy_ram
+# pytest: ollama, e2e
 
 """Examples using vision models with OpenAI backend."""
 

@@ -87,7 +87,6 @@
             "pages": [
               "integrations/ollama",
               "integrations/huggingface",
-              "integrations/vllm",
               "integrations/openai",
               "integrations/vertex-ai",
               "integrations/bedrock",

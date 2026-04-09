@@ -1,4 +1,4 @@
-# pytest: ollama, llm
+# pytest: ollama, e2e
 
 """Example demonstrating OpenTelemetry metrics exporters in Mellea.
 

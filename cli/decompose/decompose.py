@@ -27,14 +27,16 @@ from .utils import validate_filename
 
 
 class DecompVersion(StrEnum):
-    """Available versions of the decomposition pipeline template.
+    """Available template versions for generated decomposition programs.
 
-    Newer versions must be declared last to ensure ``latest`` always resolves to
-    the most recent template.
+    Newer concrete versions must be declared after older ones so that
+    ``latest`` can resolve to the most recently declared template version.
 
-    Args:
-        latest (str): Sentinel value that resolves to the last declared version.
-        v1 (str): Version 1 of the decomposition pipeline template.
+    Attributes:
+        latest: Sentinel value that resolves to the last declared concrete
+            template version.
+        v1: Version 1 of the decomposition program template.
+        v2: Version 2 of the decomposition program template.
     """
 
     latest = "latest"
@@ -225,44 +227,42 @@ def run(
         ),
     ] = LogMode.demo,
 ) -> None:
-    """Decompose one or more user queries into subtasks with constraints and dependency metadata.
+    """Runs the ``m decompose`` CLI workflow and writes generated outputs.
 
-    Reads user queries either from a file or interactively, runs the LLM
-    decomposition pipeline to produce subtask descriptions, Jinja2 prompt templates,
-    constraint lists, and dependency metadata, and writes one ``.json`` result file
-    plus one rendered ``.py`` script per task job to the output directory.
-
-    If ``input_file`` contains multiple non-empty lines, each line is treated as a
-    separate task job.
+    Reads user queries from a file or interactive input, runs the decomposition
+    pipeline for each task job, and writes one JSON file, one rendered Python
+    program, and any generated validation modules under a per-job output
+    directory.
 
     Args:
-        out_dir: Path to an existing directory where output files are saved.
-        out_name: Base name (no extension) for the output files. Defaults to
-            ``"m_decomp_result"``.
-        input_file: Optional path to a text file containing one or more user
-            queries. If the file contains multiple non-empty lines, each line is
-            treated as a separate task job. If omitted, the query is collected
-            interactively.
-        model_id: Model name or ID used for all decomposition pipeline steps.
-        backend: Inference backend -- ``"ollama"``, ``"openai"``, or ``"rits"``.
-        backend_req_timeout: Request timeout in seconds for model inference calls.
-        backend_endpoint: Base URL of the configured endpoint. Required when
-            ``backend="openai"`` or ``backend="rits"``.
-        backend_api_key: API key for the configured endpoint. Required when
-            ``backend="openai"`` or ``backend="rits"``.
-        version: Version of the decomposition pipeline template to use.
-        input_var: Optional list of user-input variable names (e.g. ``"DOC"``).
-            Each name must be a valid Python identifier. Pass this option
-            multiple times to define multiple variables.
-        log_mode: Logging detail mode for CLI and pipeline output.
+        out_dir: Existing directory under which per-job output directories are
+            created.
+        out_name: Base name used for the per-job output directory and generated
+            files.
+        input_file: Optional path to a text file containing one or more task
+            prompts. Each non-empty line is processed as a separate task job.
+            When omitted, the command prompts interactively for one task.
+        model_id: Model identifier used for all decomposition pipeline stages.
+        backend: Inference backend used to execute model calls.
+        backend_req_timeout: Request timeout in seconds for backend inference calls.
+        backend_endpoint: Endpoint URL or base URL required by remote backends.
+        backend_api_key: API key required by remote backends.
+        version: Template version used to render the generated Python program.
+            ``latest`` resolves to the most recently declared concrete version.
+        input_var: Optional user input variable names to expose in generated
+            prompts and programs. Each name must be a valid non-keyword Python
+            identifier.
+        log_mode: Logging verbosity for CLI and pipeline execution.
 
     Raises:
-        AssertionError: If ``out_name`` contains invalid characters, if
-            ``out_dir`` does not exist or is not a directory, or if any
-            ``input_var`` name is not a valid Python identifier.
-        ValueError: If the input file contains no non-empty task lines.
-        Exception: Re-raised from the decomposition pipeline after cleaning up
-            any partially written output directories.
+        AssertionError: If ``out_name`` is invalid, ``out_dir`` does not name an
+            existing directory, ``input_file`` does not name an existing file,
+            or any declared ``input_var`` is not a valid Python identifier.
+        ValueError: If ``input_file`` exists but contains no non-empty task
+            lines.
+        Exception: Propagates pipeline, rendering, parsing, or file-writing
+            failures. Any output directories created earlier in the run are
+            removed before the exception is re-raised.
     """
     created_dirs: list[Path] = []
 

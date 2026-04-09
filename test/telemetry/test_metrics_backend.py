@@ -14,6 +14,7 @@ from mellea.backends.model_ids import (
 )
 from mellea.stdlib.components import Message
 from mellea.stdlib.context import SimpleContext
+from test.predicates import require_api_key, require_gpu
 
 # Check if OpenTelemetry is available
 try:
@@ -72,11 +73,9 @@ def hf_metrics_backend(gh_run):
 
     yield backend
 
-    # Cleanup
-    import gc
+    from test.conftest import cleanup_gpu_backend
 
-    del backend
-    gc.collect()
+    cleanup_gpu_backend(backend, "hf-metrics")
 
 
 def get_metric_value(metrics_data, metric_name, attributes=None):
@@ -108,7 +107,7 @@ def get_metric_value(metrics_data, metric_name, attributes=None):
 
 
 @pytest.mark.asyncio
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, stream):
@@ -162,7 +161,8 @@ async def test_ollama_token_metrics_integration(enable_metrics, metric_reader, s
 
 
 @pytest.mark.asyncio
-@pytest.mark.llm
+@pytest.mark.e2e
+@pytest.mark.openai
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_openai_token_metrics_integration(enable_metrics, metric_reader, stream):
@@ -218,14 +218,11 @@ async def test_openai_token_metrics_integration(enable_metrics, metric_reader, s
 
 
 @pytest.mark.asyncio
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.watsonx
-@pytest.mark.requires_api_key
+@require_api_key("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID")
 async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
     """Test that WatsonX backend records token metrics correctly."""
-    if not os.getenv("WATSONX_API_KEY"):
-        pytest.skip("WATSONX_API_KEY not set")
-
     from mellea.backends.watsonx import WatsonxAIBackend
     from mellea.telemetry import metrics as metrics_module
 
@@ -268,7 +265,7 @@ async def test_watsonx_token_metrics_integration(enable_metrics, metric_reader):
 
 
 @pytest.mark.asyncio
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.litellm
 @pytest.mark.ollama
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
@@ -331,9 +328,9 @@ async def test_litellm_token_metrics_integration(
 
 
 @pytest.mark.asyncio
-@pytest.mark.llm
+@pytest.mark.e2e
 @pytest.mark.huggingface
-@pytest.mark.requires_heavy_ram
+@require_gpu(min_vram_gb=8)
 @pytest.mark.parametrize("stream", [False, True], ids=["non-streaming", "streaming"])
 async def test_huggingface_token_metrics_integration(
     enable_metrics, metric_reader, stream, hf_metrics_backend

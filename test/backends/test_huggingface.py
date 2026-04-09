@@ -11,15 +11,16 @@ from unittest.mock import Mock
 
 import pydantic
 import pytest
-import torch
+
+torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
+
+from test.predicates import require_gpu
 
 # Mark all tests in this module with backend and resource requirements
 pytestmark = [
     pytest.mark.huggingface,
-    pytest.mark.llm,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
-    pytest.mark.requires_gpu_isolation,  # Activate GPU memory isolation
+    pytest.mark.e2e,
+    require_gpu(min_vram_gb=20),
     # Skip entire module in CI since 17/18 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -50,8 +51,9 @@ def backend():
     """Shared HuggingFace backend for all tests in this module.
 
     Uses Granite 3.3-8b for aLoRA adapter compatibility.
-    The ibm-granite/rag-intrinsics-lib repository only has adapters for
-    Granite 3.3 models. Granite 4 adapters are not yet available.
+    The "requirement_check" intrinsic only has adapters for Granite 3.3 models.
+    Granite 4 adapters are not yet available.
+    Other intrinsics are not affected by this issue.
     """
     backend = LocalHFBackend(
         model_id="ibm-granite/granite-3.3-8b-instruct",
@@ -64,7 +66,11 @@ def backend():
     backend.add_adapter(
         IntrinsicAdapter("answerability", base_model_name=backend.base_model_name)
     )
-    return backend
+    yield backend
+
+    from test.conftest import cleanup_gpu_backend
+
+    cleanup_gpu_backend(backend, "huggingface")
 
 
 @pytest.fixture(scope="function")
@@ -355,7 +361,7 @@ async def test_generate_with_lock(backend) -> None:
     )
     b.add_adapter(IntrinsicAdapter("answerability", base_model_name=b.base_model_name))
 
-    memoized: dict[torch.Tensor, str] = dict()
+    memoized: dict[torch.Tensor, str] = dict()  # type: ignore[name-defined]
     gen_func = model.generate
 
     def mock_func(input_ids, *args, **kwargs):

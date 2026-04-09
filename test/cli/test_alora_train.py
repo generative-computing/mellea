@@ -1,12 +1,14 @@
-"""Unit tests for aLoRA/LoRA training configuration."""
+"""Integration tests for aLoRA/LoRA training configuration."""
 
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+
+peft = pytest.importorskip("peft", reason="peft not installed (install mellea[hf])")
 from peft import LoraConfig
 
 
-@pytest.mark.huggingface
+@pytest.mark.integration
 def test_alora_config_creation():
     """Test that aLoRA config is created correctly with PEFT 0.18+."""
     from cli.alora.train import train_model
@@ -84,7 +86,7 @@ def test_alora_config_creation():
         assert peft_config.task_type == "CAUSAL_LM", "Task type should be CAUSAL_LM"
 
 
-@pytest.mark.huggingface
+@pytest.mark.integration
 def test_lora_config_creation():
     """Test that standard LoRA config is created correctly."""
     from cli.alora.train import train_model
@@ -159,7 +161,7 @@ def test_lora_config_creation():
         assert peft_config.task_type == "CAUSAL_LM", "Task type should be CAUSAL_LM"
 
 
-@pytest.mark.huggingface
+@pytest.mark.integration
 def test_invocation_prompt_tokenization():
     """Test that invocation prompt is correctly tokenized for aLoRA."""
     from cli.alora.train import train_model
@@ -213,6 +215,7 @@ def test_invocation_prompt_tokenization():
         )
 
 
+@pytest.mark.integration
 def test_imports_work():
     """Test that PEFT imports work correctly (no IBM alora dependency)."""
     # This test verifies the migration was successful

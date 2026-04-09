@@ -7,7 +7,7 @@ import pytest
 from PIL import Image
 
 # Mark all tests in this module as requiring OpenAI API with vision support
-pytestmark = [pytest.mark.openai, pytest.mark.llm, pytest.mark.ollama]
+pytestmark = [pytest.mark.openai, pytest.mark.e2e, pytest.mark.ollama]
 
 from mellea import MelleaSession, start_session
 from mellea.backends import ModelOption
@@ -68,6 +68,7 @@ def test_image_block_construction_from_pil(pil_image: Image.Image):
     assert ImageBlock.is_valid_base64_png(str(image_block))
 
 
+@pytest.mark.qualitative
 def test_image_block_in_instruction(
     m_session: MelleaSession, pil_image: Image.Image, gh_run: int
 ):

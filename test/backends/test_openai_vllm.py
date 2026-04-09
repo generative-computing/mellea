@@ -9,13 +9,14 @@ import pydantic
 import pytest
 import requests
 
+from test.predicates import require_gpu
+
 # Mark all tests in this module with backend and resource requirements
 pytestmark = [
     pytest.mark.openai,
-    pytest.mark.llm,
+    pytest.mark.e2e,
     pytest.mark.vllm,
-    pytest.mark.requires_gpu,
-    pytest.mark.requires_heavy_ram,
+    require_gpu(min_vram_gb=8),
     # Skip entire module in CI since all 8 tests are qualitative
     pytest.mark.skipif(
         int(os.environ.get("CICD", 0)) == 1,
@@ -37,13 +38,43 @@ from mellea.stdlib.context import ChatContext
 
 @pytest.fixture(scope="module")
 def vllm_process():
-    """Shared vllm process for all tests in this module."""
+    """Shared vllm process for all tests in this module.
+
+    If VLLM_TEST_BASE_URL is set (e.g. by run_tests_with_ollama_and_vllm.sh),
+    the server is already running externally — skip subprocess entirely.
+    """
+    if os.environ.get("VLLM_TEST_BASE_URL"):
+        yield None
+        return
+
+    # Skip if no CUDA GPU is available (mirrors auto-detection in the script)
+    try:
+        subprocess.run(["nvidia-smi", "-L"], check=True, capture_output=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pytest.skip(
+            "No CUDA GPU detected — skipping vLLM openai tests", allow_module_level=True
+        )
+
+    # Resolve the vLLM venv — created by run_tests_with_ollama_and_vllm.sh or
+    # bootstrapped here for direct pytest invocations.
+    vllm_venv = os.environ.get("VLLM_VENV_PATH", ".vllm-venv")
+    vllm_python = os.path.join(vllm_venv, "bin", "python")
+    if not os.path.isfile(vllm_python):
+        subprocess.run(["uv", "venv", vllm_venv, "--python", "3.11"], check=True)
+        subprocess.run(
+            ["uv", "pip", "install", "--python", vllm_python, "vllm"], check=True
+        )
+
     process = None
     try:
         process = subprocess.Popen(
             [
-                "vllm",
-                "serve",
+                vllm_python,
+                "-m",
+                "vllm.entrypoints.openai.api_server",
+                "--model",
+                IBM_GRANITE_4_MICRO_3B.hf_model_name,
+                "--served-model-name",
                 IBM_GRANITE_4_MICRO_3B.hf_model_name,
                 "--enable-lora",
                 "--dtype",
@@ -51,10 +82,19 @@ def vllm_process():
                 "--max-lora-rank",
                 "64",
                 "--enable-prefix-caching",
+                "--gpu-memory-utilization",
+                "0.4",
+                "--max-num-seqs",
+                "256",
+                "--max-model-len",
+                "4096",
             ],
             # the process will have a new session id, so
             # entire process tree is killable at once
             start_new_session=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # merge stderr into stdout
+            text=True,
         )
         url = "http://127.0.0.1:8000/ping"
         timeout = 600  # vllm initialization takes quite a while
@@ -63,7 +103,11 @@ def vllm_process():
         # Wait for readiness message
         while True:
             if process.poll() is not None:
-                raise RuntimeError("vLLM server exited before startup.")
+                output = process.stdout.read() if process.stdout else ""
+                raise RuntimeError(
+                    f"vLLM server exited before startup (code {process.returncode}).\n"
+                    f"--- vLLM output ---\n{output}\n--- end ---"
+                )
 
             try:
                 response = requests.get(url, timeout=2)
@@ -73,17 +117,36 @@ def vllm_process():
                 pass
 
             if time.time() - start_time > timeout:
+                output = ""
+                if process.stdout:
+                    try:
+                        # Read whatever is available without blocking
+                        import select
+
+                        if select.select([process.stdout], [], [], 0)[0]:
+                            output = process.stdout.read()
+                    except Exception:
+                        pass
                 raise TimeoutError(
-                    f"Timed out waiting for server health check at {url}"
+                    f"Timed out waiting for server health check at {url}\n"
+                    f"--- vLLM output (last lines) ---\n{output[-2000:]}\n--- end ---"
                 )
 
         yield process
 
     except Exception as e:
-        pytest.skip(
-            f"vLLM process not available: {e}. May need to install with: pip install mellea[vllm]",
-            allow_module_level=True,
+        output = ""
+        if process is not None and process.stdout:
+            try:
+                output = process.stdout.read()
+            except Exception:
+                pass
+        skip_msg = (
+            f"vLLM process not available: {e}\n"
+            f"--- vLLM output ---\n{output}\n--- end ---"
         )
+        print(skip_msg)  # visible with -s flag
+        pytest.skip(skip_msg, allow_module_level=True)
 
     # --- Teardown (always runs) ---
     finally:
@@ -101,11 +164,12 @@ def vllm_process():
 
 @pytest.fixture(scope="module")
 def backend(gh_run: int, vllm_process: subprocess.Popen):
-    """Shared OpenAI backend configured for Ollama."""
+    """Shared OpenAI backend configured for vLLM."""
+    base_url = os.environ.get("VLLM_TEST_BASE_URL", "http://127.0.0.1:8000") + "/v1"
     return OpenAIBackend(
         model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name,  # type: ignore
         formatter=TemplateFormatter(model_id=IBM_GRANITE_4_MICRO_3B.hf_model_name),  # type: ignore
-        base_url="http://0.0.0.0:8000/v1",
+        base_url=base_url,
         api_key="EMPTY",
     )
 
