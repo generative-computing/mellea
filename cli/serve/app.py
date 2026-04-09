@@ -10,7 +10,8 @@ import uuid
 
 import typer
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from mellea.backends.model_options import ModelOption
@@ -30,6 +31,34 @@ app = FastAPI(
     description="M programs that run as a simple OpenAI API-compatible server",
     version="0.1.0",
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Convert FastAPI validation errors to OpenAI-compatible format.
+
+    FastAPI returns 422 with a 'detail' array by default. OpenAI API uses
+    400 with an 'error' object containing message, type, and param fields.
+    """
+    # Extract the first validation error
+    errors = exc.errors()
+    if errors:
+        first_error = errors[0]
+        # Get the field name from the location tuple (e.g., ('body', 'n') -> 'n')
+        param = first_error["loc"][-1] if first_error["loc"] else None
+        message = first_error["msg"]
+    else:
+        param = None
+        message = "Invalid request parameters"
+
+    return create_openai_error_response(
+        status_code=400,
+        message=message,
+        error_type="invalid_request_error",
+        param=str(param) if param else None,
+    )
 
 
 def load_module_from_path(path: str):
@@ -84,6 +113,15 @@ def make_chat_endpoint(module):
 
     async def endpoint(request: ChatCompletionRequest):
         try:
+            # Validate that n=1 (we don't support multiple completions)
+            if request.n is not None and request.n > 1:
+                return create_openai_error_response(
+                    status_code=400,
+                    message=f"Multiple completions (n={request.n}) are not supported. Please set n=1 or omit the parameter.",
+                    error_type="invalid_request_error",
+                    param="n",
+                )
+
             completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
             created_timestamp = int(time.time())
 

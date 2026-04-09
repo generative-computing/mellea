@@ -3,6 +3,8 @@
 from unittest.mock import Mock
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from cli.serve.app import make_chat_endpoint
 from cli.serve.models import (
@@ -226,3 +228,178 @@ class TestChatEndpoint:
         assert response.system_fingerprint is None  # Not tracking backend config
         assert response.object == "chat.completion"
         assert response.id.startswith("chatcmpl-")
+
+    @pytest.mark.asyncio
+    async def test_n_greater_than_1_rejected(self, mock_module):
+        """Test that requests with n > 1 are rejected with appropriate error."""
+        import json
+
+        from fastapi.responses import JSONResponse
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Hello")],
+            n=2,  # Request multiple completions
+        )
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should return a JSONResponse error, not a ChatCompletion
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 400
+
+        # Decode the response body
+        body_bytes = response.body
+        if isinstance(body_bytes, memoryview):
+            body_bytes = bytes(body_bytes)
+        error_data = json.loads(body_bytes.decode("utf-8"))
+        assert "error" in error_data
+        assert error_data["error"]["type"] == "invalid_request_error"
+        assert error_data["error"]["param"] == "n"
+        assert "not supported" in error_data["error"]["message"].lower()
+
+        # Verify serve was never called
+        mock_module.serve.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_n_equals_1_accepted(self, mock_module):
+        """Test that requests with n=1 are accepted."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Hello")],
+            n=1,  # Explicitly set to 1
+        )
+
+        mock_output = ModelOutputThunk("Test response")
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should succeed
+        assert isinstance(response, ChatCompletion)
+        assert response.choices[0].message.content == "Test response"
+
+        # Verify serve was called
+        mock_module.serve.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_n_less_than_1_rejected_by_pydantic(self, mock_module):
+        """Test that requests with n < 1 are rejected by Pydantic validation.
+
+        FastAPI automatically validates request models before they reach the endpoint,
+        so n=0 or negative values will be caught by the framework, not our code.
+        This test documents that behavior.
+        """
+        from pydantic import ValidationError
+
+        # Pydantic validation happens before the endpoint is called
+        with pytest.raises(ValidationError) as exc_info:
+            ChatCompletionRequest(
+                model="test-model",
+                messages=[ChatMessage(role="user", content="Hello")],
+                n=0,  # Invalid: less than 1
+            )
+
+        # Verify the error is about the 'n' field
+        errors = exc_info.value.errors()
+        assert len(errors) == 1
+        assert errors[0]["loc"] == ("n",)
+        assert errors[0]["type"] == "greater_than_equal"
+
+
+class TestHTTPValidation:
+    """Tests for HTTP-level validation via FastAPI TestClient."""
+
+    def test_n_zero_rejected_at_http_level(self, mock_module):
+        """Test that n=0 is rejected with OpenAI-compatible error format.
+
+        Pydantic validation errors are caught by our custom exception handler
+        and converted to OpenAI-compatible 400 errors (not FastAPI's default 422).
+        """
+        # Setup a test app with the exception handler
+        from cli.serve.app import app as serve_app
+
+        serve_app.add_api_route(
+            "/v1/chat/completions", make_chat_endpoint(mock_module), methods=["POST"]
+        )
+        client = TestClient(serve_app)
+
+        # Send request with n=0
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "n": 0,
+            },
+        )
+
+        # Our exception handler converts to OpenAI-compatible 400 error
+        assert response.status_code == 400
+        error_data = response.json()
+        assert "error" in error_data
+        assert error_data["error"]["type"] == "invalid_request_error"
+        assert error_data["error"]["param"] == "n"
+        # Pydantic's error message is used as-is
+        assert "greater than or equal to 1" in error_data["error"]["message"].lower()
+
+        # Verify serve was never called
+        mock_module.serve.assert_not_called()
+
+    def test_n_two_rejected_at_endpoint_level(self, mock_module):
+        """Test that n=2 is rejected by our endpoint logic (not Pydantic).
+
+        While n=2 passes Pydantic validation (ge=1), our endpoint explicitly
+        rejects it because we don't support multiple completions.
+        """
+        # Setup a test app
+        app = FastAPI()
+        app.add_api_route(
+            "/v1/chat/completions", make_chat_endpoint(mock_module), methods=["POST"]
+        )
+        client = TestClient(app)
+
+        # Send request with n=2
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "n": 2,
+            },
+        )
+
+        # Our endpoint returns 400 for unsupported n > 1
+        assert response.status_code == 400
+        error_data = response.json()
+        assert "error" in error_data
+        assert error_data["error"]["type"] == "invalid_request_error"
+        assert error_data["error"]["param"] == "n"
+        assert "not supported" in error_data["error"]["message"].lower()
+
+        # Verify serve was never called
+        mock_module.serve.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_n_none_accepted(self, mock_module):
+        """Test that requests with n=None (default) are accepted."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Hello")],
+            # n not specified, defaults to 1
+        )
+
+        mock_output = ModelOutputThunk("Test response")
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should succeed
+        assert isinstance(response, ChatCompletion)
+        assert response.choices[0].message.content == "Test response"
+
+        # Verify serve was called
+        mock_module.serve.assert_called_once()
