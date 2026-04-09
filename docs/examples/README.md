@@ -214,7 +214,7 @@ Utility functions used across examples.
 - **Agent Guidelines**: [../../AGENTS.md](../../AGENTS.md)
 - **Dev Docs**: [../dev/](../dev/)
 
-## Running Examples
+## 🏃 Running Examples
 
 ```bash
 # Run any Python example
@@ -226,8 +226,8 @@ uv run docs/examples/tutorial/simple_email.py
 # Run notebooks
 jupyter notebook docs/examples/notebooks/
 
-# Run examples as tests
-uv run pytest docs/examples/
+# Run tests
+uv run pytest test/
 ```
 
 ## 💡 Tips
