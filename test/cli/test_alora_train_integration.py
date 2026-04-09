@@ -310,12 +310,14 @@ def test_alora_training_integration():
         base_model.cpu()
         del base_model
 
-        # 4. Force GC and flush CUDA cache synchronously.
+        # 4. Force GC and flush device caches.
         gc.collect()
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
 
 
 def test_lora_training_integration():
@@ -398,3 +400,5 @@ def test_lora_training_integration():
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
