@@ -226,6 +226,15 @@ def run(
             case_sensitive=False,
         ),
     ] = LogMode.demo,
+    enable_script_run: Annotated[
+        bool,
+        typer.Option(
+            help=(
+                "When true, generated scripts expose argparse runtime options "
+                "for backend, model, endpoint, and API key overrides."
+            )
+        ),
+    ] = False,
 ) -> None:
     """Runs the ``m decompose`` CLI workflow and writes generated outputs.
 
@@ -253,6 +262,8 @@ def run(
             prompts and programs. Each name must be a valid non-keyword Python
             identifier.
         log_mode: Logging verbosity for CLI and pipeline execution.
+        enable_script_run: Whether generated scripts should expose argparse
+            runtime options. Defaults to ``False``.
 
     Raises:
         AssertionError: If ``out_name`` is invalid, ``out_dir`` does not name an
@@ -277,6 +288,7 @@ def run(
         logger.info("model_id       : %s", model_id)
         logger.info("version        : %s", version.value)
         logger.info("log_mode       : %s", log_mode.value)
+        logger.info("script options : %s", enable_script_run)
         logger.info("input_vars     : %s", input_var or "[]")
 
         environment = Environment(
@@ -393,6 +405,11 @@ def run(
                         subtasks=decomp_data["subtasks"],
                         user_inputs=input_var,
                         identified_constraints=decomp_data["identified_constraints"],
+                        model_id=model_id,
+                        backend=backend.value,
+                        backend_endpoint=backend_endpoint,
+                        backend_api_key=backend_api_key,
+                        enable_script_run=enable_script_run,
                     )
                     + "\n"
                 )
