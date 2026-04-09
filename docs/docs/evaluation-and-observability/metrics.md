@@ -1,6 +1,6 @@
 ---
 title: "Metrics"
-description: "Collect token usage metrics and instrument your own code with OpenTelemetry counters, histograms, and up-down counters."
+description: "Collect token usage and latency metrics, and instrument your own code with OpenTelemetry counters, histograms, and up-down counters."
 # diataxis: how-to
 ---
 
@@ -8,8 +8,8 @@ description: "Collect token usage metrics and instrument your own code with Open
 introduces the environment variables and telemetry architecture. This page
 covers metrics collection in detail.
 
-Mellea automatically tracks token consumption across all backends using
-OpenTelemetry metrics counters. Token metrics follow the
+Mellea automatically tracks token consumption and request latency across all
+backends using OpenTelemetry metrics. Metrics follow the
 [Gen-AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
 for standardized observability. The metrics API also lets you create your own
 counters, histograms, and up-down counters for application-level instrumentation.
@@ -80,6 +80,57 @@ await mot.astream()
 
 # Metrics recorded here (after stream completion)
 await mot.avalue()
+```
+
+## Latency histograms
+
+Mellea tracks request duration and time-to-first-token (TTFB) automatically
+after each LLM call. The `LatencyMetricsPlugin` auto-registers when
+`MELLEA_METRICS_ENABLED=true` alongside `TokenMetricsPlugin`. No code changes
+are required.
+
+### Latency instruments
+
+| Metric Name | Type | Unit | Description |
+| ----------- | ---- | ---- | ----------- |
+| `mellea.llm.request.duration` | Histogram | `s` | Total request duration, from call to full response |
+| `mellea.llm.ttfb` | Histogram | `s` | Time to first token (streaming requests only) |
+
+### Latency attributes
+
+| Attribute | Description | Example Values |
+| --------- | ----------- | -------------- |
+| `gen_ai.provider.name` | Backend provider name | `openai`, `ollama`, `watsonx`, `litellm`, `huggingface` |
+| `gen_ai.request.model` | Model identifier | `gpt-4`, `llama3.2:7b`, `granite-3.1-8b-instruct` |
+| `streaming` | Whether streaming mode was used (duration only) | `True`, `False` |
+
+### Histogram buckets
+
+Custom bucket boundaries are configured for LLM-sized latencies:
+
+- **`mellea.llm.request.duration`**: `0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120` seconds
+- **`mellea.llm.ttfb`**: `0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10` seconds
+
+### Latency recording timing
+
+- **`mellea.llm.request.duration`**: Recorded for every `generate_from_context` call,
+  both streaming and non-streaming.
+- **`mellea.llm.ttfb`**: Recorded only for streaming requests, measuring elapsed time
+  from the `generate_from_context` call until the first chunk arrives.
+
+Access latency data directly from a `ModelOutputThunk`:
+
+```python
+from mellea import start_session
+from mellea.backends import ModelOption
+
+with start_session() as m:
+    result = m.instruct(
+        "Explain quantum entanglement briefly",
+        model_options={ModelOption.STREAM: True},
+    )
+    if result.streaming and result.ttfb_ms is not None:
+        print(f"Time to first token: {result.ttfb_ms:.1f} ms")
 ```
 
 ## Metrics export configuration
@@ -283,13 +334,14 @@ Check if metrics are enabled:
 from mellea.telemetry import is_metrics_enabled
 
 if is_metrics_enabled():
-    print("Token metrics are being collected")
+    print("Metrics are being collected")
 ```
 
-Access token usage data from a `ModelOutputThunk`:
+Access token usage and latency data from a `ModelOutputThunk`:
 
 ```python
 from mellea import start_session
+from mellea.backends import ModelOption
 
 with start_session() as m:
     result = m.instruct("Write a haiku about programming")
@@ -298,18 +350,29 @@ with start_session() as m:
         print(f"Prompt tokens: {result.usage['prompt_tokens']}")
         print(f"Completion tokens: {result.usage['completion_tokens']}")
         print(f"Total tokens: {result.usage['total_tokens']}")
+
+    # Streaming mode also exposes time-to-first-token
+    streamed = m.instruct(
+        "Describe the solar system",
+        model_options={ModelOption.STREAM: True},
+    )
+    print(f"Streaming: {streamed.streaming}")
+    if streamed.ttfb_ms is not None:
+        print(f"Time to first token: {streamed.ttfb_ms:.1f} ms")
 ```
 
 The `usage` field is a dictionary with three keys: `prompt_tokens`,
 `completion_tokens`, and `total_tokens`. All backends populate this field
-consistently.
+consistently. `streaming` and `ttfb_ms` are set automatically based on whether
+streaming mode was used.
 
 ## Performance
 
 - **Zero overhead when disabled**: When `MELLEA_METRICS_ENABLED=false` (default),
-  the `TokenMetricsPlugin` is not registered and all instrument calls are no-ops.
-- **Minimal overhead when enabled**: Counter increments are extremely fast
-  (~nanoseconds per operation).
+  neither `TokenMetricsPlugin` nor `LatencyMetricsPlugin` is registered and all
+  instrument calls are no-ops.
+- **Minimal overhead when enabled**: Counter increments and histogram recordings
+  are extremely fast (~nanoseconds per operation).
 - **Async export**: Metrics are batched and exported asynchronously (default:
   every 60 seconds).
 - **Non-blocking**: Metric recording never blocks LLM calls.

@@ -503,6 +503,10 @@
     {
       "source": "/integrations/langchain-and-smolagents",
       "destination": "/integrations/langchain"
+    },
+    {
+      "source": "/how-to/safety-guardrails",
+      "destination": "/advanced/security-and-taint-tracking"
     }
   ]
 }

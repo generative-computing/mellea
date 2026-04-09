@@ -306,6 +306,19 @@ class ModelOutputThunk(CBlock, Generic[S]):
         Populated by backends. None if unavailable.
         """
 
+        self.ttfb_ms: float | None = None
+        """Time to first token in milliseconds (streaming only).
+
+        Set when the first chunk is received from the backend.
+        None for non-streaming requests or when not measured.
+        """
+
+        self.streaming: bool = False
+        """Whether this generation used streaming mode.
+
+        Set from model options at the start of astream().
+        """
+
         # Used for tracking generation.
         self._context: list[Component | CBlock] | None = None
         self._action: Component | CBlock | None = None
@@ -328,7 +341,20 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self._on_computed: Callable[[ModelOutputThunk], Coroutine] | None = None
 
         self._start: datetime.datetime | None = None
+        self._first_chunk_received: bool = False
         self._generate_log: GenerateLog | None = None
+
+    def _record_ttfb(self) -> None:
+        """Record time-to-first-byte if streaming and not yet recorded."""
+        if (
+            self.streaming
+            and not self._first_chunk_received
+            and self._start is not None
+        ):
+            self.ttfb_ms = (
+                datetime.datetime.now() - self._start
+            ).total_seconds() * 1000
+            self._first_chunk_received = True
 
     def _copy_from(self, other: ModelOutputThunk) -> None:
         """Copy computed-output fields from *other* into *self*.
@@ -345,6 +371,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
         self.usage = other.usage
         self.model = other.model
         self.provider = other.provider
+        self.ttfb_ms = other.ttfb_ms
+        self.streaming = other.streaming
         self._generate_log = other._generate_log
 
     def is_computed(self) -> bool:
@@ -418,6 +446,9 @@ class ModelOutputThunk(CBlock, Generic[S]):
             )
 
         do_set_computed = False
+        # Use string directly to avoid importing ModelOption from backends into core (circular import).
+        # ModelOption.STREAM is defined in mellea/backends/model_options.py.
+        self.streaming = bool((self._model_options or {}).get("@@@stream@@@", False))
 
         if not self._generate_type == GenerateType.ASYNC:
             raise RuntimeError(
@@ -434,6 +465,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
             try:
                 item = self._async_queue.get_nowait()
                 chunks.append(item)
+                self._record_ttfb()
             except asyncio.QueueEmpty:
                 # We've exhausted the current items in the queue.
                 break
@@ -449,6 +481,7 @@ class ModelOutputThunk(CBlock, Generic[S]):
 
             item = await self._async_queue.get()
             chunks.append(item)
+            self._record_ttfb()
 
         # Process the sentinel value if it's there.
         if chunks[-1] is None:
@@ -561,6 +594,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
         copied.usage = self.usage
         copied.model = self.model
         copied.provider = self.provider
+        copied.ttfb_ms = self.ttfb_ms
+        copied.streaming = self.streaming
         return copied
 
     def __deepcopy__(self, memo: dict) -> ModelOutputThunk:
@@ -593,6 +628,8 @@ class ModelOutputThunk(CBlock, Generic[S]):
         deepcopied.usage = deepcopy(self.usage) if self.usage else None
         deepcopied.model = self.model
         deepcopied.provider = self.provider
+        deepcopied.ttfb_ms = self.ttfb_ms
+        deepcopied.streaming = self.streaming
         return deepcopied
 
 

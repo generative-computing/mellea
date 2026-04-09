@@ -91,6 +91,10 @@ class ModelOption:
             # This will usually be a @@@<>@@@ ModelOption.<> key.
             new_key = from_to.get(old_key, None)
             if new_key:
+                # Skip if old_key and new_key are the same (no-op replacement)
+                if old_key == new_key:
+                    continue
+
                 if new_options.get(new_key, None) is not None:
                     # The key already has a value associated with it in the dict. Leave it be.
                     conflict_log.append(
