@@ -973,7 +973,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 "",  # Empty for no adapters.
                 self._model.generate,  # type: ignore
                 # Passed as args/kwargs to generate.
-                input_ids,
+                inputs=input_ids["input_ids"],
+                attention_mask=input_ids["attention_mask"],
                 return_dict_in_generate=True,
                 use_cache=self._use_caches,  # Only create KV cache if caching is enabled
                 **self._make_backend_specific_and_remove(generate_options),
@@ -1045,6 +1046,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             input_ids: The prompt token IDs used for decoding; required to slice off
                 the prompt portion from the generated sequences.
         """
+        input_ids_tensor: torch.Tensor = input_ids["input_ids"]
+
         if mot._underlying_value is None:
             mot._underlying_value = ""
 
@@ -1058,7 +1061,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             mot._underlying_value += cast(
                 str,
                 self._tokenizer.decode(
-                    chunk.sequences[0, input_ids.shape[1] :], skip_special_tokens=True
+                    chunk.sequences[0, input_ids_tensor.shape[1] :],
+                    skip_special_tokens=True,
                 ),
             )
 
