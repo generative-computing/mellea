@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 
 from cli.serve.app import make_chat_endpoint
@@ -319,12 +320,14 @@ class TestHTTPValidation:
         and converted to OpenAI-compatible 400 errors (not FastAPI's default 422).
         """
         # Setup a test app with the exception handler
-        from cli.serve.app import app as serve_app
+        from cli.serve.app import validation_exception_handler
 
-        serve_app.add_api_route(
+        app = FastAPI()
+        app.add_exception_handler(RequestValidationError, validation_exception_handler)
+        app.add_api_route(
             "/v1/chat/completions", make_chat_endpoint(mock_module), methods=["POST"]
         )
-        client = TestClient(serve_app)
+        client = TestClient(app)
 
         # Send request with n=0
         response = client.post(
