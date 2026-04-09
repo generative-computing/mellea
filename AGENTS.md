@@ -51,7 +51,7 @@ Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualita
 
 See **[test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md)** for the full marker reference (tier definitions, backend markers, resource gates, auto-skip logic, common patterns).
 
-**Examples in `docs/examples/`** use comment-based markers:
+**Examples in `docs/examples/`** are opt-in — unlike `test/` files (auto-collected, default `unit`), examples require an explicit `# pytest:` comment to be collected. Files without this comment are silently ignored (they won't appear in skip summaries either). This is because examples have variable dependencies and limited setup:
 ```python
 # pytest: e2e, ollama, qualitative
 """Example description..."""

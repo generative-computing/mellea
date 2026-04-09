@@ -282,15 +282,14 @@ def pytest_collection_finish(session):
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
-    # Append the skipped examples if needed.
-    if len(examples_to_skip) == 0:
-        return
-
-    terminalreporter.ensure_newline()
-    terminalreporter.section("Skipped Examples", sep="=", blue=True, bold=True)
-    terminalreporter.line("The following examples were skipped during collection:\n")
-    for filename, reason in examples_to_skip.items():
-        terminalreporter.line(f"  • {filename}: {reason}")
+    if examples_to_skip:
+        terminalreporter.ensure_newline()
+        terminalreporter.section("Skipped Examples", sep="=", blue=True, bold=True)
+        terminalreporter.line(
+            "The following examples were skipped during collection:\n"
+        )
+        for filename, reason in examples_to_skip.items():
+            terminalreporter.line(f"  • {filename}: {reason}")
 
 
 def pytest_pycollect_makemodule(module_path, parent):
@@ -371,6 +370,9 @@ def pytest_ignore_collect(collection_path, config):
         # Extract markers and check if we should skip
         try:
             markers = _extract_markers_from_file(collection_path)
+            # No markers → not a runnable example (e.g. __init__.py, helpers)
+            if not markers:
+                return True
             should_skip, reason = _should_skip_collection(markers)
             if should_skip and reason:
                 # Add to skip list with reason for terminal summary
@@ -402,14 +404,13 @@ def pytest_collect_file(parent: pytest.Dir, file_path: pathlib.PosixPath):
         if file_path.name in examples_to_skip:
             return
 
-        # Check markers first - if file has skip marker, return SkippedFile
+        # Check markers — no markers means not a runnable example
         try:
             markers = _extract_markers_from_file(file_path)
+            if not markers:
+                return None
             should_skip, _reason = _should_skip_collection(markers)
             if should_skip:
-                # FIX: Return a dummy collector instead of None.
-                # This prevents pytest from falling back to the default Module collector
-                # which would try to import the file.
                 return SkippedFile.from_parent(parent, path=file_path)
         except Exception:
             # If we can't read markers, continue with other checks

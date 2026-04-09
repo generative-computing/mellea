@@ -270,7 +270,10 @@ pytestmark = [pytest.mark.e2e, pytest.mark.huggingface,
 
 ## Example Files (`docs/examples/`)
 
-Examples use a comment-based marker format instead of `pytestmark`:
+Unlike `test/` files (which are auto-collected and default to `unit`), examples
+require an explicit `# pytest:` comment to be collected. This opt-in approach
+reflects that examples often have variable dependencies and limited setup, so
+only files that declare themselves runnable should be executed.
 
 ```python
 # pytest: e2e, ollama, qualitative
@@ -278,8 +281,9 @@ Examples use a comment-based marker format instead of `pytestmark`:
 ```
 
 Same classification rules apply. The comment must appear in the first few
-lines before non-comment code. Parser: `docs/examples/conftest.py`
-(`_extract_markers_from_file`).
+lines before non-comment code. Files without this comment are silently
+ignored — they won't appear in skip summaries or collection output.
+Parser: `docs/examples/conftest.py` (`_extract_markers_from_file`).
 
 ## Adding Markers to New Tests
 

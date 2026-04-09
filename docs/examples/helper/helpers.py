@@ -1,5 +1,3 @@
-# pytest: ollama, e2e
-
 from textwrap import fill
 from typing import Any
 
