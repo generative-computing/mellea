@@ -37,12 +37,18 @@ pytestmark = [
 @pytest.fixture(scope="module", autouse=True)
 def setup_telemetry():
     """Set up telemetry for all tests in this module."""
+    import importlib
+
+    import mellea.telemetry.tracing
+
     mp = pytest.MonkeyPatch()
     mp.setenv("MELLEA_TRACE_BACKEND", "true")
+    importlib.reload(mellea.telemetry.tracing)
 
     yield
 
-    mp.undo()
+    mp.setenv("MELLEA_TRACE_BACKEND", "false")
+    importlib.reload(mellea.telemetry.tracing)
 
 
 @pytest.fixture
