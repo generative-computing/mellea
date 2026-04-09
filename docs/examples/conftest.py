@@ -288,8 +288,8 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
         terminalreporter.line(
             "The following examples were skipped during collection:\n"
         )
-        for filename, reason in examples_to_skip.items():
-            terminalreporter.line(f"  • {filename}: {reason}")
+        for filepath, reason in examples_to_skip.items():
+            terminalreporter.line(f"  • {pathlib.Path(filepath).name}: {reason}")
 
 
 def pytest_pycollect_makemodule(module_path, parent):
@@ -307,7 +307,7 @@ def pytest_pycollect_makemodule(module_path, parent):
     file_path = module_path
 
     # Limit scope to docs/examples directory
-    if "docs" not in str(file_path) or "examples" not in str(file_path):
+    if "docs" not in file_path.parts or "examples" not in file_path.parts:
         return None
 
     if file_path.name == "conftest.py":
@@ -319,7 +319,7 @@ def pytest_pycollect_makemodule(module_path, parent):
         config._example_capabilities = get_system_capabilities()
 
     # Check manual skip list
-    if file_path.name in examples_to_skip:
+    if str(file_path) in examples_to_skip:
         return SkippedFile.from_parent(parent, path=file_path)
 
     # Extract and evaluate markers
@@ -365,7 +365,7 @@ def pytest_ignore_collect(collection_path, config):
         and "examples" in abs_path.parts
     ):
         # Skip files in the manual skip list
-        if collection_path.name in examples_to_skip:
+        if str(collection_path) in examples_to_skip:
             return True
 
         # Extract markers and check if we should skip
@@ -377,7 +377,7 @@ def pytest_ignore_collect(collection_path, config):
             should_skip, reason = _should_skip_collection(markers)
             if should_skip and reason:
                 # Add to skip list with reason for terminal summary
-                examples_to_skip[collection_path.name] = reason
+                examples_to_skip[str(collection_path)] = reason
                 # Return True to ignore this file completely
                 return True
         except Exception as e:
@@ -399,25 +399,24 @@ def pytest_collect_file(parent: pytest.Dir, file_path: pathlib.PosixPath):
         and "docs" in file_path.parts
         and "examples" in file_path.parts
     ):
+        # Directly-specified files are handled by pytest_pycollect_makemodule —
+        # only provide an explicit collector during directory traversal.
+        if parent.session.isinitpath(file_path):
+            return None
+
         # Already flagged for skipping (missing system capability)
-        if file_path.name in examples_to_skip:
+        if str(file_path) in examples_to_skip:
             return
 
-        # Check markers — no markers means not a runnable example
-        try:
-            markers = _extract_markers_from_file(file_path)
-            if not markers:
-                return None
-            should_skip, _reason = _should_skip_collection(markers)
-            if should_skip:
-                return SkippedFile.from_parent(parent, path=file_path)
-        except OSError as e:
-            import sys
-
-            print(
-                f"WARNING: Error reading markers for {file_path}: {e}", file=sys.stderr
-            )
-            return None  # Can't read markers — don't collect
+        # Check markers — no markers means not a runnable example.
+        # _extract_markers_from_file is self-contained (returns [] on error),
+        # so no try/except needed here.
+        markers = _extract_markers_from_file(file_path)
+        if not markers:
+            return None
+        should_skip, _reason = _should_skip_collection(markers)
+        if should_skip:
+            return SkippedFile.from_parent(parent, path=file_path)
 
         # pytest_pycollect_makemodule only fires for files matching python_files
         # (test_*.py) — examples need an explicit collector for directory traversal.
