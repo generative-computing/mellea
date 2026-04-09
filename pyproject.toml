@@ -30,6 +30,7 @@ dependencies = [
     "math_verify", # Needed for Majority Voting Sampling Strategies.
     "rouge_score", # Needed for Majority Voting Sampling Strategies.
     "numpy", # Needed for SIMBAUQ Sampling Strategy.
+    "scikit-learn", # Needed for SIMBAUQ Sampling Strategy.
     "PyYAML", # Needed for backends/adapters and granite formatters.
     "packaging", # Needed for server type helpers.
 ]

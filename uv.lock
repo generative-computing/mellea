@@ -3741,6 +3741,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
     { name = "rouge-score" },
+    { name = "scikit-learn" },
     { name = "typer" },
 ]
 
@@ -3959,6 +3960,7 @@ requires-dist = [
     { name = "pyyaml" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "rouge-score" },
+    { name = "scikit-learn" },
     { name = "sentence-transformers", marker = "extra == 'granite-retriever'" },
     { name = "smolagents", marker = "extra == 'tools'", specifier = ">=1.0.0" },
     { name = "transformers", marker = "extra == 'hf'", specifier = ">=4.53.2,<5" },
