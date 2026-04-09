@@ -427,6 +427,7 @@ def generate_with_transformers(
                 all_logprobs[token_ix][response_tokens[token_ix]].item()
                 for token_ix in range(len(response_tokens))
             ]
+            assert isinstance(response_string, str)
             token_strings = [response_string[begin:end] for begin, end in token_offsets]
             token_bytes = [list(s.encode("utf-8")) for s in token_strings]
 
@@ -439,8 +440,8 @@ def generate_with_transformers(
                     torch.nan_to_num(all_logprobs, float("-inf")),
                     other_input["top_logprobs"],
                 )
-                top_k_token_strs = [
-                    [tokenizer.decode(t) for t in row_i] for row_i in top_k_indices
+                top_k_token_strs: list[list[str]] = [
+                    [str(tokenizer.decode(t)) for t in row_i] for row_i in top_k_indices
                 ]
                 top_logprobs = [
                     [

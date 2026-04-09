@@ -1,17 +1,19 @@
 """Low-level utilities for concatenating transformer KV caches (KV smashing).
 
 Provides functions for merging ``DynamicCache`` and legacy tuple caches along the
-time axis (``merge_dynamic_caches``, ``legacy_cache_smash``), and
+time axis (``merge_dynamic_caches_v5``, ``legacy_cache_smash``), and
 ``tokens_to_legacy_cache`` for converting a tokenized prompt into a prefilled KV
 cache. These helpers are used internally by local HuggingFace backends that reuse
 cached prefix computations across multiple generation calls.
 """
 
 from collections.abc import Iterable
+from typing import cast
 
 import torch
 from transformers import PreTrainedModel, PreTrainedTokenizerBase
-from transformers.cache_utils import DynamicCache
+from transformers.cache_utils import CacheLayerMixin, DynamicCache
+from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 
 @torch.no_grad()
@@ -54,9 +56,10 @@ def merge_dynamic_caches_v5(caches: Iterable[DynamicCache]) -> DynamicCache:
     # DynamicLayer.update(): self.keys = cat([self.keys, key_states], dim=-2).
     for c in caches:
         for layer_idx, layer in enumerate(c.layers):
-            if layer.keys is None or layer.values is None:
-                continue
-            merged.update(layer.keys, layer.values, layer_idx=layer_idx)
+            if isinstance(layer, CacheLayerMixin):
+                if layer.keys is None or layer.values is None:
+                    continue
+                merged.update(layer.keys, layer.values, layer_idx=layer_idx)
 
     return merged
 
@@ -86,9 +89,10 @@ if __name__ == "__main__":
     from mellea.backends.huggingface import LocalHFBackend
     from mellea.backends.model_ids import IBM_GRANITE_3_3_8B
 
+    assert IBM_GRANITE_3_3_8B.hf_model_name is not None
     backend = LocalHFBackend(model_id=IBM_GRANITE_3_3_8B.hf_model_name)
-    model, tokenizer, device = backend._model, backend._tokenizer, backend._device
-    model: PreTrainedModel = model
+    _model_raw, tokenizer, device = backend._model, backend._tokenizer, backend._device
+    model = cast(PreTrainedModel, _model_raw)
 
     docs = [
         "Nathan Fulton is expert in large language models, formal verification, and reinforcement learning. He holds a Ph.D. from Carnegie Mellon University's Computer Science Department and has worked at Amazon Web Services and IBM Research. He currently works at IBM Research - Cambridge.",
@@ -100,14 +104,17 @@ if __name__ == "__main__":
         model, tokenizer, docs, device=backend._device
     )
     input_ids = merged_tokens.to(device)
-    result = model.generate(
-        input_ids=input_ids,
-        use_cache=True,
-        return_dict_in_generate=True,
-        past_key_values=merged_cache,
-        max_new_tokens=512,
+    generate_out = cast(
+        GenerateDecoderOnlyOutput,
+        model.generate(  # type: ignore[operator]
+            input_ids=input_ids,
+            use_cache=True,
+            return_dict_in_generate=True,
+            past_key_values=merged_cache,
+            max_new_tokens=512,
+        ),
     )
     result = tokenizer.decode(
-        result.sequences[0, input_ids.shape[1] :], skip_special_tokens=True
+        generate_out.sequences[0, input_ids.shape[1] :], skip_special_tokens=True
     )
     print(result)
