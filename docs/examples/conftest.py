@@ -603,6 +603,56 @@ def pytest_runtest_setup(item):
             )
 
 
+def pytest_runtest_teardown(item, nextitem):
+    """Evict Ollama models after each ollama-marked example.
+
+    Examples run as subprocesses, so Ollama's default keep_alive keeps
+    models resident after exit. Evict after every example to prevent
+    heavyweight models from starving subsequent examples of memory (#798).
+    """
+    if not isinstance(item, ExampleItem):
+        return
+    if not item.get_closest_marker("ollama"):
+        return
+
+    _evict_ollama_models()
+
+
+def _evict_ollama_models() -> None:
+    """Evict all currently loaded Ollama models (best-effort)."""
+    import requests
+
+    host = os.environ.get("OLLAMA_HOST", "127.0.0.1")
+    if ":" in host:
+        host, port = host.rsplit(":", 1)
+    else:
+        port = os.environ.get("OLLAMA_PORT", "11434")
+
+    if host == "0.0.0.0":
+        host = "127.0.0.1"
+
+    base_url = f"http://{host}:{port}"
+
+    try:
+        resp = requests.get(f"{base_url}/api/ps", timeout=5)
+        resp.raise_for_status()
+        loaded = resp.json().get("models", [])
+    except Exception:
+        return
+
+    for entry in loaded:
+        model_name = entry.get("name") or entry.get("model", "unknown")
+        try:
+            requests.post(
+                f"{base_url}/api/generate",
+                json={"model": model_name, "keep_alive": 0},
+                timeout=10,
+            )
+            print(f"ollama-evict: evicted {model_name}", file=sys.stderr)
+        except Exception:
+            pass
+
+
 def pytest_collection_modifyitems(items):
     """Apply markers from example files to ExampleItem objects.
 
