@@ -12,7 +12,7 @@ import pytest
 
 from cli.decompose.decompose import DecompVersion, reorder_subtasks, run
 from cli.decompose.logging import LogMode
-from cli.decompose.pipeline import DecompBackend, DecompPipelineResult
+from cli.decompose.pipeline import ConstraintResult, DecompBackend, DecompPipelineResult
 
 
 class DummyTemplate:
@@ -34,8 +34,8 @@ class DummyEnvironment:
 
 def make_decomp_result(with_code_validation: bool = False) -> DecompPipelineResult:
     """Create a valid decomposition result for CLI tests."""
-    identified_constraints = []
-    subtask_constraints = []
+    identified_constraints: list[ConstraintResult] = []
+    subtask_constraints: list[ConstraintResult] = []
 
     if with_code_validation:
         identified_constraints = [
@@ -214,11 +214,16 @@ class TestRunSuccess:
         input_file = write_input_file(tmp_path, "Test")
         requested_templates: list[str] = []
         environment = Mock()
-        environment.get_template.side_effect = lambda template_name: (
-            requested_templates.append(template_name) or DummyTemplate()
-        )
 
-        monkeypatch.setattr("cli.decompose.decompose.Environment", lambda *args, **kwargs: environment)
+        def get_template(template_name: str) -> DummyTemplate:
+            requested_templates.append(template_name)
+            return DummyTemplate()
+
+        environment.get_template.side_effect = get_template
+
+        monkeypatch.setattr(
+            "cli.decompose.decompose.Environment", lambda *args, **kwargs: environment
+        )
         monkeypatch.setattr(
             "cli.decompose.decompose.FileSystemLoader", lambda *args, **kwargs: None
         )
