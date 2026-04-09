@@ -83,33 +83,46 @@ def create_openai_error_response(
     )
 
 
+def _build_model_options(request: ChatCompletionRequest) -> dict:
+    """Build model_options dict from OpenAI-compatible request parameters."""
+    excluded_fields = {
+        # Request structure fields (handled separately)
+        "messages",  # Chat messages - passed separately to serve()
+        "requirements",  # Mellea requirements - passed separately to serve()
+        # Routing/metadata fields (not generation parameters)
+        "model",  # Model identifier - used for routing, not generation
+        "n",  # Number of completions - not supported in Mellea's model_options
+        "user",  # User tracking ID - metadata, not a generation parameter
+        "extra",  # Pydantic's extra fields dict - unused (see model_config)
+        # Not-yet-implemented OpenAI parameters (silently ignored)
+        "stream",  # Streaming responses - not yet implemented
+        "stop",  # Stop sequences - not yet implemented
+        "top_p",  # Nucleus sampling - not yet implemented
+        "presence_penalty",  # Presence penalty - not yet implemented
+        "frequency_penalty",  # Frequency penalty - not yet implemented
+        "logit_bias",  # Logit bias - not yet implemented
+        "response_format",  # Response format (json_object) - not yet implemented
+        "functions",  # Legacy function calling - not yet implemented
+        "function_call",  # Legacy function calling - not yet implemented
+        "tools",  # Tool calling - not yet implemented
+        "tool_choice",  # Tool choice - not yet implemented
+    }
+    openai_to_model_option = {
+        "temperature": ModelOption.TEMPERATURE,
+        "max_tokens": ModelOption.MAX_NEW_TOKENS,
+        "seed": ModelOption.SEED,
+    }
+
+    filtered_options = {
+        key: value
+        for key, value in request.model_dump(exclude_none=True).items()
+        if key not in excluded_fields
+    }
+    return ModelOption.replace_keys(filtered_options, openai_to_model_option)
+
+
 def make_chat_endpoint(module):
     """Makes a chat endpoint using a custom module."""
-
-    def _build_model_options(request: ChatCompletionRequest) -> dict:
-        """Build model_options dict from OpenAI-compatible request parameters."""
-        excluded_fields = {
-            # Request structure fields (handled separately)
-            "messages",  # Chat messages - passed separately to serve()
-            "requirements",  # Mellea requirements - passed separately to serve()
-            # Routing/metadata fields (not generation parameters)
-            "model",  # Model identifier - used for routing, not generation
-            "n",  # Number of completions - not supported in Mellea's model_options
-            "user",  # User tracking ID - metadata, not a generation parameter
-            "extra",  # Pydantic's extra fields dict - unused (see model_config)
-        }
-        openai_to_model_option = {
-            "temperature": ModelOption.TEMPERATURE,
-            "max_tokens": ModelOption.MAX_NEW_TOKENS,
-            "seed": ModelOption.SEED,
-        }
-
-        filtered_options = {
-            key: value
-            for key, value in request.model_dump(exclude_none=True).items()
-            if key not in excluded_fields
-        }
-        return ModelOption.replace_keys(filtered_options, openai_to_model_option)
 
     async def endpoint(request: ChatCompletionRequest):
         try:

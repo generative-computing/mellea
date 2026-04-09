@@ -403,3 +403,132 @@ class TestHTTPValidation:
 
         # Verify serve was called
         mock_module.serve.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_unsupported_params_excluded_from_model_options(self, mock_module):
+        """Test that unsupported OpenAI parameters are excluded from model_options."""
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Hello")],
+            temperature=0.7,
+            max_tokens=100,
+            # Unsupported parameters that should be excluded
+            stream=False,
+            stop=["END"],
+            top_p=0.9,
+            presence_penalty=0.5,
+            frequency_penalty=0.3,
+            logit_bias={"123": 1.0},
+        )
+
+        mock_output = ModelOutputThunk("Test response")
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should succeed
+        assert isinstance(response, ChatCompletion)
+
+        # Verify serve was called with correct model_options
+        call_args = mock_module.serve.call_args
+        assert call_args is not None
+        model_options = call_args.kwargs["model_options"]
+
+        # Supported parameters should be present
+        from mellea.backends.model_options import ModelOption
+
+        assert ModelOption.TEMPERATURE in model_options
+        assert model_options[ModelOption.TEMPERATURE] == 0.7
+        assert ModelOption.MAX_NEW_TOKENS in model_options
+        assert model_options[ModelOption.MAX_NEW_TOKENS] == 100
+
+        # Unsupported parameters should NOT be in model_options
+        assert "stream" not in model_options
+        assert "stop" not in model_options
+        assert "top_p" not in model_options
+        assert "presence_penalty" not in model_options
+        assert "frequency_penalty" not in model_options
+        assert "logit_bias" not in model_options
+
+    @pytest.mark.asyncio
+    async def test_tool_params_excluded_from_model_options(self, mock_module):
+        """Test that tool-related parameters are excluded from model_options."""
+        from cli.serve.models import (
+            FunctionDefinition,
+            FunctionParameters,
+            ToolFunction,
+        )
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Hello")],
+            # Tool-related parameters that should be excluded
+            tools=[
+                ToolFunction(
+                    type="function",
+                    function=FunctionDefinition(
+                        name="test_func",
+                        description="A test function",
+                        parameters=FunctionParameters(RootModel={"type": "object"}),
+                    ),
+                )
+            ],
+            tool_choice="auto",
+            functions=[
+                FunctionDefinition(
+                    name="legacy_func",
+                    description="A legacy function",
+                    parameters=FunctionParameters(RootModel={"type": "object"}),
+                )
+            ],
+            function_call="auto",
+        )
+
+        mock_output = ModelOutputThunk("Test response")
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should succeed
+        assert isinstance(response, ChatCompletion)
+
+        # Verify serve was called
+        call_args = mock_module.serve.call_args
+        assert call_args is not None
+        model_options = call_args.kwargs["model_options"]
+
+        # Tool-related parameters should NOT be in model_options
+        assert "tools" not in model_options
+        assert "tool_choice" not in model_options
+        assert "functions" not in model_options
+        assert "function_call" not in model_options
+
+    @pytest.mark.asyncio
+    async def test_response_format_excluded_from_model_options(self, mock_module):
+        """Test that response_format parameter is excluded from model_options."""
+        from cli.serve.models import ResponseFormat
+
+        request = ChatCompletionRequest(
+            model="test-model",
+            messages=[ChatMessage(role="user", content="Hello")],
+            response_format=ResponseFormat(type="json_object"),
+        )
+
+        mock_output = ModelOutputThunk("Test response")
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(request)
+
+        # Should succeed
+        assert isinstance(response, ChatCompletion)
+
+        # Verify serve was called
+        call_args = mock_module.serve.call_args
+        assert call_args is not None
+        model_options = call_args.kwargs["model_options"]
+
+        # response_format should NOT be in model_options
+        assert "response_format" not in model_options
