@@ -1,7 +1,5 @@
 """Tests for ComputedModelOutputThunk."""
 
-# pytest: ollama, llm
-
 import pytest
 
 from mellea.core import ComputedModelOutputThunk, ModelOutputThunk
@@ -72,6 +70,8 @@ def test_computed_thunk_with_parsed_repr():
     assert computed_thunk.parsed_repr == "parsed value"
 
 
+@pytest.mark.ollama
+@pytest.mark.e2e
 def test_sync_functions_return_computed_thunks():
     """Test that synchronous session functions return ComputedModelOutputThunk."""
     with start_session() as session:
@@ -83,6 +83,8 @@ def test_sync_functions_return_computed_thunks():
         assert result.value is not None
 
 
+@pytest.mark.ollama
+@pytest.mark.e2e
 def test_sync_functions_with_sampling_return_computed_thunks():
     """Test that synchronous functions with sampling return ComputedModelOutputThunk."""
     from mellea.stdlib.sampling import RejectionSamplingStrategy
@@ -98,6 +100,8 @@ def test_sync_functions_with_sampling_return_computed_thunks():
         assert result.value is not None
 
 
+@pytest.mark.ollama
+@pytest.mark.e2e
 async def test_async_functions_return_computed_thunks():
     """Test that async session functions return ComputedModelOutputThunk when await_result=True."""
     with start_session() as session:
