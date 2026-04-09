@@ -97,7 +97,7 @@ def run_aggregation_example() -> None:
         n_per_temp=3,
         similarity_metric="rouge",
         confidence_method="aggregation",
-        aggregation="harmonic_mean",
+        aggregation="mean",
     )
 
     result: SamplingResult = m.instruct(
