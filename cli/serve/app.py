@@ -106,7 +106,7 @@ def make_chat_endpoint(module):
 
         filtered_options = {
             key: value
-            for key, value in request.model_dump().items()
+            for key, value in request.model_dump(exclude_none=True).items()
             if key not in excluded_fields
         }
         return ModelOption.replace_keys(filtered_options, openai_to_model_option)
