@@ -295,8 +295,9 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 def pytest_pycollect_makemodule(module_path, parent):
     """Intercepts Module creation to skip files before import.
 
-    Runs for both directory traversal and direct file specification.
-    Returning a SkippedFile prevents pytest from importing the file,
+    Only fires for files matching python_files (default test_*.py) during
+    directory traversal, or for any file specified directly on the command
+    line. Returning a SkippedFile prevents pytest from importing the file,
     which is necessary when files contain unavailable dependencies.
 
     Args:
@@ -325,7 +326,7 @@ def pytest_pycollect_makemodule(module_path, parent):
     markers = _extract_markers_from_file(file_path)
 
     if not markers:
-        return None
+        return SkippedFile.from_parent(parent, path=file_path)
 
     should_skip, _reason = _should_skip_collection(markers)
 
@@ -391,16 +392,14 @@ def pytest_ignore_collect(collection_path, config):
     return False
 
 
-# This doesn't replace the existing pytest file collection behavior.
 def pytest_collect_file(parent: pytest.Dir, file_path: pathlib.PosixPath):
-    # Do a quick check that it's a .py file in the expected `docs/examples` folder. We can make
-    # this more exact if needed.
+    """Provide an explicit collector for example files in docs/examples/."""
     if (
         file_path.suffix == ".py"
         and "docs" in file_path.parts
         and "examples" in file_path.parts
     ):
-        # Skip this test. It requires additional setup.
+        # Already flagged for skipping (missing system capability)
         if file_path.name in examples_to_skip:
             return
 
@@ -412,9 +411,13 @@ def pytest_collect_file(parent: pytest.Dir, file_path: pathlib.PosixPath):
             should_skip, _reason = _should_skip_collection(markers)
             if should_skip:
                 return SkippedFile.from_parent(parent, path=file_path)
-        except Exception:
-            # If we can't read markers, continue with other checks
-            pass
+        except OSError as e:
+            import sys
+
+            print(
+                f"WARNING: Error reading markers for {file_path}: {e}", file=sys.stderr
+            )
+            return None  # Can't read markers — don't collect
 
         # pytest_pycollect_makemodule only fires for files matching python_files
         # (test_*.py) — examples need an explicit collector for directory traversal.
