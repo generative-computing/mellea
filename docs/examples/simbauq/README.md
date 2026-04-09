@@ -11,7 +11,7 @@ temperatures and selects the one with the highest estimated confidence.
 ### simbauq_example.py
 
 Complete example demonstrating both confidence estimation methods with
-a RITSBackend and granite-4.0-micro.
+ollama and granite-4.0-micro.
 
 ## Architecture
 
