@@ -261,6 +261,33 @@ def pytest_configure(config):
 
 
 # ============================================================================
+# Device Cache Flush Helper
+# ============================================================================
+
+
+def flush_device_caches() -> None:
+    """Force garbage collection and flush GPU device caches (CUDA and MPS).
+
+    Safe to call unconditionally — skips gracefully when torch is absent
+    or no accelerator is available.
+    """
+    gc.collect()
+    gc.collect()
+
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+        if torch.backends.mps.is_available():
+            torch.mps.synchronize()
+            torch.mps.empty_cache()
+    except ImportError:
+        pass
+
+
+# ============================================================================
 # vLLM Backend Cleanup Helper
 # ============================================================================
 
@@ -275,22 +302,34 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
         backend: The backend instance to clean up.
         backend_name: Name for logging.
     """
-    import gc
-
     logger = FancyLogger.get_logger()
     logger.info(f"Cleaning up {backend_name} backend GPU memory...")
 
     try:
         import torch
 
+        # Snapshot memory before cleanup for reporting
+        free_before = 0
+        allocated_before = 0
         if torch.cuda.is_available():
-            free_before, total = torch.cuda.mem_get_info()
+            free_before, total_mem = torch.cuda.mem_get_info()
+            reserved = torch.cuda.memory_reserved()
+            allocated = torch.cuda.memory_allocated()
             logger.info(
-                f"  GPU before cleanup: {free_before / 1024**3:.1f}GB free "
-                f"/ {total / 1024**3:.1f}GB total"
+                f"  CUDA before cleanup: {free_before / 1024**3:.1f}GB free "
+                f"/ {total_mem / 1024**3:.1f}GB total "
+                f"(allocated {allocated / 1024**2:.0f}MB, "
+                f"reserved {reserved / 1024**2:.0f}MB, "
+                f"fragmentation {(reserved - allocated) / 1024**2:.0f}MB)"
             )
-        else:
-            free_before = 0
+        elif torch.backends.mps.is_available():
+            allocated_before = torch.mps.current_allocated_memory()
+            max_mem = torch.mps.recommended_max_memory()
+            logger.info(
+                f"  MPS before cleanup: "
+                f"allocated {allocated_before / 1024**2:.0f}MB "
+                f"/ {max_mem / 1024**3:.1f}GB max"
+            )
 
         # 1. Clear the LRU cache (holds DynamicCache KV tensors on GPU)
         if hasattr(backend, "_cache") and hasattr(backend._cache, "cache"):
@@ -357,21 +396,27 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
             del backend._tokenizer
 
         # 7. Force garbage collection and flush device caches
-        gc.collect()
-        gc.collect()
+        flush_device_caches()
 
+        # Report memory after cleanup
         if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-
-            free_after, total = torch.cuda.mem_get_info()
+            free_after, total_mem = torch.cuda.mem_get_info()
+            reserved = torch.cuda.memory_reserved()
+            allocated = torch.cuda.memory_allocated()
             logger.info(
-                f"  GPU after cleanup: {free_after / 1024**3:.1f}GB free "
-                f"/ {total / 1024**3:.1f}GB total "
-                f"(reclaimed {(free_after - free_before) / 1024**3:.1f}GB)"
+                f"  CUDA after cleanup: {free_after / 1024**3:.1f}GB free "
+                f"/ {total_mem / 1024**3:.1f}GB total "
+                f"(allocated {allocated / 1024**2:.0f}MB, "
+                f"reserved {reserved / 1024**2:.0f}MB, "
+                f"reclaimed {(free_after - free_before) / 1024**3:.1f}GB)"
             )
-        if torch.backends.mps.is_available():
-            torch.mps.empty_cache()
+        elif torch.backends.mps.is_available():
+            allocated_after = torch.mps.current_allocated_memory()
+            logger.info(
+                f"  MPS after cleanup: "
+                f"allocated {allocated_after / 1024**2:.0f}MB "
+                f"(reclaimed {(allocated_before - allocated_after) / 1024**2:.0f}MB)"
+            )
 
     except ImportError:
         pass
@@ -478,17 +523,7 @@ def pytest_runtest_setup(item):
                 "Running GPU cleanup."
             )
 
-            # General GPU flush for any transition
-            try:
-                import torch
-
-                if torch.cuda.is_available():
-                    gc.collect()
-                    gc.collect()
-                    torch.cuda.empty_cache()
-                    torch.cuda.synchronize()
-            except ImportError:
-                pass
+            flush_device_caches()
 
         # Warm up Ollama models when entering Ollama group
         if current_group == "ollama" and prev_group != "ollama":
@@ -566,18 +601,7 @@ def pytest_runtest_teardown(item, nextitem):
 def memory_cleaner():
     """Lightweight memory cleanup — safety net for per-test GPU leaks."""
     yield
-
-    gc.collect()
-    gc.collect()
-
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-    except ImportError:
-        pass
+    flush_device_caches()
 
 
 def evict_ollama_models() -> None:
