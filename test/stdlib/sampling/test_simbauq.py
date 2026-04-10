@@ -315,7 +315,7 @@ class TestInit:
             SIMBAUQSamplingStrategy(temperatures=[])
 
     def test_zero_n_per_temp_raises(self):
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             SIMBAUQSamplingStrategy(n_per_temp=0)
 
 
