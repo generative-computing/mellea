@@ -22,6 +22,9 @@ _INPUT_ARGS_DIR = pathlib.Path(__file__).parent / "testdata" / "input_args"
 
 # All local input JSON files
 _INPUT_FILES = sorted(_INPUT_JSON_DIR.glob("*.json"))
+assert _INPUT_FILES, (
+    f"No input JSON files found in {_INPUT_JSON_DIR} — testdata missing?"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -45,8 +48,7 @@ _REWRITER_CONFIGS: dict[str, tuple[pathlib.Path, pathlib.Path | None]] = {
 def _fake_openai_client() -> openai.OpenAI:
     """Create an OpenAI client pointing at a bogus endpoint."""
     return openai.OpenAI(
-        base_url="http://example.com:98765/not/a/valid/url",
-        api_key="not_a_valid_api_key",
+        base_url="http://127.0.0.1:1/v1", api_key="not_a_valid_api_key"
     )
 
 

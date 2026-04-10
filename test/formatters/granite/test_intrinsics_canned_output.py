@@ -122,6 +122,11 @@ if (_CANNED_INPUT_DIR / "query_clarification.json").exists():
     _SCENARIOS.append(("query_clarification", _QUERY_CLARIFICATION_CONFIG))
 
 
+assert _SCENARIOS, (
+    f"No canned output scenarios found — testdata missing in {_CANNED_INPUT_DIR}?"
+)
+
+
 def _scenario_ids():
     return [s[0] for s in _SCENARIOS]
 
@@ -186,15 +191,23 @@ class TestCannedOutputParsing:
     def _expected_result_files():
         return sorted(_EXPECTED_DIR.glob("*.json"))
 
-    @pytest.fixture(params=[p.name for p in sorted(_CANNED_INPUT_DIR.glob("*.json"))])
+    _canned_input_params = [p.name for p in sorted(_CANNED_INPUT_DIR.glob("*.json"))]
+    _model_output_params = [p.name for p in sorted(_MODEL_OUTPUT_DIR.glob("*.json"))]
+    _expected_result_params = [p.name for p in sorted(_EXPECTED_DIR.glob("*.json"))]
+
+    assert _canned_input_params, f"No canned input files in {_CANNED_INPUT_DIR}"
+    assert _model_output_params, f"No model output files in {_MODEL_OUTPUT_DIR}"
+    assert _expected_result_params, f"No expected result files in {_EXPECTED_DIR}"
+
+    @pytest.fixture(params=_canned_input_params)
     def canned_input_file(self, request):
         return _CANNED_INPUT_DIR / request.param
 
-    @pytest.fixture(params=[p.name for p in sorted(_MODEL_OUTPUT_DIR.glob("*.json"))])
+    @pytest.fixture(params=_model_output_params)
     def model_output_file(self, request):
         return _MODEL_OUTPUT_DIR / request.param
 
-    @pytest.fixture(params=[p.name for p in sorted(_EXPECTED_DIR.glob("*.json"))])
+    @pytest.fixture(params=_expected_result_params)
     def expected_result_file(self, request):
         return _EXPECTED_DIR / request.param
 
