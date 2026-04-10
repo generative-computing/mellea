@@ -311,7 +311,7 @@ class TestInit:
         assert strategy.temperatures == [0.1, 0.9]
 
     def test_empty_temperatures_raises(self):
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             SIMBAUQSamplingStrategy(temperatures=[])
 
     def test_zero_n_per_temp_raises(self):
