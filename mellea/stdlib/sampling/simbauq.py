@@ -487,7 +487,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
         except ImportError:
             msg = (
                 "sklearn is required for training a Random Forest classifier. "
-                "Please install with `pip install sklearn`."
+                    "Please install with `pip install scikit-learn`."
             )
             raise ImportError(msg)
 
