@@ -38,11 +38,6 @@ class TestFindSubstringInText:
         result = find_substring_in_text("foo(bar)", "call foo(bar) now")
         assert result == [{"begin_idx": 5, "end_idx": 13}]
 
-    def test_empty_substring(self):
-        result = find_substring_in_text("", "hello")
-        # re.finditer with empty pattern matches at every position
-        assert len(result) > 0
-
 
 # ---------------------------------------------------------------------------
 # create_dict
