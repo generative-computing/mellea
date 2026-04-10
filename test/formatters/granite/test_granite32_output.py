@@ -16,20 +16,16 @@ from mellea.formatters.granite.granite3.granite32.constants import (
 )
 from mellea.formatters.granite.granite3.granite32.output import (
     Granite32OutputProcessor,
-    _add_citation_response_spans,
     _get_docs_from_citations,
     _parse_citations_text,
-    _parse_model_output,
     _remove_citations_from_response_text,
     _split_model_output_into_parts,
     _update_docs_text_with_input_docs,
     _validate_response,
-    _validate_spans_in_parser_output,
 )
 from mellea.formatters.granite.granite3.granite32.types import Granite32ChatCompletion
 from mellea.formatters.granite.granite3.types import (
     Granite3AssistantMessage,
-    Granite3ChatCompletion,
     Granite3Controls,
     Granite3Kwargs,
 )
@@ -146,7 +142,7 @@ class TestValidateResponse:
         citations = [{"id": "1"}, {"id": "2"}]
         _validate_response(text, citations)
         assert (
-            "warning" not in caplog.text.lower() or "nested" not in caplog.text.lower()
+            "warning" not in caplog.text.lower() and "nested" not in caplog.text.lower()
         )
 
     def test_nested_tags_warns(self, caplog):

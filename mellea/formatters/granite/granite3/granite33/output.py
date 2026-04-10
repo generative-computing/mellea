@@ -25,8 +25,9 @@ import pydantic
 
 # First Party
 from ...base.io import OutputProcessor
+from ...base.optional import nltk_check
 from ...base.types import AssistantMessage, ChatCompletion, ToolCall
-from ...base.util import nltk_check, random_uuid
+from ...base.util import random_uuid
 from ...granite3.output import (
     add_citation_context_spans,
     add_hallucination_response_spans,

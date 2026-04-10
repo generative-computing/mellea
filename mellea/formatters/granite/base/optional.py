@@ -59,7 +59,7 @@ def nltk_check(feature_name: str):
     except ImportError as err:
         raise ImportError(
             f"'nltk' package not installed. This package is required for "
-            f"{feature_name} in the 'granite_io' library."
+            f"{feature_name} in the 'mellea' library."
             f"{_NLTK_INSTALL_INSTRUCTIONS}"
         ) from err
     except LookupError as err:

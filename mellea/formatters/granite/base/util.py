@@ -23,14 +23,6 @@ if TYPE_CHECKING:
 # First Party
 from .types import ChatCompletionResponse, ChatCompletionResponseChoice
 
-NLTK_INSTALL_INSTRUCTIONS = """
-Please install nltk with:
-    pip install nltk
-In some environments you may also need to manually download model weights with:
-    python -m nltk.downloader punkt_tab
-See https://www.nltk.org/install.html#installing-nltk-data for more detailed
-instructions."""
-
 
 @contextlib.contextmanager
 def import_optional(extra_name: str):
@@ -50,34 +42,6 @@ def import_optional(extra_name: str):
             extra_name,
         )
         raise
-
-
-@contextlib.contextmanager
-def nltk_check(feature_name: str):
-    """Variation on import_optional for nltk.
-
-    Args:
-        feature_name: Name of the feature that requires NLTK, used in the error message.
-
-    Raises:
-        ImportError: If the ``nltk`` package is not installed or required
-            NLTK data (e.g. ``punkt_tab``) has not been downloaded,
-            re-raised with a descriptive message and installation
-            instructions.
-    """
-    try:
-        yield
-    except ImportError as err:
-        raise ImportError(
-            f"'nltk' package not installed. This package is required for "
-            f"{feature_name} in the 'granite_io' library."
-            f"{NLTK_INSTALL_INSTRUCTIONS}"
-        ) from err
-    except LookupError as err:
-        raise ImportError(
-            f"NLTK data required for {feature_name} is not installed."
-            f"{NLTK_INSTALL_INSTRUCTIONS}"
-        ) from err
 
 
 def find_substring_in_text(substring: str, text: str) -> list[dict]:
