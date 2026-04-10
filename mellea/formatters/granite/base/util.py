@@ -60,8 +60,10 @@ def nltk_check(feature_name: str):
         feature_name: Name of the feature that requires NLTK, used in the error message.
 
     Raises:
-        ImportError: If the ``nltk`` package is not installed, re-raised with
-            a descriptive message and installation instructions.
+        ImportError: If the ``nltk`` package is not installed or required
+            NLTK data (e.g. ``punkt_tab``) has not been downloaded,
+            re-raised with a descriptive message and installation
+            instructions.
     """
     try:
         yield
@@ -69,6 +71,11 @@ def nltk_check(feature_name: str):
         raise ImportError(
             f"'nltk' package not installed. This package is required for "
             f"{feature_name} in the 'granite_io' library."
+            f"{NLTK_INSTALL_INSTRUCTIONS}"
+        ) from err
+    except LookupError as err:
+        raise ImportError(
+            f"NLTK data required for {feature_name} is not installed."
             f"{NLTK_INSTALL_INSTRUCTIONS}"
         ) from err
 
