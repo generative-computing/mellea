@@ -304,6 +304,133 @@ class AdapterMixin(Backend, abc.ABC):
         )
 
 
+class EmbeddedIntrinsicAdapter(Adapter):
+    """Adapter for intrinsics embedded in a Granite Switch model.
+
+    Unlike PEFT-based adapters that are loaded into the model at runtime,
+    embedded adapters are already baked into the model weights and activated
+    via control tokens injected by the model's chat template.  Only the I/O
+    transformation config (``io.yaml``) is needed; no adapter weights are
+    downloaded or loaded.
+
+    Args:
+        intrinsic_name (str): Name of the intrinsic (e.g. ``"answerability"``).
+        config (dict): Parsed I/O transformation configuration (from ``io.yaml``).
+        technology (str): Adapter technology in the switch model — ``"lora"`` or
+            ``"alora"``.  Determines where the control token is placed in the
+            chat template (beginning of sequence for LoRA, before generation
+            prompt for aLoRA).
+
+    Attributes:
+        intrinsic_name (str): Name of the intrinsic this adapter implements.
+        config (dict): Parsed I/O transformation configuration.
+        technology (str): ``"lora"`` or ``"alora"``.
+    """
+
+    def __init__(
+        self,
+        intrinsic_name: str,
+        config: dict,
+        technology: str = "lora",
+    ):
+        """Initialize an embedded intrinsic adapter with its I/O config."""
+        adapter_type = (
+            AdapterType.ALORA if technology == "alora" else AdapterType.LORA
+        )
+        super().__init__(intrinsic_name, adapter_type)
+        self.intrinsic_name = intrinsic_name
+        self.config = config
+        self.technology = technology
+
+    @staticmethod
+    def from_model_directory(
+        model_path: str | pathlib.Path,
+    ) -> list["EmbeddedIntrinsicAdapter"]:
+        """Load all embedded adapters from a Granite Switch model directory.
+
+        Reads ``adapter_index.json`` and the corresponding ``io_configs/*/io.yaml``
+        files from the model directory.
+
+        Args:
+            model_path (str | pathlib.Path): Path to a Granite Switch model
+                directory that contains ``adapter_index.json`` and ``io_configs/``.
+
+        Returns:
+            list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
+
+        Raises:
+            FileNotFoundError: If ``adapter_index.json`` is missing.
+            ValueError: If an ``io.yaml`` file listed in the index cannot be found.
+        """
+        import json as _json
+
+        model_path = pathlib.Path(model_path)
+        index_path = model_path / "adapter_index.json"
+        if not index_path.exists():
+            raise FileNotFoundError(
+                f"No adapter_index.json found at {index_path}"
+            )
+
+        with open(index_path, encoding="utf-8") as f:
+            index = _json.load(f)
+
+        adapters: list[EmbeddedIntrinsicAdapter] = []
+        for entry in index.get("adapters", []):
+            io_config_rel = entry.get("io_config")
+            if io_config_rel is None:
+                continue
+
+            io_config_path = model_path / io_config_rel
+            if not io_config_path.exists():
+                raise ValueError(
+                    f"io.yaml for intrinsic '{entry['intrinsic_name']}' "
+                    f"not found at {io_config_path}"
+                )
+
+            with open(io_config_path, encoding="utf-8") as f:
+                config_dict = yaml.safe_load(f)
+
+            adapters.append(
+                EmbeddedIntrinsicAdapter(
+                    intrinsic_name=entry["intrinsic_name"],
+                    config=config_dict,
+                    technology=entry.get("technology", "lora"),
+                )
+            )
+
+        return adapters
+
+    @staticmethod
+    def from_hub(
+        repo_id: str,
+        revision: str = "main",
+        cache_dir: str | None = None,
+    ) -> list["EmbeddedIntrinsicAdapter"]:
+        """Load all embedded adapters from a Granite Switch model on HuggingFace Hub.
+
+        Downloads ``adapter_index.json`` and the ``io_configs/`` directory, then
+        delegates to :meth:`from_model_directory`.
+
+        Args:
+            repo_id (str): HuggingFace Hub repository ID
+                (e.g. ``"ibm-granite/granite-switch-micro"``).
+            revision (str): Git revision to download from.
+            cache_dir (str | None): Local cache directory; ``None`` for the default.
+
+        Returns:
+            list[EmbeddedIntrinsicAdapter]: One adapter per entry in the index.
+        """
+        import huggingface_hub
+
+        local_root = huggingface_hub.snapshot_download(
+            repo_id=repo_id,
+            allow_patterns=["adapter_index.json", "io_configs/**"],
+            cache_dir=cache_dir,
+            revision=revision,
+        )
+        return EmbeddedIntrinsicAdapter.from_model_directory(local_root)
+
+
 class CustomIntrinsicAdapter(IntrinsicAdapter):
     """Special class for users to subclass when creating custom intrinsic adapters.
 

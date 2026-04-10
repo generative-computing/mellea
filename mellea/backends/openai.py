@@ -42,6 +42,7 @@ from ..helpers import (
     messages_to_docs,
     send_to_queue,
 )
+from ..formatters import granite as granite_formatters
 from ..stdlib.components import Intrinsic, Message
 from ..stdlib.requirements import LLMaJRequirement
 from ..telemetry.backend_instrumentation import (
@@ -58,6 +59,8 @@ from .tools import (
 
 if TYPE_CHECKING:
     from transformers.tokenization_utils import PreTrainedTokenizer
+
+    from .adapters.adapter import EmbeddedIntrinsicAdapter
 
 openai_ollama_batching_error = "json: cannot unmarshal array into Go struct field CompletionRequest.prompt of type string"
 
@@ -200,8 +203,60 @@ class OpenAIBackend(FormatterBackend):
 
         self._client_cache = ClientCache(2)
 
+        # Registry of embedded intrinsic adapters (for Granite Switch models).
+        # Keyed by intrinsic name (e.g. "answerability").
+        self._embedded_adapters: dict[str, "EmbeddedIntrinsicAdapter"] = {}
+
         # Call once to create an async_client and populate the cache.
         _ = self._async_client
+
+    # ------------------------------------------------------------------
+    # Embedded adapter registration (Granite Switch)
+    # ------------------------------------------------------------------
+
+    def add_embedded_adapter(self, adapter: "EmbeddedIntrinsicAdapter") -> None:
+        """Register an embedded intrinsic adapter for use with Granite Switch models.
+
+        Embedded adapters carry only I/O transformation configuration; they do not
+        load adapter weights because the weights are baked into the model.
+
+        Args:
+            adapter (EmbeddedIntrinsicAdapter): The adapter to register.
+        """
+        self._embedded_adapters[adapter.intrinsic_name] = adapter
+
+    def register_granite_switch_model(
+        self,
+        source: str,
+        *,
+        revision: str = "main",
+        cache_dir: str | None = None,
+    ) -> list[str]:
+        """Register all embedded adapters from a Granite Switch model.
+
+        Args:
+            source (str): Either a local directory path containing
+                ``adapter_index.json``, or a HuggingFace Hub repo ID.
+            revision (str): Git revision when loading from HuggingFace Hub.
+            cache_dir (str | None): Cache directory for HF downloads.
+
+        Returns:
+            list[str]: Names of the registered intrinsics.
+        """
+        import os
+        from .adapters.adapter import EmbeddedIntrinsicAdapter
+
+        if os.path.isdir(source):
+            adapters = EmbeddedIntrinsicAdapter.from_model_directory(source)
+        else:
+            adapters = EmbeddedIntrinsicAdapter.from_hub(
+                source, revision=revision, cache_dir=cache_dir
+            )
+
+        for adapter in adapters:
+            self.add_embedded_adapter(adapter)
+
+        return [a.intrinsic_name for a in adapters]
 
     @property
     def _async_client(self) -> openai.AsyncOpenAI:
@@ -363,14 +418,21 @@ class OpenAIBackend(FormatterBackend):
             "The Openai backend only supports chat-like contexts."
         )
 
-        assert not isinstance(action, Intrinsic), (
-            "The openai backend does not currently support adapters, intrinsics, loras, or aloras."
-        )
-
         # Start span without auto-closing (will be closed in post_processing)
         span = start_generate_span(
             backend=self, action=action, ctx=ctx, format=format, tool_calls=tool_calls
         )
+
+        if isinstance(action, Intrinsic):
+            model_opts = self._simplify_and_merge(
+                model_options, is_chat_context=ctx.is_chat_context
+            )
+            mot = await self._generate_from_intrinsic(
+                action, ctx, model_options=model_opts
+            )
+            if span is not None:
+                mot._meta["_telemetry_span"] = span
+            return mot, ctx.add(action).add(mot)
 
         result = await self.generate_from_chat_context(
             action,
@@ -384,6 +446,184 @@ class OpenAIBackend(FormatterBackend):
         if span is not None:
             mot._meta["_telemetry_span"] = span
         return mot, new_ctx
+
+    async def _generate_from_intrinsic(
+        self,
+        action: Intrinsic,
+        ctx: Context,
+        *,
+        model_options: dict[str, Any],
+    ) -> ModelOutputThunk:
+        """Generate a completion for an intrinsic action using an embedded adapter.
+
+        Applies the intrinsic's I/O rewriter to transform the conversation,
+        injects ``intrinsic_name`` into ``chat_template_kwargs`` so that the
+        Granite Switch chat template activates the correct adapter, and
+        post-processes the model output through the intrinsic's result
+        processor.
+
+        Args:
+            action (Intrinsic): The intrinsic component to execute.
+            ctx (Context): The current generation context (must be a chat context).
+            model_options (dict[str, Any]): Merged model options for this call.
+
+        Returns:
+            ModelOutputThunk: A thunk that lazily resolves to the processed
+            intrinsic output.
+
+        Raises:
+            ValueError: If no embedded adapter is registered for the requested
+                intrinsic.
+        """
+        if not ctx.is_chat_context:
+            raise NotImplementedError("Intrinsics require a chat context.")
+
+        if model_options.get(ModelOption.STREAM, None) is not None:
+            raise NotImplementedError("Intrinsics do not support streaming.")
+
+        # --- adapter lookup ------------------------------------------------
+        adapter = self._embedded_adapters.get(action.intrinsic_name)
+        if adapter is None:
+            raise ValueError(
+                f"No embedded adapter registered for intrinsic "
+                f"'{action.intrinsic_name}'. "
+                f"Available: {list(self._embedded_adapters)}"
+            )
+
+        intrinsic_config = adapter.config
+
+        rewriter = granite_formatters.IntrinsicsRewriter(
+            config_dict=intrinsic_config, model_name=adapter.name
+        )
+        result_processor = granite_formatters.IntrinsicsResultProcessor(
+            config_dict=intrinsic_config
+        )
+
+        # --- build request dict (mirrors HF backend pattern) ---------------
+        linearized_ctx = ctx.view_for_generation()
+        assert linearized_ctx is not None
+        ctx_as_message_list = self.formatter.to_chat_messages(linearized_ctx)
+
+        conversation: list[dict] = []
+        system_prompt = model_options.get(ModelOption.SYSTEM_PROMPT, "")
+        if system_prompt != "":
+            conversation.append({"role": "system", "content": system_prompt})
+        conversation.extend(
+            [message_to_openai_message(m) for m in ctx_as_message_list]
+        )
+        docs = messages_to_docs(ctx_as_message_list)
+
+        request_json: dict = {
+            "messages": conversation,
+            "extra_body": {"documents": docs},
+        }
+
+        for opt in model_options:
+            if opt == ModelOption.TEMPERATURE:
+                request_json["temperature"] = model_options[opt]
+
+        rewritten = rewriter.transform(request_json, **action.intrinsic_kwargs)
+
+        # --- inject intrinsic_name into chat_template_kwargs ---------------
+        extra_body = {}
+        if rewritten.extra_body is not None:
+            extra_body = rewritten.extra_body.model_dump(exclude_unset=True)
+
+        chat_template_kwargs = extra_body.pop("chat_template_kwargs", {}) or {}
+        chat_template_kwargs["intrinsic_name"] = action.intrinsic_name
+        extra_body["chat_template_kwargs"] = chat_template_kwargs
+
+        # --- collect parameters from the rewriter -------------------------
+        api_params: dict[str, Any] = {}
+        if rewriter.parameters:
+            api_params.update(rewriter.parameters)
+        # Embedded adapters set `model` to the adapter name in the rewriter
+        # config, but for Granite Switch the adapter is activated via control
+        # tokens — the actual model is already specified via self._model_id.
+        from .adapters.adapter import EmbeddedIntrinsicAdapter as _EIA
+        if "model" in api_params and isinstance(adapter, _EIA):
+            api_params.pop("model")
+
+        # Merge model_options that map to standard OpenAI params
+        seed = model_options.get(ModelOption.SEED, None)
+        if seed is not None:
+            api_params["seed"] = seed
+
+        # --- call the OpenAI-compatible API --------------------------------
+        # The rewriter may add instruction messages where 'role' is a default
+        # (e.g. UserMessage with role="user").  exclude_unset would drop it,
+        # so we always force 'role' into the serialized dict.
+        messages_dicts = []
+        for m in rewritten.messages:
+            d = m.model_dump(exclude_unset=True)
+            if "role" not in d:
+                d["role"] = m.role
+            messages_dicts.append(d)
+        chat_response = self._async_client.chat.completions.create(
+            model=self._model_id,
+            messages=messages_dicts,  # type: ignore
+            extra_body=extra_body,
+            **api_params,
+        )
+
+        # --- wire up ModelOutputThunk with intrinsic post-processing ------
+        output = ModelOutputThunk(None)
+        output._start = datetime.datetime.now()
+        output._context = linearized_ctx
+        output._action = action
+        output._model_options = model_options
+
+        async def _intrinsic_processing(
+            mot: ModelOutputThunk,
+            chunk: "openai.types.chat.ChatCompletion",
+            rewritten: granite_formatters.ChatCompletion,
+            result_processor: granite_formatters.IntrinsicsResultProcessor,
+        ):
+            """Accumulate content and apply intrinsic result processing."""
+            import json as _json
+
+            # Store raw response metadata (same as standard processing)
+            mot._meta["oai_chat_response"] = chunk.model_dump()
+            mot._meta["oai_chat_response_choice"] = chunk.choices[0].model_dump()
+
+            # Convert OpenAI response to granite_formatters ChatCompletionResponse
+            response_dict = chunk.model_dump()
+            try:
+                res = result_processor.transform(response_dict, rewritten)
+            except _json.JSONDecodeError as e:
+                raise Exception(
+                    f"Intrinsic did not return valid JSON: "
+                    f"{chunk.choices[0].message.content}"
+                ) from e
+
+            if mot._underlying_value is None:
+                mot._underlying_value = ""
+            mot._underlying_value = res.choices[0].message.content
+
+        output._process = functools.partial(
+            _intrinsic_processing,
+            rewritten=rewritten,
+            result_processor=result_processor,
+        )
+
+        output._post_process = functools.partial(
+            self.post_processing,
+            tools={},
+            conversation=conversation,
+            thinking=None,
+            seed=seed,
+            _format=None,
+        )
+
+        try:
+            output._generate = asyncio.create_task(
+                send_to_queue(chat_response, output._async_queue)
+            )
+            output._generate_type = GenerateType.ASYNC
+        except RuntimeError as e:
+            raise e
+
+        return output
 
     async def generate_from_chat_context(
         self,
