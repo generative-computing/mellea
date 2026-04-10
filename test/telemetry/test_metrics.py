@@ -46,6 +46,14 @@ def clean_metrics_env(monkeypatch):
 def enable_metrics(monkeypatch):
     """Enable metrics for tests."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
+    # Clear other env vars to prevent user-set values from leaking into reload
+    monkeypatch.delenv("MELLEA_METRICS_CONSOLE", raising=False)
+    monkeypatch.delenv("MELLEA_METRICS_OTLP", raising=False)
+    monkeypatch.delenv("MELLEA_METRICS_PROMETHEUS", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTL_METRIC_EXPORT_INTERVAL", raising=False)
+    monkeypatch.delenv("OTL_SERVICE_NAME", raising=False)
     # Force reload of metrics module to pick up env vars
     import importlib
 
@@ -454,6 +462,9 @@ def test_otlp_enabled_without_endpoint_warning(monkeypatch):
     """Test that enabling OTLP without endpoint produces helpful warning."""
     monkeypatch.setenv("MELLEA_METRICS_ENABLED", "true")
     monkeypatch.setenv("MELLEA_METRICS_OTLP", "true")
+    # Ensure no endpoint env vars are set (user env could have these)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
 
     import importlib
 

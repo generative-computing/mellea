@@ -124,8 +124,12 @@ async def test_context_propagation_parent_child(span_exporter, gh_run):
     ctx = SimpleContext()
     ctx = ctx.add(Message(role="user", content="Say 'test' and nothing else"))
 
-    # Create a parent span
-    tracer = trace.get_tracer(__name__)
+    # Create a parent span using the module's own tracer provider
+    # (not the global one, which may be pinned to a different provider
+    # due to OTel's set-once semantics for set_tracer_provider)
+    from mellea.telemetry import tracing
+
+    tracer = tracing._tracer_provider.get_tracer(__name__)
     with tracer.start_as_current_span("parent_operation"):
         mot, _ = await backend.generate_from_context(
             Message(role="assistant", content=""), ctx
