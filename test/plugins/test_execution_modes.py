@@ -31,7 +31,7 @@ from mellea.plugins import PluginMode, PluginResult, block, hook, register
 from mellea.plugins.base import PluginViolationError
 from mellea.plugins.hooks.generation import GenerationPreCallPayload
 from mellea.plugins.hooks.session import SessionPreInitPayload
-from mellea.plugins.manager import invoke_hook, shutdown_plugins
+from mellea.plugins.manager import invoke_hook
 from mellea.plugins.types import HookType, PluginMode
 
 # ---------------------------------------------------------------------------
@@ -51,18 +51,6 @@ def _generation_payload(**kwargs) -> GenerationPreCallPayload:
     defaults: dict = dict(model_options={"temperature": 0.7})
     defaults.update(kwargs)
     return GenerationPreCallPayload(**defaults)
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-async def cleanup_plugins():
-    """Reset plugin manager state after every test."""
-    yield
-    await shutdown_plugins()
 
 
 # ---------------------------------------------------------------------------

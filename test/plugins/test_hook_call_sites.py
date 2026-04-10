@@ -29,7 +29,6 @@ from mellea.core.base import (
     ModelOutputThunk,
 )
 from mellea.plugins import PluginResult, hook, register
-from mellea.plugins.manager import shutdown_plugins
 from mellea.stdlib.context import SimpleContext
 
 # ---------------------------------------------------------------------------
@@ -87,18 +86,6 @@ def _make_thunk():
     mot._chunk_size = 0
     mot._start = datetime.datetime.now()
     return mot
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-async def reset_plugins():
-    """Shut down and reset the plugin manager after every test."""
-    yield
-    await shutdown_plugins()
 
 
 # ---------------------------------------------------------------------------
