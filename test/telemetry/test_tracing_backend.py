@@ -73,7 +73,7 @@ def span_exporter():
 
 
 @pytest.mark.asyncio
-async def test_span_duration_captures_async_operation(span_exporter, gh_run):
+async def test_span_duration_captures_async_operation(span_exporter):
     """Test that span duration includes the full async operation time."""
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
@@ -117,7 +117,7 @@ async def test_span_duration_captures_async_operation(span_exporter, gh_run):
 
 
 @pytest.mark.asyncio
-async def test_context_propagation_parent_child(span_exporter, gh_run):
+async def test_context_propagation_parent_child(span_exporter):
     """Test that parent-child span relationships are maintained."""
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
@@ -164,7 +164,7 @@ async def test_context_propagation_parent_child(span_exporter, gh_run):
 
 
 @pytest.mark.asyncio
-async def test_token_usage_recorded_after_completion(span_exporter, gh_run):
+async def test_token_usage_recorded_after_completion(span_exporter):
     """Test that token usage metrics are recorded after async completion."""
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
@@ -213,7 +213,7 @@ async def test_token_usage_recorded_after_completion(span_exporter, gh_run):
 
 
 @pytest.mark.asyncio
-async def test_span_not_closed_prematurely(span_exporter, gh_run):
+async def test_span_not_closed_prematurely(span_exporter):
     """Test that spans are not closed before async operations complete."""
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
@@ -247,7 +247,7 @@ async def test_span_not_closed_prematurely(span_exporter, gh_run):
 
 
 @pytest.mark.asyncio
-async def test_multiple_generations_separate_spans(span_exporter, gh_run):
+async def test_multiple_generations_separate_spans(span_exporter):
     """Test that multiple generations create separate spans."""
 
     backend = OllamaModelBackend(model_id=IBM_GRANITE_4_HYBRID_MICRO.ollama_name)  # type: ignore
@@ -279,7 +279,7 @@ async def test_multiple_generations_separate_spans(span_exporter, gh_run):
 
 
 @pytest.mark.asyncio
-async def test_streaming_span_duration(span_exporter, gh_run):
+async def test_streaming_span_duration(span_exporter):
     """Test that streaming operations have accurate span durations."""
 
     from mellea.backends.model_options import ModelOption
