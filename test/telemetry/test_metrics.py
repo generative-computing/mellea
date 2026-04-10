@@ -52,8 +52,8 @@ def enable_metrics(monkeypatch):
     monkeypatch.delenv("MELLEA_METRICS_PROMETHEUS", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", raising=False)
-    monkeypatch.delenv("OTL_METRIC_EXPORT_INTERVAL", raising=False)
-    monkeypatch.delenv("OTL_SERVICE_NAME", raising=False)
+    monkeypatch.delenv("OTEL_METRIC_EXPORT_INTERVAL", raising=False)
+    monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
     # Force reload of metrics module to pick up env vars
     import importlib
 
