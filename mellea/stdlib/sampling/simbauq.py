@@ -385,7 +385,7 @@ class SIMBAUQSamplingStrategy(SamplingStrategy):
             except ImportError:
                 msg = (
                     "sklearn.metrics.pairwise.cosine_similarity is required for sbert similarity. "
-                    "Please install with `pip install sklearn`."
+                    "Please install with `pip install scikit-learn`."
                 )
                 raise ImportError(msg)
 
