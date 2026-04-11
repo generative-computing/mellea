@@ -1,7 +1,5 @@
 """Unit tests for _build_model_options function."""
 
-import pytest
-
 from cli.serve.app import _build_model_options
 from cli.serve.models import ChatCompletionRequest, ChatMessage
 from mellea.backends.model_options import ModelOption
@@ -87,13 +85,13 @@ class TestBuildModelOptions:
         assert ModelOption.MAX_NEW_TOKENS not in options
 
     def test_minimal_request_includes_defaults(self):
-        """Test that a minimal request includes default values like temperature."""
+        """Test that a minimal request includes default values like temperature and stream."""
         request = ChatCompletionRequest(
             model="test-model", messages=[ChatMessage(role="user", content="test")]
         )
         options = _build_model_options(request)
-        # ChatCompletionRequest has default temperature=1.0
-        assert options == {ModelOption.TEMPERATURE: 1.0}
+        # ChatCompletionRequest has default temperature=1.0 and stream=False
+        assert options == {ModelOption.TEMPERATURE: 1.0, ModelOption.STREAM: False}
 
     def test_requirements_excluded(self):
         """Test that requirements field is excluded from model_options."""

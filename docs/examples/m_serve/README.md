@@ -13,11 +13,21 @@ A simple example showing how to structure a Mellea program for serving as an API
 - Custom validation functions for API constraints
 - Handling chat message inputs
 
+### m_serve_example_streaming.py
+A dedicated streaming example for `m serve` that supports both modes:
+- `stream=False` returns a normal computed response
+- `stream=True` returns an uncomputed thunk so the server can emit
+  incremental Server-Sent Events (SSE) chunks
+
 ### pii_serve.py
 Example of serving a PII (Personally Identifiable Information) detection service.
 
 ### client.py
-Client code for testing the served API endpoints.
+Client code for testing the served API endpoints with non-streaming requests.
+
+### client_streaming.py
+Client code demonstrating streaming responses using Server-Sent Events (SSE)
+against `m_serve_example_streaming.py`.
 
 ## Concepts Demonstrated
 
@@ -26,6 +36,7 @@ Client code for testing the served API endpoints.
 - **Output Formatting**: Returning appropriate response types
 - **Validation in Production**: Using requirements in deployed services
 - **Model Options**: Passing model configuration through API
+- **Streaming Responses**: Real-time token streaming via Server-Sent Events (SSE)
 
 ## Basic Pattern
 
@@ -53,12 +64,59 @@ def serve(input: list[ChatMessage],
 
 ## Running the Server
 
+### Sampling
+
 ```bash
-# Start the server
+# Start the sampling example server
 m serve docs/examples/m_serve/m_serve_example_simple.py
 
-# In another terminal, test with client
+# In another terminal, test with the non-streaming client
 python docs/examples/m_serve/client.py
+
+### Streaming
+
+# Start the dedicated streaming example server
+m serve docs/examples/m_serve/m_serve_example_streaming.py
+
+# In another terminal, test with the streaming client
+python docs/examples/m_serve/client_streaming.py
+```
+
+## Streaming Support
+
+The server supports streaming responses via Server-Sent Events (SSE) when the
+`stream=True` parameter is set in the request. This allows clients to receive
+tokens as they are generated, providing a better user experience for long-running
+generations.
+
+For a real streaming demo, serve `m_serve_example_streaming.py`. That example
+supports both normal and streaming responses consistently. The sampling example
+(`m_serve_example_simple.py`) demonstrates rejection sampling and validation,
+not token-by-token streaming.
+
+**Key Features:**
+- Real-time token streaming using SSE
+- OpenAI-compatible streaming format (`ChatCompletionChunk`)
+- Final chunk includes usage statistics when the backend provides usage data
+- The dedicated streaming example supports both `stream=False` and `stream=True`
+- Works with any backend that supports `ModelOutputThunk.astream()`
+
+**Example:**
+```python
+import openai
+
+client = openai.OpenAI(api_key="na", base_url="http://0.0.0.0:8080/v1")
+
+# Enable streaming with stream=True
+stream = client.chat.completions.create(
+    messages=[{"role": "user", "content": "Tell me a story"}],
+    model="granite4:micro-h",
+    stream=True,
+)
+
+for chunk in stream:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="", flush=True)
 ```
 
 ## API Endpoints

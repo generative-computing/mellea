@@ -13,7 +13,7 @@ try:
     import uvicorn
     from fastapi import FastAPI, Request
     from fastapi.exceptions import RequestValidationError
-    from fastapi.responses import JSONResponse
+    from fastapi.responses import JSONResponse, StreamingResponse
 except ImportError as e:
     raise ImportError(
         "The 'm serve' command requires extra dependencies. "
@@ -21,13 +21,16 @@ except ImportError as e:
     ) from e
 
 from mellea.backends.model_options import ModelOption
+from mellea.helpers.openai_compatible_helpers import (
+    build_completion_usage,
+    stream_chat_completion_chunks,
+)
 
 from .models import (
     ChatCompletion,
     ChatCompletionMessage,
     ChatCompletionRequest,
     Choice,
-    CompletionUsage,
     OpenAIError,
     OpenAIErrorResponse,
 )
@@ -100,8 +103,8 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
         "n",  # Number of completions - not supported in Mellea's model_options
         "user",  # User tracking ID - metadata, not a generation parameter
         "extra",  # Pydantic's extra fields dict - unused (see model_config)
+        "stream_options",  # Streaming options - handled separately in streaming response
         # Not-yet-implemented OpenAI parameters (silently ignored)
-        "stream",  # Streaming responses - not yet implemented
         "stop",  # Stop sequences - not yet implemented
         "top_p",  # Nucleus sampling - not yet implemented
         "presence_penalty",  # Presence penalty - not yet implemented
@@ -117,6 +120,7 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
         "temperature": ModelOption.TEMPERATURE,
         "max_tokens": ModelOption.MAX_NEW_TOKENS,
         "seed": ModelOption.SEED,
+        "stream": ModelOption.STREAM,
     }
 
     filtered_options = {
@@ -163,19 +167,17 @@ def make_chat_endpoint(module):
                     model_options=model_options,
                 )
 
-            # Extract usage information from the ModelOutputThunk if available
-            usage = None
-            if hasattr(output, "usage") and output.usage is not None:
-                prompt_tokens = output.usage.get("prompt_tokens", 0)
-                completion_tokens = output.usage.get("completion_tokens", 0)
-                # Calculate total_tokens if not provided
-                total_tokens = output.usage.get(
-                    "total_tokens", prompt_tokens + completion_tokens
-                )
-                usage = CompletionUsage(
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    total_tokens=total_tokens,
+            # Handle streaming response
+            if request.stream:
+                return StreamingResponse(
+                    stream_chat_completion_chunks(
+                        output=output,
+                        completion_id=completion_id,
+                        model=request.model,
+                        created=created_timestamp,
+                        stream_options=request.stream_options,
+                    ),
+                    media_type="text/event-stream",
                 )
 
             # system_fingerprint represents backend config hash, not model name
@@ -198,7 +200,7 @@ def make_chat_endpoint(module):
                 ],
                 object="chat.completion",  # type: ignore
                 system_fingerprint=system_fingerprint,
-                usage=usage,
+                usage=build_completion_usage(output),
             )  # type: ignore
         except ValueError as e:
             # Handle validation errors or invalid input
