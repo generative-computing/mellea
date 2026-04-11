@@ -223,7 +223,16 @@ def messages_to_docs(msgs: list[Message]) -> list[dict[str, str]]:
 
 
 def build_completion_usage(output: Any) -> CompletionUsage | None:
-    """Build a normalized usage object from a model output, if available."""
+    """Build a normalized usage object from a model output, if available.
+
+    Args:
+        output: Model output object that may expose a ``usage`` mapping with
+            token counts.
+
+    Returns:
+        A ``CompletionUsage`` object when usage metadata is present on the
+        output, otherwise ``None``.
+    """
     if not hasattr(output, "usage") or output.usage is None:
         return None
 
@@ -254,6 +263,10 @@ async def stream_chat_completion_chunks(
         stream_options: OpenAI-compatible streaming options. Currently supports
             ``include_usage`` (bool) to control whether usage stats are included
             in the final chunk. Defaults to including usage when available.
+
+    Yields:
+        Server-sent event payload strings representing OpenAI-compatible chat
+        completion chunks, including the terminating ``[DONE]`` event.
     """
     from cli.serve.models import (
         ChatCompletionChunk,
