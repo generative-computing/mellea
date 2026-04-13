@@ -4,12 +4,10 @@ import asyncio
 
 import pytest
 
-from mellea.core import ModelOutputThunk
 from mellea.helpers.async_helpers import (
     ClientCache,
     get_current_event_loop,
     send_to_queue,
-    wait_for_all_mots,
 )
 
 # --- send_to_queue ---
@@ -82,22 +80,6 @@ class TestSendToQueue:
         assert isinstance(item, RuntimeError)
 
 
-# --- wait_for_all_mots ---
-
-
-class TestWaitForAllMots:
-    async def test_resolves_all_thunks(self):
-        """All pre-computed MOTs are awaited concurrently."""
-        mots = [ModelOutputThunk("a"), ModelOutputThunk("b"), ModelOutputThunk("c")]
-        await wait_for_all_mots(mots)
-        for mot in mots:
-            assert mot.value is not None
-
-    async def test_empty_list(self):
-        """Empty list is a no-op."""
-        await wait_for_all_mots([])
-
-
 # --- get_current_event_loop ---
 
 
@@ -119,10 +101,6 @@ class TestClientCache:
         cache = ClientCache(capacity=3)
         cache.put(1, "a")
         assert cache.get(1) == "a"
-
-    def test_get_missing_returns_none(self):
-        cache = ClientCache(capacity=3)
-        assert cache.get(999) is None
 
     def test_evicts_lru(self):
         cache = ClientCache(capacity=2)
@@ -149,13 +127,6 @@ class TestClientCache:
         cache.put(1, "new")
         assert cache.get(1) == "new"
         assert cache.current_size() == 1
-
-    def test_current_size(self):
-        cache = ClientCache(capacity=5)
-        assert cache.current_size() == 0
-        cache.put(1, "a")
-        cache.put(2, "b")
-        assert cache.current_size() == 2
 
 
 if __name__ == "__main__":

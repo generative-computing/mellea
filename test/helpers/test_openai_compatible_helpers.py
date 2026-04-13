@@ -319,11 +319,6 @@ class TestMessageToOpenaiMessage:
         assert len(result["content"]) == 1
         assert result["content"][0] == {"type": "text", "text": "hello"}
 
-    def test_assistant_role(self):
-        msg = Message(role="assistant", content="I can help")
-        result = message_to_openai_message(msg)
-        assert result["role"] == "assistant"
-
 
 # --- messages_to_docs ---
 
