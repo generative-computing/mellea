@@ -84,7 +84,7 @@ def tool_arg_validator(
         assert output is not None
 
         if output.tool_calls is None:
-            tool_label = tool_name or "a tool"
+            tool_label = tool_name if tool_name is not None else "a tool"
             return ValidationResult(
                 result=False,
                 reason=f"Expected {tool_label} to be called but no tools were called.",
