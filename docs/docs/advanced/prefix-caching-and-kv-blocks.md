@@ -63,7 +63,7 @@ When a prompt contains a mix of cached and uncached blocks, Mellea:
 2. Runs forward passes on uncached blocks.
 3. Retrieves stored `DynamicCache` for cached blocks.
 4. **Smashes** (concatenates) all KV caches along the time axis using
-   `merge_dynamic_caches()`.
+   `merge_dynamic_caches_v5()`.
 5. Passes the merged cache plus the combined input IDs to the generation step.
 
 The result is identical to a single full-context forward pass, with the prefill

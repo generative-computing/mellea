@@ -4,17 +4,20 @@
 #   "mellea[hf]",
 # ]
 # ///
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizer
-from transformers.generation import GenerateDecoderOnlyOutput
+from typing import cast
 
-from mellea.backends.kv_block_helpers import DynamicCache, merge_dynamic_caches
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerBase
+from transformers.generation.utils import GenerateDecoderOnlyOutput
+from transformers.modeling_utils import PreTrainedModel
+
+from mellea.backends.kv_block_helpers import DynamicCache, merge_dynamic_caches_v5
 
 model_id = "ibm-granite/granite-4.0-tiny-preview"
 device = torch.device("mps")
-model = AutoModelForCausalLM.from_pretrained(model_id)
+model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(model_id)  # type: ignore[assignment]
 # model = model.to(device=device) # this part does not pass mypy; possible misconfiguration
-tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(model_id)
+tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(model_id)
 
 
 def cache(toks) -> DynamicCache:
@@ -34,7 +37,7 @@ def merge(strs: list[str]):
 
     merged_toks = torch.cat([toks["input_ids"] for toks in strs_toks], dim=1)
     merged_masks = torch.cat([toks["attention_mask"] for toks in strs_toks], dim=1)
-    merged_dcs = merge_dynamic_caches(strs_dcs)
+    merged_dcs = merge_dynamic_caches_v5(strs_dcs)
 
     return merged_toks, merged_masks, merged_dcs
 
@@ -45,7 +48,7 @@ merged_toks, merged_masks, merged_dcs = merge(strs)
 merged_dcs.crop(-1)
 
 # GenerateDecoderOnlyOutput | GenerateEncoderDecoderOutput | GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderOutput | LongTensor
-result = model.generate(
+result = model.generate(  # type: ignore[operator]
     merged_toks.to(model.device),
     attention_mask=merged_masks.to(model.device),
     past_key_values=merged_dcs,

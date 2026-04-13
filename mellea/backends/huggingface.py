@@ -12,7 +12,7 @@ import functools
 import json
 import threading
 from collections.abc import Callable, Coroutine, Sequence
-from typing import Any, overload
+from typing import Any, cast, overload
 
 import llguidance
 import llguidance.hf
@@ -24,7 +24,7 @@ from transformers.generation.logits_process import LogitsProcessorList
 from transformers.generation.streamers import AsyncTextIteratorStreamer
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 from transformers.modeling_utils import PreTrainedModel
-from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.trainer_utils import set_seed
 
 from ..backends import kv_block_helpers
@@ -71,7 +71,7 @@ from .utils import to_chat, to_tool_calls
 
 Huggingface backends can initialize themselves from a model string if the transformers `Auto*` classes can be used. Therefore, a TransformersTorchConfig usually isn't required. However, sometimes a model needs special care to instantiate properly, or a custom device type needs to bse used. Instead of trying to do a lot of partial magic, we basically have two modaliites: either the constructor can figure out everything from the model_id, or the user has to provide an entire config.
 """
-TransformersTorchConfig = tuple[PreTrainedTokenizer, PreTrainedModel, torch.device]
+TransformersTorchConfig = tuple[PreTrainedTokenizerBase, PreTrainedModel, torch.device]
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors
 
@@ -302,8 +302,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
                     self._hf_model_id, device_map=str(self._device), torch_dtype="auto"
                 )
-                self._tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
-                    self._hf_model_id
+                self._tokenizer: PreTrainedTokenizerBase = (
+                    AutoTokenizer.from_pretrained(self._hf_model_id)
                 )
             case _:
                 self._tokenizer, self._model, self._device = custom_config
@@ -726,7 +726,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             [toks["attention_mask"] for toks in tok_parts], dim=1
         )
         assert input_ids.shape == attention_mask.shape
-        merged_cache: DynamicCache = kv_block_helpers.merge_dynamic_caches(dc_parts)
+        merged_cache: DynamicCache = kv_block_helpers.merge_dynamic_caches_v5(dc_parts)
         # TODO: also assert that the merged cached is the correct shape given the input_ids and attention_mask shapes.
         # rewind merged cache by 1 for safety.
         merged_cache.crop(-1)  # type: ignore
@@ -973,7 +973,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 "",  # Empty for no adapters.
                 self._model.generate,  # type: ignore
                 # Passed as args/kwargs to generate.
-                input_ids,
+                inputs=input_ids["input_ids"],
+                attention_mask=input_ids["attention_mask"],
                 return_dict_in_generate=True,
                 use_cache=self._use_caches,  # Only create KV cache if caching is enabled
                 **self._make_backend_specific_and_remove(generate_options),
@@ -1045,6 +1046,8 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             input_ids: The prompt token IDs used for decoding; required to slice off
                 the prompt portion from the generated sequences.
         """
+        input_ids_tensor: torch.Tensor = input_ids["input_ids"]
+
         if mot._underlying_value is None:
             mot._underlying_value = ""
 
@@ -1055,8 +1058,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         elif isinstance(chunk, GenerateDecoderOnlyOutput):
             # Otherwise, it's a non-streaming request. Decode it here.
             mot._meta["hf_output"] = chunk
-            mot._underlying_value += self._tokenizer.decode(
-                chunk.sequences[0, input_ids.shape[1] :], skip_special_tokens=True
+            mot._underlying_value += cast(
+                str,
+                self._tokenizer.decode(
+                    chunk.sequences[0, input_ids_tensor.shape[1] :],
+                    skip_special_tokens=True,
+                ),
             )
 
     async def post_processing(

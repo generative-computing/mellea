@@ -56,9 +56,6 @@ from .tools import (
     convert_tools_to_json,
 )
 
-if TYPE_CHECKING:
-    from transformers.tokenization_utils import PreTrainedTokenizer
-
 openai_ollama_batching_error = "json: cannot unmarshal array into Go struct field CompletionRequest.prompt of type string"
 
 format: None = None  # typing this variable in order to shadow the global format function and ensure mypy checks for errors

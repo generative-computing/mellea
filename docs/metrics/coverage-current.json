@@ -355,7 +355,7 @@
       "TokenizedCacheIterleaving",
       "LegacyCache",
       "legacy_cache_smash",
-      "merge_dynamic_caches",
+      "merge_dynamic_caches_v5",
       "tokens_to_legacy_cache"
     ],
     "mellea.backends.huggingface.granite_formatters": [
