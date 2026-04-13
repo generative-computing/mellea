@@ -283,6 +283,17 @@ Closes #123
 git commit -s -m "feat: your commit message"
 ```
 
+### AI Tools
+
+AI-assisted development is welcome. You are responsible for reviewing and understanding every change before submitting.
+
+AI tools following project guidelines add an `Assisted-by:` trailer to commit messages by default, identifying which tool was used:
+
+```text
+Assisted-by: Claude Code
+Assisted-by: IBM Bob
+```
+
 ### Pre-commit Hooks
 
 Pre-commit hooks run automatically before each commit and check:
