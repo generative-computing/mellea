@@ -95,7 +95,7 @@ def run_aggregation_example() -> None:
     strategy = SIMBAUQSamplingStrategy(
         temperatures=[0.3, 0.5, 0.7, 1.0],
         n_per_temp=3,
-        similarity_metric="rouge",
+        similarity_metric="sbert",
         confidence_method="aggregation",
         aggregation="mean",
     )

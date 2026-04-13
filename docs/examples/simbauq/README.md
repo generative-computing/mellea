@@ -116,12 +116,11 @@ strategy = SIMBAUQSamplingStrategy(
 ## Similarity Metrics
 
 - **rouge** (default): RougeL F-measure. Good general-purpose text similarity.
-  No extra dependencies beyond `rouge-score` (already in mellea).
+  No extra dependencies beyond `rouge-score` (already in Mellea).
 - **jaccard**: Word-level set overlap (intersection / union). Fast, no
   external dependencies, works well for short structured answers.
 - **sbert**: Cosine similarity of Sentence-BERT embeddings. Best semantic
-  similarity but requires `sentence-transformers` (`pip install
-  mellea[granite_retriever]`).
+  similarity but requires `sentence-transformers`.
 
 ## Inspecting Results
 
