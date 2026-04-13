@@ -3,10 +3,12 @@
 import asyncio
 import importlib.util
 import inspect
+import json
 import os
 import sys
 import time
 import uuid
+from typing import Literal
 
 try:
     import typer
@@ -26,10 +28,12 @@ from mellea.helpers.openai_compatible_helpers import build_completion_usage
 from .models import (
     ChatCompletion,
     ChatCompletionMessage,
+    ChatCompletionMessageToolCall,
     ChatCompletionRequest,
     Choice,
     OpenAIError,
     OpenAIErrorResponse,
+    ToolCallFunction,
 )
 from .streaming import stream_chat_completion_chunks
 
@@ -111,14 +115,14 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
         "response_format",  # Response format (json_object) - not yet implemented
         "functions",  # Legacy function calling - not yet implemented
         "function_call",  # Legacy function calling - not yet implemented
-        "tools",  # Tool calling - not yet implemented
-        "tool_choice",  # Tool choice - not yet implemented
+        # Tool choice is passed through as-is (not a ModelOption sentinel)
     }
     openai_to_model_option = {
         "temperature": ModelOption.TEMPERATURE,
         "max_tokens": ModelOption.MAX_NEW_TOKENS,
         "seed": ModelOption.SEED,
         "stream": ModelOption.STREAM,
+        "tools": ModelOption.TOOLS,
     }
 
     # Get all non-None fields
@@ -171,6 +175,35 @@ def make_chat_endpoint(module):
                     model_options=model_options,
                 )
 
+            # Extract tool calls from the ModelOutputThunk if available
+            tool_calls = None
+            finish_reason: Literal[
+                "stop", "length", "content_filter", "tool_calls", "function_call"
+            ] = "stop"
+            if (
+                hasattr(output, "tool_calls")
+                and output.tool_calls is not None
+                and isinstance(output.tool_calls, dict)
+            ):
+                tool_calls = []
+                for tool_name, model_tool_call in output.tool_calls.items():
+                    # Generate a unique ID for this tool call
+                    tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
+
+                    # Serialize the arguments to JSON string
+                    args_json = json.dumps(model_tool_call.args)
+
+                    tool_calls.append(
+                        ChatCompletionMessageToolCall(
+                            id=tool_call_id,
+                            type="function",
+                            function=ToolCallFunction(
+                                name=model_tool_call.name, arguments=args_json
+                            ),
+                        )
+                    )
+                finish_reason = "tool_calls"
+
             # system_fingerprint represents backend config hash, not model name
             # The model name is already in response.model (line 73)
             # Leave as None since we don't track backend config fingerprints yet
@@ -198,9 +231,11 @@ def make_chat_endpoint(module):
                     Choice(
                         index=0,
                         message=ChatCompletionMessage(
-                            content=output.value, role="assistant"
+                            content=output.value,
+                            role="assistant",
+                            tool_calls=tool_calls,
                         ),
-                        finish_reason="stop",
+                        finish_reason=finish_reason,
                     )
                 ],
                 object="chat.completion",  # type: ignore

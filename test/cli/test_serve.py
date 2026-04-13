@@ -451,18 +451,19 @@ class TestHTTPValidation:
         assert "logit_bias" not in model_options
 
     @pytest.mark.asyncio
-    async def test_tool_params_excluded_from_model_options(self, mock_module):
-        """Test that tool-related parameters are excluded from model_options."""
+    async def test_tool_params_passed_to_model_options(self, mock_module):
+        """Test that tool-related parameters are passed to model_options."""
         from cli.serve.models import (
             FunctionDefinition,
             FunctionParameters,
             ToolFunction,
         )
+        from mellea.backends.model_options import ModelOption
 
         request = ChatCompletionRequest(
             model="test-model",
             messages=[ChatMessage(role="user", content="Hello")],
-            # Tool-related parameters that should be excluded
+            # Tool-related parameters
             tools=[
                 ToolFunction(
                     type="function",
@@ -498,9 +499,12 @@ class TestHTTPValidation:
         assert call_args is not None
         model_options = call_args.kwargs["model_options"]
 
-        # Tool-related parameters should NOT be in model_options
-        assert "tools" not in model_options
-        assert "tool_choice" not in model_options
+        # Tools should be passed with ModelOption.TOOLS key
+        assert ModelOption.TOOLS in model_options
+        # tool_choice should be passed through as-is
+        assert "tool_choice" in model_options
+        assert model_options["tool_choice"] == "auto"
+        # Legacy function calling parameters should still be excluded
         assert "functions" not in model_options
         assert "function_call" not in model_options
 
