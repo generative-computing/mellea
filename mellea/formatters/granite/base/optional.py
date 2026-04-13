@@ -27,7 +27,7 @@ def import_optional(extra_name: str):
 
     Args:
         extra_name: Package extra to suggest in the install hint
-            (e.g. ``pip install granite_io[extra_name]``).
+            (e.g. ``pip install mellea[extra_name]``).
     """
     try:
         yield

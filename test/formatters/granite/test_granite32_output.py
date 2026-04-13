@@ -141,24 +141,26 @@ class TestValidateResponse:
         text = "Hello <co>1</co> world <co>2</co>."
         citations = [{"id": "1"}, {"id": "2"}]
         _validate_response(text, citations)
-        assert (
-            "warning" not in caplog.text.lower() and "nested" not in caplog.text.lower()
-        )
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert len(warnings) == 0
 
     def test_nested_tags_warns(self, caplog):
         text = "Hello <co>1 <co>2</co> </co> end."
         _validate_response(text, [{"id": "1"}])
-        assert "nested" in caplog.text.lower()
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any("nested" in r.message.lower() for r in warnings)
 
     def test_mismatched_opening_closing_warns(self, caplog):
         text = "Hello <co>1</co> <co>2 end."
         _validate_response(text, [{"id": "1"}, {"id": "2"}])
-        assert "different number" in caplog.text.lower()
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any("different number" in r.message.lower() for r in warnings)
 
     def test_count_mismatch_warns(self, caplog):
         text = "Hello <co>1</co> <co>2</co>."
         _validate_response(text, [{"id": "1"}])  # only 1 citation but 2 tags
-        assert "different number" in caplog.text.lower()
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any("different number" in r.message.lower() for r in warnings)
 
 
 # ---------------------------------------------------------------------------
