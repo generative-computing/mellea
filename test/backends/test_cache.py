@@ -36,7 +36,7 @@ def test_put_existing_key_updates_value():
 
 
 def test_put_existing_key_does_not_evict():
-    evicted: list = []
+    evicted: list[int] = []
     cache = SimpleLRUCache(capacity=1, on_evict=evicted.append)
     cache.put("a", 1)
     cache.put("a", 2)
@@ -57,7 +57,7 @@ def test_evicts_least_recently_used():
 
 
 def test_on_evict_callback_receives_evicted_value():
-    evicted: list = []
+    evicted: list[str] = []
     cache = SimpleLRUCache(capacity=2, on_evict=evicted.append)
     cache.put("a", "val_a")
     cache.put("b", "val_b")
@@ -66,7 +66,7 @@ def test_on_evict_callback_receives_evicted_value():
 
 
 def test_multiple_evictions_fire_callback_each_time():
-    evicted: list = []
+    evicted: list[int] = []
     cache = SimpleLRUCache(capacity=1, on_evict=evicted.append)
     cache.put("a", 1)
     cache.put("b", 2)  # evicts 1
@@ -91,7 +91,7 @@ def test_get_promotes_key_preventing_eviction():
 
 
 def test_zero_capacity_put_is_noop():
-    evicted: list = []
+    evicted: list[int] = []
     cache = SimpleLRUCache(capacity=0, on_evict=evicted.append)
     cache.put("a", 1)
     assert cache.current_size() == 0

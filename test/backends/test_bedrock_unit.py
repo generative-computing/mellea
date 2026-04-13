@@ -75,6 +75,7 @@ def test_create_backend_with_model_identifier(mock_list, monkeypatch):
 
     assert isinstance(backend, OpenAIBackend)
     assert backend.model_id == "granite-3.3-8b"
+    assert backend._base_url == "https://bedrock-mantle.eu-west-1.api.aws/v1"
     mock_list.assert_called_once_with("eu-west-1")
 
 
@@ -85,6 +86,7 @@ def test_create_backend_with_string_model_id(mock_list, monkeypatch):
 
     assert isinstance(backend, OpenAIBackend)
     assert backend.model_id == "llama-4-scout"
+    assert backend._base_url == "https://bedrock-mantle.us-east-1.api.aws/v1"
 
 
 @patch("mellea.backends.bedrock.list_mantle_models", return_value=_FAKE_MODELS)
