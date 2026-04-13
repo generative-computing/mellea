@@ -5,7 +5,11 @@ on:
     types: [opened, reopened, synchronize]
   merge_group:
 
+permissions: {}
+
 jobs:
   code-checks:
+    permissions:
+      contents: read
     uses: ./.github/workflows/quality.yml
 

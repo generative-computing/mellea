@@ -42,8 +42,7 @@ on:
         type: boolean
         default: false
 
-permissions:
-  contents: write
+permissions: {}
 
 concurrency:
   group: docs-publish-${{ github.ref }}
@@ -59,16 +58,19 @@ jobs:
   # ---------------------------------------------------------------------------
   build-and-validate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 30
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -124,7 +126,7 @@ jobs:
 
       - name: Upload quality report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: docstring-quality-report
           path: /tmp/quality_report.json
@@ -132,7 +134,7 @@ jobs:
 
       - name: Upload docs artifact
         if: success() || (inputs.strict_validation != true)
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: docs-site
           path: docs/docs/
@@ -157,10 +159,10 @@ jobs:
               except FileNotFoundError:
                   return ""
 
-          markdownlint_outcome = "${{ steps.markdownlint.outcome }}"
-          validate_outcome = "${{ steps.validate_mdx.outcome }}"
-          coverage_outcome = "${{ steps.audit_coverage.outcome }}"
-          quality_gate_outcome = "${{ steps.quality_gate.outcome }}"
+          markdownlint_outcome = os.environ.get("STEPS_MARKDOWNLINT_OUTCOME", "")
+          validate_outcome = os.environ.get("STEPS_VALIDATE_MDX_OUTCOME", "")
+          coverage_outcome = os.environ.get("STEPS_AUDIT_COVERAGE_OUTCOME", "")
+          quality_gate_outcome = os.environ.get("STEPS_QUALITY_GATE_OUTCOME", "")
           lint_log = read_log("/tmp/markdownlint.log")
           validate_log = read_log("/tmp/validate_mdx.log")
           coverage_log = read_log("/tmp/audit_coverage.log")
@@ -247,8 +249,8 @@ jobs:
               "https://github.com/generative-computing/mellea/blob/main"
               "/docs/docs/guide/CONTRIBUTING.md"
           )
-          REPO = "${{ github.repository }}"
-          RUN_ID = "${{ github.run_id }}"
+          REPO = os.environ.get("GITHUB_REPOSITORY", "")
+          RUN_ID = os.environ.get("GITHUB_RUN_ID", "")
           ARTIFACT_URL = f"https://github.com/{REPO}/actions/runs/{RUN_ID}#artifacts"
 
           lines = [
@@ -292,6 +294,11 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
               f.write("\n".join(lines))
           PYEOF
+        env:
+          STEPS_MARKDOWNLINT_OUTCOME: ${{ steps.markdownlint.outcome }}
+          STEPS_VALIDATE_MDX_OUTCOME: ${{ steps.validate_mdx.outcome }}
+          STEPS_AUDIT_COVERAGE_OUTCOME: ${{ steps.audit_coverage.outcome }}
+          STEPS_QUALITY_GATE_OUTCOME: ${{ steps.quality_gate.outcome }}
 
   # ---------------------------------------------------------------------------
   # Deploy to orphan branch
@@ -299,6 +306,8 @@ jobs:
   deploy:
     needs: build-and-validate
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     timeout-minutes: 10
 
     # Deploy on: push to main, release, force_publish via dispatch,
@@ -311,7 +320,7 @@ jobs:
 
     steps:
       - name: Download docs artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: docs-site
           path: docs-site/
@@ -319,15 +328,18 @@ jobs:
       - name: Determine target branch
         id: target
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
+          if [ "$EVENT_NAME" = "release" ]; then
             echo "branch=docs/production" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
             echo "branch=docs/preview" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.target_branch }}" ]; then
-            echo "branch=${{ inputs.target_branch }}" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "${INPUTS_TARGET_BRANCH}" ]; then
+            echo "branch=${INPUTS_TARGET_BRANCH}" >> "$GITHUB_OUTPUT"
           else
             echo "branch=docs/staging" >> "$GITHUB_OUTPUT"
           fi
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUTS_TARGET_BRANCH: ${{ inputs.target_branch }}
 
       - name: Add DO NOT EDIT warning
         run: |
@@ -348,7 +360,7 @@ jobs:
           EOF
 
       - name: Deploy to ${{ steps.target.outputs.branch }}
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: ${{ steps.target.outputs.branch }}
@@ -366,10 +378,10 @@ jobs:
       - name: Write deploy summary
         if: always()
         run: |
-          TARGET="${{ steps.target.outputs.branch }}"
-          REPO="${{ github.repository }}"
-          SHA="${{ github.sha }}"
-          if [ "${{ job.status }}" = "success" ]; then
+          TARGET="${STEPS_TARGET_OUTPUTS_BRANCH}"
+          REPO="${GITHUB_REPOSITORY}"
+          SHA="${GITHUB_SHA}"
+          if [ "${JOB_STATUS}" = "success" ]; then
             STATUS="✅ Deployed"
             DETAIL="Published to [\`${TARGET}\`](https://github.com/${REPO}/tree/${TARGET})"
           else
@@ -383,7 +395,12 @@ jobs:
           |-|-|
           | Branch | \`${TARGET}\` |
           | Source | \`${SHA:0:7}\` |
-          | Trigger | ${{ github.event_name }}${{ github.event.pull_request.number && format(' (PR #{0})', github.event.pull_request.number) || '' }} |
+          | Trigger | ${EVENT_NAME}${PR_SUFFIX} |
 
           ${DETAIL}
           EOF
+        env:
+          STEPS_TARGET_OUTPUTS_BRANCH: ${{ steps.target.outputs.branch }}
+          JOB_STATUS: ${{ job.status }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_SUFFIX: ${{ github.event.pull_request.number && format(' (PR #{0})', github.event.pull_request.number) || '' }}
