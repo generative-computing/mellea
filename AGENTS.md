@@ -97,9 +97,7 @@ Pre-commit runs: ruff, mypy, uv-lock, codespell
 
 ## 7. AI Attribution
 
-AI tools are welcome for development work in this project.
-
-**For AI assistants:** The project requires sign-offs — use `-s` when committing. Do not add a separate `Signed-off-by` line in the AI's own name. Add an `Assisted-by:` trailer to the commit footer by default:
+The project requires sign-offs — use `-s` when committing. Do not add a separate `Signed-off-by` line in the AI's own name. Add an `Assisted-by:` trailer to the commit footer by default:
 
 ```text
 Assisted-by: Claude Code
