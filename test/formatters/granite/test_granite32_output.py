@@ -195,9 +195,7 @@ class TestGetDocsFromCitations:
     def test_missing_colon_skipped(self):
         text = "<co>1</co> Document 0 no colon here"
         result = _get_docs_from_citations(text)
-        # The line still has a colon after "0" so parsing depends on exact format.
-        # Verify no crash.
-        assert isinstance(result, list)
+        assert result == []
 
 
 # ---------------------------------------------------------------------------
