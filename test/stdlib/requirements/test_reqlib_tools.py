@@ -185,11 +185,13 @@ def test_tool_arg_validator_no_tool_name_one_fails():
     )
     result = req.validation_fn(ctx)
     assert result.as_bool() is False
+    assert "tool_b" in result.reason
+    assert "None" not in result.reason
 
 
 def test_tool_arg_validator_no_tool_name_arg_missing_everywhere():
-    """Documents current behavior: when tool_name=None and no tool call contains
-    the target arg_name, validation silently passes (the for-loop completes
+    """Documents current behavior (see #826): when tool_name=None and no tool call
+    contains the target arg_name, validation silently passes (the for-loop completes
     without failing). This is arguably a latent bug — the validator never runs."""
     ctx = _ctx_with_tool_calls({"tool_a": _make_tool_call("tool_a", {"y": 5})})
     req = tool_arg_validator(
