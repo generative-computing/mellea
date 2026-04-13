@@ -426,6 +426,14 @@
     },
     {
       "source": "/overview/mellea-welcome",
+      "destination": "/"
+    },
+    {
+      "source": "/overview/quick-start",
+      "destination": "/getting-started/quickstart"
+    },
+    {
+      "source": "/overview/project-mellea",
       "destination": "/concepts/generative-programming"
     },
     {
@@ -507,6 +515,38 @@
     {
       "source": "/how-to/safety-guardrails",
       "destination": "/advanced/security-and-taint-tracking"
+    },
+    {
+      "source": "/dev/constrained-decoding",
+      "destination": "/advanced/mellea-core-internals"
+    },
+    {
+      "source": "/dev/generate-ctx-signature",
+      "destination": "/advanced/mellea-core-internals"
+    },
+    {
+      "source": "/dev/intrinsics-and-adapters",
+      "destination": "/advanced/intrinsics"
+    },
+    {
+      "source": "/dev/mellea-library",
+      "destination": "/concepts/generative-programming"
+    },
+    {
+      "source": "/dev/mify",
+      "destination": "/concepts/mobjects-and-mify"
+    },
+    {
+      "source": "/dev/requirement-alora-rerouting",
+      "destination": "/advanced/lora-and-alora-adapters"
+    },
+    {
+      "source": "/dev/spans",
+      "destination": "/evaluation-and-observability/tracing"
+    },
+    {
+      "source": "/dev/tool-calling",
+      "destination": "/guide/tools-and-agents"
     }
   ]
 }
