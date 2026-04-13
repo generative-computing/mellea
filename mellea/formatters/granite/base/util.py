@@ -354,13 +354,11 @@ def generate_with_transformers(
         # Third Party
         import torch
 
-    # Input tokens must be passed to generate() as a positional argument, not a named
-    # argument.
     input_tokens = generate_input["input_tokens"]
     generate_input = generate_input.copy()
     del generate_input["input_tokens"]
 
-    generate_result = model.generate(input_tokens, **generate_input)  # type: ignore[operator]
+    generate_result = model.generate(inputs=input_tokens, **generate_input)  # type: ignore[operator]
 
     # Result is a a 2D tensor of shape (num responses, prompt + max generated tokens)
     # containing tokens, plus a tuple of <max generated tokens> tensors of shape

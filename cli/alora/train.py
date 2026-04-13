@@ -160,8 +160,12 @@ class SafeSaveTrainer(SFTTrainer):
         """
         if self.model is not None:
             self.model.save_pretrained(output_dir, safe_serialization=True)
-            if self.tokenizer is not None:
-                self.tokenizer.save_pretrained(output_dir)
+            # transformers v5 renamed .tokenizer -> .processing_class
+            processor = getattr(self, "processing_class", None) or getattr(
+                self, "tokenizer", None
+            )
+            if processor is not None:
+                processor.save_pretrained(output_dir)
 
 
 def train_model(

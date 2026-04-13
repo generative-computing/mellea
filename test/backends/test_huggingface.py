@@ -364,19 +364,19 @@ async def test_generate_with_lock(backend) -> None:
     memoized: dict[torch.Tensor, str] = dict()  # type: ignore[name-defined]
     gen_func = model.generate
 
-    def mock_func(input_ids, *args, **kwargs):
+    def mock_func(inputs=None, *args, **kwargs):
         """Mocks the generate function. Must call `populate_mocked_dict` with each input that must be cached before using this."""
         for key, val in memoized.items():
-            if torch.equal(key, input_ids):
+            if torch.equal(key, inputs):
                 time.sleep(random.uniform(0.1, 0.5))  # Simulate a bit of work.
                 return val
         assert False, "did not get a cached response"
 
     # Safely create the dict.
-    def populate_mocked_dict(input_ids, *args, **kwargs):
+    def populate_mocked_dict(inputs=None, *args, **kwargs):
         """Generates the model output and adds to the memoized dict."""
-        output = gen_func(input_ids, *args, **kwargs)  # type: ignore
-        memoized[input_ids] = output
+        output = gen_func(inputs=inputs, *args, **kwargs)  # type: ignore
+        memoized[inputs] = output
         return output
 
     model.generate = Mock(side_effect=populate_mocked_dict)
