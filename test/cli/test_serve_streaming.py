@@ -629,6 +629,68 @@ class TestStreamingEndpoint:
         assert last_chunk["usage"]["total_tokens"] == 8
 
     @pytest.mark.asyncio
+    async def test_streaming_system_fingerprint_always_none(
+        self, mock_module, streaming_request
+    ):
+        """Test that system_fingerprint is None in all streaming chunks.
+
+        Per OpenAI spec, system_fingerprint represents a hash of backend config,
+        not the model name. The model name is in chunk.model.
+        We don't track backend config fingerprints yet, so it should be None.
+        """
+        mock_output = ModelOutputThunk(None)
+        mock_output._computed = False
+        mock_output._generate_type = mock_output._generate_type.ASYNC
+
+        chunks = ["Hello", " world"]
+
+        async def mock_astream():
+            if chunks:
+                chunk = chunks.pop(0)
+                if not chunks:
+                    mock_output._computed = True
+                return chunk
+            mock_output._computed = True
+            return ""
+
+        mock_output.astream = mock_astream
+        mock_output.is_computed = lambda: mock_output._computed
+        mock_output.usage = {
+            "prompt_tokens": 5,
+            "completion_tokens": 2,
+            "total_tokens": 7,
+        }
+        mock_module.serve.return_value = mock_output
+
+        # Create test app
+        app = FastAPI()
+        app.add_api_route(
+            "/v1/chat/completions", make_chat_endpoint(mock_module), methods=["POST"]
+        )
+        client = TestClient(app)
+
+        # Make streaming request
+        response = client.post(
+            "/v1/chat/completions", json=streaming_request.model_dump(mode="json")
+        )
+
+        assert response.status_code == 200
+
+        # Parse all chunks
+        events = []
+        for line in response.text.strip().split("\n\n"):
+            if line.startswith("data: "):
+                data = line[6:]
+                if data != "[DONE]":
+                    events.append(json.loads(data))
+
+        # All chunks should have system_fingerprint as None
+        for chunk in events:
+            assert chunk["system_fingerprint"] is None
+            # Model name should be in the model field
+            assert chunk["model"] == "test-model"
+
+    @pytest.mark.asyncio
     async def test_stream_options_ignored_for_non_streaming(self, mock_module):
         """Test that stream_options is ignored when stream=False (usage always included)."""
         request = ChatCompletionRequest(

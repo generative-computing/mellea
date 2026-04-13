@@ -167,6 +167,11 @@ def make_chat_endpoint(module):
                     model_options=model_options,
                 )
 
+            # system_fingerprint represents backend config hash, not model name
+            # The model name is already in response.model (line 73)
+            # Leave as None since we don't track backend config fingerprints yet
+            system_fingerprint = None
+
             # Handle streaming response
             if request.stream:
                 return StreamingResponse(
@@ -176,14 +181,10 @@ def make_chat_endpoint(module):
                         model=request.model,
                         created=created_timestamp,
                         stream_options=request.stream_options,
+                        system_fingerprint=system_fingerprint,
                     ),
                     media_type="text/event-stream",
                 )
-
-            # system_fingerprint represents backend config hash, not model name
-            # The model name is already in response.model (line 73)
-            # Leave as None since we don't track backend config fingerprints yet
-            system_fingerprint = None
 
             return ChatCompletion(
                 id=completion_id,

@@ -252,6 +252,7 @@ async def stream_chat_completion_chunks(
     model: str,
     created: int,
     stream_options: dict[str, Any] | None = None,
+    system_fingerprint: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Generate OpenAI-compatible SSE chat completion chunks from a model output.
 
@@ -263,6 +264,8 @@ async def stream_chat_completion_chunks(
         stream_options: OpenAI-compatible streaming options. Currently supports
             ``include_usage`` (bool) to control whether usage stats are included
             in the final chunk. Defaults to including usage when available.
+        system_fingerprint: Backend configuration fingerprint to include in chunks.
+            Defaults to ``None``.
 
     Yields:
         Server-sent event payload strings representing OpenAI-compatible chat
@@ -289,6 +292,7 @@ async def stream_chat_completion_chunks(
                 )
             ],
             object="chat.completion.chunk",
+            system_fingerprint=system_fingerprint,
         )
         yield f"data: {initial_chunk.model_dump_json()}\n\n"
 
@@ -310,6 +314,7 @@ async def stream_chat_completion_chunks(
                         )
                     ],
                     object="chat.completion.chunk",
+                    system_fingerprint=system_fingerprint,
                 )
                 yield f"data: {chunk.model_dump_json()}\n\n"
 
@@ -333,6 +338,7 @@ async def stream_chat_completion_chunks(
                 )
             ],
             object="chat.completion.chunk",
+            system_fingerprint=system_fingerprint,
             usage=usage,
         )
         yield f"data: {final_chunk.model_dump_json()}\n\n"
