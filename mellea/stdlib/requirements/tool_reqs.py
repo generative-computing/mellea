@@ -106,7 +106,7 @@ def tool_arg_validator(
             else:
                 return ValidationResult(
                     result=False,
-                    reason=f"Valiudation did not pass for {tool_name}.{arg_name}. Arg value: {arg_value}. Argument validation result: {validate_result}",
+                    reason=f"Validation did not pass for {tool_name}.{arg_name}. Arg value: {arg_value}. Argument validation result: {validate_result}",
                 )
         else:
             for tool in output.tool_calls.keys():
@@ -116,7 +116,7 @@ def tool_arg_validator(
                     if not validate_result:
                         return ValidationResult(
                             result=False,
-                            reason=f"Valiudation did not pass for {tool_name}.{arg_name}. Arg value: {arg_value}. Argument validation result: {validate_result}",
+                            reason=f"Validation did not pass for {tool_name}.{arg_name}. Arg value: {arg_value}. Argument validation result: {validate_result}",
                         )
             return ValidationResult(result=True)
 
