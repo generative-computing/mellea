@@ -3,6 +3,14 @@
 Automated system for generating, decorating, and validating Mellea API
 documentation using Mintlify.
 
+## Prerequisites
+
+```bash
+uv sync --all-extras --group dev   # Same as CI — installs all extras + dev tools
+```
+
+Node.js (LTS, v22 or earlier) is required for `mintlify dev` previews.
+
 ## Quick Start
 
 ```bash
