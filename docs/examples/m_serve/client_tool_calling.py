@@ -159,6 +159,17 @@ def main():
 
     if assistant_message.get("tool_calls"):
         print("\nAssistant requested tool calls:")
+
+        # Add assistant message once before processing tool calls
+        messages.append(
+            {
+                "role": "assistant",
+                "content": assistant_message.get("content"),
+                "tool_calls": assistant_message["tool_calls"],
+            }
+        )
+
+        # Process each tool call and add tool responses
         for tool_call in assistant_message["tool_calls"]:
             func = tool_call["function"]
             args = json.loads(func["arguments"])
@@ -171,13 +182,6 @@ def main():
                 tool_result = "Tool result"
 
             # Add tool response to conversation
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": assistant_message.get("content"),
-                    "tool_calls": assistant_message["tool_calls"],
-                }
-            )
             messages.append(
                 {
                     "role": "tool",
