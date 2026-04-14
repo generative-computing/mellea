@@ -596,6 +596,26 @@
     {
       "source": "/api/cli/eval/runner",
       "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/serve/app",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/serve/models",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/fix/commands",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/fix/async_fixer",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/fix/genstub_fixer",
+      "destination": "/reference/cli"
     }
   ]
 }

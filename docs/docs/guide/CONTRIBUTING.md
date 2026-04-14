@@ -438,6 +438,9 @@ def my_command(
         Describe what the command produces — files written, services started,
         or side effects applied.
 
+    Examples:
+        m my-command path/to/input --flag value
+
     See Also:
         guide: how-to/some-guide-page
         guide: advanced/another-page
@@ -451,6 +454,8 @@ def my_command(
 - **`Prerequisites:`** — what must be installed or running. Rendered as a callout.
 - **`Output:`** — what the command produces (files, services, side effects). Rendered
   as an "Output" paragraph.
+- **`Examples:`** — a minimal one-liner invocation showing the most common flags.
+  Rendered as a fenced code block.
 - **`See Also:`** — cross-links to guide pages. Each line is `guide: <relative-doc-path>`
   (no `.md` extension). Rendered as "See also" links.
 - **`help=` strings** on `typer.Option()` / `typer.Argument()` become the flag

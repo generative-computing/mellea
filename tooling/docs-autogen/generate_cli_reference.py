@@ -10,7 +10,7 @@ functions are extracted and rendered as admonitions and cross-links.
 
 Run via::
 
-    uv run python tooling/docs-autogen/generate-cli-reference.py
+    uv run python tooling/docs-autogen/generate_cli_reference.py
 """
 
 from __future__ import annotations
@@ -444,17 +444,7 @@ def main() -> None:
     print("🔧 Importing CLI application...", flush=True)
     click_app = _get_click_app()
 
-    print("📝 Generating CLI reference...", flush=True)
-    content = generate_cli_reference(click_app)
-
-    if args.stdout:
-        print(content)
-    else:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(content)
-        print(f"✅ CLI reference written to {output_path}")
-
-    # Strict validation — always run, fail only with --strict
+    # Validate before writing — fail early with --strict
     errors = validate_cli_reference(click_app)
     if errors:
         print(f"\n⚠️  CLI docstring validation: {len(errors)} issue(s):", flush=True)
@@ -465,6 +455,16 @@ def main() -> None:
             sys.exit(1)
     else:
         print("✅ CLI docstring validation passed.")
+
+    print("📝 Generating CLI reference...", flush=True)
+    content = generate_cli_reference(click_app)
+
+    if args.stdout:
+        print(content)
+    else:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(content)
+        print(f"✅ CLI reference written to {output_path}")
 
 
 if __name__ == "__main__":
