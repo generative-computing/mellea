@@ -187,7 +187,7 @@ def make_chat_endpoint(module):
                 and output.tool_calls  # Check dict is not empty
             ):
                 tool_calls = []
-                for tool_name, model_tool_call in output.tool_calls.items():
+                for model_tool_call in output.tool_calls.values():
                     # Generate a unique ID for this tool call
                     tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
 
