@@ -66,24 +66,29 @@ docs/docs/api/   (fresh copy, replaces previous entirely)
     - Add CLASS/FUNC pills and visual dividers to headings
     │
     ▼
-[3] validate.py  (optional, run via uv run poe apidocs-validate)
+[3] generate-ast.py --nav-only
+    - Re-reads decorated files to rebuild the landing page and nav
+    - Ensures API Reference tab cards show full module descriptions
+    │
+    ▼
+[4] generate_cli_reference.py  (--strict in CI / apidocs; lenient via clidocs)
+    - Imports Typer app, walks Click command tree
+    - Extracts flags, types, defaults, help strings
+    - Parses docstring sections (Prerequisites, Output, Examples, See Also)
+    - Emits docs/docs/reference/cli.md (standard Markdown)
+    │
+    ▼
+[5] Mintlify dev server  (mintlify dev from docs/docs/)
+    http://localhost:3000
+
+── Optional tools (not part of the build pipeline) ──────────────────────────
+
+validate.py  (uv run poe apidocs-validate)
     - GitHub source links correct?
     - API coverage ≥ threshold?
     - MDX syntax valid (no unescaped braces)?
     - Internal cross-reference links resolve?
     - No duplicate heading anchors?
-    │
-    ▼
-[4] generate_cli_reference.py
-    - Imports Typer app, walks Click command tree
-    - Extracts flags, types, defaults, help strings
-    - Parses docstring sections (Prerequisites, Output, Examples, See Also)
-    - Emits docs/docs/reference/cli.md (standard Markdown)
-    - --strict fails on incomplete docstrings
-    │
-    ▼
-[5] Mintlify dev server  (mintlify dev from docs/docs/)
-    http://localhost:3000
 ```
 
 ## File Structure

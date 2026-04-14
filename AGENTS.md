@@ -88,7 +88,7 @@ mkdir -p .bob && ln -s ../.agents/skills .bob/skills
 - Use `...` in `@generative` function bodies
 - Prefer primitives over classes
 - **Friendly Dependency Errors**: Wraps optional backend imports in `try/except ImportError` with a helpful message (e.g., "Please pip install mellea[hf]"). See `mellea/stdlib/session.py` for examples.
-- **CLI command docstrings**: Typer command functions in `cli/` follow an enriched convention with `Prerequisites:` and `See Also:` sections — these feed the auto-generated CLI reference page. See [`docs/docs/guide/CONTRIBUTING.md`](docs/docs/guide/CONTRIBUTING.md) for the full pattern. Regenerate after changes: `uv run poe clidocs`.
+- **CLI command docstrings**: Typer command functions in `cli/` follow an enriched convention with `Prerequisites:` and `See Also:` sections — these feed the auto-generated CLI reference page. See [`docs/docs/guide/CONTRIBUTING.md`](docs/docs/guide/CONTRIBUTING.md) for the full pattern. Regenerate after changes: `uv run poe clidocs`. Test the generator: `uv run pytest tooling/docs-autogen/test_cli_reference.py -v`. Full pipeline docs: [`tooling/docs-autogen/README.md`](tooling/docs-autogen/README.md).
 - **Backend telemetry fields**: All backends must populate `mot.usage` (dict with `prompt_tokens`, `completion_tokens`, `total_tokens`), `mot.model` (str), and `mot.provider` (str) in their `post_processing()` method. `mot.streaming` (bool) and `mot.ttfb_ms` (float | None) are set automatically in `astream()` — backends do not need to set them. Metrics are automatically recorded by `TokenMetricsPlugin` and `LatencyMetricsPlugin` — don't add manual `record_token_usage_metrics()` or `record_request_duration()` calls.
 
 ## 6. Commits & Hooks
