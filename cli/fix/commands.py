@@ -16,7 +16,21 @@ def fix_async(
         False, "--dry-run", help="Report locations without modifying files"
     ),
 ):
-    """Fix async calls (aact, ainstruct, aquery) for the await_result default change.
+    """Fix async calls for the await_result default change.
+
+    Scans Python source files for ``aact``, ``ainstruct``, and ``aquery`` calls
+    and applies an automated migration to restore blocking behaviour after the
+    ``await_result`` default changed from ``True`` to ``False``.
+
+    Prerequisites:
+        Mellea installed (``uv add mellea``).
+
+    Output:
+        Modifies Python source files in place (unless ``--dry-run``). Prints a
+        summary of fixed call sites with file paths and line numbers.
+
+    Examples:
+        m fix async src/ --dry-run
 
     Args:
         path: File or directory to scan.
@@ -83,7 +97,20 @@ def fix_genslots(
         False, "--dry-run", help="Report locations without modifying files"
     ),
 ):
-    """Rewrite old genslot imports and class names to genstub equivalents.
+    """Rewrite genslot imports and class names to genstub equivalents.
+
+    Scans Python source files and replaces deprecated ``GenerativeSlot`` imports
+    and class references with their ``GenerativeStub`` replacements.
+
+    Prerequisites:
+        Mellea installed (``uv add mellea``).
+
+    Output:
+        Modifies Python source files in place (unless ``--dry-run``). Prints a
+        summary of rewritten references with file paths and line numbers.
+
+    Examples:
+        m fix genslots src/ --dry-run
 
     Args:
         path: File or directory to scan.

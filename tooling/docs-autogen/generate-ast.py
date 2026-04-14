@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """generate-ast.py — mdxify + postprocess docs pipeline.
 
-Runs mdxify against the project's mellea and cli packages then postprocesses
+Runs mdxify against the project's mellea package then postprocesses
 the generated MDX files into the Mintlify docs tree.
 
 Requires mdxify to be installed in the current Python environment.  Run via::
@@ -9,7 +9,7 @@ Requires mdxify to be installed in the current Python environment.  Run via::
     uv run python tooling/docs-autogen/generate-ast.py
 
 Pipeline:
-  1) Run mdxify --all for root modules: mellea, cli into STAGING: <repo-root>/docs/api/<pkg>
+  1) Run mdxify --all for root modules: mellea into STAGING: <repo-root>/docs/api/<pkg>
   2) Reorganize flat mdxify output into nested folders
   3) Rename __init__.mdx -> <foldername>.mdx (dedupe if identical)
   4) Update frontmatter (title/sidebarTitle/description) from H1 + first paragraph
@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 NAV_TAB = "API Reference"
-PACKAGES = ["mellea", "cli"]
+PACKAGES = ["mellea"]
 
 # Script is in tooling/docs-autogen/generate-ast.py -> repo root is 2 parents up
 REPO_ROOT = Path(__file__).resolve().parents[2]

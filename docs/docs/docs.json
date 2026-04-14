@@ -136,7 +136,8 @@
           {
             "group": "Reference",
             "pages": [
-              "guide/glossary"
+              "guide/glossary",
+              "reference/cli"
             ]
           },
           {
@@ -547,6 +548,54 @@
     {
       "source": "/dev/tool-calling",
       "destination": "/guide/tools-and-agents"
+    },
+    {
+      "source": "/api/cli/m",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/commands",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/intrinsic_uploader",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/readme_generator",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/train",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/alora/upload",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/decompose/decompose",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/decompose/pipeline",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/decompose/utils",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/eval/commands",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/eval/eval",
+      "destination": "/reference/cli"
+    },
+    {
+      "source": "/api/cli/eval/runner",
+      "destination": "/reference/cli"
     }
   ]
 }

@@ -221,7 +221,27 @@ def serve(
     host: str = typer.Option("0.0.0.0", help="Host to bind to"),
     port: int = typer.Option(8080, help="Port to bind to"),
 ):
-    """Serve a FastAPI endpoint for a given script."""
+    """Serve a Mellea program as an OpenAI-compatible HTTP endpoint.
+
+    Loads a Python script containing a Mellea generative function and exposes it
+    via a FastAPI server implementing the OpenAI chat completions API. The server
+    accepts ``POST /v1/chat/completions`` requests.
+
+    Prerequisites:
+        Mellea installed (``uv add mellea``). The target script must define at
+        least one generative function.
+
+    Output:
+        Starts a long-running HTTP server on the specified host and port.
+        The ``/v1/chat/completions`` endpoint accepts OpenAI-format chat
+        completion requests and returns ``ChatCompletion`` JSON responses.
+
+    Examples:
+        m serve my_app.py --port 9000
+
+    See Also:
+        guide: integrations/m-serve
+    """
     module = load_module_from_path(script_path)
     route_path = "/v1/chat/completions"
 

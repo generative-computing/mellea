@@ -215,6 +215,14 @@ python tooling/docs-autogen/audit_coverage.py --quality \
 """
 help = "Generate fresh API docs to /tmp/mellea-preview and audit quality."
 
+[tool.poe.tasks.clidocs]
+cmd = "python tooling/docs-autogen/generate_cli_reference.py"
+help = "Generate the CLI reference page (docs/docs/reference/cli.md) from Typer metadata."
+
+[tool.poe.tasks.clidocs-clean]
+shell = "rm -f docs/docs/reference/cli.md"
+help = "Remove the generated CLI reference page."
+
 # -----------------------------
 # Ruff - Linting and Formatting
 # -----------------------------

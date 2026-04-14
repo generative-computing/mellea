@@ -81,6 +81,11 @@ jobs:
       - name: Generate API documentation
         run: uv run python tooling/docs-autogen/build.py
 
+      # -- Run docs-autogen unit tests ------------------------------------------
+
+      - name: Run docs-autogen tests
+        run: uv run pytest tooling/docs-autogen/ -v --tb=short
+
       # -- Validate static docs ------------------------------------------------
 
       - name: Lint static docs (markdownlint)

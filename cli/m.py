@@ -23,8 +23,15 @@ def callback() -> None:
     """Mellea command-line tool for LLM-powered workflows.
 
     Provides sub-commands for serving models (``m serve``), training and uploading
-    adapters (``m alora``), decomposing tasks into subtasks (``m decompose``), and
-    running test-based evaluation pipelines (``m eval``).
+    adapters (``m alora``), decomposing tasks into subtasks (``m decompose``),
+    running test-based evaluation pipelines (``m eval``), and applying automated
+    code migrations (``m fix``).
+
+    Prerequisites:
+        Mellea installed (``uv add mellea``).
+
+    See Also:
+        guide: getting-started/quickstart
     """
 
 

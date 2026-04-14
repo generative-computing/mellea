@@ -158,4 +158,5 @@ affect other sessions.
 
 **See also:** [Intrinsics](./intrinsics) |
 [The Requirements System](../concepts/requirements-system) |
-[Write Custom Verifiers](../how-to/write-custom-verifiers)
+[Write Custom Verifiers](../how-to/write-custom-verifiers) |
+[CLI Reference](../reference/cli)

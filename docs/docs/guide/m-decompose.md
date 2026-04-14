@@ -123,4 +123,4 @@ For tasks that fit comfortably in a single prompt, use `m.instruct()` directly.
 
 ---
 
-**See also:** [Tools and Agents](../guide/tools-and-agents) | [Refactor Prompts with CLI](../how-to/refactor-prompts-with-cli)
+**See also:** [Tools and Agents](../guide/tools-and-agents) | [Refactor Prompts with CLI](../how-to/refactor-prompts-with-cli) | [CLI Reference](../reference/cli)

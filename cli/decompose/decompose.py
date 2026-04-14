@@ -236,12 +236,28 @@ def run(
         ),
     ] = False,
 ) -> None:
-    """Runs the ``m decompose`` CLI workflow and writes generated outputs.
+    """Break a complex task into ordered, executable subtasks.
 
-    Reads user queries from a file or interactive input, runs the decomposition
-    pipeline for each task job, and writes one JSON file, one rendered Python
-    program, and any generated validation modules under a per-job output
-    directory.
+    Reads user queries from a file or interactive input, runs the LLM-driven
+    decomposition pipeline for each task job, and writes one JSON file, one
+    rendered Python script, and any generated validation modules under a per-job
+    output directory.
+
+    Prerequisites:
+        Mellea installed (``uv add mellea``). An Ollama instance running locally,
+        or an OpenAI-compatible endpoint configured via ``--backend-endpoint``.
+
+    Output:
+        Creates a directory ``<out-dir>/<out-name>/`` containing a JSON
+        decomposition result file, a ready-to-run Python script, and any
+        generated validation modules. One directory per task job.
+
+    Examples:
+        m decompose run --out-dir ./output --input-file tasks.txt
+
+    See Also:
+        guide: guide/m-decompose
+        guide: how-to/refactor-prompts-with-cli
 
     Args:
         out_dir: Existing directory under which per-job output directories are

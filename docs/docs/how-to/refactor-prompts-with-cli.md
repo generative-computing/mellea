@@ -339,3 +339,5 @@ and `"llm"` for quality checks that require LLM-as-a-judge evaluation.
   typed returns, and context steering to the generated pipeline
 - [Enforce Structured Output](../how-to/enforce-structured-output) — constrain
   subtask outputs to Pydantic models or `Literal` values
+- [CLI Reference](../reference/cli) — complete flag and option reference for
+  all `m` subcommands
