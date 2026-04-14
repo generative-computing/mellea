@@ -132,7 +132,7 @@ class TestStreamingHelpers:
 
     @pytest.mark.asyncio
     async def test_stream_chat_completion_chunks_emits_error_event(self):
-        """Test helper emits an error payload when streaming fails."""
+        """Test helper emits an error payload and [DONE] when streaming fails."""
         output = ModelOutputThunk(None)
         output._computed = False
         output._generate_type = output._generate_type.ASYNC
@@ -152,10 +152,17 @@ class TestStreamingHelpers:
         ):
             events.append(event)
 
-        assert len(events) == 2
+        # Should emit: initial chunk, error payload, [DONE]
+        assert len(events) == 3
+        # First event is initial chunk with role
+        initial_chunk = json.loads(events[0][6:].strip())
+        assert initial_chunk["choices"][0]["delta"]["role"] == "assistant"
+        # Second event is error payload
         error_payload = json.loads(events[1][6:].strip())
         assert error_payload["error"]["type"] == "server_error"
         assert "boom" in error_payload["error"]["message"]
+        # Third event is [DONE] sentinel
+        assert events[2] == "data: [DONE]\n\n"
 
 
 class TestStreamingEndpoint:

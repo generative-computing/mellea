@@ -107,3 +107,4 @@ async def stream_chat_completion_chunks(
             error=OpenAIError(message=f"Streaming error: {e!s}", type="server_error")
         )
         yield f"data: {error_response.model_dump_json()}\n\n"
+        yield "data: [DONE]\n\n"
