@@ -233,9 +233,7 @@ class TestAddCitationResponseSpans:
         response_without_citations = f"{sent1} {sent2}"
 
         result = _add_citation_response_spans(
-            [self._make_citation()],
-            response_with_citations,
-            response_without_citations,
+            [self._make_citation()], response_with_citations, response_without_citations
         )
 
         assert len(result) == 1
