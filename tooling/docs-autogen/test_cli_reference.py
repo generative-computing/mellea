@@ -170,20 +170,12 @@ def test_output_sections_rendered(generated_md):
     assert "**Output:**" in generated_md
 
 
-def test_rst_backticks_converted(generated_md):
-    """RST-style double-backticks from docstrings should be converted."""
-    # The description column text should not contain rst-style ``backticks``
-    # (flag names in the Name column use markdown ``code`` which is fine)
-    # Check that description text in tables doesn't have rst backticks
-    for line in generated_md.splitlines():
-        if line.startswith("|") and "| ``--" not in line and "| ``" not in line:
-            continue
-        # Check descriptions (last column) for rst backticks
-        if line.startswith("|"):
-            cols = line.split("|")
-            if len(cols) >= 5:
-                desc = cols[-2]  # Description is second-to-last (before trailing |)
-                assert "``" not in desc, f"RST backticks in description: {desc}"
+def test_no_double_backticks_in_output(generated_md):
+    """No RST-style double-backticks should appear in the generated output."""
+    # After frontmatter, strip code blocks, then check for ``
+    content = generated_md.split("---", 2)[-1]
+    non_code = re.sub(r"```.*?```", "", content, flags=re.DOTALL)
+    assert "``" not in non_code, "Double backticks found outside code blocks"
 
 
 def test_strict_validation_passes(click_app):

@@ -959,36 +959,6 @@ def audit_nav_orphans(docs_dir: Path, source_dir: Path) -> list[str]:
     return sorted(mdx_files - nav_refs)
 
 
-def discover_cli_commands(cli_dir: Path) -> list[str]:
-    """Discover CLI commands from Typer applications.
-
-    Args:
-        cli_dir: Path to cli/ directory
-
-    Returns:
-        List of command names (e.g., ["m serve", "m alora", "m decompose"])
-    """
-    commands = []
-
-    # Look for Typer app definitions
-    # This is a simplified version - full implementation would parse the CLI structure
-    main_file = cli_dir / "m.py"
-    if main_file.exists():
-        content = main_file.read_text()
-
-        # Simple heuristic: look for @app.command() decorators or add_typer() calls
-
-        # Find command decorators
-        command_pattern = r'@app\.command\(["\']([^"\']+)["\']\)'
-        commands.extend(re.findall(command_pattern, content))
-
-        # Find subcommand additions
-        typer_pattern = r'app\.add_typer\([^,]+,\s*name=["\']([^"\']+)["\']\)'
-        commands.extend(re.findall(typer_pattern, content))
-
-    return sorted(set(commands))
-
-
 def find_documented_symbols(docs_dir: Path) -> set[str]:
     """Find which symbols have MDX documentation.
 

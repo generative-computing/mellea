@@ -98,6 +98,37 @@ def _rst_to_md(text: str) -> str:
     return _RST_BACKTICK_RE.sub(r"`\1`", text)
 
 
+_TITLE_LOWERCASE = {
+    "a",
+    "an",
+    "and",
+    "as",
+    "at",
+    "by",
+    "for",
+    "in",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "vs",
+    "with",
+}
+
+
+def _slug_to_title(slug: str) -> str:
+    """Convert a URL slug to a human-readable title with proper capitalisation."""
+    words = slug.replace("-", " ").split()
+    result = []
+    for i, word in enumerate(words):
+        if i == 0 or word.lower() not in _TITLE_LOWERCASE:
+            result.append(word.capitalize())
+        else:
+            result.append(word.lower())
+    return " ".join(result)
+
+
 # ---------------------------------------------------------------------------
 # Click model traversal
 # ---------------------------------------------------------------------------
@@ -137,18 +168,25 @@ def _format_flags(param: click.Parameter) -> str:
     is_arg = isinstance(param, click.Argument)
     if is_arg:
         name = param.name or ""
-        return f"``{name.upper()}``"
+        return f"`{name.upper()}`"
     opts = list(getattr(param, "opts", []))
     secondary = list(getattr(param, "secondary_opts", []))
     # Filter out --no-* boolean counterparts
     all_opts = [o for o in opts + secondary if not o.startswith("--no-")]
-    return ", ".join(f"``{o}``" for o in all_opts)
+    return ", ".join(f"`{o}`" for o in all_opts)
+
+
+def _is_help_param(param: click.Parameter) -> bool:
+    """Return True for Click's auto-generated --help parameter."""
+    return param.name == "help" and not isinstance(param, click.Argument)
 
 
 def _build_synopsis(full_name: str, cmd: click.BaseCommand) -> str:
     """Build a usage synopsis line for a command."""
     parts = [full_name]
     for param in cmd.params:
+        if _is_help_param(param):
+            continue
         is_arg = isinstance(param, click.Argument)
         if is_arg:
             name = (param.name or "").upper()
@@ -217,9 +255,13 @@ def _render_command(
     lines.append("```")
     lines.append("")
 
-    # Options table — split into arguments and options
+    # Options table — split into arguments and options, exclude --help
     arguments = [p for p in cmd.params if isinstance(p, click.Argument)]
-    options = [p for p in cmd.params if not isinstance(p, click.Argument)]
+    options = [
+        p
+        for p in cmd.params
+        if not isinstance(p, click.Argument) and not _is_help_param(p)
+    ]
 
     if arguments:
         lines.append("**Arguments:**")
@@ -280,7 +322,8 @@ def _render_command(
             see_parts = []
             for kind, path in links:
                 if kind == "guide":
-                    see_parts.append(f"[{path.split('/')[-1]}](../{path})")
+                    title = _slug_to_title(path.split("/")[-1])
+                    see_parts.append(f"[{title}](../{path})")
             if see_parts:
                 lines.append(f"**See also:** {', '.join(see_parts)}")
                 lines.append("")
@@ -307,11 +350,11 @@ def generate_cli_reference(click_app: click.BaseCommand) -> str:
 
     # Intro from root callback docstring
     root_sections = _parse_docstring_sections(click_app.help)
-    root_summary = root_sections.get("summary", "")
+    root_summary = _rst_to_md(root_sections.get("summary", ""))
     if root_summary:
         lines.append(root_summary)
         lines.append("")
-    root_body = root_sections.get("body", "")
+    root_body = _rst_to_md(root_sections.get("body", ""))
     if root_body:
         lines.append(root_body)
         lines.append("")
@@ -378,8 +421,10 @@ def validate_cli_reference(click_app: click.BaseCommand) -> list[str]:
         if not sections.get("Output", "").strip():
             errors.append(f"{full_name}: missing Output section")
 
-        # Check all options have help text
+        # Check all options have help text (skip auto-generated --help)
         for param in cmd.params:
+            if _is_help_param(param):
+                continue
             help_text = getattr(param, "help", None)
             if not help_text:
                 param_name = param.name or "(unnamed)"
