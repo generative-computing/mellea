@@ -9,7 +9,14 @@ documentation using Mintlify.
 uv sync --all-extras --group dev   # Same as CI — installs all extras + dev tools
 ```
 
-Node.js (LTS, v22 or earlier) is required for `mintlify dev` previews.
+Node.js (LTS, v22 or earlier) is required for `mintlify dev` previews. If your
+default node is newer (e.g. v25), prefix the command with the v22 bin path:
+
+```bash
+env PATH="/opt/homebrew/opt/node@22/bin:$PATH" mintlify dev
+```
+
+Install node@22 via Homebrew if needed: `brew install node@22`.
 
 ## Quick Start
 
@@ -300,5 +307,7 @@ most common cases but has not been fully verified end-to-end.
 | `Could not parse expression with acorn` | Unescaped `{}` — run `uv run poe apidocs` to regenerate |
 | `VIRTUAL_ENV … does not match` warning | Harmless — `uv run` uses the project venv regardless |
 | Port 3000 in use | `lsof -ti:3000 \| xargs kill -9` |
+| `mint dev is not supported on node versions 25+` | Run `env PATH="/opt/homebrew/opt/node@22/bin:$PATH" mintlify dev` |
+| API Reference tab shows 404 locally | Generated artefacts are gitignored — run `uv run poe apidocs` first |
 | Duplicate preamble / double dividers in MDX | Files were decorated twice — run `uv run poe apidocs` (starts from fresh generation) |
 | Griffe loading wrong package when using `--source-dir` | Expected — Griffe uses `try_relative_path=False` to avoid loading same-named packages from CWD |
