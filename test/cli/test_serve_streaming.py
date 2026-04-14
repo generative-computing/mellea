@@ -169,17 +169,17 @@ class TestStreamingEndpoint:
         mock_output._computed = False
         mock_output._generate_type = mock_output._generate_type.ASYNC
 
-        # Simulate streaming chunks
+        # Simulate streaming chunks (deltas, not accumulated)
         chunks = ["Hello", " there", "!"]
-        accumulated = ""
 
         async def mock_astream():
-            nonlocal accumulated
             if chunks:
-                accumulated += chunks.pop(0)
-            else:
-                mock_output._computed = True
-            return accumulated
+                delta = chunks.pop(0)
+                if not chunks:
+                    mock_output._computed = True
+                return delta
+            mock_output._computed = True
+            return ""
 
         mock_output.astream = mock_astream
         mock_output.is_computed = lambda: mock_output._computed
@@ -362,15 +362,15 @@ class TestStreamingEndpoint:
         mock_output._generate_type = mock_output._generate_type.ASYNC
 
         chunks = ["A", "B"]
-        accumulated = ""
 
         async def mock_astream():
-            nonlocal accumulated
             if chunks:
-                accumulated += chunks.pop(0)
-            else:
-                mock_output._computed = True
-            return accumulated
+                delta = chunks.pop(0)
+                if not chunks:
+                    mock_output._computed = True
+                return delta
+            mock_output._computed = True
+            return ""
 
         mock_output.astream = mock_astream
         mock_output.is_computed = lambda: mock_output._computed

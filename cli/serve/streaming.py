@@ -56,12 +56,10 @@ async def stream_chat_completion_chunks(
         )
         yield f"data: {initial_chunk.model_dump_json()}\n\n"
 
-        previous_length = 0
         while not output.is_computed():
-            new_content = await output.astream()
-            previous_length += len(new_content)
+            delta_content = await output.astream()
 
-            if new_content:
+            if delta_content:
                 chunk = ChatCompletionChunk(
                     id=completion_id,
                     model=model,
@@ -69,7 +67,7 @@ async def stream_chat_completion_chunks(
                     choices=[
                         ChatCompletionChunkChoice(
                             index=0,
-                            delta=ChatCompletionChunkDelta(content=new_content),
+                            delta=ChatCompletionChunkDelta(content=delta_content),
                             finish_reason=None,
                         )
                     ],
