@@ -95,7 +95,7 @@ mkdir -p .bob && ln -s ../.agents/skills .bob/skills
 
 Pre-commit runs: ruff, mypy, uv-lock, codespell
 
-For AI attribution trailers, see [§7 AI Attribution](#7-ai-attribution).
+For AI attribution trailers, see [Section 7 (AI Attribution)](#7-ai-attribution).
 
 ## 7. AI Attribution
 
