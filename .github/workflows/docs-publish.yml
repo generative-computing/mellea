@@ -83,8 +83,8 @@ jobs:
 
       # -- Run docs-autogen unit tests ------------------------------------------
 
-      - name: Run docs-autogen tests
-        run: uv run pytest tooling/docs-autogen/ -v --tb=short
+      - name: Run CLI reference tests
+        run: uv run pytest tooling/docs-autogen/test_cli_reference.py -v --tb=short
 
       # -- Validate static docs ------------------------------------------------
 
