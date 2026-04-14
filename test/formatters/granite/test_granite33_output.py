@@ -244,11 +244,9 @@ class TestAddCitationResponseSpans:
         end = citation["response_end"]
         text = citation["response_text"]
 
-        # The span must exactly bracket the cited sentence in the clean response
+        assert begin == 0
+        assert end == len(sent1)  # sentence length, not full response length
         assert response_without_citations[begin:end] == text
-        # Span length must equal the sentence length, not the full response length
-        assert end - begin == len(text)
-        assert end <= len(response_without_citations)
 
     def test_multiple_citations_each_span_correct(self):
         """Each citation span must cover only its own sentence."""
