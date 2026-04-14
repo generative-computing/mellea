@@ -446,6 +446,10 @@ class WatsonxAIBackend(FormatterBackend):
             _format=_format,
         )
 
+        # Set model/provider early so they are available in the error path
+        output.model = str(self._get_watsonx_model_id())
+        output.provider = "watsonx"
+
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
             # We can also support synchronous calls by adding a flag and changing this ._generate function.
@@ -581,11 +585,7 @@ class WatsonxAIBackend(FormatterBackend):
             mot.usage = usage
 
         # Populate model and provider metadata
-        mot.model = (
-            self.model_id.watsonx_name
-            if isinstance(self.model_id, ModelIdentifier)
-            else str(self.model_id)
-        )
+        mot.model = str(self._get_watsonx_model_id())
         mot.provider = "watsonx"
 
         # Record tracing if span exists

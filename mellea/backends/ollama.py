@@ -417,6 +417,10 @@ class OllamaModelBackend(FormatterBackend):
             _format=_format,
         )
 
+        # Set model/provider early so they are available in the error path
+        output.model = self._get_ollama_model_id()
+        output.provider = "ollama"
+
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
             # We can also support synchronous calls by adding a flag and changing this ._generate function.
@@ -705,11 +709,7 @@ class OllamaModelBackend(FormatterBackend):
             }
 
         # Populate model and provider metadata
-        mot.model = (
-            self.model_id.ollama_name
-            if isinstance(self.model_id, ModelIdentifier)
-            else str(self.model_id)
-        )
+        mot.model = str(self._get_ollama_model_id())
         mot.provider = "ollama"
 
         # Record telemetry and close span now that response is available

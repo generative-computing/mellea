@@ -116,14 +116,15 @@ exporter configuration (Jaeger, Grafana Tempo, etc.), and debugging guidance.
 
 ## Metrics
 
-Mellea automatically tracks token consumption and request latency across all
-backends using OpenTelemetry metrics. No code changes are required — two
-plugins hook into the generation pipeline and record metrics automatically:
+Mellea automatically records the following metrics across all backends using
+OpenTelemetry. No code changes are required:
 
-- **`TokenMetricsPlugin`** — records `mellea.llm.tokens.input` and
-  `mellea.llm.tokens.output` counters after each LLM call.
-- **`LatencyMetricsPlugin`** — records `mellea.llm.request.duration` (every
-  request) and `mellea.llm.ttfb` (streaming requests only) histograms.
+- **Token counters** — `mellea.llm.tokens.input` and `mellea.llm.tokens.output`
+  after each LLM call.
+- **Latency histograms** — `mellea.llm.request.duration` (every request) and
+  `mellea.llm.ttfb` (streaming requests only).
+- **Error counter** — `mellea.llm.errors` on each failed backend call,
+  classified by semantic error type.
 
 The metrics API also exposes `create_counter`, `create_histogram`, and
 `create_up_down_counter` for instrumenting your own application code.
@@ -134,9 +135,9 @@ Mellea supports three exporters that can run simultaneously:
 - **OTLP** — export to production observability platforms
 - **Prometheus** — register with `prometheus_client` for scraping
 
-See [Metrics](../evaluation-and-observability/metrics) for token usage and
-latency details, backend support matrix, exporter setup, custom instruments,
-and troubleshooting.
+See [Metrics](../evaluation-and-observability/metrics) for the full list of
+metrics, backend support matrix, exporter setup, custom instruments, and
+troubleshooting.
 
 ## Logging
 
@@ -156,8 +157,8 @@ configuration, OTLP log export setup, and programmatic access via
 
 - [Tracing](../evaluation-and-observability/tracing) — distributed traces
   with Gen-AI semantic conventions.
-- [Metrics](../evaluation-and-observability/metrics) — token usage metrics,
-  exporters, and custom instruments.
+- [Metrics](../evaluation-and-observability/metrics) — metrics, exporters,
+  and custom instruments.
 - [Logging](../evaluation-and-observability/logging) — console logging and OTLP
   log export.
 - [Evaluate with LLM-as-a-Judge](../evaluation-and-observability/evaluate-with-llm-as-a-judge) —

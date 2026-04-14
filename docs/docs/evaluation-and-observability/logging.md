@@ -182,5 +182,5 @@ Set either `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`.
   telemetry features and configuration.
 - [Tracing](../evaluation-and-observability/tracing) — distributed traces
   with Gen-AI semantic conventions.
-- [Metrics](../evaluation-and-observability/metrics) — token usage metrics,
-  exporters, and custom instruments.
+- [Metrics](../evaluation-and-observability/metrics) — metrics, exporters,
+  and custom instruments.

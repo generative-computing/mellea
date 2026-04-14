@@ -372,6 +372,10 @@ class LiteLLMBackend(FormatterBackend):
             _format=_format,
         )
 
+        # Set model/provider early so they are available in the error path
+        output.model = str(self.model_id)
+        output.provider = "litellm"
+
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
             # We can also support synchronous calls by adding a flag and changing this ._generate function.

@@ -1,4 +1,4 @@
-"""Unit tests for TokenMetricsPlugin and LatencyMetricsPlugin."""
+"""Unit tests for TokenMetricsPlugin, LatencyMetricsPlugin, and ErrorMetricsPlugin."""
 
 from unittest.mock import patch
 
@@ -7,8 +7,20 @@ import pytest
 pytest.importorskip("cpex", reason="cpex not installed — install mellea[hooks]")
 
 from mellea.core.base import ModelOutputThunk
-from mellea.plugins.hooks.generation import GenerationPostCallPayload
-from mellea.telemetry.metrics_plugins import LatencyMetricsPlugin, TokenMetricsPlugin
+from mellea.plugins.hooks.generation import (
+    GenerationErrorPayload,
+    GenerationPostCallPayload,
+)
+from mellea.telemetry.metrics import (
+    ERROR_TYPE_TIMEOUT,
+    ERROR_TYPE_TRANSPORT_ERROR,
+    ERROR_TYPE_UNKNOWN,
+)
+from mellea.telemetry.metrics_plugins import (
+    ErrorMetricsPlugin,
+    LatencyMetricsPlugin,
+    TokenMetricsPlugin,
+)
 
 
 @pytest.fixture
@@ -172,4 +184,86 @@ async def test_latency_missing_model_provider(latency_plugin):
 
         mock_dur.assert_called_once_with(
             duration_s=0.5, model="unknown", provider="unknown", streaming=False
+        )
+
+
+# ErrorMetricsPlugin tests
+
+
+@pytest.fixture
+def error_plugin():
+    return ErrorMetricsPlugin()
+
+
+def _make_error_payload(exc, model="test-model", provider="test-provider"):
+    """Create a GenerationErrorPayload wrapping the given exception."""
+    mot = ModelOutputThunk(value="")
+    mot.model = model
+    mot.provider = provider
+    return GenerationErrorPayload(exception=exc, model_output=mot)
+
+
+@pytest.mark.asyncio
+async def test_error_plugin_records_correct_type(error_plugin):
+    """Plugin classifies the exception and calls record_error with the right type."""
+    payload = _make_error_payload(TimeoutError("timed out"))
+
+    with patch("mellea.telemetry.metrics.record_error") as mock_record:
+        await error_plugin.record_error_metrics(payload, {})
+
+        mock_record.assert_called_once_with(
+            error_type=ERROR_TYPE_TIMEOUT,
+            model="test-model",
+            provider="test-provider",
+            exception_class="TimeoutError",
+        )
+
+
+@pytest.mark.asyncio
+async def test_error_plugin_unknown_exception(error_plugin):
+    """Unrecognized exceptions are classified as unknown."""
+    payload = _make_error_payload(ValueError("something broke"))
+
+    with patch("mellea.telemetry.metrics.record_error") as mock_record:
+        await error_plugin.record_error_metrics(payload, {})
+
+        mock_record.assert_called_once_with(
+            error_type=ERROR_TYPE_UNKNOWN,
+            model="test-model",
+            provider="test-provider",
+            exception_class="ValueError",
+        )
+
+
+@pytest.mark.asyncio
+async def test_error_plugin_falls_back_to_unknown_when_model_none(error_plugin):
+    """model/provider fall back to 'unknown' when None on the MOT."""
+    payload = _make_error_payload(ConnectionError("refused"), model=None, provider=None)
+
+    with patch("mellea.telemetry.metrics.record_error") as mock_record:
+        await error_plugin.record_error_metrics(payload, {})
+
+        mock_record.assert_called_once_with(
+            error_type=ERROR_TYPE_TRANSPORT_ERROR,
+            model="unknown",
+            provider="unknown",
+            exception_class="ConnectionError",
+        )
+
+
+@pytest.mark.asyncio
+async def test_error_plugin_handles_none_model_output(error_plugin):
+    """Plugin handles a None model_output gracefully."""
+    payload = GenerationErrorPayload(
+        exception=RuntimeError("queue error"), model_output=None
+    )
+
+    with patch("mellea.telemetry.metrics.record_error") as mock_record:
+        await error_plugin.record_error_metrics(payload, {})
+
+        mock_record.assert_called_once_with(
+            error_type=ERROR_TYPE_UNKNOWN,
+            model="unknown",
+            provider="unknown",
+            exception_class="RuntimeError",
         )

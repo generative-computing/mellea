@@ -611,6 +611,7 @@ def test_metric_instruments_lazy_initialization(enable_metrics):
 def test_record_metrics_noop_when_disabled(clean_metrics_env):
     """Test that all record functions are no-ops when metrics disabled."""
     from mellea.telemetry.metrics import (
+        record_error,
         record_request_duration,
         record_token_usage_metrics,
     )
@@ -619,10 +620,17 @@ def test_record_metrics_noop_when_disabled(clean_metrics_env):
         input_tokens=100, output_tokens=50, model="llama2:7b", provider="ollama"
     )
     record_request_duration(duration_s=1.0, model="llama2:7b", provider="ollama")
+    record_error(
+        error_type="timeout",
+        model="llama2:7b",
+        provider="ollama",
+        exception_class="TimeoutError",
+    )
 
     # No instruments should have been initialized
     from mellea.telemetry.metrics import (
         _duration_histogram,
+        _error_counter,
         _input_token_counter,
         _output_token_counter,
         _ttfb_histogram,
@@ -632,6 +640,7 @@ def test_record_metrics_noop_when_disabled(clean_metrics_env):
     assert _output_token_counter is None
     assert _duration_histogram is None
     assert _ttfb_histogram is None
+    assert _error_counter is None
 
 
 def test_record_functions_exported_in_public_api():
