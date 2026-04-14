@@ -172,19 +172,44 @@ def test_from_json_file_multiple_user_messages(tmp_path):
 
 
 def test_from_json_file_no_user_messages(tmp_path):
-    """Example with no user messages produces no input entry."""
+    """Example with no user messages is skipped entirely."""
     data = _minimal_test_data(
         examples=[
             {
                 "input": [{"role": "system", "content": "sys"}],
-                "targets": [],
-                "input_id": "",
+                "targets": [{"role": "assistant", "content": "orphan"}],
+                "input_id": "skip-me",
             }
         ]
     )
     path = _write_test_json(tmp_path, data)
     evals = TestBasedEval.from_json_file(path)
     assert evals[0].inputs == []
+    assert evals[0].targets == []
+    assert evals[0].input_ids == []
+
+
+def test_from_json_file_mixed_user_messages(tmp_path):
+    """Examples without user messages don't misalign the parallel lists."""
+    data = _minimal_test_data(
+        examples=[
+            {
+                "input": [{"role": "system", "content": "sys only"}],
+                "targets": [{"role": "assistant", "content": "orphan"}],
+                "input_id": "no-user",
+            },
+            {
+                "input": [{"role": "user", "content": "q1"}],
+                "targets": [{"role": "assistant", "content": "a1"}],
+                "input_id": "has-user",
+            },
+        ]
+    )
+    path = _write_test_json(tmp_path, data)
+    evals = TestBasedEval.from_json_file(path)
+    assert evals[0].inputs == ["q1"]
+    assert evals[0].targets == [["a1"]]
+    assert evals[0].input_ids == ["has-user"]
 
 
 def test_from_json_file_filters_non_assistant_targets(tmp_path):

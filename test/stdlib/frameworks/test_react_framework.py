@@ -7,6 +7,7 @@ internal refactors of react() while still verifying observable behaviour.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from unittest.mock import Mock
 
 import pytest
 
@@ -226,8 +227,6 @@ async def test_react_final_answer_with_extra_tool_rejected():
 @pytest.mark.asyncio
 async def test_react_rejects_non_chat_context():
     """react() requires a ChatContext instance."""
-    from unittest.mock import Mock
-
     with pytest.raises(AssertionError, match="type of chat context"):
         await react(goal="g", context=Mock(), backend=Mock(), tools=None)
 
