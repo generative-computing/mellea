@@ -12,9 +12,9 @@ uv run poe apidocs-quality   # Audit docstring quality (public symbols, no metho
 uv run poe apidocs-orphans   # Find MDX files not referenced in docs.json navigation
 uv run poe apidocs-validate  # Verify coverage + MDX syntax
 uv run poe apidocs-clean     # Remove generated artefacts
+uv run poe clidocs           # Generate CLI reference page from Typer metadata
+uv run poe clidocs-clean     # Remove generated CLI reference page
 ```
-
-Makefile shims are also available if you prefer `make apidocs` etc.
 
 The `apidocs` task runs `build.py`, which calls `generate-ast.py` then
 `decorate_api_mdx.py` in sequence. Both the `docs/docs/api/` directory and the
@@ -47,7 +47,7 @@ docs/docs/api/   (fresh copy, replaces previous entirely)
     - Add CLASS/FUNC pills and visual dividers to headings
     │
     ▼
-[3] validate.py  (optional, run via make docs-validate)
+[3] validate.py  (optional, run via uv run poe apidocs-validate)
     - GitHub source links correct?
     - API coverage ≥ threshold?
     - MDX syntax valid (no unescaped braces)?
@@ -55,7 +55,15 @@ docs/docs/api/   (fresh copy, replaces previous entirely)
     - No duplicate heading anchors?
     │
     ▼
-[4] Mintlify dev server  (make docs-serve)
+[4] generate_cli_reference.py
+    - Imports Typer app, walks Click command tree
+    - Extracts flags, types, defaults, help strings
+    - Parses docstring sections (Prerequisites, Output, Examples, See Also)
+    - Emits docs/docs/reference/cli.md (standard Markdown)
+    - --strict fails on incomplete docstrings
+    │
+    ▼
+[5] Mintlify dev server  (mintlify dev from docs/docs/)
     http://localhost:3000
 ```
 
@@ -69,6 +77,8 @@ tooling/docs-autogen/
 ├── decorate_api_mdx.py     # Step 2: decoration, escaping, cross-references
 ├── validate.py             # Step 3: quality validation
 ├── audit_coverage.py       # Symbol coverage + quality audit
+├── generate_cli_reference.py  # CLI reference page generator
+├── test_cli_reference.py   # Tests for CLI reference generation
 ├── test_escape_mdx.py      # Tests for MDX brace escaping
 ├── test_cross_references.py
 ├── test_mintlify_anchors.py
@@ -79,8 +89,9 @@ docs/docs/
 ├── docs.json               # Mintlify config — API Reference tab auto-generated
 ├── api-reference.mdx       # Auto-generated landing page
 ├── api/                    # Fully generated — do not edit
-│   ├── mellea/
-│   └── cli/
+│   └── mellea/
+├── reference/
+│   └── cli.md              # Auto-generated CLI reference — do not edit
 └── snippets/
     └── SidebarFix.mdx      # Mintlify sidebar component (hand-maintained)
 ```
