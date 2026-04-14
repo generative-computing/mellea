@@ -95,14 +95,18 @@ mkdir -p .bob && ln -s ../.agents/skills .bob/skills
 
 Pre-commit runs: ruff, mypy, uv-lock, codespell
 
+For AI attribution trailers, see [§7 AI Attribution](#7-ai-attribution).
+
 ## 7. AI Attribution
 
-The project requires sign-offs — use `-s` when committing. Do not add a separate `Signed-off-by` line in the AI's own name. Add an `Assisted-by:` trailer to the commit footer by default:
+Commits require a Signed-off-by trailer from the human author (added by running `git commit -s`). AI agents must not add a Signed-off-by in the tool's own name — instead, always add an `Assisted-by:` trailer to the commit footer:
 
 ```text
 Assisted-by: Claude Code
 Assisted-by: IBM Bob
 ```
+
+Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
 
 ## 8. Timing
 > **Don't cancel**: `pytest` (full) and `pre-commit --all-files` may take minutes. Canceling mid-run can corrupt state.
@@ -152,6 +156,6 @@ Key rules that differ from typical Markdown habits:
 
 Found a bug, workaround, or pattern? Update the docs:
 
-- **Issue/workaround?** → Add to Section 7 (Common Issues) in this file
+- **Issue/workaround?** → Add to [Section 9 (Common Issues)](#9-common-issues) in this file
 - **Usage pattern?** → Add to [`docs/AGENTS_TEMPLATE.md`](docs/AGENTS_TEMPLATE.md)
 - **New pitfall?** → Add warning near relevant section

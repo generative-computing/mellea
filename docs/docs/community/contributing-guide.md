@@ -171,9 +171,14 @@ git commit -s -m "feat: your commit message"
 
 **Branch naming:** `feat/topic`, `fix/issue-id`, `docs/topic`
 
-### AI tools
+### AI coding assistants
 
-AI-assisted development is welcome. You are responsible for reviewing and understanding every change before submitting. AI tools following project guidelines will add an `Assisted-by:` trailer to commit messages by default.
+AI-assisted development is welcome. You are responsible for reviewing and understanding every change before submitting. AI coding assistants that follow project guidelines automatically add an `Assisted-by:` trailer to commit messages — one line per tool, using its common name (GitHub Copilot, Cursor, etc.):
+
+```text
+Assisted-by: Claude Code
+Assisted-by: IBM Bob
+```
 
 ### Pre-commit hooks
 

@@ -27,4 +27,4 @@ Use this template when adding or modifying components in `mellea/stdlib/componen
 - [ ] Ensure existing tests and github automation passes (a maintainer will kick off the github automation when the rest of the PR is populated)
 
 ### Attribution
-- [ ] AI tools used (Assisted-by trailer added to commits)
+- [ ] AI coding assistants used

@@ -283,16 +283,18 @@ Closes #123
 git commit -s -m "feat: your commit message"
 ```
 
-### AI Tools
+### AI Coding Assistants
 
 AI-assisted development is welcome. You are responsible for reviewing and understanding every change before submitting.
 
-AI tools following project guidelines add an `Assisted-by:` trailer to commit messages by default, identifying which tool was used:
+AI coding assistants following project guidelines add an `Assisted-by:` trailer to commit messages by default, identifying which tool was used:
 
 ```text
 Assisted-by: Claude Code
 Assisted-by: IBM Bob
 ```
+
+Add one line per tool used, using its common name (GitHub Copilot, Cursor, etc.).
 
 ### Pre-commit Hooks
 
