@@ -63,26 +63,29 @@ class GetWeatherTool(AbstractMelleaTool):
         }
 
 
-class CalculatorTool(AbstractMelleaTool):
-    """Tool for performing calculations."""
+class GetStockPriceTool(AbstractMelleaTool):
+    """Tool for getting stock price information."""
 
-    name = "calculator"
+    name = "get_stock_price"
 
-    def run(self, expression: str) -> str:
-        """Evaluate a mathematical expression.
+    def run(self, symbol: str) -> str:
+        """Get the current stock price for a symbol.
 
         Args:
-            expression: A mathematical expression to evaluate
+            symbol: The stock ticker symbol (e.g., AAPL, GOOGL)
 
         Returns:
-            The result of the calculation
+            Stock price information as a string
         """
-        try:
-            # In a real implementation, use a safe expression evaluator
-            result = eval(expression)  # noqa: S307
-            return f"The result is {result}"
-        except Exception as e:
-            return f"Error evaluating expression: {e}"
+        # In a real implementation, this would call a stock market API
+        mock_prices = {
+            "AAPL": "$175.43",
+            "GOOGL": "$142.87",
+            "MSFT": "$378.91",
+            "TSLA": "$242.15",
+        }
+        price = mock_prices.get(symbol.upper(), "$100.00")
+        return f"The current price of {symbol.upper()} is {price}"
 
     @property
     def as_json_tool(self) -> dict[str, Any]:
@@ -91,16 +94,16 @@ class CalculatorTool(AbstractMelleaTool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Evaluate a mathematical expression",
+                "description": "Get the current stock price for a given ticker symbol",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "expression": {
+                        "symbol": {
                             "type": "string",
-                            "description": "The mathematical expression to evaluate, e.g. '2 + 2'",
+                            "description": "The stock ticker symbol, e.g. AAPL, GOOGL",
                         }
                     },
-                    "required": ["expression"],
+                    "required": ["symbol"],
                 },
             },
         }
@@ -108,10 +111,10 @@ class CalculatorTool(AbstractMelleaTool):
 
 # Create tool instances
 weather_tool = GetWeatherTool()
-calculator_tool = CalculatorTool()
+stock_price_tool = GetStockPriceTool()
 
 # Map tool names to instances for easy lookup
-TOOLS = {weather_tool.name: weather_tool, calculator_tool.name: calculator_tool}
+TOOLS = {weather_tool.name: weather_tool, stock_price_tool.name: stock_price_tool}
 
 
 def serve(
@@ -167,7 +170,7 @@ if __name__ == "__main__":
 
     # Simulate tool definitions being passed
     test_model_options = {
-        "@@@tools@@@": [weather_tool.as_json_tool, calculator_tool.as_json_tool]
+        "@@@tools@@@": [weather_tool.as_json_tool, stock_price_tool.as_json_tool]
     }
 
     response = serve(input=test_messages, model_options=test_model_options)
