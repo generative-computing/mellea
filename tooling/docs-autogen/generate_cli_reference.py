@@ -136,9 +136,15 @@ def _slug_to_title(slug: str) -> str:
 
 def _get_click_app():
     """Import and return the Click command tree for the ``m`` CLI."""
-    import typer.main
+    try:
+        import typer.main
 
-    from cli.m import cli
+        from cli.m import cli
+    except ImportError as e:
+        raise SystemExit(
+            f"❌ Failed to import CLI application: {e}\n"
+            "   Install all extras: uv sync --all-extras --group dev"
+        ) from e
 
     return typer.main.get_command(cli)
 
