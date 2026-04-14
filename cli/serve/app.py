@@ -184,6 +184,7 @@ def make_chat_endpoint(module):
                 hasattr(output, "tool_calls")
                 and output.tool_calls is not None
                 and isinstance(output.tool_calls, dict)
+                and output.tool_calls  # Check dict is not empty
             ):
                 tool_calls = []
                 for tool_name, model_tool_call in output.tool_calls.items():

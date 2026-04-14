@@ -164,6 +164,28 @@ class TestToolCalling:
         assert response.choices[0].message.tool_calls is None
 
     @pytest.mark.asyncio
+    async def test_empty_tool_calls_dict_finish_reason_stop(
+        self, mock_module, sample_tool_request
+    ):
+        """Test that finish_reason is 'stop' when tool_calls is an empty dict.
+
+        Regression test for bug where empty tool_calls dict {} produces
+        finish_reason='tool_calls' with an empty array instead of
+        finish_reason='stop' with tool_calls=None.
+        """
+        mock_output = ModelOutputThunk("Hello! How can I help?")
+        # Set tool_calls to empty dict (the bug case)
+        mock_output.tool_calls = {}
+        mock_module.serve.return_value = mock_output
+
+        endpoint = make_chat_endpoint(mock_module)
+        response = await endpoint(sample_tool_request)
+
+        # Should behave like no tool calls at all
+        assert response.choices[0].finish_reason == "stop"
+        assert response.choices[0].message.tool_calls is None
+
+    @pytest.mark.asyncio
     async def test_tools_passed_to_model_options(
         self, mock_module, sample_tool_request
     ):
