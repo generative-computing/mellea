@@ -212,10 +212,12 @@ class TestGetDocsFromCitations33:
 
 
 class TestAddCitationResponseSpans:
-    """Tests for _add_citation_response_spans (issue #843 regression guard)."""
+    """Regression tests for citation response span computation."""
 
-    def _make_citation(self, doc_id: str = "1") -> dict:
-        return {"doc_id": doc_id, "context_text": "some context"}
+    def _make_citation(self) -> dict:
+        # Citations are matched positionally by _add_citation_response_spans,
+        # not by doc_id — the doc_id value here is irrelevant to the function.
+        return {"doc_id": "1", "context_text": "some context"}
 
     def test_response_end_uses_sentence_length_not_full_response(self):
         """Regression: response_end must be index + len(sentence), not index + len(full_response).
@@ -231,7 +233,7 @@ class TestAddCitationResponseSpans:
         response_without_citations = f"{sent1} {sent2}"
 
         result = _add_citation_response_spans(
-            [self._make_citation("1")],
+            [self._make_citation()],
             response_with_citations,
             response_without_citations,
         )
@@ -258,7 +260,7 @@ class TestAddCitationResponseSpans:
         response_without = f"{sent1} {sent2}"
 
         result = _add_citation_response_spans(
-            [self._make_citation("1"), self._make_citation("2")],
+            [self._make_citation(), self._make_citation()],
             response_with,
             response_without,
         )
@@ -284,7 +286,7 @@ class TestAddCitationResponseSpans:
         response_without = sent
 
         result = _add_citation_response_spans(
-            [self._make_citation("1")], response_with, response_without
+            [self._make_citation()], response_with, response_without
         )
 
         assert len(result) == 1
