@@ -21,10 +21,7 @@ except ImportError as e:
     ) from e
 
 from mellea.backends.model_options import ModelOption
-from mellea.helpers.openai_compatible_helpers import (
-    build_completion_usage,
-    stream_chat_completion_chunks,
-)
+from mellea.helpers.openai_compatible_helpers import build_completion_usage
 
 from .models import (
     ChatCompletion,
@@ -34,6 +31,7 @@ from .models import (
     OpenAIError,
     OpenAIErrorResponse,
 )
+from .streaming import stream_chat_completion_chunks
 
 app = FastAPI(
     title="M serve OpenAI API Compatible Server",

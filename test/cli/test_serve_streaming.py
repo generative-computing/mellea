@@ -9,11 +9,9 @@ from fastapi.testclient import TestClient
 
 from cli.serve.app import make_chat_endpoint
 from cli.serve.models import ChatCompletionRequest, ChatMessage
+from cli.serve.streaming import stream_chat_completion_chunks
 from mellea.core.base import ModelOutputThunk
-from mellea.helpers.openai_compatible_helpers import (
-    build_completion_usage,
-    stream_chat_completion_chunks,
-)
+from mellea.helpers.openai_compatible_helpers import build_completion_usage
 
 
 @pytest.fixture
