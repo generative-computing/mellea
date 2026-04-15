@@ -11,7 +11,7 @@ from cli.decompose.utils import validate_filename
 # --- reorder_subtasks ---
 
 
-def _subtask(tag: str, subtask: str, depends_on: list[str] | None = None):
+def _subtask(tag: str, subtask: str, depends_on: list[str] | None = None) -> dict:
     """Minimal subtask dict for testing."""
     d = {
         "tag": tag,
@@ -94,7 +94,7 @@ def test_reorder_case_insensitive_dependency():
 # --- verify_user_variables ---
 
 
-def _decomp_data(subtasks):
+def _decomp_data(subtasks: list[dict]) -> dict:
     return {
         "original_task_prompt": "",
         "subtask_list": [],
