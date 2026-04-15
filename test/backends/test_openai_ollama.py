@@ -1,4 +1,3 @@
-# test/rits_backend_tests/test_openai_integration.py
 import asyncio
 import os
 from unittest.mock import patch
