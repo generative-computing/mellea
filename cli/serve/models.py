@@ -62,9 +62,9 @@ class ChatCompletionRequest(BaseModel):
 
     # OpenAI-compatible streaming options. Only applies when stream=True.
     # Supports `include_usage` (bool) to control whether usage statistics are
-    # included in the final streaming chunk. Defaults to True (include usage)
-    # when not specified for backward compatibility. For non-streaming requests
-    # (stream=False), usage is always included regardless of this parameter.
+    # included in the final streaming chunk. Defaults to False (exclude usage)
+    # when not specified. For non-streaming requests (stream=False), usage is
+    # always included regardless of this parameter.
     stream_options: dict[str, Any] | None = None
 
     # For future/undocumented fields
