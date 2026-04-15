@@ -157,6 +157,52 @@ def require_api_key(*env_vars: str):
 
 
 # ---------------------------------------------------------------------------
+# NLTK data
+# ---------------------------------------------------------------------------
+
+
+def _nltk_data_available() -> tuple[bool, str]:
+    """Check whether nltk is installed *and* punkt_tab data is downloaded.
+
+    Returns a (available, reason) tuple so the skip message is specific:
+    - nltk not installed  → "nltk not installed — install mellea[formatters]"
+    - punkt_tab missing   → "NLTK punkt_tab data not downloaded — run: python -m nltk.downloader punkt_tab"
+    - both ok             → (True, "")
+    """
+    try:
+        import nltk
+    except ImportError:
+        return False, "nltk not installed — install mellea[formatters]"
+
+    try:
+        import nltk.data
+
+        nltk.data.find("tokenizers/punkt_tab")
+    except LookupError:
+        return (
+            False,
+            "NLTK punkt_tab data not downloaded — run: python -m nltk.downloader punkt_tab",
+        )
+
+    return True, ""
+
+
+def require_nltk_data():
+    """Skip unless nltk is installed and punkt_tab tokenizer data is available.
+
+    Distinguishes between the two failure modes so the skip reason is actionable::
+
+        @require_nltk_data()
+        def test_citation_spans(): ...
+
+        # Module-level (skips all tests in the file):
+        pytestmark = [require_nltk_data()]
+    """
+    available, reason = _nltk_data_available()
+    return pytest.mark.skipif(not available, reason=reason)
+
+
+# ---------------------------------------------------------------------------
 # Optional dependencies
 # ---------------------------------------------------------------------------
 

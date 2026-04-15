@@ -1,7 +1,10 @@
 import pytest
 
+from mellea.core import CBlock, ModelOutputThunk, TemplateRepresentation
 from mellea.helpers import messages_to_docs
 from mellea.stdlib.components import Document, Message
+from mellea.stdlib.components.chat import ToolMessage, as_chat_history
+from mellea.stdlib.context import ChatContext
 
 
 def test_message_with_docs():
@@ -22,5 +25,231 @@ def test_message_with_docs():
     assert tr.args["documents"]
 
 
+# --- Message init ---
+
+
+def test_message_basic_fields():
+    msg = Message("user", "hello")
+    assert msg.role == "user"
+    assert msg.content == "hello"
+    assert msg._images is None
+    assert msg._docs is None
+
+
+def test_message_content_block_created():
+    msg = Message("assistant", "response")
+    assert isinstance(msg._content_cblock, CBlock)
+    assert msg._content_cblock.value == "response"
+
+
+def test_message_repr():
+    msg = Message("user", "hi there")
+    r = repr(msg)
+    assert 'role="user"' in r
+    assert 'content="hi there"' in r
+
+
+# --- Message images property ---
+
+
+def test_message_images_none():
+    msg = Message("user", "text")
+    assert msg.images is None
+
+
+# --- Message parts() ---
+
+
+def test_message_parts_no_docs_no_images():
+    msg = Message("user", "text")
+    parts = msg.parts()
+    assert len(parts) == 1
+    assert parts[0] is msg._content_cblock
+
+
+def test_message_parts_with_docs():
+    doc = Document("text", "title")
+    msg = Message("user", "hi", documents=[doc])
+    parts = msg.parts()
+    assert doc in parts
+
+
+# --- Message format_for_llm ---
+
+
+def test_message_format_for_llm_structure():
+    msg = Message("user", "hello")
+    tr = msg.format_for_llm()
+    assert isinstance(tr, TemplateRepresentation)
+    assert tr.args["role"] == "user"
+    assert tr.args["content"] is msg._content_cblock
+    assert tr.args["images"] is None
+    assert tr.args["documents"] is None
+
+
+# --- Message._parse — no tool calls ---
+
+
+def test_parse_plain_value_no_meta():
+    msg = Message("user", "original")
+    mot = ModelOutputThunk(value="model response")
+    result = msg._parse(mot)
+    assert isinstance(result, Message)
+    assert result.role == "assistant"
+    assert result.content == "model response"
+
+
+def test_parse_ollama_chat_response():
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="v")
+    fake_response = type(
+        "Resp",
+        (),
+        {
+            "message": type(
+                "Msg", (), {"role": "assistant", "content": "ollama answer"}
+            )()
+        },
+    )()
+    mot._meta["chat_response"] = fake_response
+    result = msg._parse(mot)
+    assert result.role == "assistant"
+    assert result.content == "ollama answer"
+
+
+def test_parse_openai_chat_response():
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="v")
+    mot._meta["oai_chat_response"] = {
+        "choices": [{"message": {"role": "assistant", "content": "openai answer"}}]
+    }
+    result = msg._parse(mot)
+    assert result.role == "assistant"
+    assert result.content == "openai answer"
+
+
+# --- Message._parse — with tool calls ---
+
+
+def test_parse_tool_calls_ollama():
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="v", tool_calls={"some_fn": None})
+    fake_calls = [{"name": "some_fn"}]
+    fake_response = type(
+        "Resp",
+        (),
+        {"message": type("Msg", (), {"role": "assistant", "tool_calls": fake_calls})()},
+    )()
+    mot._meta["chat_response"] = fake_response
+    result = msg._parse(mot)
+    assert result.role == "assistant"
+    assert "some_fn" in result.content
+
+
+def test_parse_tool_calls_openai():
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="v", tool_calls={"fn": None})
+    mot._meta["oai_chat_response"] = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{"function": {"name": "fn"}}],
+                }
+            }
+        ]
+    }
+    result = msg._parse(mot)
+    assert result.role == "assistant"
+
+
+def test_parse_tool_calls_fallback_uses_value():
+    """No chat_response or oai_chat_response — falls back to computed.value."""
+    msg = Message("user", "q")
+    mot = ModelOutputThunk(value="<tool_call>fn()</tool_call>", tool_calls={"fn": None})
+    result = msg._parse(mot)
+    assert result.role == "assistant"
+    assert result.content == "<tool_call>fn()</tool_call>"
+
+
+# --- ToolMessage ---
+
+
+def test_tool_message_fields():
+    from mellea.core import ModelToolCall
+
+    fake_tool = type("T", (), {"as_json_tool": {}})()
+    mtc = ModelToolCall("my_tool", fake_tool, {"x": 1})
+    tm = ToolMessage(
+        role="tool",
+        content='{"result": 42}',
+        tool_output=42,
+        name="my_tool",
+        args={"x": 1},
+        tool=mtc,
+    )
+    assert tm.role == "tool"
+    assert tm.name == "my_tool"
+    assert tm.arguments == {"x": 1}
+
+
+def test_tool_message_format_for_llm_includes_name():
+    from mellea.core import ModelToolCall
+
+    fake_tool = type("T", (), {"as_json_tool": {}})()
+    mtc = ModelToolCall("my_tool", fake_tool, {})
+    tm = ToolMessage(
+        role="tool",
+        content="output",
+        tool_output="output",
+        name="my_tool",
+        args={},
+        tool=mtc,
+    )
+    tr = tm.format_for_llm()
+    assert isinstance(tr, TemplateRepresentation)
+    assert tr.args["name"] == "my_tool"
+
+
+def test_tool_message_repr():
+    from mellea.core import ModelToolCall
+
+    fake_tool = type("T", (), {"as_json_tool": {}})()
+    mtc = ModelToolCall("fn", fake_tool, {})
+    tm = ToolMessage("tool", "out", "out", "fn", {}, mtc)
+    r = repr(tm)
+    assert 'name="fn"' in r
+
+
+# --- as_chat_history ---
+
+
+def test_as_chat_history_messages_only():
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    ctx = ctx.add(Message("assistant", "hi"))
+    history = as_chat_history(ctx)
+    assert len(history) == 2
+    assert history[0].role == "user"
+    assert history[1].role == "assistant"
+
+
+def test_as_chat_history_empty():
+    ctx = ChatContext()
+    history = as_chat_history(ctx)
+    assert history == []
+
+
+def test_as_chat_history_with_parsed_mot():
+    ctx = ChatContext()
+    ctx = ctx.add(Message("user", "hello"))
+    mot = ModelOutputThunk(value="reply")
+    mot.parsed_repr = Message("assistant", "reply")
+    ctx = ctx.add(mot)
+    history = as_chat_history(ctx)
+    assert len(history) == 2
+    assert history[1].content == "reply"
+
+
 if __name__ == "__main__":
-    pytest.main([__file__])
+    pytest.main([__file__, "-v"])
