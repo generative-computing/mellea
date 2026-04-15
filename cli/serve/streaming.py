@@ -57,10 +57,9 @@ async def stream_chat_completion_chunks(
         )
         yield f"data: {initial_chunk.model_dump_json()}\n\n"
 
-        while not output.is_computed():
-            delta_content = await output.astream()
-
-            if delta_content:
+        # Handle pre-computed output: emit value as a single content chunk
+        if output.is_computed():
+            if output.value:
                 chunk = ChatCompletionChunk(
                     id=completion_id,
                     model=model,
@@ -68,7 +67,7 @@ async def stream_chat_completion_chunks(
                     choices=[
                         ChatCompletionChunkChoice(
                             index=0,
-                            delta=ChatCompletionChunkDelta(content=delta_content),
+                            delta=ChatCompletionChunkDelta(content=output.value),
                             finish_reason=None,
                         )
                     ],
@@ -76,6 +75,27 @@ async def stream_chat_completion_chunks(
                     system_fingerprint=system_fingerprint,
                 )
                 yield f"data: {chunk.model_dump_json()}\n\n"
+        else:
+            # Stream incremental chunks for uncomputed output
+            while not output.is_computed():
+                delta_content = await output.astream()
+
+                if delta_content:
+                    chunk = ChatCompletionChunk(
+                        id=completion_id,
+                        model=model,
+                        created=created,
+                        choices=[
+                            ChatCompletionChunkChoice(
+                                index=0,
+                                delta=ChatCompletionChunkDelta(content=delta_content),
+                                finish_reason=None,
+                            )
+                        ],
+                        object="chat.completion.chunk",
+                        system_fingerprint=system_fingerprint,
+                    )
+                    yield f"data: {chunk.model_dump_json()}\n\n"
 
         # Include usage in final chunk only if explicitly requested via stream_options
         # Per OpenAI spec: usage is only included when stream_options.include_usage=True
