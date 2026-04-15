@@ -708,3 +708,72 @@ class TestStreamingEndpoint:
         # Usage should be included regardless of stream_options (non-streaming always includes usage)
         assert data["usage"] is not None
         assert data["usage"]["total_tokens"] == 8
+
+    def test_streaming_with_precomputed_thunk_bug(self, mock_module, streaming_request):
+        """Test that demonstrates the bug when serve returns an already-computed thunk.
+
+        BUG: When a serve function returns a ModelOutputThunk that is already computed
+        (i.e., output.is_computed() returns True immediately), the streaming loop
+        `while not output.is_computed()` exits immediately without emitting any content
+        chunks. The client receives only the initial role chunk and final finish chunk
+        with zero content.
+
+        This affects any serve function that doesn't explicitly check ModelOption.STREAM
+        and return an uncomputed thunk for streaming requests.
+        """
+        # Simulate a serve function that returns an already-computed thunk
+        # (e.g., a function that doesn't check ModelOption.STREAM)
+        mock_output = ModelOutputThunk("Hello, this is the complete response!")
+        # The thunk is already computed because we passed a value to __init__
+        assert mock_output.is_computed()  # This is True immediately
+        assert mock_output.value == "Hello, this is the complete response!"
+
+        mock_module.serve.return_value = mock_output
+
+        # Create test app
+        app = FastAPI()
+        app.add_api_route(
+            "/v1/chat/completions", make_chat_endpoint(mock_module), methods=["POST"]
+        )
+        client = TestClient(app)
+
+        # Make streaming request
+        response = client.post(
+            "/v1/chat/completions", json=streaming_request.model_dump(mode="json")
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+
+        # Parse SSE events
+        events = []
+        for line in response.text.strip().split("\n\n"):
+            if line.startswith("data: "):
+                data = line[6:]  # Remove "data: " prefix
+                if data != "[DONE]":
+                    events.append(json.loads(data))
+
+        # BUG DEMONSTRATION: We should get content chunks, but we don't
+        # Expected: initial role chunk + content chunks + final finish chunk
+        # Actual: initial role chunk + final finish chunk (no content!)
+
+        # Count chunks with actual content
+        content_chunks = [
+            e for e in events if e["choices"][0]["delta"].get("content") is not None
+        ]
+
+        # This assertion FAILS, proving the bug exists
+        # We expect at least one content chunk with the response text
+        assert len(content_chunks) > 0, (
+            "BUG: No content chunks emitted when serve returns pre-computed thunk"
+        )
+
+        # Verify the content is missing
+        all_content = "".join(
+            e["choices"][0]["delta"].get("content", "")
+            for e in events
+            if e["choices"][0]["delta"].get("content")
+        )
+        assert all_content == "Hello, this is the complete response!", (
+            f"BUG: Expected full response in content chunks, got: {all_content!r}"
+        )
