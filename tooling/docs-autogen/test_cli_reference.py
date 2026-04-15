@@ -200,7 +200,7 @@ def test_verbatim_blocks_rendered(generated_md):
     (Modes, Best practices, Detection notes, Rewrites) that are visible in
     ``--help`` output.  These were previously silently dropped because they
     appear after ``Raises:`` in the docstring, which the generator never
-    renders.  They should now appear as preformatted blocks.
+    renders.  They should now appear correctly formatted.
     """
     assert "**Modes:**" in generated_md, "fix async Modes block missing"
     assert "add-await-result" in generated_md, "fix async mode value missing"
@@ -208,6 +208,24 @@ def test_verbatim_blocks_rendered(generated_md):
     assert "**Detection notes:**" in generated_md, "Detection notes block missing"
     assert "**Rewrites:**" in generated_md, "fix genslots Rewrites block missing"
     assert "GenerativeStub" in generated_md, "fix genslots rewrite target missing"
+
+
+def test_bullet_blocks_not_in_code_fence(generated_md):
+    """Bullet-list \\b blocks must render as markdown lists, not code fences.
+
+    Best practices / Detection notes / Rewrites start with ``- `` items and
+    should be plain markdown bullets so they render properly in the browser,
+    not as monospace preformatted blocks.
+    """
+    # Find the Best practices section and verify the bullet follows as plain text
+    idx = generated_md.index("**Best practices:**")
+    # Next non-empty line after the heading should be a markdown bullet, not ```
+    after = generated_md[idx:].split("\n")
+    content_lines = [ln for ln in after[1:] if ln.strip()]
+    assert content_lines[0].startswith("- "), (
+        f"Expected markdown bullet after Best practices, got: {content_lines[0]!r}"
+    )
+    assert content_lines[0] != "```", "Best practices content is inside a code fence"
 
 
 def test_extract_verbatim_blocks_basic():

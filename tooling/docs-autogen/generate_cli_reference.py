@@ -336,9 +336,35 @@ def _render_command(
                 lines.append(f"**{title}**")
                 lines.append("")
             if rest.strip():
-                lines.append("```")
-                lines.append(rest.rstrip())
-                lines.append("```")
+                # Bullet lists render as markdown; columnar/aligned content
+                # (e.g. mode tables) keeps a code fence for monospace alignment.
+                first_content = next(
+                    (line.strip() for line in rest.splitlines() if line.strip()), ""
+                )
+                if first_content.startswith("- "):
+                    # Join wrapped continuation lines back into their bullet
+                    bullets: list[str] = []
+                    current: str | None = None
+                    for raw in rest.splitlines():
+                        s = raw.strip()
+                        if not s:
+                            if current is not None:
+                                bullets.append(current)
+                                current = None
+                        elif s.startswith("- "):
+                            if current is not None:
+                                bullets.append(current)
+                            current = s
+                        else:
+                            current = (current + " " + s) if current is not None else s
+                    if current is not None:
+                        bullets.append(current)
+                    for b in bullets:
+                        lines.append(b)
+                else:
+                    lines.append("```")
+                    lines.append(rest.rstrip())
+                    lines.append("```")
                 lines.append("")
 
     # Output
