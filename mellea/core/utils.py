@@ -40,7 +40,7 @@ _log_context: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
 _logger_lock: threading.Lock = threading.Lock()
 
 # Standard LogRecord attribute names that must not be overwritten by callers.
-_RESERVED_LOG_RECORD_ATTRS: frozenset[str] = frozenset(
+RESERVED_LOG_RECORD_ATTRS: frozenset[str] = frozenset(
     (
         "args",
         "created",
@@ -85,7 +85,7 @@ def set_log_context(**fields: Any) -> None:
         ValueError: If any key clashes with a standard ``logging.LogRecord``
             attribute (e.g. ``levelname``, ``module``, ``thread``).
     """
-    invalid = frozenset(fields) & _RESERVED_LOG_RECORD_ATTRS
+    invalid = frozenset(fields) & RESERVED_LOG_RECORD_ATTRS
     if invalid:
         raise ValueError(
             f"Context field names clash with LogRecord reserved attributes: "
@@ -126,7 +126,7 @@ def log_context(**fields: Any) -> Generator[None, None, None]:
     Raises:
         ValueError: If any key clashes with a reserved ``LogRecord`` attribute.
     """
-    invalid = frozenset(fields) & _RESERVED_LOG_RECORD_ATTRS
+    invalid = frozenset(fields) & RESERVED_LOG_RECORD_ATTRS
     if invalid:
         raise ValueError(
             f"Context field names clash with LogRecord reserved attributes: "
@@ -196,7 +196,7 @@ class RESTHandler(logging.Handler):
         if os.environ.get("MELLEA_FLOG"):
             formatter = self.formatter
             if isinstance(formatter, JsonFormatter):
-                log_dict = formatter._build_log_dict(record)
+                log_dict = formatter.format_as_dict(record)
             else:
                 log_dict = {"message": self.format(record)}
             try:
@@ -221,8 +221,12 @@ class JsonFormatter(logging.Formatter):
     Args:
         timestamp_format: ``strftime`` format for the ``timestamp`` field.
             Defaults to ISO-8601 (``"%Y-%m-%dT%H:%M:%S"``).
-        include_fields: Whitelist of core field names to keep.  When ``None``
-            all core fields are included.
+        include_fields: Whitelist of **core** field names to keep.  When ``None``
+            all core fields are included.  Note: this filter applies only to the
+            fields listed in ``_DEFAULT_FIELDS``; ``extra_fields`` passed to the
+            constructor and dynamic context fields (set via
+            :func:`set_log_context`) are **always** included regardless of this
+            setting.
         exclude_fields: Set of core field names to drop.  Applied after
             *include_fields*.
         extra_fields: Static key-value pairs merged into every log record.
@@ -268,6 +272,20 @@ class JsonFormatter(logging.Formatter):
         self._exclude: frozenset[str] = frozenset(exclude_fields or [])
         self._extra: dict[str, Any] = dict(extra_fields or {})
 
+    def format_as_dict(self, record: logging.LogRecord) -> dict[str, Any]:
+        """Return the log record as a dictionary (public API for external callers).
+
+        Equivalent to :meth:`_build_log_dict` but part of the public interface so
+        handlers and other callers do not need to reach into private methods.
+
+        Args:
+            record: The log record to convert.
+
+        Returns:
+            A dictionary ready for JSON serialisation.
+        """
+        return self._build_log_dict(record)
+
     def _build_log_dict(self, record: logging.LogRecord) -> dict[str, Any]:
         """Build a log record dictionary with core, extra, and context fields.
 
@@ -277,11 +295,19 @@ class JsonFormatter(logging.Formatter):
         Returns:
             A dictionary ready for JSON serialisation.
         """
-        # Build the full set of core fields first
+        # Build the full set of core fields first.
+        # A TypeError here means the caller used %-style format placeholders
+        # with the wrong number of arguments (e.g. logger.info("%s %s", one)).
+        # Catch it and substitute a safe error string so the record is still emitted.
+        try:
+            message = record.getMessage()
+        except TypeError as exc:
+            message = f"<logging format error: {exc}> original msg={record.msg!r}"
+
         all_core: dict[str, Any] = {
             "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,
-            "message": record.getMessage(),
+            "message": message,
             "module": record.module,
             "function": record.funcName,
             "line_number": record.lineno,

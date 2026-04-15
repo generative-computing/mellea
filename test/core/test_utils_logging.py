@@ -1,5 +1,7 @@
 """Unit tests for MelleaLogger, JsonFormatter, and ContextFilter enhancements."""
 
+# pytest: unit
+
 import asyncio
 import json
 import logging
@@ -8,8 +10,10 @@ from typing import Any
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from mellea.core.utils import (
-    _RESERVED_LOG_RECORD_ATTRS,
+    RESERVED_LOG_RECORD_ATTRS,
     ContextFilter,
     MelleaLogger,
     JsonFormatter,
@@ -187,6 +191,7 @@ class TestContextFilter:
         assert not hasattr(record, "trace_id")
 
 
+@pytest.mark.unit
 class TestMelleaLoggerLogLevel:
     def _reset(self) -> None:
         MelleaLogger.logger = None
@@ -215,6 +220,7 @@ class TestMelleaLoggerLogLevel:
         assert MelleaLogger._resolve_log_level() == logging.INFO
 
 
+@pytest.mark.unit
 class TestMelleaLoggerJsonConsole:
     def _reset(self) -> None:
         MelleaLogger.logger = None
@@ -273,6 +279,7 @@ class TestMelleaLoggerJsonConsole:
         assert isinstance(handler.formatter, CustomFormatter)
 
 
+@pytest.mark.unit
 class TestMelleaLoggerContextFilterWired:
     def setup_method(self) -> None:
         MelleaLogger.logger = None
@@ -422,9 +429,10 @@ class TestReservedAttributeValidation:
         assert parsed["custom_field"] == "fine"
 
     def test_reserved_set_is_non_empty(self) -> None:
-        assert len(_RESERVED_LOG_RECORD_ATTRS) > 10
+        assert len(RESERVED_LOG_RECORD_ATTRS) > 10
 
 
+@pytest.mark.unit
 class TestGetLoggerThreadSafety:
     def setup_method(self) -> None:
         MelleaLogger.logger = None
@@ -462,6 +470,28 @@ class TestJsonFormatterFormatSignature:
         result = fmt.format(_make_record("check"))
         assert isinstance(result, str)
         json.loads(result)  # also valid JSON
+
+
+class TestFormatAsDict:
+    def test_format_as_dict_returns_same_as_internal(self) -> None:
+        fmt = JsonFormatter()
+        record = _make_record("hi")
+        assert fmt.format_as_dict(record) == fmt._build_log_dict(record)
+
+    def test_format_as_dict_malformed_args_does_not_raise(self) -> None:
+        fmt = JsonFormatter()
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="x.py",
+            lineno=1,
+            msg="val: %s %s",
+            args=("only_one",),
+            exc_info=None,
+        )
+        result = fmt.format_as_dict(record)
+        assert "message" in result
+        assert "format error" in result["message"]
 
 
 class TestIncludeFieldsValidation:
