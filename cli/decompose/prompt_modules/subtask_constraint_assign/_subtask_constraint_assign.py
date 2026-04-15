@@ -4,7 +4,7 @@ from typing import TypedDict, TypeVar, Unpack, cast, final
 
 from mellea import MelleaSession
 from mellea.backends import ModelOption
-from mellea.core import FancyLogger
+from mellea.core import MelleaLogger
 from mellea.stdlib.components import Message
 
 from .._prompt_modules import PromptModule, PromptModuleString
@@ -12,7 +12,7 @@ from ._exceptions import BackendGenerationError, TagExtractionError
 from ._prompt import get_system_prompt, get_user_prompt
 from ._types import SubtaskPromptConstraintsItem
 
-FancyLogger.get_logger().setLevel("DEBUG")
+MelleaLogger.get_logger().setLevel("DEBUG")
 
 T = TypeVar("T")
 
@@ -175,7 +175,7 @@ class _SubtaskConstraintAssign(PromptModule):
                 ).strip()
             else:
                 # Fallback to raw text if tags are missing
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "Expected tags missing from LLM response; falling back to raw response text. "
                     "Downstream stages may receive unstructured content."
                 )
@@ -202,7 +202,7 @@ class _SubtaskConstraintAssign(PromptModule):
                 # If content exists but no list items were parsed,
                 # treat the whole text as a single constraint.
                 if subtask_constraint_assign_str and not subtask_constraint_assign:
-                    FancyLogger.get_logger().warning(
+                    MelleaLogger.get_logger().warning(
                         "No list-style constraints detected; falling back to full text as a single constraint."
                     )
                     subtask_constraint_assign = [subtask_constraint_assign_str]
