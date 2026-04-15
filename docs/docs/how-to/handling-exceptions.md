@@ -92,7 +92,7 @@ validates the inputs before calling the model. If any precondition fails,
 from typing import Literal
 from mellea import generative, start_session
 from mellea.core import Requirement
-from mellea.stdlib.components.genslot import PreconditionException
+from mellea.stdlib.components.genstub import PreconditionException
 from mellea.stdlib.requirements import simple_validate
 
 @generative

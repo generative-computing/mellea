@@ -8,7 +8,7 @@ description: "Run a Mellea program as an OpenAI-compatible chat endpoint with m 
 any LLM client — LangChain, the OpenAI SDK, `curl` — call your Mellea program as if
 it were a model.
 
-**Prerequisites:** `pip install "mellea[cli]"`.
+**Prerequisites:** `pip install "mellea[server]"`.
 
 ## The serve() function
 
@@ -112,4 +112,5 @@ print(response.choices[0].message.content)
 ---
 
 **See also:** [Context and Sessions](../concepts/context-and-sessions) |
-[Backends and Configuration](../guide/backends-and-configuration)
+[Backends and Configuration](../guide/backends-and-configuration) |
+[CLI Reference](../reference/cli)

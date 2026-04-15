@@ -87,8 +87,10 @@ if _OTEL_AVAILABLE and (_TRACE_APPLICATION_ENABLED or _TRACE_BACKEND_ENABLED):
     _tracer_provider = _setup_tracer_provider()
     # Create separate tracers for application and backend
     _mellea_version = version("mellea")
-    _application_tracer = trace.get_tracer("mellea.application", _mellea_version)  # type: ignore
-    _backend_tracer = trace.get_tracer("mellea.backend", _mellea_version)  # type: ignore
+    _application_tracer = _tracer_provider.get_tracer(
+        "mellea.application", _mellea_version
+    )
+    _backend_tracer = _tracer_provider.get_tracer("mellea.backend", _mellea_version)
 
 
 def is_application_tracing_enabled() -> bool:

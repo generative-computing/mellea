@@ -162,7 +162,7 @@ from typing import Literal
 
 from mellea import generative, start_session
 from mellea.core import Requirement
-from mellea.stdlib.components.genslot import PreconditionException
+from mellea.stdlib.components.genstub import PreconditionException
 from mellea.stdlib.requirements import simple_validate
 from mellea.stdlib.sampling import RejectionSamplingStrategy
 

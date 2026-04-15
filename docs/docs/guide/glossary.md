@@ -60,8 +60,7 @@ See: [Generative Functions](./generative-functions)
 ## Backend
 
 A backend is an inference engine that Mellea uses to run LLM calls. Examples:
-`OllamaModelBackend`, `OpenAIBackend`, `LocalHFBackend`, `LocalVLLMBackend`,
-`WatsonxAIBackend`. Backends are configured via `MelleaSession` or
+`OllamaModelBackend`, `OpenAIBackend`, `LocalHFBackend`, `WatsonxAIBackend`. Backends are configured via `MelleaSession` or
 `start_session()`.
 
 See: [Backends and Configuration](./backends-and-configuration)
@@ -400,22 +399,6 @@ See: [Instruct, Validate, Repair](../concepts/instruct-validate-repair)
 
 ---
 
-## m decompose
-
-`m decompose` is a CLI tool that takes a complex task description and uses an LLM
-to break it into ordered subtasks, extract constraints, and generate a ready-to-run
-Python script.
-
-```bash
-m decompose run --prompt-file task.txt --out-dir ./output/
-```
-
-The output includes a JSON breakdown of subtasks and a `result.py` you can run
-immediately. Also available programmatically via
-`cli.decompose.pipeline.decompose()`.
-
----
-
 ## MelleaSession
 
 The primary entry point for Mellea. A `MelleaSession` wraps a backend and provides
@@ -529,7 +512,7 @@ fails — i.e., before the LLM call is made. Catch it to handle pre-call validat
 failures gracefully.
 
 ```python
-from mellea.stdlib.components.genslot import PreconditionException
+from mellea.stdlib.components.genstub import PreconditionException
 
 try:
     result = my_generative_fn(m, ...)

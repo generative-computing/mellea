@@ -15,10 +15,9 @@ try:
 except ImportError:
     OTEL_AVAILABLE = False
 
-pytestmark = [
-    pytest.mark.skipif(not OTEL_AVAILABLE, reason="OpenTelemetry not installed"),
-    pytest.mark.integration,
-]
+pytestmark = pytest.mark.skipif(
+    not OTEL_AVAILABLE, reason="OpenTelemetry not installed"
+)
 
 
 def _reset_logging_modules():

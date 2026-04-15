@@ -463,7 +463,7 @@ class OpenAIBackend(FormatterBackend):
             if self._server_type == _ServerType.OPENAI:
                 # The OpenAI platform requires that additionalProperties=False on all response_format schemas.
                 # However, not all schemas generates by Mellea include additionalProperties.
-                # GenerativeSlot, in particular, does not add this property.
+                # GenerativeStub, in particular, does not add this property.
                 # The easiest way to address this disparity between OpenAI and other inference providers is to
                 # monkey-patch the response format exactly when we are actually using the OpenAI server.
                 #

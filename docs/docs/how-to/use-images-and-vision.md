@@ -114,7 +114,6 @@ To remove images from context on the next turn, pass `images=[]` explicitly.
 | `OpenAIBackend` | ✓ | Use with `gpt-4o`, or a local vision model via OpenAI-compatible endpoint |
 | `LiteLLMBackend` | ✓ | Depends on the underlying provider |
 | `LocalHFBackend` | Partial | Model-dependent; experimental |
-| `LocalVLLMBackend` | Partial | Model-dependent |
 | `WatsonxAIBackend` | ✗ | Not currently supported |
 
 > **Full example (Ollama):** [`docs/examples/image_text_models/vision_ollama_chat.py`](https://github.com/generative-computing/mellea/blob/main/docs/examples/image_text_models/vision_ollama_chat.py)

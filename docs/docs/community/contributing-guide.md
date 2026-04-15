@@ -215,7 +215,6 @@ Tests use a four-tier granularity system. Every test belongs to exactly one tier
 | `openai` | OpenAI API or compatible | API calls (may use Ollama `/v1`) |
 | `watsonx` | Watsonx API | API calls, requires credentials |
 | `huggingface` | HuggingFace transformers | Local, GPU required |
-| `vllm` | vLLM | Local, GPU required |
 | `litellm` | LiteLLM (wraps other backends) | Depends on underlying backend |
 | `bedrock` | AWS Bedrock | API calls, requires credentials |
 

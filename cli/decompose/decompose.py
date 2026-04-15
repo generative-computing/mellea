@@ -42,7 +42,7 @@ class DecompVersion(StrEnum):
     latest = "latest"
     v1 = "v1"
     v2 = "v2"
-    # v3 = "v3"
+    v3 = "v3"
 
 
 this_file_dir = Path(__file__).resolve().parent
@@ -226,13 +226,38 @@ def run(
             case_sensitive=False,
         ),
     ] = LogMode.demo,
+    enable_script_run: Annotated[
+        bool,
+        typer.Option(
+            help=(
+                "When true, generated scripts expose argparse runtime options "
+                "for backend, model, endpoint, and API key overrides."
+            )
+        ),
+    ] = False,
 ) -> None:
-    """Runs the ``m decompose`` CLI workflow and writes generated outputs.
+    """Break a complex task into ordered, executable subtasks.
 
-    Reads user queries from a file or interactive input, runs the decomposition
-    pipeline for each task job, and writes one JSON file, one rendered Python
-    program, and any generated validation modules under a per-job output
-    directory.
+    Reads user queries from a file or interactive input, runs the LLM-driven
+    decomposition pipeline for each task job, and writes one JSON file, one
+    rendered Python script, and any generated validation modules under a per-job
+    output directory.
+
+    Prerequisites:
+        Mellea installed (``uv add mellea``). An Ollama instance running locally,
+        or an OpenAI-compatible endpoint configured via ``--backend-endpoint``.
+
+    Output:
+        Creates a directory ``<out-dir>/<out-name>/`` containing a JSON
+        decomposition result file, a ready-to-run Python script, and any
+        generated validation modules. One directory per task job.
+
+    Examples:
+        m decompose run --out-dir ./output --input-file tasks.txt
+
+    See Also:
+        guide: guide/m-decompose
+        guide: how-to/refactor-prompts-with-cli
 
     Args:
         out_dir: Existing directory under which per-job output directories are
@@ -253,6 +278,8 @@ def run(
             prompts and programs. Each name must be a valid non-keyword Python
             identifier.
         log_mode: Logging verbosity for CLI and pipeline execution.
+        enable_script_run: Whether generated scripts should expose argparse
+            runtime options. Defaults to ``False``.
 
     Raises:
         AssertionError: If ``out_name`` is invalid, ``out_dir`` does not name an
@@ -277,6 +304,7 @@ def run(
         logger.info("model_id       : %s", model_id)
         logger.info("version        : %s", version.value)
         logger.info("log_mode       : %s", log_mode.value)
+        logger.info("script options : %s", enable_script_run)
         logger.info("input_vars     : %s", input_var or "[]")
 
         environment = Environment(
@@ -393,6 +421,11 @@ def run(
                         subtasks=decomp_data["subtasks"],
                         user_inputs=input_var,
                         identified_constraints=decomp_data["identified_constraints"],
+                        model_id=model_id,
+                        backend=backend.value,
+                        backend_endpoint=backend_endpoint,
+                        backend_api_key=backend_api_key,
+                        enable_script_run=enable_script_run,
                     )
                     + "\n"
                 )

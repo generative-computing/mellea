@@ -4,8 +4,8 @@ This directory contains examples for extracting structured information from unst
 
 ## Files
 
-### 101_with_gen_slots.py
-Basic information extraction using generative slots to extract person names from text.
+### 101_with_gen_stubs.py
+Basic information extraction using generative stubs to extract person names from text.
 
 **Key Features:**
 - Using `@generative` decorator for extraction tasks
@@ -49,5 +49,5 @@ print(names)  # ['President Obama', 'Angela Merkel']
 
 ## Related Documentation
 
-- See `generative_slots/` for more on the `@generative` decorator
-- See `mellea/stdlib/components/genslot.py` for implementation details
+- See `generative_stubs/` for more on the `@generative` decorator
+- See `mellea/stdlib/components/genstub.py` for implementation details

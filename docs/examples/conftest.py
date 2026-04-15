@@ -282,22 +282,22 @@ def pytest_collection_finish(session):
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
-    # Append the skipped examples if needed.
-    if len(examples_to_skip) == 0:
-        return
-
-    terminalreporter.ensure_newline()
-    terminalreporter.section("Skipped Examples", sep="=", blue=True, bold=True)
-    terminalreporter.line("The following examples were skipped during collection:\n")
-    for filename, reason in examples_to_skip.items():
-        terminalreporter.line(f"  • {filename}: {reason}")
+    if examples_to_skip:
+        terminalreporter.ensure_newline()
+        terminalreporter.section("Skipped Examples", sep="=", blue=True, bold=True)
+        terminalreporter.line(
+            "The following examples were skipped during collection:\n"
+        )
+        for filepath, reason in examples_to_skip.items():
+            terminalreporter.line(f"  • {pathlib.Path(filepath).name}: {reason}")
 
 
 def pytest_pycollect_makemodule(module_path, parent):
     """Intercepts Module creation to skip files before import.
 
-    Runs for both directory traversal and direct file specification.
-    Returning a SkippedFile prevents pytest from importing the file,
+    Only fires for files matching python_files (default test_*.py) during
+    directory traversal, or for any file specified directly on the command
+    line. Returning a SkippedFile prevents pytest from importing the file,
     which is necessary when files contain unavailable dependencies.
 
     Args:
@@ -307,7 +307,7 @@ def pytest_pycollect_makemodule(module_path, parent):
     file_path = module_path
 
     # Limit scope to docs/examples directory
-    if "docs" not in str(file_path) or "examples" not in str(file_path):
+    if "docs" not in file_path.parts or "examples" not in file_path.parts:
         return None
 
     if file_path.name == "conftest.py":
@@ -319,14 +319,14 @@ def pytest_pycollect_makemodule(module_path, parent):
         config._example_capabilities = get_system_capabilities()
 
     # Check manual skip list
-    if file_path.name in examples_to_skip:
+    if str(file_path) in examples_to_skip:
         return SkippedFile.from_parent(parent, path=file_path)
 
     # Extract and evaluate markers
     markers = _extract_markers_from_file(file_path)
 
     if not markers:
-        return None
+        return SkippedFile.from_parent(parent, path=file_path)
 
     should_skip, _reason = _should_skip_collection(markers)
 
@@ -365,16 +365,19 @@ def pytest_ignore_collect(collection_path, config):
         and "examples" in abs_path.parts
     ):
         # Skip files in the manual skip list
-        if collection_path.name in examples_to_skip:
+        if str(collection_path) in examples_to_skip:
             return True
 
         # Extract markers and check if we should skip
         try:
             markers = _extract_markers_from_file(collection_path)
+            # No markers → not a runnable example (e.g. __init__.py, helpers)
+            if not markers:
+                return True
             should_skip, reason = _should_skip_collection(markers)
             if should_skip and reason:
                 # Add to skip list with reason for terminal summary
-                examples_to_skip[collection_path.name] = reason
+                examples_to_skip[str(collection_path)] = reason
                 # Return True to ignore this file completely
                 return True
         except Exception as e:
@@ -389,36 +392,35 @@ def pytest_ignore_collect(collection_path, config):
     return False
 
 
-# This doesn't replace the existing pytest file collection behavior.
 def pytest_collect_file(parent: pytest.Dir, file_path: pathlib.PosixPath):
-    # Do a quick check that it's a .py file in the expected `docs/examples` folder. We can make
-    # this more exact if needed.
+    """Provide an explicit collector for example files in docs/examples/."""
     if (
         file_path.suffix == ".py"
         and "docs" in file_path.parts
         and "examples" in file_path.parts
     ):
-        # Skip this test. It requires additional setup.
-        if file_path.name in examples_to_skip:
+        # Directly-specified files are handled by pytest_pycollect_makemodule —
+        # only provide an explicit collector during directory traversal.
+        if parent.session.isinitpath(file_path):
+            return None
+
+        # Already flagged for skipping (missing system capability)
+        if str(file_path) in examples_to_skip:
             return
 
-        # Check markers first - if file has skip marker, return SkippedFile
-        try:
-            markers = _extract_markers_from_file(file_path)
-            should_skip, _reason = _should_skip_collection(markers)
-            if should_skip:
-                # FIX: Return a dummy collector instead of None.
-                # This prevents pytest from falling back to the default Module collector
-                # which would try to import the file.
-                return SkippedFile.from_parent(parent, path=file_path)
-        except Exception:
-            # If we can't read markers, continue with other checks
-            pass
+        # Check markers — no markers means not a runnable example.
+        # _extract_markers_from_file is self-contained (returns [] on error),
+        # so no try/except needed here.
+        markers = _extract_markers_from_file(file_path)
+        if not markers:
+            return None
+        should_skip, _reason = _should_skip_collection(markers)
+        if should_skip:
+            return SkippedFile.from_parent(parent, path=file_path)
 
-        # ExampleModule (returned by pytest_pycollect_makemodule) handles
-        # collection for files that should run — return None here to avoid
-        # creating a duplicate collector from this hook.
-        return None
+        # pytest_pycollect_makemodule only fires for files matching python_files
+        # (test_*.py) — examples need an explicit collector for directory traversal.
+        return ExampleModule.from_parent(parent, path=file_path)
 
 
 class SkippedFile(pytest.File):
@@ -599,6 +601,56 @@ def pytest_runtest_setup(item):
             pytest.skip(
                 "Skipping test: Ollama not available (port 11434 not listening)"
             )
+
+
+def pytest_runtest_teardown(item, nextitem):
+    """Evict Ollama models after each ollama-marked example.
+
+    Examples run as subprocesses, so Ollama's default keep_alive keeps
+    models resident after exit. Evict after every example to prevent
+    heavyweight models from starving subsequent examples of memory (#798).
+    """
+    if not isinstance(item, ExampleItem):
+        return
+    if not item.get_closest_marker("ollama"):
+        return
+
+    _evict_ollama_models()
+
+
+def _evict_ollama_models() -> None:
+    """Evict all currently loaded Ollama models (best-effort)."""
+    import requests
+
+    host = os.environ.get("OLLAMA_HOST", "127.0.0.1")
+    if ":" in host:
+        host, port = host.rsplit(":", 1)
+    else:
+        port = os.environ.get("OLLAMA_PORT", "11434")
+
+    if host == "0.0.0.0":
+        host = "127.0.0.1"
+
+    base_url = f"http://{host}:{port}"
+
+    try:
+        resp = requests.get(f"{base_url}/api/ps", timeout=5)
+        resp.raise_for_status()
+        loaded = resp.json().get("models", [])
+    except Exception:
+        return
+
+    for entry in loaded:
+        model_name = entry.get("name") or entry.get("model", "unknown")
+        try:
+            requests.post(
+                f"{base_url}/api/generate",
+                json={"model": model_name, "keep_alive": 0},
+                timeout=10,
+            )
+            print(f"ollama-evict: evicted {model_name}", file=sys.stderr)
+        except Exception:
+            pass
 
 
 def pytest_collection_modifyitems(items):

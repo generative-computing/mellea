@@ -41,6 +41,8 @@ jobs:
       - name: Send failure message pre-commit
         if: failure() # This step will only run if a previous step failed
         run: echo "The quality verification failed. Please run precommit "
+      - name: Download NLTK data
+        run: uv run python -m nltk.downloader punkt_tab
       - name: Install Ollama
         run: curl -fsSL https://ollama.com/install.sh | sh
       - name: Start serving ollama

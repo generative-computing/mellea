@@ -19,7 +19,6 @@ pytest.importorskip("cpex.framework")
 
 from mellea.core.base import AbstractMelleaTool, ModelOutputThunk, ModelToolCall
 from mellea.plugins import PluginResult, hook, register
-from mellea.plugins.manager import shutdown_plugins
 from mellea.plugins.types import HookType
 from mellea.stdlib.functional import _acall_tools
 
@@ -50,17 +49,6 @@ def _make_result(tool_call: ModelToolCall) -> ModelOutputThunk:
     mot = MagicMock(spec=ModelOutputThunk)
     mot.tool_calls = {tool_call.name: tool_call}
     return mot
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-async def reset_plugins():
-    yield
-    await shutdown_plugins()
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
-# Default: request review from contributors
-* @generative-computing/mellea-contributors
+# Default: request review from maintainers
+* @generative-computing/mellea-maintainers
 
 # Mellea Core requires special review
 /mellea/core/ @nrfulton @jakelorocco

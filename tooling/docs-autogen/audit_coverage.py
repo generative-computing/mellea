@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Audit API documentation coverage and docstring quality.
 
-Discovers all public classes and functions in mellea/ and cli/ using Griffe,
+Discovers all public classes and functions in mellea/ using Griffe,
 then checks which ones have generated MDX documentation. Constants and module
 attributes are excluded from the count — they are not expected to have
 standalone documentation.
@@ -96,7 +96,7 @@ def discover_public_symbols(
 
     Args:
         source_dir: Root directory to scan (e.g., mellea/ or cli/)
-        package_name: Package name to prepend (e.g., "mellea" or "cli")
+        package_name: Package name to prepend (e.g., "mellea")
 
     Returns:
         Dict mapping full symbol paths to empty lists (for compatibility)
@@ -615,8 +615,8 @@ def audit_docstring_quality(
     actually surfaced in the API reference.
 
     Args:
-        source_dir: Root directory to scan (e.g., mellea/ or cli/)
-        package_name: Package name (e.g., "mellea" or "cli")
+        source_dir: Root directory to scan (e.g., mellea/)
+        package_name: Package name (e.g., "mellea")
         short_threshold: Word count below which a docstring is flagged as short
         include_methods: Whether to audit public methods on classes in addition
             to top-level functions and classes
@@ -959,36 +959,6 @@ def audit_nav_orphans(docs_dir: Path, source_dir: Path) -> list[str]:
     return sorted(mdx_files - nav_refs)
 
 
-def discover_cli_commands(cli_dir: Path) -> list[str]:
-    """Discover CLI commands from Typer applications.
-
-    Args:
-        cli_dir: Path to cli/ directory
-
-    Returns:
-        List of command names (e.g., ["m serve", "m alora", "m decompose"])
-    """
-    commands = []
-
-    # Look for Typer app definitions
-    # This is a simplified version - full implementation would parse the CLI structure
-    main_file = cli_dir / "m.py"
-    if main_file.exists():
-        content = main_file.read_text()
-
-        # Simple heuristic: look for @app.command() decorators or add_typer() calls
-
-        # Find command decorators
-        command_pattern = r'@app\.command\(["\']([^"\']+)["\']\)'
-        commands.extend(re.findall(command_pattern, content))
-
-        # Find subcommand additions
-        typer_pattern = r'app\.add_typer\([^,]+,\s*name=["\']([^"\']+)["\']\)'
-        commands.extend(re.findall(typer_pattern, content))
-
-    return sorted(set(commands))
-
-
 def find_documented_symbols(docs_dir: Path) -> set[str]:
     """Find which symbols have MDX documentation.
 
@@ -1119,17 +1089,12 @@ def main():
 
     print("🔍 Discovering public symbols...")
     mellea_symbols = discover_public_symbols(source_dir / "mellea", "mellea")
-    cli_symbols = discover_public_symbols(source_dir / "cli", "cli")
-
-    print("🔍 Discovering CLI commands...")
-    cli_commands = discover_cli_commands(source_dir / "cli")
 
     print("📚 Finding documented symbols...")
     documented = find_documented_symbols(docs_dir)
 
     print("📊 Generating coverage report...")
-    all_symbols = {**mellea_symbols, **cli_symbols}
-    report = generate_coverage_report(all_symbols, documented, cli_commands)
+    report = generate_coverage_report(mellea_symbols, documented, cli_commands=[])
 
     # Print coverage report
     print(f"\n{'=' * 60}")
@@ -1175,7 +1140,7 @@ def main():
     if args.quality:
         print("\n🔬 Running docstring quality audit (documented symbols only)...")
         include_methods = not args.no_methods
-        for pkg, pkg_name in [("mellea", "mellea"), ("cli", "cli")]:
+        for pkg, pkg_name in [("mellea", "mellea")]:
             pkg_dir = source_dir / pkg
             if pkg_dir.exists():
                 quality_issues.extend(

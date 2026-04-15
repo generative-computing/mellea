@@ -250,4 +250,4 @@ For parallel generation, keep the default `SimpleContext`.
 ---
 
 **See also:** [Async and Streaming](../how-to/use-async-and-streaming) (full API reference) |
-[Tutorial 03: Using Generative Slots](./03-using-generative-slots)
+[Tutorial 03: Using Generative Stubs](./03-using-generative-stubs)

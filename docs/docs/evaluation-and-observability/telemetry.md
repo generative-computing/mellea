@@ -116,11 +116,14 @@ exporter configuration (Jaeger, Grafana Tempo, etc.), and debugging guidance.
 
 ## Metrics
 
-Mellea automatically tracks token consumption across all backends using
-OpenTelemetry counters (`mellea.llm.tokens.input` and
-`mellea.llm.tokens.output`). No code changes are required — the
-`TokenMetricsPlugin` records metrics via the plugin hook system after each
-LLM call completes.
+Mellea automatically tracks token consumption and request latency across all
+backends using OpenTelemetry metrics. No code changes are required — two
+plugins hook into the generation pipeline and record metrics automatically:
+
+- **`TokenMetricsPlugin`** — records `mellea.llm.tokens.input` and
+  `mellea.llm.tokens.output` counters after each LLM call.
+- **`LatencyMetricsPlugin`** — records `mellea.llm.request.duration` (every
+  request) and `mellea.llm.ttfb` (streaming requests only) histograms.
 
 The metrics API also exposes `create_counter`, `create_histogram`, and
 `create_up_down_counter` for instrumenting your own application code.
@@ -131,8 +134,9 @@ Mellea supports three exporters that can run simultaneously:
 - **OTLP** — export to production observability platforms
 - **Prometheus** — register with `prometheus_client` for scraping
 
-See [Metrics](../evaluation-and-observability/metrics) for token usage details,
-backend support matrix, exporter setup, custom instruments, and troubleshooting.
+See [Metrics](../evaluation-and-observability/metrics) for token usage and
+latency details, backend support matrix, exporter setup, custom instruments,
+and troubleshooting.
 
 ## Logging
 

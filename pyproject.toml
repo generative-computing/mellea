@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "mellea"
-version = "0.4.1"
+version = "0.4.2"
 authors = [
     { name = "Mellea Contributors", email = "melleaadmin@ibm.com" },
 ]
@@ -26,6 +26,7 @@ dependencies = [
     "mistletoe>=1.4.0",
     "pillow", # Needed for Intrinsics (HF and OpenAI Backends).
     "math_verify", # Needed for Majority Voting Sampling Strategies.
+    "nltk>=3.9", # Needed for sentence tokenization in granite citation parsing.
     "rouge_score", # Needed for Majority Voting Sampling Strategies.
     "PyYAML", # Needed for backends/adapters and granite formatters.
     "packaging", # Needed for server type helpers.
@@ -49,10 +50,6 @@ hf = [
     "huggingface-hub>=0.33.4",
 ]
 
-vllm = [
-    "vllm>=0.13.0; sys_platform != 'darwin'",
-    "numpy<=2.2", # ImportError: Numba needs NumPy 2.2 or less. Got NumPy 2.4.
-]
 
 litellm = [
     "litellm>=1.76",
@@ -104,7 +101,7 @@ sandbox = [
     "llm-sandbox[docker]>=0.3.23",
 ]
 
-backends = ["mellea[watsonx,hf,vllm,litellm]"]
+backends = ["mellea[watsonx,hf,litellm]"]
 
 hooks = [
     "cpex>=0.1.0.dev10; python_version >= '3.11'",
@@ -164,6 +161,7 @@ dev = [
     {include-group = "release"},
     "griffe>=2.0.0",
     "mdxify>=0.2.37",
+    "mellea[server]",
     "poethepoet>=0.42.1",
 ]
 
@@ -220,6 +218,14 @@ python tooling/docs-autogen/audit_coverage.py --quality \
   --docs-dir "$PREVIEW_DIR/api"
 """
 help = "Generate fresh API docs to /tmp/mellea-preview and audit quality."
+
+[tool.poe.tasks.clidocs]
+cmd = "python tooling/docs-autogen/generate_cli_reference.py"
+help = "Generate the CLI reference page (docs/docs/reference/cli.md) from Typer metadata."
+
+[tool.poe.tasks.clidocs-clean]
+shell = "rm -f docs/docs/reference/cli.md"
+help = "Remove the generated CLI reference page."
 
 # -----------------------------
 # Ruff - Linting and Formatting
@@ -305,12 +311,6 @@ disable_error_code = [
     "import-not-found",
 ]
 
-[[tool.mypy.overrides]]
-# vLLM is an optional backend that doesn't work on macOS
-module = "mellea.backends.vllm"
-disable_error_code = [
-    "import-not-found",
-]
 
 # -----------------------------
 # Codespell - Spell Checking
@@ -340,7 +340,6 @@ markers = [
     "openai: Tests requiring OpenAI API (requires API key)",
     "watsonx: Tests requiring Watsonx API (requires API key)",
     "huggingface: Tests requiring HuggingFace backend (local, heavy)",
-    "vllm: Tests requiring vLLM backend (local, GPU required)",
     "litellm: Tests requiring LiteLLM backend",
     "bedrock: Tests requiring AWS Bedrock backend (requires credentials)",
 
@@ -371,10 +370,6 @@ filterwarnings = [
     # Deduplicate noisy Pydantic serialization warnings
     "once:.*PydanticSerializationUnexpectedValue.*:UserWarning",
 
-    # Ignore SWIG C/C++ binding warnings from vLLM (Python 3.12 issue)
-    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
-    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
-    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
 
     # Keep Watsonx deprecation visible (important for migration)
     "default:.*Watsonx Backend is deprecated.*:DeprecationWarning",
@@ -427,3 +422,6 @@ branch = "main"
 parser_angular_allowed_types = "build,chore,ci,docs,feat,fix,perf,style,refactor,test,release"
 parser_angular_minor_types = "release"
 parser_angular_patch_types = "fix,perf,feat"
+
+[tool.uv.sources]
+mellea = { workspace = true }

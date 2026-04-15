@@ -5,12 +5,12 @@ This test actually trains a tiny adapter to verify the migration works end-to-en
 
 import json
 import os
-import shutil
-import sys
 import tempfile
 from pathlib import Path
 
 import pytest
+
+from test.conftest import flush_device_caches
 
 torch = pytest.importorskip("torch", reason="torch not installed — install mellea[hf]")
 from transformers import AutoTokenizer
@@ -292,8 +292,6 @@ def test_alora_training_integration():
         )
 
         # Cleanup GPU memory
-        import gc
-
         # 1. Remove accelerate dispatch hooks before moving to CPU.
         #    device_map="auto" installs hooks that prevent full VRAM release otherwise.
         try:
@@ -310,12 +308,8 @@ def test_alora_training_integration():
         base_model.cpu()
         del base_model
 
-        # 4. Force GC and flush CUDA cache synchronously.
-        gc.collect()
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
+        # 4. Flush device caches.
+        flush_device_caches()
 
 
 def test_lora_training_integration():
@@ -391,10 +385,4 @@ def test_lora_training_integration():
         )
 
         # Cleanup GPU memory after training
-        import gc
-
-        gc.collect()
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
+        flush_device_caches()
