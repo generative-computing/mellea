@@ -110,6 +110,7 @@ class TestStreamingHelpers:
             completion_id="chatcmpl-test123",
             model="test-model",
             created=123,
+            stream_options={"include_usage": True},
         ):
             events.append(event)
 
@@ -229,11 +230,10 @@ class TestStreamingEndpoint:
         assert first_chunk["object"] == "chat.completion.chunk"
         assert first_chunk["choices"][0]["delta"]["role"] == "assistant"
 
-        # Last chunk should have finish_reason and usage
+        # Last chunk should have finish_reason but no usage (not requested)
         last_chunk = events[-1]
         assert last_chunk["choices"][0]["finish_reason"] == "stop"
-        assert last_chunk["usage"] is not None
-        assert last_chunk["usage"]["total_tokens"] == 8
+        assert last_chunk["usage"] is None
 
     def test_non_streaming_still_works(self, mock_module, non_streaming_request):
         """Test that non-streaming requests still work correctly."""
@@ -569,8 +569,8 @@ class TestStreamingEndpoint:
         last_chunk = events[-1]
         assert last_chunk["usage"] is None
 
-    def test_stream_options_default_includes_usage(self, mock_module):
-        """Test that without stream_options, usage is included by default (backward compat)."""
+    def test_stream_options_default_excludes_usage(self, mock_module):
+        """Test that without stream_options, usage is NOT included (per OpenAI spec)."""
         request = ChatCompletionRequest(
             model="test-model",
             messages=[ChatMessage(role="user", content="Hello")],
@@ -617,10 +617,9 @@ class TestStreamingEndpoint:
                 if data != "[DONE]":
                     events.append(json.loads(data))
 
-        # Last chunk should have usage (default behavior)
+        # Last chunk should NOT have usage (must explicitly request via stream_options)
         last_chunk = events[-1]
-        assert last_chunk["usage"] is not None
-        assert last_chunk["usage"]["total_tokens"] == 8
+        assert last_chunk["usage"] is None
 
     def test_streaming_system_fingerprint_always_none(
         self, mock_module, streaming_request
@@ -648,11 +647,7 @@ class TestStreamingEndpoint:
 
         mock_output.astream = mock_astream
         mock_output.is_computed = lambda: mock_output._computed
-        mock_output.usage = {
-            "prompt_tokens": 5,
-            "completion_tokens": 2,
-            "total_tokens": 7,
-        }
+        # Usage not needed for this test since we're not checking it
         mock_module.serve.return_value = mock_output
 
         # Create test app

@@ -31,7 +31,8 @@ async def stream_chat_completion_chunks(
         created: Unix timestamp of when the completion was created.
         stream_options: OpenAI-compatible streaming options. Currently supports
             ``include_usage`` (bool) to control whether usage stats are included
-            in the final chunk. Defaults to including usage when available.
+            in the final chunk. Usage is only included when explicitly requested
+            via ``stream_options={"include_usage": True}``.
         system_fingerprint: Backend configuration fingerprint to include in chunks.
             Defaults to ``None``.
 
@@ -76,11 +77,11 @@ async def stream_chat_completion_chunks(
                 )
                 yield f"data: {chunk.model_dump_json()}\n\n"
 
-        # Include usage in final chunk if requested via stream_options
-        # Default to True (include usage) for backward compatibility
-        include_usage = True
-        if stream_options is not None:
-            include_usage = stream_options.get("include_usage", True)
+        # Include usage in final chunk only if explicitly requested via stream_options
+        # Per OpenAI spec: usage is only included when stream_options.include_usage=True
+        include_usage = stream_options is not None and stream_options.get(
+            "include_usage", False
+        )
 
         usage = build_completion_usage(output) if include_usage else None
 
