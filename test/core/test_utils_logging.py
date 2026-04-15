@@ -1,4 +1,4 @@
-"""Unit tests for MelleaLogger, JsonFormatter, and ContextFilter enhancements."""
+"""Unit tests for MelleaLogger, JsonFormatter, ContextFilter, and OtelTraceFilter."""
 
 # pytest: unit
 
@@ -6,7 +6,9 @@ import asyncio
 import json
 import logging
 import threading
+from contextlib import contextmanager
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -15,15 +17,36 @@ pytestmark = pytest.mark.unit
 from mellea.core.utils import (
     RESERVED_LOG_RECORD_ATTRS,
     ContextFilter,
+    CustomFormatter,
     JsonFormatter,
     MelleaLogger,
+    OtelTraceFilter,
     clear_log_context,
     log_context,
     set_log_context,
 )
 
 
+@contextmanager
+def _otel_span(trace_id: int, span_id: int, is_valid: bool = True):
+    """Context manager that patches mellea.core.utils with a mock OTel span."""
+    mock_ctx = MagicMock()
+    mock_ctx.is_valid = is_valid
+    mock_ctx.trace_id = trace_id
+    mock_ctx.span_id = span_id
+    mock_span = MagicMock()
+    mock_span.get_span_context.return_value = mock_ctx
+    mock_otel = MagicMock()
+    mock_otel.get_current_span.return_value = mock_span
+    with (
+        patch("mellea.core.utils._OTEL_AVAILABLE", True),
+        patch("mellea.core.utils.otel_trace", mock_otel, create=True),
+    ):
+        yield
+
+
 def _make_record(msg: str = "hello", level: int = logging.INFO) -> logging.LogRecord:
+    """Return a minimal LogRecord for use in formatter/filter tests."""
     record = logging.LogRecord(
         name="test",
         level=level,
@@ -34,6 +57,70 @@ def _make_record(msg: str = "hello", level: int = logging.INFO) -> logging.LogRe
         exc_info=None,
     )
     return record
+
+
+# ---------------------------------------------------------------------------
+# OtelTraceFilter
+# ---------------------------------------------------------------------------
+
+
+class TestOtelTraceFilter:
+    def test_always_returns_true_without_otel(self):
+        """Filter never suppresses records when OTel is unavailable."""
+        with patch("mellea.core.utils._OTEL_AVAILABLE", False):
+            f = OtelTraceFilter()
+            record = _make_record()
+            assert f.filter(record) is True
+
+    def test_no_attributes_added_without_otel(self):
+        """No trace_id/span_id are added to the record when OTel is unavailable."""
+        with patch("mellea.core.utils._OTEL_AVAILABLE", False):
+            f = OtelTraceFilter()
+            record = _make_record()
+            f.filter(record)
+            assert not hasattr(record, "trace_id")
+            assert not hasattr(record, "span_id")
+
+    def test_always_returns_true_with_active_span(self):
+        """Filter never suppresses records when OTel is available and span is active."""
+        with _otel_span(0xABCD1234ABCD1234ABCD1234ABCD1234, 0x1234567890ABCDEF):
+            f = OtelTraceFilter()
+            record = _make_record()
+            assert f.filter(record) is True
+
+    def test_injects_trace_and_span_id_when_span_active(self):
+        """trace_id and span_id are hex-formatted and added to the record."""
+        with _otel_span(0xABCD1234ABCD1234ABCD1234ABCD1234, 0x1234567890ABCDEF):
+            f = OtelTraceFilter()
+            record = _make_record()
+            f.filter(record)
+
+        assert record.trace_id == "abcd1234abcd1234abcd1234abcd1234"
+        assert len(record.trace_id) == 32
+        assert record.span_id == "1234567890abcdef"
+        assert len(record.span_id) == 16
+
+    def test_no_attributes_when_span_invalid(self):
+        """No trace_id/span_id are added when the current span context is invalid."""
+        with _otel_span(0, 0, is_valid=False):
+            f = OtelTraceFilter()
+            record = _make_record()
+            f.filter(record)
+
+        assert not hasattr(record, "trace_id")
+        assert not hasattr(record, "span_id")
+
+    def test_always_returns_true_when_span_invalid(self):
+        """Filter never suppresses records even when no active span context."""
+        with _otel_span(0, 0, is_valid=False):
+            f = OtelTraceFilter()
+            record = _make_record()
+            assert f.filter(record) is True
+
+
+# ---------------------------------------------------------------------------
+# JsonFormatter
+# ---------------------------------------------------------------------------
 
 
 class TestJsonFormatterCoreSchema:
@@ -71,6 +158,27 @@ class TestJsonFormatterCoreSchema:
             parsed = json.loads(fmt.format(record))
         assert "exception" in parsed
         assert "ValueError" in parsed["exception"]
+
+    def test_trace_fields_absent_without_filter(self):
+        """trace_id and span_id are not in output when filter hasn't run."""
+        fmt = JsonFormatter()
+        record = _make_record()
+        result = json.loads(fmt.format(record))
+
+        assert "trace_id" not in result
+        assert "span_id" not in result
+
+    def test_trace_fields_present_when_populated(self):
+        """trace_id and span_id appear in output when set on the record."""
+        fmt = JsonFormatter()
+        record = _make_record()
+        record.trace_id = "abcd1234abcd1234abcd1234abcd1234"
+        record.span_id = "1234567890abcdef"
+
+        result = json.loads(fmt.format(record))
+
+        assert result["trace_id"] == "abcd1234abcd1234abcd1234abcd1234"
+        assert result["span_id"] == "1234567890abcdef"
 
 
 class TestJsonFormatterFieldConfig:
@@ -114,10 +222,10 @@ class TestJsonFormatterContextInjection:
         clear_log_context()
 
     def test_context_fields_appear_in_output(self) -> None:
-        set_log_context(trace_id="abc-123")
+        set_log_context(request_id="abc-123")
         fmt = JsonFormatter()
         parsed = json.loads(fmt.format(_make_record()))
-        assert parsed.get("trace_id") == "abc-123"
+        assert parsed.get("request_id") == "abc-123"
 
     def test_multiple_context_fields(self) -> None:
         set_log_context(trace_id="t1", request_id="r1", user="alice")
@@ -241,8 +349,6 @@ class TestMelleaLoggerJsonConsole:
     def test_default_uses_custom_formatter(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from mellea.core.utils import CustomFormatter
-
         monkeypatch.delenv("MELLEA_LOG_JSON", raising=False)
         handler = self._get_stream_handler()
         assert isinstance(handler.formatter, CustomFormatter)
@@ -269,15 +375,13 @@ class TestMelleaLoggerJsonConsole:
     def test_json_console_disabled_with_false(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from mellea.core.utils import CustomFormatter
-
         monkeypatch.setenv("MELLEA_LOG_JSON", "false")
         handler = self._get_stream_handler()
         assert isinstance(handler.formatter, CustomFormatter)
 
 
 @pytest.mark.unit
-class TestMelleaLoggerContextFilterWired:
+class TestMelleaLoggerFiltersWired:
     def setup_method(self) -> None:
         MelleaLogger.logger = None
         logging.getLogger("fancy_logger").handlers.clear()
@@ -293,6 +397,10 @@ class TestMelleaLoggerContextFilterWired:
     def test_context_filter_present(self) -> None:
         logger = MelleaLogger.get_logger()
         assert any(isinstance(f, ContextFilter) for f in logger.filters)
+
+    def test_otel_filter_present(self) -> None:
+        logger = MelleaLogger.get_logger()
+        assert any(isinstance(f, OtelTraceFilter) for f in logger.filters)
 
 
 class TestLogContext:
@@ -507,3 +615,93 @@ class TestIncludeFieldsValidation:
         fmt = JsonFormatter(include_fields=list(JsonFormatter._DEFAULT_FIELDS))
         parsed = json.loads(fmt.format(_make_record()))
         assert set(parsed.keys()) == set(JsonFormatter._DEFAULT_FIELDS)
+
+
+# ---------------------------------------------------------------------------
+# CustomFormatter
+# ---------------------------------------------------------------------------
+
+
+class TestCustomFormatter:
+    def test_returns_string(self):
+        """format() always returns a string."""
+        fmt = CustomFormatter(datefmt="%H:%M:%S")
+        record = _make_record()
+        result = fmt.format(record)
+        assert isinstance(result, str)
+
+    def test_no_trace_suffix_without_filter(self):
+        """No [trace_id=… span_id=…] suffix when filter has not run."""
+        fmt = CustomFormatter(datefmt="%H:%M:%S")
+        record = _make_record()
+        result = fmt.format(record)
+        assert "trace_id=" not in result
+        assert "span_id=" not in result
+
+    def test_trace_suffix_appended_when_populated(self):
+        """[trace_id=… span_id=…] suffix is appended when record has trace context."""
+        fmt = CustomFormatter(datefmt="%H:%M:%S")
+        record = _make_record()
+        record.trace_id = "abcd1234abcd1234abcd1234abcd1234"
+        record.span_id = "1234567890abcdef"
+
+        result = fmt.format(record)
+
+        assert (
+            "[trace_id=abcd1234abcd1234abcd1234abcd1234 span_id=1234567890abcdef]"
+            in result
+        )
+
+    def test_all_log_levels_format(self):
+        """CustomFormatter handles all standard log levels without error."""
+        fmt = CustomFormatter(datefmt="%H:%M:%S")
+        for level in (
+            logging.DEBUG,
+            logging.INFO,
+            logging.WARNING,
+            logging.ERROR,
+            logging.CRITICAL,
+        ):
+            logger = logging.getLogger("test")
+            record = logger.makeRecord(
+                name="test",
+                level=level,
+                fn="f.py",
+                lno=1,
+                msg="msg",
+                args=(),
+                exc_info=None,
+            )
+            result = fmt.format(record)
+            assert isinstance(result, str)
+
+
+# ---------------------------------------------------------------------------
+# Integration: filter → formatter round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestFilterFormatterIntegration:
+    def test_json_formatter_picks_up_filter_output(self):
+        """OtelTraceFilter + JsonFormatter round-trip injects trace context."""
+        with _otel_span(0x00000000000000000000000000000001, 0x0000000000000002):
+            f = OtelTraceFilter()
+            fmt = JsonFormatter()
+            record = _make_record("integration test")
+            f.filter(record)
+            result = json.loads(fmt.format(record))
+
+        assert result["trace_id"] == "00000000000000000000000000000001"
+        assert result["span_id"] == "0000000000000002"
+
+    def test_custom_formatter_picks_up_filter_output(self):
+        """OtelTraceFilter + CustomFormatter round-trip appends trace suffix."""
+        with _otel_span(0x00000000000000000000000000000001, 0x0000000000000002):
+            f = OtelTraceFilter()
+            fmt = CustomFormatter(datefmt="%H:%M:%S")
+            record = _make_record("integration test")
+            f.filter(record)
+            result = fmt.format(record)
+
+        assert "trace_id=00000000000000000000000000000001" in result
+        assert "span_id=0000000000000002" in result
