@@ -72,9 +72,11 @@ m serve docs/examples/m_serve/m_serve_example_simple.py
 
 # In another terminal, test with the non-streaming client
 python docs/examples/m_serve/client.py
+```
 
 ### Streaming
 
+```bash
 # Start the dedicated streaming example server
 m serve docs/examples/m_serve/m_serve_example_streaming.py
 
