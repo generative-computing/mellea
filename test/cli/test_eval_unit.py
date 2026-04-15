@@ -43,6 +43,7 @@ def _make_test_eval() -> TestBasedEval:
         name="test_name",
         instructions="Judge if correct",
         inputs=["input1", "input2"],
+        test_id="test-001",
     )
 
 
@@ -85,7 +86,7 @@ def test_test_eval_result_to_dict_structure():
     results = _make_input_results([True, False])
     r = TestEvalResult(eval_spec, results)
     d = r.to_dict()
-    assert d["test_id"] == eval_spec.test_id
+    assert d["test_id"] == "test-001"
     assert d["source"] == "test_source"
     assert d["name"] == "test_name"
     assert d["instructions"] == "Judge if correct"
@@ -128,9 +129,10 @@ def test_parse_no_score_returns_none():
 
 def test_parse_invalid_json_falls_back_to_regex():
     output = 'Almost JSON: {"score": 1, but broken}'
-    score, _reason = parse_judge_output(output)
-    # Regex fallback should find "score": 1
+    score, reason = parse_judge_output(output)
+    # Regex fallback should find "score": 1 and return the full raw text as justification
     assert score == 1
+    assert reason == output
 
 
 def test_parse_zero_score():

@@ -77,6 +77,18 @@ def test_reorder_invalid_dependency_ignored():
     subtasks = [_subtask("a", "1. A", depends_on=["nonexistent"])]
     result = reorder_subtasks(subtasks)
     assert len(result) == 1
+    assert result[0]["tag"] == "a"
+
+
+def test_reorder_case_insensitive_dependency():
+    # Tags and depends_on are lowercased before lookup — mixed case must resolve correctly
+    subtasks = [
+        _subtask("b", "1. Task B", depends_on=["A"]),
+        _subtask("a", "2. Task A"),
+    ]
+    result = reorder_subtasks(subtasks)
+    tags = [s["tag"] for s in result]
+    assert tags.index("a") < tags.index("b")
 
 
 # --- verify_user_variables ---
@@ -177,6 +189,10 @@ def test_valid_filename_starts_with_dot():
 
 def test_invalid_filename_too_long():
     assert validate_filename("a" * 251) is False
+
+
+def test_valid_filename_max_length():
+    assert validate_filename("a" * 250) is True
 
 
 if __name__ == "__main__":
