@@ -78,6 +78,7 @@ telemetry = [
 docling = [
     "docling>=2.45.0",
     "opencv-python-headless",  # workaround: docling-ibm-models uses cv2 but omits it from its declared dependencies; headless variant required on Apple Silicon
+    "omegaconf>=2.1", # workaround: docling's omegaconf and rapidocr dependencies have incompatible version
 ]
 
 granite_retriever = [
