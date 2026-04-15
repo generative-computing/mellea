@@ -69,6 +69,7 @@ class TestBuildModelOptions:
         assert "n" not in options
         assert "user" not in options
         assert "stream" not in options
+        assert ModelOption.STREAM not in options
         # Check that temperature is present
         assert ModelOption.TEMPERATURE in options
 
@@ -85,13 +86,14 @@ class TestBuildModelOptions:
         assert ModelOption.MAX_NEW_TOKENS not in options
 
     def test_minimal_request_includes_defaults(self):
-        """Test that a minimal request includes default values like temperature and stream."""
+        """Test that a minimal request includes default values like temperature."""
         request = ChatCompletionRequest(
             model="test-model", messages=[ChatMessage(role="user", content="test")]
         )
         options = _build_model_options(request)
-        # ChatCompletionRequest has default temperature=1.0 and stream=False
-        assert options == {ModelOption.TEMPERATURE: 1.0, ModelOption.STREAM: False}
+        # ChatCompletionRequest has default temperature=1.0
+        # stream is excluded from model_options (handled separately in endpoint logic)
+        assert options == {ModelOption.TEMPERATURE: 1.0}
 
     def test_requirements_excluded(self):
         """Test that requirements field is excluded from model_options."""

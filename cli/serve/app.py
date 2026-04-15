@@ -121,11 +121,17 @@ def _build_model_options(request: ChatCompletionRequest) -> dict:
         "stream": ModelOption.STREAM,
     }
 
+    # Get all non-None fields
     filtered_options = {
         key: value
         for key, value in request.model_dump(exclude_none=True).items()
         if key not in excluded_fields
     }
+
+    # Special handling for stream: only include if True (don't forward False)
+    if "stream" in filtered_options and not filtered_options["stream"]:
+        del filtered_options["stream"]
+
     return ModelOption.replace_keys(filtered_options, openai_to_model_option)
 
 
