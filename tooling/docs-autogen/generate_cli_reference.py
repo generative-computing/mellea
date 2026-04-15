@@ -149,6 +149,56 @@ def _get_click_app():
     return typer.main.get_command(cli)
 
 
+def _parse_two_column_block(content: str) -> list[tuple[str, str]] | None:
+    """Parse a Click-style two-column aligned block into (name, description) pairs.
+
+    Click authors sometimes format ``\\b`` blocks as a fixed-width two-column
+    table (name left-aligned, description right-aligned with consistent padding)
+    for legible ``--help`` output.  This function detects that format and returns
+    ``(name, description)`` pairs so the generator can emit a proper markdown
+    table instead of a raw code fence.
+
+    Returns ``None`` if the content does not match the two-column pattern.
+
+    Example input::
+
+        add-await-result  Adds await_result=True to each call.
+                          Continuation of the description.
+        add-stream-loop   Inserts a while loop after each call.
+    """
+    pairs: list[tuple[str, str]] = []
+    current_name: str | None = None
+    current_desc_parts: list[str] = []
+    desc_col: int | None = None
+
+    for raw in content.splitlines():
+        if not raw.strip():
+            continue
+        # Detect a new entry: leading whitespace, a name (no spaces), then 2+
+        # spaces, then description text — all starting before the desc column.
+        m = re.match(r"^(\s+)(\S+)(\s{2,})(\S.*)", raw)
+        if m and (desc_col is None or m.start(4) == desc_col):
+            if current_name is not None:
+                pairs.append((current_name, " ".join(current_desc_parts)))
+            desc_col = m.start(4)
+            current_name = m.group(2)
+            current_desc_parts = [m.group(4)]
+            continue
+        # Continuation line: non-space content starts at or near desc_col
+        if desc_col is not None and current_name is not None:
+            leading = len(raw) - len(raw.lstrip())
+            if leading >= desc_col - 1:
+                current_desc_parts.append(raw.strip())
+                continue
+        # Does not fit either pattern — not a two-column block
+        return None
+
+    if current_name is not None:
+        pairs.append((current_name, " ".join(current_desc_parts)))
+
+    return pairs if pairs else None
+
+
 def _extract_verbatim_blocks(help_text: str) -> list[str]:
     """Extract Click ``\\b`` verbatim blocks from help text.
 
@@ -342,7 +392,7 @@ def _render_command(
                     (line.strip() for line in rest.splitlines() if line.strip()), ""
                 )
                 if first_content.startswith("- "):
-                    # Join wrapped continuation lines back into their bullet
+                    # Bullet list — join wrapped continuation lines into bullets
                     bullets: list[str] = []
                     current: str | None = None
                     for raw in rest.splitlines():
@@ -362,9 +412,17 @@ def _render_command(
                     for b in bullets:
                         lines.append(b)
                 else:
-                    lines.append("```")
-                    lines.append(rest.rstrip())
-                    lines.append("```")
+                    # Try two-column aligned format → markdown table
+                    pairs = _parse_two_column_block(rest)
+                    if pairs:
+                        lines.append("| Option | Description |")
+                        lines.append("| ------ | ----------- |")
+                        for name, desc in pairs:
+                            lines.append(f"| `{name}` | {desc} |")
+                    else:
+                        lines.append("```")
+                        lines.append(rest.rstrip())
+                        lines.append("```")
                 lines.append("")
 
     # Output
