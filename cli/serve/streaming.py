@@ -3,6 +3,7 @@
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from mellea.core.base import ModelOutputThunk
 from mellea.helpers.openai_compatible_helpers import build_completion_usage
 
 from .models import (
@@ -15,7 +16,7 @@ from .models import (
 
 
 async def stream_chat_completion_chunks(
-    output: Any,
+    output: ModelOutputThunk,
     completion_id: str,
     model: str,
     created: int,
