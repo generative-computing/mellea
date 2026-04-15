@@ -48,7 +48,7 @@ async def stream_chat_completion_chunks(
             choices=[
                 ChatCompletionChunkChoice(
                     index=0,
-                    delta=ChatCompletionChunkDelta(role="assistant", content=""),
+                    delta=ChatCompletionChunkDelta(role="assistant", content=None),
                     finish_reason=None,
                 )
             ],
@@ -92,7 +92,7 @@ async def stream_chat_completion_chunks(
             choices=[
                 ChatCompletionChunkChoice(
                     index=0,
-                    delta=ChatCompletionChunkDelta(content=""),
+                    delta=ChatCompletionChunkDelta(content=None),
                     finish_reason="stop",
                 )
             ],

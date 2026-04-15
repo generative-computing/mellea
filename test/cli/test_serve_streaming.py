@@ -348,12 +348,7 @@ class TestStreamingEndpoint:
                     events.append(chunk)
 
         # Count chunks with actual content (excluding initial role chunk and final finish chunk)
-        content_chunks = [
-            e
-            for e in events
-            if e["choices"][0]["delta"].get("content")
-            and e["choices"][0]["delta"]["content"] != ""
-        ]
+        content_chunks = [e for e in events if e["choices"][0]["delta"].get("content")]
         assert len(content_chunks) == 2  # "Hello" and " world"
 
     def test_streaming_completion_id_consistent(self, mock_module, streaming_request):
