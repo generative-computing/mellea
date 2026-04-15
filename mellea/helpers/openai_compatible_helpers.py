@@ -1,7 +1,6 @@
 """A file for helper functions that deal with OpenAI API compatible helpers."""
 
 import json
-from collections.abc import AsyncGenerator
 from typing import Any
 
 from pydantic import BaseModel
