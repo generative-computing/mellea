@@ -15,8 +15,8 @@ pytestmark = pytest.mark.unit
 from mellea.core.utils import (
     RESERVED_LOG_RECORD_ATTRS,
     ContextFilter,
-    MelleaLogger,
     JsonFormatter,
+    MelleaLogger,
     clear_log_context,
     log_context,
     set_log_context,
@@ -384,7 +384,9 @@ class TestLogContextAsyncIsolation:
                 results["b"] = json.loads(fmt.format(_make_record()))
 
         async def run() -> None:
-            await asyncio.gather(asyncio.create_task(task_a()), asyncio.create_task(task_b()))
+            await asyncio.gather(
+                asyncio.create_task(task_a()), asyncio.create_task(task_b())
+            )
 
         asyncio.run(run())
 
@@ -398,7 +400,7 @@ class TestLogContextAsyncIsolation:
         async def child() -> None:
             set_log_context(trace_id="child-task")
 
-        async def run() -> None:
+        async def run() -> dict[str, object]:
             await asyncio.create_task(child())
             # The caller's context should be unaffected
             return json.loads(fmt.format(_make_record()))

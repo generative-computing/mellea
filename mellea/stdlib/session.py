@@ -25,15 +25,17 @@ from ..core import (
     Component,
     ComputedModelOutputThunk,
     Context,
-    MelleaLogger,
     GenerateLog,
     ImageBlock,
+    MelleaLogger,
     ModelOutputThunk,
     Requirement,
     S,
     SamplingResult,
     SamplingStrategy,
     ValidationResult,
+    clear_log_context,
+    set_log_context,
 )
 from ..helpers import _run_async_in_thread
 from ..plugins.manager import has_plugins, invoke_hook
@@ -320,11 +322,17 @@ class MelleaSession:
             context_type=self.ctx.__class__.__name__,
         ).__enter__()
         self._context_token = _context_session.set(self)
+        set_log_context(
+            session_id=self.id,
+            backend=self.backend.__class__.__name__,
+            model_id=str(getattr(self.backend, "model_id", "unknown")),
+        )
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit context manager and cleanup session."""
         self.cleanup()
+        clear_log_context()
         if self._context_token is not None:
             _context_session.reset(self._context_token)
             self._context_token = None

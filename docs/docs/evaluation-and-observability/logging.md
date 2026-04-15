@@ -51,6 +51,55 @@ Each message is formatted as:
 message
 ```
 
+## Sample output
+
+### Console format (default)
+
+Running `m.instruct(...)` inside a session produces lines like:
+
+```text
+=== 11:11:25-INFO ======
+SUCCESS
+```
+
+### JSON format (`MELLEA_LOG_JSON=1`)
+
+With structured JSON output enabled, the same `SUCCESS` record looks like:
+
+```json
+{
+  "timestamp": "2026-04-08T11:11:25",
+  "level": "INFO",
+  "message": "SUCCESS",
+  "module": "base",
+  "function": "sample",
+  "line_number": 258,
+  "process_id": 73738,
+  "thread_id": 6179762176,
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "backend": "OllamaModelBackend",
+  "model_id": "granite4:micro",
+  "strategy": "RejectionSamplingStrategy",
+  "loop_budget": 3
+}
+```
+
+The `session_id`, `backend`, `model_id`, `strategy`, and `loop_budget` fields
+are injected automatically when the call runs inside a `with session:` block.
+They appear on every log record within that scope — not just `SUCCESS`.
+
+### Adding custom context fields
+
+Use `log_context` to attach your own fields for the duration of a block:
+
+```python
+from mellea.core import log_context
+
+with log_context(request_id="req-abc", user_id="usr-42"):
+    result = m.instruct("Summarise this document")
+    # Every log record emitted here will include request_id and user_id
+```
+
 ## OTLP log export
 
 When the `[telemetry]` extra is installed, Mellea can export logs to an OTLP
