@@ -2,6 +2,8 @@
 
 """Example to run m serve with true streaming support."""
 
+from typing import Any
+
 import mellea
 from cli.serve.models import ChatMessage
 from mellea.backends.model_options import ModelOption
@@ -14,7 +16,7 @@ session = mellea.start_session(ctx=SimpleContext())
 async def serve(
     input: list[ChatMessage],
     requirements: list[str] | None = None,
-    model_options: dict | None = None,
+    model_options: dict[str, Any] | None = None,
 ) -> ModelOutputThunk | ComputedModelOutputThunk:
     """Support both normal and streaming responses from the same example.
 
