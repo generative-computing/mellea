@@ -180,9 +180,7 @@ def run(
     backend: Annotated[
         DecompBackend,
         typer.Option(
-            help=(
-                'Backend used for inference. Options: "ollama", "openai", and "rits".'
-            ),
+            help=('Backend used for inference. Options: "ollama", "openai".'),
             case_sensitive=False,
         ),
     ] = DecompBackend.ollama,
@@ -194,13 +192,10 @@ def run(
     ] = 300,
     backend_endpoint: Annotated[
         str | None,
-        typer.Option(
-            help='Backend endpoint / base URL. Required for "openai" and "rits".'
-        ),
+        typer.Option(help='Backend endpoint / base URL. Required for "openai".'),
     ] = None,
     backend_api_key: Annotated[
-        str | None,
-        typer.Option(help='Backend API key. Required for "openai" and "rits".'),
+        str | None, typer.Option(help='Backend API key. Required for "openai".')
     ] = None,
     version: Annotated[
         DecompVersion,

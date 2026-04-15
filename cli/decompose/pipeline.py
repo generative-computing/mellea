@@ -6,7 +6,7 @@ Provides the ``decompose()`` function, which orchestrates a series of LLM calls
 generation, and constraint assignment) to produce a ``DecompPipelineResult``
 containing subtasks, per-subtask prompts, constraints, and dependency information.
 
-Supports Ollama, OpenAI-compatible, and RITS inference backends.
+Supports Ollama and OpenAI-compatible inference backends.
 """
 
 import re
@@ -127,12 +127,10 @@ class DecompBackend(StrEnum):
     Attributes:
         ollama: Local Ollama inference server backend.
         openai: OpenAI-compatible HTTP API backend.
-        rits: IBM RITS remote inference backend.
     """
 
     ollama = "ollama"
     openai = "openai"
-    rits = "rits"
 
 
 RE_JINJA_VAR = re.compile(r"\{\{\s*(.*?)\s*\}\}")
@@ -189,7 +187,7 @@ def build_backend_session(
     """Builds a model session for the configured inference backend.
 
     Initializes and returns a ``MelleaSession`` backed by Ollama,
-    an OpenAI-compatible endpoint, or RITS, depending on ``backend``.
+    or OpenAI-compatible endpoint, depending on ``backend``.
 
     Args:
         model_id: Model identifier passed to the selected backend.
@@ -201,13 +199,6 @@ def build_backend_session(
 
     Returns:
         A configured ``MelleaSession`` ready for prompt generation calls.
-
-    Raises:
-        AssertionError: If ``backend`` is ``DecompBackend.openai`` or
-            ``DecompBackend.rits`` and the required endpoint or API key is not
-            provided.
-        ImportError: If the RITS backend is selected but the required RITS
-            package is not installed.
     """
     logger = get_logger("m_decompose.backend")
     log_section(logger, "backend")
@@ -242,25 +233,6 @@ def build_backend_session(
                 OpenAIBackend(
                     model_id=model_id,
                     base_url=backend_endpoint,
-                    api_key=backend_api_key,
-                    model_options={"timeout": backend_req_timeout},
-                )
-            )
-
-        case DecompBackend.rits:
-            assert backend_endpoint is not None, (
-                'Required to provide "backend_endpoint" for this configuration'
-            )
-            assert backend_api_key is not None, (
-                'Required to provide "backend_api_key" for this configuration'
-            )
-
-            logger.info("initializing RITS backend")
-            from mellea_ibm.rits import RITSBackend, RITSModelIdentifier  # type: ignore
-
-            session = MelleaSession(
-                RITSBackend(
-                    RITSModelIdentifier(endpoint=backend_endpoint, model_name=model_id),
                     api_key=backend_api_key,
                     model_options={"timeout": backend_req_timeout},
                 )
@@ -650,7 +622,7 @@ def decompose(
         backend_req_timeout: Request timeout in seconds for backend inference
             calls.
         backend_endpoint: Endpoint URL required by remote backends such as
-            OpenAI-compatible APIs and RITS.
+            OpenAI-compatible APIs.
         backend_api_key: API key required by remote backends.
         log_mode: Logging verbosity for the pipeline run.
 
@@ -662,8 +634,6 @@ def decompose(
     Raises:
         AssertionError: If a selected remote backend is missing a required
             endpoint or API key.
-        ImportError: If the RITS backend is selected but its dependency is not
-            installed.
         Exception: Propagates backend, generation, parsing, or constraint
             assignment failures raised by lower-level pipeline stages.
     """
