@@ -18,6 +18,7 @@ from mellea.formatters.granite.granite3.granite33.constants import (
 )
 from mellea.formatters.granite.granite3.granite33.output import (
     Granite33OutputProcessor,
+    _add_citation_response_spans,
     _get_docs_from_citations,
     _parse_citations_text,
     _remove_citations_from_response_text,
@@ -204,6 +205,92 @@ class TestGetDocsFromCitations33:
         # The special token line has no colon-separated numeric id
         found_real = [d for d in result if d["text"] == "Real doc."]
         assert len(found_real) == 1
+
+
+# ---------------------------------------------------------------------------
+# _add_citation_response_spans
+# ---------------------------------------------------------------------------
+
+
+class TestAddCitationResponseSpans:
+    """Regression tests for citation response span computation."""
+
+    def _make_citation(self) -> dict:
+        # Citations are matched positionally by _add_citation_response_spans,
+        # not by doc_id — the doc_id value here is irrelevant to the function.
+        return {"doc_id": "1", "context_text": "some context"}
+
+    def test_response_end_uses_sentence_length_not_full_response(self):
+        """Regression: response_end must be index + len(sentence), not index + len(full_response).
+
+        Before the fix, _add_citation_response_spans used len(response_text_without_citations)
+        — the full response length — instead of len(response_text) — the cited sentence length.
+        This caused response_end to overshoot for any sentence that is not the last one.
+        """
+        sent1 = "Short sentence."
+        sent2 = "This is the second sentence, which is longer."
+        cite_tag = f'{CITE_START}{{"document_id": "1"}}{CITE_END}'
+        response_with_citations = f"{sent1} {cite_tag} {sent2}"
+        response_without_citations = f"{sent1} {sent2}"
+
+        result = _add_citation_response_spans(
+            [self._make_citation()], response_with_citations, response_without_citations
+        )
+
+        assert len(result) == 1
+        citation = result[0]
+        begin = citation["response_begin"]
+        end = citation["response_end"]
+        text = citation["response_text"]
+
+        assert begin == 0
+        assert end == len(sent1)  # sentence length, not full response length
+        assert response_without_citations[begin:end] == text
+
+    def test_multiple_citations_each_span_correct(self):
+        """Each citation span must cover only its own sentence."""
+        sent1 = "First sentence."
+        sent2 = "Second sentence."
+        cite1 = f'{CITE_START}{{"document_id": "1"}}{CITE_END}'
+        cite2 = f'{CITE_START}{{"document_id": "2"}}{CITE_END}'
+        response_with = f"{sent1} {cite1} {sent2} {cite2}"
+        response_without = f"{sent1} {sent2}"
+
+        result = _add_citation_response_spans(
+            [self._make_citation(), self._make_citation()],
+            response_with,
+            response_without,
+        )
+
+        assert len(result) == 2
+        for citation in result:
+            begin = citation["response_begin"]
+            end = citation["response_end"]
+            text = citation["response_text"]
+            assert response_without[begin:end] == text
+            assert end - begin == len(text)
+            assert end <= len(response_without)
+
+        # The two spans must not overlap
+        spans = sorted((c["response_begin"], c["response_end"]) for c in result)
+        assert spans[0][1] <= spans[1][0]
+
+    def test_single_sentence_response(self):
+        """Single-sentence response: span must cover the full clean response."""
+        sent = "The only sentence."
+        cite_tag = f'{CITE_START}{{"document_id": "1"}}{CITE_END}'
+        response_with = f"{sent} {cite_tag}"
+        response_without = sent
+
+        result = _add_citation_response_spans(
+            [self._make_citation()], response_with, response_without
+        )
+
+        assert len(result) == 1
+        citation = result[0]
+        begin = citation["response_begin"]
+        end = citation["response_end"]
+        assert response_without[begin:end] == citation["response_text"]
 
 
 # ---------------------------------------------------------------------------

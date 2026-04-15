@@ -224,7 +224,7 @@ def _add_citation_response_spans(
 
         citation["response_text"] = response_text
         citation["response_begin"] = index
-        citation["response_end"] = index + len(response_text_without_citations)
+        citation["response_end"] = index + len(response_text)
 
     return augmented_citation_info
 
