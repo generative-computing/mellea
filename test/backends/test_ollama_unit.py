@@ -14,8 +14,7 @@ from mellea.backends.ollama import OllamaModelBackend, chat_response_delta_merge
 from mellea.core import ModelOutputThunk
 
 
-@pytest.fixture
-def backend():
+def _make_backend(model_options: dict | None = None) -> OllamaModelBackend:
     """Return an OllamaModelBackend with all network calls patched."""
     with (
         patch.object(OllamaModelBackend, "_check_ollama_server", return_value=True),
@@ -23,8 +22,13 @@ def backend():
         patch("mellea.backends.ollama.ollama.Client", return_value=MagicMock()),
         patch("mellea.backends.ollama.ollama.AsyncClient", return_value=MagicMock()),
     ):
-        b = OllamaModelBackend(model_id="granite3.3:8b")
-    return b
+        return OllamaModelBackend(model_id="granite3.3:8b", model_options=model_options)
+
+
+@pytest.fixture
+def backend():
+    """Return an OllamaModelBackend with no pre-set model options."""
+    return _make_backend()
 
 
 # --- _simplify_and_merge ---
@@ -32,7 +36,7 @@ def backend():
 
 def test_simplify_and_merge_none_returns_empty_dict(backend):
     result = backend._simplify_and_merge(None)
-    assert isinstance(result, dict)
+    assert result == {}
 
 
 def test_simplify_and_merge_remaps_num_predict(backend):
@@ -47,9 +51,10 @@ def test_simplify_and_merge_remaps_num_ctx(backend):
     assert result[ModelOption.CONTEXT_WINDOW] == 4096
 
 
-def test_simplify_and_merge_per_call_overrides_backend(backend):
-    # Any per-call value should take precedence
-    result = backend._simplify_and_merge({"num_predict": 256})
+def test_simplify_and_merge_per_call_overrides_backend():
+    # Backend sets num_predict=128; per-call value of 256 must win.
+    b = _make_backend(model_options={"num_predict": 128})
+    result = b._simplify_and_merge({"num_predict": 256})
     assert result[ModelOption.MAX_NEW_TOKENS] == 256
 
 
