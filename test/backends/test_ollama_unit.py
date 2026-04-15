@@ -31,6 +31,18 @@ def backend():
     return _make_backend()
 
 
+# --- Map consistency ---
+
+
+def test_from_mellea_keys_are_subset_of_to_mellea_values(backend):
+    """Every key in from_mellea must appear as a value in to_mellea (maps agree)."""
+    to_values = set(backend.to_mellea_model_opts_map.values())
+    from_keys = set(backend.from_mellea_model_opts_map.keys())
+    assert from_keys <= to_values, (
+        f"from_mellea has keys absent from to_mellea values: {from_keys - to_values}"
+    )
+
+
 # --- _simplify_and_merge ---
 
 
@@ -39,16 +51,19 @@ def test_simplify_and_merge_none_returns_empty_dict(backend):
     assert result == {}
 
 
+def test_simplify_and_merge_all_to_mellea_entries(backend):
+    """Every to_mellea entry remaps to its ModelOption via _simplify_and_merge."""
+    for backend_key, mellea_key in backend.to_mellea_model_opts_map.items():
+        result = backend._simplify_and_merge({backend_key: 42})
+        assert mellea_key in result, f"{backend_key!r} did not produce {mellea_key!r}"
+        assert result[mellea_key] == 42
+
+
 def test_simplify_and_merge_remaps_num_predict(backend):
+    """Hardcoded anchor: the most critical mapping for generation length."""
     result = backend._simplify_and_merge({"num_predict": 128})
     assert ModelOption.MAX_NEW_TOKENS in result
     assert result[ModelOption.MAX_NEW_TOKENS] == 128
-
-
-def test_simplify_and_merge_remaps_num_ctx(backend):
-    result = backend._simplify_and_merge({"num_ctx": 4096})
-    assert ModelOption.CONTEXT_WINDOW in result
-    assert result[ModelOption.CONTEXT_WINDOW] == 4096
 
 
 def test_simplify_and_merge_per_call_overrides_backend():
@@ -61,18 +76,20 @@ def test_simplify_and_merge_per_call_overrides_backend():
 # --- _make_backend_specific_and_remove ---
 
 
+def test_make_backend_specific_all_from_mellea_entries(backend):
+    """Every from_mellea entry remaps to its backend key via _make_backend_specific_and_remove."""
+    for mellea_key, backend_key in backend.from_mellea_model_opts_map.items():
+        result = backend._make_backend_specific_and_remove({mellea_key: 42})
+        assert backend_key in result, f"{mellea_key!r} did not produce {backend_key!r}"
+        assert result[backend_key] == 42
+
+
 def test_make_backend_specific_remaps_max_new_tokens(backend):
+    """Hardcoded anchor: the most critical mapping for generation length."""
     opts = {ModelOption.MAX_NEW_TOKENS: 64}
     result = backend._make_backend_specific_and_remove(opts)
     assert "num_predict" in result
     assert result["num_predict"] == 64
-
-
-def test_make_backend_specific_remaps_context_window(backend):
-    opts = {ModelOption.CONTEXT_WINDOW: 8192}
-    result = backend._make_backend_specific_and_remove(opts)
-    assert "num_ctx" in result
-    assert result["num_ctx"] == 8192
 
 
 def test_make_backend_specific_removes_sentinel_keys(backend):
@@ -80,13 +97,6 @@ def test_make_backend_specific_removes_sentinel_keys(backend):
     result = backend._make_backend_specific_and_remove(opts)
     # Sentinel keys not in from_mellea_model_opts_map should be removed
     assert ModelOption.SYSTEM_PROMPT not in result
-
-
-def test_make_backend_specific_seed_preserved(backend):
-    opts = {ModelOption.SEED: 42}
-    result = backend._make_backend_specific_and_remove(opts)
-    assert "seed" in result
-    assert result["seed"] == 42
 
 
 # --- chat_response_delta_merge ---
