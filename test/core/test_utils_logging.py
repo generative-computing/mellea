@@ -1,5 +1,6 @@
 """Unit tests for MelleaLogger, JsonFormatter, and ContextFilter enhancements."""
 
+import asyncio
 import json
 import logging
 import threading
@@ -348,6 +349,55 @@ class TestLogContext:
         with pytest.raises(ValueError, match="reserved"):
             with log_context(levelname="BAD"):
                 pass
+
+
+class TestLogContextAsyncIsolation:
+    """Verify that concurrent asyncio tasks cannot contaminate each other's context."""
+
+    def setup_method(self) -> None:
+        clear_log_context()
+
+    def teardown_method(self) -> None:
+        clear_log_context()
+
+    def test_concurrent_tasks_isolated(self) -> None:
+        """Fields set inside one asyncio.Task must not bleed into a sibling task."""
+        fmt = JsonFormatter()
+        results: dict[str, Any] = {}
+
+        async def task_a() -> None:
+            with log_context(trace_id="task-a"):
+                # Yield so task_b can run and attempt to overwrite the context
+                await asyncio.sleep(0)
+                results["a"] = json.loads(fmt.format(_make_record()))
+
+        async def task_b() -> None:
+            with log_context(trace_id="task-b"):
+                await asyncio.sleep(0)
+                results["b"] = json.loads(fmt.format(_make_record()))
+
+        async def run() -> None:
+            await asyncio.gather(asyncio.create_task(task_a()), asyncio.create_task(task_b()))
+
+        asyncio.run(run())
+
+        assert results["a"].get("trace_id") == "task-a"
+        assert results["b"].get("trace_id") == "task-b"
+
+    def test_task_context_does_not_leak_after_completion(self) -> None:
+        """A task's context fields must not persist into the caller after the task ends."""
+        fmt = JsonFormatter()
+
+        async def child() -> None:
+            set_log_context(trace_id="child-task")
+
+        async def run() -> None:
+            await asyncio.create_task(child())
+            # The caller's context should be unaffected
+            return json.loads(fmt.format(_make_record()))
+
+        parsed = asyncio.run(run())
+        assert "trace_id" not in parsed
 
 
 class TestReservedAttributeValidation:

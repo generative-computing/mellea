@@ -18,6 +18,7 @@ Environment variables
 """
 
 import contextlib
+import contextvars
 import json
 import logging
 import os
@@ -29,9 +30,11 @@ from typing import Any
 import requests
 
 # ---------------------------------------------------------------------------
-# Thread-local storage for per-request context fields
+# Per-task/coroutine context fields (safe for asyncio — each Task gets its own copy)
 # ---------------------------------------------------------------------------
-_context_local: threading.local = threading.local()
+_log_context: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
+    "log_context_fields", default={}
+)
 
 # Lock used to make MelleaLogger singleton initialisation thread-safe.
 _logger_lock: threading.Lock = threading.Lock()
@@ -65,7 +68,7 @@ _RESERVED_LOG_RECORD_ATTRS: frozenset[str] = frozenset(
 
 
 def set_log_context(**fields: Any) -> None:
-    """Inject extra fields into every log record emitted from this thread.
+    """Inject extra fields into every log record emitted from this coroutine or thread.
 
     Call this at the start of a request or task to attach identifiers such as
     ``trace_id`` or ``request_id`` without modifying individual log calls.
@@ -88,23 +91,23 @@ def set_log_context(**fields: Any) -> None:
             f"Context field names clash with LogRecord reserved attributes: "
             f"{sorted(invalid)}.  Choose different names."
         )
-    existing: dict[str, Any] = getattr(_context_local, "fields", {})
-    existing.update(fields)
-    _context_local.fields = existing
+    _log_context.set({**_log_context.get(), **fields})
 
 
 def clear_log_context() -> None:
-    """Remove all thread-local log context fields set by :func:`set_log_context`."""
-    _context_local.fields = {}
+    """Remove all context fields set by :func:`set_log_context` for this coroutine/thread."""
+    _log_context.set({})
 
 
 @contextlib.contextmanager
 def log_context(**fields: Any) -> Generator[None, None, None]:
     """Context manager that injects *fields* for the duration of the block.
 
-    On exit — including on exceptions — removes only the keys that *this*
-    invocation set, leaving any enclosing context intact.  This makes nested
-    and thread-pool usage safe without requiring manual cleanup.
+    On exit — including on exceptions — the context is restored to its state
+    before the block via a ``ContextVar`` token.  This is safe for both nested
+    usage and concurrent asyncio tasks: each ``asyncio.Task`` owns an isolated
+    copy of the context variable, so coroutines running on the same event-loop
+    thread cannot overwrite each other's fields.
 
     Example::
 
@@ -123,21 +126,17 @@ def log_context(**fields: Any) -> Generator[None, None, None]:
     Raises:
         ValueError: If any key clashes with a reserved ``LogRecord`` attribute.
     """
-    existing_before: dict[str, Any] = getattr(_context_local, "fields", {})
-    previous: dict[str, Any] = {
-        k: existing_before[k] for k in fields if k in existing_before
-    }
-    set_log_context(**fields)
+    invalid = frozenset(fields) & _RESERVED_LOG_RECORD_ATTRS
+    if invalid:
+        raise ValueError(
+            f"Context field names clash with LogRecord reserved attributes: "
+            f"{sorted(invalid)}.  Choose different names."
+        )
+    token = _log_context.set({**_log_context.get(), **fields})
     try:
         yield
     finally:
-        existing: dict[str, Any] = getattr(_context_local, "fields", {})
-        for key in fields:
-            if key in previous:
-                existing[key] = previous[key]
-            else:
-                existing.pop(key, None)
-        _context_local.fields = existing
+        _log_context.reset(token)
 
 
 class ContextFilter(logging.Filter):
@@ -157,7 +156,7 @@ class ContextFilter(logging.Filter):
         Returns:
             bool: Always ``True`` — the record is never suppressed.
         """
-        fields: dict[str, Any] = getattr(_context_local, "fields", {})
+        fields: dict[str, Any] = _log_context.get()
         for key, value in fields.items():
             setattr(record, key, value)
         return True
@@ -306,9 +305,9 @@ class JsonFormatter(logging.Formatter):
         log_record.update(self._extra)
 
         # Dynamic context fields — prefer record attributes (set by
-        # ContextFilter) but fall back to thread-local storage so the
+        # ContextFilter) but fall back to ContextVar storage so the
         # formatter works standalone without a filter attached.
-        context_fields: dict[str, Any] = getattr(_context_local, "fields", {})
+        context_fields: dict[str, Any] = _log_context.get()
         for key, value in context_fields.items():
             log_record[key] = getattr(record, key, value)
 
