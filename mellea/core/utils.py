@@ -1,22 +1,20 @@
 """Logging utilities for the mellea core library.
 
-Provides ``FancyLogger``, a singleton logger with colour-coded console output and
+Provides ``MelleaLogger``, a singleton logger with colour-coded console output and
 an optional REST handler (``RESTHandler``) that forwards log records to a local
-``/api/receive`` endpoint when the ``FLOG`` environment variable is set. All
-internal mellea modules obtain their logger via ``FancyLogger.get_logger()``.
+``/api/receive`` endpoint when the ``MELLEA_FLOG`` environment variable is set. All
+internal mellea modules obtain their logger via ``MelleaLogger.get_logger()``.
 
 Environment variables
 ---------------------
 ``MELLEA_LOG_LEVEL``
     Minimum log level name (e.g. ``DEBUG``, ``INFO``, ``WARNING``).  Defaults to
-    ``INFO``.  The legacy ``DEBUG`` variable is still honoured as a fallback.
+    ``INFO``.
 ``MELLEA_LOG_JSON``
     Set to any truthy value (``1``, ``true``, ``yes``) to emit structured JSON on
     the console instead of the colour-coded human-readable format.
-``FLOG``
+``MELLEA_FLOG``
     When set, log records are forwarded to a local REST endpoint.
-``DEBUG``
-    Legacy flag — equivalent to ``MELLEA_LOG_LEVEL=DEBUG``.
 """
 
 import contextlib
@@ -35,7 +33,7 @@ import requests
 # ---------------------------------------------------------------------------
 _context_local: threading.local = threading.local()
 
-# Lock used to make FancyLogger singleton initialisation thread-safe.
+# Lock used to make MelleaLogger singleton initialisation thread-safe.
 _logger_lock: threading.Lock = threading.Lock()
 
 # Standard LogRecord attribute names that must not be overwritten by callers.
@@ -168,7 +166,7 @@ class ContextFilter(logging.Filter):
 class RESTHandler(logging.Handler):
     """Logging handler that forwards records to a local REST endpoint.
 
-    Sends log records as JSON to ``/api/receive`` when the ``FLOG`` environment
+    Sends log records as JSON to ``/api/receive`` when the ``MELLEA_FLOG`` environment
     variable is set. Failures are silently suppressed to avoid disrupting the
     application.
 
@@ -189,14 +187,14 @@ class RESTHandler(logging.Handler):
         self.headers = headers or {"Content-Type": "application/json"}
 
     def emit(self, record: logging.LogRecord) -> None:
-        """Forwards a log record to the REST endpoint when the ``FLOG`` environment variable is set.
+        """Forwards a log record to the REST endpoint when the ``MELLEA_FLOG`` environment variable is set.
 
         Silently suppresses any network or HTTP errors to avoid disrupting the application.
 
         Args:
             record (logging.LogRecord): The log record to forward.
         """
-        if os.environ.get("FLOG"):
+        if os.environ.get("MELLEA_FLOG"):
             formatter = self.formatter
             if isinstance(formatter, JsonFormatter):
                 log_dict = formatter._build_log_dict(record)
@@ -375,13 +373,13 @@ class CustomFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-class FancyLogger:
+class MelleaLogger:
     """Singleton logger with colour-coded console output and optional REST forwarding.
 
-    Obtain the shared logger instance via ``FancyLogger.get_logger()``. Log level
-    defaults to ``INFO`` but can be raised to ``DEBUG`` by setting the ``DEBUG``
-    environment variable. When the ``FLOG`` environment variable is set, records are
-    also forwarded to a local ``/api/receive`` REST endpoint via ``RESTHandler``.
+    Obtain the shared logger instance via ``MelleaLogger.get_logger()``. Log level
+    defaults to ``INFO`` but can be overridden via ``MELLEA_LOG_LEVEL``. When the
+    ``MELLEA_FLOG`` environment variable is set, records are also forwarded to a
+    local ``/api/receive`` REST endpoint via ``RESTHandler``.
 
     Attributes:
         logger (logging.Logger | None): The shared ``logging.Logger`` instance; ``None`` until first call to ``get_logger()``.
@@ -410,8 +408,7 @@ class FancyLogger:
     def _resolve_log_level() -> int:
         """Resolves the effective log level from environment variables.
 
-        Checks ``MELLEA_LOG_LEVEL`` first, then falls back to the legacy
-        ``DEBUG`` flag, then defaults to ``INFO``.
+        Checks ``MELLEA_LOG_LEVEL`` and defaults to ``INFO``.
 
         Returns:
             int: A :mod:`logging` level integer.
@@ -421,13 +418,11 @@ class FancyLogger:
             numeric = getattr(logging, level_name, None)
             if isinstance(numeric, int):
                 return numeric
-        if os.environ.get("DEBUG"):
-            return FancyLogger.DEBUG
-        return FancyLogger.INFO
+        return MelleaLogger.INFO
 
     @staticmethod
     def get_logger() -> logging.Logger:
-        """Returns a FancyLogger.logger and sets level based upon env vars.
+        """Returns a MelleaLogger.logger and sets level based upon env vars.
 
         The logger is created once (singleton).  Subsequent calls return the
         cached instance.  Initialisation is protected by a module-level lock so
@@ -436,11 +431,11 @@ class FancyLogger:
         Returns:
             Configured logger with REST, stream, and optional OTLP handlers.
         """
-        if FancyLogger.logger is None:
+        if MelleaLogger.logger is None:
             with _logger_lock:
                 # Second check inside the lock: another thread may have finished
                 # initialisation while we were waiting.
-                if FancyLogger.logger is None:
+                if MelleaLogger.logger is None:
                     logger = logging.getLogger("fancy_logger")
 
                     # Attach the context filter so ContextFilter fields reach all handlers
@@ -448,7 +443,7 @@ class FancyLogger:
 
                     # Only set default level if user hasn't already configured it
                     if logger.level == logging.NOTSET:
-                        logger.setLevel(FancyLogger._resolve_log_level())
+                        logger.setLevel(MelleaLogger._resolve_log_level())
 
                     # --- REST handler ---
                     api_url = "http://localhost:8000/api/receive"
@@ -477,5 +472,5 @@ class FancyLogger:
                         otlp_handler.setFormatter(JsonFormatter())
                         logger.addHandler(otlp_handler)
 
-                    FancyLogger.logger = logger
-        return FancyLogger.logger
+                    MelleaLogger.logger = logger
+        return MelleaLogger.logger

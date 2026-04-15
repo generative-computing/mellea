@@ -25,7 +25,7 @@ from ..core import (
     Component,
     ComputedModelOutputThunk,
     Context,
-    FancyLogger,
+    MelleaLogger,
     GenerateLog,
     ImageBlock,
     ModelOutputThunk,
@@ -191,7 +191,7 @@ def start_session(
         session.cleanup()
         ```
     """
-    logger = FancyLogger.get_logger()
+    logger = MelleaLogger.get_logger()
 
     # Get model_id string for logging and tracing
     if isinstance(model_id, ModelIdentifier):
@@ -307,7 +307,7 @@ class MelleaSession:
         self.id = str(uuid.uuid4())
         self.backend = backend
         self.ctx: Context = ctx if ctx is not None else SimpleContext()
-        self._session_logger = FancyLogger.get_logger()
+        self._session_logger = MelleaLogger.get_logger()
         self._context_token = None
         self._session_span = None
 

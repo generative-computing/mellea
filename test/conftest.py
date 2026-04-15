@@ -6,7 +6,7 @@ import sys
 import pytest
 import requests
 
-from mellea.core import FancyLogger
+from mellea.core import MelleaLogger
 
 # Try to import optional dependencies for system detection
 try:
@@ -302,7 +302,9 @@ def cleanup_gpu_backend(backend, backend_name="unknown"):
         backend: The backend instance to clean up.
         backend_name: Name for logging.
     """
-    logger = FancyLogger.get_logger()
+    import gc
+
+    logger = MelleaLogger.get_logger()
     logger.info(f"Cleaning up {backend_name} backend GPU memory...")
 
     try:
@@ -455,7 +457,7 @@ def pytest_collection_modifyitems(config, items):
 
     # Reorder tests by backend if requested
     if config.getoption("--group-by-backend", default=False):
-        logger = FancyLogger.get_logger()
+        logger = MelleaLogger.get_logger()
         logger.info("Grouping tests by backend (--group-by-backend enabled)")
 
         # Group items by backend
@@ -517,7 +519,7 @@ def pytest_runtest_setup(item):
         prev_group = getattr(pytest_runtest_setup, "_last_backend_group", None)
 
         if prev_group is not None and current_group != prev_group:
-            logger = FancyLogger.get_logger()
+            logger = MelleaLogger.get_logger()
             logger.info(
                 f"Backend transition: {prev_group} → {current_group}. "
                 "Running GPU cleanup."
@@ -527,7 +529,7 @@ def pytest_runtest_setup(item):
 
         # Warm up Ollama models when entering Ollama group
         if current_group == "ollama" and prev_group != "ollama":
-            logger = FancyLogger.get_logger()
+            logger = MelleaLogger.get_logger()
             host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1")
             port = os.environ.get("OLLAMA_PORT", "11434")
             logger.info(
@@ -551,7 +553,7 @@ def pytest_runtest_setup(item):
 
         # Evict Ollama models when leaving Ollama group
         if prev_group == "ollama" and current_group != "ollama":
-            logger = FancyLogger.get_logger()
+            logger = MelleaLogger.get_logger()
             host_str = os.environ.get("OLLAMA_HOST", "127.0.0.1")
             port = os.environ.get("OLLAMA_PORT", "11434")
             logger.info("Evicting ollama models from VRAM after ollama group...")

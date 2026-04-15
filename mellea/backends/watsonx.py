@@ -21,7 +21,7 @@ from ..core import (
     CBlock,
     Component,
     Context,
-    FancyLogger,
+    MelleaLogger,
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
@@ -387,7 +387,7 @@ class WatsonxAIBackend(FormatterBackend):
         tools: dict[str, AbstractMelleaTool] = {}
         if tool_calls:
             if _format:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"tool calling is superseded by format; will not call tools for request: {action}"
                 )
             else:
@@ -397,7 +397,7 @@ class WatsonxAIBackend(FormatterBackend):
                 # Add the tools from the action for this generation last so that
                 # they overwrite conflicting names.
                 add_tools_from_context_actions(tools, [action])
-            FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         formatted_tools = convert_tools_to_json(tools)
 
@@ -676,7 +676,7 @@ class WatsonxAIBackend(FormatterBackend):
             await self.do_generate_walks(list(actions))
 
             if format is not None:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "WatsonxAI completion api does not accept response format, ignoring it for this request."
                 )
 
@@ -743,7 +743,7 @@ class WatsonxAIBackend(FormatterBackend):
 
             func = tools.get(tool_name)
             if func is None:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"model attempted to call a non-existing function: {tool_name}"
                 )
                 continue  # skip this function if we can't find it.

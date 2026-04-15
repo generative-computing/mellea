@@ -315,10 +315,10 @@ CICD=1 uv run pytest
 ### Debugging tips
 
 ```python
-from mellea.core import FancyLogger
+from mellea.core import MelleaLogger
 
 # Enable debug logging
-FancyLogger.get_logger().setLevel("DEBUG")
+MelleaLogger.get_logger().setLevel("DEBUG")
 
 # Inspect the exact prompt sent to the LLM
 print(m.last_prompt())

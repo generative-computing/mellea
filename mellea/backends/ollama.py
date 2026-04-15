@@ -16,7 +16,7 @@ from ..core import (
     CBlock,
     Component,
     Context,
-    FancyLogger,
+    MelleaLogger,
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
@@ -89,11 +89,11 @@ class OllamaModelBackend(FormatterBackend):
 
         if not self._check_ollama_server():
             err = f"could not create OllamaModelBackend: ollama server not running at {base_url}"
-            FancyLogger.get_logger().error(err)
+            MelleaLogger.get_logger().error(err)
             raise Exception(err)
         if not self._pull_ollama_model():
             err = f"could not create OllamaModelBackend: {self._get_ollama_model_id()} could not be pulled from ollama library"
-            FancyLogger.get_logger().error(err)
+            MelleaLogger.get_logger().error(err)
             raise Exception(err)
 
         # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
@@ -168,7 +168,7 @@ class OllamaModelBackend(FormatterBackend):
             return True
 
         try:
-            FancyLogger.get_logger().debug(
+            MelleaLogger.get_logger().debug(
                 f"Loading/Pulling model from Ollama: {self._get_ollama_model_id()}"
             )
             stream = self._client.pull(self._get_ollama_model_id(), stream=True)
@@ -376,7 +376,7 @@ class OllamaModelBackend(FormatterBackend):
         tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
             if _format:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
             else:
@@ -386,7 +386,7 @@ class OllamaModelBackend(FormatterBackend):
                 # Add the tools from the action for this generation last so that
                 # they overwrite conflicting names.
                 add_tools_from_context_actions(tools, [action])
-            FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         # Generate a chat response from ollama, using the chat messages. Can be either type since stream is passed as a model option.
         chat_response: Coroutine[
@@ -483,11 +483,11 @@ class OllamaModelBackend(FormatterBackend):
             list[ModelOutputThunk]: A list of model output thunks, one per action.
         """
         if len(actions) > 1:
-            FancyLogger.get_logger().info(
+            MelleaLogger.get_logger().info(
                 "Ollama doesn't support batching; will attempt to process concurrently."
             )
         if tool_calls:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "The completion endpoint does not support tool calling at the moment."
             )
 
@@ -523,7 +523,7 @@ class OllamaModelBackend(FormatterBackend):
             result = None
             error = None
             if isinstance(response, BaseException):
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"generate_from_raw: request {i} failed with "
                     f"{type(response).__name__}: {response}"
                 )
@@ -583,7 +583,7 @@ class OllamaModelBackend(FormatterBackend):
             for tool in chat_response.message.tool_calls:
                 func = tools.get(tool.function.name)
                 if func is None:
-                    FancyLogger.get_logger().warning(
+                    MelleaLogger.get_logger().warning(
                         f"model attempted to call a non-existing function: {tool.function.name}"
                     )
                     continue  # skip this function if we can't find it.

@@ -20,7 +20,7 @@ from mellea.core.base import (
     ModelOutputThunk,
     TemplateRepresentation,
 )
-from mellea.core.utils import FancyLogger
+from mellea.core.utils import MelleaLogger
 
 MELLEA_FINALIZER_TOOL = "final_answer"
 """Used in the react loop to symbolize the loop is done."""
@@ -66,7 +66,7 @@ class ReactInitiator(Component[str]):
         tools = {tool.name: tool for tool in self.tools}
 
         if tools.get(MELLEA_FINALIZER_TOOL, None) is not None:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 f"overriding user tool '{MELLEA_FINALIZER_TOOL}' in react call; this tool name is required for internal use"
             )
 

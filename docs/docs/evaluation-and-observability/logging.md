@@ -14,22 +14,23 @@ Both work simultaneously when enabled.
 
 ## Console logging
 
-Mellea uses `FancyLogger`, a color-coded singleton logger built on Python's
+Mellea uses `MelleaLogger`, a color-coded singleton logger built on Python's
 `logging` module. All internal Mellea modules obtain their logger via
-`FancyLogger.get_logger()`.
+`MelleaLogger.get_logger()`.
 
 ### Configuration
 
 | Variable | Description | Default |
 | -------- | ----------- | ------- |
-| `DEBUG` | Set to any value to enable `DEBUG`-level output | unset (`INFO` level) |
-| `FLOG` | Set to any value to forward logs to a local REST endpoint at `http://localhost:8000/api/receive` | unset |
+| `MELLEA_LOG_LEVEL` | Log level name (e.g. `DEBUG`, `INFO`, `WARNING`) | `INFO` |
+| `MELLEA_LOG_JSON` | Set to any truthy value (`1`, `true`, `yes`) to emit structured JSON instead of colour-coded output | unset |
+| `MELLEA_FLOG` | Set to any value to forward logs to a local REST endpoint at `http://localhost:8000/api/receive` | unset |
 
-By default, `FancyLogger` logs at `INFO` level with color-coded output to
-stdout. Set the `DEBUG` environment variable to lower the level to `DEBUG`:
+By default, `MelleaLogger` logs at `INFO` level with color-coded output to
+stdout. Set `MELLEA_LOG_LEVEL` to change the level:
 
 ```bash
-export DEBUG=1
+export MELLEA_LOG_LEVEL=DEBUG
 python your_script.py
 ```
 
@@ -74,11 +75,11 @@ export OTEL_SERVICE_NAME=my-mellea-app
 
 ### How it works
 
-When `MELLEA_LOGS_OTLP=true`, `FancyLogger` adds an OpenTelemetry
+When `MELLEA_LOGS_OTLP=true`, `MelleaLogger` adds an OpenTelemetry
 `LoggingHandler` alongside its existing handlers:
 
 - **Console handler** — continues to work normally (color-coded output)
-- **REST handler** — continues to work normally (when `FLOG` is set)
+- **REST handler** — continues to work normally (when `MELLEA_FLOG` is set)
 - **OTLP handler** — exports logs to the configured OTLP collector
 
 Logs are exported using OpenTelemetry's Logs API with batched processing

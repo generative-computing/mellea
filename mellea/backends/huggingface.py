@@ -34,7 +34,7 @@ from ..core import (
     CBlock,
     Component,
     Context,
-    FancyLogger,
+    MelleaLogger,
     GenerateLog,
     GenerateType,
     ModelOutputThunk,
@@ -199,7 +199,7 @@ class _GuidanceLogitsProcessor:
                 )
                 err = ll_matcher.get_error()  # type: ignore[attr-defined]
                 if err:
-                    FancyLogger.get_logger().warning("Error in LLMatcher: %s", err)
+                    MelleaLogger.get_logger().warning("Error in LLMatcher: %s", err)
 
             llguidance.torch.fill_next_token_bitmask(ll_matcher, bitmask, 0)
             llguidance.torch.apply_token_bitmask_inplace(
@@ -402,7 +402,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             if alora_req_adapter is None:
                 # Log a warning if using an AloraRequirement but no adapter fit.
                 if reroute_to_alora and isinstance(action, ALoraRequirement):
-                    FancyLogger.get_logger().warning(
+                    MelleaLogger.get_logger().warning(
                         f"attempted to use an AloraRequirement but backend {self} doesn't have the specified adapter added {adapter_name}; defaulting to regular generation"
                     )
                 reroute_to_alora = False
@@ -472,7 +472,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             raise Exception("Does not yet support non-chat contexts.")
 
         if len(model_options.items()) > 0:
-            FancyLogger.get_logger().info(
+            MelleaLogger.get_logger().info(
                 "passing in model options when generating with an adapter; some model options may be overwritten / ignored"
             )
 
@@ -648,11 +648,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 case CBlock() if c.cache:
                     assert c.value is not None
                     if c.value in self._cached_blocks:
-                        FancyLogger.get_logger().info(
+                        MelleaLogger.get_logger().info(
                             f"KV CACHE HIT for: {hash(c.value)} ({c.value[:3]}..{c.value[-3:]})"  # type: ignore
                         )
                     else:
-                        FancyLogger.get_logger().debug(
+                        MelleaLogger.get_logger().debug(
                             f"HF backend is caching a CBlock with hashed contents: {hash(c.value)} ({c.value[:3]}..{c.value[-3:]})"
                         )
                         tokens = self._tokenizer(c.value, return_tensors="pt")
@@ -690,14 +690,14 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             prefix, suffix = parts
             # Add the prefix, if any, to str+tok+dc parts.
             if prefix != "":
-                FancyLogger.get_logger().debug(
+                MelleaLogger.get_logger().debug(
                     f"Doing a forward pass on uncached block which is prefix to a cached CBlock: {prefix[:3]}.{len(prefix)}.{prefix[-3:]}"
                 )
                 str_parts.append(prefix)
                 tok_parts.append(self._tokenizer(prefix, return_tensors="pt"))
                 dc_parts.append(self._make_dc_cache(tok_parts[-1]))
             # Add the cached CBlock to str+tok+dc parts.
-            FancyLogger.get_logger().debug(
+            MelleaLogger.get_logger().debug(
                 f"Replacing a substring with previously computed/retrieved cache with hahs value {hash(key)} ({key[:3]}..{key[-3:]})"
             )
             # str_parts.append(key)
@@ -710,7 +710,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             current_suffix = suffix
         # "base" case: the final suffix.
         if current_suffix != "":
-            FancyLogger.get_logger().debug(  # type: ignore
+            MelleaLogger.get_logger().debug(  # type: ignore
                 f"Doing a forward pass on final suffix, an uncached block: {current_suffix[:3]}.{len(current_suffix)}.{current_suffix[-3:]}"  # type: ignore
             )  # type: ignore
             str_parts.append(current_suffix)
@@ -753,7 +753,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             tools: dict[str, AbstractMelleaTool] = dict()
             if tool_calls:
                 if _format:
-                    FancyLogger.get_logger().warning(
+                    MelleaLogger.get_logger().warning(
                         f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                     )
                 else:
@@ -765,7 +765,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     # Add the tools from the action for this generation last so that
                     # they overwrite conflicting names.
                     add_tools_from_context_actions(tools, [action])
-                FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+                MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
             seed = model_options.get(ModelOption.SEED, None)
             if seed is not None:
@@ -904,7 +904,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             tools: dict[str, AbstractMelleaTool] = dict()
             if tool_calls:
                 if _format:
-                    FancyLogger.get_logger().warning(
+                    MelleaLogger.get_logger().warning(
                         f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                     )
                 else:
@@ -916,7 +916,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     # Add the tools from the action for this generation last so that
                     # they overwrite conflicting names.
                     add_tools_from_context_actions(tools, [action])
-                FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+                MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
             seed = model_options.get(ModelOption.SEED, None)
             if seed is not None:
@@ -1266,7 +1266,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             await self.do_generate_walks(list(actions))
 
             if tool_calls:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "The raw endpoint does not support tool calling at the moment."
                 )
 
@@ -1274,7 +1274,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 # TODO: Remove this when we are able to update the torch package.
                 #       Test this by ensuring all outputs from this call are populated when running on mps.
                 #       https://github.com/pytorch/pytorch/pull/157727
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     "utilizing device mps with a `generate_from_raw` request; you may see issues when submitting batches of prompts to a huggingface backend; ensure all ModelOutputThunks have non-empty values."
                 )
 
@@ -1475,7 +1475,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         """
         if adapter.backend is not None:
             if adapter.backend is self:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"attempted to add adapter {adapter.name} with type {adapter.adapter_type} to the same backend {adapter.backend}"
                 )
                 return
@@ -1485,7 +1485,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                 )
 
         if self._added_adapters.get(adapter.qualified_name) is not None:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 f"Client code attempted to add {adapter.name} with type {adapter.adapter_type} but {adapter.name} was already added to {self.__class__}. The backend is refusing to do this, because adapter loading is not idempotent."
             )
             return None
@@ -1551,7 +1551,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
         # Check if the backend knows about this adapter.
         adapter = self._loaded_adapters.get(adapter_qualified_name, None)
         if adapter is None:
-            FancyLogger.get_logger().info(
+            MelleaLogger.get_logger().info(
                 f"could not unload adapter {adapter_qualified_name} for backend {self}: adapter is not loaded"
             )
             return

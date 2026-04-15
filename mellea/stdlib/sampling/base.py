@@ -25,7 +25,7 @@ from ...core import (
     Component,
     ComputedModelOutputThunk,
     Context,
-    FancyLogger,
+    MelleaLogger,
     Requirement,
     S,
     SamplingResult,
@@ -143,7 +143,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         """
         validation_ctx = validation_ctx if validation_ctx is not None else context
 
-        flog = FancyLogger.get_logger()
+        flog = MelleaLogger.get_logger()
 
         sampled_results: list[ComputedModelOutputThunk] = []
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
@@ -152,7 +152,7 @@ class BaseSamplingStrategy(SamplingStrategy):
 
         # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
         # flag to determine whether we should show the pbar.
-        show_progress = show_progress and flog.getEffectiveLevel() <= FancyLogger.INFO
+        show_progress = show_progress and flog.getEffectiveLevel() <= MelleaLogger.INFO
 
         reqs = []
         # global requirements supersede local requirements (global requirements can be defined by user)

@@ -11,7 +11,7 @@ history tracking. Raises ``RuntimeError`` if the loop ends without a final answe
 from mellea.backends.model_options import ModelOption
 from mellea.core.backend import Backend, BaseModelSubclass
 from mellea.core.base import AbstractMelleaTool, ComputedModelOutputThunk
-from mellea.core.utils import FancyLogger
+from mellea.core.utils import MelleaLogger
 from mellea.stdlib import functional as mfuncs
 
 # from mellea.stdlib.components.docs.document import Document
@@ -79,7 +79,7 @@ async def react(
     turn_num = 0
     while (turn_num < loop_budget) or (loop_budget == -1):
         turn_num += 1
-        FancyLogger.get_logger().info(f"## ReACT TURN NUMBER {turn_num}")
+        MelleaLogger.get_logger().info(f"## ReACT TURN NUMBER {turn_num}")
 
         step, next_context = await mfuncs.aact(
             action=ReactThought(),

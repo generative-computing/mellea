@@ -1,4 +1,4 @@
-"""Unit tests for FancyLogger, JsonFormatter, and ContextFilter enhancements."""
+"""Unit tests for MelleaLogger, JsonFormatter, and ContextFilter enhancements."""
 
 import json
 import logging
@@ -10,7 +10,7 @@ import pytest
 from mellea.core.utils import (
     _RESERVED_LOG_RECORD_ATTRS,
     ContextFilter,
-    FancyLogger,
+    MelleaLogger,
     JsonFormatter,
     clear_log_context,
     log_context,
@@ -186,9 +186,9 @@ class TestContextFilter:
         assert not hasattr(record, "trace_id")
 
 
-class TestFancyLoggerLogLevel:
+class TestMelleaLoggerLogLevel:
     def _reset(self) -> None:
-        FancyLogger.logger = None
+        MelleaLogger.logger = None
         logging.getLogger("fancy_logger").handlers.clear()
         logging.getLogger("fancy_logger").setLevel(logging.NOTSET)
 
@@ -197,40 +197,26 @@ class TestFancyLoggerLogLevel:
 
     def test_default_level_is_info(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("MELLEA_LOG_LEVEL", raising=False)
-        monkeypatch.delenv("DEBUG", raising=False)
-        assert FancyLogger._resolve_log_level() == logging.INFO
+        assert MelleaLogger._resolve_log_level() == logging.INFO
 
     def test_mellea_log_level_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MELLEA_LOG_LEVEL", "DEBUG")
-        assert FancyLogger._resolve_log_level() == logging.DEBUG
+        assert MelleaLogger._resolve_log_level() == logging.DEBUG
 
     def test_mellea_log_level_warning(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MELLEA_LOG_LEVEL", "WARNING")
-        assert FancyLogger._resolve_log_level() == logging.WARNING
-
-    def test_legacy_debug_flag(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("MELLEA_LOG_LEVEL", raising=False)
-        monkeypatch.setenv("DEBUG", "1")
-        assert FancyLogger._resolve_log_level() == logging.DEBUG
-
-    def test_mellea_log_level_takes_precedence_over_debug(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("MELLEA_LOG_LEVEL", "WARNING")
-        monkeypatch.setenv("DEBUG", "1")
-        assert FancyLogger._resolve_log_level() == logging.WARNING
+        assert MelleaLogger._resolve_log_level() == logging.WARNING
 
     def test_invalid_level_falls_back_to_info(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("MELLEA_LOG_LEVEL", "BOGUS")
-        monkeypatch.delenv("DEBUG", raising=False)
-        assert FancyLogger._resolve_log_level() == logging.INFO
+        assert MelleaLogger._resolve_log_level() == logging.INFO
 
 
-class TestFancyLoggerJsonConsole:
+class TestMelleaLoggerJsonConsole:
     def _reset(self) -> None:
-        FancyLogger.logger = None
+        MelleaLogger.logger = None
         logger = logging.getLogger("fancy_logger")
         logger.handlers.clear()
         logger.setLevel(logging.NOTSET)
@@ -242,7 +228,7 @@ class TestFancyLoggerJsonConsole:
         self._reset()
 
     def _get_stream_handler(self) -> logging.StreamHandler:  # type: ignore[type-arg]
-        logger = FancyLogger.get_logger()
+        logger = MelleaLogger.get_logger()
         handlers = [h for h in logger.handlers if isinstance(h, logging.StreamHandler)]
         # RESTHandler is a subclass of Handler but not StreamHandler, so this
         # correctly picks the console handler.
@@ -286,21 +272,21 @@ class TestFancyLoggerJsonConsole:
         assert isinstance(handler.formatter, CustomFormatter)
 
 
-class TestFancyLoggerContextFilterWired:
+class TestMelleaLoggerContextFilterWired:
     def setup_method(self) -> None:
-        FancyLogger.logger = None
+        MelleaLogger.logger = None
         logging.getLogger("fancy_logger").handlers.clear()
         logging.getLogger("fancy_logger").setLevel(logging.NOTSET)
         clear_log_context()
 
     def teardown_method(self) -> None:
-        FancyLogger.logger = None
+        MelleaLogger.logger = None
         logging.getLogger("fancy_logger").handlers.clear()
         logging.getLogger("fancy_logger").setLevel(logging.NOTSET)
         clear_log_context()
 
     def test_context_filter_present(self) -> None:
-        logger = FancyLogger.get_logger()
+        logger = MelleaLogger.get_logger()
         assert any(isinstance(f, ContextFilter) for f in logger.filters)
 
 
@@ -391,12 +377,12 @@ class TestReservedAttributeValidation:
 
 class TestGetLoggerThreadSafety:
     def setup_method(self) -> None:
-        FancyLogger.logger = None
+        MelleaLogger.logger = None
         logging.getLogger("fancy_logger").handlers.clear()
         logging.getLogger("fancy_logger").setLevel(logging.NOTSET)
 
     def teardown_method(self) -> None:
-        FancyLogger.logger = None
+        MelleaLogger.logger = None
         logging.getLogger("fancy_logger").handlers.clear()
         logging.getLogger("fancy_logger").setLevel(logging.NOTSET)
 
@@ -407,7 +393,7 @@ class TestGetLoggerThreadSafety:
 
         def worker() -> None:
             barrier.wait()
-            results.append(FancyLogger.get_logger())
+            results.append(MelleaLogger.get_logger())
 
         threads = [threading.Thread(target=worker) for _ in range(4)]
         for t in threads:

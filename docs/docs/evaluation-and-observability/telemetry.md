@@ -140,7 +140,7 @@ and troubleshooting.
 
 ## Logging
 
-Mellea uses a color-coded console logger (`FancyLogger`) by default. When the
+Mellea uses a color-coded console logger (`MelleaLogger`) by default. When the
 `[telemetry]` extra is installed and `MELLEA_LOGS_OTLP=true` is set, Mellea
 also exports logs to an OTLP collector alongside existing console output.
 

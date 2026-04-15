@@ -9,7 +9,7 @@ from ....core import (
     BaseModelSubclass,
     CBlock,
     Context,
-    FancyLogger,
+    MelleaLogger,
     Requirement,
     ValidationResult,
 )
@@ -197,7 +197,7 @@ class GuardianCheck(Requirement):
             except Exception:
                 pass
 
-        self._logger = FancyLogger.get_logger()
+        self._logger = MelleaLogger.get_logger()
 
     def get_effective_risk(self) -> str:
         """Return the effective risk criteria to use for validation.

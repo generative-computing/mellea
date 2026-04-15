@@ -49,7 +49,7 @@
       "ComponentParseError",
       "Context",
       "ContextTurn",
-      "FancyLogger",
+      "MelleaLogger",
       "Formatter",
       "GenerateLog",
       "GenerateType",

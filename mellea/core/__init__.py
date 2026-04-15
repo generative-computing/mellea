@@ -30,7 +30,7 @@ from .base import (
 from .formatter import Formatter
 from .requirement import Requirement, ValidationResult, default_output_to_bool
 from .sampling import SamplingResult, SamplingStrategy
-from .utils import FancyLogger, clear_log_context, log_context, set_log_context
+from .utils import MelleaLogger, clear_log_context, log_context, set_log_context
 
 __all__ = [
     "Backend",
@@ -42,7 +42,7 @@ __all__ = [
     "ComputedModelOutputThunk",
     "Context",
     "ContextTurn",
-    "FancyLogger",
+    "MelleaLogger",
     "Formatter",
     "GenerateLog",
     "GenerateType",

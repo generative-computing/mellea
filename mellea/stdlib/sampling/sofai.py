@@ -20,7 +20,7 @@ from ...core import (
     Component,
     ComputedModelOutputThunk,
     Context,
-    FancyLogger,
+    MelleaLogger,
     Requirement,
     S,
     SamplingResult,
@@ -431,7 +431,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         Returns:
             Tuple of (action_for_s2, context_for_s2).
         """
-        flog = FancyLogger.get_logger()
+        flog = MelleaLogger.get_logger()
 
         if s2_mode == "fresh_start":
             # Clean slate: same prompt as S1
@@ -605,7 +605,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
             "SOFAI requires ChatContext for conversation management."
         )
 
-        flog = FancyLogger.get_logger()
+        flog = MelleaLogger.get_logger()
         reqs: list[Requirement] = list(requirements) if requirements else []
 
         # State tracking for all attempts
@@ -627,7 +627,7 @@ class SOFAISamplingStrategy(SamplingStrategy):
         next_action = deepcopy(action)
         next_context: Context = context
 
-        show_progress = flog.getEffectiveLevel() <= FancyLogger.INFO
+        show_progress = flog.getEffectiveLevel() <= MelleaLogger.INFO
         loop_iterator = (
             tqdm.tqdm(range(self.loop_budget), desc="S1 Solver")
             if show_progress

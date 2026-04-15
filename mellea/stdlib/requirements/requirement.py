@@ -4,7 +4,7 @@ import json
 from collections.abc import Callable
 from typing import Any, overload
 
-from ...core import CBlock, Context, FancyLogger, Requirement, ValidationResult
+from ...core import CBlock, Context, MelleaLogger, Requirement, ValidationResult
 from ..components.intrinsic import Intrinsic
 
 
@@ -37,7 +37,7 @@ def requirement_check_to_bool(x: CBlock | str) -> bool:
 
     likelihood = req_dict.get("requirement_likelihood", None)
     if likelihood is None:
-        FancyLogger.get_logger().warning(
+        MelleaLogger.get_logger().warning(
             f"could not get value from alora requirement output; looking for `requirement_likelihood` in {req_dict}"
         )
         return False
@@ -173,7 +173,7 @@ def simple_validate(
     def validate(ctx: Context) -> ValidationResult:
         o = ctx.last_output()
         if o is None or o.value is None:
-            FancyLogger.get_logger().warn(
+            MelleaLogger.get_logger().warn(
                 "Last output of context was None. That might be a problem. We return validation as False to be able to continue..."
             )
             return ValidationResult(
