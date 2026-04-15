@@ -615,7 +615,7 @@ def evict_ollama_models() -> None:
 
     Best-effort: errors are logged but never raised.
     """
-    logger = FancyLogger.get_logger()
+    logger = MelleaLogger.get_logger()
 
     # Parse OLLAMA_HOST which may be "host", "host:port", or absent.
     host = os.environ.get("OLLAMA_HOST", "127.0.0.1")
