@@ -459,6 +459,8 @@ async def test_error_metrics_on_backend_failure(enable_metrics, metric_reader):
         Message(role="assistant", content=""), ctx, model_options={}
     )
 
+    # avalue() drives astream(), where the backend call fails, GENERATION_ERROR
+    # fires, and the exception is re-raised. pytest.raises catches that re-raise.
     with pytest.raises(Exception):
         await mot.avalue()
 
