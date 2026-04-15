@@ -415,10 +415,10 @@ def _render_command(
                     # Try two-column aligned format → markdown table
                     pairs = _parse_two_column_block(rest)
                     if pairs:
-                        lines.append("| Option | Description |")
-                        lines.append("| ------ | ----------- |")
+                        # Render as bold-name bullets — consistent font with
+                        # other bullet blocks, no invented column headers.
                         for name, desc in pairs:
-                            lines.append(f"| `{name}` | {desc} |")
+                            lines.append(f"- **`{name}`** — {desc}")
                     else:
                         lines.append("```")
                         lines.append(rest.rstrip())
