@@ -45,11 +45,10 @@ def non_streaming_request():
     )
 
 
-class TestStreamingHelpers:
-    """Tests for reusable streaming helper functions."""
+class TestCompletionUsageHelpers:
+    """Tests for completion usage normalization helpers."""
 
-    @pytest.mark.asyncio
-    async def test_build_completion_usage_with_full_usage(self):
+    def test_build_completion_usage_with_full_usage(self):
         """Test usage normalization with complete usage data."""
         output = ModelOutputThunk("done")
         output.usage = {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}
@@ -61,8 +60,7 @@ class TestStreamingHelpers:
         assert usage.completion_tokens == 3
         assert usage.total_tokens == 8
 
-    @pytest.mark.asyncio
-    async def test_build_completion_usage_with_partial_usage(self):
+    def test_build_completion_usage_with_partial_usage(self):
         """Test usage normalization fills missing values safely."""
         output = ModelOutputThunk("done")
         output.usage = {"prompt_tokens": 5}
@@ -74,12 +72,15 @@ class TestStreamingHelpers:
         assert usage.completion_tokens == 0
         assert usage.total_tokens == 5
 
-    @pytest.mark.asyncio
-    async def test_build_completion_usage_without_usage(self):
+    def test_build_completion_usage_without_usage(self):
         """Test usage normalization returns None when usage is unavailable."""
         output = ModelOutputThunk("done")
 
         assert build_completion_usage(output) is None
+
+
+class TestStreamingHelpers:
+    """Tests for reusable streaming helper functions."""
 
     @pytest.mark.asyncio
     async def test_stream_chat_completion_chunks_emits_incremental_content(self):
@@ -168,8 +169,7 @@ class TestStreamingHelpers:
 class TestStreamingEndpoint:
     """Tests for streaming chat completion endpoint."""
 
-    @pytest.mark.asyncio
-    async def test_streaming_response_format(self, mock_module, streaming_request):
+    def test_streaming_response_format(self, mock_module, streaming_request):
         """Test that streaming returns SSE format with proper chunks."""
         # Create a mock output that simulates streaming
         mock_output = ModelOutputThunk(None)
@@ -235,8 +235,7 @@ class TestStreamingEndpoint:
         assert last_chunk["usage"] is not None
         assert last_chunk["usage"]["total_tokens"] == 8
 
-    @pytest.mark.asyncio
-    async def test_non_streaming_still_works(self, mock_module, non_streaming_request):
+    def test_non_streaming_still_works(self, mock_module, non_streaming_request):
         """Test that non-streaming requests still work correctly."""
         mock_output = ModelOutputThunk("Complete response")
         mock_output.usage = {
@@ -267,8 +266,7 @@ class TestStreamingEndpoint:
         assert data["choices"][0]["finish_reason"] == "stop"
         assert data["usage"]["total_tokens"] == 7
 
-    @pytest.mark.asyncio
-    async def test_stream_parameter_passed_to_model_options(
+    def test_stream_parameter_passed_to_model_options(
         self, mock_module, streaming_request
     ):
         """Test that stream parameter is passed to model_options."""
@@ -302,8 +300,7 @@ class TestStreamingEndpoint:
         assert ModelOption.STREAM in model_options
         assert model_options[ModelOption.STREAM] is True
 
-    @pytest.mark.asyncio
-    async def test_streaming_with_empty_content(self, mock_module, streaming_request):
+    def test_streaming_with_empty_content(self, mock_module, streaming_request):
         """Test streaming handles empty content chunks gracefully."""
         mock_output = ModelOutputThunk(None)
         mock_output._computed = False
@@ -359,10 +356,7 @@ class TestStreamingEndpoint:
         ]
         assert len(content_chunks) == 2  # "Hello" and " world"
 
-    @pytest.mark.asyncio
-    async def test_streaming_completion_id_consistent(
-        self, mock_module, streaming_request
-    ):
+    def test_streaming_completion_id_consistent(self, mock_module, streaming_request):
         """Test that completion ID is consistent across all chunks."""
         mock_output = ModelOutputThunk(None)
         mock_output._computed = False
@@ -408,8 +402,7 @@ class TestStreamingEndpoint:
         assert len(set(ids)) == 1  # All IDs are the same
         assert ids[0].startswith("chatcmpl-")
 
-    @pytest.mark.asyncio
-    async def test_streaming_ends_with_done(self, mock_module, streaming_request):
+    def test_streaming_ends_with_done(self, mock_module, streaming_request):
         """Test that streaming response ends with [DONE] marker."""
         mock_output = ModelOutputThunk(None)
         mock_output._computed = False
@@ -438,8 +431,7 @@ class TestStreamingEndpoint:
         # Verify response ends with [DONE]
         assert response.text.strip().endswith("data: [DONE]")
 
-    @pytest.mark.asyncio
-    async def test_streaming_model_field_correct(self, mock_module, streaming_request):
+    def test_streaming_model_field_correct(self, mock_module, streaming_request):
         """Test that model field is correctly set in streaming chunks."""
         mock_output = ModelOutputThunk(None)
         mock_output._computed = False
@@ -472,8 +464,7 @@ class TestStreamingEndpoint:
         # Model should match request
         assert first_chunk["model"] == "test-model"
 
-    @pytest.mark.asyncio
-    async def test_stream_options_include_usage_true(self, mock_module):
+    def test_stream_options_include_usage_true(self, mock_module):
         """Test that stream_options with include_usage=true includes usage in final chunk."""
         request = ChatCompletionRequest(
             model="test-model",
@@ -526,8 +517,7 @@ class TestStreamingEndpoint:
         assert last_chunk["usage"] is not None
         assert last_chunk["usage"]["total_tokens"] == 8
 
-    @pytest.mark.asyncio
-    async def test_stream_options_include_usage_false(self, mock_module):
+    def test_stream_options_include_usage_false(self, mock_module):
         """Test that stream_options with include_usage=false excludes usage from final chunk."""
         request = ChatCompletionRequest(
             model="test-model",
@@ -579,8 +569,7 @@ class TestStreamingEndpoint:
         last_chunk = events[-1]
         assert last_chunk["usage"] is None
 
-    @pytest.mark.asyncio
-    async def test_stream_options_default_includes_usage(self, mock_module):
+    def test_stream_options_default_includes_usage(self, mock_module):
         """Test that without stream_options, usage is included by default (backward compat)."""
         request = ChatCompletionRequest(
             model="test-model",
@@ -633,8 +622,7 @@ class TestStreamingEndpoint:
         assert last_chunk["usage"] is not None
         assert last_chunk["usage"]["total_tokens"] == 8
 
-    @pytest.mark.asyncio
-    async def test_streaming_system_fingerprint_always_none(
+    def test_streaming_system_fingerprint_always_none(
         self, mock_module, streaming_request
     ):
         """Test that system_fingerprint is None in all streaming chunks.
@@ -695,8 +683,7 @@ class TestStreamingEndpoint:
             # Model name should be in the model field
             assert chunk["model"] == "test-model"
 
-    @pytest.mark.asyncio
-    async def test_stream_options_ignored_for_non_streaming(self, mock_module):
+    def test_stream_options_ignored_for_non_streaming(self, mock_module):
         """Test that stream_options is ignored when stream=False (usage always included)."""
         request = ChatCompletionRequest(
             model="test-model",
